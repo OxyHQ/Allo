@@ -1,8 +1,8 @@
-# Mention API
+# Allo (Chat) API
 
 ## Overview
 
-The Mention API allows you to create and fetch posts. Below are the available endpoints and their usage.
+The Allo API allows you to create and manage chat conversations between users. It uses Socket.IO to enable real-time messaging and events.
 
 ## Endpoints
 
@@ -15,6 +15,4 @@ npm install
 npm start
 ```
 
-The API will be available at `http://localhost:3000`.
-
-# mention-api
+The API will be available at `http://localhost:5000`.
