@@ -5,7 +5,8 @@ import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 import chat from "./routes/chat";
-
+import * as chatController from "./controllers/chatController";
+import * as chatService from "./services/chatService";
 
 // Import security middlewares
 import { rateLimiter, bruteForceProtection, csrfProtection, parseCookies, csrfErrorHandler } from "./middleware/security";
@@ -25,7 +26,7 @@ app.use(cors());
 app.use(parseCookies);
 app.use(rateLimiter);
 app.use(bruteForceProtection);
-//app.use(csrfProtection);
+app.use(csrfProtection);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || "");
