@@ -44,6 +44,16 @@ export function initializeSocket(server: any): SocketIOServer {
     registerChatEvents(io, socket);
     registerUserEvents(io, socket);
 
+    // Handle WebRTC signaling
+    socket.on("webrtcSignal", (payload) => {
+      const { to, ...rest } = payload;
+      if (to) {
+        io.to(to).emit("webrtcSignal", { ...rest, from: userId });
+      } else {
+        console.error("Error: 'to' field missing in webrtcSignal payload");
+      }
+    });
+
     // Join all conversations the user is part of
     try {
       const conversations = await Conversation.find({
