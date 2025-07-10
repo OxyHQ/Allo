@@ -22,6 +22,8 @@ import {
     webrtcSignal,
 } from '@/socket/socketEvents';
 import { useAuth } from '@/contexts/authContext';
+import { WebRTCService, SignalingData } from '@/services/webrtcService';
+import { RTCView, MediaStream } from 'react-native-webrtc';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -78,13 +80,37 @@ const CallManager: React.FC<CallManagerProps> = ({
     const [isVideoEnabled, setIsVideoEnabled] = useState(true);
     const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
     const callTimer = useRef<number | null>(null);
+    const webRTCService = useRef<WebRTCService | null>(null);
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
+
+    // Initialize WebRTCService
+    useEffect(() => {
+        if (!webRTCService.current) {
+            webRTCService.current = new WebRTCService({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], // Example STUN server
+            });
+
+            webRTCService.current.setCallbacks({
+                onSignalingData: handleSignalingData,
+                onRemoteStream: handleRemoteStream,
+                onConnectionStateChange: handleConnectionStateChange,
+            });
+        }
+
+        return () => {
+            webRTCService.current?.cleanup();
+        };
+    }, []);
+
 
     // Initialize call state from props or context
     useEffect(() => {
         if (visible && initiateCall) {
             setCallState({
                 isActive: true,
-                callId: `call_${Date.now()}`,
+                callId: `call_${Date.now()}`, // Generate a unique call ID
                 caller: {
                     id: initiateCall.callerId,
                     name: initiateCall.callerName,
@@ -94,6 +120,9 @@ const CallManager: React.FC<CallManagerProps> = ({
                 status: 'outgoing',
                 conversationId: conversationId || '',
             });
+            // Initialize and create offer when initiating a call
+            initializeAndCreateOffer(initiateCall.callerId, conversationId || '', initiateCall.callType);
+
         }
     }, [visible, initiateCall, conversationId, conversationName, conversationAvatar]);
 
@@ -118,6 +147,56 @@ const CallManager: React.FC<CallManagerProps> = ({
         };
     }, [callState.status]);
 
+
+    // WebRTC Callbacks
+    const handleSignalingData = (data: SignalingData) => {
+        if (!callState.callId || !callState.caller?.id) return;
+        // Send signaling data to the other user via your signaling server (e.g., Socket.IO)
+        console.log('Sending signaling data:', data);
+        webrtcSignal({
+            ...data,
+            callId: callState.callId,
+            to: callState.caller?.id, // Send to the other user in the call
+        });
+    };
+
+    const handleRemoteStream = (stream: MediaStream) => {
+        console.log('Received remote stream');
+        setRemoteStream(stream);
+    };
+
+    const handleConnectionStateChange = (state: string) => {
+        console.log('Connection state changed:', state);
+        if (state === 'connected') {
+            setCallState(prev => ({ ...prev, status: 'connected' }));
+        } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+            handleEndCall();
+        }
+    };
+
+
+    // Initialize and create offer
+    const initializeAndCreateOffer = async (targetUserId: string, convId: string, callType: 'audio' | 'video') => {
+        if (!webRTCService.current || !user) return;
+        try {
+            await webRTCService.current.initializePeerConnection(callState.callId!, targetUserId);
+            const stream = await webRTCService.current.getLocalStream({
+                audio: true,
+                video: callType === 'video',
+            });
+            if (stream) {
+                setLocalStream(stream);
+                await webRTCService.current.addLocalStream(stream);
+            }
+            await webRTCService.current.createOffer(callState.callId!, targetUserId);
+        } catch (error) {
+            console.error('Error initializing and creating offer:', error);
+            Alert.alert('Error', 'Failed to initiate call');
+            handleEndCall();
+        }
+    };
+
+
     // Vibration for incoming calls
     useEffect(() => {
         if (callState.status === 'incoming' && Platform.OS === 'ios') {
@@ -139,41 +218,54 @@ const CallManager: React.FC<CallManagerProps> = ({
     };
 
     const handleAcceptCall = async () => {
+        if (!webRTCService.current || !callState.callId || !callState.conversationId || !callState.caller?.id || !user) return;
         try {
-            if (!callState.callId || !callState.conversationId) return;
-
-            // Emit answer call event
+            // Emit answer call event via socket
             answerCall({
                 callId: callState.callId,
                 conversationId: callState.conversationId,
                 answer: 'accept',
+                to: callState.caller.id, // Send to the caller
             });
 
-            // Update call state
-            setCallState(prev => ({
-                ...prev,
-                status: 'connected',
-            }));
+            // Initialize peer connection
+            await webRTCService.current.initializePeerConnection(callState.callId, callState.caller.id);
 
-            // Initialize WebRTC connection here
-            // This would involve setting up media streams and peer connections
-            console.log('Call accepted, setting up WebRTC...');
+            // Get local stream
+            const stream = await webRTCService.current.getLocalStream({
+                audio: true,
+                video: callState.callType === 'video',
+            });
+            if (stream) {
+                setLocalStream(stream);
+                await webRTCService.current.addLocalStream(stream);
+            }
+
+            // The offer should have been received via signaling before accepting the call
+            // If an offer is stored, handle it. Otherwise, wait for it.
+            // For simplicity, we assume the offer is received and handled via handleIncomingWebrtcSignal
+            // before this function is called or shortly after.
+
+            // Update call state
+            // The status will be updated to 'connected' by handleConnectionStateChange callback
 
         } catch (error) {
             console.error('Error accepting call:', error);
             Alert.alert('Error', 'Failed to accept call');
+            handleEndCall(); // Ensure call is ended on error
         }
     };
 
     const handleDeclineCall = async () => {
         try {
-            if (!callState.callId || !callState.conversationId) return;
+            if (!callState.callId || !callState.conversationId || !callState.caller?.id) return;
 
             // Emit answer call event
             answerCall({
                 callId: callState.callId,
                 conversationId: callState.conversationId,
                 answer: 'decline',
+                to: callState.caller.id, // Send to the caller
             });
 
             // End call
@@ -220,28 +312,83 @@ const CallManager: React.FC<CallManagerProps> = ({
         }
     };
 
-    const handleToggleMute = () => {
-        setIsMuted(!isMuted);
-        // Here you would mute/unmute the audio track
-        console.log('Toggling mute:', !isMuted);
+    const handleToggleMute = async () => {
+        if (webRTCService.current) {
+            const newMutedState = await webRTCService.current.toggleAudio();
+            setIsMuted(!newMutedState); // Correctly update based on actual track state
+        }
     };
 
-    const handleToggleVideo = () => {
-        setIsVideoEnabled(!isVideoEnabled);
-        // Here you would enable/disable the video track
-        console.log('Toggling video:', !isVideoEnabled);
+    const handleToggleVideo = async () => {
+        if (webRTCService.current) {
+            const newVideoState = await webRTCService.current.toggleVideo();
+            setIsVideoEnabled(newVideoState); // Correctly update based on actual track state
+        }
     };
 
     const handleToggleSpeaker = () => {
         setIsSpeakerEnabled(!isSpeakerEnabled);
         // Here you would switch between speaker and earpiece
+        // This typically involves using a library like react-native-incall-manager
         console.log('Toggling speaker:', !isSpeakerEnabled);
     };
 
     const handleSwitchCamera = () => {
         // Here you would switch between front and back camera
         console.log('Switching camera');
+        // webRTCService.current?.switchCamera(); // Assuming WebRTCService has switchCamera
     };
+
+    // Handle incoming WebRTC signals
+    useEffect(() => {
+        const handleIncomingWebrtcSignal = async (payload: any) => {
+            if (!webRTCService.current || !callState.callId || !user ) return;
+            console.log('Received webrtc signal:', payload);
+
+            // Ensure the signal is for the current call
+            if (payload.callId !== callState.callId) {
+                console.warn('Received signal for a different call.');
+                return;
+            }
+
+            // Ensure the signal is not from self
+            if (payload.from === user.id) {
+                console.warn('Received signal from self.');
+                return;
+            }
+
+
+            try {
+                switch (payload.type) {
+                    case 'offer':
+                        // This typically happens when the current user is receiving a call
+                        // Initialize peer connection if not already done (e.g. if call was accepted before offer arrived)
+                        if (!webRTCService.current.peerConnection) {
+                             await webRTCService.current.initializePeerConnection(callState.callId, payload.from);
+                        }
+                        await webRTCService.current.handleOffer(payload.data, callState.callId, payload.from);
+                        break;
+                    case 'answer':
+                        await webRTCService.current.handleAnswer(payload.data);
+                        break;
+                    case 'ice-candidate':
+                        await webRTCService.current.handleIceCandidate(payload.data);
+                        break;
+                    default:
+                        console.warn('Unknown WebRTC signal type:', payload.type);
+                }
+            } catch (error) {
+                console.error('Error handling incoming WebRTC signal:', error);
+            }
+        };
+
+        webrtcSignal(handleIncomingWebrtcSignal); // Register listener
+
+        return () => {
+            webrtcSignal(handleIncomingWebrtcSignal, true); // Unregister listener
+        };
+    }, [callState.callId, user]);
+
 
     if (!visible || !callState.isActive) {
         return null;
@@ -331,34 +478,37 @@ const CallManager: React.FC<CallManagerProps> = ({
                     {/* Video Call Content */}
                     {callState.callType === 'video' && (
                         <View style={styles.videoCallContent}>
-                            {/* Remote video stream placeholder */}
-                            <View style={styles.remoteVideoContainer}>
-                                {isVideoEnabled ? (
-                                    <View style={styles.videoStreamPlaceholder}>
-                                        <Icons.VideoCamera size={40} color={colors.white} weight="fill" />
-                                        <Text style={[{ color: colors.white, fontSize: 16 }, styles.videoPlaceholder]}>
-                                            {callState.caller?.name} video
-                                        </Text>
-                                        <Text style={[{ color: colors.white, fontSize: 12 }, styles.videoStatus]}>
-                                            Connected
-                                        </Text>
-                                    </View>
-                                ) : (
-                                    <>
-                                        <Avatar size={80} uri={callState.caller?.avatar || null} />
-                                        <Text style={[{ color: colors.white, fontSize: 16 }, styles.videoPlaceholder]}>
-                                            {isVideoEnabled ? 'Connecting video...' : 'Camera off'}
-                                        </Text>
-                                    </>
-                                )}
-                            </View>
-
-                            {/* Local video stream placeholder */}
-                            <View style={styles.localVideoContainer}>
-                                <View style={styles.localVideoPlaceholder}>
-                                    <Icons.User size={24} color={colors.white} weight="fill" />
+                            {/* Remote video stream */}
+                            {remoteStream && isVideoEnabled ? (
+                                <RTCView
+                                    streamURL={remoteStream.toURL()}
+                                    style={styles.remoteVideoContainer}
+                                    objectFit="cover"
+                                    mirror={false}
+                                />
+                            ) : (
+                                <View style={styles.remoteVideoContainer}>
+                                    <Avatar size={80} uri={callState.caller?.avatar || null} />
+                                    <Text style={[{ color: colors.white, fontSize: 16 }, styles.videoPlaceholder]}>
+                                        {isVideoEnabled ? 'Connecting video...' : `${callState.caller?.name}'s camera is off`}
+                                    </Text>
                                 </View>
-                            </View>
+                            )}
+
+                            {/* Local video stream */}
+                            {localStream && isVideoEnabled && (
+                                <RTCView
+                                    streamURL={localStream.toURL()}
+                                    style={styles.localVideoContainer}
+                                    objectFit="cover"
+                                    mirror={true} // Usually mirror local video
+                                />
+                            )}
+                             {!isVideoEnabled && localStream && ( // Show avatar if local camera is off but stream exists
+                                <View style={[styles.localVideoContainer, styles.localVideoPlaceholder]}>
+                                     <Icons.User size={24} color={colors.white} weight="fill" />
+                                </View>
+                            )}
                         </View>
                     )}
 
@@ -384,7 +534,7 @@ const CallManager: React.FC<CallManagerProps> = ({
                                     style={[styles.controlButton, !isVideoEnabled && styles.controlButtonActive]}
                                     onPress={handleToggleVideo}
                                 >
-                                    <Icons.VideoCamera size={24} color={colors.white} weight={isVideoEnabled ? "regular" : "fill"} />
+                                    <Icons.VideoCamera size={24} color={colors.white} weight={!isVideoEnabled ? "fill" : "regular"} />
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
