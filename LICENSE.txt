@@ -1,0 +1,21 @@
+Application Name: Full Stack Chat App (Bubbly)
+
+Company: Code With Nomi
+
+Terms and Conditions:
+
+    Non-Attribution:
+    You are free to modify and use this software, for personal or internal purposes without the need to credit "Code With Nomi" as the original author.
+
+    Non-Commercial Use:
+    This software, including any modifications or derivatives, may not be used for commercial purposes. You are prohibited from selling, licensing, or monetizing this software in any form.
+
+    Modification:
+    You are permitted to modify this software for your own use. However, redistribution of the original or modified versions, whether for profit or not, is not allowed.
+
+    No Redistribution:
+    You are not allowed to redistribute this software or any modifications you make, whether in original or altered form.
+
+    No Warranty:
+    This software is provided "as is," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, or non-infringement. In no event shall "Code With Nomi" be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or the use or other dealings in the software.
+

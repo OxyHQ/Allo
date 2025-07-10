@@ -1,0 +1,40 @@
+Follow these steps to successfully run the app:
+
+Backend:
+1. open terminal in backend folder
+2. run command "npm run install"
+3. run command "npm run dev" (this will start the nodejs server using nodemon)
+4. check if the server is running open this url "http://localhost:3000/" in your browser, this will show "server is running",
+you will also see logs in the terminal as "Connected to MongoDB Atlas" and "Server is running on port 3000"
+
+Frontend:
+1. open terminal in frontend folder
+2. run command "npm run install"
+3. run command "npm run start"
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+* This project is already using a mongodb account (in backend) and a cloudinary service (in frontend) for media uploads.
+But if you want to integrate your own mongodb and cloudinary account then follow these steps
+
+MongoDB Setup:
+1. go to https://www.mongodb.com and sign in
+
+2. if you signin for the first time, they will ask you to deploy your cluste:
+    - choose the free option
+    - choose your nearest region
+    - hit create
+
+3. now you will see the mongodb atlas dashboard, go to clusters option. you will see Cluster0, now click on Connect button.
+
+4. they will ask to create a database user that will help connecting to database, choose a username and a password then hit create database user.
+
+5. once the database user is created then "choose a connection method", choose "MongoDB for VS Code" and copy the connection string,
+(you will need to replace the db_password in the connection string with the password you choose to create a user previously)
+
+6. copy the connection string in MONGO_URI variable in backend/.env file
+
+7. go to Network Access option in the sidebar, click on Add IP Address button, choose "ALLOW ACCESS FROM ANYWHERE" and hit confirm.
