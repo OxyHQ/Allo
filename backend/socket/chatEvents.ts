@@ -373,7 +373,7 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
         // Remove existing reaction if same emoji
         message.reactions.splice(existingReactionIndex, 1);
       } else {
-        // Remove any other reaction from this user first (WhatsApp allows only one reaction per user)
+        // Remove any other reaction from this user first (only one reaction per user allowed)
         for (let i = message.reactions.length - 1; i >= 0; i--) {
           if (message.reactions[i].userId.toString() === userId) {
             message.reactions.splice(i, 1);

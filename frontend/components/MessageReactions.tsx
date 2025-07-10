@@ -71,7 +71,7 @@ const MessageReactions = ({
                     {count > 1 && (
                         <Typo
                             size={12}
-                            color={hasCurrentUser ? colors.whatsappBlue : colors.timestampText}
+                            color={hasCurrentUser ? colors.accentBlue : colors.timestampText}
                             fontWeight="600"
                             style={styles.reactionCount}
                         >
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     },
     reactionBubbleActive: {
         backgroundColor: '#e3f2fd', // Light blue for user's own reaction
-        borderColor: colors.whatsappBlue,
+        borderColor: colors.accentBlue,
     },
     reactionEmoji: {
         marginRight: 2,

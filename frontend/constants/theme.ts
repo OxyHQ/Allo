@@ -6,7 +6,15 @@ export const colors = {
   white: "#fff",
   black: "#000",
   rose: "#ef4444",
-  // WhatsApp exact colors
+  // Allo app colors (WhatsApp-style design)
+  alloGreen: "#128C7E",
+  alloGreenDark: "#075E54",
+  alloGreenLight: "#25D366",
+  alloTeal: "#128C7E",
+  accentBlue: "#34B7F1",
+  surfaceGray: "#ECE5DD",
+  textDark: "#4A4A4A",
+  surfaceLight: "#F7F7F7",
   otherBubble: "#ffffff",
   myBubble: "#dcf8c6",
   myBubbleText: "#303030",
@@ -14,7 +22,7 @@ export const colors = {
   timestampText: "#667781",
   chatBackground: "#e5ddd5",
   chatPattern: "#d1c7b8",
-  whatsappBlue: "#53bdeb", // WhatsApp read tick color
+  readTickBlue: "#53bdeb", // Read tick color
   green: "#16a34a",
   neutral50: "#fafaf9",
   neutral100: "#f5f5f4",

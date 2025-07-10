@@ -12,7 +12,7 @@ const MessageTicks = ({ status = 'sent', size = 12 }: MessageTicksProps) => {
     const getTickColor = () => {
         switch (status) {
             case 'read':
-                return colors.whatsappBlue; // WhatsApp blue for read messages
+                return colors.accentBlue; // Blue for read messages
             case 'delivered':
             case 'sent':
             default:

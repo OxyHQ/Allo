@@ -39,12 +39,12 @@ const MessageItem = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [pickerPosition, setPickerPosition] = useState({ x: 0, y: 0 });
 
-  // Format the date using moment (WhatsApp style - 24 hour format)
+  // Format the date using moment (24 hour format)
   const formattedDate = moment(item.createdAt).isSame(moment(), "day")
     ? moment(item.createdAt).format("HH:mm")
     : moment(item.createdAt).format("MMM D, HH:mm");
 
-  // Get bubble radius based on position and message direction (WhatsApp exact)
+  // Get bubble radius based on position and message direction
   const getBubbleRadius = () => {
     const baseRadius = 7.5;
     const tightRadius = 3;
@@ -112,7 +112,7 @@ const MessageItem = ({
 
   const bubbleRadius = getBubbleRadius();
 
-  // Check if we should show the WhatsApp-style tail
+  // Check if we should show the message tail
   const showTail = position === 'single' || position === 'first';
 
   // Handle long press to show emoji picker
@@ -264,7 +264,7 @@ const MessageItem = ({
               </View>
             </TouchableWithoutFeedback>
 
-            {/* WhatsApp-style tail */}
+            {/* Message tail */}
             {showTail && (
               <View
                 style={[
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     maxWidth: "100%",
     minWidth: 20,
-    // WhatsApp exact shadow
+    // Message bubble shadow
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
