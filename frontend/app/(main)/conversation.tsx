@@ -131,12 +131,27 @@ const Conversation = () => {
 
 
 
+  // Helper function to get username from participants
+  const getUserNameById = (userId: string): string => {
+    try {
+      if (typeof participants === 'string') {
+        const participantsList = JSON.parse(participants);
+        const participant = participantsList.find((p: any) => p._id === userId);
+        return participant?.name || 'Unknown User';
+      }
+    } catch (error) {
+      console.error('Error parsing participants:', error);
+    }
+    return 'Unknown User';
+  };
+
   // Real-time typing handlers
-  const handleUserStartedTyping = (data: { userId: string; userName: string; conversationId: string }) => {
-    if (data.conversationId === conversationId) {
+  const handleUserStartedTyping = (data: { userId: string; conversationId: string }) => {
+    if (data.conversationId === conversationId && data.userId !== currentUser?.id) {
       setTypingUsers(prev => {
         const newMap = new Map(prev);
-        newMap.set(data.userId, data.userName);
+        const userName = getUserNameById(data.userId);
+        newMap.set(data.userId, userName);
         return newMap;
       });
     }

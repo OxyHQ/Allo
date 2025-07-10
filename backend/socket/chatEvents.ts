@@ -470,16 +470,14 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
   socket.on("startTyping", (data: { conversationId: string }) => {
     try {
       const userId = socket.data.userId;
-      const userName = socket.data.name;
       
-      if (!userId || !userName) {
+      if (!userId) {
         return;
       }
 
       // Emit to all other participants in the conversation
       socket.to(data.conversationId).emit("userStartedTyping", {
         userId,
-        userName,
         conversationId: data.conversationId,
       });
     } catch (error) {
