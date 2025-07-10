@@ -1,5 +1,6 @@
-import { StyleSheet, Text, TextStyle, View } from "react-native";
+import { StyleSheet, TextStyle, View } from "react-native";
 import React from "react";
+import { Text } from "react-native-paper";
 import { colors } from "@/constants/theme";
 import { TypoProps } from "@/types";
 

@@ -3,29 +3,44 @@ import { useAuth } from "@/contexts/authContext";
 import { ConversationListItemProps } from "@/types";
 import moment from "moment";
 import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View, TouchableOpacity } from "react-native";
+import { List, Badge, Text, Checkbox, useTheme } from "react-native-paper";
 import Avatar from "./Avatar";
-import Typo from "./Typo";
 import * as Icons from "phosphor-react-native";
 
 const ConversationListItem = ({
   item,
   showDivider,
   router,
+  isSelectionMode = false,
+  isSelected = false,
+  onLongPress,
+  onToggleSelection,
 }: ConversationListItemProps) => {
   const { user: currentUser } = useAuth();
+  const theme = useTheme();
 
   const openConversation = () => {
-    router.push({
-      pathname: "/(main)/conversation",
-      params: {
-        id: item._id,
-        name: item.name,
-        avatar: item.avatar,
-        type: item.type,
-        participants: JSON.stringify(item.participants),
-      },
-    });
+    if (isSelectionMode) {
+      onToggleSelection?.();
+    } else {
+      router.push({
+        pathname: "/(main)/conversation",
+        params: {
+          id: item._id,
+          name: item.name,
+          avatar: item.avatar,
+          type: item.type,
+          participants: JSON.stringify(item.participants),
+        },
+      });
+    }
+  };
+
+  const handleLongPress = () => {
+    if (!isSelectionMode) {
+      onLongPress?.();
+    }
   };
 
   let avatar = item.avatar;
@@ -68,61 +83,88 @@ const ConversationListItem = ({
   // Get unread count from conversation data
   const unreadCount = item.unreadCount || 0;
 
+  const renderAvatar = () => {
+    if (isSelectionMode) {
+      return (
+        <View style={styles.avatarContainer}>
+          <Avatar uri={avatar} size={50} isGroup={item.type == "group"} />
+          <View style={styles.checkboxOverlay}>
+            <Checkbox
+              status={isSelected ? 'checked' : 'unchecked'}
+              onPress={onToggleSelection}
+              theme={{
+                colors: {
+                  primary: colors.alloGreen,
+                  onPrimary: colors.white,
+                }
+              }}
+            />
+          </View>
+        </View>
+      );
+    }
+    return <Avatar uri={avatar} size={50} isGroup={item.type == "group"} />;
+  };
+
+  const renderRight = () => (
+    <View style={styles.rightSection}>
+      {lastMessage && (
+        <Text variant="labelSmall" style={[styles.timeText, { color: colors.timestampText }]}>
+          {getLastMessageDate()}
+        </Text>
+      )}
+      {unreadCount > 0 && (
+        <Badge
+          style={styles.unreadBadge}
+          theme={{
+            colors: {
+              primary: colors.alloGreenLight,
+              onPrimary: colors.white,
+            }
+          }}
+        >
+          {unreadCount > 99 ? "99+" : unreadCount}
+        </Badge>
+      )}
+    </View>
+  );
+
+  const renderDescription = () => (
+    <View style={styles.messagePreview}>
+      {lastMessage && lastMessage.senderId === currentUser?.id && (
+        <Icons.Checks color={colors.timestampText} size={16} style={styles.checkIcon} />
+      )}
+      <Text
+        variant="bodyMedium"
+        numberOfLines={1}
+        style={[styles.messageText, { color: colors.timestampText }]}
+      >
+        {getLastMessageContent()}
+      </Text>
+    </View>
+  );
+
   return (
     <View>
       <TouchableOpacity
-        style={styles.conversationItem}
         onPress={openConversation}
-        activeOpacity={0.8}
+        onLongPress={handleLongPress}
+        style={[
+          styles.conversationItem,
+          { backgroundColor: theme.colors.surface },
+          isSelected && { backgroundColor: theme.colors.surfaceVariant }
+        ]}
       >
-        <View style={styles.avatarContainer}>
-          <Avatar uri={avatar} size={50} isGroup={item.type == "group"} />
-        </View>
-
-        <View style={styles.contentContainer}>
-          <View style={styles.topRow}>
-            <Typo size={16} fontWeight="400" style={styles.nameText} color={colors.black}>
-              {isDirect ? otherParticipant?.name : item.name}
-            </Typo>
-            <View style={styles.timeContainer}>
-              {lastMessage && (
-                <Typo size={12} color={colors.timestampText} style={styles.timeText}>
-                  {getLastMessageDate()}
-                </Typo>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.bottomRow}>
-            <View style={styles.messagePreview}>
-              {lastMessage && lastMessage.senderId === currentUser?.id && (
-                <View style={styles.tickContainer}>
-                  <Icons.Checks color={colors.timestampText} size={16} />
-                </View>
-              )}
-              <Typo
-                size={14}
-                color={colors.timestampText}
-                textProps={{ numberOfLines: 1 }}
-                style={styles.messageText}
-              >
-                {getLastMessageContent()}
-              </Typo>
-            </View>
-
-            <View style={styles.rightContainer}>
-              {unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Typo size={12} color={colors.white} fontWeight="600">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </Typo>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
+        <List.Item
+          title={isDirect ? otherParticipant?.name : item.name}
+          description={renderDescription}
+          left={renderAvatar}
+          right={renderRight}
+          style={styles.listItem}
+          titleStyle={styles.titleStyle}
+          theme={theme}
+        />
       </TouchableOpacity>
-
       {showDivider && <View style={styles.divider} />}
     </View>
   );
@@ -132,71 +174,57 @@ export default ConversationListItem;
 
 const styles = StyleSheet.create({
   conversationItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: spacingX._15,
-    paddingVertical: spacingY._10,
-    backgroundColor: colors.white,
   },
-  avatarContainer: {
-    marginRight: spacingX._12,
+  listItem: {
+    paddingHorizontal: 0,
   },
-  contentContainer: {
-    flex: 1,
-    justifyContent: "center",
+  titleStyle: {
+    fontSize: 16,
+    fontWeight: "400",
+    color: colors.black,
   },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacingY._5,
-  },
-  nameText: {
-    flex: 1,
-    marginRight: spacingX._10,
-  },
-  timeContainer: {
+  rightSection: {
     alignItems: "flex-end",
+    justifyContent: "center",
+    gap: spacingY._5,
   },
   timeText: {
     textAlign: "right",
   },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   messagePreview: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
-  tickContainer: {
+  checkIcon: {
     marginRight: spacingX._5,
-    justifyContent: "center",
-    alignItems: "center",
   },
   messageText: {
     flex: 1,
   },
-  rightContainer: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    marginLeft: spacingX._10,
-  },
   unreadBadge: {
-    backgroundColor: colors.alloGreenLight,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: spacingX._7,
+    marginTop: spacingY._5,
   },
   divider: {
     height: 1,
     backgroundColor: "#E0E0E0",
     marginLeft: spacingX._15 + 50 + spacingX._12, // Avatar width + margins
     marginRight: spacingX._15,
+  },
+  avatarContainer: {
+    position: "relative",
+  },
+  checkboxOverlay: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { List, IconButton, Text } from 'react-native-paper';
 import * as Icons from 'phosphor-react-native';
 import { colors, radius, spacingX, spacingY } from '@/constants/theme';
-import Typo from './Typo';
 import Avatar from './Avatar';
 import { useRouter } from 'expo-router';
 
@@ -123,108 +123,90 @@ const CallHistoryItem: React.FC<CallHistoryItemProps> = ({
         }
     };
 
-    return (
-        <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
-            <View style={styles.leftSection}>
-                <Avatar
-                    size={50}
-                    uri={conversationAvatar || null}
-                    isGroup={!isDirect}
-                />
+    const renderAvatar = () => (
+        <Avatar
+            size={50}
+            uri={conversationAvatar || null}
+            isGroup={!isDirect}
+        />
+    );
 
-                <View style={styles.callInfo}>
-                    <View style={styles.nameAndIcon}>
-                        <Typo
-                            size={16}
-                            fontWeight="500"
-                            color={colors.text}
-                            style={styles.name}
-                        >
-                            {conversationName}
-                        </Typo>
-                        {getCallIcon()}
-                    </View>
-
-                    <View style={styles.callDetails}>
-                        <Typo
-                            size={14}
-                            color={getTextColor()}
-                            fontWeight={status === 'missed' ? '500' : '400'}
-                        >
-                            {getCallText()}
-                        </Typo>
-                        {duration && (
-                            <>
-                                <Typo size={14} color={colors.timestampText}> • </Typo>
-                                <Typo size={14} color={colors.timestampText}>
-                                    {duration}
-                                </Typo>
-                            </>
-                        )}
-                    </View>
-
-                    <Typo size={12} color={colors.timestampText} style={styles.timestamp}>
-                        {formatTimestamp(timestamp)}
-                    </Typo>
-                </View>
+    const renderDescription = () => (
+        <View style={styles.descriptionContainer}>
+            <View style={styles.callDetails}>
+                {getCallIcon()}
+                <Text
+                    variant="bodyMedium"
+                    style={[
+                        styles.callText,
+                        {
+                            color: getTextColor(),
+                            fontWeight: status === 'missed' ? '500' : '400'
+                        }
+                    ]}
+                >
+                    {getCallText()}
+                </Text>
+                {duration && (
+                    <>
+                        <Text variant="bodyMedium" style={{ color: colors.timestampText }}> • </Text>
+                        <Text variant="bodyMedium" style={{ color: colors.timestampText }}>
+                            {duration}
+                        </Text>
+                    </>
+                )}
             </View>
+            <Text variant="labelSmall" style={[styles.timestamp, { color: colors.timestampText }]}>
+                {formatTimestamp(timestamp)}
+            </Text>
+        </View>
+    );
 
-            <TouchableOpacity
-                style={styles.callButton}
-                onPress={handleCallBack}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-                <Icons.Phone
-                    size={20}
-                    color={callType === 'video' ? colors.accentBlue : colors.alloGreen}
-                    weight="fill"
-                />
-            </TouchableOpacity>
-        </TouchableOpacity>
+    const renderRight = () => (
+        <IconButton
+            icon="phone"
+            onPress={handleCallBack}
+            iconColor={callType === 'video' ? colors.accentBlue : colors.alloGreen}
+            size={20}
+        />
+    );
+
+    return (
+        <List.Item
+            title={conversationName}
+            description={renderDescription}
+            left={renderAvatar}
+            right={renderRight}
+            onPress={handlePress}
+            style={styles.container}
+            titleStyle={styles.titleStyle}
+        />
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: spacingX._15,
-        paddingVertical: spacingY._12,
         backgroundColor: colors.white,
     },
-    leftSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        gap: spacingX._12,
+    titleStyle: {
+        fontSize: 16,
+        fontWeight: "500",
+        color: colors.text,
     },
-    callInfo: {
-        flex: 1,
-        gap: spacingY._5,
-    },
-    nameAndIcon: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacingX._10,
-    },
-    name: {
+    descriptionContainer: {
         flex: 1,
     },
     callDetails: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginBottom: spacingY._5,
+    },
+    callText: {
+        marginLeft: spacingX._5,
     },
     timestamp: {
         marginTop: spacingY._5,
-    },
-    callButton: {
-        padding: spacingX._10,
-        borderRadius: radius._20,
-        backgroundColor: colors.neutral100,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: spacingX._12,
     },
 });
 

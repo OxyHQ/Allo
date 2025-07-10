@@ -1,11 +1,26 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import React from "react";
 import { Stack } from "expo-router";
+import { PaperProvider } from "react-native-paper";
 import { AuthProvider } from "@/contexts/authContext";
 import { CallHistoryProvider } from "@/contexts/callHistoryContext";
 import { GlobalCallProvider } from "@/contexts/globalCallContext";
+import { ThemeProvider, useTheme } from "@/contexts/themeContext";
 import GlobalCallManager from "@/components/GlobalCallManager";
 import { useFonts } from "expo-font";
+import { getTheme } from "@/constants/paperTheme";
+
+// Theme wrapper component to provide dynamic theme
+function AppWithTheme({ children }: { children: React.ReactNode }) {
+  const { isDarkMode } = useTheme();
+  const theme = getTheme(isDarkMode);
+
+  return (
+    <PaperProvider theme={theme}>
+      {children}
+    </PaperProvider>
+  );
+}
 
 function StackLayout() {
   return (
@@ -17,6 +32,10 @@ function StackLayout() {
       <Stack.Screen
         name="(main)/newConversationModal"
         options={{ presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="(main)/settings"
+        options={{ presentation: "card" }}
       />
     </Stack>
   );
@@ -38,13 +57,17 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <CallHistoryProvider>
-        <GlobalCallProvider>
-          <StackLayout />
-          <GlobalCallManager />
-        </GlobalCallProvider>
-      </CallHistoryProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AppWithTheme>
+        <AuthProvider>
+          <CallHistoryProvider>
+            <GlobalCallProvider>
+              <StackLayout />
+              <GlobalCallManager />
+            </GlobalCallProvider>
+          </CallHistoryProvider>
+        </AuthProvider>
+      </AppWithTheme>
+    </ThemeProvider>
   );
 }

@@ -2,14 +2,13 @@ import {
   Image,
   ImageBackground,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
   SafeAreaView,
 } from "react-native";
 import React from "react";
+import { Text } from "react-native-paper";
 import ScreenWrapper from "@/components/ScreenWrapper";
-import Typo from "@/components/Typo";
 import { colors, spacingX, spacingY } from "@/constants/theme";
 import Button from "@/components/Button";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
@@ -22,9 +21,12 @@ const Welcome = () => {
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.container}>
           <View style={{ alignItems: "center" }}>
-            <Typo color={colors.white} size={43} fontWeight={"900"} fontFamily="Phudu-Bold">
+            <Text
+              variant="headlineLarge"
+              style={{ color: colors.white, fontWeight: '900', fontFamily: 'Phudu-Bold' }}
+            >
               Allo by Oxy
-            </Typo>
+            </Text>
           </View>
 
           <Animated.Image
@@ -35,24 +37,36 @@ const Welcome = () => {
           />
 
           <View style={{ paddingVertical: spacingY._50, paddingHorizontal: spacingX._20, }}>
-            <Typo color={colors.white} size={45} fontWeight={"800"} fontFamily="Phudu-Bold">
+            <Text
+              variant="headlineLarge"
+              style={{ color: colors.white, fontWeight: '800', fontFamily: 'Phudu-Bold' }}
+            >
               Stay Connected
-            </Typo>
-            <Typo color={colors.white} size={45} fontWeight={"800"} fontFamily="Phudu-Bold">
+            </Text>
+            <Text
+              variant="headlineLarge"
+              style={{ color: colors.white, fontWeight: '800', fontFamily: 'Phudu-Bold' }}
+            >
               with your friends
-            </Typo>
-            <Typo color={colors.white} size={45} fontWeight={"800"} fontFamily="Phudu-Bold">
+            </Text>
+            <Text
+              variant="headlineLarge"
+              style={{ color: colors.white, fontWeight: '800', fontFamily: 'Phudu-Bold' }}
+            >
               and family
-            </Typo>
+            </Text>
           </View>
 
           <Button
             style={{ backgroundColor: colors.white }}
             onPress={() => router.push("/(auth)/register")}
           >
-            <Typo size={23} fontWeight={"bold"} fontFamily="Phudu-Bold">
+            <Text
+              variant="titleLarge"
+              style={{ fontWeight: 'bold', fontFamily: 'Phudu-Bold' }}
+            >
               Get Started
-            </Typo>
+            </Text>
           </Button>
         </View>
       </SafeAreaView>

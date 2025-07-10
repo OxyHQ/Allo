@@ -108,6 +108,10 @@ export type ConversationListItemProps = {
   showDivider: boolean;
   isGroup?: boolean;
   router: Router;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onLongPress?: () => void;
+  onToggleSelection?: () => void;
 };
 
 export type ConversationProps = {

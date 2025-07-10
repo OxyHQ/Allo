@@ -1,4 +1,4 @@
-import { Image, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Image, StatusBar, StyleSheet, View } from "react-native";
 import React, { useEffect } from "react";
 import { colors } from "@/constants/theme";
 import { useRouter } from "expo-router";
@@ -9,30 +9,8 @@ import Animated, {
   FadeInUp,
 } from "react-native-reanimated";
 
-const index = () => {
+const Index = () => {
   const router = useRouter();
-
-  // useEffect(() => {
-  //   checkAuth();
-  // }, []);
-
-  // const checkAuth = async () => {
-  //   try {
-  //     const token = await AsyncStorage.getItem("token");
-  //     if (token) {
-  //       setTimeout(() => {
-  //         router.replace("/(main)/home");
-  //       }, 1500);
-  //     } else {
-  //       setTimeout(() => {
-  //         router.replace("/(auth)/welcome");
-  //       }, 1500);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error loading token:", error);
-  //     router.replace("/login");
-  //   }
-  // };
 
   return (
     <View style={styles.container}>
@@ -47,7 +25,7 @@ const index = () => {
   );
 };
 
-export default index;
+export default Index;
 
 const styles = StyleSheet.create({
   container: {
@@ -58,7 +36,5 @@ const styles = StyleSheet.create({
   },
   logo: {
     height: "23%",
-    // aspectRatio: 1, // Remove this line for better responsiveness
-    width: undefined, // Let the image scale naturally
   },
 });

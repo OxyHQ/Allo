@@ -7,22 +7,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import React, { useEffect, useRef, useState } from "react";
 import ScreenWrapper from "@/components/ScreenWrapper";
-import Header from "@/components/Header";
+import { Appbar, IconButton, TextInput, Text } from "react-native-paper";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import BackButton from "@/components/BackButton";
 import * as Icons from "phosphor-react-native";
-import Typo from "@/components/Typo";
 import Avatar from "@/components/Avatar";
 import Input from "@/components/Input";
 import MessageItem from "@/components/MessageItem";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { MessageProps } from "@/types";
 import {
   getMessages,
@@ -46,7 +43,7 @@ import { useGlobalCall } from "@/contexts/globalCallContext";
 import Loading from "@/components/Loading";
 import { uploadFileToCloudinary } from "@/services/imageService";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import { AudioRecorder, AudioPlayer, requestPermissionsAsync, setAudioModeAsync } from "expo-audio";
 import CallManager from "@/components/CallManager";
 
 type ResponseProps = {
@@ -86,6 +83,7 @@ const Conversation = () => {
   const { user: currentUser } = useAuth();
   const { addCallToHistory } = useCallHistory();
   const { initializeCallManager } = useGlobalCall();
+  const router = useRouter();
   const {
     id: conversationId,
     name: conversationName,
@@ -101,7 +99,7 @@ const Conversation = () => {
 
   const isDirect = type === "direct";
   const flatListRef = useRef<FlatList>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<any>(null);
   const [sendSound, setSendSound] = useState<Audio.Sound | null>(null);
   const [receiveSound, setReceiveSound] = useState<Audio.Sound | null>(null);
 
@@ -536,15 +534,8 @@ const Conversation = () => {
 
   const onTakePhoto = async () => {
     setShowAttachmentOptions(false);
-    let result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.7,
-      allowsEditing: true,
-    });
-
-    if (!result.canceled) {
-      setSelectedFile(result.assets[0]);
-    }
+    // Navigate to camera screen
+    router.push('/(main)/camera');
   };
 
   const removeSelectedFile = () => {
@@ -829,20 +820,22 @@ const Conversation = () => {
             size={48}
             style={styles.emptyStateIcon}
           />
-          <Typo
-            size={16}
-            color={colors.timestampText}
-            style={styles.emptyStateText}
+          <Text
+            style={[
+              styles.emptyStateText,
+              { fontSize: 16, color: colors.timestampText }
+            ]}
           >
             No messages yet
-          </Typo>
-          <Typo
-            size={14}
-            color={colors.timestampText}
-            style={styles.emptyStateSubtext}
+          </Text>
+          <Text
+            style={[
+              styles.emptyStateSubtext,
+              { fontSize: 14, color: colors.timestampText }
+            ]}
           >
             Send a message to start the conversation
-          </Typo>
+          </Text>
         </View>
       </View>
     );
@@ -859,12 +852,12 @@ const Conversation = () => {
           <View style={[styles.typingDot, styles.typingDot2]} />
           <View style={[styles.typingDot, styles.typingDot3]} />
         </View>
-        <Typo color={colors.white} size={12} style={styles.typingText}>
+        <Text style={[styles.typingText, { color: colors.white, fontSize: 12 }]}>
           {typingUsers.size === 1
             ? `${typingUserNames[0]} is typing...`
             : `${typingUsers.size} people are typing...`
           }
-        </Typo>
+        </Text>
       </View>
     );
   };
@@ -901,21 +894,21 @@ const Conversation = () => {
           <View style={[styles.attachmentIcon, { backgroundColor: colors.rose }]}>
             <Icons.Camera color={colors.white} size={24} />
           </View>
-          <Typo size={12} style={styles.attachmentLabel}>Camera</Typo>
+          <Text style={[styles.attachmentLabel, { fontSize: 12 }]}>Camera</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.attachmentOption} onPress={onPickImage}>
           <View style={[styles.attachmentIcon, { backgroundColor: colors.accentBlue }]}>
             <Icons.Image color={colors.white} size={24} />
           </View>
-          <Typo size={12} style={styles.attachmentLabel}>Gallery</Typo>
+          <Text style={[styles.attachmentLabel, { fontSize: 12 }]}>Gallery</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.attachmentOption}>
           <View style={[styles.attachmentIcon, { backgroundColor: colors.green }]}>
             <Icons.File color={colors.white} size={24} />
           </View>
-          <Typo size={12} style={styles.attachmentLabel}>Document</Typo>
+          <Text style={[styles.attachmentLabel, { fontSize: 12 }]}>Document</Text>
         </TouchableOpacity>
       </View>
     );
@@ -928,57 +921,61 @@ const Conversation = () => {
         style={styles.container}
       >
         {/* header */}
-        <Header
+        <Appbar.Header
           style={styles.header}
-          leftIcon={
-            <View style={styles.headerLeft}>
-              <BackButton />
-              <Avatar
-                size={40}
-                uri={conversationAvatar as string}
-                isGroup={type === "group"}
-              />
-              <View style={styles.headerInfo}>
-                <Typo color={colors.white} fontWeight={"500"} size={18}>
-                  {conversationName}
-                </Typo>
-                {typingUsers.size > 0 ? (
-                  renderTypingIndicator()
-                ) : (
-                  <Typo color={colors.white} size={12} style={styles.statusText}>
-                    {isDirect
-                      ? (isOnline ? "online" : `last seen ${lastSeen}`)
-                      : `${participants ? (participants as string).split(',').length : 2} participants`
-                    }
-                  </Typo>
-                )}
-              </View>
+          theme={{
+            colors: {
+              surface: colors.alloGreen,
+              onSurface: colors.white,
+              primary: colors.white,
+            }
+          }}
+        >
+          <Appbar.BackAction
+            onPress={() => router.back()}
+            color={colors.white}
+          />
+          <View style={styles.headerLeft}>
+            <Avatar
+              size={40}
+              uri={conversationAvatar as string}
+              isGroup={type === "group"}
+            />
+            <View style={styles.headerInfo}>
+              <Text style={{ color: colors.white, fontWeight: "500", fontSize: 18 }}>
+                {conversationName}
+              </Text>
+              {typingUsers.size > 0 ? (
+                renderTypingIndicator()
+              ) : (
+                <Text style={[styles.statusText, { color: colors.white, fontSize: 12 }]}>
+                  {isDirect
+                    ? (isOnline ? "online" : `last seen ${lastSeen}`)
+                    : `${participants ? (participants as string).split(',').length : 2} participants`
+                  }
+                </Text>
+              )}
             </View>
-          }
-          rightIcon={
-            <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.headerIconButton} onPress={startVideoCall}>
-                <Icons.VideoCamera color={colors.white} size={22} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconButton} onPress={startAudioCall}>
-                <Icons.Phone color={colors.white} size={22} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerIconButton}
-                onPress={() => {
-                  // Open conversation settings/menu
-                  console.log('Opening conversation menu');
-                }}
-              >
-                <Icons.DotsThreeOutlineVertical
-                  weight="fill"
-                  color={colors.white}
-                  size={22}
-                />
-              </TouchableOpacity>
-            </View>
-          }
-        />
+          </View>
+          <Appbar.Action
+            icon="video"
+            iconColor={colors.white}
+            onPress={startVideoCall}
+          />
+          <Appbar.Action
+            icon="phone"
+            iconColor={colors.white}
+            onPress={startAudioCall}
+          />
+          <Appbar.Action
+            icon="dots-vertical"
+            iconColor={colors.white}
+            onPress={() => {
+              // Open conversation settings/menu
+              console.log('Opening conversation menu');
+            }}
+          />
+        </Appbar.Header>
 
         {/* messages */}
         <View style={styles.content}>
@@ -1092,9 +1089,9 @@ const Conversation = () => {
           {isRecording && (
             <View style={styles.recordingIndicator}>
               <View style={styles.recordingDot} />
-              <Typo color={colors.rose} size={14} fontWeight="500">
+              <Text style={{ color: colors.rose, fontSize: 14, fontWeight: "500" }}>
                 Recording...
-              </Typo>
+              </Text>
             </View>
           )}
         </View>
@@ -1121,25 +1118,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: spacingX._15,
-    paddingTop: spacingY._10,
-    paddingBottom: spacingY._15,
+    backgroundColor: colors.alloGreen,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacingX._12,
+    flex: 1,
   },
   headerInfo: {
     flex: 1,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacingX._15,
-  },
-  headerIconButton: {
-    padding: spacingY._5,
   },
   statusText: {
     opacity: 0.8,

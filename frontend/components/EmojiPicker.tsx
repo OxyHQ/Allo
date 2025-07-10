@@ -1,6 +1,6 @@
 import React from "react";
-import { View, TouchableOpacity, StyleSheet, Modal } from "react-native";
-import Typo from "./Typo";
+import { View, StyleSheet } from "react-native";
+import { Modal, Portal, IconButton, Text } from "react-native-paper";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 
 type EmojiPickerProps = {
@@ -24,52 +24,40 @@ const EmojiPicker = ({
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <TouchableOpacity
-                style={styles.overlay}
-                activeOpacity={1}
-                onPress={onClose}
+        <Portal>
+            <Modal
+                visible={visible}
+                onDismiss={onClose}
+                contentContainerStyle={[
+                    styles.container,
+                    {
+                        top: Math.max(position.y - 60, 50), // Position above the message
+                        left: Math.max(Math.min(position.x - 150, 300), 20), // Center and stay within bounds
+                    }
+                ]}
             >
-                <View
-                    style={[
-                        styles.container,
-                        {
-                            top: Math.max(position.y - 60, 50), // Position above the message
-                            left: Math.max(Math.min(position.x - 150, 300), 20), // Center and stay within bounds
-                        }
-                    ]}
-                >
-                    <View style={styles.picker}>
-                        {QUICK_REACTIONS.map((emoji) => (
-                            <TouchableOpacity
-                                key={emoji}
-                                style={styles.emojiButton}
-                                onPress={() => handleEmojiPress(emoji)}
-                                activeOpacity={0.7}
-                            >
-                                <Typo size={24} style={styles.emoji}>
+                <View style={styles.picker}>
+                    {QUICK_REACTIONS.map((emoji) => (
+                        <IconButton
+                            key={emoji}
+                            icon={() => (
+                                <Text variant="headlineMedium" style={styles.emoji}>
                                     {emoji}
-                                </Typo>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                    <View style={styles.arrow} />
+                                </Text>
+                            )}
+                            onPress={() => handleEmojiPress(emoji)}
+                            style={styles.emojiButton}
+                            size={36}
+                        />
+                    ))}
                 </View>
-            </TouchableOpacity>
-        </Modal>
+                <View style={styles.arrow} />
+            </Modal>
+        </Portal>
     );
 };
 
 const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    },
     container: {
         position: 'absolute',
         zIndex: 1000,

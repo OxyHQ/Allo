@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import React from "react";
-import Typo from "./Typo";
+import { Text } from "react-native-paper";
 import { HeaderProps } from "@/types";
 
 const Header = ({ title = "", leftIcon, rightIcon, style }: HeaderProps) => {
@@ -8,9 +8,9 @@ const Header = ({ title = "", leftIcon, rightIcon, style }: HeaderProps) => {
     <View style={[styles.container, style]}>
       {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
       {title && (
-        <Typo size={22} fontWeight={"600"} style={styles.title}>
+        <Text variant="titleLarge" style={[styles.title, { fontWeight: '600' }]}>
           {title}
-        </Typo>
+        </Text>
       )}
 
       {rightIcon && <View style={styles.rightIcon}>{rightIcon}</View>}

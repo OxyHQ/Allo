@@ -4,7 +4,7 @@ import { useGlobalCall } from '@/contexts/globalCallContext';
 import { useAuth } from '@/contexts/authContext';
 import { useCallHistory } from '@/contexts/callHistoryContext';
 import { colors, spacingX, spacingY, radius } from '@/constants/theme';
-import Typo from './Typo';
+import { Text } from 'react-native-paper';
 import Avatar from './Avatar';
 import * as Icons from 'phosphor-react-native';
 import { answerCall, endCall } from '@/socket/socketEvents';
@@ -79,9 +79,9 @@ const GlobalCallManager: React.FC = () => {
         >
             <View style={styles.container}>
                 <View style={styles.callHeader}>
-                    <Typo color={colors.white} size={18} fontWeight="500">
+                    <Text style={{ color: colors.white, fontSize: 18, fontWeight: "500" }}>
                         Incoming {currentCall.callType} call
-                    </Typo>
+                    </Text>
                 </View>
 
                 <View style={styles.callerInfo}>
@@ -90,12 +90,12 @@ const GlobalCallManager: React.FC = () => {
                         uri={currentCall.conversationAvatar || null}
                         isGroup={!currentCall.isDirect}
                     />
-                    <Typo color={colors.white} size={24} fontWeight="600" style={styles.callerName}>
+                    <Text style={[styles.callerName, { color: colors.white, fontSize: 24, fontWeight: "600" }]}>
                         {currentCall.conversationName || currentCall.callerName}
-                    </Typo>
-                    <Typo color={colors.white} size={16} style={styles.callStatus}>
+                    </Text>
+                    <Text style={[styles.callStatus, { color: colors.white, fontSize: 16 }]}>
                         {currentCall.callType === 'video' ? 'Incoming video call' : 'Incoming call'}
-                    </Typo>
+                    </Text>
                 </View>
 
                 <View style={styles.callActions}>

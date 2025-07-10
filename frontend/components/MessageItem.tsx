@@ -2,7 +2,7 @@ import { StyleSheet, View, TouchableWithoutFeedback } from "react-native";
 import React, { useState } from "react";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import Avatar from "./Avatar";
-import Typo from "./Typo";
+import { Text } from "react-native-paper";
 import { MessageProps } from "@/types";
 import { useAuth } from "@/contexts/authContext";
 import moment from "moment";
@@ -207,14 +207,14 @@ const MessageItem = ({
         ]}>
           {/* Sender name for group chats */}
           {!isMe && !isDirect && showSenderName && (
-            <Typo
-              color="#00a884"
-              fontWeight={"600"}
-              size={13}
-              style={styles.senderName}
+            <Text
+              style={[
+                styles.senderName,
+                { color: "#00a884", fontWeight: "600", fontSize: 13 }
+              ]}
             >
               {item.sender.name}
-            </Typo>
+            </Text>
           )}
 
           <View style={styles.bubbleWrapper}>
@@ -250,25 +250,26 @@ const MessageItem = ({
 
                   <View style={styles.textAndTimestamp}>
                     {item.content && (
-                      <Typo
-                        size={14}
-                        color={isMe ? colors.myBubbleText : colors.otherBubbleText}
-                        style={styles.messageText}
+                      <Text
+                        style={[
+                          styles.messageText,
+                          { fontSize: 14, color: isMe ? colors.myBubbleText : colors.otherBubbleText }
+                        ]}
                       >
                         {item.content}
-                      </Typo>
+                      </Text>
                     )}
 
                     {/* Timestamp and ticks inside bubble */}
                     <View style={styles.timestampAndTicks}>
-                      <Typo
-                        size={11}
-                        fontWeight={"400"}
-                        color={colors.timestampText}
-                        style={styles.inlineTimestamp}
+                      <Text
+                        style={[
+                          styles.inlineTimestamp,
+                          { fontSize: 11, fontWeight: "400", color: colors.timestampText }
+                        ]}
                       >
                         {formattedDate}
-                      </Typo>
+                      </Text>
 
                       {/* Show ticks only for sent messages */}
                       {isMe && (

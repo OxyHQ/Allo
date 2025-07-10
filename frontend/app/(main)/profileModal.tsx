@@ -3,7 +3,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -13,7 +12,7 @@ import ScreenWrapper from "@/components/ScreenWrapper";
 import BackButton from "@/components/BackButton";
 import { Image } from "expo-image";
 import * as Icons from "phosphor-react-native";
-import Typo from "@/components/Typo";
+import { Text } from "react-native-paper";
 import Input from "@/components/Input";
 import { UserDataProps } from "@/types";
 import Button from "@/components/Button";
@@ -149,7 +148,7 @@ const ProfileModal = () => {
 
           <View style={{ gap: spacingY._20 }}>
             <View style={styles.inputContainer}>
-              <Typo style={{ paddingLeft: spacingX._10 }}>Email</Typo>
+              <Text style={{ paddingLeft: spacingX._10 }}>Email</Text>
               <Input
                 value={userData.email}
                 containerStyle={{
@@ -164,7 +163,7 @@ const ProfileModal = () => {
               />
             </View>
             <View style={styles.inputContainer}>
-              <Typo style={{ paddingLeft: spacingX._10 }}>Name</Typo>
+              <Text style={{ paddingLeft: spacingX._10 }}>Name</Text>
               <Input
                 value={userData.name}
                 containerStyle={{
@@ -199,9 +198,9 @@ const ProfileModal = () => {
         )}
 
         <Button onPress={onSubmit} loading={loading} style={{ flex: 1 }}>
-          <Typo color={colors.black} fontWeight={"700"}>
+          <Text style={{ color: colors.black, fontWeight: "700" }}>
             Update
-          </Typo>
+          </Text>
         </Button>
       </View>
     </ScreenWrapper>

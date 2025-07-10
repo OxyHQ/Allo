@@ -1,23 +1,20 @@
 import {
   ScrollView,
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
   Image,
   Alert,
-  TextInput,
   StatusBar,
+  TouchableOpacity,
 } from "react-native";
 import React, { useEffect, useState } from "react";
 import ScreenWrapper from "@/components/ScreenWrapper";
-import Typo from "@/components/Typo";
 import {
   getContacts,
   getConversations,
   newConversation,
 } from "@/socket/socketEvents";
-import Header from "@/components/Header";
+import { Appbar, FAB, Searchbar, List, IconButton, TextInput, Text } from "react-native-paper";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import BackButton from "@/components/BackButton";
 import Avatar from "@/components/Avatar";
@@ -169,71 +166,74 @@ const NewConversationModal = () => {
   const renderHeader = () => {
     if (isGroupMode && step === 2) {
       return (
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerButton}
+        <Appbar.Header
+          style={styles.header}
+          theme={{
+            colors: {
+              surface: colors.alloGreen,
+              onSurface: colors.white,
+              primary: colors.white,
+            }
+          }}
+        >
+          <Appbar.BackAction
             onPress={() => setStep(1)}
-          >
-            <Icons.ArrowLeft color={colors.white} size={24} />
-          </TouchableOpacity>
-          <Typo color={colors.white} size={18} fontWeight="600" style={styles.headerTitle}>
-            New Group
-          </Typo>
-          <View style={styles.headerButton} />
-        </View>
+            color={colors.white}
+          />
+          <Appbar.Content
+            title="New Group"
+            titleStyle={styles.headerTitle}
+          />
+        </Appbar.Header>
       );
     }
 
     return (
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerButton}
+      <Appbar.Header
+        style={styles.header}
+        theme={{
+          colors: {
+            surface: colors.alloGreen,
+            onSurface: colors.white,
+            primary: colors.white,
+          }
+        }}
+      >
+        <Appbar.Action
+          icon="close"
+          iconColor={colors.white}
           onPress={() => router.back()}
-        >
-          <Icons.X color={colors.white} size={24} />
-        </TouchableOpacity>
-        <Typo color={colors.white} size={18} fontWeight="600" style={styles.headerTitle}>
-          {isGroupMode ? "Add Participants" : "New Chat"}
-        </Typo>
+        />
+        <Appbar.Content
+          title={isGroupMode ? "Add Participants" : "New Chat"}
+          titleStyle={styles.headerTitle}
+        />
         {isGroupMode && selectedParticipants.length > 0 && (
-          <TouchableOpacity
-            style={styles.headerButton}
+          <Appbar.Action
+            icon="arrow-right"
+            iconColor={colors.white}
             onPress={proceedToGroupInfo}
-          >
-            <Icons.ArrowRight color={colors.white} size={24} />
-          </TouchableOpacity>
+          />
         )}
-        {!isGroupMode && <View style={styles.headerButton} />}
-      </View>
+      </Appbar.Header>
     );
   };
 
   const renderSearchBar = () => (
     <View style={styles.searchContainer}>
-      <View style={styles.searchInputWrapper}>
-        <Icons.MagnifyingGlass
-          color={colors.timestampText}
-          size={18}
-          style={styles.searchIcon}
-        />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search contacts..."
-          placeholderTextColor={colors.timestampText}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity
-            onPress={() => setSearchQuery("")}
-            style={styles.clearButton}
-          >
-            <Icons.X color={colors.timestampText} size={16} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <Searchbar
+        placeholder="Search contacts..."
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchBar}
+        theme={{
+          colors: {
+            surface: colors.neutral100,
+            onSurface: colors.black,
+            onSurfaceVariant: colors.timestampText,
+          }
+        }}
+      />
     </View>
   );
 
@@ -258,16 +258,16 @@ const NewConversationModal = () => {
                   <Icons.X color={colors.white} size={12} />
                 </View>
               </TouchableOpacity>
-              <Typo size={12} style={styles.selectedName}>
+              <Text style={[styles.selectedName, { fontSize: 12 }]}>
                 {contact.name.split(' ')[0]}
-              </Typo>
+              </Text>
             </View>
           ))}
         </ScrollView>
         <View style={styles.participantCount}>
-          <Typo size={14} color={colors.timestampText}>
+          <Text style={{ fontSize: 14, color: colors.timestampText }}>
             {selectedParticipants.length} participant{selectedParticipants.length !== 1 ? 's' : ''} selected
-          </Typo>
+          </Text>
         </View>
       </View>
     );
@@ -286,9 +286,9 @@ const NewConversationModal = () => {
             <Icons.Camera color={colors.white} size={24} />
           </View>
         </TouchableOpacity>
-        <Typo size={14} color={colors.timestampText} style={styles.avatarHint}>
+        <Text style={[styles.avatarHint, { fontSize: 14, color: colors.timestampText }]}>
           Tap to add group photo
-        </Typo>
+        </Text>
       </View>
 
       <View style={styles.groupNameSection}>
@@ -304,24 +304,24 @@ const NewConversationModal = () => {
           />
           <View style={styles.groupNameUnderline} />
         </View>
-        <Typo size={12} color={colors.timestampText} style={styles.characterCount}>
+        <Text style={[styles.characterCount, { fontSize: 12, color: colors.timestampText }]}>
           {groupName.length}/25
-        </Typo>
+        </Text>
       </View>
 
       <View style={styles.participantsSection}>
-        <Typo size={16} fontWeight="600" style={styles.sectionTitle}>
+        <Text style={[styles.sectionTitle, { fontSize: 16, fontWeight: "600" }]}>
           Participants: {selectedParticipants.length + 1}
-        </Typo>
+        </Text>
 
         {/* Current user */}
         <View style={styles.participantRow}>
           <Avatar size={40} uri={currentUser?.avatar || null} />
           <View style={styles.participantInfo}>
-            <Typo size={16} fontWeight="500">
+            <Text style={{ fontSize: 16, fontWeight: "500" }}>
               {currentUser?.name} (You)
-            </Typo>
-            <Typo size={14} color={colors.timestampText}>Admin</Typo>
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.timestampText }}>Admin</Text>
           </View>
         </View>
 
@@ -330,7 +330,7 @@ const NewConversationModal = () => {
           <View key={index} style={styles.participantRow}>
             <Avatar size={40} uri={contact.avatar} />
             <View style={styles.participantInfo}>
-              <Typo size={16} fontWeight="500">{contact.name}</Typo>
+              <Text style={{ fontSize: 16, fontWeight: "500" }}>{contact.name}</Text>
             </View>
             <TouchableOpacity
               onPress={() => toggleParticipant(contact)}
@@ -351,39 +351,40 @@ const NewConversationModal = () => {
     >
       {filteredContacts.length === 0 ? (
         <View style={styles.emptyState}>
-          <Typo color={colors.timestampText} style={styles.emptyText}>
+          <Text style={[styles.emptyText, { color: colors.timestampText }]}>
             {searchQuery ? "No contacts found" : "No contacts available"}
-          </Typo>
+          </Text>
         </View>
       ) : (
         filteredContacts.map((user: any, index) => {
           const isSelected = selectedParticipants.includes(user.id);
-          return (
-            <TouchableOpacity
-              key={index}
-              style={styles.contactRow}
-              onPress={() => onSelectUser(user)}
-              activeOpacity={0.7}
-            >
-              <Avatar size={50} uri={user.avatar} />
-              <View style={styles.contactInfo}>
-                <Typo size={16} fontWeight="500" color={colors.black}>
-                  {user.name}
-                </Typo>
-                <Typo size={14} color={colors.timestampText}>
-                  Last seen recently
-                </Typo>
+
+          const renderAvatar = () => (
+            <Avatar size={50} uri={user.avatar} />
+          );
+
+          const renderRight = () => (
+            isGroupMode ? (
+              <View style={[styles.checkbox, isSelected && styles.checked]}>
+                {isSelected && (
+                  <Icons.Check color={colors.white} size={14} weight="bold" />
+                )}
               </View>
-              {isGroupMode && (
-                <View style={styles.selectionIndicator}>
-                  <View style={[styles.checkbox, isSelected && styles.checked]}>
-                    {isSelected && (
-                      <Icons.Check color={colors.white} size={14} weight="bold" />
-                    )}
-                  </View>
-                </View>
-              )}
-            </TouchableOpacity>
+            ) : null
+          );
+
+          return (
+            <List.Item
+              key={index}
+              title={user.name}
+              description="Last seen recently"
+              left={renderAvatar}
+              right={renderRight}
+              onPress={() => onSelectUser(user)}
+              style={styles.contactRow}
+              titleStyle={styles.contactTitle}
+              descriptionStyle={styles.contactDescription}
+            />
           );
         })
       )}
@@ -410,22 +411,19 @@ const NewConversationModal = () => {
 
       {/* Create Group Button */}
       {isGroupMode && step === 2 && (
-        <View style={styles.createButtonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              (!groupName.trim() || isLoading) && styles.createButtonDisabled
-            ]}
-            onPress={createGroup}
-            disabled={!groupName.trim() || isLoading}
-          >
-            {isLoading ? (
-              <Typo color={colors.white} fontWeight="600">Creating...</Typo>
-            ) : (
-              <Icons.Check color={colors.white} size={24} weight="bold" />
-            )}
-          </TouchableOpacity>
-        </View>
+        <FAB
+          style={styles.createButton}
+          icon="check"
+          onPress={createGroup}
+          disabled={!groupName.trim() || isLoading}
+          loading={isLoading}
+          theme={{
+            colors: {
+              primaryContainer: colors.alloGreen,
+              onPrimaryContainer: colors.white,
+            },
+          }}
+        />
       )}
     </View>
   );
@@ -439,22 +437,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.alloGreen,
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacingX._15,
-    paddingTop: spacingY._50,
-    paddingBottom: spacingY._15,
     backgroundColor: colors.alloGreen,
-  },
-  headerButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
+    elevation: 0,
+    shadowOpacity: 0,
   },
   headerTitle: {
-    flex: 1,
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: "600",
     textAlign: "center",
   },
   content: {
@@ -467,26 +457,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacingY._10,
     backgroundColor: colors.white,
   },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.neutral100,
-    borderRadius: radius._20,
-    paddingHorizontal: spacingX._15,
-    paddingVertical: spacingY._10,
-  },
-  searchIcon: {
-    marginRight: spacingX._10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.black,
-    paddingVertical: spacingY._5,
-  },
-  clearButton: {
-    padding: spacingY._5,
-    marginLeft: spacingX._5,
+  searchBar: {
+    elevation: 0,
+    shadowOpacity: 0,
   },
   selectedContainer: {
     backgroundColor: colors.neutral50,
@@ -526,14 +499,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacingY._10,
   },
   contactRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: spacingX._15,
-    paddingVertical: spacingY._12,
   },
-  contactInfo: {
-    flex: 1,
-    marginLeft: spacingX._12,
+  contactTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: colors.black,
+  },
+  contactDescription: {
+    fontSize: 14,
+    color: colors.timestampText,
   },
   selectionIndicator: {
     marginLeft: spacingX._10,
@@ -628,28 +603,9 @@ const styles = StyleSheet.create({
   removeParticipantButton: {
     padding: spacingY._5,
   },
-  createButtonContainer: {
+  createButton: {
     position: "absolute",
     bottom: spacingY._30,
     right: spacingX._20,
-  },
-  createButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.alloGreen,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 8,
-    shadowColor: colors.black,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-  },
-  createButtonDisabled: {
-    backgroundColor: colors.timestampText,
   },
 });

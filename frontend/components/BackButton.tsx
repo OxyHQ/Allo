@@ -1,8 +1,7 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React from "react";
+import { IconButton } from "react-native-paper";
 import { useRouter } from "expo-router";
-import { CaretLeft } from "phosphor-react-native";
-import { colors, radius } from "@/constants/theme";
+import { colors } from "@/constants/theme";
 import { BackButtonProps } from "@/types";
 
 const BackButton = ({
@@ -12,23 +11,14 @@ const BackButton = ({
 }: BackButtonProps) => {
   const router = useRouter();
   return (
-    <TouchableOpacity
+    <IconButton
+      icon="arrow-left"
+      size={iconSize}
+      iconColor={color}
       onPress={() => router.back()}
-      style={[styles.button, style]}
-    >
-      <CaretLeft size={iconSize} color={color} weight="bold" />
-    </TouchableOpacity>
+      style={style}
+    />
   );
 };
 
 export default BackButton;
-
-const styles = StyleSheet.create({
-  button: {
-    // backgroundColor: colors.neutral600,
-    // alignSelf: "flex-start",
-    // borderRadius: radius._12,
-    // borderCurve: "continuous",
-    // padding: 5,
-  },
-});

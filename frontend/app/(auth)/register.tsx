@@ -6,12 +6,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import React, { useRef, useState } from "react";
 import ScreenWrapper from "@/components/ScreenWrapper";
-import Typo from "@/components/Typo";
+import { Text } from "react-native-paper";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import BackButton from "@/components/BackButton";
 import Input from "@/components/Input";
@@ -53,9 +52,9 @@ const Register = () => {
         <View style={styles.container}>
           <View style={styles.header}>
             <BackButton iconSize={28} />
-            <Typo size={17} color={colors.white}>
+            <Text style={{ fontSize: 17, color: colors.white }}>
               Need some help?
-            </Typo>
+            </Text>
           </View>
           <View style={styles.content}>
             <ScrollView
@@ -63,12 +62,12 @@ const Register = () => {
               showsVerticalScrollIndicator={false}
             >
               <View style={{ gap: spacingY._10, marginBottom: spacingY._15 }}>
-                <Typo size={28} fontWeight={"600"}>
+                <Text style={{ fontSize: 28, fontWeight: "600" }}>
                   Getting started
-                </Typo>
-                <Typo color={colors.neutral600}>
+                </Text>
+                <Text style={{ color: colors.neutral600 }}>
                   Create an account to continue!
-                </Typo>
+                </Text>
               </View>
               <Input
                 placeholder="Enter your name"
@@ -104,16 +103,16 @@ const Register = () => {
 
               <View style={{ marginTop: spacingY._25, gap: spacingY._15 }}>
                 <Button loading={isLoading} onPress={handleSubmit}>
-                  <Typo fontWeight={"bold"} color={colors.black} size={20}>
+                  <Text style={{ fontWeight: "bold", color: colors.black, fontSize: 20 }}>
                     Sign Up
-                  </Typo>
+                  </Text>
                 </Button>
                 <View style={styles.footer}>
-                  <Typo>Already have an account?</Typo>
+                  <Text>Already have an account?</Text>
                   <Pressable onPress={() => router.push("/(auth)/login")}>
-                    <Typo fontWeight={"bold"} color={colors.primaryDark}>
+                    <Text style={{ fontWeight: "bold", color: colors.primaryDark }}>
                       Login
-                    </Typo>
+                    </Text>
                   </Pressable>
                 </View>
               </View>

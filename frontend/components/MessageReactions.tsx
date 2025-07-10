@@ -1,6 +1,6 @@
 import React from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
-import Typo from "./Typo";
+import { Text } from "react-native-paper";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import { useAuth } from "@/contexts/authContext";
 
@@ -65,18 +65,18 @@ const MessageReactions = ({
                     onLongPress={() => onReactionLongPress?.(emoji)}
                     activeOpacity={0.7}
                 >
-                    <Typo size={14} style={styles.reactionEmoji}>
+                    <Text style={[styles.reactionEmoji, { fontSize: 14 }]}>
                         {emoji}
-                    </Typo>
+                    </Text>
                     {count > 1 && (
-                        <Typo
-                            size={12}
-                            color={hasCurrentUser ? colors.accentBlue : colors.timestampText}
-                            fontWeight="600"
-                            style={styles.reactionCount}
+                        <Text
+                            style={[
+                                styles.reactionCount,
+                                { fontSize: 12, color: hasCurrentUser ? colors.accentBlue : colors.timestampText, fontWeight: "600" }
+                            ]}
                         >
                             {count}
-                        </Typo>
+                        </Text>
                     )}
                 </TouchableOpacity>
             ))}

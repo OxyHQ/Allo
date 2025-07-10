@@ -1,18 +1,18 @@
 import React from "react";
 import {
+  Alert,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
   StatusBar,
   TextInput,
 } from "react-native";
+import { BottomNavigation, Appbar, FAB, Searchbar, Menu, Divider, Text, useTheme } from "react-native-paper";
 import { useAuth } from "@/contexts/authContext";
 import { useCallHistory } from "@/contexts/callHistoryContext";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import Button from "@/components/Button";
-import Typo from "@/components/Typo";
 import { colors, radius, spacingX, spacingY } from "@/constants/theme";
 import * as Icons from "phosphor-react-native";
 import { useRouter } from "expo-router";
@@ -26,8 +26,12 @@ const Home = () => {
   const { user: currentUser, signOut } = useAuth();
   const { callHistory } = useCallHistory();
   const router = useRouter();
-  const [selectedTab, setSelectedTab] = React.useState(0);
+  const theme = useTheme();
+  const [selectedTab, setSelectedTab] = React.useState('chats');
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [menuVisible, setMenuVisible] = React.useState(false);
+  const [isSelectionMode, setIsSelectionMode] = React.useState(false);
+  const [selectedConversations, setSelectedConversations] = React.useState<Set<string>>(new Set());
   const {
     loading,
     directConversations,
@@ -36,6 +40,75 @@ const Home = () => {
 
   const handleLogout = async () => {
     await signOut();
+  };
+
+  // Selection mode handlers
+  const enterSelectionMode = (conversationId: string) => {
+    setIsSelectionMode(true);
+    setSelectedConversations(new Set([conversationId]));
+  };
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedConversations(new Set());
+  };
+
+  const toggleConversationSelection = (conversationId: string) => {
+    setSelectedConversations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(conversationId)) {
+        newSet.delete(conversationId);
+      } else {
+        newSet.add(conversationId);
+      }
+
+      // Exit selection mode if no conversations selected
+      if (newSet.size === 0) {
+        setIsSelectionMode(false);
+      }
+
+      return newSet;
+    });
+  };
+
+  const selectAllConversations = () => {
+    const allConversations = [...directConversations, ...groupConversations];
+    const filteredConversations = [
+      ...filterConversations(directConversations),
+      ...filterConversations(groupConversations)
+    ];
+    setSelectedConversations(new Set(filteredConversations.map(conv => conv._id)));
+  };
+
+  const handleBulkDelete = async () => {
+    Alert.alert(
+      "Delete Conversations",
+      `Are you sure you want to delete ${selectedConversations.size} conversation(s)?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            // TODO: Implement bulk delete API call
+            console.log("Deleting conversations:", Array.from(selectedConversations));
+            exitSelectionMode();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleBulkArchive = async () => {
+    // TODO: Implement bulk archive API call
+    console.log("Archiving conversations:", Array.from(selectedConversations));
+    exitSelectionMode();
+  };
+
+  const handleBulkMarkAsRead = async () => {
+    // TODO: Implement bulk mark as read API call
+    console.log("Marking conversations as read:", Array.from(selectedConversations));
+    exitSelectionMode();
   };
 
   // Filter conversations based on search query
@@ -62,12 +135,16 @@ const Home = () => {
         key={item._id || index}
         router={router}
         showDivider={filteredConversations.length !== index + 1}
+        isSelectionMode={isSelectionMode}
+        isSelected={selectedConversations.has(item._id)}
+        onLongPress={() => enterSelectionMode(item._id)}
+        onToggleSelection={() => toggleConversationSelection(item._id)}
       />
     ));
   };
 
   const renderEmptyState = () => {
-    if (!loading && selectedTab === 0) {
+    if (!loading && selectedTab === 'chats') {
       const filteredDirect = filterConversations(directConversations);
       const filteredGroup = filterConversations(groupConversations);
 
@@ -75,118 +152,161 @@ const Home = () => {
         if (filteredDirect.length === 0 && filteredGroup.length === 0) {
           return (
             <View style={styles.emptyState}>
-              <Typo style={{ textAlign: "center", color: colors.textDark }}>
+              <Text variant="bodyLarge" style={{ textAlign: "center", color: colors.textDark }}>
                 No chats found
-              </Typo>
-              <Typo size={14} style={{ textAlign: "center" }} color={colors.timestampText}>
+              </Text>
+              <Text variant="bodyMedium" style={{ textAlign: "center", color: colors.timestampText }}>
                 Try a different search term
-              </Typo>
+              </Text>
             </View>
           );
         }
       } else if (directConversations.length === 0 && groupConversations.length === 0) {
         return (
           <View style={styles.emptyState}>
-            <Typo style={{ textAlign: "center", color: colors.textDark }}>
+            <Text variant="bodyLarge" style={{ textAlign: "center", color: colors.textDark }}>
               No chats yet
-            </Typo>
-            <Typo size={14} style={{ textAlign: "center" }} color={colors.timestampText}>
+            </Text>
+            <Text variant="bodyMedium" style={{ textAlign: "center", color: colors.timestampText }}>
               Tap the new chat button to start messaging
-            </Typo>
+            </Text>
           </View>
         );
       }
     }
-    if (!loading && selectedTab === 1) {
+    if (!loading && selectedTab === 'status') {
       return (
         <View style={styles.emptyState}>
-          <Typo style={{ textAlign: "center", color: colors.textDark }}>
+          <Text variant="bodyLarge" style={{ textAlign: "center", color: colors.textDark }}>
             No status updates
-          </Typo>
+          </Text>
         </View>
       );
     }
-    if (!loading && selectedTab === 2 && callHistory.length === 0) {
+    if (!loading && selectedTab === 'calls' && callHistory.length === 0) {
       return (
         <View style={styles.emptyState}>
-          <Typo style={{ textAlign: "center", color: colors.textDark }}>
+          <Text variant="bodyLarge" style={{ textAlign: "center", color: colors.textDark }}>
             No recent calls
-          </Typo>
+          </Text>
         </View>
       );
     }
     return null;
   };
 
-  const tabs = [
-    { label: "Chats", icon: "ChatCircle" },
-    { label: "Status", icon: "Circle" },
-    { label: "Calls", icon: "Phone" },
-  ];
+
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.alloGreenDark} />
 
-      {/* Allo Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Typo
-            color={colors.white}
-            size={20}
-            fontWeight="600"
-            style={styles.headerTitle}
-          >
-            Allo
-          </Typo>
-
-          <View style={styles.headerIcons}>
-            <TouchableOpacity
-              style={styles.headerIcon}
-              onPress={() => router.push("/(main)/profileModal")}
-            >
-              <Icons.DotsThreeVertical color={colors.white} size={22} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+      {/* Allo Header using react-native-paper Appbar */}
+      <Appbar.Header
+        style={styles.header}
+        theme={{
+          colors: {
+            surface: colors.alloGreen,
+            onSurface: colors.white,
+            primary: colors.white,
+          }
+        }}
+        mode="large"
+      >
+        <Appbar.Content
+          title="Allo"
+          titleStyle={styles.headerTitle}
+        />
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <Appbar.Action
+              icon="dots-vertical"
+              iconColor={colors.white}
+              onPress={() => setMenuVisible(true)}
+            />
+          }
+          contentStyle={styles.menuContent}
+        >
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              router.push("/(main)/profileModal");
+            }}
+            title="Profile"
+            leadingIcon="account-circle"
+          />
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              router.push("/(main)/settings");
+            }}
+            title="Settings"
+            leadingIcon="cog"
+          />
+          <Divider />
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              handleLogout();
+            }}
+            title="Logout"
+            leadingIcon="logout"
+            titleStyle={{ color: colors.rose }}
+          />
+        </Menu>
+      </Appbar.Header>
 
       {/* Content Area */}
-      <View style={styles.content}>
+      <View style={[styles.content, { backgroundColor: theme.colors.background }]}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* Chat List with Search */}
-          {selectedTab === 0 && (
+          {selectedTab === 'chats' && (
             <View style={styles.chatsContainer}>
               {/* Search Input */}
-              <View style={styles.searchContainer}>
-                <View style={styles.searchInputWrapper}>
-                  <Icons.MagnifyingGlass
-                    color={colors.timestampText}
-                    size={18}
-                    style={styles.searchIcon}
-                  />
-                  <TextInput
-                    style={styles.searchInput}
+              {!isSelectionMode && (
+                <View style={styles.searchContainer}>
+                  <Searchbar
                     placeholder="Search conversations..."
-                    placeholderTextColor={colors.timestampText}
-                    value={searchQuery}
                     onChangeText={setSearchQuery}
-                    autoCapitalize="none"
-                    autoCorrect={false}
+                    value={searchQuery}
+                    style={styles.searchBar}
+                    theme={theme}
                   />
-                  {searchQuery.length > 0 && (
-                    <TouchableOpacity
-                      onPress={() => setSearchQuery("")}
-                      style={styles.clearButton}
-                    >
-                      <Icons.X color={colors.timestampText} size={16} />
-                    </TouchableOpacity>
-                  )}
                 </View>
-              </View>
+              )}
+
+              {/* Selection Header */}
+              {isSelectionMode && (
+                <View style={styles.selectionHeader}>
+                  <View style={styles.selectionHeaderLeft}>
+                    <TouchableOpacity onPress={exitSelectionMode} style={styles.selectionBackButton}>
+                      <Icons.X color={colors.black} size={24} />
+                    </TouchableOpacity>
+                    <Text variant="titleMedium" style={styles.selectionTitle}>
+                      {selectedConversations.size} selected
+                    </Text>
+                  </View>
+                  <View style={styles.selectionActions}>
+                    <TouchableOpacity onPress={selectAllConversations} style={styles.selectionAction}>
+                      <Icons.CheckSquare color={colors.alloGreen} size={24} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleBulkMarkAsRead} style={styles.selectionAction}>
+                      <Icons.CheckCircle color={colors.accentBlue} size={24} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleBulkArchive} style={styles.selectionAction}>
+                      <Icons.Archive color={colors.timestampText} size={24} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleBulkDelete} style={styles.selectionAction}>
+                      <Icons.Trash color={colors.rose} size={24} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {/* Conversations List */}
               <View style={styles.conversationList}>
@@ -197,15 +317,15 @@ const Home = () => {
           )}
 
           {/* Status Tab Content */}
-          {selectedTab === 1 && (
+          {selectedTab === 'status' && (
             <View style={styles.statusSection}>
               <View style={styles.myStatusItem}>
                 <Avatar uri={currentUser?.avatar || null} size={50} />
                 <View style={styles.statusTextContent}>
-                  <Typo size={16} fontWeight="600">My status</Typo>
-                  <Typo size={14} color={colors.timestampText}>
+                  <Text variant="titleMedium" style={{ fontWeight: '600' }}>My status</Text>
+                  <Text variant="bodyMedium" style={{ color: colors.timestampText }}>
                     Tap to add status update
-                  </Typo>
+                  </Text>
                 </View>
                 <TouchableOpacity>
                   <Icons.Camera color={colors.timestampText} size={24} />
@@ -214,20 +334,20 @@ const Home = () => {
 
               {/* Recent updates section */}
               <View style={styles.statusHeader}>
-                <Typo size={14} color={colors.timestampText} fontWeight="600">
+                <Text variant="bodyMedium" style={{ color: colors.timestampText, fontWeight: '600' }}>
                   Recent updates
-                </Typo>
+                </Text>
               </View>
             </View>
           )}
 
           {/* Calls Tab Content */}
-          {selectedTab === 2 && (
+          {selectedTab === 'calls' && (
             <View style={styles.callsSection}>
               <View style={styles.callsHeader}>
-                <Typo size={14} color={colors.timestampText} fontWeight="600">
+                <Text variant="bodyMedium" style={{ color: colors.timestampText, fontWeight: '600' }}>
                   Recent
-                </Typo>
+                </Text>
               </View>
               <View style={styles.callsList}>
                 {callHistory.map((call, index) => (
@@ -259,86 +379,90 @@ const Home = () => {
         </ScrollView>
       </View>
 
-      {/* Bottom Tab Bar */}
-      <View style={styles.bottomTabBar}>
-        {tabs.map((tab, index) => {
-          const isActive = selectedTab === index;
+      {/* Bottom Navigation using react-native-paper */}
+      <BottomNavigation
+        navigationState={{
+          index: selectedTab === 'chats' ? 0 : selectedTab === 'status' ? 1 : selectedTab === 'camera' ? 2 : 3,
+          routes: [
+            { key: 'chats', title: 'Chats', focusedIcon: 'message', unfocusedIcon: 'message-outline' },
+            { key: 'status', title: 'Status', focusedIcon: 'circle', unfocusedIcon: 'circle-outline' },
+            { key: 'camera', title: 'Camera', focusedIcon: 'camera', unfocusedIcon: 'camera-outline' },
+            { key: 'calls', title: 'Calls', focusedIcon: 'phone', unfocusedIcon: 'phone-outline' },
+          ],
+        }}
+        onIndexChange={(index) => {
+          const tabs = ['chats', 'status', 'camera', 'calls'];
+          const newTab = tabs[index];
+          if (newTab === 'camera') {
+            router.push('/(main)/camera');
+          } else {
+            setSelectedTab(newTab);
+          }
+        }}
+        renderScene={() => null}
+        theme={{
+          colors: {
+            secondaryContainer: colors.alloGreen,
+            onSecondaryContainer: colors.white,
+            surface: colors.white,
+            onSurface: colors.timestampText,
+            primary: colors.alloGreen,
+          },
+        }}
+        style={styles.bottomNavigation}
+      />
 
-          const renderIcon = () => {
-            if (tab.icon === "ChatCircle") {
-              return (
-                <Icons.ChatCircle
-                  color={isActive ? colors.alloGreen : colors.timestampText}
-                  size={24}
-                  weight={isActive ? "fill" : "regular"}
-                />
-              );
-            } else if (tab.icon === "Circle") {
-              return (
-                <Icons.Circle
-                  color={isActive ? colors.alloGreen : colors.timestampText}
-                  size={24}
-                  weight={isActive ? "fill" : "regular"}
-                />
-              );
-            } else if (tab.icon === "Phone") {
-              return (
-                <Icons.Phone
-                  color={isActive ? colors.alloGreen : colors.timestampText}
-                  size={24}
-                  weight={isActive ? "fill" : "regular"}
-                />
-              );
-            }
-            return null;
-          };
-
-          return (
-            <TouchableOpacity
-              key={index}
-              style={styles.bottomTab}
-              onPress={() => setSelectedTab(index)}
-              activeOpacity={0.7}
-            >
-              {renderIcon()}
-              <Typo
-                size={12}
-                color={isActive ? colors.alloGreen : colors.timestampText}
-                fontWeight={isActive ? "600" : "400"}
-                style={styles.bottomTabLabel}
-              >
-                {tab.label}
-              </Typo>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Allo-style Floating Action Button */}
-      {selectedTab === 0 && (
-        <TouchableOpacity
-          style={styles.floatingButton}
+      {/* Allo-style Floating Action Button using react-native-paper */}
+      {selectedTab === 'chats' && (
+        <FAB
+          style={styles.fab}
+          icon="message"
           onPress={() =>
             router.push({
               pathname: "/(main)/newConversationModal",
               params: { isGroup: "false" },
             })
           }
-        >
-          <Icons.ChatCircle color={colors.white} weight="fill" size={24} />
-        </TouchableOpacity>
+          theme={{
+            colors: {
+              primaryContainer: colors.alloGreenLight,
+              onPrimaryContainer: colors.white,
+            },
+          }}
+        />
       )}
 
-      {selectedTab === 1 && (
-        <TouchableOpacity style={styles.floatingButton}>
-          <Icons.Camera color={colors.white} weight="fill" size={24} />
-        </TouchableOpacity>
+      {selectedTab === 'status' && (
+        <FAB
+          style={styles.fab}
+          icon="camera"
+          onPress={() => {
+            router.push('/(main)/camera');
+          }}
+          theme={{
+            colors: {
+              primaryContainer: colors.alloGreenLight,
+              onPrimaryContainer: colors.white,
+            },
+          }}
+        />
       )}
 
-      {selectedTab === 2 && (
-        <TouchableOpacity style={styles.floatingButton}>
-          <Icons.Phone color={colors.white} weight="fill" size={24} />
-        </TouchableOpacity>
+      {selectedTab === 'calls' && (
+        <FAB
+          style={styles.fab}
+          icon="phone"
+          onPress={() => {
+            // Handle new call
+            console.log('Starting new call');
+          }}
+          theme={{
+            colors: {
+              primaryContainer: colors.alloGreenLight,
+              onPrimaryContainer: colors.white,
+            },
+          }}
+        />
       )}
     </View>
   );
@@ -352,29 +476,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.alloGreenDark,
   },
   header: {
-    backgroundColor: colors.alloGreen,
-    paddingTop: spacingY._50,
-    paddingBottom: spacingY._15,
-  },
-  headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacingX._20,
   },
   headerTitle: {
-    flex: 1,
-  },
-  headerIcons: {
-    flexDirection: "row",
-    gap: spacingX._20,
-  },
-  headerIcon: {
-    padding: spacingY._5,
+    color: colors.white,
+    fontSize: 28,
+    fontWeight: "500",
+    fontFamily: "Phudu-Bold",
   },
   content: {
     flex: 1,
-    backgroundColor: colors.white,
   },
   scrollContent: {
     flexGrow: 1,
@@ -389,26 +499,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacingY._10,
     backgroundColor: colors.white,
   },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.neutral100,
-    borderRadius: radius._20,
-    paddingHorizontal: spacingX._15,
-    paddingVertical: spacingY._10,
-  },
-  searchIcon: {
-    marginRight: spacingX._10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.black,
-    paddingVertical: spacingY._5,
-  },
-  clearButton: {
-    padding: spacingY._5,
-    marginLeft: spacingX._5,
+  searchBar: {
+    elevation: 0,
+    shadowOpacity: 0,
   },
   conversationList: {
     paddingVertical: spacingY._5,
@@ -446,42 +539,49 @@ const styles = StyleSheet.create({
   callsHeader: {
     paddingVertical: spacingY._10,
   },
-  bottomTabBar: {
-    flexDirection: "row",
+  bottomNavigation: {
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.neutral200,
-    paddingVertical: spacingY._10,
-    paddingHorizontal: spacingX._10,
-    paddingBottom: spacingY._25, // Extra padding for safe area
   },
-  bottomTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacingY._5,
-  },
-  bottomTabLabel: {
-    marginTop: spacingY._5,
-    textAlign: "center",
-  },
-  floatingButton: {
+  fab: {
     position: "absolute",
-    bottom: spacingY._25 + 60, // Adjusted to be above tab bar
+    bottom: spacingY._25 + 80, // Adjusted to be above tab bar
     right: spacingX._20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.alloGreenLight,
-    justifyContent: "center",
+  },
+  menuContent: {
+    backgroundColor: colors.white,
+    borderRadius: radius._10,
+    marginTop: spacingY._10,
+  },
+  selectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    elevation: 8,
-    shadowColor: colors.black,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
+    paddingHorizontal: spacingX._15,
+    paddingVertical: spacingY._12,
+    backgroundColor: colors.neutral100,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral200,
+  },
+  selectionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacingX._12,
+  },
+  selectionBackButton: {
+    padding: spacingX._5,
+  },
+  selectionTitle: {
+    color: colors.black,
+    fontWeight: "600",
+  },
+  selectionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacingX._15,
+  },
+  selectionAction: {
+    padding: spacingX._7,
   },
 });

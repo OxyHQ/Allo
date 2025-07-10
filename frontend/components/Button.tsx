@@ -1,34 +1,23 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React from "react";
-import { colors, radius, spacingX } from "@/constants/theme";
-import Loading from "./Loading";
+import { Button as PaperButton } from "react-native-paper";
+import { colors } from "@/constants/theme";
 import { ButtonProps } from "@/types";
 
 const Button = ({ style, onPress, loading = false, children }: ButtonProps) => {
-  if (loading) {
-    return (
-      <View style={[styles.button, style, { backgroundColor: "transparent" }]}>
-        <Loading />
-      </View>
-    );
-  }
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.button, style]}>
+    <PaperButton
+      mode="contained"
+      onPress={onPress}
+      loading={loading}
+      disabled={loading}
+      style={style}
+      buttonColor={colors.primary}
+      textColor={colors.white}
+      contentStyle={{ minHeight: 44 }}
+    >
       {children}
-    </TouchableOpacity>
+    </PaperButton>
   );
 };
 
 export default Button;
-
-const styles = StyleSheet.create({
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-    borderCurve: "continuous",
-    minHeight: 44, // minimum touch target
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: spacingX._20,
-  },
-});
