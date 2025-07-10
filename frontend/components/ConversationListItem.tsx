@@ -65,8 +65,8 @@ const ConversationListItem = ({
     return messageDate.format("M/D/YY");
   };
 
-  // Mock unread count for demo purposes
-  const unreadCount = Math.floor(Math.random() * 4); // 0-3 random unread messages
+  // Get unread count from conversation data
+  const unreadCount = item.unreadCount || 0;
 
   return (
     <View>
@@ -114,7 +114,7 @@ const ConversationListItem = ({
               {unreadCount > 0 && (
                 <View style={styles.unreadBadge}>
                   <Typo size={12} color={colors.white} fontWeight="600">
-                    {unreadCount}
+                    {unreadCount > 99 ? "99+" : unreadCount}
                   </Typo>
                 </View>
               )}

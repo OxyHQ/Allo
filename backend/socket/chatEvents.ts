@@ -38,9 +38,26 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
         })
         .lean();
 
+      // Calculate unread count for each conversation
+      const conversationsWithUnreadCount = await Promise.all(
+        conversations.map(async (conversation) => {
+          // Count unread messages for this user in this conversation
+          const unreadCount = await Message.countDocuments({
+            conversationId: conversation._id,
+            senderId: { $ne: userId }, // Not sent by current user
+            'readBy.userId': { $ne: userId }, // Not read by current user
+          });
+
+          return {
+            ...conversation,
+            unreadCount,
+          };
+        })
+      );
+
       socket.emit("getConversations", {
         success: true,
-        data: conversations,
+        data: conversationsWithUnreadCount,
       });
     } catch (error) {
       console.error("Error in getConversations:", error);
@@ -249,6 +266,7 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
           messageId: data.messageId,
           status: message.status,
           updatedBy: userId,
+          conversationId: data.conversationId,
         });
       }
     } catch (error) {
@@ -294,6 +312,7 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
           messageId: data.messageId,
           status: message.status,
           updatedBy: userId,
+          conversationId: data.conversationId,
         });
       }
     } catch (error) {
@@ -338,6 +357,7 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
           messageIds: updatedMessageIds,
           status: 'read',
           updatedBy: userId,
+          conversationId: data.conversationId,
         });
       }
     } catch (error) {
@@ -500,6 +520,80 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
       });
     } catch (error) {
       console.error("Error in stopTyping:", error);
+    }
+  });
+
+  // Call functionality
+  socket.on("initiateCall", (data: { conversationId: string; callType: 'audio' | 'video'; callerId: string; callerName: string }) => {
+    try {
+      const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Emit to all other participants in the conversation
+      socket.to(data.conversationId).emit("incomingCall", {
+        callId,
+        conversationId: data.conversationId,
+        callType: data.callType,
+        callerId: data.callerId,
+        callerName: data.callerName,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Confirm call initiated to caller
+      socket.emit("callInitiated", {
+        callId,
+        conversationId: data.conversationId,
+        callType: data.callType,
+      });
+    } catch (error) {
+      console.error("Error in initiateCall:", error);
+    }
+  });
+
+  socket.on("answerCall", (data: { callId: string; conversationId: string; answer: 'accept' | 'decline' }) => {
+    try {
+      const userId = socket.data.userId;
+      const userName = socket.data.name;
+
+      // Emit to all participants in the conversation
+      io.to(data.conversationId).emit("callAnswered", {
+        callId: data.callId,
+        conversationId: data.conversationId,
+        answer: data.answer,
+        answeredBy: userId,
+        answeredByName: userName,
+      });
+    } catch (error) {
+      console.error("Error in answerCall:", error);
+    }
+  });
+
+  socket.on("endCall", (data: { callId: string; conversationId: string }) => {
+    try {
+      const userId = socket.data.userId;
+
+      // Emit to all participants in the conversation
+      io.to(data.conversationId).emit("callEnded", {
+        callId: data.callId,
+        conversationId: data.conversationId,
+        endedBy: userId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error in endCall:", error);
+    }
+  });
+
+  // WebRTC signaling
+  socket.on("webrtcSignal", (data: { callId: string; signal: any; to: string }) => {
+    try {
+      // Forward WebRTC signals to specific participant
+      socket.to(data.to).emit("webrtcSignal", {
+        callId: data.callId,
+        signal: data.signal,
+        from: socket.data.userId,
+      });
+    } catch (error) {
+      console.error("Error in webrtcSignal:", error);
     }
   });
 }

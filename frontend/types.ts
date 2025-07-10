@@ -131,6 +131,7 @@ export type ConversationProps = {
   };
   createdAt: string;
   updatedAt: string;
+  unreadCount?: number;
 };
 
 export type MessageProps = {
@@ -150,4 +151,10 @@ export type MessageProps = {
     emoji: string;
     createdAt: string;
   }[];
+  // Call event properties
+  callEvent?: {
+    type: 'audio' | 'video';
+    status: 'missed' | 'incoming' | 'outgoing';
+    duration?: string;
+  };
 };

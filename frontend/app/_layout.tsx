@@ -2,6 +2,9 @@ import { StyleSheet, Text, View } from "react-native";
 import React from "react";
 import { Stack } from "expo-router";
 import { AuthProvider } from "@/contexts/authContext";
+import { CallHistoryProvider } from "@/contexts/callHistoryContext";
+import { GlobalCallProvider } from "@/contexts/globalCallContext";
+import GlobalCallManager from "@/components/GlobalCallManager";
 import { useFonts } from "expo-font";
 
 function StackLayout() {
@@ -36,7 +39,12 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <StackLayout />
+      <CallHistoryProvider>
+        <GlobalCallProvider>
+          <StackLayout />
+          <GlobalCallManager />
+        </GlobalCallProvider>
+      </CallHistoryProvider>
     </AuthProvider>
   );
 }

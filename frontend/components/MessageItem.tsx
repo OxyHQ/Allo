@@ -10,6 +10,7 @@ import { Image } from "expo-image";
 import MessageTicks from "./MessageTicks";
 import MessageReactions from "./MessageReactions";
 import EmojiPicker from "./EmojiPicker";
+import CallEventMessage from "./CallEventMessage";
 
 export type MessagePosition = 'single' | 'first' | 'middle' | 'last';
 
@@ -22,6 +23,7 @@ const MessageItem = ({
   showSenderName = false,
   onReactionAdd,
   onReactionRemove,
+  onCallBack,
 }: {
   item: MessageProps;
   isDirect: boolean;
@@ -31,6 +33,7 @@ const MessageItem = ({
   showSenderName?: boolean;
   onReactionAdd?: (messageId: string, emoji: string) => void;
   onReactionRemove?: (messageId: string, emoji: string) => void;
+  onCallBack?: (callType: 'audio' | 'video') => void;
 }) => {
   const { user: currentUser } = useAuth();
   const isMe = currentUser?.id == item?.sender?.id;
@@ -161,6 +164,22 @@ const MessageItem = ({
         return styles.messageWrapper;
     }
   };
+
+  // If this is a call event message, render CallEventMessage component
+  if (item.callEvent) {
+    return (
+      <View style={getWrapperStyle()}>
+        <CallEventMessage
+          callType={item.callEvent.type}
+          callStatus={item.callEvent.status}
+          duration={item.callEvent.duration}
+          timestamp={formattedDate}
+          isMe={isMe}
+          onCallBack={() => onCallBack?.(item.callEvent!.type)}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={getWrapperStyle()}>

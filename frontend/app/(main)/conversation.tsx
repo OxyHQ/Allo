@@ -38,12 +38,16 @@ import {
   stopTyping,
   userStartedTyping,
   userStoppedTyping,
+  initiateCall,
 } from "@/socket/socketEvents";
 import { useAuth } from "@/contexts/authContext";
+import { useCallHistory } from "@/contexts/callHistoryContext";
+import { useGlobalCall } from "@/contexts/globalCallContext";
 import Loading from "@/components/Loading";
 import { uploadFileToCloudinary } from "@/services/imageService";
 import * as ImagePicker from "expo-image-picker";
 import { Audio } from "expo-av";
+import CallManager from "@/components/CallManager";
 
 type ResponseProps = {
   success: boolean;
@@ -63,6 +67,12 @@ const Conversation = () => {
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
   const [isOnline, setIsOnline] = useState(true);
   const [lastSeen, setLastSeen] = useState("2 minutes ago");
+  const [showCallManager, setShowCallManager] = useState(false);
+  const [callInitData, setCallInitData] = useState<{
+    callType: 'audio' | 'video';
+    callerId: string;
+    callerName: string;
+  } | null>(null);
 
   // Animated values for typing dots (optimized with useNativeDriver)
   const dot1Opacity = useRef(new Animated.Value(0.3)).current;
@@ -74,12 +84,19 @@ const Conversation = () => {
   const isTypingRef = useRef(false);
 
   const { user: currentUser } = useAuth();
+  const { addCallToHistory } = useCallHistory();
+  const { initializeCallManager } = useGlobalCall();
   const {
     id: conversationId,
     name: conversationName,
     avatar: conversationAvatar,
     type,
     participants,
+    acceptedCall,
+    callType,
+    callId,
+    callerId,
+    callerName,
   } = useLocalSearchParams();
 
   const isDirect = type === "direct";
@@ -89,10 +106,9 @@ const Conversation = () => {
   const [receiveSound, setReceiveSound] = useState<Audio.Sound | null>(null);
 
   const getMessageProps = (message: MessageProps, index: number) => {
-    const messages_data = messages.length > 0 ? messages : dummyMessages;
     const currentMessage = message;
-    const previousMessage = messages_data[index + 1];
-    const nextMessage = messages_data[index - 1];
+    const previousMessage = messages[index + 1];
+    const nextMessage = messages[index - 1];
 
     const isSameSenderAsPrevious = previousMessage &&
       previousMessage.sender.id === currentMessage.sender.id;
@@ -166,6 +182,38 @@ const Conversation = () => {
       });
     }
   };
+
+  // Initialize call manager with conversation details for global call context
+  useEffect(() => {
+    if (conversationId && conversationName && typeof conversationAvatar === 'string') {
+      const participantIds = typeof participants === 'string' ? participants.split(',') : [];
+      initializeCallManager(
+        conversationId as string,
+        conversationName as string,
+        conversationAvatar,
+        isDirect,
+        participantIds
+      );
+    }
+  }, [conversationId, conversationName, conversationAvatar, isDirect, participants, initializeCallManager]);
+
+  // Handle accepted call from global manager
+  useEffect(() => {
+    if (acceptedCall === 'true' && callType && callerId && callerName) {
+      // Show call manager to continue the accepted call
+      setShowCallManager(true);
+
+      // Set appropriate call state for accepted call
+      setCallInitData({
+        callType: callType as 'audio' | 'video',
+        callerId: callerId as string,
+        callerName: callerName as string,
+      });
+
+      // Add incoming call message to conversation
+      addCallEventMessage(callType as 'audio' | 'video', 'incoming');
+    }
+  }, [acceptedCall, callType, callerId, callerName]);
 
   // Efficient typing detection with debouncing
   const handleTypingChange = (text: string) => {
@@ -286,6 +334,7 @@ const Conversation = () => {
       reactionUpdate(reactionUpdateHandler);
       userStartedTyping(handleUserStartedTyping);
       userStoppedTyping(handleUserStoppedTyping);
+      // Note: Removed incomingCall handler as it's now handled globally
     }
 
     return () => {
@@ -297,6 +346,7 @@ const Conversation = () => {
       reactionUpdate(reactionUpdateHandler, true);
       userStartedTyping(handleUserStartedTyping, true);
       userStoppedTyping(handleUserStoppedTyping, true);
+      // Note: Removed incomingCall cleanup as it's now handled globally
 
       // Cleanup typing state
       if (typingTimeoutRef.current) {
@@ -426,6 +476,51 @@ const Conversation = () => {
     });
   };
 
+  // Handle call back from call event messages
+  const handleCallBack = (callType: 'audio' | 'video') => {
+    if (callType === 'video') {
+      startVideoCall();
+    } else {
+      startAudioCall();
+    }
+  };
+
+  // Add call event message to conversation
+  const addCallEventMessage = (
+    callType: 'audio' | 'video',
+    status: 'missed' | 'incoming' | 'outgoing',
+    duration?: string
+  ) => {
+    const callMessage: MessageProps = {
+      id: `call_${Date.now()}_${Math.random()}`,
+      sender: {
+        id: currentUser?.id || 'unknown',
+        name: currentUser?.name || 'Unknown',
+        avatar: currentUser?.avatar || null,
+      },
+      content: '',
+      createdAt: new Date().toISOString(),
+      callEvent: {
+        type: callType,
+        status,
+        duration,
+      },
+    };
+
+    setMessages(prevMessages => [callMessage, ...prevMessages]);
+  };
+
+  // Update call message with duration when call ends
+  const updateCallEventMessage = (callId: string, duration: string) => {
+    setMessages(prevMessages =>
+      prevMessages.map(message =>
+        message.id === callId && message.callEvent
+          ? { ...message, callEvent: { ...message.callEvent, duration } }
+          : message
+      )
+    );
+  };
+
   const onPickImage = async () => {
     setShowAttachmentOptions(false);
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -455,6 +550,110 @@ const Conversation = () => {
   const removeSelectedFile = () => {
     setSelectedFile(null);
   };
+
+  // Call functions
+  const startVideoCall = () => {
+    if (!currentUser?.id || !conversationId) return;
+
+    const callData = {
+      callType: 'video' as const,
+      callerId: currentUser.id,
+      callerName: currentUser.name || 'Unknown',
+    };
+
+    setCallInitData(callData);
+    setShowCallManager(true);
+
+    // Add outgoing call message
+    addCallEventMessage('video', 'outgoing');
+
+    // Add to global call history
+    addCallToHistory({
+      conversationId: conversationId as string,
+      conversationName: conversationName as string,
+      conversationAvatar: conversationAvatar as string,
+      callType: 'video',
+      status: 'outgoing',
+      timestamp: new Date().toISOString(),
+      participants: typeof participants === 'string' ? participants.split(',') : [currentUser.id],
+      isDirect: isDirect,
+    });
+
+    initiateCall({
+      conversationId,
+      callType: 'video',
+      callerId: currentUser.id,
+      callerName: currentUser.name || 'Unknown',
+    });
+  };
+
+  const startAudioCall = () => {
+    if (!currentUser?.id || !conversationId) return;
+
+    const callData = {
+      callType: 'audio' as const,
+      callerId: currentUser.id,
+      callerName: currentUser.name || 'Unknown',
+    };
+
+    setCallInitData(callData);
+    setShowCallManager(true);
+
+    // Add outgoing call message
+    addCallEventMessage('audio', 'outgoing');
+
+    // Add to global call history
+    addCallToHistory({
+      conversationId: conversationId as string,
+      conversationName: conversationName as string,
+      conversationAvatar: conversationAvatar as string,
+      callType: 'audio',
+      status: 'outgoing',
+      timestamp: new Date().toISOString(),
+      participants: typeof participants === 'string' ? participants.split(',') : [currentUser.id],
+      isDirect: isDirect,
+    });
+
+    initiateCall({
+      conversationId,
+      callType: 'audio',
+      callerId: currentUser.id,
+      callerName: currentUser.name || 'Unknown',
+    });
+  };
+
+  const closeCallManager = (callInfo?: { duration?: string; callType?: 'audio' | 'video' }) => {
+    setShowCallManager(false);
+    setCallInitData(null);
+
+    // Update the most recent call message with actual duration if call was connected
+    if (callInfo?.duration) {
+      // Find the most recent outgoing call message of the same type and update it
+      setMessages(prevMessages => {
+        const messageIndex = prevMessages.findIndex(
+          msg => msg.callEvent?.type === callInfo.callType &&
+            msg.callEvent?.status === 'outgoing' &&
+            msg.sender.id === currentUser?.id &&
+            !msg.callEvent?.duration
+        );
+
+        if (messageIndex !== -1) {
+          const updatedMessages = [...prevMessages];
+          updatedMessages[messageIndex] = {
+            ...updatedMessages[messageIndex],
+            callEvent: {
+              ...updatedMessages[messageIndex].callEvent!,
+              duration: callInfo.duration,
+            }
+          };
+          return updatedMessages;
+        }
+        return prevMessages;
+      });
+    }
+  };
+
+
 
   const startRecording = async () => {
     try {
@@ -618,143 +817,36 @@ const Conversation = () => {
     }
   };
 
-  // Dummy messages for now
-  const dummyMessages = [
-    {
-      id: "msg_10",
-      sender: {
-        id: "user_2",
-        name: "Jane Smith",
-        avatar: null,
-      },
-      content: "That would be really useful!",
-      createdAt: "10:42 AM",
-      isMe: false,
-    },
-    {
-      id: "msg_9",
-      sender: {
-        id: "me",
-        name: "Me",
-        avatar: null,
-      },
-      content:
-        "Yes, I'm thinking about adding message reactions and file sharing.",
-      createdAt: "10:41 AM",
-      isMe: true,
-      status: "read" as const,
-      reactions: [
-        {
-          userId: "user_1",
-          emoji: "👍",
-          createdAt: "10:42 AM"
-        },
-        {
-          userId: "user_2",
-          emoji: "❤️",
-          createdAt: "10:42 AM"
-        }
-      ],
-    },
-    {
-      id: "msg_8",
-      sender: {
-        id: "user_1",
-        name: "John Doe",
-        avatar: null,
-      },
-      content: "Are you planning to add any special features?",
-      createdAt: "10:40 AM",
-      isMe: false,
-    },
-    {
-      id: "msg_7",
-      sender: {
-        id: "me",
-        name: "Me",
-        avatar: null,
-      },
-      content: "Thanks! I'm trying to make it as user-friendly as possible.",
-      createdAt: "10:38 AM",
-      isMe: true,
-      status: "delivered" as const,
-    },
-    {
-      id: "msg_6",
-      sender: {
-        id: "user_2",
-        name: "Jane Smith",
-        avatar: null,
-      },
-      content: "The UI looks really clean so far.",
-      createdAt: "10:37 AM",
-      isMe: false,
-      reactions: [
-        {
-          userId: "me",
-          emoji: "😂",
-          createdAt: "10:38 AM"
-        }
-      ],
-    },
-    {
-      id: "msg_5",
-      sender: {
-        id: "user_1",
-        name: "John Doe",
-        avatar: null,
-      },
-      content: "Looking forward to testing it out!",
-      createdAt: "10:36 AM",
-      isMe: false,
-    },
-    {
-      id: "msg_4",
-      sender: {
-        id: "me",
-        name: "Me",
-        avatar: null,
-      },
-      content: "I'm working on the chat feature right now.",
-      createdAt: "10:35 AM",
-      isMe: true,
-      status: "sent" as const,
-    },
-    {
-      id: "msg_3",
-      sender: {
-        id: "user_2",
-        name: "Jane Smith",
-        avatar: null,
-      },
-      content: "That's awesome! Can't wait to see it in action.",
-      createdAt: "10:33 AM",
-      isMe: false,
-    },
-    {
-      id: "msg_2",
-      sender: {
-        id: "me",
-        name: "Me",
-        avatar: null,
-      },
-      content: "I'm doing great!",
-      createdAt: "10:32 AM",
-      isMe: true,
-      status: "read" as const,
-    },
-    {
-      id: "msg_1",
-      sender: {
-        id: "user_1",
-        name: "John Doe",
-        avatar: null,
-      },
-      content: "Hey everyone! How's it going?",
-      createdAt: "10:30 AM",
-      isMe: false,
-    },
-  ];
+  // Render empty state when no messages
+  const renderEmptyState = () => {
+    if (loading) return null;
+
+    return (
+      <View style={styles.emptyStateContainer}>
+        <View style={styles.emptyStateContent}>
+          <Icons.ChatCircle
+            color={colors.timestampText}
+            size={48}
+            style={styles.emptyStateIcon}
+          />
+          <Typo
+            size={16}
+            color={colors.timestampText}
+            style={styles.emptyStateText}
+          >
+            No messages yet
+          </Typo>
+          <Typo
+            size={14}
+            color={colors.timestampText}
+            style={styles.emptyStateSubtext}
+          >
+            Send a message to start the conversation
+          </Typo>
+        </View>
+      </View>
+    );
+  };
 
   const renderTypingIndicator = () => {
     if (typingUsers.size === 0) return null;
@@ -865,13 +957,19 @@ const Conversation = () => {
           }
           rightIcon={
             <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.headerIconButton}>
+              <TouchableOpacity style={styles.headerIconButton} onPress={startVideoCall}>
                 <Icons.VideoCamera color={colors.white} size={22} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconButton}>
+              <TouchableOpacity style={styles.headerIconButton} onPress={startAudioCall}>
                 <Icons.Phone color={colors.white} size={22} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIconButton}>
+              <TouchableOpacity
+                style={styles.headerIconButton}
+                onPress={() => {
+                  // Open conversation settings/menu
+                  console.log('Opening conversation menu');
+                }}
+              >
                 <Icons.DotsThreeOutlineVertical
                   weight="fill"
                   color={colors.white}
@@ -886,7 +984,7 @@ const Conversation = () => {
         <View style={styles.content}>
           <FlatList
             ref={flatListRef}
-            data={messages.length > 0 ? messages : dummyMessages}
+            data={messages}
             inverted={true}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.messagesContent}
@@ -902,11 +1000,13 @@ const Conversation = () => {
                   showSenderName={messageProps.showSenderName}
                   onReactionAdd={handleReactionAdd}
                   onReactionRemove={handleReactionRemove}
+                  onCallBack={handleCallBack}
                 />
               );
             }}
             keyExtractor={(item) => item.id}
             ListHeaderComponent={renderMessageTypingBubble}
+            ListEmptyComponent={renderEmptyState}
           />
 
           {/* Attachment Options */}
@@ -999,6 +1099,17 @@ const Conversation = () => {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Call Manager */}
+      <CallManager
+        visible={showCallManager}
+        onClose={closeCallManager}
+        conversationId={Array.isArray(conversationId) ? conversationId[0] : conversationId}
+        conversationName={Array.isArray(conversationName) ? conversationName[0] : conversationName}
+        conversationAvatar={Array.isArray(conversationAvatar) ? conversationAvatar[0] : conversationAvatar}
+        isDirect={isDirect}
+        initiateCall={callInitData || undefined}
+      />
     </ScreenWrapper>
   );
 };
@@ -1225,5 +1336,27 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.timestampText,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: spacingX._20,
+    paddingVertical: spacingY._40,
+  },
+  emptyStateContent: {
+    alignItems: "center",
+    gap: spacingY._15,
+  },
+  emptyStateIcon: {
+    marginBottom: spacingY._10,
+  },
+  emptyStateText: {
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  emptyStateSubtext: {
+    textAlign: "center",
+    opacity: 0.8,
   },
 });

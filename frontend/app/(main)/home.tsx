@@ -9,6 +9,7 @@ import {
   TextInput,
 } from "react-native";
 import { useAuth } from "@/contexts/authContext";
+import { useCallHistory } from "@/contexts/callHistoryContext";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import Button from "@/components/Button";
 import Typo from "@/components/Typo";
@@ -17,11 +18,13 @@ import * as Icons from "phosphor-react-native";
 import { useRouter } from "expo-router";
 import Avatar from "@/components/Avatar";
 import ConversationListItem from "@/components/ConversationListItem";
+import CallHistoryItem from "@/components/CallHistoryItem";
 import Loading from "@/components/Loading";
 import useConversations from "@/hooks/useConversations";
 
 const Home = () => {
   const { user: currentUser, signOut } = useAuth();
+  const { callHistory } = useCallHistory();
   const router = useRouter();
   const [selectedTab, setSelectedTab] = React.useState(0);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -103,7 +106,7 @@ const Home = () => {
         </View>
       );
     }
-    if (!loading && selectedTab === 2) {
+    if (!loading && selectedTab === 2 && callHistory.length === 0) {
       return (
         <View style={styles.emptyState}>
           <Typo style={{ textAlign: "center", color: colors.textDark }}>
@@ -225,6 +228,28 @@ const Home = () => {
                 <Typo size={14} color={colors.timestampText} fontWeight="600">
                   Recent
                 </Typo>
+              </View>
+              <View style={styles.callsList}>
+                {callHistory.map((call, index) => (
+                  <CallHistoryItem
+                    key={call.id}
+                    {...call}
+                    onCallBack={(callType) => {
+                      // Navigate to conversation and start call
+                      router.push({
+                        pathname: '/(main)/conversation',
+                        params: {
+                          id: call.conversationId,
+                          name: call.conversationName,
+                          avatar: call.conversationAvatar || '',
+                          type: call.isDirect ? 'direct' : 'group',
+                          participants: call.participants.join(','),
+                          startCall: callType, // This could trigger a call automatically
+                        },
+                      });
+                    }}
+                  />
+                ))}
               </View>
             </View>
           )}
@@ -414,6 +439,9 @@ const styles = StyleSheet.create({
   },
   callsSection: {
     padding: spacingX._15,
+  },
+  callsList: {
+    marginTop: spacingY._10,
   },
   callsHeader: {
     paddingVertical: spacingY._10,

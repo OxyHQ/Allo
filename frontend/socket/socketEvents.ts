@@ -301,3 +301,124 @@ export const userStoppedTyping = (payload: any, off: boolean = false) => {
     socket.emit("userStoppedTyping", payload);
   }
 };
+
+// Call functionality
+export const initiateCall = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("initiateCall", payload);
+  } else if (typeof payload == "function") {
+    socket.on("initiateCall", payload);
+  } else {
+    socket.emit("initiateCall", payload);
+  }
+};
+
+export const incomingCall = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("incomingCall", payload);
+  } else if (typeof payload == "function") {
+    socket.on("incomingCall", payload);
+  } else {
+    socket.emit("incomingCall", payload);
+  }
+};
+
+export const callInitiated = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("callInitiated", payload);
+  } else if (typeof payload == "function") {
+    socket.on("callInitiated", payload);
+  } else {
+    socket.emit("callInitiated", payload);
+  }
+};
+
+export const answerCall = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("answerCall", payload);
+  } else if (typeof payload == "function") {
+    socket.on("answerCall", payload);
+  } else {
+    socket.emit("answerCall", payload);
+  }
+};
+
+export const callAnswered = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("callAnswered", payload);
+  } else if (typeof payload == "function") {
+    socket.on("callAnswered", payload);
+  } else {
+    socket.emit("callAnswered", payload);
+  }
+};
+
+export const endCall = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("endCall", payload);
+  } else if (typeof payload == "function") {
+    socket.on("endCall", payload);
+  } else {
+    socket.emit("endCall", payload);
+  }
+};
+
+export const callEnded = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("callEnded", payload);
+  } else if (typeof payload == "function") {
+    socket.on("callEnded", payload);
+  } else {
+    socket.emit("callEnded", payload);
+  }
+};
+
+export const webrtcSignal = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("webrtcSignal", payload);
+  } else if (typeof payload == "function") {
+    socket.on("webrtcSignal", payload);
+  } else {
+    socket.emit("webrtcSignal", payload);
+  }
+};

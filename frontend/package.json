@@ -19,7 +19,9 @@
     "@react-navigation/native": "^7.1.6",
     "axios": "^1.9.0",
     "expo": "~53.0.7",
+    "expo-av": "~15.1.7",
     "expo-blur": "~14.1.4",
+    "expo-camera": "^16.1.10",
     "expo-constants": "~17.1.5",
     "expo-font": "~13.3.1",
     "expo-haptics": "~14.1.4",
@@ -43,10 +45,10 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.10.0",
     "react-native-web": "~0.20.0",
+    "react-native-webrtc": "^124.0.5",
     "react-native-webview": "13.13.5",
     "socket.io-client": "^4.8.1",
-    "twrnc": "^4.9.1",
-    "expo-av": "~15.1.7"
+    "twrnc": "^4.9.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
