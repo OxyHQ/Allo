@@ -466,5 +466,42 @@ export function registerChatEvents(io: SocketIOServer, socket: Socket) {
     }
   });
 
-  // Additional chat events can be added here (e.g., typing indicators)
+  // Typing indicators
+  socket.on("startTyping", (data: { conversationId: string }) => {
+    try {
+      const userId = socket.data.userId;
+      const userName = socket.data.name;
+      
+      if (!userId || !userName) {
+        return;
+      }
+
+      // Emit to all other participants in the conversation
+      socket.to(data.conversationId).emit("userStartedTyping", {
+        userId,
+        userName,
+        conversationId: data.conversationId,
+      });
+    } catch (error) {
+      console.error("Error in startTyping:", error);
+    }
+  });
+
+  socket.on("stopTyping", (data: { conversationId: string }) => {
+    try {
+      const userId = socket.data.userId;
+      
+      if (!userId) {
+        return;
+      }
+
+      // Emit to all other participants in the conversation
+      socket.to(data.conversationId).emit("userStoppedTyping", {
+        userId,
+        conversationId: data.conversationId,
+      });
+    } catch (error) {
+      console.error("Error in stopTyping:", error);
+    }
+  });
 }

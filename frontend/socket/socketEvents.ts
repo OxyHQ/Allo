@@ -240,3 +240,64 @@ export const reactionUpdate = (payload: any, off: boolean = false) => {
     socket.emit("reactionUpdate", payload);
   }
 };
+
+// Typing indicators
+export const startTyping = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("startTyping", payload);
+  } else if (typeof payload == "function") {
+    socket.on("startTyping", payload);
+  } else {
+    socket.emit("startTyping", payload);
+  }
+};
+
+export const stopTyping = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("stopTyping", payload);
+  } else if (typeof payload == "function") {
+    socket.on("stopTyping", payload);
+  } else {
+    socket.emit("stopTyping", payload);
+  }
+};
+
+export const userStartedTyping = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("userStartedTyping", payload);
+  } else if (typeof payload == "function") {
+    socket.on("userStartedTyping", payload);
+  } else {
+    socket.emit("userStartedTyping", payload);
+  }
+};
+
+export const userStoppedTyping = (payload: any, off: boolean = false) => {
+  const socket = getSocket();
+  if (!socket) {
+    console.warn("Socket is not connected. ");
+    return;
+  }
+  if (off) {
+    socket.off("userStoppedTyping", payload);
+  } else if (typeof payload == "function") {
+    socket.on("userStoppedTyping", payload);
+  } else {
+    socket.emit("userStoppedTyping", payload);
+  }
+};

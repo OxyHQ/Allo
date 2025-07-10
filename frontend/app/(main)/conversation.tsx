@@ -1,5 +1,6 @@
 import {
   Alert,
+  Animated,
   AppState,
   FlatList,
   Image,
@@ -33,6 +34,10 @@ import {
   addReaction,
   removeReaction,
   reactionUpdate,
+  startTyping,
+  stopTyping,
+  userStartedTyping,
+  userStoppedTyping,
 } from "@/socket/socketEvents";
 import { useAuth } from "@/contexts/authContext";
 import Loading from "@/components/Loading";
@@ -55,6 +60,18 @@ const Conversation = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSeen, setLastSeen] = useState("2 minutes ago");
+
+  // Animated values for typing dots (optimized with useNativeDriver)
+  const dot1Opacity = useRef(new Animated.Value(0.3)).current;
+  const dot2Opacity = useRef(new Animated.Value(0.3)).current;
+  const dot3Opacity = useRef(new Animated.Value(0.3)).current;
+
+  // Performance optimizations
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
   const { user: currentUser } = useAuth();
   const {
@@ -114,6 +131,107 @@ const Conversation = () => {
 
 
 
+  // Real-time typing handlers
+  const handleUserStartedTyping = (data: { userId: string; userName: string; conversationId: string }) => {
+    if (data.conversationId === conversationId) {
+      setTypingUsers(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.userId, data.userName);
+        return newMap;
+      });
+    }
+  };
+
+  const handleUserStoppedTyping = (data: { userId: string; conversationId: string }) => {
+    if (data.conversationId === conversationId) {
+      setTypingUsers(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(data.userId);
+        return newMap;
+      });
+    }
+  };
+
+  // Efficient typing detection with debouncing
+  const handleTypingChange = (text: string) => {
+    setMessage(text);
+
+    if (!text.trim()) {
+      // User cleared text, stop typing
+      if (isTypingRef.current) {
+        stopTyping({ conversationId });
+        isTypingRef.current = false;
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // User is typing
+    if (!isTypingRef.current) {
+      startTyping({ conversationId });
+      isTypingRef.current = true;
+    }
+
+    // Reset the timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Stop typing after 3 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTypingRef.current) {
+        stopTyping({ conversationId });
+        isTypingRef.current = false;
+      }
+    }, 3000);
+  };
+
+  // Typing animation effect (optimized)
+  useEffect(() => {
+    if (typingUsers.size > 0) {
+      // Start pulsing animation
+      const createPulseAnimation = (animatedValue: Animated.Value, delay: number) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.timing(animatedValue, {
+              toValue: 1,
+              duration: 400,
+              delay,
+              useNativeDriver: true,
+            }),
+            Animated.timing(animatedValue, {
+              toValue: 0.3,
+              duration: 400,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+      };
+
+      const animation1 = createPulseAnimation(dot1Opacity, 0);
+      const animation2 = createPulseAnimation(dot2Opacity, 200);
+      const animation3 = createPulseAnimation(dot3Opacity, 400);
+
+      animation1.start();
+      animation2.start();
+      animation3.start();
+
+      return () => {
+        animation1.stop();
+        animation2.stop();
+        animation3.stop();
+      };
+    } else {
+      // Reset opacity when not typing
+      dot1Opacity.setValue(0.3);
+      dot2Opacity.setValue(0.3);
+      dot3Opacity.setValue(0.3);
+    }
+  }, [typingUsers.size, dot1Opacity, dot2Opacity, dot3Opacity]);
+
   useEffect(() => {
     // Load message sounds
     const loadSounds = async () => {
@@ -151,6 +269,8 @@ const Conversation = () => {
       messageStatusUpdate(messageStatusUpdateHandler);
       bulkMessageStatusUpdate(bulkMessageStatusUpdateHandler);
       reactionUpdate(reactionUpdateHandler);
+      userStartedTyping(handleUserStartedTyping);
+      userStoppedTyping(handleUserStoppedTyping);
     }
 
     return () => {
@@ -160,6 +280,16 @@ const Conversation = () => {
       messageStatusUpdate(messageStatusUpdateHandler, true);
       bulkMessageStatusUpdate(bulkMessageStatusUpdateHandler, true);
       reactionUpdate(reactionUpdateHandler, true);
+      userStartedTyping(handleUserStartedTyping, true);
+      userStoppedTyping(handleUserStoppedTyping, true);
+
+      // Cleanup typing state
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (isTypingRef.current) {
+        stopTyping({ conversationId });
+      }
     };
   }, []);
 
@@ -172,8 +302,16 @@ const Conversation = () => {
       if (receiveSound) {
         receiveSound.unloadAsync();
       }
+
+      // Final cleanup of typing state
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (isTypingRef.current && conversationId) {
+        stopTyping({ conversationId });
+      }
     };
-  }, [sendSound, receiveSound]);
+  }, [sendSound, receiveSound, conversationId]);
 
   // Handle app state changes to mark messages as read when app becomes active
   useEffect(() => {
@@ -398,6 +536,16 @@ const Conversation = () => {
     if (!message.trim() && !selectedFile) return;
     if (!currentUser) return;
 
+    // Stop typing immediately when sending
+    if (isTypingRef.current) {
+      stopTyping({ conversationId });
+      isTypingRef.current = false;
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
     setLoading(true);
     try {
       let attachment = null;
@@ -593,6 +741,50 @@ const Conversation = () => {
     },
   ];
 
+  const renderTypingIndicator = () => {
+    if (typingUsers.size === 0) return null;
+
+    const typingUserNames = Array.from(typingUsers.values());
+    return (
+      <View style={styles.typingContainer}>
+        <View style={styles.typingDots}>
+          <View style={[styles.typingDot, styles.typingDot1]} />
+          <View style={[styles.typingDot, styles.typingDot2]} />
+          <View style={[styles.typingDot, styles.typingDot3]} />
+        </View>
+        <Typo color={colors.white} size={12} style={styles.typingText}>
+          {typingUsers.size === 1
+            ? `${typingUserNames[0]} is typing...`
+            : `${typingUsers.size} people are typing...`
+          }
+        </Typo>
+      </View>
+    );
+  };
+
+  const renderMessageTypingBubble = () => {
+    if (typingUsers.size === 0) return null;
+
+    return (
+      <View style={styles.typingBubbleContainer}>
+        {!isDirect && (
+          <Avatar
+            size={24}
+            uri={null}
+            style={styles.typingAvatar}
+          />
+        )}
+        <View style={styles.typingBubble}>
+          <View style={styles.typingDotsMessage}>
+            <Animated.View style={[styles.typingDotMessage, { opacity: dot1Opacity }]} />
+            <Animated.View style={[styles.typingDotMessage, { opacity: dot2Opacity }]} />
+            <Animated.View style={[styles.typingDotMessage, { opacity: dot3Opacity }]} />
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderAttachmentOptions = () => {
     if (!showAttachmentOptions) return null;
 
@@ -639,18 +831,39 @@ const Conversation = () => {
                 uri={conversationAvatar as string}
                 isGroup={type === "group"}
               />
-              <Typo color={colors.white} fontWeight={"500"} size={22}>
-                {conversationName}
-              </Typo>
+              <View style={styles.headerInfo}>
+                <Typo color={colors.white} fontWeight={"500"} size={18}>
+                  {conversationName}
+                </Typo>
+                {typingUsers.size > 0 ? (
+                  renderTypingIndicator()
+                ) : (
+                  <Typo color={colors.white} size={12} style={styles.statusText}>
+                    {isDirect
+                      ? (isOnline ? "online" : `last seen ${lastSeen}`)
+                      : `${participants ? (participants as string).split(',').length : 2} participants`
+                    }
+                  </Typo>
+                )}
+              </View>
             </View>
           }
           rightIcon={
-            <TouchableOpacity>
-              <Icons.DotsThreeOutlineVertical
-                weight="fill"
-                color={colors.white}
-              />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.headerIconButton}>
+                <Icons.VideoCamera color={colors.white} size={22} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerIconButton}>
+                <Icons.Phone color={colors.white} size={22} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerIconButton}>
+                <Icons.DotsThreeOutlineVertical
+                  weight="fill"
+                  color={colors.white}
+                  size={22}
+                />
+              </TouchableOpacity>
+            </View>
           }
         />
 
@@ -678,6 +891,7 @@ const Conversation = () => {
               );
             }}
             keyExtractor={(item) => item.id}
+            ListHeaderComponent={renderMessageTypingBubble}
           />
 
           {/* Attachment Options */}
@@ -708,7 +922,7 @@ const Conversation = () => {
                 placeholder="Message"
                 placeholderTextColor={colors.timestampText}
                 value={message}
-                onChangeText={setMessage}
+                onChangeText={handleTypingChange}
                 multiline={true}
                 maxLength={1000}
                 onKeyPress={({ nativeEvent }) => {
@@ -789,6 +1003,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacingX._12,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacingX._15,
+  },
+  headerIconButton: {
+    padding: spacingY._5,
+  },
+  statusText: {
+    opacity: 0.8,
   },
   content: {
     flex: 1,
@@ -921,5 +1149,66 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.rose,
+  },
+  typingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacingX._7,
+    marginTop: spacingY._5,
+  },
+  typingDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  typingDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.white,
+    opacity: 0.7,
+  },
+  typingDot1: {
+    animationDelay: '0ms',
+  },
+  typingDot2: {
+    animationDelay: '200ms',
+  },
+  typingDot3: {
+    animationDelay: '400ms',
+  },
+  typingText: {
+    fontStyle: 'italic',
+  },
+  typingBubbleContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginVertical: spacingY._5,
+    paddingHorizontal: spacingX._15,
+    gap: spacingX._7,
+  },
+  typingAvatar: {
+    marginBottom: spacingY._5,
+  },
+  typingBubble: {
+    backgroundColor: colors.white,
+    borderRadius: radius._20,
+    paddingHorizontal: spacingX._15,
+    paddingVertical: spacingY._12,
+    borderBottomLeftRadius: spacingX._5,
+    minWidth: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typingDotsMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  typingDotMessage: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.timestampText,
   },
 });
