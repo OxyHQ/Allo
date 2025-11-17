@@ -6,6 +6,7 @@ import {
     FlatList,
     TouchableOpacity,
     TextInput,
+    useWindowDimensions,
 } from 'react-native';
 import { Link, useRouter, usePathname } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -89,6 +90,7 @@ export default function ConversationsList() {
     const theme = useTheme();
     const pathname = usePathname();
     const router = useRouter();
+    const { width: windowWidth } = useWindowDimensions();
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
     const archiveConversation = useConversationsStore(state => state.archiveConversation);
@@ -336,7 +338,7 @@ export default function ConversationsList() {
         swipeActionContainer: {
             justifyContent: 'center',
             alignItems: 'center',
-            minWidth: 100,
+            overflow: 'hidden',
         },
         swipeActionContent: {
             flexDirection: 'row',
@@ -532,27 +534,39 @@ export default function ConversationsList() {
 
             const isDelete = action === 'delete';
 
+            const swipeGapWidth = dragX.interpolate({
+                inputRange: direction === 'left'
+                    ? [0, windowWidth]
+                    : [-windowWidth, 0],
+                outputRange: [0, windowWidth],
+                extrapolate: 'clamp',
+            });
+
             return (
-                <View
+                <Animated.View
                     style={[
                         styles.swipeActionContainer,
                         isDelete ? styles.swipeActionDelete : styles.swipeActionArchive,
+                        {
+                            width: swipeGapWidth,
+                            maxWidth: windowWidth,
+                        },
                     ]}
                 >
                     <View style={styles.swipeActionContent}>
-                        <Ionicons 
-                            name={isDelete ? 'trash-outline' : 'archive-outline'} 
-                            size={20} 
-                            color="#FFFFFF" 
+                        <Ionicons
+                            name={isDelete ? 'trash-outline' : 'archive-outline'}
+                            size={20}
+                            color="#FFFFFF"
                         />
                         <Text style={styles.swipeActionText}>
                             {isDelete ? 'Delete' : 'Archive'}
                         </Text>
                     </View>
-                </View>
+                </Animated.View>
             );
         };
-    }, [styles]);
+    }, [styles, windowWidth]);
 
     /**
      * Handle swipe action on a conversation
@@ -734,8 +748,8 @@ export default function ConversationsList() {
                 renderRightActions={
                     rightEnabled ? renderSwipeAction(rightSwipeAction, 'right') : undefined
                 }
-                overshootLeft={false}
-                overshootRight={false}
+                overshootLeft={true}
+                overshootRight={true}
                 onSwipeableOpen={(direction) => {
                     if (direction === 'left' || direction === 'right') {
                         handleSwipeAction(direction, item);
