@@ -3,6 +3,9 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS, TIME_FORMAT_OPTIONS } from '@/constants/messaging';
 import { colors } from '@/styles/colors';
+import { MsgDblCheckIcon } from '@/assets/icons/msgdblcheck-icon';
+import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
+import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
 
 export interface MessageMetadataProps {
   timestamp: Date;
@@ -63,13 +66,29 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
     readIndicator: {
       marginLeft: 2,
     },
-    checkIcon: {
-      fontSize: 14,
-      color: readStatus === 'read' 
-        ? colors.buttonPrimary || '#007AFF'
-        : colors.messageTimestamp || theme.colors.textSecondary || '#999999',
-    },
   }), [isSent, readStatus, theme]);
+
+  const readIndicatorColor = useMemo(() => {
+    if (readStatus === 'read') {
+      return colors.buttonPrimary || colors.primaryColor || theme.colors.primary || '#007AFF';
+    }
+    return colors.messageTimestamp || theme.colors.textSecondary || '#999999';
+  }, [readStatus, theme]);
+
+  const statusIcon = useMemo(() => {
+    if (!isSent || !readStatus) return null;
+    const commonProps = { size: 16, color: readIndicatorColor };
+
+    switch (readStatus) {
+      case 'read':
+        return <MsgDblCheckIcon {...commonProps} />;
+      case 'delivered':
+        return <MsgCheckIcon {...commonProps} />;
+      case 'sent':
+      default:
+        return <MsgPendingIcon {...commonProps} />;
+    }
+  }, [isSent, readStatus, readIndicatorColor]);
 
   if (!showTimestamp) {
     return null;
@@ -83,11 +102,9 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
       {isEdited && (
         <Text style={styles.editedLabel}>edited</Text>
       )}
-      {isSent && readStatus && (
+      {statusIcon && (
         <View style={styles.readIndicator}>
-          <Text style={styles.checkIcon}>
-            {readStatus === 'read' ? '✓✓' : readStatus === 'delivered' ? '✓✓' : '✓'}
-          </Text>
+          {statusIcon}
         </View>
       )}
     </View>
@@ -95,4 +112,3 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
 });
 
 MessageMetadata.displayName = 'MessageMetadata';
-

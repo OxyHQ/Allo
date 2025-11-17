@@ -310,10 +310,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
         />
       </View>
 
-      {/* Spacer for sent messages */}
-      {!isAiGroup && !isIncoming && (
-        <View style={styles.avatarSlot} />
-      )}
     </View>
   );
 });
