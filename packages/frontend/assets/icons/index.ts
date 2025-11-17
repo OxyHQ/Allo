@@ -9,6 +9,7 @@ export { Home, HomeActive } from './home-icon';
 export { Search, SearchActive } from './search-icon';
 export { Video, VideoActive } from './video-icon';
 export { ComposeIcon, ComposeIIconActive } from './compose-icon';
+export { SendIcon } from './send-icon';
 
 // Types
 export type { IconProps } from './types';

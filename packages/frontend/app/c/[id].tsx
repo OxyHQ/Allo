@@ -24,6 +24,9 @@ import { MessageBubble } from '@/components/messages/MessageBubble';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
+import { Plus } from '@/assets/icons/plus-icon';
+import { EmojiIcon } from '@/assets/icons/emoji-icon';
+import { SendIcon } from '@/assets/icons/send-icon';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -96,21 +99,22 @@ export default function ConversationView({ conversationId: propConversationId }:
   const pathname = usePathname();
   const segments = useSegments();
   const bottomSheet = useContext(BottomSheetContext);
-  
+
   // Get conversation ID from multiple sources (prop > pathname > segments)
   const conversationId = useMemo(
     () => getConversationId(propConversationId, pathname, segments),
     [propConversationId, pathname, segments]
   );
-  
+
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  
+
   // Load mock messages for this conversation
   const initialMessages = useMemo(() => getMockMessages(conversationId), [conversationId]);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
-  
+  const inputRef = useRef<TextInput>(null);
+
   // Track which message has timestamp visible (only one at a time)
   const [visibleTimestampId, setVisibleTimestampId] = useState<string | null>(null);
 
@@ -128,7 +132,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     () => conversation ? isGroupConversation(conversation) : false,
     [conversation]
   );
-  
+
   // Extract conversation metadata
   const conversationMetadata = useMemo(() => {
     const contactInfo = getContactInfo(conversation);
@@ -140,7 +144,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       ? getConversationAvatar(conversation, CURRENT_USER_ID)
       : undefined;
     const participants = isGroup && conversation ? (conversation.participants || []) : [];
-    
+
     return {
       contactInfo,
       groupInfo,
@@ -161,7 +165,7 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const handleHeaderPress = useCallback(() => {
     if (!conversationId || !conversation || !bottomSheet) return;
-    
+
     if (!isLargeScreen) {
       bottomSheet.setBottomSheetContent(
         <ContactDetails
@@ -206,39 +210,66 @@ export default function ConversationView({ conversationId: propConversationId }:
     },
     inputContainer: {
       flexDirection: 'row',
-      paddingHorizontal: 16,
+      alignItems: 'flex-end',
+      paddingHorizontal: 12,
       paddingVertical: 8,
+      paddingBottom: Platform.OS === 'ios' ? 8 : 12,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
       backgroundColor: theme.colors.background,
+      gap: 8,
     },
-    input: {
+    inputWrapper: {
       flex: 1,
-      paddingHorizontal: MESSAGING_CONSTANTS.INPUT_PADDING_HORIZONTAL,
-      paddingVertical: MESSAGING_CONSTANTS.INPUT_PADDING_VERTICAL,
-      borderRadius: MESSAGING_CONSTANTS.INPUT_BORDER_RADIUS,
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      minHeight: 44,
+      maxHeight: 120,
+      borderRadius: 22,
       backgroundColor: colors.chatInputBackground,
       borderWidth: 1,
       borderColor: colors.chatInputBorder,
+      paddingHorizontal: 4,
+      paddingVertical: 4,
+    },
+    input: {
+      flex: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
       fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
       color: colors.chatInputText,
-      marginRight: 8,
+      textAlignVertical: 'center',
+      minHeight: 36,
+      maxHeight: 112,
+    },
+    attachButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+    },
+    emojiButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent',
     },
     sendButton: {
-      width: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE,
-      height: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE,
-      borderRadius: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE / 2,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       backgroundColor: colors.buttonPrimary,
       justifyContent: 'center',
       alignItems: 'center',
+      opacity: 1,
     },
     sendButtonDisabled: {
-      backgroundColor: colors.buttonDisabled,
-    },
-    sendButtonText: {
-      color: '#FFFFFF',
-      fontSize: 18,
-      fontWeight: '600',
+      backgroundColor: 'transparent',
+      opacity: 0.4,
     },
     emptyState: {
       flex: 1,
@@ -259,7 +290,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       const timeoutId = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, MESSAGING_CONSTANTS.SCROLL_TO_BOTTOM_DELAY);
-      
+
       return () => clearTimeout(timeoutId);
     }
   }, [messages.length]);
@@ -277,7 +308,27 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
+    // Blur input after sending
+    inputRef.current?.blur();
   }, [inputText]);
+
+  /**
+   * Handle attach button press
+   * TODO: Implement media picker
+   */
+  const handleAttach = useCallback(() => {
+    // Placeholder for media picker functionality
+    console.log('Attach pressed');
+  }, []);
+
+  /**
+   * Handle emoji button press
+   * TODO: Implement emoji picker
+   */
+  const handleEmoji = useCallback(() => {
+    // Placeholder for emoji picker functionality
+    console.log('Emoji pressed');
+  }, []);
 
   /**
    * Get sender name for group conversations
@@ -306,12 +357,12 @@ export default function ConversationView({ conversationId: propConversationId }:
     const senderName = showSenderName
       ? (item.senderName || getSenderName(item.senderId))
       : undefined;
-    
+
     // Check if this is the first message from this sender (for spacing)
     const prevMessage = index > 0 ? messages[index - 1] : null;
     const isFirstFromSender = !prevMessage || prevMessage.senderId !== item.senderId;
-    const showSenderNameLabel = showSenderName && senderName && isFirstFromSender;
-    
+    const showSenderNameLabel = Boolean(showSenderName && senderName && isFirstFromSender);
+
     const showTimestamp = visibleTimestampId === item.id;
 
     return (
@@ -338,10 +389,10 @@ export default function ConversationView({ conversationId: propConversationId }:
           <Header
             options={{
               title: conversationMetadata.displayName,
-              subtitle: conversationMetadata.contactUsername || 
-                       (isGroup && conversationMetadata.groupInfo 
-                         ? `${conversationMetadata.groupInfo.participantCount} participants` 
-                         : undefined),
+              subtitle: conversationMetadata.contactUsername ||
+                (isGroup && conversationMetadata.groupInfo
+                  ? `${conversationMetadata.groupInfo.participantCount} participants`
+                  : undefined),
               leftComponents: !isLargeScreen ? [
                 <HeaderIconButton
                   key="back"
@@ -418,28 +469,76 @@ export default function ConversationView({ conversationId: propConversationId }:
           </View>
         )}
 
-        {/* Input */}
+        {/* Input Composer */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
         >
           <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder="Type a message..."
-              placeholderTextColor={colors.chatInputPlaceholder}
-              multiline
-              maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
-            />
+            {/* Attach Button */}
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handleAttach}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Plus
+                color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                size={24}
+              />
+            </TouchableOpacity>
+
+            {/* Input Wrapper */}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="Message"
+                placeholderTextColor={colors.chatInputPlaceholder}
+                multiline
+                maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
+                textAlignVertical="center"
+                returnKeyType="default"
+                blurOnSubmit={false}
+              />
+
+              {/* Emoji Button - Only show when input is empty or at end */}
+              {inputText.length === 0 && (
+                <TouchableOpacity
+                  style={styles.emojiButton}
+                  onPress={handleEmoji}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <EmojiIcon
+                    color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                    size={24}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Send Button */}
             <TouchableOpacity
               style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
               onPress={handleSend}
               disabled={!canSend}
               activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.sendButtonText}>→</Text>
+              {canSend ? (
+                <SendIcon
+                  color="#FFFFFF"
+                  size={20}
+                />
+              ) : (
+                <EmojiIcon
+                  color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                  size={24}
+                />
+              )}
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
