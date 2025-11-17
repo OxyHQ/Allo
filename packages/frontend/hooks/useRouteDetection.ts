@@ -1,12 +1,41 @@
 import { usePathname, useSegments } from 'expo-router';
 import { useMemo } from 'react';
-import { routeMatchers } from '@/utils/routeUtils';
+import { routeMatchers, ROUTE_PATTERNS } from '@/utils/routeUtils';
+
+/**
+ * Route detection result type
+ */
+export interface RouteDetectionResult {
+  pathname: string | null;
+  segments: string[];
+  isSettingsRoute: boolean;
+  isSettingsIndexRoute: boolean;
+  isNestedSettingsRoute: boolean;
+  isStatusRoute: boolean;
+  isConversationRoute: boolean;
+  isIndexRoute: boolean;
+  conversationId: string | null;
+}
 
 /**
  * Custom hook for detecting current route type
- * Follows Expo Router 54 best practices with proper hook usage
+ * 
+ * Follows Expo Router 54 best practices:
+ * - Uses usePathname() and useSegments() hooks
+ * - Memoized for performance
+ * - Returns type-safe route detection results
+ * 
+ * @returns RouteDetectionResult object with route state
+ * 
+ * @example
+ * ```ts
+ * const route = useRouteDetection();
+ * if (route.isStatusRoute) {
+ *   // Handle status route
+ * }
+ * ```
  */
-export function useRouteDetection() {
+export function useRouteDetection(): RouteDetectionResult {
   const pathname = usePathname();
   const segments = useSegments();
 
@@ -28,11 +57,12 @@ export function useRouteDetection() {
       (String(lastSegment) === 'index' && !isSettingsRoute)
     ) && !isStatusRoute;
 
-    const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
+    // Extract conversation ID using pattern matching
+    const conversationIdMatch = pathname?.match(ROUTE_PATTERNS.CONVERSATION);
     const conversationId = conversationIdMatch?.[1] || null;
 
     return {
-      pathname,
+      pathname: pathname || null,
       segments,
       isSettingsRoute,
       isSettingsIndexRoute,

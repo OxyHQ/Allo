@@ -1,21 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
     StyleSheet,
     View,
     Text,
     FlatList,
     TouchableOpacity,
-    useWindowDimensions,
 } from 'react-native';
 import { Link, usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
+
+// Components
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { colors } from '@/styles/colors';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
+
+// Hooks
+import { useTheme } from '@/hooks/useTheme';
+import { useConversations } from '@/hooks/useConversation';
+
+// Utils
+import { colors } from '@/styles/colors';
 import {
     getConversationDisplayName,
     getConversationAvatar,
@@ -23,7 +28,6 @@ import {
     getParticipantCount,
     isGroupConversation,
 } from '@/utils/conversationUtils';
-import { useConversations } from '@/hooks/useConversation';
 
 // Export types for use in other files
 export type ConversationType = 'direct' | 'group';
@@ -50,17 +54,27 @@ export interface Conversation {
     participantCount?: number; // Number of participants (for groups)
 }
 
+/**
+ * Conversations list component
+ * Displays list of all conversations with support for direct and group chats
+ * 
+ * Follows Expo Router 54 best practices:
+ * - Uses Link components for navigation
+ * - Derives selected state from pathname
+ * - Supports responsive layouts
+ */
 export default function ConversationsList() {
     const theme = useTheme();
     const pathname = usePathname();
-    const { width } = useWindowDimensions();
-    const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-    const conversations = useConversations(); // Use hook instead of local state
+    const conversations = useConversations();
     
-    // Track selected conversation from pathname - check both /c/:id and /(chat)/:id
-    const selectedId = pathname?.match(/\/c\/([^/]+)$/)?.[1] || 
-                       pathname?.match(/\/(chat)\/([^/]+)$/)?.[2] || 
-                       null;
+    // Track selected conversation from pathname
+    // Matches both /c/:id format and legacy /(chat)/:id format
+    const selectedId = useMemo(() => {
+        const cMatch = pathname?.match(/\/c\/([^/]+)$/);
+        const chatMatch = pathname?.match(/\/(chat)\/([^/]+)$/);
+        return cMatch?.[1] || chatMatch?.[2] || null;
+    }, [pathname]);
 
     // Mock current user ID - replace with actual user ID from your auth system
     const currentUserId = 'current-user';

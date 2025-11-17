@@ -1,10 +1,11 @@
 import React, { Suspense, useMemo } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, Slot } from 'expo-router';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingFallback } from '@/components/shared/LoadingFallback';
 import ConversationsList from './index';
 import StatusScreen from './status';
 
@@ -13,61 +14,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useRouteDetection } from '@/hooks/useRouteDetection';
 
+// Constants
+import { BREAKPOINTS } from '@/constants/responsive';
+
 // Dynamic imports for code splitting (Expo Router 54 best practice)
 const ChatSettings = React.lazy(() => import('./settings/index'));
-
-/**
- * Loading fallback component
- */
-const LoadingFallback = () => {
-  const theme = useTheme();
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-    </View>
-  );
-};
-
-/**
- * Empty state component for right pane
- */
-interface EmptyStateProps {
-  title: string;
-  subtitle: string;
-}
-
-const EmptyState: React.FC<EmptyStateProps> = ({ title, subtitle }) => {
-  const theme = useTheme();
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 32,
-      backgroundColor: theme.colors.background,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.colors.text,
-      marginBottom: 12,
-      textAlign: 'center',
-    },
-    subtitle: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 24,
-    },
-  }), [theme.colors]);
-
-  return (
-    <View style={styles.container}>
-      <ThemedText style={styles.title}>{title}</ThemedText>
-      <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>
-    </View>
-  );
-};
 
 /**
  * Chat Layout with responsive two-pane support
@@ -86,7 +37,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({ title, subtitle }) => {
  */
 export default function ChatLayout() {
   const theme = useTheme();
-  const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
+  const isLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.TABLET });
   const route = useRouteDetection();
 
   const {
@@ -146,12 +97,17 @@ export default function ChatLayout() {
             />
           ) : isNestedSettingsRoute ? (
             <Suspense fallback={<LoadingFallback />}>
+              {/* 
+                Expo Router automatically discovers nested routes from file system.
+                Stack.Screen declarations allow customization of route options.
+              */}
               <Stack
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: theme.colors.background },
                 }}
               >
+                {/* First-level nested settings routes */}
                 <Stack.Screen
                   name="settings/appearance"
                   options={{ title: 'Appearance' }}
@@ -168,6 +124,7 @@ export default function ChatLayout() {
                   name="settings/profile-customization"
                   options={{ title: 'Profile Customization' }}
                 />
+                {/* Second-level nested routes under privacy */}
                 <Stack.Screen
                   name="settings/privacy/profile-visibility"
                   options={{ title: 'Profile Visibility' }}

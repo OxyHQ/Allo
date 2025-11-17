@@ -1,19 +1,32 @@
-import React, { useMemo } from 'react';
+import React, { Suspense, useMemo, useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
-import { useTheme } from '@/hooks/useTheme';
-import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
+
+// Components
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingFallback } from '@/components/shared/LoadingFallback';
 import { ContactDetails } from '@/components/ContactDetails';
 import ConversationsList from '../(chat)/index';
+
+// Hooks
+import { useTheme } from '@/hooks/useTheme';
+import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation, getContactInfo, getGroupInfo } from '@/hooks/useConversation';
+
+// Constants
+import { BREAKPOINTS } from '@/constants/responsive';
+
+// Utils
 import {
   getConversationDisplayName,
   getConversationAvatar,
   getOtherParticipants,
   isGroupConversation,
 } from '@/utils/conversationUtils';
+
+// Dynamic imports for code splitting (Expo Router 54 best practice)
+const ConversationView = React.lazy(() => import('./[id]'));
 
 /**
  * Layout for /c/:id routes
@@ -25,12 +38,13 @@ import {
 export default function CConversationLayout() {
   const theme = useTheme();
   const pathname = usePathname();
-  const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  // Show contact details only on very large screens (>= 1024px)
-  const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: 1024 });
+  const isLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.TABLET });
+  // Show contact details only on desktop screens (>= 1024px)
+  const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
   
+  // Extract conversation ID using route pattern
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
-  const conversationId = conversationIdMatch?.[1];
+  const conversationId = conversationIdMatch?.[1] || null;
   
   // Get conversation data
   const conversation = useConversation(conversationId);
@@ -52,16 +66,26 @@ export default function CConversationLayout() {
   const contactAvatar = contactInfo?.avatar || groupInfo?.avatar || avatar;
   const isOnline = contactInfo?.isOnline || false;
 
-  // Wrapper component to render conversation view with ID from pathname
-  const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
-    try {
-      const ConversationView = require('./[id]').default;
-      return <ConversationView conversationId={conversationId} />;
-    } catch (error) {
-      console.error('Failed to load conversation view:', error);
-      return null;
+  /**
+   * Renders the conversation view with error boundary
+   * Uses React.lazy for code splitting
+   */
+  const renderConversationView = useCallback(() => {
+    if (!conversationId) {
+      return (
+        <EmptyState
+          title="Select a conversation"
+          subtitle="Choose a conversation from the list to start messaging"
+        />
+      );
     }
-  };
+
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <ConversationView conversationId={conversationId} />
+      </Suspense>
+    );
+  }, [conversationId]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -96,35 +120,26 @@ export default function CConversationLayout() {
   // On large screens (>= 768px), show two-pane layout
   // On extra large screens (>= 1024px), show three-pane layout with contact details
   if (isLargeScreen) {
+    const showContactDetails = isExtraLargeScreen && conversationId && conversation;
+
     return (
       <ThemedView style={styles.container}>
-        {/* Left pane - show conversations list */}
+        {/* Left pane - conversations list */}
         <View style={styles.leftPane}>
           <ConversationsList />
         </View>
         
-        {/* Middle pane - show conversation detail */}
+        {/* Middle pane - conversation detail */}
         <View style={[
           styles.middlePane,
           // Only show right border if third column is visible
-          (isExtraLargeScreen && conversationId) && styles.middlePaneWithBorder,
+          showContactDetails && styles.middlePaneWithBorder,
         ]}>
-          {conversationId ? (
-            <ConversationViewWrapper conversationId={conversationId} />
-          ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-              <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: theme.colors.text, marginBottom: 12 }}>
-                Select a conversation
-              </ThemedText>
-              <ThemedText style={{ fontSize: 16, color: theme.colors.textSecondary, textAlign: 'center' }}>
-                Choose a conversation from the list to start messaging
-              </ThemedText>
-            </View>
-          )}
+          {renderConversationView()}
         </View>
 
-        {/* Right pane - show contact details only on extra large screens when conversation is selected */}
-        {conversationId && isExtraLargeScreen && conversation && (
+        {/* Right pane - contact details (only on extra large screens) */}
+        {showContactDetails && (
           <View style={styles.rightPane}>
             <ContactDetails
               conversationId={conversationId}
@@ -137,7 +152,7 @@ export default function CConversationLayout() {
               participants={participants}
               groupName={groupInfo?.name}
               groupAvatar={groupInfo?.avatar}
-              currentUserId="current-user" // Replace with actual current user ID
+              currentUserId="current-user" // TODO: Replace with actual current user ID
             />
           </View>
         )}
@@ -145,7 +160,8 @@ export default function CConversationLayout() {
     );
   }
 
-  // On small screens, use standard stack navigation
+  // On small screens, use Stack navigator with file-based routing
+  // Expo Router automatically discovers [id].tsx route from the file system
   return (
     <ThemedView style={styles.mobileContainer}>
       <Stack

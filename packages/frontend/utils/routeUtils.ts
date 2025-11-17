@@ -1,9 +1,12 @@
 /**
  * Route utilities for consistent route matching across the application
+ * 
+ * Follows Expo Router 54 conventions and best practices
  */
 
 /**
  * Application route constants
+ * Centralized route definitions for type safety and maintainability
  */
 export const ROUTES = {
   HOME: '/',
@@ -12,6 +15,11 @@ export const ROUTES = {
   SETTINGS: '/(chat)/settings',
   CHAT_INDEX: '/(chat)',
 } as const;
+
+/**
+ * Type for route keys
+ */
+export type RouteKey = keyof typeof ROUTES;
 
 /**
  * Route matching options
@@ -75,12 +83,26 @@ export const isRouteActive = (
 };
 
 /**
+ * Route pattern constants for consistent matching
+ */
+export const ROUTE_PATTERNS = {
+  CONVERSATION: /^\/c\/([^/]+)$/,
+  PROFILE: /^\/@([^/]+)$/,
+  SETTINGS: /\/settings/,
+  STATUS: /\/status/,
+} as const;
+
+/**
  * Special route matchers for common patterns
+ * Provides type-safe route detection utilities
  */
 export const routeMatchers = {
   /**
    * Checks if current pathname matches the status route
    * Handles various pathname formats that Expo Router might use
+   * 
+   * @param pathname - Current pathname from usePathname()
+   * @returns true if pathname matches status route
    */
   isStatusRoute: (pathname: string | null | undefined): boolean => {
     if (!pathname) return false;
@@ -88,20 +110,26 @@ export const routeMatchers = {
       pathname === ROUTES.STATUS ||
       pathname === '/status' ||
       pathname.endsWith('/status') ||
-      pathname.includes('/status')
+      ROUTE_PATTERNS.STATUS.test(pathname)
     );
   },
 
   /**
    * Checks if current pathname matches the settings route
+   * 
+   * @param pathname - Current pathname from usePathname()
+   * @returns true if pathname matches settings route
    */
   isSettingsRoute: (pathname: string | null | undefined): boolean => {
     if (!pathname) return false;
-    return pathname.includes('/settings');
+    return ROUTE_PATTERNS.SETTINGS.test(pathname);
   },
 
   /**
    * Checks if current pathname matches the home route
+   * 
+   * @param pathname - Current pathname from usePathname()
+   * @returns true if pathname matches home route
    */
   isHomeRoute: (pathname: string | null | undefined): boolean => {
     if (!pathname) return false;
@@ -110,11 +138,24 @@ export const routeMatchers = {
 
   /**
    * Checks if current pathname matches a conversation route
+   * 
+   * @param pathname - Current pathname from usePathname()
+   * @returns true if pathname matches conversation route pattern
    */
   isConversationRoute: (pathname: string | null | undefined): boolean => {
     if (!pathname) return false;
-    const conversationIdMatch = pathname.match(/\/c\/([^/]+)$/);
-    return Boolean(conversationIdMatch);
+    return ROUTE_PATTERNS.CONVERSATION.test(pathname);
+  },
+
+  /**
+   * Checks if current pathname matches a profile route
+   * 
+   * @param pathname - Current pathname from usePathname()
+   * @returns true if pathname matches profile route pattern
+   */
+  isProfileRoute: (pathname: string | null | undefined): boolean => {
+    if (!pathname) return false;
+    return ROUTE_PATTERNS.PROFILE.test(pathname);
   },
 };
 

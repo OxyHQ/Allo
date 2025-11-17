@@ -20,11 +20,15 @@ import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 
 // Hooks
+// Hooks
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useKeyboardVisibility } from "@/hooks/useKeyboardVisibility";
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
 import { usePathname } from 'expo-router';
+
+// Utils
+import { routeMatchers } from '@/utils/routeUtils';
 
 // Services & Utils
 import { oxyServices } from '@/lib/oxyServices';
@@ -51,11 +55,9 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   const theme = useTheme();
   const pathname = usePathname();
   
-  // Check if we're on a conversation route (should hide BottomBar)
-  const isConversationRoute = pathname?.match(/^\/c\/([^/]+)$/);
-  // Check if we're on chat index (conversations list) - this is where BottomBar should show
-  const isChatIndex = pathname === '/(chat)' || pathname === '/(chat)/' || pathname === '/chat' || pathname === '/chat/' || pathname === '/';
-  // Only show BottomBar on mobile when NOT on conversation route
+  // Determine if BottomBar should be visible
+  // Hide BottomBar on conversation routes (handled by /c/_layout.tsx)
+  const isConversationRoute = routeMatchers.isConversationRoute(pathname);
   const shouldShowBottomBar = !isScreenNotMobile && !isConversationRoute;
 
   const styles = useMemo(() => StyleSheet.create({
