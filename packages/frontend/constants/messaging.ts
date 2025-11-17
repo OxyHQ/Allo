@@ -40,6 +40,15 @@ export const MESSAGING_CONSTANTS = {
   
   // Message grouping
   MESSAGE_GROUPING_TIME_WINDOW_MS: 5 * 60 * 1000, // 5 minutes in milliseconds
+  
+  // Media
+  MEDIA_MAX_WIDTH: 250,
+  MEDIA_HEIGHT: 200,
+  MEDIA_BORDER_RADIUS_AI: 12,
+  MEDIA_MARGIN_BOTTOM: 4,
+  
+  // Typography
+  LINE_HEIGHT_MULTIPLIER: 1.4, // Multiplier for line height based on font size
 } as const;
 
 export const TIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {

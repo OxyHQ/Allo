@@ -10,6 +10,7 @@ import {
   Platform,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
+  ImageBackground,
 } from 'react-native';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +31,7 @@ import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { Plus } from '@/assets/icons/plus-icon';
 import { EmojiIcon } from '@/assets/icons/emoji-icon';
 import { SendIcon } from '@/assets/icons/send-icon';
+import ChatBackgroundImage from '@/assets/images/background.png';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -213,9 +215,20 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Styles memoized for performance
   const styles = useMemo(() => StyleSheet.create({
-    container: {
+    safeArea: {
       flex: 1,
       backgroundColor: theme.colors.background,
+    },
+    background: {
+      flex: 1,
+      width: '100%',
+    },
+    backgroundImage: {
+      opacity: 0.18,
+    },
+    container: {
+      flex: 1,
+      backgroundColor: 'transparent',
     },
     headerWrapper: {
       position: 'relative',
@@ -505,173 +518,180 @@ export default function ConversationView({ conversationId: propConversationId }:
   const canSend = inputText.trim().length > 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ThemedView style={styles.container}>
-        {/* Header */}
-        <View style={styles.headerWrapper}>
-          <Header
-            options={{
-              title: conversationMetadata.displayName,
-              subtitle: conversationMetadata.contactUsername ||
-                (isGroup && conversationMetadata.groupInfo
-                  ? `${conversationMetadata.groupInfo.participantCount} participants`
-                  : undefined),
-              leftComponents: !isLargeScreen ? [
-                <HeaderIconButton
-                  key="back"
-                  onPress={() => router.back()}
-                >
-                  <BackArrowIcon size={20} color={theme.colors.text} />
-                </HeaderIconButton>,
-              ] : [],
-              rightComponents: [
-                isGroup && conversationMetadata.participants.length > 0 ? (
-                  <TouchableOpacity
-                    key="group-avatar"
-                    onPress={handleHeaderPress}
-                    activeOpacity={0.7}
-                    hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ImageBackground
+        source={ChatBackgroundImage}
+        style={styles.background}
+        imageStyle={styles.backgroundImage}
+        resizeMode="repeat"
+      >
+        <ThemedView style={styles.container}>
+          {/* Header */}
+          <View style={styles.headerWrapper}>
+            <Header
+              options={{
+                title: conversationMetadata.displayName,
+                subtitle: conversationMetadata.contactUsername ||
+                  (isGroup && conversationMetadata.groupInfo
+                    ? `${conversationMetadata.groupInfo.participantCount} participants`
+                    : undefined),
+                leftComponents: !isLargeScreen ? [
+                  <HeaderIconButton
+                    key="back"
+                    onPress={() => router.back()}
                   >
-                    <GroupAvatar
-                      participants={getOtherParticipants(conversation!, CURRENT_USER_ID)}
-                      size={MESSAGING_CONSTANTS.AVATAR_SIZE}
-                      maxAvatars={2}
-                    />
-                  </TouchableOpacity>
-                ) : (
-                  conversationMetadata.contactAvatar && (
+                    <BackArrowIcon size={20} color={theme.colors.text} />
+                  </HeaderIconButton>,
+                ] : [],
+                rightComponents: [
+                  isGroup && conversationMetadata.participants.length > 0 ? (
                     <TouchableOpacity
-                      key="avatar"
+                      key="group-avatar"
                       onPress={handleHeaderPress}
                       activeOpacity={0.7}
                       hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
                     >
-                      <Avatar
-                        source={{ uri: conversationMetadata.contactAvatar }}
+                      <GroupAvatar
+                        participants={getOtherParticipants(conversation!, CURRENT_USER_ID)}
                         size={MESSAGING_CONSTANTS.AVATAR_SIZE}
+                        maxAvatars={2}
                       />
                     </TouchableOpacity>
-                  )
-                ),
-              ].filter(Boolean),
-            }}
-            hideBottomBorder={true}
-            disableSticky={true}
-          />
-          <TouchableOpacity
-            style={[
-              styles.headerClickableOverlay,
-              {
-                left: !isLargeScreen ? 56 : 0,
-                right: (conversationMetadata.contactAvatar || (isGroup && conversationMetadata.participants.length > 0)) ? 56 : 0,
-              },
-            ]}
-            onPress={handleHeaderPress}
-            activeOpacity={0.7}
-            disabled={!conversationId || !conversation}
-            hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-          />
-        </View>
-
-        {/* Messages List */}
-        {messages.length > 0 ? (
-          <FlatList
-            ref={flatListRef}
-            style={styles.messagesList}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingVertical: 16 }}
-            inverted={false}
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              No messages yet.{'\n'}Start the conversation!
-            </ThemedText>
-          </View>
-        )}
-
-        {/* Input Composer */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
-        >
-          <View style={styles.inputContainer}>
-            {/* Attach Button */}
+                  ) : (
+                    conversationMetadata.contactAvatar && (
+                      <TouchableOpacity
+                        key="avatar"
+                        onPress={handleHeaderPress}
+                        activeOpacity={0.7}
+                        hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
+                      >
+                        <Avatar
+                          source={{ uri: conversationMetadata.contactAvatar }}
+                          size={MESSAGING_CONSTANTS.AVATAR_SIZE}
+                        />
+                      </TouchableOpacity>
+                    )
+                  ),
+                ].filter(Boolean),
+              }}
+              hideBottomBorder={true}
+              disableSticky={true}
+            />
             <TouchableOpacity
-              style={styles.attachButton}
-              onPress={handleAttach}
+              style={[
+                styles.headerClickableOverlay,
+                {
+                  left: !isLargeScreen ? 56 : 0,
+                  right: (conversationMetadata.contactAvatar || (isGroup && conversationMetadata.participants.length > 0)) ? 56 : 0,
+                },
+              ]}
+              onPress={handleHeaderPress}
               activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Plus
-                color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
-                size={24}
-              />
-            </TouchableOpacity>
+              disabled={!conversationId || !conversation}
+              hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+            />
+          </View>
 
-            {/* Input Wrapper */}
-            <View style={styles.inputWrapper}>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                value={inputText}
-                onChangeText={(text) => {
-                  if (conversationId) {
-                    setInputText(conversationId, text);
-                  }
-                }}
-                placeholder="Message"
-                placeholderTextColor={colors.chatInputPlaceholder}
-                multiline
-                maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
-                textAlignVertical="center"
-                returnKeyType="send"
-                blurOnSubmit={false}
-                onSubmitEditing={handleSubmitEditing}
-                onKeyPress={handleKeyPress}
-              />
+          {/* Messages List */}
+          {messages.length > 0 ? (
+            <FlatList
+              ref={flatListRef}
+              style={styles.messagesList}
+              data={messages}
+              renderItem={renderMessage}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingVertical: 16 }}
+              inverted={false}
+            />
+          ) : (
+            <View style={styles.emptyState}>
+              <ThemedText style={styles.emptyStateText}>
+                No messages yet.{'\n'}Start the conversation!
+              </ThemedText>
+            </View>
+          )}
 
-              {/* Emoji Button - Only show when input is empty or at end */}
-              {inputText.length === 0 && (
-                <TouchableOpacity
-                  style={styles.emojiButton}
-                  onPress={handleEmoji}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
+          {/* Input Composer */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
+          >
+            <View style={styles.inputContainer}>
+              {/* Attach Button */}
+              <TouchableOpacity
+                style={styles.attachButton}
+                onPress={handleAttach}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Plus
+                  color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                  size={24}
+                />
+              </TouchableOpacity>
+
+              {/* Input Wrapper */}
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  ref={inputRef}
+                  style={styles.input}
+                  value={inputText}
+                  onChangeText={(text) => {
+                    if (conversationId) {
+                      setInputText(conversationId, text);
+                    }
+                  }}
+                  placeholder="Message"
+                  placeholderTextColor={colors.chatInputPlaceholder}
+                  multiline
+                  maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
+                  textAlignVertical="center"
+                  returnKeyType="send"
+                  blurOnSubmit={false}
+                  onSubmitEditing={handleSubmitEditing}
+                  onKeyPress={handleKeyPress}
+                />
+
+                {/* Emoji Button - Only show when input is empty or at end */}
+                {inputText.length === 0 && (
+                  <TouchableOpacity
+                    style={styles.emojiButton}
+                    onPress={handleEmoji}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <EmojiIcon
+                      color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                      size={24}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Send Button */}
+              <TouchableOpacity
+                style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+                onPress={handleSend}
+                disabled={!canSend}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {canSend ? (
+                  <SendIcon
+                    color="#FFFFFF"
+                    size={20}
+                  />
+                ) : (
                   <EmojiIcon
                     color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
                     size={24}
                   />
-                </TouchableOpacity>
-              )}
+                )}
+              </TouchableOpacity>
             </View>
-
-            {/* Send Button */}
-            <TouchableOpacity
-              style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-              onPress={handleSend}
-              disabled={!canSend}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {canSend ? (
-                <SendIcon
-                  color="#FFFFFF"
-                  size={20}
-                />
-              ) : (
-                <EmojiIcon
-                  color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
-                  size={24}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </ThemedView>
+          </KeyboardAvoidingView>
+        </ThemedView>
+      </ImageBackground>
     </SafeAreaView>
   );
 }

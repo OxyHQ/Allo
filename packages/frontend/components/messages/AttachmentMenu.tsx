@@ -8,7 +8,6 @@
 import React, { useMemo } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
@@ -20,7 +19,7 @@ import { MediaIcon } from '@/assets/icons/media-icon';
 import { LocationIcon } from '@/assets/icons/location-icon';
 import { DocumentIcon } from '@/assets/icons/document-icon';
 import { CameraIcon } from '@/assets/icons/camera-icon';
-import { ContactIcon } from '@/assets/icons/contact-icon';
+import { ProfileIcon } from '@/assets/icons/profile-icon';
 import { PollIcon } from '@/assets/icons/poll-icon';
 
 export interface AttachmentOption {
@@ -28,6 +27,8 @@ export interface AttachmentOption {
   label: string;
   icon: React.ReactNode;
   onPress: () => void;
+  accentColor: string;
+  accentBackground: string;
 }
 
 export interface AttachmentMenuProps {
@@ -67,7 +68,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'photo',
       label: 'Photo & Video',
-      icon: <MediaIcon color={theme.colors.text} size={28} />,
+      icon: <MediaIcon color="#FF7A00" size={30} />,
+      accentColor: '#FF7A00',
+      accentBackground: '#FFF2E6',
       onPress: () => {
         onSelectPhoto?.();
         onClose();
@@ -76,7 +79,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'document',
       label: 'Document',
-      icon: <DocumentIcon color={theme.colors.text} size={28} />,
+      icon: <DocumentIcon color="#5C6BC0" size={30} />,
+      accentColor: '#5C6BC0',
+      accentBackground: '#E9ECFF',
       onPress: () => {
         onSelectDocument?.();
         onClose();
@@ -85,7 +90,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'location',
       label: 'Location',
-      icon: <LocationIcon color={theme.colors.text} size={28} />,
+      icon: <LocationIcon color="#00B894" size={30} />,
+      accentColor: '#00B894',
+      accentBackground: '#E0FFF7',
       onPress: () => {
         onSelectLocation?.();
         onClose();
@@ -94,7 +101,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'camera',
       label: 'Camera',
-      icon: <CameraIcon color={theme.colors.text} size={28} />,
+      icon: <CameraIcon color="#D84393" size={30} />,
+      accentColor: '#D84393',
+      accentBackground: '#FFE7F3',
       onPress: () => {
         onSelectCamera?.();
         onClose();
@@ -103,7 +112,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'contact',
       label: 'Contact',
-      icon: <ContactIcon color={theme.colors.text} size={28} />,
+      icon: <ProfileIcon color="#0087FF" size={30} />,
+      accentColor: '#0087FF',
+      accentBackground: '#E3F2FF',
       onPress: () => {
         onSelectContact?.();
         onClose();
@@ -112,14 +123,15 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     {
       id: 'poll',
       label: 'Poll',
-      icon: <PollIcon color={theme.colors.text} size={28} />,
+      icon: <PollIcon color="#FF5252" size={30} />,
+      accentColor: '#FF5252',
+      accentBackground: '#FFE7E7',
       onPress: () => {
         onSelectPoll?.();
         onClose();
       },
     },
   ], [
-    theme.colors.text,
     onSelectPhoto,
     onSelectDocument,
     onSelectLocation,
@@ -131,30 +143,39 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
-      paddingVertical: 20,
-      paddingHorizontal: 16,
+      paddingVertical: 24,
+      paddingHorizontal: 20,
+      backgroundColor: theme.colors.background,
+    },
+    contentContainer: {
+      paddingBottom: 12,
     },
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'flex-start',
-      gap: 24,
+      justifyContent: 'space-between',
+      rowGap: 24,
     },
     option: {
+      width: '30%',
       alignItems: 'center',
-      width: 80,
+      gap: 8,
     },
     iconContainer: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: theme.colors.border || colors.COLOR_BLACK_LIGHT_5,
+      width: 72,
+      height: 72,
+      borderRadius: 36,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
     },
     label: {
       fontSize: 12,
+      fontWeight: '500',
       color: theme.colors.text,
       textAlign: 'center',
     },
@@ -163,7 +184,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.container}
+      contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.grid}>
@@ -172,9 +193,9 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
             key={option.id}
             style={styles.option}
             onPress={option.onPress}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, { backgroundColor: option.accentBackground }]}>
               {option.icon}
             </View>
             <ThemedText style={styles.label}>{option.label}</ThemedText>
