@@ -27,12 +27,17 @@ export const GroupAvatar: React.FC<GroupAvatarProps> = ({
     );
   }
 
+  // Helper to get initial from participant
+  const getInitial = (participant: ConversationParticipant): string => {
+    return participant.name?.first?.charAt(0).toUpperCase() || '?';
+  };
+
   if (participants.length === 1) {
     return (
       <Avatar
         size={size}
         source={participants[0].avatar ? { uri: participants[0].avatar } : undefined}
-        label={participants[0].name.charAt(0).toUpperCase()}
+        label={getInitial(participants[0])}
         style={style}
       />
     );
@@ -58,7 +63,7 @@ export const GroupAvatar: React.FC<GroupAvatarProps> = ({
             <Avatar
               size={avatarSize}
               source={participant.avatar ? { uri: participant.avatar } : undefined}
-              label={participant.name.charAt(0).toUpperCase()}
+              label={getInitial(participant)}
             />
           </View>
         );

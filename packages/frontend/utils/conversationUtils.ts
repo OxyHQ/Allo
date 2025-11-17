@@ -1,6 +1,14 @@
 import { Conversation, ConversationType, ConversationParticipant } from '@/app/(chat)/index';
 
 /**
+ * Get full name from participant (name.first + name.last)
+ */
+function getParticipantFullName(participant: ConversationParticipant): string {
+  const { first, last } = participant.name;
+  return `${first}${last ? ` ${last}` : ''}`.trim();
+}
+
+/**
  * Generate a group conversation name from participant names
  * @param participants Array of participants (excluding current user)
  * @param currentUserId Current user's ID to exclude from name generation
@@ -22,11 +30,11 @@ export function generateGroupName(
   }
 
   if (otherParticipants.length === 1) {
-    return otherParticipants[0].name;
+    return getParticipantFullName(otherParticipants[0]);
   }
 
   // Take first maxNames participants
-  const namesToShow = otherParticipants.slice(0, maxNames).map(p => p.name);
+  const namesToShow = otherParticipants.slice(0, maxNames).map(getParticipantFullName);
   const remainingCount = otherParticipants.length - maxNames;
 
   if (remainingCount > 0) {

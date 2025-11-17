@@ -34,7 +34,10 @@ export type ConversationType = 'direct' | 'group';
 
 export interface ConversationParticipant {
     id: string;
-    name: string;
+    name: {
+        first: string;
+        last: string;
+    };
     username?: string;
     avatar?: string;
 }

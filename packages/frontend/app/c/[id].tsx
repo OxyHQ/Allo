@@ -42,10 +42,7 @@ import {
   isGroupConversation,
 } from '@/utils/conversationUtils';
 import { getMockMessages } from '@/utils/mockMessages';
-import {
-  getConversationId,
-  getSenderNameFromParticipants,
-} from '@/utils/conversationHelpers';
+import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -286,7 +283,7 @@ export default function ConversationView({ conversationId: propConversationId }:
    * Get sender name for group conversations
    */
   const getSenderName = useCallback((senderId: string): string | undefined => {
-    return getSenderNameFromParticipants(senderId, conversation, CURRENT_USER_ID);
+    return getSenderNameFromParticipants(senderId, conversation);
   }, [conversation]);
 
   /**

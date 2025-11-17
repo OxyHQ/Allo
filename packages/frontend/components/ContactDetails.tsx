@@ -289,21 +289,27 @@ export function ContactDetails({
           {/* Participants Tab - Only for groups */}
           {isGroup && activeTab === 'participants' && otherParticipants.length > 0 && (
             <View style={styles.section}>
-              {otherParticipants.map((participant) => (
-                <TouchableOpacity key={participant.id} style={styles.participantItem} activeOpacity={0.7}>
-                  <Avatar
-                    size={40}
-                    source={participant.avatar ? { uri: participant.avatar } : undefined}
-                    label={participant.name.charAt(0)}
-                  />
-                  <View style={styles.participantInfo}>
-                    <ThemedText style={styles.participantName}>{participant.name}</ThemedText>
-                    {participant.username && (
-                      <ThemedText style={styles.participantUsername}>{participant.username}</ThemedText>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {otherParticipants.map((participant) => {
+                const { first, last } = participant.name;
+                const fullName = `${first}${last ? ` ${last}` : ''}`.trim();
+                const initial = first?.charAt(0).toUpperCase() || '?';
+                
+                return (
+                  <TouchableOpacity key={participant.id} style={styles.participantItem} activeOpacity={0.7}>
+                    <Avatar
+                      size={40}
+                      source={participant.avatar ? { uri: participant.avatar } : undefined}
+                      label={initial}
+                    />
+                    <View style={styles.participantInfo}>
+                      <ThemedText style={styles.participantName}>{fullName}</ThemedText>
+                      {participant.username && (
+                        <ThemedText style={styles.participantUsername}>{participant.username}</ThemedText>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
 
