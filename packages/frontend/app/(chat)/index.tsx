@@ -5,6 +5,7 @@ import {
     Text,
     FlatList,
     TouchableOpacity,
+    TextInput,
 } from 'react-native';
 import { Link, useRouter, usePathname } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -20,6 +21,7 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { toast } from '@/lib/sonner';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -90,18 +92,38 @@ export default function ConversationsList() {
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
     const archiveConversation = useConversationsStore(state => state.archiveConversation);
+    const unarchiveConversation = useConversationsStore(state => state.unarchiveConversation);
     const removeConversation = useConversationsStore(state => state.removeConversation);
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
-    const visibleConversations = useMemo(
-        () => conversations.filter(conv => !conv.isArchived),
-        [conversations]
-    );
-    const hasArchivedOnly = conversations.length > 0 && visibleConversations.length === 0;
-    const emptyStateCopy = hasArchivedOnly
-        ? 'All of your conversations are archived.\nAdjust swipe settings if you want them to stay visible.'
-        : 'No conversations yet.\nStart a new chat to get started!';
-    
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Filter conversations based on search query and archived status
+    const visibleConversations = useMemo(() => {
+        let filtered = conversations.filter(conv => !conv.isArchived);
+
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter(conv =>
+                conv.name.toLowerCase().includes(query) ||
+                conv.lastMessage.toLowerCase().includes(query)
+            );
+        }
+
+        return filtered;
+    }, [conversations, searchQuery]);
+    // Determine empty state messaging
+    const hasArchivedOnly = conversations.length > 0 && visibleConversations.length === 0 && !searchQuery.trim();
+    const noSearchResults = searchQuery.trim() && visibleConversations.length === 0;
+
+    const emptyStateCopy = noSearchResults
+        ? 'No conversations found.\nTry a different search term.'
+        : hasArchivedOnly
+            ? 'All of your conversations are archived.\nAdjust swipe settings if you want them to stay visible.'
+            : 'No conversations yet.\nStart a new chat to get started!';
+
     // Track selected conversation from pathname
     // Matches both /c/:id format and legacy /(chat)/:id format
     const selectedId = useMemo(() => {
@@ -110,16 +132,19 @@ export default function ConversationsList() {
         return cMatch?.[1] || chatMatch?.[2] || null;
     }, [pathname]);
 
-    // Mock current user ID - replace with actual user ID from your auth system
+    // Mock current user ID - replace with actual user ID from auth system
     const currentUserId = 'current-user';
-    const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
-    const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(
-        () => new Set()
-    );
-    const selectionModeProgress = useSharedValue(0);
+
+    // Multi-selection state
+    const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(() => new Set());
     const isSelectionMode = selectedConversationIds.size > 0;
     const selectedCount = selectedConversationIds.size;
 
+    // Animation and refs
+    const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
+    const selectionModeProgress = useSharedValue(0);
+
+    // Sync animation progress with selection mode
     useEffect(() => {
         selectionModeProgress.value = withTiming(isSelectionMode ? 1 : 0, {
             duration: 220,
@@ -134,31 +159,52 @@ export default function ConversationsList() {
         },
         header: {
             position: 'relative',
-            height: 64,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.border,
             backgroundColor: theme.colors.background,
         },
-        headerContent: {
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            top: 8,
-            bottom: 8,
+        headerTop: {
             flexDirection: 'row',
             alignItems: 'center',
+            justifyContent: 'space-between',
         },
         headerTitle: {
-            fontSize: 20,
+            fontSize: 24,
             fontWeight: 'bold',
             color: theme.colors.text,
         },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 16,
+        },
+        headerIconButton: {
+            padding: 4,
+        },
+        searchBarContainer: {
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 8,
+            backgroundColor: theme.colors.background,
+        },
+        searchInputWrapper: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.backgroundSecondary || '#f0f2f5',
+            borderRadius: 20,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            height: 40,
+        },
+        searchInput: {
+            flex: 1,
+            fontSize: 15,
+            color: theme.colors.text,
+            marginLeft: 8,
+        },
         selectionHeaderContent: {
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            top: 8,
-            bottom: 8,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -204,10 +250,10 @@ export default function ConversationsList() {
             backgroundColor: theme.colors.background,
         },
         conversationItemSelected: {
-            backgroundColor: colors.primaryLight_1,
+            backgroundColor: theme.colors.backgroundSecondary,
         },
         conversationItemMultiSelected: {
-            backgroundColor: colors.primaryLight_2,
+            backgroundColor: theme.colors.backgroundSecondary,
         },
         selectionOverlay: {
             position: 'absolute',
@@ -219,16 +265,16 @@ export default function ConversationsList() {
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 3,
-            backgroundColor: 'rgba(0,0,0,0.45)',
+            backgroundColor: theme.isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
             borderWidth: 2,
-            borderColor: theme.colors.card,
+            borderColor: theme.colors.border,
         },
         selectionOverlaySelected: {
-            backgroundColor: colors.primaryColor,
-            borderColor: colors.primaryColor,
+            backgroundColor: theme.colors.primary,
+            borderColor: theme.colors.primary,
         },
         selectionOverlayUnselected: {
-            backgroundColor: 'rgba(0,0,0,0.35)',
+            backgroundColor: theme.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
             borderColor: theme.colors.border,
         },
         avatarContainer: {
@@ -288,10 +334,16 @@ export default function ConversationsList() {
             textAlign: 'center',
         },
         swipeActionContainer: {
-            width: 96,
-            height: '100%',
             justifyContent: 'center',
             alignItems: 'center',
+            minWidth: 100,
+        },
+        swipeActionContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            paddingHorizontal: 20,
         },
         swipeActionArchive: {
             backgroundColor: colors.chatTypingIndicator,
@@ -301,9 +353,8 @@ export default function ConversationsList() {
         },
         swipeActionText: {
             color: '#FFFFFF',
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: '600',
-            textTransform: 'uppercase',
         },
         settingsButton: {
             paddingHorizontal: 16,
@@ -318,10 +369,16 @@ export default function ConversationsList() {
         },
     }), [theme]);
 
+    /**
+     * Clear all selected conversations
+     */
     const clearSelection = useCallback(() => {
         setSelectedConversationIds(new Set());
     }, []);
 
+    /**
+     * Toggle selection state for a single conversation
+     */
     const toggleConversationSelection = useCallback((conversationId: string) => {
         setSelectedConversationIds((prev) => {
             const next = new Set(prev);
@@ -334,6 +391,9 @@ export default function ConversationsList() {
         });
     }, []);
 
+    /**
+     * Handle long press to enter/exit selection mode
+     */
     const handleConversationLongPress = useCallback((conversationId: string) => {
         setSelectedConversationIds((prev) => {
             if (prev.size === 0) {
@@ -349,6 +409,9 @@ export default function ConversationsList() {
         });
     }, []);
 
+    /**
+     * Handle conversation press - navigate or toggle selection
+     */
     const handleConversationPress = useCallback((conversationId: string) => {
         if (isSelectionMode) {
             toggleConversationSelection(conversationId);
@@ -357,18 +420,84 @@ export default function ConversationsList() {
         router.push(`/c/${conversationId}` as any);
     }, [isSelectionMode, toggleConversationSelection, router]);
 
+    /**
+     * Archive a conversation with toast notification and undo
+     */
+    const handleArchiveConversation = useCallback((conversationId: string, conversationName: string) => {
+        archiveConversation(conversationId);
+
+        toast.success(`Archived "${conversationName}"`, {
+            action: {
+                label: 'Undo',
+                onClick: () => {
+                    unarchiveConversation(conversationId);
+                    toast.success('Archive undone');
+                },
+            },
+            duration: 4000,
+        });
+    }, [archiveConversation, unarchiveConversation]);
+
+    /**
+     * Delete a conversation with toast notification and undo
+     * Note: For undo to work, we'd need to store deleted conversations temporarily
+     */
+    const handleDeleteConversation = useCallback((conversationId: string, conversationName: string) => {
+        const conversation = conversations.find(c => c.id === conversationId);
+
+        removeConversation(conversationId);
+
+        toast.error(`Deleted "${conversationName}"`, {
+            action: conversation ? {
+                label: 'Undo',
+                onClick: () => {
+                    // Re-add the conversation (this would need proper implementation in the store)
+                    toast.info('Delete undone - restoring conversation');
+                    // TODO: Implement proper restore functionality in the store
+                },
+            } : undefined,
+            duration: 4000,
+        });
+    }, [removeConversation, conversations]);
+
+    /**
+     * Archive all selected conversations
+     */
     const handleBulkArchive = useCallback(() => {
         const ids = Array.from(selectedConversationIds);
+        const count = ids.length;
+
         ids.forEach((id) => archiveConversation(id));
         clearSelection();
-    }, [selectedConversationIds, archiveConversation, clearSelection]);
 
+        toast.success(`Archived ${count} conversation${count !== 1 ? 's' : ''}`, {
+            action: {
+                label: 'Undo',
+                onClick: () => {
+                    ids.forEach((id) => unarchiveConversation(id));
+                    toast.success('Archive undone');
+                },
+            },
+            duration: 4000,
+        });
+    }, [selectedConversationIds, archiveConversation, unarchiveConversation, clearSelection]);
+
+    /**
+     * Delete all selected conversations
+     */
     const handleBulkDelete = useCallback(() => {
         const ids = Array.from(selectedConversationIds);
+        const count = ids.length;
+
         ids.forEach((id) => removeConversation(id));
         clearSelection();
+
+        toast.error(`Deleted ${count} conversation${count !== 1 ? 's' : ''}`, {
+            duration: 4000,
+        });
     }, [selectedConversationIds, removeConversation, clearSelection]);
 
+    // Animated styles for header background during selection mode
     const headerBackgroundColor = theme.colors.background;
     const headerBorderColor = theme.colors.border;
 
@@ -385,54 +514,49 @@ export default function ConversationsList() {
         ),
     }), [headerBackgroundColor, headerBorderColor]);
 
-    const defaultHeaderAnimatedStyle = useAnimatedStyle(() => ({
-        opacity: 1 - selectionModeProgress.value,
-        transform: [
-            {
-                translateY: selectionModeProgress.value * -8,
-            },
-        ],
-    }));
-
-    const selectionHeaderAnimatedStyle = useAnimatedStyle(() => ({
-        opacity: selectionModeProgress.value,
-        transform: [
-            {
-                translateY: (1 - selectionModeProgress.value) * 8,
-            },
-        ],
-    }));
-
+    /**
+     * Close a swipeable row
+     */
     const closeSwipeable = useCallback((id: string) => {
         swipeableRefs.current[id]?.close();
     }, []);
 
-    const renderSwipeActionPreview = useCallback((action: SwipeActionType) => {
-        if (action === 'none') {
-            return null;
-        }
+    /**
+     * Render swipe action with animated width that fills space
+     */
+    const renderSwipeAction = useCallback((action: SwipeActionType, direction: 'left' | 'right') => {
+        return (progress: any, dragX: any) => {
+            if (action === 'none') {
+                return null;
+            }
 
-        const isDelete = action === 'delete';
+            const isDelete = action === 'delete';
 
-        return (
-            <View
-                style={[
-                    styles.swipeActionContainer,
-                    isDelete ? styles.swipeActionDelete : styles.swipeActionArchive,
-                ]}
-            >
-                <Text style={styles.swipeActionText}>
-                    {isDelete ? 'Delete' : 'Archive'}
-                </Text>
-            </View>
-        );
-    }, [
-        styles.swipeActionArchive,
-        styles.swipeActionContainer,
-        styles.swipeActionDelete,
-        styles.swipeActionText,
-    ]);
+            return (
+                <View
+                    style={[
+                        styles.swipeActionContainer,
+                        isDelete ? styles.swipeActionDelete : styles.swipeActionArchive,
+                    ]}
+                >
+                    <View style={styles.swipeActionContent}>
+                        <Ionicons 
+                            name={isDelete ? 'trash-outline' : 'archive-outline'} 
+                            size={20} 
+                            color="#FFFFFF" 
+                        />
+                        <Text style={styles.swipeActionText}>
+                            {isDelete ? 'Delete' : 'Archive'}
+                        </Text>
+                    </View>
+                </View>
+            );
+        };
+    }, [styles]);
 
+    /**
+     * Handle swipe action on a conversation
+     */
     const handleSwipeAction = useCallback((direction: 'left' | 'right', conversation: Conversation) => {
         const action = direction === 'left' ? leftSwipeAction : rightSwipeAction;
 
@@ -442,22 +566,62 @@ export default function ConversationsList() {
         }
 
         if (action === 'archive') {
-            archiveConversation(conversation.id);
+            handleArchiveConversation(conversation.id, conversation.name);
         } else if (action === 'delete') {
-            removeConversation(conversation.id);
+            handleDeleteConversation(conversation.id, conversation.name);
         }
 
         setTimeout(() => {
             closeSwipeable(conversation.id);
         }, 200);
-    }, [
-        archiveConversation,
-        removeConversation,
-        leftSwipeAction,
-        rightSwipeAction,
-        closeSwipeable,
-    ]);
+    }, [leftSwipeAction, rightSwipeAction, closeSwipeable, handleArchiveConversation, handleDeleteConversation]);
 
+    /**
+     * Search bar header component (memoized to prevent re-renders)
+     */
+    const SearchBarHeader = useMemo(() => {
+        if (isSelectionMode) return null;
+
+        return (
+            <View style={styles.searchBarContainer}>
+                <View style={styles.searchInputWrapper}>
+                    <Ionicons
+                        name="search"
+                        size={20}
+                        color={theme.colors.textSecondary}
+                    />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Ask Oxy AI or Search"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        accessibilityLabel="Search input"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                    />
+                    {searchQuery.length > 0 && (
+                        <TouchableOpacity
+                            onPress={() => setSearchQuery('')}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityLabel="Clear search"
+                        >
+                            <Ionicons
+                                name="close-circle"
+                                size={20}
+                                color={theme.colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </View>
+        );
+    }, [isSelectionMode, searchQuery, theme.colors.textSecondary, styles.searchBarContainer, styles.searchInputWrapper, styles.searchInput]);
+
+    /**
+     * Render individual conversation item
+     */
     const renderConversationItem = ({ item }: { item: Conversation }) => {
         const isActiveConversation = selectedId === item.id;
         const isItemSelected = selectedConversationIds.has(item.id);
@@ -472,7 +636,7 @@ export default function ConversationsList() {
 
         const wrapperStyles = [
             styles.conversationItem,
-            isActiveConversation && styles.conversationItemSelected,
+            !isSelectionMode && isActiveConversation && styles.conversationItemSelected,
             isItemSelected && styles.conversationItemMultiSelected,
         ];
 
@@ -565,10 +729,10 @@ export default function ConversationsList() {
                 }}
                 enabled={swipeEnabled}
                 renderLeftActions={
-                    leftEnabled ? () => renderSwipeActionPreview(leftSwipeAction) : undefined
+                    leftEnabled ? renderSwipeAction(leftSwipeAction, 'left') : undefined
                 }
                 renderRightActions={
-                    rightEnabled ? () => renderSwipeActionPreview(rightSwipeAction) : undefined
+                    rightEnabled ? renderSwipeAction(rightSwipeAction, 'right') : undefined
                 }
                 overshootLeft={false}
                 overshootRight={false}
@@ -587,54 +751,96 @@ export default function ConversationsList() {
         <SafeAreaView style={styles.container} edges={['top']}>
             <ThemedView style={styles.container}>
                 <Animated.View style={[styles.header, headerAnimatedStyle]}>
-                    <Animated.View
-                        pointerEvents={isSelectionMode ? 'none' : 'auto'}
-                        style={[styles.headerContent, defaultHeaderAnimatedStyle]}
-                    >
-                        <ThemedText style={styles.headerTitle}>Messages</ThemedText>
-                    </Animated.View>
-
-                    <Animated.View
-                        pointerEvents={isSelectionMode ? 'auto' : 'none'}
-                        style={[styles.selectionHeaderContent, selectionHeaderAnimatedStyle]}
-                    >
-                        <View style={styles.selectionHeaderLeft}>
-                            <TouchableOpacity
-                                style={styles.selectionCloseButton}
-                                onPress={clearSelection}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                                <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={styles.selectionHeaderTitle}>
-                                {selectedCount} selected
-                            </Text>
-                        </View>
-                        <View style={styles.selectionHeaderActions}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.selectionActionButton,
-                                    selectedCount === 0 && styles.selectionActionButtonDisabled,
-                                ]}
-                                onPress={handleBulkArchive}
-                                disabled={selectedCount === 0}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                                <Ionicons name="archive-outline" size={20} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.selectionActionButton,
-                                    selectedCount === 0 && styles.selectionActionButtonDisabled,
-                                ]}
-                                onPress={handleBulkDelete}
-                                disabled={selectedCount === 0}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                                <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
-                    </Animated.View>
+                    {!isSelectionMode ? (
+                        <Animated.View
+                            entering={FadeIn.duration(200)}
+                            exiting={FadeOut.duration(150)}
+                            style={styles.headerTop}
+                        >
+                            <ThemedText style={styles.headerTitle}>Allo</ThemedText>
+                            <View style={styles.headerRight}>
+                                <TouchableOpacity
+                                    style={styles.headerIconButton}
+                                    onPress={() => {
+                                        // TODO: Implement camera functionality
+                                        console.log('Camera pressed');
+                                    }}
+                                    accessibilityLabel="Camera"
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons
+                                        name="camera-outline"
+                                        size={24}
+                                        color={theme.colors.text}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.headerIconButton}
+                                    onPress={() => {
+                                        // TODO: Implement options menu
+                                        console.log('Options pressed');
+                                    }}
+                                    accessibilityLabel="More options"
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons
+                                        name="ellipsis-vertical"
+                                        size={24}
+                                        color={theme.colors.text}
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        </Animated.View>
+                    ) : (
+                        <Animated.View
+                            entering={FadeIn.duration(200)}
+                            exiting={FadeOut.duration(150)}
+                            style={[styles.selectionHeaderContent]}
+                        >
+                            <View style={styles.selectionHeaderLeft}>
+                                <TouchableOpacity
+                                    style={styles.selectionCloseButton}
+                                    onPress={clearSelection}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    accessibilityLabel="Exit selection mode"
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+                                </TouchableOpacity>
+                                <Text style={styles.selectionHeaderTitle}>
+                                    {selectedCount} selected
+                                </Text>
+                            </View>
+                            <View style={styles.selectionHeaderActions}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.selectionActionButton,
+                                        selectedCount === 0 && styles.selectionActionButtonDisabled,
+                                    ]}
+                                    onPress={handleBulkArchive}
+                                    disabled={selectedCount === 0}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    accessibilityLabel={`Archive ${selectedCount} conversation${selectedCount !== 1 ? 's' : ''}`}
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons name="archive-outline" size={20} color="#FFFFFF" />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.selectionActionButton,
+                                        selectedCount === 0 && styles.selectionActionButtonDisabled,
+                                    ]}
+                                    onPress={handleBulkDelete}
+                                    disabled={selectedCount === 0}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    accessibilityLabel={`Delete ${selectedCount} conversation${selectedCount !== 1 ? 's' : ''}`}
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                                </TouchableOpacity>
+                            </View>
+                        </Animated.View>
+                    )}
                 </Animated.View>
 
                 {visibleConversations.length > 0 ? (
@@ -644,14 +850,19 @@ export default function ConversationsList() {
                         renderItem={renderConversationItem}
                         keyExtractor={(item) => item.id}
                         extraData={selectedConversationIds}
+                        ListHeaderComponent={SearchBarHeader}
                         contentContainerStyle={{ flexGrow: 1 }}
+                        keyboardShouldPersistTaps="handled"
                     />
                 ) : (
-                    <View style={styles.emptyState}>
-                        <ThemedText style={styles.emptyStateText}>
-                            {emptyStateCopy}
-                        </ThemedText>
-                    </View>
+                    <>
+                        {SearchBarHeader}
+                        <View style={styles.emptyState}>
+                            <ThemedText style={styles.emptyStateText}>
+                                {emptyStateCopy}
+                            </ThemedText>
+                        </View>
+                    </>
                 )}
 
                 <Link

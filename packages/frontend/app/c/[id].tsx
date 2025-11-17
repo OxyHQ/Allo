@@ -81,6 +81,8 @@ interface ConversationViewProps {
   conversationId?: string;
 }
 
+type SelectionContext = 'text' | 'media';
+
 /**
  * Current user ID constant
  * TODO: Replace with actual authentication system
@@ -166,6 +168,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Message actions state
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null);
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
   const [infoScreenVisible, setInfoScreenVisible] = useState(false);
@@ -604,6 +607,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleMessageLongPress = useCallback((message: Message, position: { x: number; y: number; width?: number; height?: number }) => {
     setSelectedMessage(message);
     setSelectedMediaId(null); // Clear media selection
+    setSelectionContext('text');
     setActionsMenuPosition(position); // Same position for actions menu
     setActionsMenuVisible(true); // Show both simultaneously
   }, []);
@@ -611,71 +615,78 @@ export default function ConversationView({ conversationId: propConversationId }:
   /**
    * Handle reaction selection
    */
+  const resetSelectionState = useCallback((options?: { preserveMessage?: boolean }) => {
+    setActionsMenuVisible(false);
+    if (!options?.preserveMessage) {
+      setSelectedMessage(null);
+    }
+    setSelectedMediaId(null);
+    setSelectionContext(null);
+  }, []);
+
   const handleReactionSelect = useCallback((emoji: string) => {
     if (selectedMessage) {
       // TODO: Implement reaction functionality
       console.log('Add reaction:', emoji, 'to message:', selectedMessage.id);
       // Could add reaction to message via store
     }
-    setActionsMenuVisible(false);
-    setSelectedMessage(null);
-    setSelectedMediaId(null);
-  }, [selectedMessage]);
+    resetSelectionState();
+  }, [selectedMessage, resetSelectionState]);
 
   /**
    * Handle reply action
    */
   const handleReply = useCallback((message: Message) => {
-    setActionsMenuVisible(false);
+    resetSelectionState({ preserveMessage: true });
     // TODO: Implement reply functionality
     console.log('Reply to message:', message.id);
     // Could scroll to input and add quote or allo
     inputRef.current?.focus();
-  }, []);
+  }, [resetSelectionState]);
 
   /**
    * Handle forward action
    */
   const handleForward = useCallback((message: Message) => {
-    setActionsMenuVisible(false);
+    resetSelectionState({ preserveMessage: true });
     // TODO: Implement forward functionality
     console.log('Forward message:', message.id);
-  }, []);
+  }, [resetSelectionState]);
 
   /**
    * Handle copy action
    */
   const handleCopy = useCallback((message: Message) => {
-    setActionsMenuVisible(false);
+    resetSelectionState({ preserveMessage: true });
     // TODO: Implement copy to clipboard
     console.log('Copy message:', message.text);
-  }, []);
+  }, [resetSelectionState]);
 
   /**
    * Handle delete action
    */
   const handleDelete = useCallback((message: Message) => {
-    setActionsMenuVisible(false);
+    resetSelectionState({ preserveMessage: true });
     // TODO: Implement delete functionality
     console.log('Delete message:', message.id);
-  }, []);
+  }, [resetSelectionState]);
 
   /**
    * Handle info action
    */
   const handleInfo = useCallback((message: Message) => {
-    setActionsMenuVisible(false);
+    resetSelectionState({ preserveMessage: true });
     setSelectedMessage(message);
     setInfoScreenVisible(true);
-  }, []);
+  }, [resetSelectionState]);
 
   /**
    * Get message actions for actions menu
    */
-  const getMessageActions = useCallback((message: Message | null): MessageAction[] => {
+  const getMessageActions = useCallback((message: Message | null, context: SelectionContext | null): MessageAction[] => {
     if (!message) return [];
 
-    return [
+    const actions: MessageAction[] = [
       {
         label: 'Reply',
         icon: <ReplyIcon size={20} color={theme.colors.text} />,
@@ -702,6 +713,10 @@ export default function ConversationView({ conversationId: propConversationId }:
         destructive: true,
       },
     ];
+    if (context === 'media') {
+      return actions.filter(action => action.label !== 'Copy');
+    }
+    return actions;
   }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleDelete]);
 
   /**
@@ -742,6 +757,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             onMediaLongPress={(message, mediaId, index, position) => {
               setSelectedMessage(message);
               setSelectedMediaId(mediaId);
+              setSelectionContext('media');
               setActionsMenuPosition(position); // Same position for actions menu
               setActionsMenuVisible(true); // Show both simultaneously
             }}
@@ -867,11 +883,9 @@ export default function ConversationView({ conversationId: propConversationId }:
           {/* Message Actions Menu - rendered first (will be below reactions) */}
           <MessageActionsMenu
             visible={actionsMenuVisible}
-            actions={getMessageActions(selectedMessage)}
+            actions={getMessageActions(selectedMessage, selectionContext)}
             onClose={() => {
-              setActionsMenuVisible(false);
-              setSelectedMessage(null);
-              setSelectedMediaId(null);
+              resetSelectionState();
             }}
             messagePosition={actionsMenuPosition}
             messageElement={selectedMessagePreview || undefined}
@@ -887,6 +901,8 @@ export default function ConversationView({ conversationId: propConversationId }:
             onClose={() => {
               setInfoScreenVisible(false);
               setSelectedMessage(null);
+              setSelectedMediaId(null);
+              setSelectionContext(null);
             }}
           />
 

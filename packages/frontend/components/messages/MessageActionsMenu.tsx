@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useEffect } from 'react';
+import React, { memo, useMemo, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -31,6 +31,7 @@ export interface MessageActionsMenuProps {
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 const DEFAULT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const SNAPSHOT_CAPTURE_DELAY = 16;
 
 /**
  * MessageActionsMenu Component
@@ -62,7 +63,37 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
   const messageOpacity = useSharedValue(0);
   const reactionsOpacity = useSharedValue(0);
   const reactionsScale = useSharedValue(0.85);
+  const centerProgress = useSharedValue(0);
+  const [snapshotSize, setSnapshotSize] = useState<{ width: number; height: number } | null>(null);
+  const [renderedElement, setRenderedElement] = useState<React.ReactNode>(null);
+  const captureTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   
+  useEffect(() => {
+    if (visible && messageElement) {
+      if (captureTimeout.current) {
+        clearTimeout(captureTimeout.current);
+      }
+      captureTimeout.current = setTimeout(() => {
+        setRenderedElement(messageElement);
+      }, SNAPSHOT_CAPTURE_DELAY);
+    } else {
+      if (captureTimeout.current) {
+        clearTimeout(captureTimeout.current);
+        captureTimeout.current = null;
+      }
+      setRenderedElement(null);
+      setSnapshotSize(null);
+    }
+  }, [visible, messageElement]);
+
+  useEffect(() => {
+    return () => {
+      if (captureTimeout.current) {
+        clearTimeout(captureTimeout.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (visible) {
       // Animate blur intensity
@@ -75,6 +106,10 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
       messageOpacity.value = withTiming(1, {
         duration: 200,
         easing: Easing.out(Easing.quad),
+      });
+      centerProgress.value = withTiming(1, {
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
       });
       
       // Animate menu with spring for natural feel
@@ -114,6 +149,10 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
         duration: 150,
         easing: Easing.in(Easing.cubic),
       });
+      centerProgress.value = withTiming(0, {
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+      });
       reactionsOpacity.value = withTiming(0, {
         duration: 150,
         easing: Easing.in(Easing.cubic),
@@ -123,57 +162,109 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
         easing: Easing.in(Easing.cubic),
       });
     }
-  }, [visible, menuOpacity, menuScale, blurIntensity, messageOpacity, reactionsOpacity, reactionsScale]);
+  }, [visible, menuOpacity, menuScale, blurIntensity, messageOpacity, reactionsOpacity, reactionsScale, centerProgress]);
 
-  // Calculate menu position below the message
-  const menuPosition = useMemo(() => {
-    if (!messagePosition) {
-      return { top: 0, left: 0 };
-    }
+  const placement = useMemo(() => {
+    const width = snapshotSize?.width ?? messagePosition?.width ?? 220;
+    const height = snapshotSize?.height ?? messagePosition?.height ?? 88;
+    const startX = messagePosition?.x ?? (screenWidth - width) / 2;
+    const startY = messagePosition?.y ?? (screenHeight - height) / 2;
+    const targetX = (screenWidth - width) / 2;
+    const targetY = Math.max(64, (screenHeight - height) / 2 - 60);
+    return { width, height, startX, startY, targetX, targetY };
+  }, [messagePosition, screenWidth, screenHeight, snapshotSize]);
 
-    const { width: messageWidth = 0, height: messageHeight = 0 } = messagePosition;
-    const menuHeight = actions.length * 56 + 16; // Approximate menu height
-    const menuWidth = 240; // Fixed menu width
-    const messageX = messagePosition.x || 0;
-    const messageY = messagePosition.y || 0;
-    const safeBottom = 32;
-    
-    // Position menu below the message, centered horizontally relative to message
-    let top = messageY + messageHeight + 12; // Below message with 12px spacing
-    let left = messageX + (messageWidth / 2) - (menuWidth / 2); // Center horizontally relative to message
+  const menuGeometry = useMemo(() => {
+    const menuWidth = 240;
+    const menuHeight = actions.length * 56 + 16;
 
-    // Adjust if menu goes off screen horizontally
-    if (left < 16) {
-      left = 16;
-    } else if (left + menuWidth > screenWidth - 16) {
-      left = screenWidth - menuWidth - 16;
-    }
-
-    // Adjust if menu goes below screen
-    if (top + menuHeight > screenHeight - safeBottom) {
-      // Position above message if there isn't enough room below
-      top = messageY - menuHeight - 12;
-      if (top < 16) {
-        top = 16;
+    const clampHorizontal = (candidate: number) => {
+      if (candidate < 16) return 16;
+      if (candidate + menuWidth > screenWidth - 16) return screenWidth - menuWidth - 16;
+      return candidate;
+    };
+    const clampVertical = (candidate: number) => {
+      if (candidate + menuHeight > screenHeight - 48) {
+        return Math.max(screenHeight - 48 - menuHeight, 32);
       }
+      if (candidate < 32) return 32;
+      return candidate;
+    };
+
+    // Target aligned with centered message
+    let targetTop = placement.targetY + placement.height + 24;
+    targetTop = clampVertical(targetTop);
+    let targetLeft = placement.targetX + (placement.width / 2) - (menuWidth / 2);
+    targetLeft = clampHorizontal(targetLeft);
+
+    // Start aligned with original message location if available
+    let startTop = messagePosition
+      ? (messagePosition.y ?? placement.startY) + (messagePosition.height ?? placement.height) + 12
+      : targetTop;
+    startTop = clampVertical(startTop);
+    let startLeft = messagePosition
+      ? clampHorizontal((messagePosition.x ?? placement.startX) + ((messagePosition.width ?? placement.width) / 2) - (menuWidth / 2))
+      : targetLeft;
+
+    return { startTop, startLeft, targetTop, targetLeft };
+  }, [actions.length, placement, screenWidth, screenHeight, messagePosition]);
+
+  const reactionGeometry = useMemo(() => {
+    if (!shouldShowReactions) {
+      return null;
     }
 
-    return { top, left };
-  }, [messagePosition, actions.length, screenWidth, screenHeight]);
+    const emojiCount = reactionEmojis.length;
+    const barWidth = emojiCount * 44 + 8;
+    const barHeight = 44;
+
+    const clampHorizontal = (candidate: number) => {
+      if (candidate < 16) return 16;
+      if (candidate + barWidth > screenWidth - 16) return screenWidth - barWidth - 16;
+      return candidate;
+    };
+    const clampVertical = (candidate: number) => {
+      if (candidate < 16) return 16;
+      if (candidate > screenHeight - barHeight - 16) return screenHeight - barHeight - 16;
+      return candidate;
+    };
+
+    let targetLeft = clampHorizontal(placement.targetX + (placement.width / 2) - (barWidth / 2));
+    let targetTop = clampVertical(placement.targetY - barHeight - 12);
+    if (targetTop < 16) {
+      targetTop = clampVertical(placement.targetY + placement.height + 12);
+    }
+
+    let startLeft = messagePosition
+      ? clampHorizontal((messagePosition.x ?? placement.startX) + ((messagePosition.width ?? placement.width) / 2) - (barWidth / 2))
+      : targetLeft;
+    let startTop = messagePosition
+      ? clampVertical((messagePosition.y ?? placement.startY) - barHeight - 8)
+      : targetTop;
+    if (startTop < 16) {
+      startTop = clampVertical((messagePosition?.y ?? placement.startY) + (messagePosition?.height ?? placement.height) + 8);
+    }
+
+    return {
+      startLeft,
+      startTop,
+      deltaX: targetLeft - startLeft,
+      deltaY: targetTop - startTop,
+    };
+  }, [shouldShowReactions, reactionEmojis.length, placement, messagePosition, screenWidth, screenHeight]);
 
   // Animated style for menu
   const animatedMenuStyle = useAnimatedStyle(() => {
-    const translateY = interpolate(
-      menuScale.value,
-      [0.9, 1],
-      [5, 0] // Start slightly above, animate to position
-    );
+    const springTranslateY = interpolate(menuScale.value, [0.9, 1], [5, 0]);
+    const deltaX = menuGeometry.targetLeft - menuGeometry.startLeft;
+    const deltaY = menuGeometry.targetTop - menuGeometry.startTop;
 
     return {
       opacity: menuOpacity.value,
       transform: [
+        { translateX: deltaX * centerProgress.value },
+        { translateY: deltaY * centerProgress.value + springTranslateY },
         { scale: menuScale.value },
-        { translateY },
       ],
     };
   });
@@ -184,24 +275,32 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
   }));
 
   // Animated style for message
-  const animatedMessageStyle = useAnimatedStyle(() => ({
-    opacity: messageOpacity.value,
-  }));
+  const animatedMessageStyle = useAnimatedStyle(() => {
+    const translateX = (placement.targetX - placement.startX) * centerProgress.value;
+    const translateY = (placement.targetY - placement.startY) * centerProgress.value;
+    return {
+      opacity: messageOpacity.value,
+      width: placement.width,
+      height: placement.height,
+      transform: [
+        { translateX },
+        { translateY },
+      ],
+    };
+  });
 
   const reactionBarPosition = useMemo(() => {
-    if (!messagePosition || !shouldShowReactions) {
+    if (!shouldShowReactions) {
       return null;
     }
 
     const emojiCount = reactionEmojis.length;
     const barWidth = emojiCount * 44 + 8;
     const barHeight = 44;
-    const messageX = messagePosition.x || 0;
-    const messageY = messagePosition.y || 0;
-    const messageWidth = messagePosition.width || 200;
+    const { width: messageWidth, targetX, targetY, height: messageHeight } = placement;
 
-    let top = messageY - barHeight - 8;
-    let left = messageX + (messageWidth / 2) - (barWidth / 2);
+    let top = targetY - barHeight - 12;
+    let left = targetX + (messageWidth / 2) - (barWidth / 2);
 
     if (left < 16) {
       left = 16;
@@ -210,19 +309,20 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
     }
 
     if (top < 16) {
-      top = messageY + (messagePosition.height || 50) + 8;
+      top = targetY + messageHeight + 12;
     }
 
     return { top, left };
-  }, [messagePosition, reactionEmojis.length, screenWidth, shouldShowReactions]);
+  }, [shouldShowReactions, reactionEmojis.length, placement, screenWidth]);
 
   const reactionAnimatedStyle = useAnimatedStyle(() => {
     const translateY = interpolate(reactionsScale.value, [0.85, 1], [10, 0]);
     return {
       opacity: reactionsOpacity.value,
       transform: [
+        { translateX: reactionGeometry ? reactionGeometry.deltaX * centerProgress.value : 0 },
+        { translateY: (reactionGeometry ? reactionGeometry.deltaY * centerProgress.value : 0) + translateY },
         { scale: reactionsScale.value },
-        { translateY },
       ],
     };
   });
@@ -238,6 +338,8 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
     messageContainer: {
       position: 'absolute',
       zIndex: 100,
+      left: placement.startX,
+      top: placement.startY,
     },
     container: {
       width: 240,
@@ -336,30 +438,36 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
           pointerEvents="none"
         />
         
-        {/* Message element - positioned at original location, on top of blur */}
-        {messageElement && messagePosition && (
+        {/* Message element morphing to center */}
+        {renderedElement && (
           <Animated.View
             style={[
               styles.messageContainer,
               {
-                top: messagePosition.y || 0,
-                left: messagePosition.x || 0,
+                top: placement.startY,
+                left: placement.startX,
               },
               animatedMessageStyle,
             ]}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              if (!snapshotSize || Math.abs(snapshotSize.width - width) > 1 || Math.abs(snapshotSize.height - height) > 1) {
+                setSnapshotSize({ width, height });
+              }
+            }}
             pointerEvents="none"
           >
-            {messageElement}
+            {renderedElement}
           </Animated.View>
         )}
 
-        {shouldShowReactions && reactionBarPosition && (
+        {shouldShowReactions && reactionGeometry && (
           <Animated.View
             style={[
               styles.reactionContainer,
               {
-                top: reactionBarPosition.top,
-                left: reactionBarPosition.left,
+                top: reactionGeometry.startTop,
+                left: reactionGeometry.startLeft,
               },
               reactionAnimatedStyle,
             ]}
@@ -385,8 +493,8 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
           style={[
             styles.container,
             {
-              top: menuPosition.top,
-              left: menuPosition.left,
+              top: menuGeometry.startTop,
+              left: menuGeometry.startLeft,
             },
             animatedMenuStyle,
           ]}
