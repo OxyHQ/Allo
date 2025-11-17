@@ -41,17 +41,17 @@ export default function CConversationLayout() {
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.TABLET });
   // Show contact details only on desktop screens (>= 1024px)
   const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
-  
+
   // Extract conversation ID using route pattern
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
   const conversationId = conversationIdMatch?.[1] || null;
-  
+
   // Get conversation data
   const conversation = useConversation(conversationId);
   const isGroup = conversation ? isGroupConversation(conversation) : false;
   const contactInfo = getContactInfo(conversation);
   const groupInfo = getGroupInfo(conversation);
-  
+
   // Get display information
   const displayName = conversation
     ? getConversationDisplayName(conversation, 'current-user') // Replace with actual current user ID
@@ -60,7 +60,7 @@ export default function CConversationLayout() {
     ? getConversationAvatar(conversation, 'current-user') // Replace with actual current user ID
     : undefined;
   const participants = isGroup && conversation ? (conversation.participants || []) : [];
-  
+
   const contactName = contactInfo?.name || groupInfo?.name || displayName;
   const contactUsername = contactInfo?.username || undefined;
   const contactAvatar = contactInfo?.avatar || groupInfo?.avatar || avatar;
@@ -128,7 +128,7 @@ export default function CConversationLayout() {
         <View style={styles.leftPane}>
           <ConversationsList />
         </View>
-        
+
         {/* Middle pane - conversation detail */}
         <View style={[
           styles.middlePane,
@@ -170,8 +170,8 @@ export default function CConversationLayout() {
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        <Stack.Screen 
-          name="[id]" 
+        <Stack.Screen
+          name="[id]"
           options={{ title: 'Conversation' }}
         />
       </Stack>
