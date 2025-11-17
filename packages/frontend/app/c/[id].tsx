@@ -23,9 +23,9 @@ import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
-import { MessageBubble } from '@/components/messages/MessageBubble';
+import { MessageBlock } from '@/components/messages/MessageBlock';
+import { DaySeparator } from '@/components/messages/DaySeparator';
 import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
-import { MessageAvatar } from '@/components/messages/MessageAvatar';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -58,6 +58,9 @@ import { oxyServices } from '@/lib/oxyServices';
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 
+// Utils
+import { groupMessagesByTime, formatMessageGroupsWithDays, FormattedMessageGroup } from '@/utils/messageGrouping';
+
 // Import Message type from store
 import type { Message } from '@/stores';
 
@@ -73,6 +76,7 @@ interface ConversationViewProps {
  * TODO: Replace with actual authentication system
  */
 const CURRENT_USER_ID = 'current-user';
+
 
 /**
  * ConversationView Component
@@ -111,6 +115,15 @@ export default function ConversationView({ conversationId: propConversationId }:
     conversationId ? state.getMessages(conversationId) : []
   );
 
+  // Group messages by time and format with day separators
+  const messageGroups = useMemo(() => {
+    if (messages.length === 0) {
+      return [];
+    }
+    const groups = groupMessagesByTime(messages);
+    return formatMessageGroupsWithDays(groups);
+  }, [messages]);
+
   // Get loading state
   const isLoading = useMessagesStore(state =>
     conversationId ? state.isLoading(conversationId) : false
@@ -130,6 +143,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const setInputText = useChatUIStore(state => state.setInputText);
   const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
   const sendMessage = useMessagesStore(state => state.sendMessage);
+
 
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -245,42 +259,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     },
     messagesList: {
       flex: 1,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-    },
-    messageRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      paddingVertical: 2,
-      paddingHorizontal: 6,
-      gap: 6,
-      marginBottom: 6,
-    },
-    messageRowIncoming: {
-      justifyContent: 'flex-start',
-    },
-    messageRowSent: {
-      justifyContent: 'flex-end',
-    },
-    messageAvatar: {
-      marginRight: 6,
-    },
-    messageContent: {
-      flexShrink: 1,
-      maxWidth: '78%',
-      rowGap: 4,
-    },
-    messageContentIncoming: {
-      alignSelf: 'flex-start',
-    },
-    messageContentSent: {
-      alignSelf: 'flex-end',
-    },
-    messageContentAi: {
-      maxWidth: '90%',
-    },
-    messageContentAiIncoming: {
-      marginLeft: 46,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -360,14 +338,14 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (flatListRef.current && messages.length > 0) {
+    if (flatListRef.current && messageGroups.length > 0) {
       const timeoutId = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, MESSAGING_CONSTANTS.SCROLL_TO_BOTTOM_DELAY);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [messages.length]);
+  }, [messageGroups.length]);
 
   const handleSend = useCallback(async () => {
     if (!conversationId || inputText.trim().length === 0) return;
@@ -497,13 +475,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     setVisibleTimestamp(conversationId, newId);
   }, [conversationId, visibleTimestampId, setVisibleTimestamp]);
 
-  /**
-   * Check if two messages are close together in time
-   */
-  const areMessagesClose = useCallback((msg1: Message, msg2: Message): boolean => {
-    const timeDiff = Math.abs(msg1.timestamp.getTime() - msg2.timestamp.getTime());
-    return timeDiff <= MESSAGING_CONSTANTS.MESSAGE_CLOSE_TIME_WINDOW_MS;
-  }, []);
 
   /**
    * Get media URL from media ID
@@ -534,91 +505,52 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, []);
 
   /**
-   * Render a single message item
-   * Memoized for performance
+   * Handle media press (open in fullscreen, etc.)
    */
-  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
-    const showSenderName = isGroup && !item.isSent;
-    const senderName = showSenderName
-      ? (item.senderName || getSenderName(item.senderId))
-      : undefined;
+  const handleMediaPress = useCallback((mediaId: string, index: number) => {
+    // TODO: Implement media viewer
+    console.log('Media pressed:', mediaId, index);
+  }, []);
 
-    // Check if this is the first message from this sender (for showing sender name)
-    const prevMessage = index > 0 ? messages[index - 1] : null;
-    const isFirstFromSender = !prevMessage || prevMessage.senderId !== item.senderId;
-    const showSenderNameLabel = Boolean(showSenderName && senderName && isFirstFromSender);
-
-    // Check if messages are close together in time for reduced spacing
-    const isCloseToPrevious = prevMessage ? areMessagesClose(prevMessage, item) : false;
-
-    const showTimestamp = visibleTimestampId === item.id;
-
-    const isIncoming = !item.isSent;
-    const isAiMessage = item.messageType === 'ai';
-    const senderAvatar = isIncoming ? getSenderAvatar(item.senderId) : undefined;
-    const resolvedSenderName =
-      senderName ||
-      getSenderName(item.senderId) ||
-      conversationMetadata.contactName ||
-      undefined;
-
-    const avatarSlot = (
-      <View style={styles.avatarSlot}>
-        {!isAiMessage && isIncoming ? (
-          <MessageAvatar
-            name={resolvedSenderName}
-            avatarUri={senderAvatar}
-            size={40}
-          />
-        ) : (
-          <View style={styles.avatarSpacer} />
-        )}
-      </View>
-    );
+  /**
+   * Render a message group with day separator if needed
+   */
+  const renderMessageGroup = useCallback(({ item }: { item: FormattedMessageGroup }) => {
+    const { showDaySeparator, ...group } = item;
 
     return (
-      <View
-        style={[
-          styles.messageRow,
-          isIncoming ? styles.messageRowIncoming : styles.messageRowSent,
-        ]}
-      >
-        {isIncoming && avatarSlot}
-        <View
-          style={[
-            styles.messageContent,
-            isIncoming ? styles.messageContentIncoming : styles.messageContentSent,
-            isAiMessage && styles.messageContentAi,
-          ]}
-        >
-          <MessageBubble
-            id={item.id}
-            text={item.text}
-            timestamp={item.timestamp}
-            isSent={item.isSent}
-            senderName={senderName}
-            showSenderName={showSenderNameLabel}
-            showTimestamp={showTimestamp}
-            isCloseToPrevious={isCloseToPrevious}
-            messageType={item.messageType}
-            media={item.media}
-            getMediaUrl={getMediaUrl}
-            onPress={() => toggleTimestamp(item.id)}
-          />
-        </View>
-        {!isIncoming && <View style={styles.avatarSlot} />}
-      </View>
+      <>
+        {showDaySeparator && (
+          <DaySeparator date={item.timestamp} />
+        )}
+        <MessageBlock
+          group={group}
+          isGroup={isGroup}
+          getSenderName={getSenderName}
+          getSenderAvatar={getSenderAvatar}
+          getMediaUrl={getMediaUrl}
+          visibleTimestampId={visibleTimestampId}
+          onMessagePress={toggleTimestamp}
+          onMediaPress={handleMediaPress}
+        />
+      </>
     );
   }, [
     isGroup,
-    messages,
-    visibleTimestampId,
     getSenderName,
-    toggleTimestamp,
-    areMessagesClose,
-    getMediaUrl,
     getSenderAvatar,
+    getMediaUrl,
+    visibleTimestampId,
+    toggleTimestamp,
+    handleMediaPress,
   ]);
+
+  /**
+   * Generate unique key for each message group
+   */
+  const getGroupKey = useCallback((item: FormattedMessageGroup, index: number) => {
+    return `group-${item.dayKey}-${index}-${item.messages[0]?.id || 'empty'}`;
+  }, []);
 
   const canSend = inputText.trim().length > 0;
 
@@ -698,14 +630,14 @@ export default function ConversationView({ conversationId: propConversationId }:
           </View>
 
           {/* Messages List */}
-          {messages.length > 0 ? (
+          {messageGroups.length > 0 ? (
             <FlatList
               ref={flatListRef}
               style={styles.messagesList}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingVertical: 16 }}
+              data={messageGroups}
+              renderItem={renderMessageGroup}
+              keyExtractor={getGroupKey}
+              contentContainerStyle={{ paddingVertical: 12 }}
               inverted={false}
             />
           ) : (

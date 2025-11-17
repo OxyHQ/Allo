@@ -1,10 +1,9 @@
 import React, { memo, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
-import { MESSAGING_CONSTANTS, TIME_FORMAT_OPTIONS } from '@/constants/messaging';
-import type { MediaItem } from '@/stores';
+import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';
 
 /**
@@ -14,6 +13,9 @@ export type MessageType = 'user' | 'ai';
 
 /**
  * Props for MessageBubble component
+ * 
+ * Simplified component that only handles individual message bubbles.
+ * Media handling is done at MessageBlock level.
  */
 export interface MessageBubbleProps {
   /** Unique identifier for the message */
@@ -34,101 +36,9 @@ export interface MessageBubbleProps {
   isCloseToPrevious?: boolean;
   /** Type of message: 'user' (with bubble) or 'ai' (plain text, no bubble) */
   messageType?: MessageType;
-  /** Array of media attachments */
-  media?: MediaItem[];
-  /** Function to get media URL from media ID */
-  getMediaUrl?: (mediaId: string) => string;
   /** Callback when message is pressed */
   onPress: () => void;
 }
-
-/**
- * Props for MediaItem component
- */
-interface MediaItemProps {
-  item: MediaItem;
-  isAiMessage: boolean;
-  getMediaUrl: (mediaId: string) => string;
-}
-
-/**
- * Renders a single media item (image or gif)
- * Memoized for performance
- */
-const MediaItemComponent = memo<MediaItemProps>(({ item, isAiMessage, getMediaUrl }) => {
-  if (item.type !== 'image' && item.type !== 'gif') {
-    return null;
-  }
-
-  const imageUrl = getMediaUrl(item.id);
-  const styles = useMemo(() => StyleSheet.create({
-    image: {
-      width: '100%',
-      maxWidth: MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
-      height: MESSAGING_CONSTANTS.MEDIA_HEIGHT,
-      resizeMode: 'cover' as const,
-      borderRadius: isAiMessage 
-        ? MESSAGING_CONSTANTS.MEDIA_BORDER_RADIUS_AI 
-        : MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
-    },
-  }), [isAiMessage]);
-
-  return (
-    <Image
-      key={item.id}
-      source={{ uri: imageUrl }}
-      style={styles.image}
-      accessibilityLabel={`Media attachment: ${item.type}`}
-    />
-  );
-});
-
-MediaItemComponent.displayName = 'MediaItem';
-
-/**
- * Props for MediaContainer component
- */
-interface MediaContainerProps {
-  media: MediaItem[];
-  isAiMessage: boolean;
-  getMediaUrl: (mediaId: string) => string;
-}
-
-/**
- * Renders media container with all media items
- * Memoized for performance
- */
-const MediaContainer = memo<MediaContainerProps>(({ media, isAiMessage, getMediaUrl }) => {
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      marginBottom: MESSAGING_CONSTANTS.MEDIA_MARGIN_BOTTOM,
-      borderRadius: isAiMessage 
-        ? MESSAGING_CONSTANTS.MEDIA_BORDER_RADIUS_AI 
-        : MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
-      overflow: 'hidden' as const,
-      backgroundColor: 'transparent',
-    },
-  }), [isAiMessage]);
-
-  if (!media || media.length === 0) {
-    return null;
-  }
-
-  return (
-    <View style={styles.container}>
-      {media.map((item) => (
-        <MediaItemComponent
-          key={item.id}
-          item={item}
-          isAiMessage={isAiMessage}
-          getMediaUrl={getMediaUrl}
-        />
-      ))}
-    </View>
-  );
-});
-
-MediaContainer.displayName = 'MediaContainer';
 
 /**
  * MessageBubble Component
@@ -164,8 +74,6 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   showTimestamp,
   isCloseToPrevious = false,
   messageType = 'user',
-  media = [],
-  getMediaUrl,
   onPress,
 }) => {
   const theme = useTheme();
@@ -174,13 +82,6 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   // Memoize computed values
   const isAiMessage = messageType === 'ai';
   const hasText = Boolean(text && text.trim().length > 0);
-  const hasMedia = Boolean(media && media.length > 0 && getMediaUrl);
-  
-  // Memoize time string formatting
-  const timeString = useMemo(
-    () => timestamp.toLocaleTimeString([], TIME_FORMAT_OPTIONS),
-    [timestamp]
-  );
   
   // Calculate margin top based on context
   const marginTop = useMemo(() => {
@@ -190,7 +91,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     if (isCloseToPrevious) {
       return MESSAGING_CONSTANTS.MESSAGE_MARGIN_CLOSE;
     }
-    return MESSAGING_CONSTANTS.MESSAGE_MARGIN_VERTICAL;
+    return 0; // No margin when in a block - spacing handled at block level
   }, [showSenderName, isCloseToPrevious]);
   
   // Memoize styles to prevent recalculation on every render
@@ -201,16 +102,12 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       container: {
         flexDirection: 'column',
         marginTop,
-        marginBottom: MESSAGING_CONSTANTS.MESSAGE_MARGIN_VERTICAL,
         maxWidth: isAiMessage ? '100%' : MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
         alignSelf: 'flex-start',
       },
       containerSent: {
         alignSelf: 'flex-end',
         alignItems: 'flex-end',
-      },
-      containerWithSender: {
-        marginTop: MESSAGING_CONSTANTS.MESSAGE_SPACING_WITH_SENDER,
       },
       senderName: {
         fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
@@ -247,20 +144,6 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         lineHeight,
         color: theme.colors.text || colors.messageTextReceived,
       },
-      timestamp: {
-        fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
-        color: colors.messageTimestamp,
-        marginTop: 4,
-      },
-      timestampAi: {
-        marginTop: -MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
-      },
-      timestampSent: {
-        alignSelf: 'flex-end',
-      },
-      timestampReceived: {
-        alignSelf: 'flex-start',
-      },
     });
   }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage, messageTextSize]);
   
@@ -268,8 +151,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => [
     styles.container,
     !isAiMessage && isSent && styles.containerSent,
-    showSenderName && styles.containerWithSender,
-  ], [styles, isAiMessage, isSent, showSenderName]);
+  ], [styles, isAiMessage, isSent]);
   
   // Memoize bubble style array
   const bubbleStyle = useMemo<StyleProp<ViewStyle>>(() => [
@@ -285,17 +167,14 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     isAiMessage && styles.textAi,
   ], [styles, isAiMessage, isSent]);
   
-  // Memoize timestamp style array
-  const timestampStyle = useMemo<StyleProp<TextStyle>>(() => [
-    styles.timestamp,
-    isAiMessage && styles.timestampAi,
-    !isAiMessage && isSent ? styles.timestampSent : styles.timestampReceived,
-  ], [styles, isAiMessage, isSent]);
-  
   // Memoize press handler to prevent unnecessary re-renders
   const handlePress = useCallback(() => {
     onPress();
   }, [onPress]);
+
+  if (!hasText) {
+    return null;
+  }
 
   return (
     <TouchableOpacity
@@ -312,34 +191,17 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         </ThemedText>
       )}
       
-      {hasMedia && getMediaUrl && (
-        <MediaContainer
-          media={media}
-          isAiMessage={isAiMessage}
-          getMediaUrl={getMediaUrl}
-        />
-      )}
-      
-      {hasText && (
-        <View style={bubbleStyle}>
-          <Text style={textStyle}>
-            {text}
-          </Text>
-        </View>
-      )}
-      
-      {showTimestamp && (
-        <Text style={timestampStyle}>
-          {timeString}
+      <View style={bubbleStyle}>
+        <Text style={textStyle}>
+          {text}
         </Text>
-      )}
+      </View>
     </TouchableOpacity>
   );
 }, (prevProps, nextProps) => {
   // Custom comparison function for better memoization
   // Returns true if props are equal (component should NOT re-render)
   
-  // Quick reference equality checks first (fastest)
   if (
     prevProps.id !== nextProps.id ||
     prevProps.text !== nextProps.text ||
@@ -349,8 +211,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     prevProps.showTimestamp !== nextProps.showTimestamp ||
     prevProps.isCloseToPrevious !== nextProps.isCloseToPrevious ||
     prevProps.messageType !== nextProps.messageType ||
-    prevProps.onPress !== nextProps.onPress ||
-    prevProps.getMediaUrl !== nextProps.getMediaUrl
+    prevProps.onPress !== nextProps.onPress
   ) {
     return false;
   }
@@ -358,23 +219,6 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   // Timestamp comparison
   if (prevProps.timestamp.getTime() !== nextProps.timestamp.getTime()) {
     return false;
-  }
-  
-  // Media array comparison (shallow)
-  const prevMedia = prevProps.media || [];
-  const nextMedia = nextProps.media || [];
-  
-  if (prevMedia.length !== nextMedia.length) {
-    return false;
-  }
-  
-  for (let i = 0; i < prevMedia.length; i++) {
-    if (
-      prevMedia[i].id !== nextMedia[i].id ||
-      prevMedia[i].type !== nextMedia[i].type
-    ) {
-      return false;
-    }
   }
   
   return true;
