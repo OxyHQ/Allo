@@ -129,6 +129,8 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
     const bottomSheet = useContext(BottomSheetContext);
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [isLocked, setIsLocked] = useState(false); // Recording lock state
+    const [buttonLayout, setButtonLayout] = useState<{ x: number; width: number } | null>(null);
+    const containerRef = useRef<View>(null);
 
     // Create audio recorder with high quality preset
     const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -533,6 +535,10 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
             'worklet';
             // Reset drag position when starting
             dragY.value = 0;
+            // If we're already recording, keep holding to prevent long press from ending
+            if (isRecordingValue.value) {
+                isHolding.value = true;
+            }
         })
         .onUpdate((event) => {
             'worklet';
@@ -543,7 +549,10 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
         })
         .onEnd(() => {
             'worklet';
-            isHolding.value = false;
+            // Only set isHolding to false if not locked - if locked, we want to keep recording
+            if (!isLocked) {
+                isHolding.value = false;
+            }
 
             // If in cancel zone when released, cancel the recording
             if (isLocked && isInCancelZone.value === 1) {
@@ -552,6 +561,7 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
                 dragY.value = withTiming(0);
                 showLockIndicator.value = withTiming(0);
                 isInCancelZone.value = 0;
+                isHolding.value = false;
             } else {
                 // Reset drag position on end, but keep lock state
                 if (!isLocked) {
@@ -665,7 +675,7 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
             : (theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5 || '#666666'));
 
     // Get window dimensions and safe area to ensure indicator stays on screen
-    const { height: windowHeight } = useWindowDimensions();
+    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const insets = useSafeAreaInsets();
     const safeTop = insets.top + 20; // Safe top margin (status bar + padding)
 
@@ -674,10 +684,23 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
     const estimatedButtonScreenY = windowHeight - 100;
     const maxUpwardPixels = estimatedButtonScreenY - safeTop - 50; // Leave 50px margin from top
 
-    // Lock indicator text and icon
+    // Lock indicator text and icon - positioned in center of screen
     const lockIndicatorAnimatedStyle = useAnimatedStyle(() => {
         const opacity = showLockIndicator.value;
         const dragYValue = dragY.value;
+
+        // Calculate center position: center of screen minus center of button
+        // If we have button layout, use it; otherwise estimate
+        let centerX = 0;
+        if (buttonLayout) {
+            const buttonCenterX = buttonLayout.x + buttonLayout.width / 2;
+            centerX = (windowWidth / 2) - buttonCenterX;
+        } else {
+            // Estimate: button is typically on right side, ~20px from right edge
+            // So button center is approximately windowWidth - 20
+            const estimatedButtonCenterX = windowWidth - 20;
+            centerX = (windowWidth / 2) - estimatedButtonCenterX;
+        }
 
         // Base position above button (-80px from button in container)
         const baseOffset = -80;
@@ -689,12 +712,26 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
             opacity,
             transform: [
                 { translateY: baseOffset + clampedOffset },
+                { translateX: centerX },
             ],
         };
     });
 
+    // Measure button position for centering indicator
+    const handleContainerLayout = useCallback(() => {
+        // Use measureInWindow to get screen coordinates
+        containerRef.current?.measureInWindow((x, y, width, height) => {
+            setButtonLayout({ x, width });
+        });
+    }, []);
+
     return (
-        <View style={styles.container}>
+        <View
+            ref={containerRef}
+            style={styles.container}
+            onLayout={handleContainerLayout}
+            collapsable={false}
+        >
             {/* Slider Track for font size adjustment */}
             {isAdjusting && hasText && (
                 <Animated.View
@@ -781,9 +818,8 @@ const styles = StyleSheet.create({
     },
     lockIndicator: {
         position: 'absolute',
-        top: -80,
-        left: '50%',
-        marginLeft: -100,
+        top: -40,
+        left: 0,
         width: 200,
         alignItems: 'center',
         justifyContent: 'center',
