@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 
 import { useTheme } from '@/hooks/useTheme';
 import { MessageBubble } from './MessageBubble';
 import { MediaCarousel } from './MediaCarousel';
-import { MessageMetadata } from './MessageMetadata';
 import { MessageAvatar } from './MessageAvatar';
 import type { MediaItem, Message } from '@/stores';
 import { MessageGroup } from '@/utils/messageGrouping';
@@ -63,9 +62,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
   const theme = useTheme();
   
   const { messages, isAiGroup, senderId, isSent } = group;
-  const firstMessage = messages[0];
-  const lastMessage = messages[messages.length - 1];
-  
   const isIncoming = !isSent;
   const senderName = isIncoming && senderId ? getSenderName?.(senderId) : undefined;
   const senderAvatar = isIncoming && senderId ? getSenderAvatar?.(senderId) : undefined;
@@ -96,11 +92,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
     }
   }, [messages, bubbleRefsMap]);
   
-  // Check if timestamp should be shown (on last message in group)
-  const showTimestamp = Boolean(
-    visibleTimestampId && visibleTimestampId === lastMessage.id
-  );
-
   // Collect all media items from all messages in the group
   const allMedia: MediaItem[] = useMemo(() => {
     return messages.flatMap(msg => msg.media || []);
@@ -250,10 +241,9 @@ export const MessageBlock = memo<MessageBlockProps>(({
         {hasText && (
           <View style={styles.bubblesContainer}>
             {messages.map((message, index) => {
-              const isFirst = index === 0;
-              const isLast = index === messages.length - 1;
               const prevMessage = index > 0 ? messages[index - 1] : null;
               const isCloseToPrevious = prevMessage !== null;
+              const showTimestamp = message.messageType !== 'ai';
               
               const bubbleRef = bubbleRefsMap.get(message.id);
               
@@ -274,7 +264,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
                 <TouchableOpacity
                   key={message.id}
                   activeOpacity={0.9}
-                  onPress={() => handleMessagePress(message.id)}
                   onLongPress={handleBubbleLongPress}
                   delayLongPress={400}
                 >
@@ -286,11 +275,11 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       isSent={message.isSent}
                       senderName={undefined} // Sender name shown at block level
                       showSenderName={false}
-                      showTimestamp={false} // Timestamp shown at block level
+                      showTimestamp={showTimestamp}
                       isCloseToPrevious={isCloseToPrevious}
                       messageType={message.messageType || 'user'}
-                      media={[]} // Media is handled at block level
-                      getMediaUrl={getMediaUrl}
+                      readStatus={message.isSent ? 'read' : undefined}
+                      isEdited={false} // TODO: Add edited status to Message type
                       onPress={() => handleMessagePress(message.id)}
                     />
                   </View>
@@ -299,15 +288,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
             })}
           </View>
         )}
-
-        {/* Message metadata (time, edited, read) - shown on last message */}
-        <MessageMetadata
-          timestamp={lastMessage.timestamp}
-          isSent={isSent}
-          isEdited={false} // TODO: Add edited status to Message type
-          readStatus={isSent ? 'read' : undefined} // TODO: Add read status to Message type
-          showTimestamp={showTimestamp}
-        />
       </View>
 
     </View>

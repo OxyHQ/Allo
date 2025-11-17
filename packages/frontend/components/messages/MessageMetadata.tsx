@@ -13,6 +13,7 @@ export interface MessageMetadataProps {
   isEdited?: boolean;
   readStatus?: 'sent' | 'delivered' | 'read';
   showTimestamp?: boolean;
+  variant?: 'default' | 'bubble';
 }
 
 /**
@@ -38,54 +39,68 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   isEdited = false,
   readStatus,
   showTimestamp = true,
+  variant = 'default',
 }) => {
   const theme = useTheme();
+  const isBubbleVariant = variant === 'bubble';
 
   const timeString = useMemo(
     () => timestamp.toLocaleTimeString([], TIME_FORMAT_OPTIONS),
     [timestamp]
   );
 
+  const timestampColor = useMemo(() => {
+    if (isBubbleVariant) {
+      return isSent ? 'rgba(255,255,255,0.85)' : 'rgba(26,32,44,0.7)';
+    }
+    return colors.messageTimestamp || theme.colors.textSecondary || '#999999';
+  }, [isBubbleVariant, isSent, theme]);
+
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      marginTop: 4,
-      alignSelf: isSent ? 'flex-end' : 'flex-start',
+      gap: isBubbleVariant ? 4 : 4,
+      marginTop: isBubbleVariant ? 0 : 4,
+      alignSelf: isBubbleVariant ? 'auto' : (isSent ? 'flex-end' : 'flex-start'),
+      opacity: isBubbleVariant ? 1 : 1,
     },
     timestamp: {
       fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
-      color: colors.messageTimestamp || theme.colors.textSecondary || '#999999',
+      color: timestampColor,
     },
     editedLabel: {
       fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
-      color: colors.messageTimestamp || theme.colors.textSecondary || '#999999',
+      color: timestampColor,
       fontStyle: 'italic',
     },
     readIndicator: {
       justifyContent: 'center',
       alignItems: 'center',
-      minWidth: 14,
-      minHeight: 14,
+      minWidth: isBubbleVariant ? 12 : 14,
+      minHeight: isBubbleVariant ? 12 : 14,
     },
     separator: {
       fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
       lineHeight: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
-      color: colors.messageTimestamp || theme.colors.textSecondary || '#999999',
+      color: timestampColor,
     },
-  }), [isSent, theme]);
+  }), [isBubbleVariant, isSent, theme, timestampColor]);
 
   const readIndicatorColor = useMemo(() => {
+    if (isBubbleVariant) {
+      return timestampColor;
+    }
     if (readStatus === 'read') {
       return colors.buttonPrimary || colors.primaryColor || theme.colors.primary || '#007AFF';
     }
     return colors.messageTimestamp || theme.colors.textSecondary || '#999999';
-  }, [readStatus, theme]);
+  }, [isBubbleVariant, readStatus, theme, timestampColor]);
 
   const statusIcon = useMemo(() => {
     if (!isSent || !readStatus) return null;
-    const commonProps = { size: MESSAGING_CONSTANTS.TIMESTAMP_SIZE + 2, color: readIndicatorColor };
+    const iconSize = isBubbleVariant ? MESSAGING_CONSTANTS.TIMESTAMP_SIZE : MESSAGING_CONSTANTS.TIMESTAMP_SIZE + 2;
+    const commonProps = { size: iconSize, color: readIndicatorColor };
 
     switch (readStatus) {
       case 'read':
@@ -96,7 +111,7 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
       default:
         return <MsgPendingIcon {...commonProps} />;
     }
-  }, [isSent, readStatus, readIndicatorColor]);
+  }, [isBubbleVariant, isSent, readStatus, readIndicatorColor]);
 
   if (!showTimestamp) {
     return null;
@@ -128,11 +143,15 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
     return null;
   }
 
+  const shouldShowSeparator = !isBubbleVariant;
+
   return (
     <View style={styles.container}>
       {metadataParts.map((part, index) => (
         <React.Fragment key={`metadata-part-${index}`}>
-          {index > 0 && <Text style={styles.separator}>•</Text>}
+          {index > 0 && shouldShowSeparator && (
+            <Text style={styles.separator}>•</Text>
+          )}
           {part}
         </React.Fragment>
       ))}

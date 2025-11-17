@@ -5,6 +5,7 @@ import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';
+import { MessageMetadata } from './MessageMetadata';
 
 /**
  * Message type enum
@@ -36,8 +37,10 @@ export interface MessageBubbleProps {
   isCloseToPrevious?: boolean;
   /** Type of message: 'user' (with bubble) or 'ai' (plain text, no bubble) */
   messageType?: MessageType;
-  /** Callback when message is pressed */
-  onPress: () => void;
+  /** Read status for sent messages */
+  readStatus?: 'sent' | 'delivered' | 'read';
+  /** Whether the message was edited */
+  isEdited?: boolean;
 }
 
 /**
@@ -60,7 +63,6 @@ export interface MessageBubbleProps {
  *   timestamp={new Date()}
  *   isSent={true}
  *   showTimestamp={true}
- *   onPress={() => {}}
  * />
  * ```
  */
@@ -74,7 +76,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   showTimestamp,
   isCloseToPrevious = false,
   messageType = 'user',
-  onPress,
+  readStatus,
+  isEdited = false,
 }) => {
   const theme = useTheme();
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
@@ -125,6 +128,10 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       bubbleSent: {
         backgroundColor: colors.messageBubbleSent,
       },
+      bubbleMetadataPadding: {
+        paddingRight: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL + 28,
+        paddingBottom: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL + 6,
+      },
       bubbleAi: {
         paddingHorizontal: 0,
         paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
@@ -144,8 +151,17 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         lineHeight,
         color: theme.colors.text || colors.messageTextReceived,
       },
+      metadataOverlay: {
+        position: 'absolute',
+        right: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL - 4,
+        bottom: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL - 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+      },
     });
   }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage, messageTextSize]);
+  
+  const shouldShowMetadata = !isAiMessage && showTimestamp;
   
   // Memoize container style array
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => [
@@ -157,8 +173,9 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   const bubbleStyle = useMemo<StyleProp<ViewStyle>>(() => [
     !isAiMessage && styles.bubble,
     !isAiMessage && isSent && styles.bubbleSent,
+    shouldShowMetadata && styles.bubbleMetadataPadding,
     isAiMessage && styles.bubbleAi,
-  ], [styles, isAiMessage, isSent]);
+  ], [styles, isAiMessage, isSent, shouldShowMetadata]);
   
   // Memoize text style array
   const textStyle = useMemo<StyleProp<TextStyle>>(() => [
@@ -167,11 +184,6 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     isAiMessage && styles.textAi,
   ], [styles, isAiMessage, isSent]);
   
-  // Memoize press handler to prevent unnecessary re-renders
-  const handlePress = useCallback(() => {
-    onPress();
-  }, [onPress]);
-
   if (!hasText) {
     return null;
   }
@@ -180,7 +192,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     <View
       style={containerStyle}
       testID={`message-${id}`}
-      accessibilityRole="button"
+      accessibilityRole="text"
       accessibilityLabel={`Message from ${senderName || (isSent ? 'you' : 'sender')}`}
     >
       {showSenderName && senderName && (
@@ -193,6 +205,18 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         <Text style={textStyle}>
           {text}
         </Text>
+        {shouldShowMetadata && (
+          <View style={styles.metadataOverlay}>
+            <MessageMetadata
+              timestamp={timestamp}
+              isSent={isSent}
+              isEdited={isEdited}
+              readStatus={readStatus}
+              showTimestamp={showTimestamp}
+              variant="bubble"
+            />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -208,8 +232,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     prevProps.showSenderName !== nextProps.showSenderName ||
     prevProps.showTimestamp !== nextProps.showTimestamp ||
     prevProps.isCloseToPrevious !== nextProps.isCloseToPrevious ||
-    prevProps.messageType !== nextProps.messageType ||
-    prevProps.onPress !== nextProps.onPress
+    prevProps.messageType !== nextProps.messageType
   ) {
     return false;
   }
