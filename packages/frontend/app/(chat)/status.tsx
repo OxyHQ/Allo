@@ -1,24 +1,28 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  Image,
 } from 'react-native';
-import { Link, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
+import { Ionicons } from '@expo/vector-icons';
+
+// Components
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
+
+// Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
+
+// Hooks
+import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/styles/colors';
 
 const IconComponent = Ionicons as any;
 
@@ -105,24 +109,31 @@ const MOCK_STATUS_GROUPS: StatusGroup[] = [
   },
 ];
 
+/**
+ * Formats a date to a human-readable "time ago" string
+ */
+const formatTimeAgo = (date: Date): string => {
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+};
+
 export default function StatusScreen() {
   const theme = useTheme();
-  const pathname = usePathname();
+  const router = useRouter();
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
   const [statusGroups] = useState<StatusGroup[]>(MOCK_STATUS_GROUPS);
 
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days === 1) return 'Yesterday';
-    return `${days}d ago`;
-  };
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -270,7 +281,7 @@ export default function StatusScreen() {
     },
   }), [theme]);
 
-  const renderMyStatus = () => {
+  const renderMyStatus = useCallback(() => {
     return (
       <View style={styles.myStatusSection}>
         <ThemedText style={styles.myStatusTitle}>My Status</ThemedText>
@@ -290,9 +301,9 @@ export default function StatusScreen() {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [styles]);
 
-  const renderStatusItem = ({ item }: { item: StatusGroup }) => {
+  const renderStatusItem = useCallback(({ item }: { item: StatusGroup }) => {
     const hasUnread = item.unreadCount > 0;
 
     return (
@@ -325,7 +336,7 @@ export default function StatusScreen() {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [styles, formatTimeAgo]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -337,7 +348,7 @@ export default function StatusScreen() {
               leftComponents: [
                 <HeaderIconButton
                   key="back"
-                  onPress={() => {/* Navigate back */}}
+                  onPress={handleBack}
                 >
                   <BackArrowIcon size={20} color={theme.colors.text} />
                 </HeaderIconButton>,

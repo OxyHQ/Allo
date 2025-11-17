@@ -1,17 +1,29 @@
+import React, { useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, ViewStyle, Platform, Vibration } from 'react-native';
 import { Link, usePathname } from 'expo-router';
-import React from 'react';
 import { Pressable } from 'react-native-web-hover';
 import { useTranslation } from 'react-i18next';
-import Avatar from './Avatar';
-import { useOxy } from '@oxyhq/services';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
-import { useHomeRefresh } from '@/context/HomeRefreshContext';
+
+// Components
+import Avatar from './Avatar';
+
+// Icons
 import { Home, HomeActive } from '@/assets/icons/home-icon';
 import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
 import { Gear, GearActive } from '@/assets/icons/gear-icon';
 import { CallIcon, CallIconActive } from '@/assets/icons/call-icon';
+
+// Hooks
+import { useTheme } from '@/hooks/useTheme';
+import { useOxy } from '@oxyhq/services';
+import { useHomeRefresh } from '@/context/HomeRefreshContext';
+
+// Utils
+import { ROUTES, routeMatchers, isRouteActive } from '@/utils/routeUtils';
+
+// Types
+import type { NavigationItem } from '@/types/navigation';
 
 export const BottomBar = () => {
     const { t } = useTranslation();
@@ -21,56 +33,65 @@ export const BottomBar = () => {
     const theme = useTheme();
     const { triggerHomeRefresh } = useHomeRefresh();
 
-    const avatarUri = user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
+    const avatarUri = useMemo(() => {
+        return user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
+    }, [user?.avatar, oxyServices]);
 
-    const handleHomePress = () => {
+    const handleHomePress = useCallback(() => {
         // If already on home page - scroll to top and refresh
-        if (pathname === '/') {
+        if (routeMatchers.isHomeRoute(pathname)) {
             triggerHomeRefresh();
         }
-    };
+    }, [pathname, triggerHomeRefresh]);
 
-    // Bottom bar navigation items - similar to SideBar structure
-    const bottomBarItems: {
-        title: string;
-        icon: React.ReactNode;
-        iconActive: React.ReactNode;
-        route: string;
-        onPress?: () => void;
-    }[] = [
+    // Build navigation items with theme-aware icons
+    const navigationItems = useMemo<NavigationItem[]>(() => [
         {
             title: t("Home"),
             icon: <Home color={theme.colors.text} size={24} />,
             iconActive: <HomeActive color={theme.colors.primary} size={24} />,
-            route: '/',
+            route: ROUTES.HOME,
             onPress: handleHomePress,
         },
         {
             title: t("Status"),
             icon: <StatusIcon color={theme.colors.text} size={24} />,
             iconActive: <StatusIconActive color={theme.colors.primary} size={24} />,
-            route: '/(chat)',
+            route: ROUTES.STATUS,
         },
         {
             title: t("Calls"),
             icon: <CallIcon color={theme.colors.text} size={24} />,
             iconActive: <CallIconActive color={theme.colors.primary} size={24} />,
-            route: '/calls',
+            route: ROUTES.CALLS,
         },
         {
             title: t("Settings"),
             icon: <Gear color={theme.colors.text} />,
             iconActive: <GearActive color={theme.colors.primary} />,
-            route: '/(chat)/settings',
+            route: ROUTES.SETTINGS,
         },
-    ];
+    ], [theme.colors, t, handleHomePress]);
 
-    const isActiveRoute = (route: string) => {
-        if (route === '/') {
-            return pathname === '/' || pathname === '';
+    /**
+     * Determines if a route is currently active
+     */
+    const getIsRouteActive = useCallback((route: string): boolean => {
+        if (route === ROUTES.HOME) {
+            return routeMatchers.isHomeRoute(pathname);
         }
-        return pathname?.startsWith(route) || pathname?.includes(route);
-    };
+        if (route === ROUTES.STATUS) {
+            return routeMatchers.isStatusRoute(pathname);
+        }
+        if (route === ROUTES.SETTINGS) {
+            return routeMatchers.isSettingsRoute(pathname);
+        }
+        if (route === ROUTES.CALLS) {
+            return isRouteActive(pathname, route, { startsWith: true, includes: true });
+        }
+        // Default: check starts with or includes
+        return isRouteActive(pathname, route, { startsWith: true, includes: true });
+    }, [pathname]);
 
     const styles = StyleSheet.create({
         bottomBar: {
@@ -128,8 +149,9 @@ export const BottomBar = () => {
 
     return (
         <View style={styles.bottomBar}>
-            {bottomBarItems.map(({ title, icon, iconActive, route, onPress }) => {
-                const isActive = isActiveRoute(route);
+            {navigationItems.map(({ title, icon, iconActive, route, onPress }) => {
+                const isActive = getIsRouteActive(route);
+                
                 const tabContent = (
                     <View style={styles.tabContent}>
                         <View style={styles.tabIcon}>
@@ -149,7 +171,7 @@ export const BottomBar = () => {
 
                 return (
                     <Link
-                        key={title}
+                        key={`${route}-${title}`}
                         href={route as any}
                         style={styles.tab}
                         asChild

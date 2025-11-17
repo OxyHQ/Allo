@@ -1,8 +1,7 @@
-import React from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
     Dimensions,
     Platform,
-    Text,
     View,
     ViewStyle,
     StyleSheet,
@@ -11,28 +10,30 @@ import { Pressable } from "react-native-web-hover";
 import { usePathname, useRouter } from "expo-router";
 import { useMediaQuery } from "react-responsive";
 import { useTranslation } from "react-i18next";
+import { Ionicons } from "@expo/vector-icons";
+
+// Components
 import { SideBarItem } from "./SideBarItem";
-import { Button } from "@/components/SideBar/Button";
 import { Logo } from "@/components/Logo";
 import Avatar from "@/components/Avatar";
+
+// Icons
 import { Home, HomeActive } from "@/assets/icons/home-icon";
-import { Bookmark, BookmarkActive } from "@/assets/icons/bookmark-icon";
 import { Gear, GearActive } from "@/assets/icons/gear-icon";
-import { Search, SearchActive } from "@/assets/icons/search-icon";
-// Removed compose button
-import { Ionicons } from "@expo/vector-icons";
-import { useOxy } from "@oxyhq/services";
-import { confirmDialog } from "@/utils/alerts";
-import { List, ListActive } from "@/assets/icons/list-icon";
-import { Video, VideoActive } from "@/assets/icons/video-icon";
-import { Hashtag, HashtagActive } from "@/assets/icons/hashtag-icon";
-import { AnalyticsIcon, AnalyticsIconActive } from "@/assets/icons/analytics-icon";
-import { useTheme } from "@/hooks/useTheme";
 import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
-import { Bell, BellActive } from '@/assets/icons/bell-icon';
+
+// Hooks
+import { useTheme } from "@/hooks/useTheme";
+import { useOxy } from "@oxyhq/services";
+
+// Utils
+import { confirmDialog } from "@/utils/alerts";
+import { ROUTES, routeMatchers, isRouteActive } from "@/utils/routeUtils";
+
+// Types
+import type { NavigationItem } from "@/types/navigation";
 
 const IconComponent = Ionicons as any;
-
 const WindowHeight = Dimensions.get('window').height;
 
 export function SideBar() {
@@ -60,47 +61,52 @@ export function SideBar() {
         }
     };
 
-    const sideBarData: {
-        title: string;
-        icon: React.ReactNode;
-        iconActive: React.ReactNode;
-        route: string;
-    }[] = [
+    const pathname = usePathname();
+    const isSideBarVisible = useMediaQuery({ minWidth: 500 });
+    const [isExpanded, setIsExpanded] = useState(false);
+    const hoverCollapseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Build navigation items with theme-aware icons
+    const navigationItems = useMemo<NavigationItem[]>(() => {
+        const items: NavigationItem[] = [
             {
                 title: t("Home"),
                 icon: <Home color={theme.colors.text} />,
                 iconActive: <HomeActive color={theme.colors.primary} />,
-                route: '/',
+                route: ROUTES.HOME,
             },
-            ...(user ? [{
+        ];
+
+        // Add profile item if user is authenticated
+        if (user?.username) {
+            items.push({
                 title: t("Profile"),
                 icon: <Avatar source={avatarUri} size={24} />,
                 iconActive: <Avatar source={avatarUri} size={24} />,
                 route: `/@${user.username}`,
-            }] : []),
-            // Pruned non-chat screens
+            });
+        }
+
+        // Add status and settings
+        items.push(
             {
                 title: t("Status"),
                 icon: <StatusIcon color={theme.colors.text} />,
                 iconActive: <StatusIconActive color={theme.colors.primary} />,
-                route: '/(chat)',
+                route: ROUTES.STATUS,
             },
             {
                 title: t("Settings"),
                 icon: <Gear color={theme.colors.text} />,
                 iconActive: <GearActive color={theme.colors.primary} />,
-                route: '/settings',
-            },
-        ];
+                route: ROUTES.SETTINGS,
+            }
+        );
 
-    const pathname = usePathname();
-    const isSideBarVisible = useMediaQuery({ minWidth: 500 });
-    const [isExpanded, setIsExpanded] = React.useState(false);
-    const hoverCollapseTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(
-        null
-    );
+        return items;
+    }, [user, avatarUri, theme.colors, t]);
 
-    const handleHoverIn = React.useCallback(() => {
+    const handleHoverIn = useCallback(() => {
         if (hoverCollapseTimeout.current) {
             clearTimeout(hoverCollapseTimeout.current);
             hoverCollapseTimeout.current = null;
@@ -108,12 +114,33 @@ export function SideBar() {
         setIsExpanded(true);
     }, []);
 
-    const handleHoverOut = React.useCallback(() => {
+    const handleHoverOut = useCallback(() => {
         if (hoverCollapseTimeout.current) {
             clearTimeout(hoverCollapseTimeout.current);
         }
         hoverCollapseTimeout.current = setTimeout(() => setIsExpanded(false), 200);
     }, []);
+
+    /**
+     * Determines if a route is currently active
+     */
+    const getIsRouteActive = useCallback((route: string): boolean => {
+        if (route === ROUTES.HOME) {
+            return routeMatchers.isHomeRoute(pathname);
+        }
+        if (route === ROUTES.STATUS) {
+            return routeMatchers.isStatusRoute(pathname);
+        }
+        if (route === ROUTES.SETTINGS) {
+            return routeMatchers.isSettingsRoute(pathname);
+        }
+        // For profile routes, check exact match or starts with
+        if (route.startsWith('/@')) {
+            return isRouteActive(pathname, route, { exact: true, startsWith: true });
+        }
+        // Default: check starts with or includes
+        return isRouteActive(pathname, route, { startsWith: true, includes: true });
+    }, [pathname]);
 
     if (!isSideBarVisible) return null;
 
@@ -148,17 +175,21 @@ export function SideBar() {
                         <Logo />
                     </View>
                     <View style={styles.navigationSection}>
-                        {sideBarData.map(({ title, icon, iconActive, route }) => (
-                            <SideBarItem
-                                href={route}
-                                key={title}
-                                icon={pathname === route ? iconActive : icon}
-                                text={title}
-                                isActive={pathname === route}
-                                isExpanded={isExpanded}
-                                onHoverExpand={handleHoverIn}
-                            />
-                        ))}
+                        {navigationItems.map(({ title, icon, iconActive, route }) => {
+                            const isActive = getIsRouteActive(route);
+                            
+                            return (
+                                <SideBarItem
+                                    key={`${route}-${title}`}
+                                    href={route}
+                                    icon={isActive ? iconActive : icon}
+                                    text={title}
+                                    isActive={isActive}
+                                    isExpanded={isExpanded}
+                                    onHoverExpand={handleHoverIn}
+                                />
+                            );
+                        })}
                     </View>
 
                     <View style={styles.footer}>
