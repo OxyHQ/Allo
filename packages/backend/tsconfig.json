@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "rootDir": "./",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mention/shared-types": [
+        "../shared-types/src"
+      ],
+      "@mention/shared-types/*": [
+        "../shared-types/src/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "package.json"
+  ],
+  "references": [
+    {
+      "path": "../shared-types"
+    }
+  ]
+}
