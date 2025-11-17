@@ -64,9 +64,17 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
       fontStyle: 'italic',
     },
     readIndicator: {
-      marginLeft: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+      minWidth: 14,
+      minHeight: 14,
     },
-  }), [isSent, readStatus, theme]);
+    separator: {
+      fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
+      lineHeight: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
+      color: colors.messageTimestamp || theme.colors.textSecondary || '#999999',
+    },
+  }), [isSent, theme]);
 
   const readIndicatorColor = useMemo(() => {
     if (readStatus === 'read') {
@@ -77,7 +85,7 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
 
   const statusIcon = useMemo(() => {
     if (!isSent || !readStatus) return null;
-    const commonProps = { size: 16, color: readIndicatorColor };
+    const commonProps = { size: MESSAGING_CONSTANTS.TIMESTAMP_SIZE + 2, color: readIndicatorColor };
 
     switch (readStatus) {
       case 'read':
@@ -94,19 +102,40 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
     return null;
   }
 
+  const metadataParts: React.ReactNode[] = [];
+
+  if (timeString) {
+    metadataParts.push(
+      <Text key="time" style={styles.timestamp}>{timeString}</Text>
+    );
+  }
+
+  if (isEdited) {
+    metadataParts.push(
+      <Text key="edited" style={styles.editedLabel}>edited</Text>
+    );
+  }
+
+  if (statusIcon) {
+    metadataParts.push(
+      <View key="status" style={styles.readIndicator}>
+        {statusIcon}
+      </View>
+    );
+  }
+
+  if (metadataParts.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
-      {timeString && (
-        <Text style={styles.timestamp}>{timeString}</Text>
-      )}
-      {isEdited && (
-        <Text style={styles.editedLabel}>edited</Text>
-      )}
-      {statusIcon && (
-        <View style={styles.readIndicator}>
-          {statusIcon}
-        </View>
-      )}
+      {metadataParts.map((part, index) => (
+        <React.Fragment key={`metadata-part-${index}`}>
+          {index > 0 && <Text style={styles.separator}>•</Text>}
+          {part}
+        </React.Fragment>
+      ))}
     </View>
   );
 });
