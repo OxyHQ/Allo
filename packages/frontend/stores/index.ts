@@ -18,6 +18,7 @@ export { useMessagesStore } from './messagesStore';
 export type { Message, MediaItem } from './messagesStore';
 
 export { useChatUIStore } from './chatUIStore';
+export { useMessagePreferencesStore } from './messagePreferencesStore';
 
 // Existing stores
 export { useUsersStore } from './usersStore';

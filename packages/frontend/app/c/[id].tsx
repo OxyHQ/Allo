@@ -25,6 +25,7 @@ import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
+import { MessageAvatar } from '@/components/messages/MessageAvatar';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -244,7 +245,42 @@ export default function ConversationView({ conversationId: propConversationId }:
     },
     messagesList: {
       flex: 1,
-      paddingHorizontal: 16,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+    },
+    messageRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      paddingVertical: 2,
+      paddingHorizontal: 6,
+      gap: 6,
+      marginBottom: 6,
+    },
+    messageRowIncoming: {
+      justifyContent: 'flex-start',
+    },
+    messageRowSent: {
+      justifyContent: 'flex-end',
+    },
+    messageAvatar: {
+      marginRight: 6,
+    },
+    messageContent: {
+      flexShrink: 1,
+      maxWidth: '78%',
+      rowGap: 4,
+    },
+    messageContentIncoming: {
+      alignSelf: 'flex-start',
+    },
+    messageContentSent: {
+      alignSelf: 'flex-end',
+    },
+    messageContentAi: {
+      maxWidth: '90%',
+    },
+    messageContentAiIncoming: {
+      marginLeft: 46,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -430,6 +466,26 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [conversation]);
 
   /**
+   * Get sender avatar for incoming messages
+   */
+  const getSenderAvatar = useCallback((senderId: string): string | undefined => {
+    if (!conversation) {
+      return undefined;
+    }
+
+    // Direct conversation: use contact avatar
+    if (!isGroup) {
+      return conversationMetadata.contactAvatar;
+    }
+
+    const participants = conversation.participants || [];
+    const participant = participants.find(
+      (p) => p.id === senderId || ('userId' in p && p.userId === senderId)
+    );
+    return participant?.avatar;
+  }, [conversation, conversationMetadata.contactAvatar, isGroup]);
+
+  /**
    * Toggle timestamp visibility for a message
    * Only one message's timestamp can be visible at a time
    */
@@ -497,23 +553,72 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     const showTimestamp = visibleTimestampId === item.id;
 
-    return (
-      <MessageBubble
-        id={item.id}
-        text={item.text}
-        timestamp={item.timestamp}
-        isSent={item.isSent}
-        senderName={senderName}
-        showSenderName={showSenderNameLabel}
-        showTimestamp={showTimestamp}
-        isCloseToPrevious={isCloseToPrevious}
-        messageType={item.messageType}
-        media={item.media}
-        getMediaUrl={getMediaUrl}
-        onPress={() => toggleTimestamp(item.id)}
-      />
+    const isIncoming = !item.isSent;
+    const isAiMessage = item.messageType === 'ai';
+    const senderAvatar = isIncoming ? getSenderAvatar(item.senderId) : undefined;
+    const resolvedSenderName =
+      senderName ||
+      getSenderName(item.senderId) ||
+      conversationMetadata.contactName ||
+      undefined;
+
+    const avatarSlot = (
+      <View style={styles.avatarSlot}>
+        {!isAiMessage && isIncoming ? (
+          <MessageAvatar
+            name={resolvedSenderName}
+            avatarUri={senderAvatar}
+            size={40}
+          />
+        ) : (
+          <View style={styles.avatarSpacer} />
+        )}
+      </View>
     );
-  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp, areMessagesClose, getMediaUrl]);
+
+    return (
+      <View
+        style={[
+          styles.messageRow,
+          isIncoming ? styles.messageRowIncoming : styles.messageRowSent,
+        ]}
+      >
+        {isIncoming && avatarSlot}
+        <View
+          style={[
+            styles.messageContent,
+            isIncoming ? styles.messageContentIncoming : styles.messageContentSent,
+            isAiMessage && styles.messageContentAi,
+          ]}
+        >
+          <MessageBubble
+            id={item.id}
+            text={item.text}
+            timestamp={item.timestamp}
+            isSent={item.isSent}
+            senderName={senderName}
+            showSenderName={showSenderNameLabel}
+            showTimestamp={showTimestamp}
+            isCloseToPrevious={isCloseToPrevious}
+            messageType={item.messageType}
+            media={item.media}
+            getMediaUrl={getMediaUrl}
+            onPress={() => toggleTimestamp(item.id)}
+          />
+        </View>
+        {!isIncoming && <View style={styles.avatarSlot} />}
+      </View>
+    );
+  }, [
+    isGroup,
+    messages,
+    visibleTimestampId,
+    getSenderName,
+    toggleTimestamp,
+    areMessagesClose,
+    getMediaUrl,
+    getSenderAvatar,
+  ]);
 
   const canSend = inputText.trim().length > 0;
 

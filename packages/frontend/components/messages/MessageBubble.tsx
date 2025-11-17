@@ -5,6 +5,7 @@ import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS, TIME_FORMAT_OPTIONS } from '@/constants/messaging';
 import type { MediaItem } from '@/stores';
+import { useMessagePreferencesStore } from '@/stores';
 
 /**
  * Message type enum
@@ -168,6 +169,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   onPress,
 }) => {
   const theme = useTheme();
+  const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
   
   // Memoize computed values
   const isAiMessage = messageType === 'ai';
@@ -193,7 +195,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   
   // Memoize styles to prevent recalculation on every render
   const styles = useMemo(() => {
-    const lineHeight = MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE * MESSAGING_CONSTANTS.LINE_HEIGHT_MULTIPLIER;
+    const lineHeight = messageTextSize * MESSAGING_CONSTANTS.LINE_HEIGHT_MULTIPLIER;
     
     return StyleSheet.create({
       container: {
@@ -233,7 +235,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         backgroundColor: 'transparent',
       },
       text: {
-        fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
+        fontSize: messageTextSize,
         lineHeight,
         color: colors.messageTextReceived,
       },
@@ -241,6 +243,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         color: colors.messageTextSent,
       },
       textAi: {
+        fontSize: messageTextSize,
         lineHeight,
         color: theme.colors.text || colors.messageTextReceived,
       },
@@ -259,7 +262,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         alignSelf: 'flex-start',
       },
     });
-  }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage]);
+  }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage, messageTextSize]);
   
   // Memoize container style array
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => [
