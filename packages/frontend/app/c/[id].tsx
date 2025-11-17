@@ -102,13 +102,14 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
-  // Zustand stores
-  const messagesStore = useMessagesStore();
-  const chatUIStore = useChatUIStore();
-
   // Get messages from store
   const messages = useMessagesStore(state =>
     conversationId ? state.getMessages(conversationId) : []
+  );
+
+  // Get loading state
+  const isLoading = useMessagesStore(state =>
+    conversationId ? state.isLoading(conversationId) : false
   );
 
   // Get UI state from store
@@ -119,17 +120,35 @@ export default function ConversationView({ conversationId: propConversationId }:
     conversationId ? state.getVisibleTimestampId(conversationId) : null
   );
 
+  // Get store actions (using selectors to avoid re-renders)
+  const fetchMessages = useMessagesStore(state => state.fetchMessages);
+  const clearConversationUI = useChatUIStore(state => state.clearConversationUI);
+  const setInputText = useChatUIStore(state => state.setInputText);
+  const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
+  const sendMessage = useMessagesStore(state => state.sendMessage);
+
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  const lastFetchedConversationId = useRef<string | null>(null);
 
   // Fetch messages when conversation changes
   useEffect(() => {
-    if (conversationId) {
-      messagesStore.fetchMessages(conversationId);
-      // Clear UI state when switching conversations
-      chatUIStore.clearConversationUI(conversationId);
+    if (!conversationId) return;
+
+    // Only fetch if this is a different conversation
+    if (lastFetchedConversationId.current === conversationId) {
+      return; // Already fetched this conversation
     }
-  }, [conversationId, messagesStore, chatUIStore]);
+
+    lastFetchedConversationId.current = conversationId;
+
+    // Clear UI state when switching conversations
+    clearConversationUI(conversationId);
+
+    // Fetch messages (store will handle duplicate requests)
+    fetchMessages(conversationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]); // Only depend on conversationId - store functions are stable
 
   // Get conversation data
   const conversation = useConversation(conversationId);
@@ -306,16 +325,16 @@ export default function ConversationView({ conversationId: propConversationId }:
     const text = inputText.trim();
 
     // Clear input immediately for better UX
-    chatUIStore.setInputText(conversationId, '');
+    setInputText(conversationId, '');
 
     // Send message via store
-    await messagesStore.sendMessage(conversationId, text, CURRENT_USER_ID);
+    await sendMessage(conversationId, text, CURRENT_USER_ID);
 
     // Refocus input after sending
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
-  }, [conversationId, inputText, messagesStore, chatUIStore]);
+  }, [conversationId, inputText, sendMessage, setInputText]);
 
   /**
    * Handle Enter key press to send message
@@ -402,11 +421,11 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const toggleTimestamp = useCallback((messageId: string) => {
     if (!conversationId) return;
-    const current = chatUIStore.getVisibleTimestampId(conversationId);
+    const current = visibleTimestampId;
     // If clicking the same message, hide it. Otherwise, show the new one.
     const newId = current === messageId ? null : messageId;
-    chatUIStore.setVisibleTimestamp(conversationId, newId);
-  }, [conversationId, chatUIStore]);
+    setVisibleTimestamp(conversationId, newId);
+  }, [conversationId, visibleTimestampId, setVisibleTimestamp]);
 
   /**
    * Check if two messages are close together in time
@@ -568,7 +587,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                 value={inputText}
                 onChangeText={(text) => {
                   if (conversationId) {
-                    chatUIStore.setInputText(conversationId, text);
+                    setInputText(conversationId, text);
                   }
                 }}
                 placeholder="Message"

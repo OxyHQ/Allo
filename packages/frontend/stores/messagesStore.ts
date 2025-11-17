@@ -165,6 +165,17 @@ export const useMessagesStore = create<MessagesState>()(
 
     // Async actions
     fetchMessages: async (conversationId) => {
+      // Don't fetch if already loading or if messages already exist
+      const currentState = get();
+      if (currentState.loadingByConversation[conversationId]) {
+        return; // Already loading
+      }
+      
+      const existingMessages = currentState.messagesByConversation[conversationId];
+      if (existingMessages && existingMessages.length > 0) {
+        return; // Messages already loaded
+      }
+
       set((state) => ({
         loadingByConversation: {
           ...state.loadingByConversation,
