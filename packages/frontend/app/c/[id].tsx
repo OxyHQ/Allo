@@ -12,7 +12,19 @@ import {
   TextInputKeyPressEventData,
   ImageBackground,
   useWindowDimensions,
+  Modal,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import {
+  Gesture,
+  GestureDetector,
+} from 'react-native-gesture-handler';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -32,6 +44,7 @@ import { MessageActionsMenu, MessageAction } from '@/components/messages/Message
 import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
+import { SendButtonWithSizeAdjustment } from '@/components/messages/SendButtonWithSizeAdjustment';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
 import { CopyIcon } from '@/assets/icons/copy-icon';
@@ -117,6 +130,20 @@ export default function ConversationView({ conversationId: propConversationId }:
   const segments = useSegments();
   const bottomSheet = useContext(BottomSheetContext);
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
+  const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
+  
+  // Send button gesture state
+  const [isSizeAdjusting, setIsSizeAdjusting] = useState(false);
+  const [tempTextSize, setTempTextSize] = useState(messageTextSize);
+  const baseTextSize = useRef(messageTextSize);
+  const panY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  
+  // Update temp size when messageTextSize changes externally
+  useEffect(() => {
+    setTempTextSize(messageTextSize);
+    baseTextSize.current = messageTextSize;
+  }, [messageTextSize]);
 
   // Get conversation ID from multiple sources (prop > pathname > segments)
   const conversationId = useMemo(
@@ -321,12 +348,12 @@ export default function ConversationView({ conversationId: propConversationId }:
       flex: 1,
       paddingHorizontal: 12,
       paddingVertical: Platform.OS === 'ios' ? 8 : 6,
-      fontSize: messageTextSize,
+      fontSize: isSizeAdjusting ? tempTextSize : messageTextSize,
       color: colors.chatInputText || theme.colors.text,
       textAlignVertical: 'top',
       minHeight: 32,
       maxHeight: 92,
-      lineHeight: messageTextSize * 1.2,
+      lineHeight: (isSizeAdjusting ? tempTextSize : messageTextSize) * 1.2,
     },
     attachButton: {
       width: 40,
@@ -380,7 +407,34 @@ export default function ConversationView({ conversationId: propConversationId }:
       color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
       textAlign: 'center',
     },
-  }), [theme, messageTextSize]);
+    sizeIndicator: {
+      position: 'absolute',
+      bottom: 60,
+      alignSelf: 'center',
+      backgroundColor: theme.colors.card || '#FFFFFF',
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border || 'rgba(0,0,0,0.1)',
+    },
+    sizeIndicatorText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    sizePreview: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.text,
+      marginTop: 4,
+    },
+  }), [theme, messageTextSize, isSizeAdjusting, tempTextSize]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -393,19 +447,26 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
   }, [messageGroups.length]);
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(async (sizeToUse?: number) => {
     if (!conversationId || inputText.trim().length === 0) return;
 
     const text = inputText.trim();
+    const originalSize = messageTextSize;
+    const finalSize = sizeToUse ?? messageTextSize;
+
+    // Temporarily set the size if it was adjusted
+    if (sizeToUse && sizeToUse !== messageTextSize) {
+      setMessageTextSize(sizeToUse);
+    }
 
     // Clear input immediately for better UX
     if (conversationId) {
       setInputText(conversationId, '');
     }
 
-    // Send message via store
+    // Send message via store with custom font size if adjusted
     try {
-      await sendMessage(conversationId, text, CURRENT_USER_ID);
+      await sendMessage(conversationId, text, CURRENT_USER_ID, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
       
       // Scroll to bottom after sending
       setTimeout(() => {
@@ -419,11 +480,18 @@ export default function ConversationView({ conversationId: propConversationId }:
       }
     }
 
+    // Reset size immediately (message stores its own fontSize)
+    if (sizeToUse && sizeToUse !== originalSize) {
+      setMessageTextSize(originalSize);
+      setTempTextSize(originalSize);
+    }
+    setIsSizeAdjusting(false);
+
     // Refocus input after sending
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize]);
 
   /**
    * Handle Enter key press to send message
@@ -995,19 +1063,19 @@ export default function ConversationView({ conversationId: propConversationId }:
                 )}
               </View>
 
-              {/* Send Button */}
+              {/* Send Button with Size Adjustment */}
               {canSend ? (
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSend}
-                  activeOpacity={0.8}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <SendIcon
-                    color="#FFFFFF"
-                    size={20}
-                  />
-                </TouchableOpacity>
+                <SendButtonWithSizeAdjustment
+                  onSend={handleSend}
+                  currentSize={messageTextSize}
+                  tempSize={tempTextSize}
+                  isAdjusting={isSizeAdjusting}
+                  onSizeChange={setTempTextSize}
+                  onAdjustingChange={setIsSizeAdjusting}
+                  baseSizeRef={baseTextSize}
+                  panY={panY}
+                  scale={scale}
+                />
               ) : null}
             </View>
           </KeyboardAvoidingView>

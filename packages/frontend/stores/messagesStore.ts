@@ -38,6 +38,7 @@ export interface Message {
   conversationId: string;
   messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
   media?: MediaItem[]; // Array of media attachments (images, videos, gifs)
+  fontSize?: number; // Custom font size for this message (if adjusted via send button)
   // Future: Add support for reactions, etc.
   // reactions?: Reaction[];
 }
@@ -62,7 +63,7 @@ interface MessagesState {
   
   // Async actions
   fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, text: string, senderId: string) => Promise<Message | null>;
+  sendMessage: (conversationId: string, text: string, senderId: string, fontSize?: number) => Promise<Message | null>;
   
   // Selectors
   getMessages: (conversationId: string) => Message[];
@@ -230,7 +231,7 @@ export const useMessagesStore = create<MessagesState>()(
       }
     },
 
-    sendMessage: async (conversationId, text, senderId) => {
+    sendMessage: async (conversationId, text, senderId, fontSize) => {
       try {
         // TODO: Replace with actual API call
         // const response = await messageService.sendMessage({
@@ -248,6 +249,7 @@ export const useMessagesStore = create<MessagesState>()(
           timestamp: new Date(),
           isSent: true,
           conversationId,
+          fontSize, // Store custom font size if provided
         };
 
         get().addMessage(message);

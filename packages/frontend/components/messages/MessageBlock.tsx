@@ -206,8 +206,8 @@ export const MessageBlock = memo<MessageBlockProps>(({
 
   return (
     <View style={containerStyle}>
-      {/* Avatar slot for incoming messages */}
-      {!isAiGroup && isIncoming && (
+      {/* Avatar slot for incoming messages (only in group conversations) */}
+      {!isAiGroup && isIncoming && isGroup && (
         <View style={styles.avatarSlot}>
           <MessageAvatar
             name={senderName}
@@ -295,6 +295,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       messageType={message.messageType || 'user'}
                       readStatus={message.isSent ? 'read' : undefined}
                       isEdited={false} // TODO: Add edited status to Message type
+                      fontSize={message.fontSize} // Use custom font size if set
                       onPress={() => handleMessagePress(message.id)}
                     />
                   </View>

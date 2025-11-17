@@ -41,6 +41,8 @@ export interface MessageBubbleProps {
   readStatus?: 'sent' | 'delivered' | 'read';
   /** Whether the message was edited */
   isEdited?: boolean;
+  /** Custom font size for this message (if adjusted via send button) */
+  fontSize?: number;
 }
 
 /**
@@ -78,9 +80,12 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   messageType = 'user',
   readStatus,
   isEdited = false,
+  fontSize,
 }) => {
   const theme = useTheme();
-  const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
+  const defaultMessageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
+  // Use custom fontSize if provided, otherwise use default
+  const messageTextSize = fontSize ?? defaultMessageTextSize;
   
   // Memoize computed values
   const isAiMessage = messageType === 'ai';
