@@ -34,7 +34,7 @@ const SignInPrompt: React.FC<SignInPromptProps> = ({ onSignInPress }) => {
                     <Logo />
                 </View>
 
-                <Text style={[styles.signInTitle, { color: theme.colors.text }]}>Welcome to Mention</Text>
+                <Text style={[styles.signInTitle, { color: theme.colors.text }]}>Welcome to allo</Text>
                 <Text style={[styles.signInSubtitle, { color: theme.colors.textSecondary }]}>
                     Join the conversation and connect with people who share your interests
                 </Text>

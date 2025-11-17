@@ -11,7 +11,7 @@ export interface PrivacySettings {
   profileVisibility: 'public' | 'private' | 'followers_only';
   showContactInfo?: boolean;
   allowTags?: boolean;
-  allowMentions?: boolean;
+  allowallos?: boolean;
   showOnlineStatus?: boolean;
   hideLikeCounts?: boolean;
   hideShareCounts?: boolean;
@@ -47,7 +47,7 @@ const PrivacySchema = new Schema<PrivacySettings>({
   profileVisibility: { type: String, enum: ['public', 'private', 'followers_only'], default: 'public' },
   showContactInfo: { type: Boolean, default: true },
   allowTags: { type: Boolean, default: true },
-  allowMentions: { type: Boolean, default: true },
+  allowallos: { type: Boolean, default: true },
   showOnlineStatus: { type: Boolean, default: true },
   hideLikeCounts: { type: Boolean, default: false },
   hideShareCounts: { type: Boolean, default: false },

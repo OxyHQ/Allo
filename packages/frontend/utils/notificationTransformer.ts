@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { NotificationType } from '@mention/shared-types';
+import { NotificationType } from '@allo/shared-types';
 
 export interface RawNotification {
   _id: string;
@@ -78,10 +78,10 @@ export const transformNotification = (
         message: getEntityDescription(rawNotification, t),
       };
 
-    case 'mention':
+    case 'allo':
       return {
         ...baseNotification,
-        title: t('notification.mention', { actorName }),
+        title: t('notification.allo', { actorName }),
         message: getEntityDescription(rawNotification, t),
       };
 

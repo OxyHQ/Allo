@@ -13,10 +13,10 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@mention/shared-types": [
+      "@allo/shared-types": [
         "../shared-types/src"
       ],
-      "@mention/shared-types/*": [
+      "@allo/shared-types/*": [
         "../shared-types/src/*"
       ]
     }

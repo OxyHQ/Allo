@@ -29,8 +29,8 @@ export function WhoToFollowTab() {
         : user.name?.full || user.name?.first || user.username
       : 'Someone';
     const userHandle = user?.username || '';
-    const appUrl = 'https://mention.earth';
-    
+    const appUrl = 'https://allo.earth';
+
     // Use a more engaging invite message with proper translation
     if (userHandle) {
       return t('settings.inviteContacts.shareMessageWithHandle', {
@@ -48,7 +48,7 @@ export function WhoToFollowTab() {
 
   const handleInviteFriends = useCallback(async () => {
     const inviteMessage = getInviteMessage();
-    const appUrl = 'https://mention.earth';
+    const appUrl = 'https://allo.earth';
 
     if (Platform.OS === 'web') {
       // On web, use Share API or copy to clipboard
@@ -75,13 +75,13 @@ export function WhoToFollowTab() {
       const shareOptions: any = {
         message: inviteMessage, // Full message with URL already included
       };
-      
+
       // On iOS, we can optionally add title, but message should be primary
       if (Platform.OS === 'ios') {
         // Don't set title as it might override the message in some apps
         // Just use message which contains everything
       }
-      
+
       await Share.share(shareOptions);
     } catch (error: any) {
       if (error?.message !== 'User did not share' && error?.code !== 'ERR_SHARE_CANCELLED') {

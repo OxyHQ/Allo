@@ -1,5 +1,5 @@
 /**
- * Interaction-related types for Mention social network
+ * Interaction-related types for allo social network
  */
 
 import { Timestamps } from './common';
@@ -58,7 +58,7 @@ export interface Comment {
   oxyUserId: string; // Links to Oxy user
   content: string;
   parentCommentId?: string; // for nested comments
-  mentions?: string[]; // oxyUserIds
+  allos?: string[]; // oxyUserIds
   hashtags?: string[];
   isEdited: boolean;
   editHistory?: string[];
@@ -154,13 +154,13 @@ export interface CreateCommentRequest {
   postId: string;
   content: string;
   parentCommentId?: string;
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
 }
 
 export interface UpdateCommentRequest {
   content: string;
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
 }
 

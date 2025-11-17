@@ -11,7 +11,7 @@
   "Language": "Lingua",
   "Primary Color": "Colore Primario",
   "Apply Settings": "Applica Impostazioni",
-  "Welcome to Mention! 👋": "Benvenuto su Mention! 👋",
+  "Welcome to allo! 👋": "Benvenuto su allo! 👋",
   "Thanks for trying out our app. Start exploring now!": "Grazie per aver provato la nostra app. Inizia a esplorare ora!",
   "This screen doesn't exist.": "Questa schermata non esiste.",
   "Go to home screen!": "Vai alla schermata principale!",
@@ -22,7 +22,7 @@
   "This is a sample post": "Questo è un post di esempio",
   "Another example post": "Un altro post di esempio",
   "Customize your view": "Personalizza la visualizzazione",
-  "These settings affect all the Mention accounts on this device.": "Queste impostazioni si applicano a tutti gli account Mention su questo dispositivo.",
+  "These settings affect all the allo accounts on this device.": "Queste impostazioni si applicano a tutti gli account allo su questo dispositivo.",
   "Account": "Account",
   "Manage your account settings": "Gestisci le impostazioni del tuo account",
   "Notification preferences": "Preferenze di notifica",
@@ -71,7 +71,7 @@
   "Posts": "Post",
   "Profiles": "Profili",
   "No results": "Nessun risultato",
-  "mentioned you": "ti ha menzionato",
+  "alloed you": "ti ha menzionato",
   "shared your post": "ha condiviso il tuo post",
   "Version": "Versione",
   "copied to clipboard": "copiato negli appunti",
@@ -98,17 +98,17 @@
   "error.boundary.title": "Ops! Qualcosa è andato storto",
   "error.boundary.message": "Ci scusiamo per l'inconveniente. Per favore riprova.",
   "error.boundary.retry": "Riprova",
-  "notification.welcome.title": "Benvenuto su Mention! 👋",
+  "notification.welcome.title": "Benvenuto su allo! 👋",
   "notification.welcome.body": "Grazie per aver provato la nostra app. Inizia a esplorare ora!",
   "notification.like": "{{actorName}} ha messo mi piace al tuo post",
   "notification.reply": "{{actorName}} ha risposto al tuo post",
-  "notification.mention": "{{actorName}} ti ha menzionato",
+  "notification.allo": "{{actorName}} ti ha menzionato",
   "notification.follow": "{{actorName}} ha iniziato a seguirti",
   "notification.repost": "{{actorName}} ha ripubblicato il tuo post",
   "notification.quote": "{{actorName}} ha citato il tuo post",
   "notification.like_reply": "{{actorName}} ha messo mi piace alla tua risposta",
   "notification.reply_reply": "{{actorName}} ha risposto alla tua risposta",
-  "notification.mention_reply": "{{actorName}} ti ha menzionato in una risposta",
+  "notification.allo_reply": "{{actorName}} ti ha menzionato in una risposta",
   "notification.follow_request": "{{actorName}} ti ha inviato una richiesta di follow",
   "notification.hashtag": "Il tuo hashtag #{{hashtag}} è in tendenza",
   "notification.verification.approved": "Il tuo account è stato verificato! ✅",
@@ -180,15 +180,15 @@
   "settings.signOutMessage": "Sei sicuro di voler disconnetterti?",
   "settings.signOutDesc": "Disconnetti il tuo account su questo dispositivo.",
   "settings.sections.account": "Account",
-  "settings.sections.aboutMention": "Informazioni su Mention",
-  "settings.aboutMention.appName": "Mention",
-  "settings.aboutMention.version": "Versione {{version}}",
-  "settings.aboutMention.build": "Build",
-  "settings.aboutMention.buildVersion": "Informazioni di build non disponibili",
-  "settings.aboutMention.oxySDK": "SDK Oxy",
-  "settings.aboutMention.expoSDK": "SDK Expo",
-  "settings.aboutMention.platform": "Piattaforma: {{platform}}",
-  "settings.aboutMention.apiUrl": "URL API",
+  "settings.sections.aboutallo": "Informazioni su allo",
+  "settings.aboutallo.appName": "allo",
+  "settings.aboutallo.version": "Versione {{version}}",
+  "settings.aboutallo.build": "Build",
+  "settings.aboutallo.buildVersion": "Informazioni di build non disponibili",
+  "settings.aboutallo.oxySDK": "SDK Oxy",
+  "settings.aboutallo.expoSDK": "SDK Expo",
+  "settings.aboutallo.platform": "Piattaforma: {{platform}}",
+  "settings.aboutallo.apiUrl": "URL API",
   "settings.sections.supportFeedback": "Supporto e feedback",
   "settings.supportFeedback.helpSupport": "Aiuto e supporto",
   "settings.supportFeedback.helpSupportMessage": "Ottieni aiuto e supporto per l'app.",
@@ -208,7 +208,7 @@
   "settings.privacy.public": "Pubblico",
   "settings.privacy.private": "Privato",
   "settings.privacy.followersOnly": "Solo follower",
-  "settings.privacy.tagsAndMentions": "Tag e menzioni",
+  "settings.privacy.tagsAndallos": "Tag e menzioni",
   "settings.privacy.onlineStatus": "Stato online",
   "settings.privacy.restrictedProfiles": "Profili limitati",
   "settings.privacy.blockedProfiles": "Profili bloccati",
@@ -232,8 +232,8 @@
   "settings.privacy.hideSaveCountsDesc": "Nascondi il pulsante salva sui post",
   "settings.privacy.allowTags": "Consenti tag",
   "settings.privacy.allowTagsDesc": "Consenti ad altri di taggarti nei post",
-  "settings.privacy.allowMentions": "Consenti menzioni",
-  "settings.privacy.allowMentionsDesc": "Consenti ad altri di menzionarti nei post",
+  "settings.privacy.allowallos": "Consenti menzioni",
+  "settings.privacy.allowallosDesc": "Consenti ad altri di menzionarti nei post",
   "settings.privacy.showOnlineStatus": "Mostra stato online",
   "settings.privacy.showOnlineStatusDesc": "Mostra quando sei online ad altri",
   "settings.privacy.blockedUsersComingSoon": "Gestione utenti bloccati in arrivo",
@@ -327,10 +327,10 @@
   "common.maybeLater": "Forse più tardi",
   "common.rateNow": "Valuta ora",
   "notification.post": "{{actorName}} ha pubblicato un nuovo aggiornamento",
-    "notifications": {
+  "notifications": {
     "tabs": {
       "all": "Tutto",
-      "mentions": "Menzioni",
+      "allos": "Menzioni",
       "follows": "Follower",
       "likes": "Mi piace",
       "posts": "Post"
@@ -347,7 +347,7 @@
     "no_posts_found": "Nessun post trovato",
     "no_video_posts_yet": "Ancora nessun video",
     "loading": "Caricamento...",
-    "on_mention": "su Mention",
+    "on_allo": "su allo",
     "action_failed": "Azione fallita. Riprova."
   },
   "common": {
@@ -427,44 +427,44 @@
     }
   },
   "seo": {
-    "siteName": "Mention",
-    "defaultTitle": "Mention - Piattaforma Sociale",
-    "defaultDescription": "Unisciti a Mention e connettiti con persone di tutto il mondo. Condividi i tuoi pensieri, scopri tendenze e interagisci con una comunità globale.",
+    "siteName": "allo",
+    "defaultTitle": "allo - Piattaforma Sociale",
+    "defaultDescription": "Unisciti a allo e connettiti con persone di tutto il mondo. Condividi i tuoi pensieri, scopri tendenze e interagisci con una comunità globale.",
     "home": {
-      "title": "Mention - Piattaforma Sociale",
-      "description": "Unisciti a Mention e connettiti con persone di tutto il mondo. Condividi i tuoi pensieri, scopri tendenze e interagisci con una comunità globale."
+      "title": "allo - Piattaforma Sociale",
+      "description": "Unisciti a allo e connettiti con persone di tutto il mondo. Condividi i tuoi pensieri, scopri tendenze e interagisci con una comunità globale."
     },
     "explore": {
-      "title": "Esplora - Mention",
-      "description": "Scopri argomenti di tendenza, post popolari e persone interessanti su Mention."
+      "title": "Esplora - allo",
+      "description": "Scopri argomenti di tendenza, post popolari e persone interessanti su allo."
     },
     "compose": {
-      "title": "Nuovo Post - Mention",
-      "description": "Condividi cosa sta succedendo con la comunità di Mention."
+      "title": "Nuovo Post - allo",
+      "description": "Condividi cosa sta succedendo con la comunità di allo."
     },
     "notifications": {
-      "title": "Notifiche - Mention",
-      "description": "Resta aggiornato con tutte le tue menzioni, mi piace, seguaci e risposte su Mention."
+      "title": "Notifiche - allo",
+      "description": "Resta aggiornato con tutte le tue menzioni, mi piace, seguaci e risposte su allo."
     },
     "saved": {
-      "title": "Post Salvati - Mention",
-      "description": "Visualizza tutti i tuoi post salvati su Mention."
+      "title": "Post Salvati - allo",
+      "description": "Visualizza tutti i tuoi post salvati su allo."
     },
     "videos": {
-      "title": "Video - Mention",
-      "description": "Guarda video di tendenza e scopri nuovi contenuti su Mention."
+      "title": "Video - allo",
+      "description": "Guarda video di tendenza e scopri nuovi contenuti su allo."
     },
     "lists": {
-      "title": "Liste - Mention",
-      "description": "Crea e gestisci liste di utenti per organizzare il tuo feed su Mention."
+      "title": "Liste - allo",
+      "description": "Crea e gestisci liste di utenti per organizzare il tuo feed su allo."
     },
     "feeds": {
-      "title": "Feed Personalizzati - Mention",
-      "description": "Crea e personalizza i tuoi feed su Mention."
+      "title": "Feed Personalizzati - allo",
+      "description": "Crea e personalizza i tuoi feed su allo."
     },
     "insights": {
-      "title": "Statistiche - Mention",
-      "description": "Visualizza analisi e statistiche sui tuoi post e il tuo coinvolgimento su Mention.",
+      "title": "Statistiche - allo",
+      "description": "Visualizza analisi e statistiche sui tuoi post e il tuo coinvolgimento su allo.",
       "post": {
         "title": "Statistiche del Post",
         "noInsightsAvailable": "Nessuna statistica disponibile",
@@ -518,21 +518,21 @@
       }
     },
     "search": {
-      "title": "Cerca - Mention",
-      "description": "Cerca utenti, post, hashtag e altro su Mention."
+      "title": "Cerca - allo",
+      "description": "Cerca utenti, post, hashtag e altro su allo."
     },
     "profile": {
-      "title": "{{name}} (@{{username}}) su Mention",
-      "description": "Visualizza il profilo di {{name}} su Mention. {{bio}}"
+      "title": "{{name}} (@{{username}}) su allo",
+      "description": "Visualizza il profilo di {{name}} su allo. {{bio}}"
     },
     "post": {
-      "title": "{{author}} su Mention",
+      "title": "{{author}} su allo",
       "description": "{{text}}",
-      "notFound": "Post Non Trovato - Mention",
+      "notFound": "Post Non Trovato - allo",
       "notFoundDescription": "Il post che stai cercando non esiste o è stato eliminato."
     },
     "notFound": {
-      "title": "Pagina Non Trovata - Mention",
+      "title": "Pagina Non Trovata - allo",
       "description": "La pagina che stai cercando non esiste."
     }
   }

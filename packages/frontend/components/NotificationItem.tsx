@@ -107,8 +107,8 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
                 return t('notification.like', { actorName: display });
             case 'reply':
                 return t('notification.reply', { actorName: display });
-            case 'mention':
-                return t('notification.mention', { actorName: display });
+            case 'allo':
+                return t('notification.allo', { actorName: display });
             case 'follow':
                 return t('notification.follow', { actorName: display });
             case 'repost':
@@ -131,7 +131,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
                 return 'heart';
             case 'reply':
                 return 'chatbubble';
-            case 'mention':
+            case 'allo':
                 return 'chatbubble-ellipses';
             case 'follow':
                 return 'person-add';
@@ -154,7 +154,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
                 return colors.online;
             case 'reply':
                 return colors.away;
-            case 'mention':
+            case 'allo':
                 return colors.primaryColor;
             case 'follow':
                 return colors.primaryColor;

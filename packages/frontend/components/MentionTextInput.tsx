@@ -8,28 +8,28 @@ import {
     findNodeHandle,
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
-import MentionPicker, { MentionUser } from "./MentionPicker";
+import alloPicker, { alloUser } from "./alloPicker";
 
-export interface MentionData {
+export interface alloData {
     userId: string;
     username: string;
     displayName: string;
 }
 
-interface MentionTextInputProps extends Omit<TextInputProps, "onChangeText" | "value"> {
+interface alloTextInputProps extends Omit<TextInputProps, "onChangeText" | "value"> {
     value: string;
     onChangeText: (text: string) => void;
-    onMentionsChange?: (mentions: MentionData[]) => void;
+    onallosChange?: (allos: alloData[]) => void;
     placeholder?: string;
     maxLength?: number;
     multiline?: boolean;
     style?: any;
 }
 
-const MentionTextInput: React.FC<MentionTextInputProps> = ({
+const alloTextInput: React.FC<alloTextInputProps> = ({
     value,
     onChangeText,
-    onMentionsChange,
+    onallosChange,
     placeholder,
     maxLength,
     multiline = true,
@@ -37,49 +37,49 @@ const MentionTextInput: React.FC<MentionTextInputProps> = ({
     ...textInputProps
 }) => {
     const theme = useTheme();
-    const [showMentionPicker, setShowMentionPicker] = useState(false);
-    const [mentionQuery, setMentionQuery] = useState("");
+    const [showalloPicker, setShowalloPicker] = useState(false);
+    const [alloQuery, setalloQuery] = useState("");
     const [cursorPosition, setCursorPosition] = useState(0);
-    const [mentions, setMentions] = useState<MentionData[]>([]);
+    const [allos, setallos] = useState<alloData[]>([]);
     const textInputRef = useRef<TextInput>(null);
 
-    // Parse mentions from text with [mention:userId] format
-    const parseMentions = useCallback((text: string): MentionData[] => {
-        const mentionRegex = /\[mention:([^\]]+)\]/g;
-        const foundMentions: MentionData[] = [];
+    // Parse allos from text with [allo:userId] format
+    const parseallos = useCallback((text: string): alloData[] => {
+        const alloRegex = /\[allo:([^\]]+)\]/g;
+        const foundallos: alloData[] = [];
         let match;
 
-        while ((match = mentionRegex.exec(text)) !== null) {
+        while ((match = alloRegex.exec(text)) !== null) {
             const userId = match[1];
-            // Find the mention in our local state to get username/displayName
-            const existingMention = mentions.find(m => m.userId === userId);
-            if (existingMention) {
-                foundMentions.push(existingMention);
+            // Find the allo in our local state to get username/displayName
+            const existingallo = allos.find(m => m.userId === userId);
+            if (existingallo) {
+                foundallos.push(existingallo);
             }
         }
 
-        return foundMentions;
-    }, [mentions]);
+        return foundallos;
+    }, [allos]);
 
-    // Convert display text with @username to storage format with [mention:userId]
-    const convertToStorageFormat = useCallback((displayText: string, currentMentions: MentionData[]): string => {
+    // Convert display text with @username to storage format with [allo:userId]
+    const convertToStorageFormat = useCallback((displayText: string, currentallos: alloData[]): string => {
         let result = displayText;
-        // Replace @username with [mention:userId]
-        currentMentions.forEach(mention => {
-            const displayMention = `@${mention.username}`;
-            const storageMention = `[mention:${mention.userId}]`;
-            result = result.replace(displayMention, storageMention);
+        // Replace @username with [allo:userId]
+        currentallos.forEach(allo => {
+            const displayallo = `@${allo.username}`;
+            const storageallo = `[allo:${allo.userId}]`;
+            result = result.replace(displayallo, storageallo);
         });
         return result;
     }, []);
 
-    // Convert storage format [mention:userId] to display format @username
-    const convertToDisplayFormat = useCallback((storageText: string, currentMentions: MentionData[]): string => {
+    // Convert storage format [allo:userId] to display format @username
+    const convertToDisplayFormat = useCallback((storageText: string, currentallos: alloData[]): string => {
         let result = storageText;
-        currentMentions.forEach(mention => {
-            const storageMention = `[mention:${mention.userId}]`;
-            const displayMention = `@${mention.username}`;
-            result = result.replace(new RegExp(storageMention.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), displayMention);
+        currentallos.forEach(allo => {
+            const storageallo = `[allo:${allo.userId}]`;
+            const displayallo = `@${allo.username}`;
+            result = result.replace(new RegExp(storageallo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), displayallo);
         });
         return result;
     }, []);
@@ -88,10 +88,10 @@ const MentionTextInput: React.FC<MentionTextInputProps> = ({
     const handleTextChange = useCallback((text: string) => {
         // Text from input is in display format (@name)
         // We need to convert to storage format for the parent component
-        const storageText = convertToStorageFormat(text, mentions);
+        const storageText = convertToStorageFormat(text, allos);
         onChangeText(storageText);
 
-        // Check if user is typing a mention
+        // Check if user is typing a allo
         const cursorPos = cursorPosition;
         const textBeforeCursor = text.substring(0, cursorPos);
         const lastAtSymbol = textBeforeCursor.lastIndexOf("@");
@@ -99,78 +99,78 @@ const MentionTextInput: React.FC<MentionTextInputProps> = ({
         if (lastAtSymbol !== -1) {
             const textAfterAt = textBeforeCursor.substring(lastAtSymbol + 1);
 
-            // Check if it's a valid mention query (no spaces)
+            // Check if it's a valid allo query (no spaces)
             const hasSpace = textAfterAt.includes(" ");
             const hasNewline = textAfterAt.includes("\n");
 
             if (!hasSpace && !hasNewline && textAfterAt.length >= 0) {
-                setMentionQuery(textAfterAt);
-                setShowMentionPicker(true);
+                setalloQuery(textAfterAt);
+                setShowalloPicker(true);
             } else {
-                setShowMentionPicker(false);
-                setMentionQuery("");
+                setShowalloPicker(false);
+                setalloQuery("");
             }
         } else {
-            setShowMentionPicker(false);
-            setMentionQuery("");
+            setShowalloPicker(false);
+            setalloQuery("");
         }
-    }, [cursorPosition, onChangeText, mentions, convertToStorageFormat]);
+    }, [cursorPosition, onChangeText, allos, convertToStorageFormat]);
 
     // Handle selection change to track cursor position
     const handleSelectionChange = useCallback((event: any) => {
         setCursorPosition(event.nativeEvent.selection.start);
     }, []);
 
-    // Handle user selection from mention picker
-    const handleMentionSelect = useCallback((user: MentionUser) => {
+    // Handle user selection from allo picker
+    const handlealloSelect = useCallback((user: alloUser) => {
         // Convert current storage value to display to find @ position
-        const currentDisplayValue = convertToDisplayFormat(value, mentions);
+        const currentDisplayValue = convertToDisplayFormat(value, allos);
         const textBeforeCursor = currentDisplayValue.substring(0, cursorPosition);
         const textAfterCursor = currentDisplayValue.substring(cursorPosition);
         const lastAtSymbol = textBeforeCursor.lastIndexOf("@");
 
         if (lastAtSymbol !== -1) {
-            // Store mention metadata first
-            const newMention: MentionData = {
+            // Store allo metadata first
+            const newallo: alloData = {
                 userId: user.id,
                 username: user.username,
                 displayName: user.name,
             };
 
-            const updatedMentions = [...mentions, newMention];
+            const updatedallos = [...allos, newallo];
 
             // Display format uses @username (handle)
-            const displayMentionText = `@${user.username}`;
-            // Storage format uses [mention:userId]
-            const storageMentionText = `[mention:${user.id}]`;
+            const displayalloText = `@${user.username}`;
+            // Storage format uses [allo:userId]
+            const storagealloText = `[allo:${user.id}]`;
 
             // Build display text (for cursor positioning)
             const newDisplayText =
                 currentDisplayValue.substring(0, lastAtSymbol) +
-                displayMentionText +
+                displayalloText +
                 " " +
                 textAfterCursor;
 
             // Build storage text (what we send to parent)
-            // We need to convert the new display text with updated mentions
+            // We need to convert the new display text with updated allos
             let storageText = newDisplayText;
-            updatedMentions.forEach(mention => {
-                const displayMention = `@${mention.username}`;
-                const storageMention = `[mention:${mention.userId}]`;
-                storageText = storageText.replace(displayMention, storageMention);
+            updatedallos.forEach(allo => {
+                const displayallo = `@${allo.username}`;
+                const storageallo = `[allo:${allo.userId}]`;
+                storageText = storageText.replace(displayallo, storageallo);
             });
 
-            setMentions(updatedMentions);
+            setallos(updatedallos);
 
             // Send storage format to parent
             onChangeText(storageText);
 
-            if (onMentionsChange) {
-                onMentionsChange(updatedMentions);
+            if (onallosChange) {
+                onallosChange(updatedallos);
             }
 
-            // Move cursor after mention in display text
-            const newCursorPos = lastAtSymbol + displayMentionText.length + 1;
+            // Move cursor after allo in display text
+            const newCursorPos = lastAtSymbol + displayalloText.length + 1;
             setCursorPosition(newCursorPos);
 
             // Set selection after a short delay
@@ -181,17 +181,17 @@ const MentionTextInput: React.FC<MentionTextInputProps> = ({
             }, 10);
         }
 
-        setShowMentionPicker(false);
-        setMentionQuery("");
-    }, [value, cursorPosition, mentions, onChangeText, onMentionsChange, convertToDisplayFormat]);
+        setShowalloPicker(false);
+        setalloQuery("");
+    }, [value, cursorPosition, allos, onChangeText, onallosChange, convertToDisplayFormat]);
 
     const handleClosePicker = useCallback(() => {
-        setShowMentionPicker(false);
-        setMentionQuery("");
+        setShowalloPicker(false);
+        setalloQuery("");
     }, []);
 
     // Convert storage format to display format for rendering
-    const displayValue = convertToDisplayFormat(value, mentions);
+    const displayValue = convertToDisplayFormat(value, allos);
 
     return (
         <View style={styles.container}>
@@ -212,11 +212,11 @@ const MentionTextInput: React.FC<MentionTextInputProps> = ({
                 {...textInputProps}
             />
 
-            {showMentionPicker && (
+            {showalloPicker && (
                 <View style={styles.pickerContainer}>
-                    <MentionPicker
-                        query={mentionQuery}
-                        onSelect={handleMentionSelect}
+                    <alloPicker
+                        query={alloQuery}
+                        onSelect={handlealloSelect}
                         onClose={handleClosePicker}
                     />
                 </View>
@@ -243,5 +243,5 @@ const styles = StyleSheet.create({
     },
 });
 
-export default MentionTextInput;
-export type { MentionTextInputProps };
+export default alloTextInput;
+export type { alloTextInputProps };

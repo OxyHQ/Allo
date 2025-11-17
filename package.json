@@ -1,25 +1,25 @@
 {
-  "name": "mention",
+  "name": "allo",
   "version": "2.0.0",
-  "description": "Mention Monorepo - Frontend and Backend",
+  "description": "allo Monorepo - Frontend and Backend",
   "private": true,
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspaces",
-    "dev:frontend": "npm run dev --workspace=@mention/frontend",
-    "dev:backend": "npm run dev --workspace=@mention/backend",
+    "dev:frontend": "npm run dev --workspace=@allo/frontend",
+    "dev:backend": "npm run dev --workspace=@allo/backend",
     "build": "npm run build --workspaces",
-    "build:shared-types": "npm run build --workspace=@mention/shared-types",
-    "build:frontend": "npm run build --workspace=@mention/frontend",
-    "build:backend": "npm run build --workspace=@mention/backend",
+    "build:shared-types": "npm run build --workspace=@allo/shared-types",
+    "build:frontend": "npm run build --workspace=@allo/frontend",
+    "build:backend": "npm run build --workspace=@allo/backend",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "install:all": "npm install && npm install --workspaces",
-    "start:frontend": "npm run start --workspace=@mention/frontend",
-    "start:backend": "npm run start --workspace=@mention/backend",
+    "start:frontend": "npm run start --workspace=@allo/frontend",
+    "start:backend": "npm run start --workspace=@allo/backend",
     "postinstall": "npm run build:shared-types"
   },
   "devDependencies": {

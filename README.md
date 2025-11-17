@@ -155,11 +155,11 @@ npm run dev:backend
 
 All project documentation is available in the [`docs/`](./docs/) folder:
 
-- [Allo System Overview](./docs/MENTION_SYSTEM_README.md) - Legacy system overview
-- [Allo Format Specification](./docs/MENTION_FORMAT_FINAL.md) - Legacy format summary
-- [Allo Implementation](./docs/MENTION_IMPLEMENTATION_COMPLETE.md) - Legacy implementation details
-- [Notifications System](./docs/MENTION_NOTIFICATIONS.md) - Notification system documentation
-- [Visual Guide](./docs/MENTION_VISUAL_GUIDE.md) - Visual design guide
+- [Allo System Overview](./docs/allo_SYSTEM_README.md) - Legacy system overview
+- [Allo Format Specification](./docs/allo_FORMAT_FINAL.md) - Legacy format summary
+- [Allo Implementation](./docs/allo_IMPLEMENTATION_COMPLETE.md) - Legacy implementation details
+- [Notifications System](./docs/allo_NOTIFICATIONS.md) - Notification system documentation
+- [Visual Guide](./docs/allo_VISUAL_GUIDE.md) - Visual design guide
 - [Theming Guide](./docs/THEMING_REFACTOR_SUMMARY.md) - Complete theming system documentation
 - [Theme Quick Reference](./docs/THEME_QUICK_REFERENCE.md) - Quick reference for developers
 - [Theming Troubleshooting](./docs/THEMING_TROUBLESHOOTING.md) - Common theming issues and solutions

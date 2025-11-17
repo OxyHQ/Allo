@@ -1,10 +1,10 @@
-# @mention/shared-types
+# @allo/shared-types
 
-Shared TypeScript types for the Mention social network platform. This package contains all the interfaces, enums, and types that are shared between the frontend and backend applications to ensure type consistency.
+Shared TypeScript types for the allo social network platform. This package contains all the interfaces, enums, and types that are shared between the frontend and backend applications to ensure type consistency.
 
 ## Overview
 
-Mention is a Twitter-like social network where users can create posts (instead of tweets), interact with content, and build communities. This package provides comprehensive type definitions for all core functionality.
+allo is a Twitter-like social network where users can create posts (instead of tweets), interact with content, and build communities. This package provides comprehensive type definitions for all core functionality.
 
 ## Architecture
 
@@ -76,7 +76,7 @@ src/
 ### Notification Types (`notification.ts`)
 
 - **Notification**: Generic notification interface
-- **NotificationType**: Like, Repost, Comment, Follow, Mention, etc.
+- **NotificationType**: Like, Repost, Comment, Follow, allo, etc.
 - **NotificationPriority**: Low, Normal, High, Urgent
 - **NotificationPreferences**: User notification settings
 - **Specific notification types**: LikeNotification, FollowNotification, etc.
@@ -127,7 +127,7 @@ All user-related data is linked to Oxy users via `oxyUserId` fields:
 ### Installation
 
 ```bash
-npm install @mention/shared-types
+npm install @allo/shared-types
 ```
 
 ### Import Types
@@ -139,7 +139,7 @@ import {
   InteractionType, 
   FeedType,
   NotificationType 
-} from '@mention/shared-types';
+} from '@allo/shared-types';
 ```
 
 ### Example Usage
@@ -148,11 +148,11 @@ import {
 // Create a new post
 const newPost: CreatePostRequest = {
   content: {
-    text: "Hello Mention!",
+    text: "Hello allo!",
     images: ["image1.jpg", "image2.jpg"]
   },
   visibility: PostVisibility.PUBLIC,
-  hashtags: ["mention", "social"]
+  hashtags: ["allo", "social"]
 };
 
 // User profile with Oxy integration
@@ -203,4 +203,4 @@ When adding new types:
 
 ## License
 
-UNLICENSED - Private package for Mention platform 
+UNLICENSED - Private package for allo platform 

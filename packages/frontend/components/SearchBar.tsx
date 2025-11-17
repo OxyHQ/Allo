@@ -84,7 +84,7 @@ export const SearchBar = () => {
                         marginHorizontal: 17,
                         flex: 1,
                     }}
-                    placeholder={t("Search Mention")}
+                    placeholder={t("Search allo")}
                     placeholderTextColor={theme.colors.textSecondary}
                     value={searchQuery}
                     onChangeText={handleSearchChange}

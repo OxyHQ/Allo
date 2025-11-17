@@ -573,7 +573,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setActionsMenuVisible(false);
     // TODO: Implement reply functionality
     console.log('Reply to message:', message.id);
-    // Could scroll to input and add quote or mention
+    // Could scroll to input and add quote or allo
     inputRef.current?.focus();
   }, []);
 

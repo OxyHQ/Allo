@@ -7,7 +7,7 @@ import { HeaderIconButton } from '@/components/HeaderIconButton';
 import { Toggle } from '@/components/Toggle';
 import { colors } from '@/styles/colors';
 
-export type ReplyPermission = 'anyone' | 'followers' | 'following' | 'mentioned';
+export type ReplyPermission = 'anyone' | 'followers' | 'following' | 'alloed';
 
 interface ReplySettingsSheetProps {
   onClose: () => void;
@@ -31,14 +31,14 @@ const ReplySettingsSheet: React.FC<ReplySettingsSheetProps> = ({
     { value: 'anyone', label: t('Anyone') || 'Anyone' },
     { value: 'followers', label: t('Your followers') || 'Your followers' },
     { value: 'following', label: t('Profiles you follow') || 'Profiles you follow' },
-    { value: 'mentioned', label: t('Profiles you mention') || 'Profiles you mention' },
+    { value: 'alloed', label: t('Profiles you allo') || 'Profiles you allo' },
   ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.colors.background, borderBottomColor: theme.colors.border }]}>
-        <HeaderIconButton 
+        <HeaderIconButton
           onPress={onClose}
           style={styles.closeButton}
         >
@@ -62,8 +62,8 @@ const ReplySettingsSheet: React.FC<ReplySettingsSheetProps> = ({
               style={[
                 styles.option,
                 {
-                  backgroundColor: isSelected 
-                    ? theme.colors.primary + '15' 
+                  backgroundColor: isSelected
+                    ? theme.colors.primary + '15'
                     : theme.colors.backgroundSecondary,
                   borderTopLeftRadius: isFirst ? 16 : 0,
                   borderTopRightRadius: isFirst ? 16 : 0,
@@ -76,8 +76,8 @@ const ReplySettingsSheet: React.FC<ReplySettingsSheetProps> = ({
               activeOpacity={0.7}
             >
               <Text style={[
-                styles.optionText, 
-                { 
+                styles.optionText,
+                {
                   color: theme.colors.text,
                   fontWeight: isSelected ? '600' : '400',
                 }

@@ -25,7 +25,7 @@ return {
         slug: "allo",
         version: VERSION,
       orientation: 'portrait',
-      icon: './assets/images/mention-icon.png',
+      icon: './assets/images/allo-icon.png',
       scheme: 'allo',
       userInterfaceStyle: 'automatic',
       newArchEnabled: true,
@@ -39,9 +39,9 @@ return {
       },
         android: {
             adaptiveIcon: {
-                foregroundImage: "./assets/images/mention-icon_foreground.png",
-                backgroundImage: "./assets/images/mention-icon_background.png",
-                monochromeImage: "./assets/images/mention-icon_monochrome.png"
+                foregroundImage: "./assets/images/allo-icon_foreground.png",
+                backgroundImage: "./assets/images/allo-icon_background.png",
+                monochromeImage: "./assets/images/allo-icon_monochrome.png"
             },
             permissions: [
                 "android.permission.CAMERA",

@@ -44,7 +44,7 @@ export interface MockPost {
   userID: Types.ObjectId;
   media: MockMediaItem[];
   hashtags: string[];
-  mentions: string[];
+  allos: string[];
   likes: Types.ObjectId[];
   reposts: Types.ObjectId[];
   replies: Types.ObjectId[];
@@ -269,13 +269,13 @@ export function generateMockPost(users: MockUser[]): MockPost {
     }
   }
   
-  // Generate mentions
-  const mentionCount = randomInt(0, 2);
-  const mentions: string[] = [];
-  for (let i = 0; i < mentionCount; i++) {
-    const mentionedUser = randomChoice(users.filter(u => u._id !== author._id));
-    if (!mentions.includes(mentionedUser.username)) {
-      mentions.push(mentionedUser.username);
+  // Generate allos
+  const alloCount = randomInt(0, 2);
+  const allos: string[] = [];
+  for (let i = 0; i < alloCount; i++) {
+    const alloedUser = randomChoice(users.filter(u => u._id !== author._id));
+    if (!allos.includes(alloedUser.username)) {
+      allos.push(alloedUser.username);
     }
   }
   
@@ -296,7 +296,7 @@ export function generateMockPost(users: MockUser[]): MockPost {
     userID: author._id,
     media,
     hashtags,
-    mentions,
+    allos,
     likes,
     reposts,
     replies,

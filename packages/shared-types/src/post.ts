@@ -1,5 +1,5 @@
 /**
- * Post-related types for Mention social network
+ * Post-related types for allo social network
  */
 
 import { Timestamps, Coordinates, GeoJSONPoint } from './common';
@@ -63,7 +63,7 @@ export interface PollData {
   userVotes: Record<string, string>; // userId -> option index
 }
 
-export type ReplyPermission = 'anyone' | 'followers' | 'following' | 'mentioned';
+export type ReplyPermission = 'anyone' | 'followers' | 'following' | 'alloed';
 
 export interface Post {
   id: string;
@@ -76,7 +76,7 @@ export interface Post {
   editHistory?: string[];
   language?: string;
   tags?: string[];
-  mentions?: string[]; // oxyUserIds
+  allos?: string[]; // oxyUserIds
   hashtags?: string[];
   repostOf?: string; // original post id
   quoteOf?: string; // quoted post id
@@ -122,7 +122,7 @@ export interface CreatePostRequest {
   parentPostId?: string;
   threadId?: string;
   tags?: string[];
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
   replyPermission?: ReplyPermission;
   reviewReplies?: boolean;
@@ -136,7 +136,7 @@ export interface CreateThreadRequest {
     content: PostContent;
     visibility?: PostVisibility;
     tags?: string[];
-    mentions?: string[];
+    allos?: string[];
     hashtags?: string[];
     replyPermission?: ReplyPermission;
     reviewReplies?: boolean;
@@ -147,7 +147,7 @@ export interface UpdatePostRequest {
   content?: PostContent;
   visibility?: PostVisibility;
   tags?: string[];
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
 }
 
@@ -162,7 +162,7 @@ export interface PostFilters {
   type?: PostType;
   visibility?: PostVisibility;
   hashtags?: string[];
-  mentions?: string[];
+  allos?: string[];
   dateFrom?: string;
   dateTo?: string;
   isEdited?: boolean;

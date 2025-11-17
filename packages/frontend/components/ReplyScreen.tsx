@@ -16,7 +16,7 @@ import { useOxy } from '@oxyhq/services';
 import { usePostsStore } from '../stores/postsStore';
 import { colors } from '../styles/colors';
 import PostItem from './Feed/PostItem';
-import { UIPost, Reply, FeedRepost as Repost, FeedType } from '@mention/shared-types';
+import { UIPost, Reply, FeedRepost as Repost, FeedType } from '@allo/shared-types';
 import Avatar from './Avatar';
 import UserName from './UserName';
 
@@ -93,7 +93,7 @@ const ReplyScreen: React.FC = () => {
                 content: {
                     text: content.trim(),
                 } as any, // Cast to any to match expected PostContent type
-                mentions: [],
+                allos: [],
                 hashtags: []
             };
 

@@ -110,11 +110,11 @@ export async function formatPushForNotification(n: any) {
   const map: Record<string, { title: string; body: string }> = {
     like: { title: 'New like', body: `${actorName} liked your post` },
     reply: { title: 'New reply', body: `${actorName} replied to your post` },
-    mention: { title: 'You were mentioned', body: `${actorName} mentioned you` },
+    allo: { title: 'You were alloed', body: `${actorName} alloed you` },
     repost: { title: 'Post reposted', body: `${actorName} reposted your post` },
     quote: { title: 'Post quoted', body: `${actorName} quoted your post` },
     follow: { title: 'New follower', body: `${actorName} followed you` },
-    welcome: { title: 'Welcome to Mention', body: 'Thanks for joining!' },
+    welcome: { title: 'Welcome to allo', body: 'Thanks for joining!' },
     post: { title: 'New post', body: `${actorName} posted a new update` },
   };
   let f = map[n.type] || { title: 'Notification', body: 'You have a new notification' };

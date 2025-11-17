@@ -1,5 +1,5 @@
-import { MentionData } from '@/components/MentionTextInput';
-import { GeoJSONPoint } from '@mention/shared-types';
+import { alloData } from '@/components/alloTextInput';
+import { GeoJSONPoint } from '@allo/shared-types';
 import { buildAttachmentsPayload } from './attachmentsUtils';
 import {
   ComposerMediaItem,
@@ -10,7 +10,7 @@ import {
 
 interface BuildMainPostParams {
   postContent: string;
-  mentions: MentionData[];
+  allos: alloData[];
   mediaIds: ComposerMediaItem[];
   pollTitle: string;
   pollOptions: string[];
@@ -27,7 +27,7 @@ interface BuildMainPostParams {
 interface ThreadItem {
   id: string;
   text: string;
-  mentions?: MentionData[];
+  allos?: alloData[];
   mediaIds: ComposerMediaItem[];
   pollTitle?: string;
   pollOptions: string[];
@@ -41,7 +41,7 @@ interface ThreadItem {
 export const buildMainPost = (params: BuildMainPostParams) => {
   const {
     postContent,
-    mentions,
+    allos,
     mediaIds,
     pollTitle,
     pollOptions,
@@ -94,7 +94,7 @@ export const buildMainPost = (params: BuildMainPostParams) => {
       ...(articlePayload && { article: articlePayload }),
       ...(attachmentsPayload.length > 0 && { attachments: attachmentsPayload })
     },
-    mentions: mentions.map(m => m.userId),
+    allos: allos.map(m => m.userId),
     hashtags: [],
     replyPermission: replyPermission,
     reviewReplies: reviewReplies,
@@ -149,7 +149,7 @@ export const buildThreadPost = (
       }),
       ...(threadAttachmentsPayload.length > 0 && { attachments: threadAttachmentsPayload })
     },
-    mentions: item.mentions?.map(m => m.userId) || [],
+    allos: item.allos?.map(m => m.userId) || [],
     hashtags: [],
     replyPermission: replyPermission,
     reviewReplies: reviewReplies

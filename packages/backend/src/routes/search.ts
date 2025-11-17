@@ -25,7 +25,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       .limit(10)
       .lean();
 
-      // Transform posts with user profiles and mention transformation
+      // Transform posts with user profiles and allo transformation
       const transformedPosts = await (feedController as any).transformPostsWithProfiles(posts, currentUserId);
       results.posts = transformedPosts;
     }

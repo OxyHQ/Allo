@@ -1,5 +1,5 @@
 {
-  "name": "mention-monorepo",
+  "name": "allo-monorepo",
   "buildCommand": "VERCEL_TARGET=frontend node scripts/build-for-vercel.js",
   "outputDirectory": "packages/frontend/dist",
   "installCommand": "npm install",

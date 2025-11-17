@@ -17,7 +17,7 @@ interface PrivacySettings {
     profileVisibility?: 'public' | 'private' | 'followers_only';
     showContactInfo?: boolean;
     allowTags?: boolean;
-    allowMentions?: boolean;
+    allowallos?: boolean;
     showOnlineStatus?: boolean;
     hideLikeCounts?: boolean;
     hideShareCounts?: boolean;
@@ -66,8 +66,8 @@ export default function PrivacySettingsScreen() {
         router.push('/settings/privacy/profile-visibility');
     };
 
-    const handleTagsMentionsPress = () => {
-        router.push('/settings/privacy/tags-mentions');
+    const handleTagsallosPress = () => {
+        router.push('/settings/privacy/tags-allos');
     };
 
     const handleOnlineStatusPress = () => {
@@ -140,7 +140,7 @@ export default function PrivacySettingsScreen() {
                 disableSticky={true}
             />
 
-            <ScrollView 
+            <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
@@ -172,10 +172,10 @@ export default function PrivacySettingsScreen() {
 
                     <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-                    {/* Tags and mentions */}
+                    {/* Tags and allos */}
                     <TouchableOpacity
                         style={styles.settingItem}
-                        onPress={handleTagsMentionsPress}
+                        onPress={handleTagsallosPress}
                     >
                         <View style={styles.settingInfo}>
                             <View style={styles.settingIcon}>
@@ -183,7 +183,7 @@ export default function PrivacySettingsScreen() {
                             </View>
                             <View style={styles.settingTextContainer}>
                                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                                    {t('settings.privacy.tagsAndMentions')}
+                                    {t('settings.privacy.tagsAndallos')}
                                 </Text>
                             </View>
                         </View>

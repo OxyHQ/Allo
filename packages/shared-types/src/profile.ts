@@ -1,5 +1,5 @@
 /**
- * Profile-related types shared across Mention frontend and backend
+ * Profile-related types shared across allo frontend and backend
  */
 
 import {
@@ -35,7 +35,7 @@ export interface ProfileNotificationSettings {
   push: boolean;
   sms: boolean;
   postNotifications?: boolean;
-  mentionNotifications?: boolean;
+  alloNotifications?: boolean;
   followNotifications?: boolean;
   likeNotifications?: boolean;
   repostNotifications?: boolean;

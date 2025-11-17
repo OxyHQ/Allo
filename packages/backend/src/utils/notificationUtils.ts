@@ -5,7 +5,7 @@ import { formatPushForNotification, sendPushToUser } from './push';
 export interface CreateNotificationData {
   recipientId: string;
   actorId: string;
-  type: 'like' | 'reply' | 'mention' | 'follow' | 'repost' | 'quote' | 'welcome' | 'post';
+  type: 'like' | 'reply' | 'allo' | 'follow' | 'repost' | 'quote' | 'welcome' | 'post';
   entityId: string;
   entityType: 'post' | 'reply' | 'profile';
 }
@@ -84,46 +84,46 @@ export const createNotification = async (
 };
 
 /**
- * Creates notifications for mentions in content
- * @param mentionUserIds - Array of Oxy user IDs who were mentioned
- * @param postId - ID of the post containing the mentions
+ * Creates notifications for allos in content
+ * @param alloUserIds - Array of Oxy user IDs who were alloed
+ * @param postId - ID of the post containing the allos
  * @param actorId - ID of the user who created the post
  * @param entityType - Type of entity ('post' or 'reply')
  * @param emitEvent - Whether to emit real-time events
  */
-export const createMentionNotifications = async (
-  mentionUserIds: string[],
+export const createalloNotifications = async (
+  alloUserIds: string[],
   postId: string,
   actorId: string,
   entityType: 'post' | 'reply' = 'post',
   emitEvent: boolean = true
 ): Promise<void> => {
   try {
-    if (!mentionUserIds || mentionUserIds.length === 0) return;
+    if (!alloUserIds || alloUserIds.length === 0) return;
 
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(mentionUserIds)];
+    const uniqueUserIds = [...new Set(alloUserIds)];
 
-    // Create notification for each mentioned user
+    // Create notification for each alloed user
     for (const recipientId of uniqueUserIds) {
       try {
-        // Skip if user is mentioning themselves
+        // Skip if user is alloing themselves
         if (recipientId === actorId) continue;
 
         await createNotification({
           recipientId,
           actorId,
-          type: 'mention',
+          type: 'allo',
           entityId: postId,
           entityType,
         }, emitEvent);
       } catch (e) {
         // If notification creation fails, log and continue
-        console.error('Failed to create mention notification for user', recipientId, e);
+        console.error('Failed to create allo notification for user', recipientId, e);
       }
     }
   } catch (error) {
-    console.error('Error creating mention notifications:', error);
+    console.error('Error creating allo notifications:', error);
   }
 };
 

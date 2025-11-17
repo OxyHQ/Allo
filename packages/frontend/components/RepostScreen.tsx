@@ -17,7 +17,7 @@ import UserName from "./UserName";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useOxy } from "@oxyhq/services";
 import { usePostsStore } from "../stores/postsStore";
-import { CreateRepostRequest } from "@mention/shared-types";
+import { CreateRepostRequest } from "@allo/shared-types";
 import { useTheme } from "@/hooks/useTheme";
 
 const MAX_CHARACTERS = 280;
@@ -80,7 +80,7 @@ const RepostScreen: React.FC = () => {
             const repostRequest: CreateRepostRequest = {
                 originalPostId: postId!,
                 content: content.trim() ? { text: content.trim() } : undefined,
-                mentions: [],
+                allos: [],
                 hashtags: []
             };
 

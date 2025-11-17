@@ -1,12 +1,12 @@
-# @mention/backend
+# @allo/backend
 
-> The backend package of the Mention monorepo - A robust API service built with Express.js and TypeScript.
+> The backend package of the allo monorepo - A robust API service built with Express.js and TypeScript.
 
 ---
 
 ## Overview
 
-This is the **backend package** of the **Mention** monorepo. The Mention API is a robust backend service built with Express.js and TypeScript, providing functionality for social media interactions including posts, user management, authentication, and real-time communications.
+This is the **backend package** of the **allo** monorepo. The allo API is a robust backend service built with Express.js and TypeScript, providing functionality for social media interactions including posts, user management, authentication, and real-time communications.
 
 ## Tech Stack
 
@@ -29,8 +29,8 @@ This is the **backend package** of the **Mention** monorepo. The Mention API is 
 #### Option 1: From the Monorepo Root (Recommended)
 ```bash
 # Clone the repository
-git clone https://github.com/OxyHQ/Mention.git
-cd Mention
+git clone https://github.com/OxyHQ/allo.git
+cd allo
 
 # Install all dependencies
 npm run install:all
@@ -263,13 +263,13 @@ erDiagram
 
 ## Monorepo Integration
 
-This package is part of the Mention monorepo and integrates with:
+This package is part of the allo monorepo and integrates with:
 
-- **@mention/frontend**: React Native application
-- **@mention/shared-types**: Shared TypeScript type definitions
+- **@allo/frontend**: React Native application
+- **@allo/shared-types**: Shared TypeScript type definitions
 
 ### Shared Dependencies
-- Uses `@mention/shared-types` for type safety across packages
+- Uses `@allo/shared-types` for type safety across packages
 - Integrates with `@oxyhq/services` for common functionality
 
 ## Performance Optimization
@@ -314,10 +314,10 @@ Response: {
 ### Docker Deployment
 ```bash
 # Build the Docker image
-docker build -t mention-api .
+docker build -t allo-api .
 
 # Run the container
-docker run -p 3000:3000 -e MONGODB_URI=your_mongodb_uri mention-api
+docker run -p 3000:3000 -e MONGODB_URI=your_mongodb_uri allo-api
 ```
 
 ### Cloud Deployment (Vercel)

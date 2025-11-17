@@ -1,6 +1,6 @@
 # Notification System Implementation
 
-This document describes the comprehensive notification system implemented for the Mention app, including database schema, API endpoints, frontend components, and integration patterns.
+This document describes the comprehensive notification system implemented for the allo app, including database schema, API endpoints, frontend components, and integration patterns.
 
 ## Overview
 
@@ -18,7 +18,7 @@ The notification model stores minimal data that gets transformed on the frontend
 interface INotification {
   recipientId: string;    // User receiving the notification
   actorId: string;        // User who performed the action
-  type: string;           // like, reply, mention, follow, repost, quote, welcome
+  type: string;           // like, reply, allo, follow, repost, quote, welcome
   entityId: string;       // ID of the post/reply/profile
   entityType: string;     // post, reply, profile
   read: boolean;          // Whether notification has been read
@@ -41,7 +41,7 @@ interface INotification {
 Use the `notificationUtils.ts` for creating notifications:
 
 ```typescript
-import { createNotification, createMentionNotifications } from '../utils/notificationUtils';
+import { createNotification, createalloNotifications } from '../utils/notificationUtils';
 
 // Create a like notification
 await createNotification({
@@ -52,8 +52,8 @@ await createNotification({
   entityType: 'post',
 });
 
-// Create mention notifications from post content
-await createMentionNotifications(
+// Create allo notifications from post content
+await createalloNotifications(
   'Check out this post @john and @jane!',
   'post789',
   'user456'
@@ -167,7 +167,7 @@ The system supports multiple languages with comprehensive translations:
 {
   "notification.like": "{{actorName}} liked your post",
   "notification.reply": "{{actorName}} replied to your post",
-  "notification.mention": "{{actorName}} mentioned you",
+  "notification.allo": "{{actorName}} alloed you",
   "notification.follow": "{{actorName}} started following you",
   "notification.repost": "{{actorName}} reposted your post",
   "notification.quote": "{{actorName}} quoted your post",
@@ -210,12 +210,12 @@ import PostActionsWithNotifications from '../components/Post/PostActionsWithNoti
 
 ### Integrating with Reply Creation
 
-When creating a reply, automatically notify mentions:
+When creating a reply, automatically notify allos:
 
 ```tsx
 import { useNotificationActions } from '../hooks/useNotificationActions';
 
-const { notifyReply, notifyMentions } = useNotificationActions();
+const { notifyReply, notifyallos } = useNotificationActions();
 
 const handleCreateReply = async (content: string, postId: string, postAuthorId: string) => {
   // Create the reply
@@ -224,8 +224,8 @@ const handleCreateReply = async (content: string, postId: string, postAuthorId: 
   // Notify the original post author
   await notifyReply(postId, postAuthorId, reply.id);
 
-  // Notify mentioned users
-  await notifyMentions(content, reply.id);
+  // Notify alloed users
+  await notifyallos(content, reply.id);
 };
 ```
 

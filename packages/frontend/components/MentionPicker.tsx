@@ -13,7 +13,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useOxy } from "@oxyhq/services";
 import Avatar from "./Avatar";
 
-export interface MentionUser {
+export interface alloUser {
     id: string;
     username: string;
     name: string;
@@ -21,14 +21,14 @@ export interface MentionUser {
     verified?: boolean;
 }
 
-interface MentionPickerProps {
+interface alloPickerProps {
     query: string;
-    onSelect: (user: MentionUser) => void;
+    onSelect: (user: alloUser) => void;
     onClose: () => void;
     maxHeight?: number;
 }
 
-const MentionPicker: React.FC<MentionPickerProps> = ({
+const alloPicker: React.FC<alloPickerProps> = ({
     query,
     onSelect,
     onClose,
@@ -36,7 +36,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
 }) => {
     const theme = useTheme();
     const { oxyServices } = useOxy();
-    const [users, setUsers] = useState<MentionUser[]>([]);
+    const [users, setUsers] = useState<alloUser[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -51,7 +51,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
                 // Search for users via Oxy services
                 const searchResults = await oxyServices.searchProfiles(query, { limit: 10 });
 
-                const mappedUsers: MentionUser[] = (searchResults || []).map((profile: any) => {
+                const mappedUsers: alloUser[] = (searchResults || []).map((profile: any) => {
                     // Handle name object or string
                     let displayName = profile.username || profile.handle;
                     if (typeof profile.name === 'string') {
@@ -75,7 +75,7 @@ const MentionPicker: React.FC<MentionPickerProps> = ({
 
                 setUsers(mappedUsers);
             } catch (error) {
-                console.error("Error searching users for mentions:", error);
+                console.error("Error searching users for allos:", error);
                 setUsers([]);
             } finally {
                 setLoading(false);
@@ -211,4 +211,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default MentionPicker;
+export default alloPicker;

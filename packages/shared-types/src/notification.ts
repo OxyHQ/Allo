@@ -1,5 +1,5 @@
 /**
- * Notification-related types for Mention social network
+ * Notification-related types for allo social network
  */
 
 import { Timestamps } from './common';
@@ -10,7 +10,7 @@ export enum NotificationType {
   COMMENT = 'comment',
   REPLY = 'reply',
   FOLLOW = 'follow',
-  MENTION = 'mention',
+  allo = 'allo',
   HASHTAG = 'hashtag',
   VERIFICATION = 'verification',
   SYSTEM = 'system',
@@ -100,8 +100,8 @@ export interface FollowNotification extends Notification {
   };
 }
 
-export interface MentionNotification extends Notification {
-  type: NotificationType.MENTION;
+export interface alloNotification extends Notification {
+  type: NotificationType.allo;
   data: NotificationData & {
     actorOxyUserId: string;
     targetId: string;

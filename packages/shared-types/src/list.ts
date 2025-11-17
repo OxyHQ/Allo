@@ -1,5 +1,5 @@
 /**
- * List-related types for Mention social network
+ * List-related types for allo social network
  */
 
 import { Timestamps } from './common';

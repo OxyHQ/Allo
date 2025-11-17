@@ -105,7 +105,7 @@ router.put('/settings', async (req: AuthRequest, res: Response) => {
         'profileVisibility',
         'showContactInfo',
         'allowTags',
-        'allowMentions',
+        'allowallos',
         'showOnlineStatus',
         'hideLikeCounts',
         'hideShareCounts',

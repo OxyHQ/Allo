@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { MentionData } from "@/components/MentionTextInput";
+import { alloData } from "@/components/alloTextInput";
 import { ComposerMediaItem } from "@/utils/composeUtils";
 
 export interface ThreadItem {
@@ -10,7 +10,7 @@ export interface ThreadItem {
   pollTitle: string;
   showPollCreator: boolean;
   location: { latitude: number; longitude: number; address?: string } | null;
-  mentions: MentionData[];
+  allos: alloData[];
 }
 
 export const useThreadManager = () => {
@@ -25,7 +25,7 @@ export const useThreadManager = () => {
       pollTitle: "",
       showPollCreator: false,
       location: null,
-      mentions: [],
+      allos: [],
     };
     setThreadItems((prev) => [...prev, newThread]);
   }, []);
@@ -40,10 +40,10 @@ export const useThreadManager = () => {
     );
   }, []);
 
-  const updateThreadMentions = useCallback(
-    (threadId: string, mentions: MentionData[]) => {
+  const updateThreadallos = useCallback(
+    (threadId: string, allos: alloData[]) => {
       setThreadItems((prev) =>
-        prev.map((item) => (item.id === threadId ? { ...item, mentions } : item))
+        prev.map((item) => (item.id === threadId ? { ...item, allos } : item))
       );
     },
     []
@@ -229,7 +229,7 @@ export const useThreadManager = () => {
     addThread,
     removeThread,
     updateThreadText,
-    updateThreadMentions,
+    updateThreadallos,
     addThreadMedia,
     addThreadMediaMultiple,
     removeThreadMedia,

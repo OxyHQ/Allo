@@ -10,7 +10,7 @@ interface LinkifiedTextProps {
   suffix?: React.ReactNode;
 }
 
-// Renders text with clickable @mentions, #hashtags, $cashtags, and URLs
+// Renders text with clickable @allos, #hashtags, $cashtags, and URLs
 export const LinkifiedText: React.FC<LinkifiedTextProps> = ({ text, style, linkStyle, suffix }) => {
   const router = useRouter();
   const theme = useTheme();
@@ -19,7 +19,7 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({ text, style, linkS
 
     const elements: React.ReactNode[] = [];
 
-    // 1) Mentions in format [@DisplayName](username) - from backend
+    // 1) allos in format [@DisplayName](username) - from backend
     // 2) URLs: http(s)://... or www....
     // 3) Entities with preceding boundary capture: hashtags, cashtags
     const pattern = /(\[@([^\]]+)\]\(([^)]+)\))|(https?:\/\/[^\s]+|www\.[^\s]+)|(^|[^A-Za-z0-9_])(#[A-Za-z][A-Za-z0-9_]*|\$[A-Z]{1,6}(?:\.[A-Z]{1,2})?)/g;
@@ -45,15 +45,15 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({ text, style, linkS
 
     while ((match = pattern.exec(text)) !== null) {
       const full = match[0];
-      const mentionFull = match[1];      // [@DisplayName](username)
-      const mentionDisplay = match[2];   // DisplayName
-      const mentionUsername = match[3];  // username
+      const alloFull = match[1];      // [@DisplayName](username)
+      const alloDisplay = match[2];   // DisplayName
+      const alloUsername = match[3];  // username
       const urlCandidate = match[4];
       const boundary = match[5] ?? '';
       const entity = match[6];
 
-      if (mentionFull) {
-        // Handle mention: display "DisplayName" (without @) but make it clickable
+      if (alloFull) {
+        // Handle allo: display "DisplayName" (without @) but make it clickable
         const start = match.index;
         pushText(text.slice(lastIndex, start));
 
@@ -61,9 +61,9 @@ export const LinkifiedText: React.FC<LinkifiedTextProps> = ({ text, style, linkS
           <Text
             key={`m-${key++}`}
             style={[{ color: theme.colors.primary }, linkStyle]}
-            onPress={() => router.push(`/@${mentionUsername}`)}
+            onPress={() => router.push(`/@${alloUsername}`)}
           >
-            {mentionDisplay}
+            {alloDisplay}
           </Text>
         );
         lastIndex = start + full.length;

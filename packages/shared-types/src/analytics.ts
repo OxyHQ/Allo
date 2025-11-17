@@ -1,5 +1,5 @@
 /**
- * Analytics-related types for Mention social network
+ * Analytics-related types for allo social network
  */
 
 import { Timestamps } from './common';

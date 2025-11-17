@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { authenticatedClient } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const PRIVACY_SETTINGS_CACHE_KEY = '@mention_privacy_settings';
+const PRIVACY_SETTINGS_CACHE_KEY = '@allo_privacy_settings';
 
 export interface PrivacySettings {
     profileVisibility?: 'public' | 'private' | 'followers_only';
     showContactInfo?: boolean;
     allowTags?: boolean;
-    allowMentions?: boolean;
+    allowallos?: boolean;
     showOnlineStatus?: boolean;
     hideLikeCounts?: boolean;
     hideShareCounts?: boolean;

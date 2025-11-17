@@ -356,9 +356,9 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
-                {/* About Mention */}
+                {/* About allo */}
                 <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('settings.sections.aboutMention')}</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('settings.sections.aboutallo')}</Text>
 
                     <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                         {/* App Title and Version */}
@@ -368,9 +368,9 @@ export default function SettingsScreen() {
                                     <LogoIcon size={20} color={theme.colors.primary} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.appName')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.appName')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
-                                        {t('settings.aboutMention.version', {
+                                        {t('settings.aboutallo.version', {
                                             version: Constants.expoConfig?.version || '1.0.0',
                                         })}
                                     </Text>
@@ -387,11 +387,11 @@ export default function SettingsScreen() {
                                     <IconComponent name="hammer" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.build')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.build')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
                                         {typeof Constants.expoConfig?.runtimeVersion === 'string'
                                             ? Constants.expoConfig.runtimeVersion
-                                            : t('settings.aboutMention.buildVersion')}
+                                            : t('settings.aboutallo.buildVersion')}
                                     </Text>
                                 </View>
                             </View>
@@ -410,7 +410,7 @@ export default function SettingsScreen() {
                                     />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.platform')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.platform')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
                                         {Constants.platform?.ios
                                             ? 'iOS'
@@ -431,7 +431,7 @@ export default function SettingsScreen() {
                                     <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.oxySDK')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.oxySDK')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>{oxySdkVersion}</Text>
                                 </View>
                             </View>
@@ -446,7 +446,7 @@ export default function SettingsScreen() {
                                     <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.expoSDK')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.expoSDK')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>{expoSdkVersion}</Text>
                                 </View>
                             </View>
@@ -461,7 +461,7 @@ export default function SettingsScreen() {
                                     <IconComponent name="globe" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
-                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutMention.apiUrl')}</Text>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>{t('settings.aboutallo.apiUrl')}</Text>
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>{apiUrl}</Text>
                                 </View>
                             </View>

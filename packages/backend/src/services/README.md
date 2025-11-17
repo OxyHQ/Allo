@@ -1,6 +1,6 @@
 # Feed Algorithm Services
 
-This directory contains the advanced feed ranking and personalization services for the Mention social platform. The system is designed similar to how Twitter/X and Facebook rank content in user feeds.
+This directory contains the advanced feed ranking and personalization services for the allo social platform. The system is designed similar to how Twitter/X and Facebook rank content in user feeds.
 
 ## Overview
 

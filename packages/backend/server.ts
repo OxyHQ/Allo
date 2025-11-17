@@ -7,28 +7,12 @@ import { Server as SocketIOServer, Socket, Namespace } from "socket.io";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 
+
 // Models
-import { Post } from "./src/models/Post";
-import Notification from "./src/models/Notification";
 
 // Routers
-import postsRouter from "./src/routes/posts";
-import notificationsRouter from "./src/routes/notifications";
-import listsRoutes from "./src/routes/lists";
-import hashtagsRoutes from "./src/routes/hashtags";
 import searchRoutes from "./src/routes/search";
-import analyticsRoutes from "./src/routes/analytics.routes";
-import feedRoutes from './src/routes/feed.routes';
-import pollsRoutes from './src/routes/polls';
-import customFeedsRoutes from './src/routes/customFeeds.routes';
-import statisticsRoutes from './src/routes/statistics.routes';
-import { OxyServices } from '@oxyhq/services/core';
-import testRoutes from "./src/routes/test";
 import profileSettingsRoutes from './src/routes/profileSettings';
-import profileDesignRoutes from './src/routes/profileDesign';
-import subscriptionsRoutes from './src/routes/subscriptions';
-import gifsRoutes from './src/routes/gifs';
-import articlesRoutes from './src/routes/articles';
 
 // Middleware
 import { rateLimiter, bruteForceProtection } from "./src/middleware/security";
@@ -80,7 +64,7 @@ app.use(async (req, res, next) => {
 
 // CORS and security headers
 app.use((req, res, next) => {
-  const allowedOrigins = [process.env.FRONTEND_URL || "https://mention.earth", "http://localhost:8081", "http://localhost:8082", "http://192.168.86.44:8081"];
+  const allowedOrigins = [process.env.FRONTEND_URL || "https://allo.earth", "http://localhost:8081", "http://localhost:8082", "http://192.168.86.44:8081"];
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -132,7 +116,7 @@ const io = new SocketIOServer(server, {
   maxHttpBufferSize: SOCKET_CONFIG.MAX_BUFFER_SIZE,
   connectTimeout: SOCKET_CONFIG.CONNECT_TIMEOUT,
   cors: {
-    origin: [process.env.FRONTEND_URL || "https://mention.earth", "http://localhost:8081", "http://localhost:8082"],
+    origin: [process.env.FRONTEND_URL || "https://allo.earth", "http://localhost:8081", "http://localhost:8082"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-Requested-With", "Accept", "Accept-Version", "Content-Length", "Content-MD5", "Date", "X-Api-Version"]

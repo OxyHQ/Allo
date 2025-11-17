@@ -1,7 +1,7 @@
 {
-    "name": "@mention/shared-types",
+    "name": "@allo/shared-types",
     "version": "1.0.0",
-    "description": "Shared TypeScript types for Mention frontend and backend",
+    "description": "Shared TypeScript types for allo frontend and backend",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
@@ -16,9 +16,9 @@
         "typescript",
         "types",
         "shared",
-        "mention"
+        "allo"
     ],
-    "author": "Mention Team",
+    "author": "allo Team",
     "license": "UNLICENSED",
     "devDependencies": {
         "typescript": "^5.0.0",

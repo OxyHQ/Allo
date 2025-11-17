@@ -35,29 +35,29 @@ export default function ChatLayout() {
   const theme = useTheme();
   const pathname = usePathname();
   const segments = useSegments();
-  
+
   // Check if we're on a large screen (tablet/desktop)
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  
+
   // Determine current route types
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
   const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
-  
+
   const lastSegment = segments[segments.length - 1];
   // Check if we're on the index route (conversations list)
-  const isIndexRoute = pathname === '/(chat)' || 
-                       pathname === '/(chat)/' || 
-                       pathname === '/chat' ||
-                       pathname === '/chat/' ||
-                       (lastSegment === 'index' && !pathname.includes('/settings'));
-  
+  const isIndexRoute = pathname === '/(chat)' ||
+    pathname === '/(chat)/' ||
+    pathname === '/chat' ||
+    pathname === '/chat/' ||
+    (lastSegment === 'index' && !pathname.includes('/settings'));
+
   // Check if we're on a conversation route - check /c/:id format
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
-  const isConversationRoute = conversationIdMatch && 
-                               !pathname.includes('/settings') && 
-                               !isIndexRoute;
-  
+  const isConversationRoute = conversationIdMatch &&
+    !pathname.includes('/settings') &&
+    !isIndexRoute;
+
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
@@ -104,7 +104,7 @@ export default function ChatLayout() {
   if (isLargeScreen) {
     // Dynamically import settings only when needed to avoid circular imports
     const ChatSettings = isSettingsRoute ? require('./settings/index').default : null;
-    
+
     return (
       <ThemedView style={styles.container}>
         {/* Left pane - show conversations list or settings index */}
@@ -115,7 +115,7 @@ export default function ChatLayout() {
             <ConversationsList />
           )}
         </View>
-        
+
         {/* Right pane - show conversation detail, nested settings, or empty state */}
         <View style={styles.rightPane}>
           {isNestedSettingsRoute ? (
@@ -127,49 +127,49 @@ export default function ChatLayout() {
               }}
             >
               {/* First level nested routes */}
-              <Stack.Screen 
-                name="settings/appearance" 
+              <Stack.Screen
+                name="settings/appearance"
                 options={{ title: 'Appearance' }}
               />
-              <Stack.Screen 
-                name="settings/language" 
+              <Stack.Screen
+                name="settings/language"
                 options={{ title: 'Language' }}
               />
-              <Stack.Screen 
-                name="settings/privacy" 
+              <Stack.Screen
+                name="settings/privacy"
                 options={{ title: 'Privacy' }}
               />
-              <Stack.Screen 
-                name="settings/profile-customization" 
+              <Stack.Screen
+                name="settings/profile-customization"
                 options={{ title: 'Profile Customization' }}
               />
               {/* Second level nested routes under privacy */}
-              <Stack.Screen 
-                name="settings/privacy/profile-visibility" 
+              <Stack.Screen
+                name="settings/privacy/profile-visibility"
                 options={{ title: 'Profile Visibility' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/tags-mentions" 
-                options={{ title: 'Tags & Mentions' }}
+              <Stack.Screen
+                name="settings/privacy/tags-allos"
+                options={{ title: 'Tags & allos' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/online-status" 
+              <Stack.Screen
+                name="settings/privacy/online-status"
                 options={{ title: 'Online Status' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/restricted" 
+              <Stack.Screen
+                name="settings/privacy/restricted"
                 options={{ title: 'Restricted' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/blocked" 
+              <Stack.Screen
+                name="settings/privacy/blocked"
                 options={{ title: 'Blocked' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/hidden-words" 
+              <Stack.Screen
+                name="settings/privacy/hidden-words"
                 options={{ title: 'Hidden Words' }}
               />
-              <Stack.Screen 
-                name="settings/privacy/hide-counts" 
+              <Stack.Screen
+                name="settings/privacy/hide-counts"
                 options={{ title: 'Hide Counts' }}
               />
             </Stack>
@@ -200,28 +200,28 @@ export default function ChatLayout() {
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        <Stack.Screen 
-          name="index" 
+        <Stack.Screen
+          name="index"
           options={{ title: 'Conversations' }}
         />
-        <Stack.Screen 
-          name="settings/index" 
+        <Stack.Screen
+          name="settings/index"
           options={{ title: 'Settings' }}
         />
-        <Stack.Screen 
-          name="settings/appearance" 
+        <Stack.Screen
+          name="settings/appearance"
           options={{ title: 'Appearance' }}
         />
-        <Stack.Screen 
-          name="settings/language" 
+        <Stack.Screen
+          name="settings/language"
           options={{ title: 'Language' }}
         />
-        <Stack.Screen 
-          name="settings/privacy" 
+        <Stack.Screen
+          name="settings/privacy"
           options={{ title: 'Privacy' }}
         />
-        <Stack.Screen 
-          name="settings/profile-customization" 
+        <Stack.Screen
+          name="settings/profile-customization"
           options={{ title: 'Profile Customization' }}
         />
       </Stack>

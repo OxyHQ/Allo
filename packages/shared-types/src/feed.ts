@@ -1,5 +1,5 @@
 /**
- * Feed types for Mention social network
+ * Feed types for allo social network
  * Shared between frontend and backend
  */
 
@@ -113,7 +113,7 @@ export interface CreateReplyRequest {
   postId: string;
   content: PostContent;
   visibility?: PostVisibility;
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
 }
 
@@ -121,7 +121,7 @@ export interface CreateRepostRequest {
   originalPostId: string;
   content?: PostContent;
   visibility?: PostVisibility;
-  mentions?: string[];
+  allos?: string[];
   hashtags?: string[];
 }
 

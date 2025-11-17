@@ -146,7 +146,7 @@ This package is part of the Allo monorepo and integrates with:
 - **@allo/shared-types**: Shared TypeScript type definitions
 
 ### Shared Dependencies
-- Uses `@mention/shared-types` for type safety across packages
+- Uses `@allo/shared-types` for type safety across packages
 - Integrates with `@oxyhq/services` for common functionality
 
 ## Push Notifications (Expo + FCM)

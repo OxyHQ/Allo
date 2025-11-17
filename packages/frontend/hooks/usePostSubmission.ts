@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import { MentionData } from '@/components/MentionTextInput';
-import { GeoJSONPoint } from '@mention/shared-types';
+import { alloData } from '@/components/alloTextInput';
+import { GeoJSONPoint } from '@allo/shared-types';
 import { buildAttachmentsPayload } from '@/utils/attachmentsUtils';
 import {
   ComposerMediaItem,
@@ -12,7 +12,7 @@ import {
 interface ThreadItem {
   id: string;
   text: string;
-  mentions?: MentionData[];
+  allos?: alloData[];
   mediaIds: ComposerMediaItem[];
   pollTitle?: string;
   pollOptions: string[];
@@ -26,7 +26,7 @@ interface ThreadItem {
 interface PostSubmissionProps {
   user: any;
   postContent: string;
-  mentions: MentionData[];
+  allos: alloData[];
   mediaIds: ComposerMediaItem[];
   pollTitle: string;
   pollOptions: string[];
@@ -54,7 +54,7 @@ interface PostSubmissionProps {
 export const usePostSubmission = ({
   user,
   postContent,
-  mentions,
+  allos,
   mediaIds,
   pollTitle,
   pollOptions,
@@ -142,7 +142,7 @@ export const usePostSubmission = ({
         ...(articlePayload && { article: articlePayload }),
         ...(attachmentsPayload.length > 0 && { attachments: attachmentsPayload })
       },
-      mentions: mentions.map(m => m.userId),
+      allos: allos.map(m => m.userId),
       hashtags: [],
       replyPermission: replyPermission,
       reviewReplies: reviewReplies,
@@ -153,7 +153,7 @@ export const usePostSubmission = ({
     };
   }, [
     postContent,
-    mentions,
+    allos,
     mediaIds,
     pollTitle,
     pollOptions,
@@ -212,7 +212,7 @@ export const usePostSubmission = ({
             }),
             ...(threadAttachmentsPayload.length > 0 && { attachments: threadAttachmentsPayload })
           },
-          mentions: item.mentions?.map(m => m.userId) || [],
+          allos: item.allos?.map(m => m.userId) || [],
           hashtags: [],
           replyPermission: replyPermission,
           reviewReplies: reviewReplies
