@@ -1,9 +1,10 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS, TIME_FORMAT_OPTIONS } from '@/constants/messaging';
+import type { MediaItem } from '@/stores';
 
 export interface MessageBubbleProps {
   id: string;
@@ -14,6 +15,9 @@ export interface MessageBubbleProps {
   showSenderName: boolean;
   showTimestamp: boolean;
   isCloseToPrevious?: boolean;
+  messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
+  media?: MediaItem[]; // Array of media attachments
+  getMediaUrl?: (mediaId: string) => string; // Function to get media URL from ID
   onPress: () => void;
 }
 
@@ -44,6 +48,9 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   showSenderName,
   showTimestamp,
   isCloseToPrevious = false,
+  messageType = 'user',
+  media = [],
+  getMediaUrl,
   onPress,
 }) => {
   const theme = useTheme();
@@ -52,6 +59,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     () => timestamp.toLocaleTimeString([], TIME_FORMAT_OPTIONS),
     [timestamp]
   );
+  
+  const isAiMessage = messageType === 'ai';
   
   const styles = useMemo(() => {
     const marginTop = showSenderName
@@ -91,17 +100,60 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       bubbleSent: {
         backgroundColor: colors.messageBubbleSent,
       },
+      bubbleAi: {
+        // No bubble styling for AI messages, but same vertical padding as bubbles
+        paddingHorizontal: 0,
+        paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
+        borderRadius: 0,
+        backgroundColor: 'transparent',
+      },
       text: {
         fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
+        lineHeight: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE * 1.4, // 1.4x for better readability
         color: colors.messageTextReceived,
       },
       textSent: {
         color: colors.messageTextSent,
       },
+      textAi: {
+        // Plain text styling for AI messages
+        lineHeight: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE * 1.4, // 1.4x for better readability
+        color: theme.colors.text || colors.messageTextReceived,
+      },
+      mediaContainer: {
+        marginBottom: 4,
+        borderRadius: MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
+        overflow: 'hidden',
+        backgroundColor: 'transparent',
+      },
+      mediaContainerAi: {
+        marginBottom: 4,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: 'transparent',
+      },
+      mediaImage: {
+        width: '100%',
+        maxWidth: 250,
+        height: 200,
+        resizeMode: 'cover',
+        borderRadius: MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
+      },
+      mediaImageAi: {
+        width: '100%',
+        maxWidth: 250,
+        height: 200,
+        resizeMode: 'cover',
+        borderRadius: 12,
+      },
       timestamp: {
         fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
         color: colors.messageTimestamp,
         marginTop: 4,
+      },
+      timestampAi: {
+        // Negative margin to compensate for bubble padding and match visual spacing
+        marginTop: -MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
       },
       timestampSent: {
         alignSelf: 'flex-end',
@@ -110,7 +162,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         alignSelf: 'flex-start',
       },
     });
-  }, [theme.colors.textSecondary]);
+  }, [theme.colors.textSecondary, theme.colors.text]);
 
   return (
     <TouchableOpacity
@@ -118,7 +170,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       onPress={onPress}
       style={[
         styles.container,
-        isSent && styles.containerSent,
+        !isAiMessage && isSent && styles.containerSent,
         showSenderName && styles.containerWithSender,
       ]}
       testID={`message-${id}`}
@@ -126,16 +178,47 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       {showSenderName && senderName && (
         <ThemedText style={styles.senderName}>{senderName}</ThemedText>
       )}
-      <View style={[styles.bubble, isSent && styles.bubbleSent]}>
-        <Text style={[styles.text, isSent && styles.textSent]}>
-          {text}
-        </Text>
-      </View>
+      {/* Media - rendered outside bubble, like Messenger */}
+      {media && media.length > 0 && getMediaUrl && (
+        <View style={isAiMessage ? styles.mediaContainerAi : styles.mediaContainer}>
+          {media.map((item) => {
+            if (item.type === 'image' || item.type === 'gif') {
+              const imageUrl = getMediaUrl(item.id);
+              return (
+                <Image
+                  key={item.id}
+                  source={{ uri: imageUrl }}
+                  style={isAiMessage ? styles.mediaImageAi : styles.mediaImage}
+                />
+              );
+            }
+            // TODO: Add video support
+            return null;
+          })}
+        </View>
+      )}
+      {/* Text bubble - only shown if there's text */}
+      {text ? (
+        <View style={[
+          !isAiMessage && styles.bubble,
+          !isAiMessage && isSent && styles.bubbleSent,
+          isAiMessage && styles.bubbleAi,
+        ]}>
+          <Text style={[
+            !isAiMessage && styles.text,
+            !isAiMessage && isSent && styles.textSent,
+            isAiMessage && styles.textAi,
+          ]}>
+            {text}
+          </Text>
+        </View>
+      ) : null}
       {showTimestamp && (
         <Text
           style={[
             styles.timestamp,
-            isSent ? styles.timestampSent : styles.timestampReceived,
+            isAiMessage && styles.timestampAi,
+            !isAiMessage && isSent ? styles.timestampSent : styles.timestampReceived,
           ]}
         >
           {timeString}

@@ -50,6 +50,7 @@ import {
 } from '@/utils/conversationUtils';
 import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
 import { useMessagesStore, useChatUIStore } from '@/stores';
+import { oxyServices } from '@/lib/oxyServices';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -436,6 +437,34 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, []);
 
   /**
+   * Get media URL from media ID
+   * Uses oxyServices to get the file download URL
+   * For mock data, uses placeholder images
+   */
+  const getMediaUrl = useCallback((mediaId: string): string => {
+    try {
+      // Check if this is a mock media ID (starts with 'img-')
+      // For mock data, use placeholder images that actually work
+      if (mediaId.startsWith('img-')) {
+        // Use picsum.photos for reliable placeholder images
+        const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+        const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return `https://picsum.photos/seed/${hash}/400/300`;
+      }
+
+      // For real media IDs, use oxyServices to get the file download URL
+      // Use 'full' for full resolution images in messages
+      return oxyServices.getFileDownloadUrl(mediaId, 'full');
+    } catch (error) {
+      console.error('Error getting media URL:', error);
+      // Fallback to placeholder if service fails
+      const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+      const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      return `https://picsum.photos/seed/${hash}/400/300`;
+    }
+  }, []);
+
+  /**
    * Render a single message item
    * Memoized for performance
    */
@@ -465,10 +494,13 @@ export default function ConversationView({ conversationId: propConversationId }:
         showSenderName={showSenderNameLabel}
         showTimestamp={showTimestamp}
         isCloseToPrevious={isCloseToPrevious}
+        messageType={item.messageType}
+        media={item.media}
+        getMediaUrl={getMediaUrl}
         onPress={() => toggleTimestamp(item.id)}
       />
     );
-  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp, areMessagesClose]);
+  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp, areMessagesClose, getMediaUrl]);
 
   const canSend = inputText.trim().length > 0;
 

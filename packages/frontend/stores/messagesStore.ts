@@ -23,6 +23,11 @@ import { subscribeWithSelector } from 'zustand/middleware';
  * ```
  */
 
+export interface MediaItem {
+  id: string;
+  type: 'image' | 'video' | 'gif';
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -31,8 +36,9 @@ export interface Message {
   timestamp: Date;
   isSent: boolean;
   conversationId: string;
-  // Future: Add support for media, reactions, etc.
-  // media?: MediaAttachment[];
+  messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
+  media?: MediaItem[]; // Array of media attachments (images, videos, gifs)
+  // Future: Add support for reactions, etc.
   // reactions?: Reaction[];
 }
 

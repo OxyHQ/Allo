@@ -3,6 +3,11 @@
  * In production, this would come from your API/store
  */
 
+interface MediaItem {
+  id: string;
+  type: 'image' | 'video' | 'gif';
+}
+
 interface Message {
   id: string;
   text: string;
@@ -10,6 +15,8 @@ interface Message {
   senderName?: string;
   timestamp: Date;
   isSent: boolean;
+  messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
+  media?: MediaItem[]; // Array of media attachments
 }
 
 /**
@@ -32,6 +39,14 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         isSent: false,
       },
       {
+        id: 'm1-ai-1',
+        text: 'Based on your calendar, you have a lunch scheduled with Sarah today at 12:30 PM at The Garden Cafe.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 1.5 * 60 * 1000),
+        isSent: false,
+        messageType: 'ai',
+      },
+      {
         id: 'm1-2',
         text: 'Yes, absolutely! I was just about to text you 😊',
         senderId: 'current-user',
@@ -46,6 +61,15 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         timestamp: new Date(now - 30 * 1000),
         isSent: false,
       },
+      {
+        id: 'm1-4',
+        text: 'Check out this new restaurant I found!',
+        senderId: '1',
+        senderName: 'Sarah',
+        timestamp: new Date(now - 20 * 1000),
+        isSent: false,
+        media: [{ id: 'img-restaurant-1', type: 'image' }],
+      },
     ],
 
     // Direct conversation 2 - Michael Rodriguez
@@ -59,11 +83,27 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         isSent: false,
       },
       {
+        id: 'm2-ai-1',
+        text: 'You worked on the "Project Phoenix" collaboration with Michael last week. The project was completed successfully.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 12 * 60 * 1000),
+        isSent: false,
+        messageType: 'ai',
+      },
+      {
         id: 'm2-2',
         text: 'Happy to help! Anytime 👍',
         senderId: 'current-user',
         timestamp: new Date(now - 10 * 60 * 1000),
         isSent: true,
+      },
+      {
+        id: 'm2-3',
+        text: '',
+        senderId: 'current-user',
+        timestamp: new Date(now - 8 * 60 * 1000),
+        isSent: true,
+        media: [{ id: 'img-project-screenshot-1', type: 'image' }],
       },
     ],
 
@@ -78,11 +118,28 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         isSent: false,
       },
       {
+        id: 'm3-ai-1',
+        text: 'You have a meeting scheduled with Emily tomorrow at 2:00 PM. Your presentation "Q4 Results" is saved in your Documents folder.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 58 * 60 * 1000),
+        isSent: false,
+        messageType: 'ai',
+      },
+      {
         id: 'm3-2',
         text: 'Will do! Already have it ready 📊',
         senderId: 'current-user',
         timestamp: new Date(now - 55 * 60 * 1000),
         isSent: true,
+      },
+      {
+        id: 'm3-ai-2',
+        text: 'Here\'s a preview of your presentation slides.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 54 * 60 * 1000),
+        isSent: false,
+        messageType: 'ai',
+        media: [{ id: 'img-presentation-preview-1', type: 'image' }],
       },
     ],
 
@@ -103,6 +160,15 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         timestamp: new Date(now - 2 * 60 * 60 * 1000),
         isSent: true,
       },
+      {
+        id: 'm4-3',
+        text: 'Here\'s the updated version with your suggestions',
+        senderId: '4',
+        senderName: 'David',
+        timestamp: new Date(now - 1.5 * 60 * 60 * 1000),
+        isSent: false,
+        media: [{ id: 'img-code-snippet-1', type: 'image' }],
+      },
     ],
 
     // Group conversation 5 - Design Team
@@ -114,6 +180,14 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         senderName: 'Jessica',
         timestamp: new Date(now - 10 * 60 * 1000),
         isSent: false,
+      },
+      {
+        id: 'm5-ai-1',
+        text: 'Jessica shared 3 new mockup files in the Design Team folder. The files are ready for review.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 7 * 60 * 1000),
+        isSent: false,
+        messageType: 'ai',
       },
       {
         id: 'm5-2',
@@ -137,6 +211,24 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         senderId: 'current-user',
         timestamp: new Date(now - 2 * 60 * 1000),
         isSent: true,
+      },
+      {
+        id: 'm5-5',
+        text: 'Here are some alternative color schemes I was thinking about',
+        senderId: '6',
+        senderName: 'Jessica',
+        timestamp: new Date(now - 1 * 60 * 1000),
+        isSent: false,
+        media: [{ id: 'img-color-palette-1', type: 'image' }],
+      },
+      {
+        id: 'm5-ai-2',
+        text: 'Jessica shared a new color palette design. The file has been saved to your Design Team folder.',
+        senderId: 'ai-assistant',
+        timestamp: new Date(now - 50 * 1000),
+        isSent: false,
+        messageType: 'ai',
+        media: [{ id: 'img-color-palette-thumb-1', type: 'image' }],
       },
     ],
 
@@ -172,6 +264,15 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         senderName: 'Tom',
         timestamp: new Date(now - 55 * 60 * 1000),
         isSent: false,
+      },
+      {
+        id: 'm6-5',
+        text: 'This is the trail we\'ll be hiking!',
+        senderId: '11',
+        senderName: 'Tom',
+        timestamp: new Date(now - 50 * 60 * 1000),
+        isSent: false,
+        media: [{ id: 'img-hiking-trail-1', type: 'image' }],
       },
     ],
 
