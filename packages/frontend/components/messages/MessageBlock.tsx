@@ -1,11 +1,11 @@
-import React, { memo, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { memo, useMemo, useCallback, useRef, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { MessageBubble } from './MessageBubble';
 import { MediaCarousel } from './MediaCarousel';
 import { MessageMetadata } from './MessageMetadata';
 import { MessageAvatar } from './MessageAvatar';
-import type { MediaItem } from '@/stores';
+import type { MediaItem, Message } from '@/stores';
 import { MessageGroup } from '@/utils/messageGrouping';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { colors } from '@/styles/colors';
@@ -18,7 +18,9 @@ export interface MessageBlockProps {
   getMediaUrl: (mediaId: string) => string;
   visibleTimestampId?: string | null;
   onMessagePress: (messageId: string) => void;
+  onMessageLongPress?: (message: Message, position: { x: number; y: number; width?: number; height?: number }) => void;
   onMediaPress?: (mediaId: string, index: number) => void;
+  onMediaLongPress?: (message: Message, mediaId: string, index: number, event: any) => void;
 }
 
 /**
@@ -54,7 +56,9 @@ export const MessageBlock = memo<MessageBlockProps>(({
   getMediaUrl,
   visibleTimestampId,
   onMessagePress,
+  onMessageLongPress,
   onMediaPress,
+  onMediaLongPress,
 }) => {
   const theme = useTheme();
   
@@ -66,6 +70,31 @@ export const MessageBlock = memo<MessageBlockProps>(({
   const senderName = isIncoming && senderId ? getSenderName?.(senderId) : undefined;
   const senderAvatar = isIncoming && senderId ? getSenderAvatar?.(senderId) : undefined;
   const showSenderName = Boolean(isGroup && !isAiGroup && isIncoming && senderName);
+  
+  // Create refs map for each message bubble using useState
+  const [bubbleRefsMap] = useState(() => {
+    const map = new Map<string, React.RefObject<View>>();
+    messages.forEach(msg => {
+      map.set(msg.id, React.createRef<View>());
+    });
+    return map;
+  });
+  
+  // Update refs map when messages change
+  useEffect(() => {
+    messages.forEach(msg => {
+      if (!bubbleRefsMap.has(msg.id)) {
+        bubbleRefsMap.set(msg.id, React.createRef<View>());
+      }
+    });
+    // Clean up refs for removed messages
+    const messageIds = new Set(messages.map(m => m.id));
+    for (const [id] of bubbleRefsMap) {
+      if (!messageIds.has(id)) {
+        bubbleRefsMap.delete(id);
+      }
+    }
+  }, [messages, bubbleRefsMap]);
   
   // Check if timestamp should be shown (on last message in group)
   const showTimestamp = Boolean(
@@ -144,6 +173,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
     onMessagePress(messageId);
   }, [onMessagePress]);
 
+
   const containerStyle = useMemo(() => [
     styles.container,
     isAiGroup && styles.containerAi,
@@ -161,15 +191,11 @@ export const MessageBlock = memo<MessageBlockProps>(({
       {/* Avatar slot for incoming messages */}
       {!isAiGroup && isIncoming && (
         <View style={styles.avatarSlot}>
-          {senderAvatar ? (
-            <MessageAvatar
-              name={senderName}
-              avatarUri={senderAvatar}
-              size={40}
-            />
-          ) : (
-            <View style={styles.avatarSpacer} />
-          )}
+          <MessageAvatar
+            name={senderName}
+            avatarUri={senderAvatar}
+            size={40}
+          />
         </View>
       )}
 
@@ -187,6 +213,36 @@ export const MessageBlock = memo<MessageBlockProps>(({
             isAiMessage={isAiGroup}
             getMediaUrl={getMediaUrl}
             onMediaPress={onMediaPress}
+            onMediaLongPress={(mediaId, index, event) => {
+              // Find the message that contains this media item
+              const messageWithMedia = messages.find(msg => 
+                msg.media?.some(m => m.id === mediaId)
+              );
+              if (messageWithMedia && onMediaLongPress) {
+                // Measure the media container position properly
+                const target = event.currentTarget;
+                if (target && 'measure' in target && typeof target.measure === 'function') {
+                  // @ts-ignore - measure exists on View but TypeScript doesn't know
+                  target.measure((x, y, width, height, pageX, pageY) => {
+                    onMediaLongPress(messageWithMedia, mediaId, index, {
+                      x: pageX || event.nativeEvent.pageX,
+                      y: pageY || event.nativeEvent.pageY,
+                      width: width || 200,
+                      height: height || 150,
+                    });
+                  });
+                } else {
+                  // Fallback to event position
+                  const { pageX, pageY } = event.nativeEvent;
+                  onMediaLongPress(messageWithMedia, mediaId, index, {
+                    x: pageX,
+                    y: pageY,
+                    width: 200,
+                    height: 150,
+                  });
+                }
+              }
+            }}
           />
         )}
 
@@ -199,22 +255,46 @@ export const MessageBlock = memo<MessageBlockProps>(({
               const prevMessage = index > 0 ? messages[index - 1] : null;
               const isCloseToPrevious = prevMessage !== null;
               
+              const bubbleRef = bubbleRefsMap.get(message.id);
+              
+              const handleBubbleLongPress = useCallback((event: GestureResponderEvent) => {
+                if (onMessageLongPress && bubbleRef?.current) {
+                  bubbleRef.current.measure((x, y, width, height, pageX, pageY) => {
+                    onMessageLongPress(message, { 
+                      x: pageX, 
+                      y: pageY, 
+                      width: width || 0, 
+                      height: height || 0 
+                    });
+                  });
+                }
+              }, [message, onMessageLongPress, bubbleRef]);
+              
               return (
-                <MessageBubble
+                <TouchableOpacity
                   key={message.id}
-                  id={message.id}
-                  text={message.text}
-                  timestamp={message.timestamp}
-                  isSent={message.isSent}
-                  senderName={undefined} // Sender name shown at block level
-                  showSenderName={false}
-                  showTimestamp={false} // Timestamp shown at block level
-                  isCloseToPrevious={isCloseToPrevious}
-                  messageType={message.messageType || 'user'}
-                  media={[]} // Media is handled at block level
-                  getMediaUrl={getMediaUrl}
+                  activeOpacity={0.9}
                   onPress={() => handleMessagePress(message.id)}
-                />
+                  onLongPress={handleBubbleLongPress}
+                  delayLongPress={400}
+                >
+                  <View ref={bubbleRef}>
+                    <MessageBubble
+                      id={message.id}
+                      text={message.text}
+                      timestamp={message.timestamp}
+                      isSent={message.isSent}
+                      senderName={undefined} // Sender name shown at block level
+                      showSenderName={false}
+                      showTimestamp={false} // Timestamp shown at block level
+                      isCloseToPrevious={isCloseToPrevious}
+                      messageType={message.messageType || 'user'}
+                      media={[]} // Media is handled at block level
+                      getMediaUrl={getMediaUrl}
+                      onPress={() => handleMessagePress(message.id)}
+                    />
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>

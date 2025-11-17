@@ -43,6 +43,8 @@ interface ConversationsState {
   addConversation: (conversation: Conversation) => void;
   updateConversation: (id: string, updates: Partial<Conversation>) => void;
   removeConversation: (id: string) => void;
+  archiveConversation: (id: string) => void;
+  unarchiveConversation: (id: string) => void;
   setActiveConversation: (id: string | null) => void;
   
   // Async actions
@@ -56,6 +58,11 @@ interface ConversationsState {
   hasUnreadMessages: (id: string) => boolean;
 }
 
+const withArchiveFlag = (conversation: Conversation): Conversation => ({
+  ...conversation,
+  isArchived: conversation.isArchived ?? false,
+});
+
 const createDefaultConversations = (): Conversation[] => [
   // Direct conversations
   {
@@ -66,6 +73,7 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '2m ago',
     unreadCount: 2,
     avatar: 'https://i.pravatar.cc/150?img=1',
+    isArchived: false,
   },
   {
     id: '2',
@@ -75,6 +83,7 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '15m ago',
     unreadCount: 0,
     avatar: 'https://i.pravatar.cc/150?img=5',
+    isArchived: false,
   },
   {
     id: '3',
@@ -84,6 +93,7 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '1h ago',
     unreadCount: 0,
     avatar: 'https://i.pravatar.cc/150?img=9',
+    isArchived: false,
   },
   {
     id: '4',
@@ -93,9 +103,10 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '3h ago',
     unreadCount: 1,
     avatar: 'https://i.pravatar.cc/150?img=12',
+    isArchived: false,
   },
   // Group conversations
-  {
+  withArchiveFlag({
     id: '5',
     type: 'group',
     name: 'Team Alpha',
@@ -135,8 +146,8 @@ const createDefaultConversations = (): Conversation[] => [
         avatar: 'https://i.pravatar.cc/150?img=12',
       },
     ],
-  },
-  {
+  }),
+  withArchiveFlag({
     id: '6',
     type: 'group',
     name: 'Weekend Plans',
@@ -170,7 +181,7 @@ const createDefaultConversations = (): Conversation[] => [
         avatar: 'https://i.pravatar.cc/150?img=25',
       },
     ],
-  },
+  }),
   {
     id: '7',
     type: 'direct',
@@ -179,8 +190,9 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '2h ago',
     unreadCount: 0,
     avatar: 'https://i.pravatar.cc/150?img=3',
+    isArchived: false,
   },
-  {
+  withArchiveFlag({
     id: '8',
     type: 'group',
     name: 'Book Club',
@@ -214,7 +226,7 @@ const createDefaultConversations = (): Conversation[] => [
         avatar: 'https://i.pravatar.cc/150?img=40',
       },
     ],
-  },
+  }),
   {
     id: '9',
     type: 'direct',
@@ -223,6 +235,7 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '4h ago',
     unreadCount: 0,
     avatar: 'https://i.pravatar.cc/150?img=15',
+    isArchived: false,
   },
   {
     id: '10',
@@ -232,8 +245,9 @@ const createDefaultConversations = (): Conversation[] => [
     timestamp: '5h ago',
     unreadCount: 0,
     avatar: 'https://i.pravatar.cc/150?img=20',
+    isArchived: false,
   },
-];
+].map(withArchiveFlag);
 
 export const useConversationsStore = create<ConversationsState>()(
   subscribeWithSelector((set, get) => ({
@@ -258,12 +272,13 @@ export const useConversationsStore = create<ConversationsState>()(
 
     // Actions
     setConversations: (conversations) => {
+      const normalized = conversations.map(withArchiveFlag);
       const conversationsById: Record<string, Conversation> = {};
-      conversations.forEach(conv => {
+      normalized.forEach(conv => {
         conversationsById[conv.id] = conv;
       });
       set({
-        conversations,
+        conversations: normalized,
         conversationsById,
         lastUpdated: Date.now(),
         error: null,
@@ -271,16 +286,17 @@ export const useConversationsStore = create<ConversationsState>()(
     },
 
     addConversation: (conversation) => {
+      const normalized = withArchiveFlag(conversation);
       set((state) => {
-        const exists = state.conversationsById[conversation.id];
+        const exists = state.conversationsById[normalized.id];
         if (exists) {
           return state; // Don't add duplicates
         }
         return {
-          conversations: [conversation, ...state.conversations],
+          conversations: [normalized, ...state.conversations],
           conversationsById: {
             ...state.conversationsById,
-            [conversation.id]: conversation,
+            [normalized.id]: normalized,
           },
           lastUpdated: Date.now(),
         };
@@ -292,7 +308,7 @@ export const useConversationsStore = create<ConversationsState>()(
         const existing = state.conversationsById[id];
         if (!existing) return state;
 
-        const updated = { ...existing, ...updates };
+        const updated = withArchiveFlag({ ...existing, ...updates });
         return {
           conversations: state.conversations.map(conv =>
             conv.id === id ? updated : conv
@@ -316,6 +332,18 @@ export const useConversationsStore = create<ConversationsState>()(
           lastUpdated: Date.now(),
         };
       });
+    },
+
+    archiveConversation: (id) => {
+      const conversation = get().conversationsById[id];
+      if (!conversation) return;
+      get().updateConversation(id, { isArchived: true });
+    },
+
+    unarchiveConversation: (id) => {
+      const conversation = get().conversationsById[id];
+      if (!conversation) return;
+      get().updateConversation(id, { isArchived: false });
     },
 
     setActiveConversation: (id) => {

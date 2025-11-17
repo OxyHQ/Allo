@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import {
     StyleSheet,
     View,
@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
 } from 'react-native';
 import { Link, usePathname } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Components
@@ -17,7 +18,11 @@ import { GroupAvatar } from '@/components/GroupAvatar';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useConversationsStore } from '@/stores';
+import {
+    useConversationsStore,
+    useConversationSwipePreferencesStore,
+    SwipeActionType,
+} from '@/stores';
 
 // Utils
 import { colors } from '@/styles/colors';
@@ -50,6 +55,7 @@ export interface Conversation {
     timestamp: string;
     unreadCount: number;
     avatar?: string; // For direct: contact avatar, for group: group avatar or first participant avatar
+    isArchived?: boolean;
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
     groupName?: string; // Custom group name (optional)
@@ -71,6 +77,18 @@ export default function ConversationsList() {
     const pathname = usePathname();
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
+    const archiveConversation = useConversationsStore(state => state.archiveConversation);
+    const removeConversation = useConversationsStore(state => state.removeConversation);
+    const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
+    const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
+    const visibleConversations = useMemo(
+        () => conversations.filter(conv => !conv.isArchived),
+        [conversations]
+    );
+    const hasArchivedOnly = conversations.length > 0 && visibleConversations.length === 0;
+    const emptyStateCopy = hasArchivedOnly
+        ? 'All of your conversations are archived.\nAdjust swipe settings if you want them to stay visible.'
+        : 'No conversations yet.\nStart a new chat to get started!';
     
     // Track selected conversation from pathname
     // Matches both /c/:id format and legacy /(chat)/:id format
@@ -82,6 +100,7 @@ export default function ConversationsList() {
 
     // Mock current user ID - replace with actual user ID from your auth system
     const currentUserId = 'current-user';
+    const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
     const styles = useMemo(() => StyleSheet.create({
         container: {
@@ -171,6 +190,24 @@ export default function ConversationsList() {
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
             textAlign: 'center',
         },
+        swipeActionContainer: {
+            width: 96,
+            height: '100%',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        swipeActionArchive: {
+            backgroundColor: colors.chatTypingIndicator,
+        },
+        swipeActionDelete: {
+            backgroundColor: colors.chatUnreadBadge,
+        },
+        swipeActionText: {
+            color: '#FFFFFF',
+            fontSize: 13,
+            fontWeight: '600',
+            textTransform: 'uppercase',
+        },
         settingsButton: {
             paddingHorizontal: 16,
             paddingVertical: 10,
@@ -184,6 +221,60 @@ export default function ConversationsList() {
         },
     }), [theme]);
 
+    const closeSwipeable = useCallback((id: string) => {
+        swipeableRefs.current[id]?.close();
+    }, []);
+
+    const renderSwipeActionPreview = useCallback((action: SwipeActionType) => {
+        if (action === 'none') {
+            return null;
+        }
+
+        const isDelete = action === 'delete';
+
+        return (
+            <View
+                style={[
+                    styles.swipeActionContainer,
+                    isDelete ? styles.swipeActionDelete : styles.swipeActionArchive,
+                ]}
+            >
+                <Text style={styles.swipeActionText}>
+                    {isDelete ? 'Delete' : 'Archive'}
+                </Text>
+            </View>
+        );
+    }, [
+        styles.swipeActionArchive,
+        styles.swipeActionContainer,
+        styles.swipeActionDelete,
+        styles.swipeActionText,
+    ]);
+
+    const handleSwipeAction = useCallback((direction: 'left' | 'right', conversation: Conversation) => {
+        const action = direction === 'left' ? leftSwipeAction : rightSwipeAction;
+
+        if (action === 'none') {
+            closeSwipeable(conversation.id);
+            return;
+        }
+
+        if (action === 'archive') {
+            archiveConversation(conversation.id);
+        } else if (action === 'delete') {
+            removeConversation(conversation.id);
+        }
+
+        setTimeout(() => {
+            closeSwipeable(conversation.id);
+        }, 200);
+    }, [
+        archiveConversation,
+        removeConversation,
+        leftSwipeAction,
+        rightSwipeAction,
+        closeSwipeable,
+    ]);
 
     const renderConversationItem = ({ item }: { item: Conversation }) => {
         const isSelected = selectedId === item.id;
@@ -192,71 +283,94 @@ export default function ConversationsList() {
         const avatar = getConversationAvatar(item, currentUserId);
         const otherParticipants = getOtherParticipants(item, currentUserId);
         const participantCount = getParticipantCount(item, currentUserId);
+        const leftEnabled = leftSwipeAction !== 'none';
+        const rightEnabled = rightSwipeAction !== 'none';
+        const swipeEnabled = leftEnabled || rightEnabled;
 
         return (
-            <Link
-                href={`/c/${item.id}` as any}
-                style={[
-                    styles.conversationItem,
-                    isSelected && styles.conversationItemSelected,
-                ]}
-                asChild
+            <Swipeable
+                ref={(ref) => {
+                    swipeableRefs.current[item.id] = ref;
+                }}
+                enabled={swipeEnabled}
+                renderLeftActions={
+                    leftEnabled ? () => renderSwipeActionPreview(leftSwipeAction) : undefined
+                }
+                renderRightActions={
+                    rightEnabled ? () => renderSwipeActionPreview(rightSwipeAction) : undefined
+                }
+                overshootLeft={false}
+                overshootRight={false}
+                onSwipeableOpen={(direction) => {
+                    if (direction === 'left' || direction === 'right') {
+                        handleSwipeAction(direction, item);
+                    }
+                }}
             >
-                <TouchableOpacity activeOpacity={0.7}>
-                    <View style={styles.avatarContainer}>
-                        {isGroup && otherParticipants.length > 0 ? (
-                            <GroupAvatar
-                                participants={otherParticipants}
-                                size={44}
-                                maxAvatars={2}
-                            />
-                        ) : (
-                            <Avatar
-                                size={44}
-                                source={avatar ? { uri: avatar } : undefined}
-                                label={displayName.charAt(0).toUpperCase()}
-                            />
-                        )}
-                    </View>
-                    <View style={styles.conversationContent}>
-                        <View style={styles.conversationHeader}>
-                            <View style={{ flex: 1, marginRight: 8 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <ThemedText style={styles.conversationName} numberOfLines={1}>
-                                        {displayName}
-                                    </ThemedText>
-                                    {isGroup && participantCount > 0 && (
-                                        <ThemedText
-                                            style={[
-                                                styles.conversationTimestamp,
-                                                { marginLeft: 4 },
-                                            ]}
-                                            numberOfLines={1}
-                                        >
-                                            ({participantCount})
+                <Link
+                    href={`/c/${item.id}` as any}
+                    style={[
+                        styles.conversationItem,
+                        isSelected && styles.conversationItemSelected,
+                    ]}
+                    asChild
+                >
+                    <TouchableOpacity activeOpacity={0.7}>
+                        <View style={styles.avatarContainer}>
+                            {isGroup && otherParticipants.length > 0 ? (
+                                <GroupAvatar
+                                    participants={otherParticipants}
+                                    size={44}
+                                    maxAvatars={2}
+                                />
+                            ) : (
+                                <Avatar
+                                    size={44}
+                                    source={avatar ? { uri: avatar } : undefined}
+                                    label={displayName.charAt(0).toUpperCase()}
+                                />
+                            )}
+                        </View>
+                        <View style={styles.conversationContent}>
+                            <View style={styles.conversationHeader}>
+                                <View style={{ flex: 1, marginRight: 8 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <ThemedText style={styles.conversationName} numberOfLines={1}>
+                                            {displayName}
                                         </ThemedText>
+                                        {isGroup && participantCount > 0 && (
+                                            <ThemedText
+                                                style={[
+                                                    styles.conversationTimestamp,
+                                                    { marginLeft: 4 },
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                ({participantCount})
+                                            </ThemedText>
+                                        )}
+                                    </View>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <ThemedText style={styles.conversationTimestamp} numberOfLines={1}>
+                                        {item.timestamp}
+                                    </ThemedText>
+                                    {item.unreadCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadText}>
+                                                {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                                            </Text>
+                                        </View>
                                     )}
                                 </View>
                             </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <ThemedText style={styles.conversationTimestamp} numberOfLines={1}>
-                                    {item.timestamp}
-                                </ThemedText>
-                                {item.unreadCount > 0 && (
-                                    <View style={styles.unreadBadge}>
-                                        <Text style={styles.unreadText}>
-                                            {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
+                            <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                                {item.lastMessage}
+                            </ThemedText>
                         </View>
-                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                            {item.lastMessage}
-                        </ThemedText>
-                    </View>
-                </TouchableOpacity>
-            </Link>
+                    </TouchableOpacity>
+                </Link>
+            </Swipeable>
         );
     };
 
@@ -267,10 +381,10 @@ export default function ConversationsList() {
                     <ThemedText style={styles.headerTitle}>Messages</ThemedText>
                 </View>
 
-                {conversations.length > 0 ? (
+                {visibleConversations.length > 0 ? (
                     <FlatList
                         style={styles.list}
-                        data={conversations}
+                        data={visibleConversations}
                         renderItem={renderConversationItem}
                         keyExtractor={(item) => item.id}
                         contentContainerStyle={{ flexGrow: 1 }}
@@ -278,7 +392,7 @@ export default function ConversationsList() {
                 ) : (
                     <View style={styles.emptyState}>
                         <ThemedText style={styles.emptyStateText}>
-                            No conversations yet.{'\n'}Start a new chat to get started!
+                            {emptyStateCopy}
                         </ThemedText>
                     </View>
                 )}

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useContext, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useContext, useCallback, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +11,7 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   ImageBackground,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,8 +25,18 @@ import { GroupAvatar } from '@/components/GroupAvatar';
 import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
 import { MessageBlock } from '@/components/messages/MessageBlock';
+import { MessageBubble } from '@/components/messages/MessageBubble';
 import { DaySeparator } from '@/components/messages/DaySeparator';
 import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
+import { MessageActionsMenu, MessageAction } from '@/components/messages/MessageActionsMenu';
+import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
+import { MessageReactionBar } from '@/components/messages/MessageReactionBar';
+import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
+import { MediaCarousel } from '@/components/messages/MediaCarousel';
+import { ReplyIcon } from '@/assets/icons/reply-icon';
+import { ForwardIcon } from '@/assets/icons/forward-icon';
+import { CopyIcon } from '@/assets/icons/copy-icon';
+import { TrashIcon } from '@/assets/icons/trash-icon';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -77,6 +88,9 @@ interface ConversationViewProps {
  */
 const CURRENT_USER_ID = 'current-user';
 
+// Stable empty array to prevent Zustand selector from creating new references
+const EMPTY_MESSAGES: Message[] = [];
+
 
 /**
  * ConversationView Component
@@ -109,10 +123,11 @@ export default function ConversationView({ conversationId: propConversationId }:
   );
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  // Get messages from store
+  // Get messages from store (direct access with stable empty array reference)
   const messages = useMessagesStore(state =>
-    conversationId ? state.getMessages(conversationId) : []
+    conversationId ? (state.messagesByConversation[conversationId] || EMPTY_MESSAGES) : EMPTY_MESSAGES
   );
 
   // Group messages by time and format with day separators
@@ -148,6 +163,16 @@ export default function ConversationView({ conversationId: propConversationId }:
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const lastFetchedConversationId = useRef<string | null>(null);
+
+  // Message actions state
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
+  const [reactionBarVisible, setReactionBarVisible] = useState(false);
+  const [reactionBarPosition, setReactionBarPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
+  const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
+  const [actionsMenuPosition, setActionsMenuPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
+  const [infoScreenVisible, setInfoScreenVisible] = useState(false);
 
   // Fetch messages when conversation changes
   useEffect(() => {
@@ -513,26 +538,162 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, []);
 
   /**
+   * Handle message long press (show reaction bar and actions menu)
+   */
+  const handleMessageLongPress = useCallback((message: Message, position: { x: number; y: number; width?: number; height?: number }) => {
+    setSelectedMessage(message);
+    setSelectedMediaId(null); // Clear media selection
+    setSelectedMediaIndex(null);
+    setReactionBarPosition(position);
+    setActionsMenuPosition(position); // Same position for actions menu
+    setReactionBarVisible(true);
+    setActionsMenuVisible(true); // Show both simultaneously
+  }, []);
+
+  /**
+   * Handle reaction selection
+   */
+  const handleReactionSelect = useCallback((emoji: string) => {
+    if (selectedMessage) {
+      // TODO: Implement reaction functionality
+      console.log('Add reaction:', emoji, 'to message:', selectedMessage.id);
+      // Could add reaction to message via store
+    }
+    setReactionBarVisible(false);
+    setActionsMenuVisible(false);
+    setSelectedMessage(null);
+    setSelectedMediaId(null);
+    setSelectedMediaIndex(null);
+  }, [selectedMessage]);
+
+  /**
+   * Handle reply action
+   */
+  const handleReply = useCallback((message: Message) => {
+    setActionsMenuVisible(false);
+    // TODO: Implement reply functionality
+    console.log('Reply to message:', message.id);
+    // Could scroll to input and add quote or mention
+    inputRef.current?.focus();
+  }, []);
+
+  /**
+   * Handle forward action
+   */
+  const handleForward = useCallback((message: Message) => {
+    setActionsMenuVisible(false);
+    // TODO: Implement forward functionality
+    console.log('Forward message:', message.id);
+  }, []);
+
+  /**
+   * Handle copy action
+   */
+  const handleCopy = useCallback((message: Message) => {
+    setActionsMenuVisible(false);
+    // TODO: Implement copy to clipboard
+    console.log('Copy message:', message.text);
+  }, []);
+
+  /**
+   * Handle delete action
+   */
+  const handleDelete = useCallback((message: Message) => {
+    setActionsMenuVisible(false);
+    // TODO: Implement delete functionality
+    console.log('Delete message:', message.id);
+  }, []);
+
+  /**
+   * Handle info action
+   */
+  const handleInfo = useCallback((message: Message) => {
+    setActionsMenuVisible(false);
+    setSelectedMessage(message);
+    setInfoScreenVisible(true);
+  }, []);
+
+  /**
+   * Get message actions for actions menu
+   */
+  const getMessageActions = useCallback((message: Message | null): MessageAction[] => {
+    if (!message) return [];
+
+    return [
+      {
+        label: 'Reply',
+        icon: <ReplyIcon size={20} color={theme.colors.text} />,
+        onPress: () => handleReply(message),
+      },
+      {
+        label: 'Forward',
+        icon: <ForwardIcon size={20} color={theme.colors.text} />,
+        onPress: () => handleForward(message),
+      },
+      {
+        label: 'Copy',
+        icon: <CopyIcon size={20} color={theme.colors.text} />,
+        onPress: () => handleCopy(message),
+      },
+      {
+        label: 'Info',
+        onPress: () => handleInfo(message),
+      },
+      {
+        label: 'Delete',
+        icon: <TrashIcon size={20} color="#FF3B30" />,
+        onPress: () => handleDelete(message),
+        destructive: true,
+      },
+    ];
+  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleDelete]);
+
+  /**
+   * Handle swipe to reply
+   */
+  const handleSwipeToReply = useCallback((message: Message) => {
+    handleReply(message);
+  }, [handleReply]);
+
+  /**
    * Render a message group with day separator if needed
    */
   const renderMessageGroup = useCallback(({ item }: { item: FormattedMessageGroup }) => {
     const { showDaySeparator, ...group } = item;
+    const firstMessage = group.messages[0];
+    const isAiGroup = group.isAiGroup;
 
     return (
       <>
         {showDaySeparator && (
           <DaySeparator date={item.timestamp} />
         )}
-        <MessageBlock
-          group={group}
-          isGroup={isGroup}
-          getSenderName={getSenderName}
-          getSenderAvatar={getSenderAvatar}
-          getMediaUrl={getMediaUrl}
-          visibleTimestampId={visibleTimestampId}
-          onMessagePress={toggleTimestamp}
-          onMediaPress={handleMediaPress}
-        />
+        <SwipeableMessage
+          enabled={!isAiGroup} // Disable swipe for AI messages
+          onSwipeRight={() => handleSwipeToReply(firstMessage)}
+          replyIcon={<ReplyIcon size={20} color="#FFFFFF" />}
+        >
+          <MessageBlock
+            group={group}
+            isGroup={isGroup}
+            getSenderName={getSenderName}
+            getSenderAvatar={getSenderAvatar}
+            getMediaUrl={getMediaUrl}
+            visibleTimestampId={visibleTimestampId}
+            onMessagePress={toggleTimestamp}
+            onMessageLongPress={handleMessageLongPress}
+            onMediaPress={handleMediaPress}
+            onMediaLongPress={(message, mediaId, index, position) => {
+              setSelectedMessage(message);
+              setSelectedMediaId(mediaId);
+              setSelectedMediaIndex(index);
+              setReactionBarPosition(position);
+              setActionsMenuPosition(position); // Same position for actions menu
+              setReactionBarVisible(true);
+              setActionsMenuVisible(true); // Show both simultaneously
+            }}
+          />
+        </SwipeableMessage>
       </>
     );
   }, [
@@ -542,7 +703,9 @@ export default function ConversationView({ conversationId: propConversationId }:
     getMediaUrl,
     visibleTimestampId,
     toggleTimestamp,
+    handleMessageLongPress,
     handleMediaPress,
+    handleSwipeToReply,
   ]);
 
   /**
@@ -647,6 +810,102 @@ export default function ConversationView({ conversationId: propConversationId }:
               </ThemedText>
             </View>
           )}
+
+          {/* Message Actions Menu - rendered first (will be below reactions) */}
+          <MessageActionsMenu
+            visible={actionsMenuVisible}
+            actions={getMessageActions(selectedMessage)}
+            onClose={() => {
+              setReactionBarVisible(false);
+              setActionsMenuVisible(false);
+              setSelectedMessage(null);
+              setSelectedMediaId(null);
+              setSelectedMediaIndex(null);
+            }}
+            messagePosition={actionsMenuPosition}
+            messageElement={selectedMessage ? (
+              <View>
+                {/* Show media if selected */}
+                {selectedMediaId && selectedMessage.media && (
+                  <MediaCarousel
+                    media={selectedMessage.media}
+                    isAiMessage={selectedMessage.messageType === 'ai'}
+                    getMediaUrl={getMediaUrl}
+                    onMediaPress={() => { }}
+                  />
+                )}
+                {/* Show message bubble */}
+                {selectedMessage.text && (
+                  <MessageBubble
+                    id={selectedMessage.id}
+                    text={selectedMessage.text}
+                    timestamp={selectedMessage.timestamp}
+                    isSent={selectedMessage.isSent}
+                    senderName={isGroup && !selectedMessage.isSent ? getSenderName(selectedMessage.senderId) : undefined}
+                    showSenderName={isGroup && !selectedMessage.isSent}
+                    showTimestamp={false}
+                    isCloseToPrevious={false}
+                    messageType={selectedMessage.messageType || 'user'}
+                    onPress={() => { }}
+                  />
+                )}
+              </View>
+            ) : undefined}
+          />
+
+          {/* Message Reaction Bar - rendered last (will be on top) */}
+          <MessageReactionBar
+            visible={reactionBarVisible}
+            position={reactionBarPosition}
+            messageElement={selectedMessage ? (
+              <View>
+                {/* Show media if selected */}
+                {selectedMediaId && selectedMessage.media && (
+                  <MediaCarousel
+                    media={selectedMessage.media}
+                    isAiMessage={selectedMessage.messageType === 'ai'}
+                    getMediaUrl={getMediaUrl}
+                    onMediaPress={() => { }}
+                  />
+                )}
+                {/* Show message bubble */}
+                {selectedMessage.text && (
+                  <MessageBubble
+                    id={selectedMessage.id}
+                    text={selectedMessage.text}
+                    timestamp={selectedMessage.timestamp}
+                    isSent={selectedMessage.isSent}
+                    senderName={isGroup && !selectedMessage.isSent ? getSenderName(selectedMessage.senderId) : undefined}
+                    showSenderName={isGroup && !selectedMessage.isSent}
+                    showTimestamp={false}
+                    isCloseToPrevious={false}
+                    messageType={selectedMessage.messageType || 'user'}
+                    onPress={() => { }}
+                  />
+                )}
+              </View>
+            ) : undefined}
+            onReactionSelect={handleReactionSelect}
+            onClose={() => {
+              setReactionBarVisible(false);
+              setActionsMenuVisible(false);
+              setSelectedMessage(null);
+              setSelectedMediaId(null);
+              setSelectedMediaIndex(null);
+            }}
+          />
+
+          {/* Message Info Screen */}
+          <MessageInfoScreen
+            visible={infoScreenVisible}
+            message={selectedMessage}
+            senderName={selectedMessage ? getSenderName(selectedMessage.senderId) : undefined}
+            senderAvatar={selectedMessage ? getSenderAvatar(selectedMessage.senderId) : undefined}
+            onClose={() => {
+              setInfoScreenVisible(false);
+              setSelectedMessage(null);
+            }}
+          />
 
           {/* Input Composer */}
           <KeyboardAvoidingView

@@ -22,6 +22,10 @@ import { getThemedBorder, getThemedShadow } from "@/utils/theme";
 import { useAppearanceStore } from "@/store/appearanceStore";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import i18n from 'i18next';
+import {
+    useConversationSwipePreferencesStore,
+    SwipeActionType,
+} from '@/stores';
 
 // Type assertion for Ionicons compatibility with React 19
 const IconComponent = Ionicons as any;
@@ -31,6 +35,41 @@ export default function SettingsScreen() {
     const router = useRouter();
     const { user, showBottomSheet } = useOxy();
     const theme = useTheme();
+    const leftSwipeAction = useConversationSwipePreferencesStore((state) => state.leftSwipeAction);
+    const rightSwipeAction = useConversationSwipePreferencesStore((state) => state.rightSwipeAction);
+    const setLeftSwipeAction = useConversationSwipePreferencesStore((state) => state.setLeftSwipeAction);
+    const setRightSwipeAction = useConversationSwipePreferencesStore((state) => state.setRightSwipeAction);
+    const swipeActionOptions = useMemo(
+        () => ([
+            {
+                value: 'archive',
+                label: t('settings.conversations.archiveLabel', 'Archive'),
+                description: t(
+                    'settings.conversations.archiveDescription',
+                    'Hide the chat but keep its history.',
+                ),
+            },
+            {
+                value: 'delete',
+                label: t('settings.conversations.deleteLabel', 'Delete'),
+                description: t(
+                    'settings.conversations.deleteDescription',
+                    'Remove the chat from your list.',
+                ),
+            },
+            {
+                value: 'none',
+                label: t('settings.conversations.disabledLabel', 'Disabled'),
+                description: t(
+                    'settings.conversations.disabledDescription',
+                    'Do nothing when swiping this direction.',
+                ),
+            },
+        ] satisfies { value: SwipeActionType; label: string; description: string }[]),
+        [t],
+    );
+    const leftActionDescription = swipeActionOptions.find(option => option.value === leftSwipeAction)?.description;
+    const rightActionDescription = swipeActionOptions.find(option => option.value === rightSwipeAction)?.description;
 
     // Determine Expo SDK/version information with safe fallbacks
     const expoSdkVersion =
@@ -426,6 +465,109 @@ export default function SettingsScreen() {
                                     <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>{apiUrl}</Text>
                                 </View>
                             </View>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Conversation Swipes */}
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                        {t('settings.sections.conversations', 'Conversations')}
+                    </Text>
+
+                    <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        <View style={[styles.settingItem, styles.firstSettingItem]}>
+                            <View style={styles.settingInfo}>
+                                <View style={styles.settingIcon}>
+                                    <IconComponent name="swap-horizontal" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                                        {t('settings.conversations.swipeTitle', 'Swipe actions')}
+                                    </Text>
+                                    <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                                        {t('settings.conversations.swipeSubtitle', 'Choose what happens when you swipe chats.')}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        <View style={styles.swipePickerBlock}>
+                            <Text style={[styles.swipePickerLabel, { color: theme.colors.text }]}>
+                                {t('settings.conversations.leftSwipe', 'Left swipe')}
+                            </Text>
+                            <View style={styles.swipeOptionsRow}>
+                                {swipeActionOptions.map((option, index) => {
+                                    const isSelected = leftSwipeAction === option.value;
+                                    return (
+                                        <TouchableOpacity
+                                            key={`left-${option.value}`}
+                                            style={[
+                                                styles.swipeOptionButton,
+                                                isSelected && styles.swipeOptionButtonSelected,
+                                                index < swipeActionOptions.length - 1 && styles.swipeOptionSpacing,
+                                            ]}
+                                            onPress={() => setLeftSwipeAction(option.value)}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.swipeOptionButtonText,
+                                                    isSelected && styles.swipeOptionButtonTextSelected,
+                                                ]}
+                                            >
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                            {leftActionDescription && (
+                                <Text style={[styles.swipeOptionDescription, { color: theme.colors.textSecondary }]}>
+                                    {leftActionDescription}
+                                </Text>
+                            )}
+                        </View>
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        <View style={[styles.swipePickerBlock, styles.lastSettingItem]}>
+                            <Text style={[styles.swipePickerLabel, { color: theme.colors.text }]}>
+                                {t('settings.conversations.rightSwipe', 'Right swipe')}
+                            </Text>
+                            <View style={styles.swipeOptionsRow}>
+                                {swipeActionOptions.map((option, index) => {
+                                    const isSelected = rightSwipeAction === option.value;
+                                    return (
+                                        <TouchableOpacity
+                                            key={`right-${option.value}`}
+                                            style={[
+                                                styles.swipeOptionButton,
+                                                isSelected && styles.swipeOptionButtonSelected,
+                                                index < swipeActionOptions.length - 1 && styles.swipeOptionSpacing,
+                                            ]}
+                                            onPress={() => setRightSwipeAction(option.value)}
+                                            activeOpacity={0.9}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.swipeOptionButtonText,
+                                                    isSelected && styles.swipeOptionButtonTextSelected,
+                                                ]}
+                                            >
+                                                {option.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                            {rightActionDescription && (
+                                <Text style={[styles.swipeOptionDescription, { color: theme.colors.textSecondary }]}>
+                                    {rightActionDescription}
+                                </Text>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -853,5 +995,45 @@ const styles = StyleSheet.create({
     signOutButton: {
         borderWidth: 1,
         // borderColor will be applied inline with theme (error color)
+    },
+    swipePickerBlock: {
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    swipePickerLabel: {
+        fontSize: 13,
+        fontWeight: "600",
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+    swipeOptionsRow: {
+        flexDirection: 'row',
+    },
+    swipeOptionButton: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        alignItems: 'center',
+    },
+    swipeOptionButtonSelected: {
+        backgroundColor: '#005c67',
+        borderColor: '#005c67',
+    },
+    swipeOptionButtonText: {
+        fontSize: 13,
+        fontWeight: "500",
+        color: '#4A5568',
+    },
+    swipeOptionButtonTextSelected: {
+        color: '#FFFFFF',
+    },
+    swipeOptionSpacing: {
+        marginRight: 8,
+    },
+    swipeOptionDescription: {
+        fontSize: 12,
+        marginTop: 8,
     },
 });

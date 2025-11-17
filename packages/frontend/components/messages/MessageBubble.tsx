@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
@@ -177,9 +177,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   }
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={handlePress}
+    <View
       style={containerStyle}
       testID={`message-${id}`}
       accessibilityRole="button"
@@ -196,7 +194,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
           {text}
         </Text>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }, (prevProps, nextProps) => {
   // Custom comparison function for better memoization

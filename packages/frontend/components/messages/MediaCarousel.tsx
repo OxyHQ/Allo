@@ -9,6 +9,7 @@ export interface MediaCarouselProps {
   isAiMessage?: boolean;
   getMediaUrl: (mediaId: string) => string;
   onMediaPress?: (mediaId: string, index: number) => void;
+  onMediaLongPress?: (mediaId: string, index: number, event: any) => void;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -34,6 +35,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
   isAiMessage = false,
   getMediaUrl,
   onMediaPress,
+  onMediaLongPress,
 }) => {
   const theme = useTheme();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -43,6 +45,12 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
       onMediaPress(mediaId, index);
     }
   }, [onMediaPress]);
+
+  const handleMediaLongPress = useCallback((mediaId: string, index: number, event: any) => {
+    if (onMediaLongPress) {
+      onMediaLongPress(mediaId, index, event);
+    }
+  }, [onMediaLongPress]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -114,38 +122,79 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
 
     if (isImage) {
       return (
-        <TouchableOpacity
-          key={item.id}
-          style={styles.mediaItem}
-          onPress={() => handleMediaPress(item.id, index)}
-          activeOpacity={0.9}
-        >
-          <Image
-            source={{ uri: mediaUrl }}
-            style={styles.image}
-            accessibilityLabel={`Media attachment: ${item.type}`}
-          />
-        </TouchableOpacity>
+        <View key={item.id} style={styles.mediaItem}>
+          <TouchableOpacity
+            onPress={() => handleMediaPress(item.id, index)}
+            onLongPress={(event) => {
+              // Use measure to get accurate position
+              if (event.currentTarget && 'measure' in event.currentTarget) {
+                // @ts-ignore
+                event.currentTarget.measure((x, y, width, height, pageX, pageY) => {
+                  handleMediaLongPress(item.id, index, {
+                    ...event,
+                    nativeEvent: {
+                      ...event.nativeEvent,
+                      pageX: pageX || event.nativeEvent.pageX,
+                      pageY: pageY || event.nativeEvent.pageY,
+                    },
+                    currentTarget: event.currentTarget,
+                  });
+                });
+              } else {
+                handleMediaLongPress(item.id, index, event);
+              }
+            }}
+            delayLongPress={400}
+            activeOpacity={0.9}
+          >
+            <Image
+              source={{ uri: mediaUrl }}
+              style={styles.image}
+              accessibilityLabel={`Media attachment: ${item.type}`}
+            />
+          </TouchableOpacity>
+        </View>
       );
     }
 
     if (isVideo) {
       return (
-        <TouchableOpacity
-          key={item.id}
-          style={[styles.mediaItem, styles.videoPlaceholder]}
-          onPress={() => handleMediaPress(item.id, index)}
-          activeOpacity={0.9}
-        >
-          <View style={styles.videoPlaceholder}>
-            <Image
-              source={{ uri: mediaUrl }}
-              style={styles.image}
-              accessibilityLabel="Video thumbnail"
-            />
-            {/* TODO: Add video play overlay icon */}
-          </View>
-        </TouchableOpacity>
+        <View key={item.id} style={styles.mediaItem}>
+          <TouchableOpacity
+            style={styles.videoPlaceholder}
+            onPress={() => handleMediaPress(item.id, index)}
+            onLongPress={(event) => {
+              // Use measure to get accurate position
+              if (event.currentTarget && 'measure' in event.currentTarget) {
+                // @ts-ignore
+                event.currentTarget.measure((x, y, width, height, pageX, pageY) => {
+                  handleMediaLongPress(item.id, index, {
+                    ...event,
+                    nativeEvent: {
+                      ...event.nativeEvent,
+                      pageX: pageX || event.nativeEvent.pageX,
+                      pageY: pageY || event.nativeEvent.pageY,
+                    },
+                    currentTarget: event.currentTarget,
+                  });
+                });
+              } else {
+                handleMediaLongPress(item.id, index, event);
+              }
+            }}
+            delayLongPress={400}
+            activeOpacity={0.9}
+          >
+            <View style={styles.videoPlaceholder}>
+              <Image
+                source={{ uri: mediaUrl }}
+                style={styles.image}
+                accessibilityLabel="Video thumbnail"
+              />
+              {/* TODO: Add video play overlay icon */}
+            </View>
+          </TouchableOpacity>
+        </View>
       );
     }
 
