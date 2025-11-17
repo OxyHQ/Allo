@@ -156,3 +156,42 @@ export function isGroupConversation(conversation: Conversation): boolean {
   return conversation.type === 'group';
 }
 
+/**
+ * Get contact information for a direct conversation
+ * @param conversation Conversation object
+ * @returns Contact info or null
+ */
+export function getContactInfo(conversation: Conversation | null) {
+  if (!conversation) return null;
+
+  if (conversation.type === 'direct') {
+    // For direct conversations, get the other participant
+    // In a real app, this would be from the participants array excluding current user
+    return {
+      name: conversation.name,
+      username: '@username', // Would come from participant data
+      avatar: conversation.avatar,
+      isOnline: false, // Would come from participant data
+      lastSeen: new Date(), // Would come from participant data
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Get group information for a group conversation
+ * @param conversation Conversation object
+ * @returns Group info or null
+ */
+export function getGroupInfo(conversation: Conversation | null) {
+  if (!conversation || conversation.type !== 'group') return null;
+
+  return {
+    name: conversation.groupName || conversation.name,
+    avatar: conversation.groupAvatar || conversation.avatar,
+    participants: conversation.participants || [],
+    participantCount: conversation.participantCount || (conversation.participants?.length || 0),
+  };
+}
+

@@ -17,7 +17,7 @@ import { GroupAvatar } from '@/components/GroupAvatar';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useConversations } from '@/hooks/useConversation';
+import { useConversationsStore } from '@/stores';
 
 // Utils
 import { colors } from '@/styles/colors';
@@ -69,7 +69,8 @@ export interface Conversation {
 export default function ConversationsList() {
     const theme = useTheme();
     const pathname = usePathname();
-    const conversations = useConversations();
+    // Get conversations from store
+    const conversations = useConversationsStore(state => state.conversations);
     
     // Track selected conversation from pathname
     // Matches both /c/:id format and legacy /(chat)/:id format

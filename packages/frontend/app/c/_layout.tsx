@@ -12,7 +12,8 @@ import ConversationsList from '../(chat)/index';
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { useConversation, getContactInfo, getGroupInfo } from '@/hooks/useConversation';
+import { useConversation } from '@/hooks/useConversation';
+import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 
 // Constants
 import { BREAKPOINTS } from '@/constants/responsive';

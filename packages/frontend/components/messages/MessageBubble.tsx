@@ -13,6 +13,7 @@ export interface MessageBubbleProps {
   senderName?: string;
   showSenderName: boolean;
   showTimestamp: boolean;
+  isCloseToPrevious?: boolean;
   onPress: () => void;
 }
 
@@ -42,6 +43,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   senderName,
   showSenderName,
   showTimestamp,
+  isCloseToPrevious = false,
   onPress,
 }) => {
   const theme = useTheme();
@@ -51,55 +53,64 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     [timestamp]
   );
   
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      flexDirection: 'column',
-      marginVertical: MESSAGING_CONSTANTS.MESSAGE_MARGIN_VERTICAL,
-      maxWidth: MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
-      alignSelf: 'flex-start',
-    },
-    containerSent: {
-      alignSelf: 'flex-end',
-      alignItems: 'flex-end',
-    },
-    containerWithSender: {
-      marginTop: MESSAGING_CONSTANTS.MESSAGE_SPACING_WITH_SENDER,
-    },
-    senderName: {
-      fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
-      fontWeight: '600',
-      color: theme.colors.textSecondary,
-      marginBottom: 2,
-      marginLeft: 12,
-    },
-    bubble: {
-      paddingHorizontal: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL,
-      paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
-      borderRadius: MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
-      backgroundColor: colors.messageBubbleReceived,
-    },
-    bubbleSent: {
-      backgroundColor: colors.messageBubbleSent,
-    },
-    text: {
-      fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
-      color: colors.messageTextReceived,
-    },
-    textSent: {
-      color: colors.messageTextSent,
-    },
-    timestamp: {
-      fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
-      color: colors.messageTimestamp,
-      marginTop: 4,
-    },
-    timestampSent: {
-      alignSelf: 'flex-end',
-    },
-    timestampReceived: {
-      alignSelf: 'flex-start',
-    },
-  }), [theme.colors.textSecondary]);
+  const styles = useMemo(() => {
+    const marginTop = showSenderName
+      ? MESSAGING_CONSTANTS.MESSAGE_SPACING_WITH_SENDER
+      : isCloseToPrevious
+      ? MESSAGING_CONSTANTS.MESSAGE_MARGIN_CLOSE
+      : MESSAGING_CONSTANTS.MESSAGE_MARGIN_VERTICAL;
+
+    return StyleSheet.create({
+      container: {
+        flexDirection: 'column',
+        marginTop,
+        marginBottom: MESSAGING_CONSTANTS.MESSAGE_MARGIN_VERTICAL,
+        maxWidth: MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
+        alignSelf: 'flex-start',
+      },
+      containerSent: {
+        alignSelf: 'flex-end',
+        alignItems: 'flex-end',
+      },
+      containerWithSender: {
+        marginTop: MESSAGING_CONSTANTS.MESSAGE_SPACING_WITH_SENDER,
+      },
+      senderName: {
+        fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
+        fontWeight: '600',
+        color: theme.colors.textSecondary,
+        marginBottom: 2,
+        marginLeft: 12,
+      },
+      bubble: {
+        paddingHorizontal: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL,
+        paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
+        borderRadius: MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
+        backgroundColor: colors.messageBubbleReceived,
+      },
+      bubbleSent: {
+        backgroundColor: colors.messageBubbleSent,
+      },
+      text: {
+        fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
+        color: colors.messageTextReceived,
+      },
+      textSent: {
+        color: colors.messageTextSent,
+      },
+      timestamp: {
+        fontSize: MESSAGING_CONSTANTS.TIMESTAMP_SIZE,
+        color: colors.messageTimestamp,
+        marginTop: 4,
+      },
+      timestampSent: {
+        alignSelf: 'flex-end',
+      },
+      timestampReceived: {
+        alignSelf: 'flex-start',
+      },
+    });
+  }, [theme.colors.textSecondary]);
 
   return (
     <TouchableOpacity

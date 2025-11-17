@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useContext, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useContext, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  NativeSyntheticEvent,
+  TextInputKeyPressEventData,
 } from 'react-native';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +23,7 @@ import { GroupAvatar } from '@/components/GroupAvatar';
 import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
 import { MessageBubble } from '@/components/messages/MessageBubble';
+import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -31,7 +34,8 @@ import { SendIcon } from '@/assets/icons/send-icon';
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { useConversation, getContactInfo, getGroupInfo } from '@/hooks/useConversation';
+import { useConversation } from '@/hooks/useConversation';
+import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -44,24 +48,14 @@ import {
   getOtherParticipants,
   isGroupConversation,
 } from '@/utils/conversationUtils';
-import { getMockMessages } from '@/utils/mockMessages';
 import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
+import { useMessagesStore, useChatUIStore } from '@/stores';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 
-/**
- * Message interface
- * Represents a single message in a conversation
- */
-export interface Message {
-  id: string;
-  text: string;
-  senderId: string;
-  senderName?: string;
-  timestamp: Date;
-  isSent: boolean;
-}
+// Import Message type from store
+import type { Message } from '@/stores';
 
 /**
  * ConversationView component props
@@ -108,23 +102,34 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
-  // Load mock messages for this conversation
-  const initialMessages = useMemo(() => getMockMessages(conversationId), [conversationId]);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [inputText, setInputText] = useState('');
+  // Zustand stores
+  const messagesStore = useMessagesStore();
+  const chatUIStore = useChatUIStore();
+
+  // Get messages from store
+  const messages = useMessagesStore(state =>
+    conversationId ? state.getMessages(conversationId) : []
+  );
+
+  // Get UI state from store
+  const inputText = useChatUIStore(state =>
+    conversationId ? state.getInputText(conversationId) : ''
+  );
+  const visibleTimestampId = useChatUIStore(state =>
+    conversationId ? state.getVisibleTimestampId(conversationId) : null
+  );
+
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Track which message has timestamp visible (only one at a time)
-  const [visibleTimestampId, setVisibleTimestampId] = useState<string | null>(null);
-
-  // Update messages when conversation changes
+  // Fetch messages when conversation changes
   useEffect(() => {
-    const newMessages = getMockMessages(conversationId);
-    setMessages(newMessages);
-    // Reset visible timestamp when conversation changes
-    setVisibleTimestampId(null);
-  }, [conversationId]);
+    if (conversationId) {
+      messagesStore.fetchMessages(conversationId);
+      // Clear UI state when switching conversations
+      chatUIStore.clearConversationUI(conversationId);
+    }
+  }, [conversationId, messagesStore, chatUIStore]);
 
   // Get conversation data
   const conversation = useConversation(conversationId);
@@ -135,8 +140,8 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Extract conversation metadata
   const conversationMetadata = useMemo(() => {
-    const contactInfo = getContactInfo(conversation);
-    const groupInfo = getGroupInfo(conversation);
+    const contactInfo = getContactInfo(conversation ?? null);
+    const groupInfo = getGroupInfo(conversation ?? null);
     const displayName = conversation
       ? getConversationDisplayName(conversation, CURRENT_USER_ID)
       : 'Unknown';
@@ -295,31 +300,85 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
   }, [messages.length]);
 
-  const handleSend = useCallback(() => {
-    if (inputText.trim().length === 0) return;
+  const handleSend = useCallback(async () => {
+    if (!conversationId || inputText.trim().length === 0) return;
 
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      text: inputText.trim(),
-      senderId: 'current-user',
-      timestamp: new Date(),
-      isSent: true,
-    };
+    const text = inputText.trim();
 
-    setMessages((prev) => [...prev, newMessage]);
-    setInputText('');
-    // Blur input after sending
-    inputRef.current?.blur();
-  }, [inputText]);
+    // Clear input immediately for better UX
+    chatUIStore.setInputText(conversationId, '');
+
+    // Send message via store
+    await messagesStore.sendMessage(conversationId, text, CURRENT_USER_ID);
+
+    // Refocus input after sending
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  }, [conversationId, inputText, messagesStore, chatUIStore]);
+
+  /**
+   * Handle Enter key press to send message
+   * For multiline inputs, we check if there's text to send
+   */
+  const handleSubmitEditing = useCallback(() => {
+    if (inputText.trim().length > 0) {
+      handleSend();
+    }
+  }, [inputText, handleSend]);
+
+  /**
+   * Handle key press events (for web/desktop Enter key)
+   * Enter sends the message, Shift+Enter creates new line (handled by multiline)
+   */
+  const handleKeyPress = useCallback((e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    // On web/desktop, detect Enter key to send
+    // Note: Shift+Enter will still create new line due to multiline behavior
+    if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
+      if (inputText.trim().length > 0) {
+        handleSend();
+      }
+    }
+  }, [inputText, handleSend]);
 
   /**
    * Handle attach button press
-   * TODO: Implement media picker
+   * Opens WhatsApp-style attachment menu in bottom sheet
    */
   const handleAttach = useCallback(() => {
-    // Placeholder for media picker functionality
-    console.log('Attach pressed');
-  }, []);
+    if (!bottomSheet) return;
+
+    bottomSheet.setBottomSheetContent(
+      <AttachmentMenu
+        onClose={() => bottomSheet.openBottomSheet(false)}
+        onSelectPhoto={() => {
+          // TODO: Implement photo picker
+          console.log('Photo selected');
+        }}
+        onSelectDocument={() => {
+          // TODO: Implement document picker
+          console.log('Document selected');
+        }}
+        onSelectLocation={() => {
+          // TODO: Implement location picker
+          console.log('Location selected');
+        }}
+        onSelectCamera={() => {
+          // TODO: Implement camera
+          console.log('Camera selected');
+        }}
+        onSelectContact={() => {
+          // TODO: Implement contact picker
+          console.log('Contact selected');
+        }}
+        onSelectPoll={() => {
+          // TODO: Implement poll creator
+          console.log('Poll selected');
+        }}
+      />
+    );
+    bottomSheet.openBottomSheet(true);
+  }, [bottomSheet]);
 
   /**
    * Handle emoji button press
@@ -334,7 +393,7 @@ export default function ConversationView({ conversationId: propConversationId }:
    * Get sender name for group conversations
    */
   const getSenderName = useCallback((senderId: string): string | undefined => {
-    return getSenderNameFromParticipants(senderId, conversation);
+    return getSenderNameFromParticipants(senderId, conversation ?? null);
   }, [conversation]);
 
   /**
@@ -342,10 +401,19 @@ export default function ConversationView({ conversationId: propConversationId }:
    * Only one message's timestamp can be visible at a time
    */
   const toggleTimestamp = useCallback((messageId: string) => {
-    setVisibleTimestampId((prev) => {
-      // If clicking the same message, hide it. Otherwise, show the new one.
-      return prev === messageId ? null : messageId;
-    });
+    if (!conversationId) return;
+    const current = chatUIStore.getVisibleTimestampId(conversationId);
+    // If clicking the same message, hide it. Otherwise, show the new one.
+    const newId = current === messageId ? null : messageId;
+    chatUIStore.setVisibleTimestamp(conversationId, newId);
+  }, [conversationId, chatUIStore]);
+
+  /**
+   * Check if two messages are close together in time
+   */
+  const areMessagesClose = useCallback((msg1: Message, msg2: Message): boolean => {
+    const timeDiff = Math.abs(msg1.timestamp.getTime() - msg2.timestamp.getTime());
+    return timeDiff <= MESSAGING_CONSTANTS.MESSAGE_CLOSE_TIME_WINDOW_MS;
   }, []);
 
   /**
@@ -358,10 +426,13 @@ export default function ConversationView({ conversationId: propConversationId }:
       ? (item.senderName || getSenderName(item.senderId))
       : undefined;
 
-    // Check if this is the first message from this sender (for spacing)
+    // Check if this is the first message from this sender (for showing sender name)
     const prevMessage = index > 0 ? messages[index - 1] : null;
     const isFirstFromSender = !prevMessage || prevMessage.senderId !== item.senderId;
     const showSenderNameLabel = Boolean(showSenderName && senderName && isFirstFromSender);
+
+    // Check if messages are close together in time for reduced spacing
+    const isCloseToPrevious = prevMessage ? areMessagesClose(prevMessage, item) : false;
 
     const showTimestamp = visibleTimestampId === item.id;
 
@@ -374,10 +445,11 @@ export default function ConversationView({ conversationId: propConversationId }:
         senderName={senderName}
         showSenderName={showSenderNameLabel}
         showTimestamp={showTimestamp}
+        isCloseToPrevious={isCloseToPrevious}
         onPress={() => toggleTimestamp(item.id)}
       />
     );
-  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp]);
+  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp, areMessagesClose]);
 
   const canSend = inputText.trim().length > 0;
 
@@ -494,14 +566,20 @@ export default function ConversationView({ conversationId: propConversationId }:
                 ref={inputRef}
                 style={styles.input}
                 value={inputText}
-                onChangeText={setInputText}
+                onChangeText={(text) => {
+                  if (conversationId) {
+                    chatUIStore.setInputText(conversationId, text);
+                  }
+                }}
                 placeholder="Message"
                 placeholderTextColor={colors.chatInputPlaceholder}
                 multiline
                 maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
                 textAlignVertical="center"
-                returnKeyType="default"
+                returnKeyType="send"
                 blurOnSubmit={false}
+                onSubmitEditing={handleSubmitEditing}
+                onKeyPress={handleKeyPress}
               />
 
               {/* Emoji Button - Only show when input is empty or at end */}

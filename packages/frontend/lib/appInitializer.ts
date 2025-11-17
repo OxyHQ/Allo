@@ -9,7 +9,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { OxyServices } from '@oxyhq/services';
 
 import { useAppearanceStore } from '@/store/appearanceStore';
-import { useVideoMuteStore } from '@/stores/videoMuteStore';
 import {
   hasNotificationPermission,
   setupNotifications,
@@ -76,17 +75,6 @@ async function loadAppearanceSettings(): Promise<void> {
     await useAppearanceStore.getState().loadMySettings();
   } catch (error) {
     console.warn('Failed to load appearance settings:', error);
-  }
-}
-
-/**
- * Loads video mute state
- */
-async function loadVideoMuteState(): Promise<void> {
-  try {
-    await useVideoMuteStore.getState().loadMutedState();
-  } catch (error) {
-    console.warn('Failed to load video mute state:', error);
   }
 }
 
@@ -175,7 +163,6 @@ export class AppInitializer {
     // Load these in parallel as they don't block app startup
     await Promise.allSettled([
       loadAppearanceSettings(),
-      loadVideoMuteState(),
     ]);
   }
 }
