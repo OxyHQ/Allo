@@ -127,9 +127,9 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
             onPress={() => handleMediaPress(item.id, index)}
             onLongPress={(event) => {
               // Use measure to get accurate position
-              if (event.currentTarget && 'measure' in event.currentTarget) {
+              if (event.currentTarget && 'measureInWindow' in event.currentTarget) {
                 // @ts-ignore
-                event.currentTarget.measure((x, y, width, height, pageX, pageY) => {
+                event.currentTarget.measureInWindow((pageX, pageY, width, height) => {
                   handleMediaLongPress(item.id, index, {
                     ...event,
                     nativeEvent: {
@@ -165,9 +165,9 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
             onPress={() => handleMediaPress(item.id, index)}
             onLongPress={(event) => {
               // Use measure to get accurate position
-              if (event.currentTarget && 'measure' in event.currentTarget) {
+              if (event.currentTarget && 'measureInWindow' in event.currentTarget) {
                 // @ts-ignore
-                event.currentTarget.measure((x, y, width, height, pageX, pageY) => {
+                event.currentTarget.measureInWindow((pageX, pageY, width, height) => {
                   handleMediaLongPress(item.id, index, {
                     ...event,
                     nativeEvent: {
@@ -243,4 +243,3 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
 });
 
 MediaCarousel.displayName = 'MediaCarousel';
-

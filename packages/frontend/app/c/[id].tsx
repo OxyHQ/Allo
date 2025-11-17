@@ -30,7 +30,6 @@ import { DaySeparator } from '@/components/messages/DaySeparator';
 import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
 import { MessageActionsMenu, MessageAction } from '@/components/messages/MessageActionsMenu';
 import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
-import { MessageReactionBar } from '@/components/messages/MessageReactionBar';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
@@ -167,12 +166,15 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Message actions state
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
-  const [reactionBarVisible, setReactionBarVisible] = useState(false);
-  const [reactionBarPosition, setReactionBarPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
   const [infoScreenVisible, setInfoScreenVisible] = useState(false);
+  const selectedMediaItem = useMemo(() => {
+    if (!selectedMessage || !selectedMediaId || !selectedMessage.media) {
+      return null;
+    }
+    return selectedMessage.media.find(media => media.id === selectedMediaId) || null;
+  }, [selectedMessage, selectedMediaId]);
 
   // Fetch messages when conversation changes
   useEffect(() => {
@@ -528,6 +530,65 @@ export default function ConversationView({ conversationId: propConversationId }:
       return `https://picsum.photos/seed/${hash}/400/300`;
     }
   }, []);
+  const selectedMessagePreview = useMemo(() => {
+    if (!selectedMessage) {
+      return null;
+    }
+
+    const previewNodes: React.ReactNode[] = [];
+    const mediaToRender = selectedMediaItem
+      ? [selectedMediaItem]
+      : selectedMessage.media && selectedMessage.media.length > 0
+        ? selectedMessage.media
+        : [];
+
+    if (mediaToRender.length > 0) {
+      previewNodes.push(
+        <MediaCarousel
+          key="preview-media"
+          media={mediaToRender}
+          isAiMessage={selectedMessage.messageType === 'ai'}
+          getMediaUrl={getMediaUrl}
+          onMediaPress={() => {}}
+          onMediaLongPress={() => {}}
+        />
+      );
+    }
+
+    if (selectedMessage.text && !selectedMediaItem) {
+      previewNodes.push(
+        <MessageBubble
+          key="preview-text"
+          id={selectedMessage.id}
+          text={selectedMessage.text}
+          timestamp={selectedMessage.timestamp}
+          isSent={selectedMessage.isSent}
+          senderName={isGroup && !selectedMessage.isSent ? getSenderName(selectedMessage.senderId) : undefined}
+          showSenderName={isGroup && !selectedMessage.isSent}
+          showTimestamp={false}
+          isCloseToPrevious={false}
+          messageType={selectedMessage.messageType || 'user'}
+          onPress={() => {}}
+        />
+      );
+    }
+
+    if (previewNodes.length === 0) {
+      return null;
+    }
+
+    return (
+      <View>
+        {previewNodes}
+      </View>
+    );
+  }, [
+    selectedMessage,
+    selectedMediaItem,
+    getMediaUrl,
+    isGroup,
+    getSenderName,
+  ]);
 
   /**
    * Handle media press (open in fullscreen, etc.)
@@ -543,10 +604,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleMessageLongPress = useCallback((message: Message, position: { x: number; y: number; width?: number; height?: number }) => {
     setSelectedMessage(message);
     setSelectedMediaId(null); // Clear media selection
-    setSelectedMediaIndex(null);
-    setReactionBarPosition(position);
     setActionsMenuPosition(position); // Same position for actions menu
-    setReactionBarVisible(true);
     setActionsMenuVisible(true); // Show both simultaneously
   }, []);
 
@@ -559,11 +617,9 @@ export default function ConversationView({ conversationId: propConversationId }:
       console.log('Add reaction:', emoji, 'to message:', selectedMessage.id);
       // Could add reaction to message via store
     }
-    setReactionBarVisible(false);
     setActionsMenuVisible(false);
     setSelectedMessage(null);
     setSelectedMediaId(null);
-    setSelectedMediaIndex(null);
   }, [selectedMessage]);
 
   /**
@@ -686,10 +742,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             onMediaLongPress={(message, mediaId, index, position) => {
               setSelectedMessage(message);
               setSelectedMediaId(mediaId);
-              setSelectedMediaIndex(index);
-              setReactionBarPosition(position);
               setActionsMenuPosition(position); // Same position for actions menu
-              setReactionBarVisible(true);
               setActionsMenuVisible(true); // Show both simultaneously
             }}
           />
@@ -816,83 +869,13 @@ export default function ConversationView({ conversationId: propConversationId }:
             visible={actionsMenuVisible}
             actions={getMessageActions(selectedMessage)}
             onClose={() => {
-              setReactionBarVisible(false);
               setActionsMenuVisible(false);
               setSelectedMessage(null);
               setSelectedMediaId(null);
-              setSelectedMediaIndex(null);
             }}
             messagePosition={actionsMenuPosition}
-            messageElement={selectedMessage ? (
-              <View>
-                {/* Show media if selected */}
-                {selectedMediaId && selectedMessage.media && (
-                  <MediaCarousel
-                    media={selectedMessage.media}
-                    isAiMessage={selectedMessage.messageType === 'ai'}
-                    getMediaUrl={getMediaUrl}
-                    onMediaPress={() => { }}
-                  />
-                )}
-                {/* Show message bubble */}
-                {selectedMessage.text && (
-                  <MessageBubble
-                    id={selectedMessage.id}
-                    text={selectedMessage.text}
-                    timestamp={selectedMessage.timestamp}
-                    isSent={selectedMessage.isSent}
-                    senderName={isGroup && !selectedMessage.isSent ? getSenderName(selectedMessage.senderId) : undefined}
-                    showSenderName={isGroup && !selectedMessage.isSent}
-                    showTimestamp={false}
-                    isCloseToPrevious={false}
-                    messageType={selectedMessage.messageType || 'user'}
-                    onPress={() => { }}
-                  />
-                )}
-              </View>
-            ) : undefined}
-          />
-
-          {/* Message Reaction Bar - rendered last (will be on top) */}
-          <MessageReactionBar
-            visible={reactionBarVisible}
-            position={reactionBarPosition}
-            messageElement={selectedMessage ? (
-              <View>
-                {/* Show media if selected */}
-                {selectedMediaId && selectedMessage.media && (
-                  <MediaCarousel
-                    media={selectedMessage.media}
-                    isAiMessage={selectedMessage.messageType === 'ai'}
-                    getMediaUrl={getMediaUrl}
-                    onMediaPress={() => { }}
-                  />
-                )}
-                {/* Show message bubble */}
-                {selectedMessage.text && (
-                  <MessageBubble
-                    id={selectedMessage.id}
-                    text={selectedMessage.text}
-                    timestamp={selectedMessage.timestamp}
-                    isSent={selectedMessage.isSent}
-                    senderName={isGroup && !selectedMessage.isSent ? getSenderName(selectedMessage.senderId) : undefined}
-                    showSenderName={isGroup && !selectedMessage.isSent}
-                    showTimestamp={false}
-                    isCloseToPrevious={false}
-                    messageType={selectedMessage.messageType || 'user'}
-                    onPress={() => { }}
-                  />
-                )}
-              </View>
-            ) : undefined}
+            messageElement={selectedMessagePreview || undefined}
             onReactionSelect={handleReactionSelect}
-            onClose={() => {
-              setReactionBarVisible(false);
-              setActionsMenuVisible(false);
-              setSelectedMessage(null);
-              setSelectedMediaId(null);
-              setSelectedMediaIndex(null);
-            }}
           />
 
           {/* Message Info Screen */}
@@ -991,4 +974,3 @@ export default function ConversationView({ conversationId: propConversationId }:
     </SafeAreaView>
   );
 }
-

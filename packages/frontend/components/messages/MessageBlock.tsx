@@ -259,12 +259,12 @@ export const MessageBlock = memo<MessageBlockProps>(({
               
               const handleBubbleLongPress = useCallback((event: GestureResponderEvent) => {
                 if (onMessageLongPress && bubbleRef?.current) {
-                  bubbleRef.current.measure((x, y, width, height, pageX, pageY) => {
-                    onMessageLongPress(message, { 
-                      x: pageX, 
-                      y: pageY, 
-                      width: width || 0, 
-                      height: height || 0 
+                  bubbleRef.current.measureInWindow((pageX, pageY, width, height) => {
+                    onMessageLongPress(message, {
+                      x: pageX,
+                      y: pageY,
+                      width: width || 0,
+                      height: height || 0,
                     });
                   });
                 }
@@ -319,4 +319,3 @@ export const MessageBlock = memo<MessageBlockProps>(({
 });
 
 MessageBlock.displayName = 'MessageBlock';
-

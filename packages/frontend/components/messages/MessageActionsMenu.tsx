@@ -24,9 +24,13 @@ export interface MessageActionsMenuProps {
   onClose: () => void;
   messagePosition?: { x: number; y: number; width?: number; height?: number };
   messageElement?: React.ReactNode;
+  showReactions?: boolean;
+  reactions?: string[];
+  onReactionSelect?: (emoji: string) => void;
 }
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+const DEFAULT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 /**
  * MessageActionsMenu Component
@@ -39,15 +43,25 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
   onClose,
   messagePosition,
   messageElement,
+  showReactions = true,
+  reactions,
+  onReactionSelect,
 }) => {
   const theme = useTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const reactionEmojis = useMemo(
+    () => (reactions && reactions.length > 0 ? reactions : DEFAULT_REACTIONS),
+    [reactions]
+  );
+  const shouldShowReactions = showReactions && reactionEmojis.length > 0;
   
   // Shared values for animations
   const menuOpacity = useSharedValue(0);
   const menuScale = useSharedValue(0.9);
   const blurIntensity = useSharedValue(0);
   const messageOpacity = useSharedValue(0);
+  const reactionsOpacity = useSharedValue(0);
+  const reactionsScale = useSharedValue(0.85);
   
   useEffect(() => {
     if (visible) {
@@ -73,6 +87,15 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
         stiffness: 200,
         mass: 0.8,
       });
+      reactionsOpacity.value = withTiming(1, {
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+      });
+      reactionsScale.value = withSpring(1, {
+        damping: 15,
+        stiffness: 200,
+        mass: 0.8,
+      });
     } else {
       // Animate out
       menuOpacity.value = withTiming(0, {
@@ -91,8 +114,16 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
         duration: 150,
         easing: Easing.in(Easing.cubic),
       });
+      reactionsOpacity.value = withTiming(0, {
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+      });
+      reactionsScale.value = withTiming(0.85, {
+        duration: 150,
+        easing: Easing.in(Easing.cubic),
+      });
     }
-  }, [visible, menuOpacity, menuScale, blurIntensity, messageOpacity]);
+  }, [visible, menuOpacity, menuScale, blurIntensity, messageOpacity, reactionsOpacity, reactionsScale]);
 
   // Calculate menu position below the message
   const menuPosition = useMemo(() => {
@@ -105,6 +136,7 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
     const menuWidth = 240; // Fixed menu width
     const messageX = messagePosition.x || 0;
     const messageY = messagePosition.y || 0;
+    const safeBottom = 32;
     
     // Position menu below the message, centered horizontally relative to message
     let top = messageY + messageHeight + 12; // Below message with 12px spacing
@@ -118,9 +150,12 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
     }
 
     // Adjust if menu goes below screen
-    if (top + menuHeight > screenHeight - 100) {
-      // Position above message instead
+    if (top + menuHeight > screenHeight - safeBottom) {
+      // Position above message if there isn't enough room below
       top = messageY - menuHeight - 12;
+      if (top < 16) {
+        top = 16;
+      }
     }
 
     return { top, left };
@@ -152,6 +187,45 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
   const animatedMessageStyle = useAnimatedStyle(() => ({
     opacity: messageOpacity.value,
   }));
+
+  const reactionBarPosition = useMemo(() => {
+    if (!messagePosition || !shouldShowReactions) {
+      return null;
+    }
+
+    const emojiCount = reactionEmojis.length;
+    const barWidth = emojiCount * 44 + 8;
+    const barHeight = 44;
+    const messageX = messagePosition.x || 0;
+    const messageY = messagePosition.y || 0;
+    const messageWidth = messagePosition.width || 200;
+
+    let top = messageY - barHeight - 8;
+    let left = messageX + (messageWidth / 2) - (barWidth / 2);
+
+    if (left < 16) {
+      left = 16;
+    } else if (left + barWidth > screenWidth - 16) {
+      left = screenWidth - barWidth - 16;
+    }
+
+    if (top < 16) {
+      top = messageY + (messagePosition.height || 50) + 8;
+    }
+
+    return { top, left };
+  }, [messagePosition, reactionEmojis.length, screenWidth, shouldShowReactions]);
+
+  const reactionAnimatedStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(reactionsScale.value, [0.85, 1], [10, 0]);
+    return {
+      opacity: reactionsOpacity.value,
+      transform: [
+        { scale: reactionsScale.value },
+        { translateY },
+      ],
+    };
+  });
 
   const styles = StyleSheet.create({
     overlay: {
@@ -204,6 +278,34 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
       justifyContent: 'center',
       alignItems: 'center',
     },
+    reactionContainer: {
+      position: 'absolute',
+      zIndex: 102,
+      backgroundColor: theme.colors.background || '#FFFFFF',
+      borderRadius: 22,
+      paddingHorizontal: 4,
+      paddingVertical: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border || '#E5E5E5',
+    },
+    emojiButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginHorizontal: 2,
+    },
+    emojiText: {
+      fontSize: 24,
+    },
   });
 
   if (!visible) {
@@ -248,6 +350,33 @@ export const MessageActionsMenu = memo<MessageActionsMenuProps>(({
             pointerEvents="none"
           >
             {messageElement}
+          </Animated.View>
+        )}
+
+        {shouldShowReactions && reactionBarPosition && (
+          <Animated.View
+            style={[
+              styles.reactionContainer,
+              {
+                top: reactionBarPosition.top,
+                left: reactionBarPosition.left,
+              },
+              reactionAnimatedStyle,
+            ]}
+          >
+            {reactionEmojis.map((emoji, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.emojiButton}
+                onPress={() => {
+                  onReactionSelect?.(emoji);
+                  onClose();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.emojiText}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
           </Animated.View>
         )}
         
