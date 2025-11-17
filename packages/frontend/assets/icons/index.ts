@@ -10,6 +10,7 @@ export { Search, SearchActive } from './search-icon';
 export { Video, VideoActive } from './video-icon';
 export { ComposeIcon, ComposeIIconActive } from './compose-icon';
 export { SendIcon } from './send-icon';
+export { MicIcon } from './mic-icon';
 
 // Types
 export type { IconProps } from './types';

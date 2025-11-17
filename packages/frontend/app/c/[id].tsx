@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useEffect, useContext, useCallback, useState } 
 import {
   StyleSheet,
   View,
-  Text,
   TextInput,
   FlatList,
   TouchableOpacity,
@@ -11,20 +10,8 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
   ImageBackground,
-  useWindowDimensions,
-  Modal,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
-import {
-  Gesture,
-  GestureDetector,
-} from 'react-native-gesture-handler';
+import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -44,7 +31,7 @@ import { MessageActionsMenu, MessageAction } from '@/components/messages/Message
 import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
-import { SendButtonWithSizeAdjustment } from '@/components/messages/SendButtonWithSizeAdjustment';
+import { MicSendButton } from '@/components/messages/MicSendButton';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
 import { CopyIcon } from '@/assets/icons/copy-icon';
@@ -54,7 +41,6 @@ import { TrashIcon } from '@/assets/icons/trash-icon';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { Plus } from '@/assets/icons/plus-icon';
 import { EmojiIcon } from '@/assets/icons/emoji-icon';
-import { SendIcon } from '@/assets/icons/send-icon';
 import ChatBackgroundImage from '@/assets/images/background.png';
 
 // Hooks
@@ -152,7 +138,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   );
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   // Get messages from store (direct access with stable empty array reference)
   const messages = useMessagesStore(state =>
@@ -322,48 +307,47 @@ export default function ConversationView({ conversationId: propConversationId }:
       flexDirection: 'row',
       alignItems: 'flex-end',
       paddingHorizontal: 8,
-      paddingVertical: 6,
-      paddingBottom: Platform.OS === 'ios' ? 6 : 10,
+      paddingVertical: 8,
+      paddingBottom: Platform.OS === 'ios' ? 8 : 12,
+      backgroundColor: theme.colors.background || '#FFFFFF',
+      gap: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border || 'rgba(0,0,0,0.1)',
-      backgroundColor: theme.colors.background,
-      gap: 6,
+      borderTopColor: theme.colors.border || 'rgba(0,0,0,0.08)',
     },
     inputWrapper: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'flex-end',
-      minHeight: 40,
+      minHeight: 36,
       maxHeight: 100,
       borderRadius: 20,
-      backgroundColor: colors.chatInputBackground || theme.colors.background,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.chatInputBorder || theme.colors.border || 'rgba(0,0,0,0.1)',
-      paddingLeft: 4,
-      paddingRight: 4,
-      paddingTop: 4,
-      paddingBottom: 4,
+      backgroundColor: '#F0F0F0',
+      paddingLeft: 12,
+      paddingRight: 12,
+      paddingTop: 8,
+      paddingBottom: 8,
     },
     input: {
       flex: 1,
-      paddingHorizontal: 12,
+      paddingHorizontal: 0,
       paddingVertical: Platform.OS === 'ios' ? 8 : 6,
       fontSize: isSizeAdjusting ? tempTextSize : messageTextSize,
-      color: colors.chatInputText || theme.colors.text,
+      color: '#000000',
       textAlignVertical: 'top',
-      minHeight: 32,
-      maxHeight: 92,
-      lineHeight: (isSizeAdjusting ? tempTextSize : messageTextSize) * 1.2,
+      minHeight: 20,
+      maxHeight: 84,
+      lineHeight: Platform.OS === 'android' 
+        ? (isSizeAdjusting ? tempTextSize : messageTextSize) * 1.2 
+        : undefined,
+      includeFontPadding: Platform.OS === 'android' ? false : undefined,
     },
     attachButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'transparent',
-      marginBottom: 2,
-      marginRight: 2,
     },
     emojiButton: {
       width: 32,
@@ -373,28 +357,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       alignItems: 'center',
       backgroundColor: 'transparent',
       marginRight: 4,
-      marginBottom: 2,
-    },
-    sendButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: colors.buttonPrimary || theme.colors.primary || '#007AFF',
-      justifyContent: 'center',
-      alignItems: 'center',
-      opacity: 1,
-      marginBottom: 2,
-      shadowColor: colors.buttonPrimary || '#007AFF',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    sendButtonDisabled: {
-      backgroundColor: 'transparent',
-      opacity: 0.5,
-      shadowOpacity: 0,
-      elevation: 0,
     },
     emptyState: {
       flex: 1,
@@ -454,14 +416,14 @@ export default function ConversationView({ conversationId: propConversationId }:
     const originalSize = messageTextSize;
     const finalSize = sizeToUse ?? messageTextSize;
 
+    // Clear input immediately for better UX (before sending)
+    if (conversationId) {
+      setInputText(conversationId, '');
+    }
+
     // Temporarily set the size if it was adjusted
     if (sizeToUse && sizeToUse !== messageTextSize) {
       setMessageTextSize(sizeToUse);
-    }
-
-    // Clear input immediately for better UX
-    if (conversationId) {
-      setInputText(conversationId, '');
     }
 
     // Send message via store with custom font size if adjusted
@@ -478,6 +440,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       if (conversationId) {
         setInputText(conversationId, text);
       }
+      return; // Don't continue with cleanup if there was an error
     }
 
     // Reset size immediately (message stores its own fontSize)
@@ -486,6 +449,11 @@ export default function ConversationView({ conversationId: propConversationId }:
       setTempTextSize(originalSize);
     }
     setIsSizeAdjusting(false);
+
+    // Ensure input is cleared (double-check)
+    if (conversationId) {
+      setInputText(conversationId, '');
+    }
 
     // Refocus input after sending
     setTimeout(() => {
@@ -1063,20 +1031,29 @@ export default function ConversationView({ conversationId: propConversationId }:
                 )}
               </View>
 
-              {/* Send Button with Size Adjustment */}
-              {canSend ? (
-                <SendButtonWithSizeAdjustment
-                  onSend={handleSend}
-                  currentSize={messageTextSize}
-                  tempSize={tempTextSize}
-                  isAdjusting={isSizeAdjusting}
-                  onSizeChange={setTempTextSize}
-                  onAdjustingChange={setIsSizeAdjusting}
-                  baseSizeRef={baseTextSize}
-                  panY={panY}
-                  scale={scale}
-                />
-              ) : null}
+              {/* Mic/Send Button */}
+              <MicSendButton
+                hasText={canSend}
+                onSend={handleSend}
+                currentSize={messageTextSize}
+                tempSize={tempTextSize}
+                isAdjusting={isSizeAdjusting}
+                onSizeChange={setTempTextSize}
+                onAdjustingChange={setIsSizeAdjusting}
+                baseSizeRef={baseTextSize}
+                panY={panY}
+                scale={scale}
+                onRecordStart={() => {
+                  console.log('Recording started');
+                }}
+                onRecordEnd={(uri, duration) => {
+                  console.log('Recording ended:', uri, duration);
+                  // TODO: Send audio message
+                }}
+                onRecordCancel={() => {
+                  console.log('Recording cancelled');
+                }}
+              />
             </View>
           </KeyboardAvoidingView>
         </ThemedView>
