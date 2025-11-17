@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useContext } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useContext, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,63 +11,88 @@ import {
 } from 'react-native';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/hooks/useTheme';
+
+// Components
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { colors } from '@/styles/colors';
 import { ContactDetails } from '@/components/ContactDetails';
-import { BottomSheetContext } from '@/context/BottomSheetContext';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { Header } from '@/components/Header';
 import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { MessageBubble } from '@/components/messages/MessageBubble';
+
+// Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
+
+// Hooks
+import { useTheme } from '@/hooks/useTheme';
+import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation, getContactInfo, getGroupInfo } from '@/hooks/useConversation';
+
+// Context
+import { BottomSheetContext } from '@/context/BottomSheetContext';
+
+// Utils
+import { colors } from '@/styles/colors';
 import {
   getConversationDisplayName,
   getConversationAvatar,
   getOtherParticipants,
   isGroupConversation,
 } from '@/utils/conversationUtils';
+import { getMockMessages } from '@/utils/mockMessages';
+import {
+  getConversationId,
+  getSenderNameFromParticipants,
+} from '@/utils/conversationHelpers';
 
-interface Message {
+// Constants
+import { MESSAGING_CONSTANTS } from '@/constants/messaging';
+
+/**
+ * Message interface
+ * Represents a single message in a conversation
+ */
+export interface Message {
   id: string;
   text: string;
   senderId: string;
+  senderName?: string;
   timestamp: Date;
   isSent: boolean;
 }
 
-// Mock messages - replace with actual data from your store/API
-const MOCK_MESSAGES: Message[] = [
-  {
-    id: '1',
-    text: 'Hey! How are you doing?',
-    senderId: 'other',
-    timestamp: new Date(Date.now() - 3600000),
-    isSent: false,
-  },
-  {
-    id: '2',
-    text: 'I\'m doing great, thanks for asking!',
-    senderId: 'me',
-    timestamp: new Date(Date.now() - 3300000),
-    isSent: true,
-  },
-  {
-    id: '3',
-    text: 'That\'s awesome to hear!',
-    senderId: 'other',
-    timestamp: new Date(Date.now() - 3000000),
-    isSent: false,
-  },
-];
-
+/**
+ * ConversationView component props
+ */
 interface ConversationViewProps {
   conversationId?: string;
 }
 
+/**
+ * Current user ID constant
+ * TODO: Replace with actual authentication system
+ */
+const CURRENT_USER_ID = 'current-user';
+
+/**
+ * ConversationView Component
+ * 
+ * Displays a conversation with messages, input, and header.
+ * Supports both direct and group conversations with responsive layouts.
+ * 
+ * Features:
+ * - Tap to toggle message timestamps (only one visible at a time)
+ * - Group conversation sender names
+ * - Responsive header with contact/group details
+ * - Keyboard-aware input
+ * 
+ * @example
+ * ```tsx
+ * <ConversationView conversationId="1" />
+ * ```
+ */
 export default function ConversationView({ conversationId: propConversationId }: ConversationViewProps = {}) {
   const theme = useTheme();
   const router = useRouter();
@@ -75,71 +100,92 @@ export default function ConversationView({ conversationId: propConversationId }:
   const segments = useSegments();
   const bottomSheet = useContext(BottomSheetContext);
   
-  // Extract ID from pathname to avoid query parameters
-  // Pathname will be like '/c/1' - extract the ID from the path
-  const pathnameId = pathname?.match(/\/c\/([^/?]+)/)?.[1];
+  // Get conversation ID from multiple sources (prop > pathname > segments)
+  const conversationId = useMemo(
+    () => getConversationId(propConversationId, pathname, segments),
+    [propConversationId, pathname, segments]
+  );
   
-  // Also try to get ID from segments (more reliable for dynamic routes)
-  // Segments will be like ['c', '1'] for /c/1
-  const segmentId = segments[segments.length - 1] === 'c' ? null : 
-                    (segments.includes('c') ? segments[segments.indexOf('c') + 1] : null);
-  
-  // Use prop ID if provided (when rendered from chat layout), otherwise use pathname/segment ID
-  // Avoid using useLocalSearchParams as it can pick up unwanted query parameters
-  const conversationId = propConversationId || pathnameId || segmentId || undefined;
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
+  
+  // Load mock messages for this conversation
+  const initialMessages = useMemo(() => getMockMessages(conversationId), [conversationId]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  
+  // Track which message has timestamp visible (only one at a time)
+  const [visibleTimestampId, setVisibleTimestampId] = useState<string | null>(null);
 
-  // Get conversation data from hook/store
+  // Update messages when conversation changes
+  useEffect(() => {
+    const newMessages = getMockMessages(conversationId);
+    setMessages(newMessages);
+    // Reset visible timestamp when conversation changes
+    setVisibleTimestampId(null);
+  }, [conversationId]);
+
+  // Get conversation data
   const conversation = useConversation(conversationId);
-  const isGroup = conversation ? isGroupConversation(conversation) : false;
+  const isGroup = useMemo(
+    () => conversation ? isGroupConversation(conversation) : false,
+    [conversation]
+  );
   
-  // Get contact or group info
-  const contactInfo = getContactInfo(conversation);
-  const groupInfo = getGroupInfo(conversation);
-  
-  // Get display information
-  const displayName = conversation
-    ? getConversationDisplayName(conversation, 'current-user') // Replace with actual current user ID
-    : 'Unknown';
-  const avatar = conversation
-    ? getConversationAvatar(conversation, 'current-user') // Replace with actual current user ID
-    : undefined;
-  const participants = isGroup && conversation ? (conversation.participants || []) : [];
-  
-  const contactName = contactInfo?.name || groupInfo?.name || displayName;
-  const contactUsername = contactInfo?.username || undefined;
-  const contactAvatar = contactInfo?.avatar || groupInfo?.avatar || avatar;
-  const isOnline = contactInfo?.isOnline || false;
-
-  const handleHeaderPress = () => {
-    if (!conversationId || !conversation) return;
+  // Extract conversation metadata
+  const conversationMetadata = useMemo(() => {
+    const contactInfo = getContactInfo(conversation);
+    const groupInfo = getGroupInfo(conversation);
+    const displayName = conversation
+      ? getConversationDisplayName(conversation, CURRENT_USER_ID)
+      : 'Unknown';
+    const avatar = conversation
+      ? getConversationAvatar(conversation, CURRENT_USER_ID)
+      : undefined;
+    const participants = isGroup && conversation ? (conversation.participants || []) : [];
     
-    // On mobile, open bottom sheet with contact details
-    if (!isLargeScreen && bottomSheet) {
+    return {
+      contactInfo,
+      groupInfo,
+      displayName,
+      avatar,
+      participants,
+      contactName: contactInfo?.name || groupInfo?.name || displayName,
+      contactUsername: contactInfo?.username || undefined,
+      contactAvatar: contactInfo?.avatar || groupInfo?.avatar || avatar,
+      isOnline: contactInfo?.isOnline || false,
+    };
+  }, [conversation, isGroup]);
+
+  /**
+   * Handle header press to show contact/group details
+   * On mobile: opens bottom sheet
+   * On desktop: details are already visible in right pane
+   */
+  const handleHeaderPress = useCallback(() => {
+    if (!conversationId || !conversation || !bottomSheet) return;
+    
+    if (!isLargeScreen) {
       bottomSheet.setBottomSheetContent(
         <ContactDetails
-          conversationId={conversationId || ''}
+          conversationId={conversationId}
           conversationType={isGroup ? 'group' : 'direct'}
-          contactName={contactName}
-          contactUsername={contactUsername}
-          contactAvatar={contactAvatar}
-          isOnline={isOnline}
-          lastSeen={contactInfo?.lastSeen}
-          participants={participants}
-          groupName={groupInfo?.name}
-          groupAvatar={groupInfo?.avatar}
-          currentUserId="current-user" // Replace with actual current user ID
+          contactName={conversationMetadata.contactName}
+          contactUsername={conversationMetadata.contactUsername}
+          contactAvatar={conversationMetadata.contactAvatar}
+          isOnline={conversationMetadata.isOnline}
+          lastSeen={conversationMetadata.contactInfo?.lastSeen}
+          participants={conversationMetadata.participants}
+          groupName={conversationMetadata.groupInfo?.name}
+          groupAvatar={conversationMetadata.groupInfo?.avatar}
+          currentUserId={CURRENT_USER_ID}
         />
       );
       bottomSheet.openBottomSheet(true);
     }
-    // On large screens, we could scroll to contact details or do nothing
-    // Contact details are already visible in the right pane
-  };
+  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata]);
 
+  // Styles memoized for performance
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
@@ -153,43 +199,13 @@ export default function ConversationView({ conversationId: propConversationId }:
       top: 0,
       left: 0,
       right: 0,
-      height: 48,
-      zIndex: 101, // Higher than Header's zIndex (100)
+      height: MESSAGING_CONSTANTS.HEADER_OVERLAY_HEIGHT,
+      zIndex: MESSAGING_CONSTANTS.HEADER_OVERLAY_Z_INDEX,
       backgroundColor: 'transparent',
     },
     messagesList: {
       flex: 1,
       paddingHorizontal: 16,
-    },
-    messageContainer: {
-      marginVertical: 4,
-      maxWidth: '75%',
-      alignSelf: 'flex-start',
-    },
-    messageContainerSent: {
-      alignSelf: 'flex-end',
-    },
-    messageBubble: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 18,
-      backgroundColor: colors.messageBubbleReceived,
-    },
-    messageBubbleSent: {
-      backgroundColor: colors.messageBubbleSent,
-    },
-    messageText: {
-      fontSize: 16,
-      color: colors.messageTextReceived,
-    },
-    messageTextSent: {
-      color: colors.messageTextSent,
-    },
-    messageTimestamp: {
-      fontSize: 11,
-      color: colors.messageTimestamp,
-      marginTop: 4,
-      textAlign: 'right',
     },
     inputContainer: {
       flexDirection: 'row',
@@ -201,20 +217,20 @@ export default function ConversationView({ conversationId: propConversationId }:
     },
     input: {
       flex: 1,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 20,
+      paddingHorizontal: MESSAGING_CONSTANTS.INPUT_PADDING_HORIZONTAL,
+      paddingVertical: MESSAGING_CONSTANTS.INPUT_PADDING_VERTICAL,
+      borderRadius: MESSAGING_CONSTANTS.INPUT_BORDER_RADIUS,
       backgroundColor: colors.chatInputBackground,
       borderWidth: 1,
       borderColor: colors.chatInputBorder,
-      fontSize: 16,
+      fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
       color: colors.chatInputText,
       marginRight: 8,
     },
     sendButton: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE,
+      height: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE,
+      borderRadius: MESSAGING_CONSTANTS.SEND_BUTTON_SIZE / 2,
       backgroundColor: colors.buttonPrimary,
       justifyContent: 'center',
       alignItems: 'center',
@@ -238,65 +254,82 @@ export default function ConversationView({ conversationId: propConversationId }:
       color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
       textAlign: 'center',
     },
-  }), [theme, id]);
+  }), [theme]);
 
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    // Scroll to bottom when messages change
     if (flatListRef.current && messages.length > 0) {
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, MESSAGING_CONSTANTS.SCROLL_TO_BOTTOM_DELAY);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [messages]);
+  }, [messages.length]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (inputText.trim().length === 0) return;
 
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: `msg-${Date.now()}`,
       text: inputText.trim(),
-      senderId: 'me',
+      senderId: 'current-user',
       timestamp: new Date(),
       isSent: true,
     };
 
     setMessages((prev) => [...prev, newMessage]);
     setInputText('');
-  };
+  }, [inputText]);
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isSent = item.isSent;
-    const timeString = item.timestamp.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
+  /**
+   * Get sender name for group conversations
+   */
+  const getSenderName = useCallback((senderId: string): string | undefined => {
+    return getSenderNameFromParticipants(senderId, conversation, CURRENT_USER_ID);
+  }, [conversation]);
+
+  /**
+   * Toggle timestamp visibility for a message
+   * Only one message's timestamp can be visible at a time
+   */
+  const toggleTimestamp = useCallback((messageId: string) => {
+    setVisibleTimestampId((prev) => {
+      // If clicking the same message, hide it. Otherwise, show the new one.
+      return prev === messageId ? null : messageId;
     });
+  }, []);
+
+  /**
+   * Render a single message item
+   * Memoized for performance
+   */
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+    const showSenderName = isGroup && !item.isSent;
+    const senderName = showSenderName
+      ? (item.senderName || getSenderName(item.senderId))
+      : undefined;
+    
+    // Check if this is the first message from this sender (for spacing)
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const isFirstFromSender = !prevMessage || prevMessage.senderId !== item.senderId;
+    const showSenderNameLabel = showSenderName && senderName && isFirstFromSender;
+    
+    const showTimestamp = visibleTimestampId === item.id;
 
     return (
-      <View
-        style={[
-          styles.messageContainer,
-          isSent && styles.messageContainerSent,
-        ]}
-      >
-        <View
-          style={[
-            styles.messageBubble,
-            isSent && styles.messageBubbleSent,
-          ]}
-        >
-          <Text
-            style={[
-              styles.messageText,
-              isSent && styles.messageTextSent,
-            ]}
-          >
-            {item.text}
-          </Text>
-        </View>
-        <Text style={styles.messageTimestamp}>{timeString}</Text>
-      </View>
+      <MessageBubble
+        id={item.id}
+        text={item.text}
+        timestamp={item.timestamp}
+        isSent={item.isSent}
+        senderName={senderName}
+        showSenderName={showSenderNameLabel}
+        showTimestamp={showTimestamp}
+        onPress={() => toggleTimestamp(item.id)}
+      />
     );
-  };
+  }, [isGroup, messages, visibleTimestampId, getSenderName, toggleTimestamp]);
 
   const canSend = inputText.trim().length > 0;
 
@@ -307,8 +340,11 @@ export default function ConversationView({ conversationId: propConversationId }:
         <View style={styles.headerWrapper}>
           <Header
             options={{
-              title: displayName,
-              subtitle: contactUsername || (isGroup && groupInfo ? `${groupInfo.participantCount} participants` : undefined),
+              title: conversationMetadata.displayName,
+              subtitle: conversationMetadata.contactUsername || 
+                       (isGroup && conversationMetadata.groupInfo 
+                         ? `${conversationMetadata.groupInfo.participantCount} participants` 
+                         : undefined),
               leftComponents: !isLargeScreen ? [
                 <HeaderIconButton
                   key="back"
@@ -318,30 +354,30 @@ export default function ConversationView({ conversationId: propConversationId }:
                 </HeaderIconButton>,
               ] : [],
               rightComponents: [
-                isGroup && participants.length > 0 ? (
+                isGroup && conversationMetadata.participants.length > 0 ? (
                   <TouchableOpacity
                     key="group-avatar"
                     onPress={handleHeaderPress}
                     activeOpacity={0.7}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
                   >
                     <GroupAvatar
-                      participants={getOtherParticipants(conversation!, 'current-user')}
-                      size={36}
+                      participants={getOtherParticipants(conversation!, CURRENT_USER_ID)}
+                      size={MESSAGING_CONSTANTS.AVATAR_SIZE}
                       maxAvatars={2}
                     />
                   </TouchableOpacity>
                 ) : (
-                  contactAvatar && (
+                  conversationMetadata.contactAvatar && (
                     <TouchableOpacity
                       key="avatar"
                       onPress={handleHeaderPress}
                       activeOpacity={0.7}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
                     >
                       <Avatar
-                        source={{ uri: contactAvatar }}
-                        size={36}
+                        source={{ uri: conversationMetadata.contactAvatar }}
+                        size={MESSAGING_CONSTANTS.AVATAR_SIZE}
                       />
                     </TouchableOpacity>
                   )
@@ -355,8 +391,8 @@ export default function ConversationView({ conversationId: propConversationId }:
             style={[
               styles.headerClickableOverlay,
               {
-                left: !isLargeScreen ? 56 : 0, // Offset for back button on mobile
-                right: (contactAvatar || (isGroup && participants.length > 0)) ? 56 : 0, // Offset for avatar if present
+                left: !isLargeScreen ? 56 : 0,
+                right: (conversationMetadata.contactAvatar || (isGroup && conversationMetadata.participants.length > 0)) ? 56 : 0,
               },
             ]}
             onPress={handleHeaderPress}
@@ -388,7 +424,7 @@ export default function ConversationView({ conversationId: propConversationId }:
         {/* Input */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
         >
           <View style={styles.inputContainer}>
             <TextInput
@@ -398,7 +434,7 @@ export default function ConversationView({ conversationId: propConversationId }:
               placeholder="Type a message..."
               placeholderTextColor={colors.chatInputPlaceholder}
               multiline
-              maxLength={1000}
+              maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
             />
             <TouchableOpacity
               style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}

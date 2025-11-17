@@ -223,50 +223,59 @@ export default function StatusScreen() {
     statusItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: 16,
       paddingHorizontal: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.border,
       backgroundColor: theme.colors.background,
     },
     statusAvatarContainer: {
-      marginRight: 12,
+      marginRight: 14,
       position: 'relative',
     },
     statusRing: {
       position: 'absolute',
+      top: -2.5,
+      left: -2.5,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      borderWidth: 2.5,
+      borderColor: theme.colors.primary,
+    },
+    statusRingViewed: {
+      borderColor: theme.colors.border,
+      borderWidth: 2,
       top: -2,
       left: -2,
       width: 48,
       height: 48,
       borderRadius: 24,
-      borderWidth: 2,
-      borderColor: theme.colors.primary,
-    },
-    statusRingViewed: {
-      borderColor: theme.colors.border,
     },
     statusContent: {
       flex: 1,
+      justifyContent: 'center',
     },
     statusHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 2,
+      marginBottom: 4,
     },
     statusName: {
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '600',
       color: theme.colors.text,
+      flex: 1,
+      marginRight: 8,
     },
     statusTime: {
-      fontSize: 12,
-      color: theme.colors.textSecondary,
-    },
-    statusPreview: {
       fontSize: 13,
       color: theme.colors.textSecondary,
+      fontWeight: '400',
+    },
+    statusPreview: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      lineHeight: 18,
     },
     emptyState: {
       flex: 1,
@@ -305,38 +314,59 @@ export default function StatusScreen() {
 
   const renderStatusItem = useCallback(({ item }: { item: StatusGroup }) => {
     const hasUnread = item.unreadCount > 0;
+    const latestUpdate = item.updates[item.updates.length - 1];
+    const updateTypeText = latestUpdate?.type === 'image' ? '📷 Photo' :
+                          latestUpdate?.type === 'video' ? '🎥 Video' :
+                          latestUpdate?.type === 'text' ? '💬 Text' : '';
 
     return (
-      <TouchableOpacity style={styles.statusItem} activeOpacity={0.7}>
+      <TouchableOpacity 
+        style={styles.statusItem} 
+        activeOpacity={0.7}
+      >
         <View style={styles.statusAvatarContainer}>
-          <View style={[
-            styles.statusRing,
-            item.isViewed && styles.statusRingViewed,
-          ]} />
+          {!item.isViewed && (
+            <View style={styles.statusRing} />
+          )}
+          {item.isViewed && (
+            <View style={styles.statusRingViewed} />
+          )}
           <Avatar
-            size={44}
+            size={48}
             source={item.userAvatar ? { uri: item.userAvatar } : undefined}
             label={item.userName.charAt(0)}
           />
         </View>
         <View style={styles.statusContent}>
           <View style={styles.statusHeader}>
-            <ThemedText style={styles.statusName} numberOfLines={1}>
+            <ThemedText 
+              style={[
+                styles.statusName,
+                hasUnread && { fontWeight: '700', color: theme.colors.text },
+              ]} 
+              numberOfLines={1}
+            >
               {item.userName}
             </ThemedText>
             <ThemedText style={styles.statusTime}>
               {formatTimeAgo(item.lastUpdate)}
             </ThemedText>
           </View>
-          {hasUnread && (
-            <ThemedText style={styles.statusPreview} numberOfLines={1}>
-              {item.unreadCount} new update{item.unreadCount > 1 ? 's' : ''}
-            </ThemedText>
-          )}
+          <ThemedText 
+            style={[
+              styles.statusPreview,
+              hasUnread && { color: theme.colors.text, fontWeight: '500' },
+            ]} 
+            numberOfLines={1}
+          >
+            {hasUnread 
+              ? `${item.unreadCount} new update${item.unreadCount > 1 ? 's' : ''}`
+              : updateTypeText || 'Viewed'}
+          </ThemedText>
         </View>
       </TouchableOpacity>
     );
-  }, [styles, formatTimeAgo]);
+  }, [styles, formatTimeAgo, theme]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -365,11 +395,14 @@ export default function StatusScreen() {
           <View style={styles.recentUpdatesSection}>
             <ThemedText style={styles.sectionTitle}>Recent Updates</ThemedText>
             <FlatList
-              style={styles.list}
               data={statusGroups}
               renderItem={renderStatusItem}
               keyExtractor={(item) => item.userId}
-              scrollEnabled={false}
+              scrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: theme.colors.border, marginLeft: 70 }} />
+              )}
               contentContainerStyle={{ paddingBottom: 16 }}
             />
           </View>
