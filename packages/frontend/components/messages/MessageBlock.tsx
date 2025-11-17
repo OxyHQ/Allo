@@ -164,6 +164,33 @@ export const MessageBlock = memo<MessageBlockProps>(({
     onMessagePress(messageId);
   }, [onMessagePress]);
 
+  // Create a single callback factory for long press that doesn't use hooks
+  const createBubbleLongPressHandler = useCallback((message: Message) => {
+    return (event: GestureResponderEvent) => {
+      if (onMessageLongPress) {
+        const bubbleRef = bubbleRefsMap.get(message.id);
+        if (bubbleRef?.current) {
+          bubbleRef.current.measureInWindow((pageX, pageY, width, height) => {
+            onMessageLongPress(message, {
+              x: pageX,
+              y: pageY,
+              width: width || 0,
+              height: height || 0,
+            });
+          });
+        } else {
+          // Fallback to event position if ref not available
+          const { pageX, pageY } = event.nativeEvent;
+          onMessageLongPress(message, {
+            x: pageX,
+            y: pageY,
+            width: 0,
+            height: 0,
+          });
+        }
+      }
+    };
+  }, [onMessageLongPress, bubbleRefsMap]);
 
   const containerStyle = useMemo(() => [
     styles.container,
@@ -246,19 +273,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
               const showTimestamp = message.messageType !== 'ai';
               
               const bubbleRef = bubbleRefsMap.get(message.id);
-              
-              const handleBubbleLongPress = useCallback((event: GestureResponderEvent) => {
-                if (onMessageLongPress && bubbleRef?.current) {
-                  bubbleRef.current.measureInWindow((pageX, pageY, width, height) => {
-                    onMessageLongPress(message, {
-                      x: pageX,
-                      y: pageY,
-                      width: width || 0,
-                      height: height || 0,
-                    });
-                  });
-                }
-              }, [message, onMessageLongPress, bubbleRef]);
+              const handleBubbleLongPress = createBubbleLongPressHandler(message);
               
               return (
                 <TouchableOpacity

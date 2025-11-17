@@ -60,7 +60,7 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: isBubbleVariant ? 4 : 4,
+      gap: isBubbleVariant ? 3 : 4,
       marginTop: isBubbleVariant ? 0 : 4,
       alignSelf: isBubbleVariant ? 'auto' : (isSent ? 'flex-end' : 'flex-start'),
       opacity: isBubbleVariant ? 1 : 1,

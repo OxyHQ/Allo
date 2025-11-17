@@ -751,6 +751,27 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
+                        {/* Font Size */}
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            onPress={() => router.push('/settings/font-size')}
+                        >
+                            <View style={styles.settingInfo}>
+                                <View style={styles.settingIcon}>
+                                    <IconComponent name="text" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                                        {t('settings.preferences.fontSize')}
+                                    </Text>
+                                    <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                                        {t('settings.preferences.fontSizeDesc')}
+                                    </Text>
+                                </View>
+                            </View>
+                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+                        </TouchableOpacity>
+
                         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
                         {/* Profile Customization */}

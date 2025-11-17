@@ -62,7 +62,7 @@ import {
   isGroupConversation,
 } from '@/utils/conversationUtils';
 import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
-import { useMessagesStore, useChatUIStore } from '@/stores';
+import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
 import { oxyServices } from '@/lib/oxyServices';
 
 // Constants
@@ -116,6 +116,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const pathname = usePathname();
   const segments = useSegments();
   const bottomSheet = useContext(BottomSheetContext);
+  const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
 
   // Get conversation ID from multiple sources (prop > pathname > segments)
   const conversationId = useMemo(
@@ -145,9 +146,9 @@ export default function ConversationView({ conversationId: propConversationId }:
     conversationId ? state.isLoading(conversationId) : false
   );
 
-  // Get UI state from store
+  // Get UI state from store - access directly from state for reactivity
   const inputText = useChatUIStore(state =>
-    conversationId ? state.getInputText(conversationId) : ''
+    conversationId ? (state.inputTextByConversation[conversationId] || '') : ''
   );
   const visibleTimestampId = useChatUIStore(state =>
     conversationId ? state.getVisibleTimestampId(conversationId) : null
@@ -293,65 +294,80 @@ export default function ConversationView({ conversationId: propConversationId }:
     inputContainer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      paddingBottom: Platform.OS === 'ios' ? 8 : 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      paddingBottom: Platform.OS === 'ios' ? 6 : 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border || 'rgba(0,0,0,0.1)',
       backgroundColor: theme.colors.background,
-      gap: 8,
+      gap: 6,
     },
     inputWrapper: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'flex-end',
-      minHeight: 44,
-      maxHeight: 120,
-      borderRadius: 22,
-      backgroundColor: colors.chatInputBackground,
-      borderWidth: 1,
-      borderColor: colors.chatInputBorder,
-      paddingHorizontal: 4,
-      paddingVertical: 4,
+      minHeight: 40,
+      maxHeight: 100,
+      borderRadius: 20,
+      backgroundColor: colors.chatInputBackground || theme.colors.background,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.chatInputBorder || theme.colors.border || 'rgba(0,0,0,0.1)',
+      paddingLeft: 4,
+      paddingRight: 4,
+      paddingTop: 4,
+      paddingBottom: 4,
     },
     input: {
       flex: 1,
       paddingHorizontal: 12,
-      paddingVertical: 10,
-      fontSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
-      color: colors.chatInputText,
-      textAlignVertical: 'center',
-      minHeight: 36,
-      maxHeight: 112,
+      paddingVertical: Platform.OS === 'ios' ? 8 : 6,
+      fontSize: messageTextSize,
+      color: colors.chatInputText || theme.colors.text,
+      textAlignVertical: 'top',
+      minHeight: 32,
+      maxHeight: 92,
+      lineHeight: messageTextSize * 1.2,
     },
     attachButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'transparent',
+      marginBottom: 2,
+      marginRight: 2,
     },
     emojiButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: 'transparent',
+      marginRight: 4,
+      marginBottom: 2,
     },
     sendButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.buttonPrimary,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.buttonPrimary || theme.colors.primary || '#007AFF',
       justifyContent: 'center',
       alignItems: 'center',
       opacity: 1,
+      marginBottom: 2,
+      shadowColor: colors.buttonPrimary || '#007AFF',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 2,
     },
     sendButtonDisabled: {
       backgroundColor: 'transparent',
-      opacity: 0.4,
+      opacity: 0.5,
+      shadowOpacity: 0,
+      elevation: 0,
     },
     emptyState: {
       flex: 1,
@@ -364,7 +380,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
       textAlign: 'center',
     },
-  }), [theme]);
+  }), [theme, messageTextSize]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -383,15 +399,30 @@ export default function ConversationView({ conversationId: propConversationId }:
     const text = inputText.trim();
 
     // Clear input immediately for better UX
-    setInputText(conversationId, '');
+    if (conversationId) {
+      setInputText(conversationId, '');
+    }
 
     // Send message via store
-    await sendMessage(conversationId, text, CURRENT_USER_ID);
+    try {
+      await sendMessage(conversationId, text, CURRENT_USER_ID);
+      
+      // Scroll to bottom after sending
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Restore text on error
+      if (conversationId) {
+        setInputText(conversationId, text);
+      }
+    }
 
     // Refocus input after sending
     setTimeout(() => {
       inputRef.current?.focus();
-    }, 50);
+    }, 100);
   }, [conversationId, inputText, sendMessage, setInputText]);
 
   /**
@@ -937,18 +968,19 @@ export default function ConversationView({ conversationId: propConversationId }:
                     }
                   }}
                   placeholder="Message"
-                  placeholderTextColor={colors.chatInputPlaceholder}
+                  placeholderTextColor={colors.chatInputPlaceholder || theme.colors.textSecondary || '#999999'}
                   multiline
                   maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
-                  textAlignVertical="center"
-                  returnKeyType="send"
+                  textAlignVertical="top"
+                  returnKeyType={canSend ? "send" : "default"}
                   blurOnSubmit={false}
                   onSubmitEditing={handleSubmitEditing}
                   onKeyPress={handleKeyPress}
+                  enablesReturnKeyAutomatically={true}
                 />
 
-                {/* Emoji Button - Only show when input is empty or at end */}
-                {inputText.length === 0 && (
+                {/* Emoji Button - Show when input is empty */}
+                {!canSend && (
                   <TouchableOpacity
                     style={styles.emojiButton}
                     onPress={handleEmoji}
@@ -957,32 +989,26 @@ export default function ConversationView({ conversationId: propConversationId }:
                   >
                     <EmojiIcon
                       color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
-                      size={24}
+                      size={22}
                     />
                   </TouchableOpacity>
                 )}
               </View>
 
               {/* Send Button */}
-              <TouchableOpacity
-                style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-                onPress={handleSend}
-                disabled={!canSend}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {canSend ? (
+              {canSend ? (
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={handleSend}
+                  activeOpacity={0.8}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <SendIcon
                     color="#FFFFFF"
                     size={20}
                   />
-                ) : (
-                  <EmojiIcon
-                    color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
-                    size={24}
-                  />
-                )}
-              </TouchableOpacity>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </KeyboardAvoidingView>
         </ThemedView>

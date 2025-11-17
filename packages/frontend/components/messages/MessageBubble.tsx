@@ -99,7 +99,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   
   // Memoize styles to prevent recalculation on every render
   const styles = useMemo(() => {
-    const lineHeight = messageTextSize * MESSAGING_CONSTANTS.LINE_HEIGHT_MULTIPLIER;
+    // Use tighter line height for more compact bubbles (WhatsApp-style)
+    const lineHeight = messageTextSize * 1.25;
     
     return StyleSheet.create({
       container: {
@@ -128,15 +129,19 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       bubbleSent: {
         backgroundColor: colors.messageBubbleSent,
       },
-      bubbleMetadataPadding: {
-        paddingRight: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL + 28,
-        paddingBottom: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL + 6,
-      },
       bubbleAi: {
         paddingHorizontal: 0,
         paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
         borderRadius: 0,
         backgroundColor: 'transparent',
+      },
+      textContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+      },
+      textWrapper: {
+        flex: 1,
+        flexShrink: 1,
       },
       text: {
         fontSize: messageTextSize,
@@ -151,12 +156,12 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         lineHeight,
         color: theme.colors.text || colors.messageTextReceived,
       },
-      metadataOverlay: {
-        position: 'absolute',
-        right: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL - 4,
-        bottom: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL - 2,
+      metadataContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginLeft: 4,
+        paddingBottom: 0,
+        flexShrink: 0,
       },
     });
   }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage, messageTextSize]);
@@ -173,9 +178,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   const bubbleStyle = useMemo<StyleProp<ViewStyle>>(() => [
     !isAiMessage && styles.bubble,
     !isAiMessage && isSent && styles.bubbleSent,
-    shouldShowMetadata && styles.bubbleMetadataPadding,
     isAiMessage && styles.bubbleAi,
-  ], [styles, isAiMessage, isSent, shouldShowMetadata]);
+  ], [styles, isAiMessage, isSent]);
   
   // Memoize text style array
   const textStyle = useMemo<StyleProp<TextStyle>>(() => [
@@ -202,21 +206,25 @@ export const MessageBubble = memo<MessageBubbleProps>(({
       )}
       
       <View style={bubbleStyle}>
-        <Text style={textStyle}>
-          {text}
-        </Text>
-        {shouldShowMetadata && (
-          <View style={styles.metadataOverlay}>
-            <MessageMetadata
-              timestamp={timestamp}
-              isSent={isSent}
-              isEdited={isEdited}
-              readStatus={readStatus}
-              showTimestamp={showTimestamp}
-              variant="bubble"
-            />
+        <View style={styles.textContainer}>
+          <View style={styles.textWrapper}>
+            <Text style={textStyle}>
+              {text}
+            </Text>
           </View>
-        )}
+          {shouldShowMetadata && (
+            <View style={styles.metadataContainer}>
+              <MessageMetadata
+                timestamp={timestamp}
+                isSent={isSent}
+                isEdited={isEdited}
+                readStatus={readStatus}
+                showTimestamp={showTimestamp}
+                variant="bubble"
+              />
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );

@@ -272,6 +272,8 @@
     "settings.language.selectLanguage": "Select Language",
     "settings.preferences.appearance": "Appearance",
     "settings.preferences.appearanceDesc": "Customize theme, colors, and display settings",
+    "settings.preferences.fontSize": "Font Size",
+    "settings.preferences.fontSizeDesc": "Adjust message text size",
     "settings.preferences.profileCustomization": "Profile Customization",
     "settings.preferences.profileCustomizationDesc": "Customize your profile screen appearance",
     "settings.profileCustomization.title": "Profile Customization",
