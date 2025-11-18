@@ -6,7 +6,15 @@
 
 ## Overview
 
-This is the **backend package** of the **Allo** monorepo. Allo is a modern chat application, and this backend provides the API service for messaging, conversations, and user settings. The backend uses Oxy for authentication, so no user management is needed.
+This is the **backend package** of the **Allo** monorepo. Allo is a modern, secure chat application with **Signal Protocol encryption**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
+
+### Key Features
+
+- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages
+- 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
+- ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
+- 🔑 **Device Key Management** - Signal Protocol device keys and key exchange
+- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
 
 ## Tech Stack
 
@@ -154,31 +162,35 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 
 ### Messages
 
+**Important**: All messages are encrypted using Signal Protocol. The backend stores only encrypted ciphertext. Decryption happens on the client side.
+
 #### GET /api/messages
 - Get messages for a conversation
+- Returns encrypted messages - client must decrypt them
 - Query params:
   - `conversationId` (required)
   - `limit` (default: 50)
   - `before` (ISO date string for pagination)
-- Returns: `{ messages: Message[] }`
+- Returns: `{ messages: Message[] }` (encrypted)
 
 #### GET /api/messages/:id
 - Get a specific message by ID
 - Returns: `Message`
 
 #### POST /api/messages
-- Send a new message
-- Body:
+- Send a new message (encrypted or plaintext for backward compatibility)
+- Body (encrypted):
 ```json
 {
   "conversationId": "conv_id",
-  "text": "Message text",
-  "media": [ // Optional
+  "senderDeviceId": 1,
+  "ciphertext": "base64_encoded_encrypted_message",
+  "encryptedMedia": [ // Optional
     {
       "id": "media_id",
       "type": "image" | "video" | "audio" | "file",
-      "url": "media_url",
-      "thumbnailUrl": "thumb_url", // Optional
+      "ciphertext": "base64_encoded_encrypted_media",
+      "thumbnailCiphertext": "base64_encoded_encrypted_thumbnail", // Optional
       "fileName": "file.jpg", // Optional
       "fileSize": 1024, // Optional
       "mimeType": "image/jpeg", // Optional
@@ -187,8 +199,19 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
       "duration": 120 // Optional, for video/audio
     }
   ],
+  "encryptionVersion": 1,
+  "messageType": "text" | "media" | "system",
   "replyTo": "message_id", // Optional
   "fontSize": 16 // Optional, custom font size
+}
+```
+- Body (legacy plaintext - deprecated):
+```json
+{
+  "conversationId": "conv_id",
+  "senderDeviceId": 1,
+  "text": "Message text",
+  "media": [...]
 }
 ```
 - Returns: `Message`
@@ -205,6 +228,46 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 
 #### POST /api/messages/:id/delivered
 - Mark a message as delivered
+
+### Device Management (Signal Protocol)
+
+#### GET /api/devices
+- Get all devices for the authenticated user
+- Returns: `{ devices: Device[] }`
+
+#### GET /api/devices/:deviceId
+- Get a specific device by deviceId
+- Returns: `Device`
+
+#### POST /api/devices
+- Register a new device with Signal Protocol keys
+- Body:
+```json
+{
+  "deviceId": 1,
+  "identityKeyPublic": "base64_encoded_public_key",
+  "signedPreKey": {
+    "keyId": 1,
+    "publicKey": "base64_encoded_public_key",
+    "signature": "base64_encoded_signature"
+  },
+  "preKeys": [
+    {
+      "keyId": 1,
+      "publicKey": "base64_encoded_public_key"
+    }
+  ],
+  "registrationId": 12345
+}
+```
+
+#### GET /api/devices/user/:userId
+- Get all devices for a specific user (for key exchange)
+- Returns public keys only
+
+#### GET /api/devices/user/:userId/prekeys/:deviceId
+- Get preKeys for a specific device (for key exchange)
+- Returns: `{ preKeys: PreKey[] }`
 
 ### Profile Settings
 
@@ -244,6 +307,11 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
     "minimalistMode": false,
     "displayName": "Display Name",
     "coverImage": "url"
+  },
+  "security": {
+    "cloudSyncEnabled": false, // Device-first by default
+    "encryptionEnabled": true, // Signal Protocol encryption
+    "peerToPeerEnabled": true // Enable P2P when possible
   }
 }
 ```
@@ -381,8 +449,37 @@ This package is part of the Allo monorepo and integrates with:
 - Uses `@allo/shared-types` for type safety across packages
 - Integrates with `@oxyhq/services` for authentication
 
+## Security & Encryption
+
+### Signal Protocol
+
+Allo uses **Signal Protocol** for end-to-end encryption:
+
+- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys
+- **Key Exchange**: Devices exchange public keys through the backend
+- **Encrypted Storage**: Backend stores only encrypted ciphertext, never plaintext
+- **Forward Secrecy**: Each message uses a unique encryption key
+- **Device Management**: Users can manage multiple devices, each with separate keys
+
+### Device-First Architecture
+
+- **Local Storage**: Messages are stored locally on the device first
+- **Optional Cloud Sync**: Users can enable cloud backup in settings (disabled by default)
+- **Privacy**: When cloud sync is disabled, messages are only stored on devices
+- **P2P Support**: Peer-to-peer messaging when both users are online (if enabled)
+
+### Message Encryption Flow
+
+1. Client encrypts message using Signal Protocol with recipient's device keys
+2. Client sends encrypted ciphertext to backend
+3. Backend stores encrypted message (never sees plaintext)
+4. Backend delivers encrypted message to recipient devices
+5. Recipient devices decrypt message locally
+
 ## Notes
 
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Real-time**: Socket.IO is used for real-time message delivery and updates.
+- **Encryption**: All messages are encrypted using Signal Protocol. Backend never sees plaintext.
+- **Device-First**: Messages stored locally by default. Cloud sync is optional.
