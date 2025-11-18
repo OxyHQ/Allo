@@ -209,6 +209,19 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
     console.log(`Client ${socket.id} left conversation room:`, room);
   });
 
+  // Handle typing indicators
+  socket.on("typing", (data: { conversationId: string; userId: string; isTyping: boolean }) => {
+    const { conversationId, isTyping } = data;
+    const room = `conversation:${conversationId}`;
+    
+    // Broadcast typing indicator to all participants except the sender
+    socket.to(room).emit("typing", {
+      conversationId,
+      userId: userId,
+      isTyping,
+    });
+  });
+
   socket.on("disconnect", (reason: DisconnectReason) => {
     console.log(`Client ${socket.id} disconnected from messaging namespace:`, reason);
     socket.leave(userRoom);

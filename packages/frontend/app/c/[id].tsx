@@ -64,6 +64,8 @@ import { getConversationId, getSenderNameFromParticipants } from '@/utils/conver
 import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
 import { oxyServices } from '@/lib/oxyServices';
 import { useOxy } from '@oxyhq/services';
+import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -265,7 +267,7 @@ export default function ConversationView({ conversationId: propConversationId }:
           participants={conversationMetadata.participants}
           groupName={conversationMetadata.groupInfo?.name}
           groupAvatar={conversationMetadata.groupInfo?.avatar}
-          currentUserId={CURRENT_USER_ID}
+          currentUserId={currentUserId}
         />
       );
       bottomSheet.openBottomSheet(true);
@@ -370,6 +372,17 @@ export default function ConversationView({ conversationId: propConversationId }:
       color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
       textAlign: 'center',
     },
+    typingIndicator: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    typingText: {
+      fontSize: 14,
+      fontStyle: 'italic',
+      color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+    },
     sizeIndicator: {
       position: 'absolute',
       bottom: 60,
@@ -410,12 +423,34 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
   }, [messageGroups.length]);
 
+  // Send typing indicator when user types
+  const handleInputChange = useCallback((text: string) => {
+    if (conversationId) {
+      setInputText(conversationId, text);
+      
+      // Send typing indicator
+      if (text.length > 0) {
+        sendTypingIndicator(true);
+        // Stop typing after 2 seconds of no input
+        const timeout = setTimeout(() => {
+          sendTypingIndicator(false);
+        }, 2000);
+        return () => clearTimeout(timeout);
+      } else {
+        sendTypingIndicator(false);
+      }
+    }
+  }, [conversationId, setInputText, sendTypingIndicator]);
+
   const handleSend = useCallback(async (sizeToUse?: number) => {
     if (!conversationId || inputText.trim().length === 0) return;
 
     const text = inputText.trim();
     const originalSize = messageTextSize;
     const finalSize = sizeToUse ?? messageTextSize;
+
+    // Stop typing indicator
+    sendTypingIndicator(false);
 
     // Clear input immediately for better UX (before sending)
     if (conversationId) {
@@ -731,11 +766,14 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const handleReply = useCallback((message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    // TODO: Implement reply functionality
-    console.log('Reply to message:', message.id);
-    // Could scroll to input and add quote or allo
-    inputRef.current?.focus();
-  }, [resetSelectionState]);
+    // Set reply context in the store (if you have a reply store)
+    // For now, we'll just focus the input and could add a visual indicator
+    if (conversationId) {
+      // TODO: Add replyTo state to chatUIStore
+      // setReplyTo(conversationId, message.id);
+      inputRef.current?.focus();
+    }
+  }, [resetSelectionState, conversationId]);
 
   /**
    * Handle forward action
@@ -749,10 +787,21 @@ export default function ConversationView({ conversationId: propConversationId }:
   /**
    * Handle copy action
    */
-  const handleCopy = useCallback((message: Message) => {
+  const handleCopy = useCallback(async (message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    // TODO: Implement copy to clipboard
-    console.log('Copy message:', message.text);
+    try {
+      // Try React Native Clipboard first
+      const { default: Clipboard } = await import('@react-native-clipboard/clipboard');
+      await Clipboard.setString(message.text || '');
+      const { toast } = await import('@/lib/sonner');
+      toast.success('Message copied to clipboard');
+    } catch (error) {
+      // Fallback for web
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(message.text || '');
+      }
+      console.log('Copy message:', message.text);
+    }
   }, [resetSelectionState]);
 
   /**
@@ -914,7 +963,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                       hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
                     >
                       <GroupAvatar
-                        participants={getOtherParticipants(conversation!, CURRENT_USER_ID)}
+                        participants={getOtherParticipants(conversation!, currentUserId)}
                         size={MESSAGING_CONSTANTS.AVATAR_SIZE}
                         maxAvatars={2}
                       />
@@ -956,15 +1005,25 @@ export default function ConversationView({ conversationId: propConversationId }:
 
           {/* Messages List */}
           {messageGroups.length > 0 ? (
-            <FlatList
-              ref={flatListRef}
-              style={styles.messagesList}
-              data={messageGroups}
-              renderItem={renderMessageGroup}
-              keyExtractor={getGroupKey}
-              contentContainerStyle={{ paddingVertical: 12 }}
-              inverted={false}
-            />
+            <>
+              <FlatList
+                ref={flatListRef}
+                style={styles.messagesList}
+                data={messageGroups}
+                renderItem={renderMessageGroup}
+                keyExtractor={getGroupKey}
+                contentContainerStyle={{ paddingVertical: 12 }}
+                inverted={false}
+              />
+              {/* Typing Indicator */}
+              {typingUserIds.length > 0 && (
+                <View style={styles.typingIndicator}>
+                  <ThemedText style={styles.typingText}>
+                    {typingUserIds.length === 1 ? 'Someone is typing...' : `${typingUserIds.length} people are typing...`}
+                  </ThemedText>
+                </View>
+              )}
+            </>
           ) : (
             <View style={styles.emptyState}>
               <ThemedText style={styles.emptyStateText}>
@@ -1024,11 +1083,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                   ref={inputRef}
                   style={styles.input}
                   value={inputText}
-                  onChangeText={(text) => {
-                    if (conversationId) {
-                      setInputText(conversationId, text);
-                    }
-                  }}
+                  onChangeText={handleInputChange}
                   placeholder="Message"
                   placeholderTextColor={colors.chatInputPlaceholder || theme.colors.textSecondary || '#999999'}
                   multiline
