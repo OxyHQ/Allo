@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
+import { api } from '@/utils/api';
 
 /**
  * Conversations Store
@@ -63,212 +64,16 @@ const withArchiveFlag = (conversation: Conversation): Conversation => ({
   isArchived: conversation.isArchived ?? false,
 });
 
-const createDefaultConversations = (): Conversation[] => [
-  // Direct conversations
-  {
-    id: '1',
-    type: 'direct',
-    name: 'Sarah Chen',
-    lastMessage: 'Hey! Are we still on for lunch today?',
-    timestamp: '2m ago',
-    unreadCount: 2,
-    avatar: 'https://i.pravatar.cc/150?img=1',
-    isArchived: false,
-  },
-  {
-    id: '2',
-    type: 'direct',
-    name: 'Michael Rodriguez',
-    lastMessage: 'Thanks for the help with the project!',
-    timestamp: '15m ago',
-    unreadCount: 0,
-    avatar: 'https://i.pravatar.cc/150?img=5',
-    isArchived: false,
-  },
-  {
-    id: '3',
-    type: 'direct',
-    name: 'Emily Watson',
-    lastMessage: 'See you at the meeting tomorrow!',
-    timestamp: '1h ago',
-    unreadCount: 0,
-    avatar: 'https://i.pravatar.cc/150?img=9',
-    isArchived: false,
-  },
-  {
-    id: '4',
-    type: 'direct',
-    name: 'David Kim',
-    lastMessage: 'The code review looks good to me 👍',
-    timestamp: '3h ago',
-    unreadCount: 1,
-    avatar: 'https://i.pravatar.cc/150?img=12',
-    isArchived: false,
-  },
-  // Group conversations
-  withArchiveFlag({
-    id: '5',
-    type: 'group',
-    name: 'Team Alpha',
-    lastMessage: 'Alex: Great work everyone! 🎉',
-    timestamp: '5m ago',
-    unreadCount: 3,
-    groupName: 'Team Alpha',
-    participantCount: 5,
-    participants: [
-      {
-        id: 'current-user',
-        name: { first: 'You', last: '' },
-        username: 'you',
-      },
-      {
-        id: '1',
-        name: { first: 'Sarah', last: 'Chen' },
-        username: 'sarah',
-        avatar: 'https://i.pravatar.cc/150?img=1',
-      },
-      {
-        id: '2',
-        name: { first: 'Michael', last: 'Rodriguez' },
-        username: 'michael',
-        avatar: 'https://i.pravatar.cc/150?img=5',
-      },
-      {
-        id: '3',
-        name: { first: 'Emily', last: 'Watson' },
-        username: 'emily',
-        avatar: 'https://i.pravatar.cc/150?img=9',
-      },
-      {
-        id: '4',
-        name: { first: 'David', last: 'Kim' },
-        username: 'david',
-        avatar: 'https://i.pravatar.cc/150?img=12',
-      },
-    ],
-  }),
-  withArchiveFlag({
-    id: '6',
-    type: 'group',
-    name: 'Weekend Plans',
-    lastMessage: 'Jordan: Count me in!',
-    timestamp: '1h ago',
-    unreadCount: 0,
-    groupName: 'Weekend Plans',
-    participantCount: 4,
-    participants: [
-      {
-        id: 'current-user',
-        name: { first: 'You', last: '' },
-        username: 'you',
-      },
-      {
-        id: '7',
-        name: { first: 'Jordan', last: 'Taylor' },
-        username: 'jordan',
-        avatar: 'https://i.pravatar.cc/150?img=15',
-      },
-      {
-        id: '8',
-        name: { first: 'Morgan', last: 'Lee' },
-        username: 'morgan',
-        avatar: 'https://i.pravatar.cc/150?img=20',
-      },
-      {
-        id: '9',
-        name: { first: 'Casey', last: 'Brown' },
-        username: 'casey',
-        avatar: 'https://i.pravatar.cc/150?img=25',
-      },
-    ],
-  }),
-  {
-    id: '7',
-    type: 'direct',
-    name: 'Alex Johnson',
-    lastMessage: 'Can we reschedule?',
-    timestamp: '2h ago',
-    unreadCount: 0,
-    avatar: 'https://i.pravatar.cc/150?img=3',
-    isArchived: false,
-  },
-  withArchiveFlag({
-    id: '8',
-    type: 'group',
-    name: 'Book Club',
-    lastMessage: 'Riley: This month\'s book is amazing!',
-    timestamp: '3h ago',
-    unreadCount: 5,
-    groupName: 'Book Club',
-    participantCount: 8,
-    participants: [
-      {
-        id: 'current-user',
-        name: { first: 'You', last: '' },
-        username: 'you',
-      },
-      {
-        id: '10',
-        name: { first: 'Riley', last: 'Martinez' },
-        username: 'riley',
-        avatar: 'https://i.pravatar.cc/150?img=30',
-      },
-      {
-        id: '11',
-        name: { first: 'Taylor', last: 'Anderson' },
-        username: 'taylor',
-        avatar: 'https://i.pravatar.cc/150?img=35',
-      },
-      {
-        id: '12',
-        name: { first: 'Jamie', last: 'Wilson' },
-        username: 'jamie',
-        avatar: 'https://i.pravatar.cc/150?img=40',
-      },
-    ],
-  }),
-  {
-    id: '9',
-    type: 'direct',
-    name: 'Jordan Taylor',
-    lastMessage: 'Thanks for the recommendation!',
-    timestamp: '4h ago',
-    unreadCount: 0,
-    avatar: 'https://i.pravatar.cc/150?img=15',
-    isArchived: false,
-  },
-  {
-    id: '10',
-    type: 'direct',
-    name: 'Morgan Lee',
-    lastMessage: 'See you tomorrow!',
-    timestamp: '5h ago',
-    unreadCount: 0,
-    avatar: 'https://i.pravatar.cc/150?img=20',
-    isArchived: false,
-  },
-].map(withArchiveFlag);
-
 export const useConversationsStore = create<ConversationsState>()(
   subscribeWithSelector((set, get) => ({
-    // Initial state
-    conversations: createDefaultConversations(),
+    // Initial state - start with empty conversations (will be fetched from API)
+    conversations: [],
     conversationsById: {},
     activeConversationId: null,
     isLoading: false,
     isRefreshing: false,
     error: null,
     lastUpdated: Date.now(),
-
-    // Initialize conversationsById from conversations array
-    ...(() => {
-      const conversations = createDefaultConversations();
-      const conversationsById: Record<string, Conversation> = {};
-      conversations.forEach(conv => {
-        conversationsById[conv.id] = conv;
-      });
-      return { conversations, conversationsById };
-    })(),
 
     // Actions
     setConversations: (conversations) => {
@@ -354,17 +159,50 @@ export const useConversationsStore = create<ConversationsState>()(
     fetchConversations: async () => {
       set({ isLoading: true, error: null });
       try {
-        // TODO: Replace with actual API call
-        // const response = await conversationService.getConversations();
-        // const conversations = response.data;
+        // Fetch conversations from API
+        const response = await api.get<{ conversations: any[] }>('/conversations');
+        const apiConversations = response.data.conversations || [];
         
-        // For now, use mock data
-        const conversations = createDefaultConversations();
+        // Transform API response to frontend Conversation format
+        const conversations: Conversation[] = apiConversations.map((conv: any) => {
+          // Map participants from API format to frontend format
+          const participants: ConversationParticipant[] = (conv.participants || []).map((p: any) => ({
+            id: p.userId,
+            name: {
+              first: p.name?.first || 'Unknown',
+              last: p.name?.last || '',
+            },
+            username: p.username,
+            avatar: p.avatar,
+          }));
+
+          return {
+            id: conv._id || conv.id,
+            type: conv.type || 'direct',
+            name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Direct Chat'),
+            lastMessage: conv.lastMessage?.text || '',
+            timestamp: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : new Date().toISOString(),
+            unreadCount: conv.unreadCounts ? Object.values(conv.unreadCounts).reduce((sum: number, count: any) => sum + (count || 0), 0) : 0,
+            avatar: conv.avatar,
+            participants,
+            groupName: conv.name,
+            groupAvatar: conv.avatar,
+            participantCount: participants.length,
+          };
+        });
+
         get().setConversations(conversations);
         set({ isLoading: false });
       } catch (error) {
+        console.error('[Conversations] Error fetching conversations:', error);
+        // No fallback - show empty state if API fails
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch conversations';
-        set({ isLoading: false, error: errorMessage });
+        set({ 
+          isLoading: false, 
+          error: errorMessage,
+          conversations: [], // Clear conversations on error
+          conversationsById: {},
+        });
       }
     },
 

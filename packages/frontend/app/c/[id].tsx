@@ -63,6 +63,7 @@ import {
 import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
 import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
 import { oxyServices } from '@/lib/oxyServices';
+import { useOxy } from '@oxyhq/services';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -82,11 +83,7 @@ interface ConversationViewProps {
 
 type SelectionContext = 'text' | 'media';
 
-/**
- * Current user ID constant
- * TODO: Replace with actual authentication system
- */
-const CURRENT_USER_ID = 'current-user';
+// Get current user ID from Oxy hook (will be used in component)
 
 // Stable empty array to prevent Zustand selector from creating new references
 const EMPTY_MESSAGES: Message[] = [];
@@ -117,6 +114,8 @@ export default function ConversationView({ conversationId: propConversationId }:
   const bottomSheet = useContext(BottomSheetContext);
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
   const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
+  const { user } = useOxy();
+  const currentUserId = user?.id;
   
   // Send button gesture state
   const [isSizeAdjusting, setIsSizeAdjusting] = useState(false);
@@ -207,9 +206,11 @@ export default function ConversationView({ conversationId: propConversationId }:
     clearConversationUI(conversationId);
 
     // Fetch messages (store will handle duplicate requests)
-    fetchMessages(conversationId);
+    if (currentUserId) {
+      fetchMessages(conversationId, currentUserId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]); // Only depend on conversationId - store functions are stable
+  }, [conversationId, currentUserId]); // Fetch when conversation or user changes
 
   // Get conversation data
   const conversation = useConversation(conversationId);
@@ -223,10 +224,10 @@ export default function ConversationView({ conversationId: propConversationId }:
     const contactInfo = getContactInfo(conversation ?? null);
     const groupInfo = getGroupInfo(conversation ?? null);
     const displayName = conversation
-      ? getConversationDisplayName(conversation, CURRENT_USER_ID)
+      ? getConversationDisplayName(conversation, currentUserId)
       : 'Unknown';
     const avatar = conversation
-      ? getConversationAvatar(conversation, CURRENT_USER_ID)
+      ? getConversationAvatar(conversation, currentUserId)
       : undefined;
     const participants = isGroup && conversation ? (conversation.participants || []) : [];
 
@@ -426,9 +427,34 @@ export default function ConversationView({ conversationId: propConversationId }:
       setMessageTextSize(sizeToUse);
     }
 
+    // Get recipient user ID from conversation
+    // For direct messages, get the other participant
+    // For groups, we'll need to handle multiple recipients (for now, use first other participant)
+    let recipientUserId: string | undefined;
+    if (conversation) {
+      if (isGroup) {
+        // For groups, get the first other participant (in a real implementation, 
+        // we'd send to all participants, but for now use first one)
+        const otherParticipants = getOtherParticipants(conversation, currentUserId);
+        recipientUserId = otherParticipants[0]?.id;
+      } else {
+        // For direct messages, get the other participant
+        const otherParticipants = getOtherParticipants(conversation, currentUserId);
+        recipientUserId = otherParticipants[0]?.id;
+      }
+    }
+
+    if (!recipientUserId || !currentUserId) {
+      console.error('Cannot send message: missing recipient or current user ID');
+      if (conversationId) {
+        setInputText(conversationId, text);
+      }
+      return;
+    }
+
     // Send message via store with custom font size if adjusted
     try {
-      await sendMessage(conversationId, text, CURRENT_USER_ID, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
+      await sendMessage(conversationId, text, currentUserId, recipientUserId, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
       
       // Scroll to bottom after sending
       setTimeout(() => {
@@ -459,7 +485,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId]);
 
   /**
    * Handle Enter key press to send message

@@ -205,6 +205,10 @@ export default function ChatLayout() {
           options={{ title: 'Conversations' }}
         />
         <Stack.Screen
+          name="new"
+          options={{ title: 'New Chat' }}
+        />
+        <Stack.Screen
           name="settings/index"
           options={{ title: 'Settings' }}
         />

@@ -7,6 +7,8 @@ import {
     TouchableOpacity,
     TextInput,
     useWindowDimensions,
+    RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import { Link, useRouter, usePathname } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -93,11 +95,20 @@ export default function ConversationsList() {
     const { width: windowWidth } = useWindowDimensions();
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
+    const fetchConversations = useConversationsStore(state => state.fetchConversations);
+    const refreshConversations = useConversationsStore(state => state.refreshConversations);
+    const isLoading = useConversationsStore(state => state.isLoading);
+    const isRefreshing = useConversationsStore(state => state.isRefreshing);
     const archiveConversation = useConversationsStore(state => state.archiveConversation);
     const unarchiveConversation = useConversationsStore(state => state.unarchiveConversation);
     const removeConversation = useConversationsStore(state => state.removeConversation);
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
+
+    // Fetch conversations on mount
+    useEffect(() => {
+        fetchConversations();
+    }, [fetchConversations]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -334,6 +345,17 @@ export default function ConversationsList() {
             fontSize: 16,
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
             textAlign: 'center',
+        },
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 32,
+        },
+        loadingText: {
+            marginTop: 16,
+            fontSize: 16,
+            color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
         },
         swipeActionContainer: {
             justifyContent: 'center',
@@ -776,6 +798,20 @@ export default function ConversationsList() {
                                 <TouchableOpacity
                                     style={styles.headerIconButton}
                                     onPress={() => {
+                                        router.push('/(chat)/new' as any);
+                                    }}
+                                    accessibilityLabel="New Chat"
+                                    accessibilityRole="button"
+                                >
+                                    <Ionicons
+                                        name="create-outline"
+                                        size={24}
+                                        color={theme.colors.text}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.headerIconButton}
+                                    onPress={() => {
                                         // TODO: Implement camera functionality
                                         console.log('Camera pressed');
                                     }}
@@ -857,7 +893,12 @@ export default function ConversationsList() {
                     )}
                 </Animated.View>
 
-                {visibleConversations.length > 0 ? (
+                {isLoading && conversations.length === 0 ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.primary} />
+                        <ThemedText style={styles.loadingText}>Loading conversations...</ThemedText>
+                    </View>
+                ) : visibleConversations.length > 0 ? (
                     <FlatList
                         style={styles.list}
                         data={visibleConversations}
@@ -867,6 +908,14 @@ export default function ConversationsList() {
                         ListHeaderComponent={SearchBarHeader}
                         contentContainerStyle={{ flexGrow: 1 }}
                         keyboardShouldPersistTaps="handled"
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={isRefreshing}
+                                onRefresh={refreshConversations}
+                                tintColor={theme.colors.primary}
+                                colors={[theme.colors.primary]}
+                            />
+                        }
                     />
                 ) : (
                     <>
