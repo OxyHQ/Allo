@@ -48,6 +48,7 @@ export interface IMessage extends Document {
   deletedAt?: Date;
   readBy: Record<string, Date>; // userId -> read timestamp
   deliveredTo: string[]; // Array of user IDs who received the message
+  reactions?: Record<string, string[]>; // emoji -> array of userIds who reacted
   createdAt: Date;
   updatedAt: Date;
 }
@@ -127,6 +128,11 @@ const MessageSchema = new Schema<IMessage>(
       default: {},
     },
     deliveredTo: [{ type: String }],
+    reactions: {
+      type: Map,
+      of: [String], // Array of user IDs
+      default: {},
+    },
   },
   { timestamps: true }
 );

@@ -41,6 +41,8 @@ export interface Message {
   messageType?: 'user' | 'ai';
   media?: MediaItem[];
   fontSize?: number;
+  replyTo?: string; // Message ID this is replying to
+  reactions?: Record<string, string[]>; // emoji -> array of userIds
   // Encryption metadata
   isEncrypted?: boolean;
   ciphertext?: string;
@@ -68,6 +70,8 @@ interface MessagesState {
   removeMessage: (conversationId: string, messageId: string) => void;
   clearMessages: (conversationId: string) => void;
   setCloudSyncEnabled: (enabled: boolean) => void;
+  addReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>;
+  removeReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>;
   
   // Async actions
   fetchMessages: (conversationId: string, currentUserId?: string) => Promise<void>;

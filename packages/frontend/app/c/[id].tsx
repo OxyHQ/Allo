@@ -752,28 +752,46 @@ export default function ConversationView({ conversationId: propConversationId }:
     setSelectionContext(null);
   }, []);
 
-  const handleReactionSelect = useCallback((emoji: string) => {
-    if (selectedMessage) {
-      // TODO: Implement reaction functionality
-      console.log('Add reaction:', emoji, 'to message:', selectedMessage.id);
-      // Could add reaction to message via store
+  const addReaction = useMessagesStore((state) => state.addReaction);
+  const removeReaction = useMessagesStore((state) => state.removeReaction);
+
+  const handleReactionSelect = useCallback(async (emoji: string) => {
+    if (!selectedMessage || !conversationId) {
+      resetSelectionState();
+      return;
     }
-    resetSelectionState();
-  }, [selectedMessage, resetSelectionState]);
+
+    try {
+      const currentReactions = selectedMessage.reactions || {};
+      const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
+
+      if (hasReacted) {
+        await removeReaction(conversationId, selectedMessage.id, emoji);
+      } else {
+        await addReaction(conversationId, selectedMessage.id, emoji);
+      }
+    } catch (error) {
+      console.error('[Conversation] Error toggling reaction:', error);
+      const { toast } = await import('@/lib/sonner');
+      toast.error('Failed to update reaction');
+    } finally {
+      resetSelectionState();
+    }
+  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState]);
+
+  const setReplyTo = useChatUIStore((state) => state.setReplyTo);
+  const replyTo = useChatUIStore((state) => conversationId ? state.replyToByConversation[conversationId] : undefined);
 
   /**
    * Handle reply action
    */
   const handleReply = useCallback((message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    // Set reply context in the store (if you have a reply store)
-    // For now, we'll just focus the input and could add a visual indicator
     if (conversationId) {
-      // TODO: Add replyTo state to chatUIStore
-      // setReplyTo(conversationId, message.id);
+      setReplyTo(conversationId, message.id);
       inputRef.current?.focus();
     }
-  }, [resetSelectionState, conversationId]);
+  }, [resetSelectionState, conversationId, setReplyTo]);
 
   /**
    * Handle forward action

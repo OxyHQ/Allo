@@ -245,6 +245,84 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * POST /api/messages/:id/reactions
+ * Add or remove a reaction to a message
+ */
+router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    const { id } = req.params;
+    const { emoji } = req.body;
+
+    const validationError = validateRequired(emoji, "emoji");
+    if (validationError) {
+      return sendErrorResponse(res, 400, "Bad Request", validationError);
+    }
+
+    const message = await Message.findById(id);
+    if (!message) {
+      return sendErrorResponse(res, 404, "Not Found", "Message not found");
+    }
+
+    // Verify user is a participant in the conversation
+    const conversation = await Conversation.findOne({
+      _id: message.conversationId,
+      "participants.userId": userId,
+    });
+
+    if (!conversation) {
+      return sendErrorResponse(res, 403, "Forbidden", "You are not a participant in this conversation");
+    }
+
+    // Initialize reactions if not exists
+    if (!message.reactions) {
+      message.reactions = new Map();
+    }
+
+    const currentReactions = message.reactions.get(emoji) || [];
+    const hasReacted = currentReactions.includes(userId);
+
+    if (hasReacted) {
+      // Remove reaction
+      message.reactions.set(
+        emoji,
+        currentReactions.filter((uid) => uid !== userId)
+      );
+    } else {
+      // Add reaction
+      message.reactions.set(emoji, [...currentReactions, userId]);
+    }
+
+    await message.save();
+
+    // Emit real-time event
+    const io = (global as any).io;
+    if (io) {
+      const messagingNamespace = io.of("/messaging");
+      messagingNamespace
+        .to(`conversation:${message.conversationId}`)
+        .emit("messageReactionUpdated", {
+          messageId: message._id,
+          emoji,
+          userId,
+          hasReacted: !hasReacted,
+          reactions: Object.fromEntries(message.reactions),
+        });
+    }
+
+    return sendSuccessResponse(res, 200, {
+      messageId: message._id,
+      emoji,
+      hasReacted: !hasReacted,
+      reactions: Object.fromEntries(message.reactions),
+    });
+  } catch (err) {
+    console.error("[Messages] Error updating reaction:", err);
+    return sendErrorResponse(res, 500, "Internal Server Error", "Failed to update reaction");
+  }
+});
+
+/**
  * DELETE /api/messages/:id
  * Delete a message (soft delete)
  */
