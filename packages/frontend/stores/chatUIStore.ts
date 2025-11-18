@@ -34,11 +34,15 @@ interface ChatUIState {
   // Attachment menu open state by conversation
   isAttachmentMenuOpenByConversation: Record<string, boolean>;
   
+  // Reply to message ID by conversation
+  replyToByConversation: Record<string, string | undefined>;
+  
   // Actions
   setVisibleTimestamp: (conversationId: string, messageId: string | null) => void;
   setInputText: (conversationId: string, text: string) => void;
   clearInputText: (conversationId: string) => void;
   setAttachmentMenuOpen: (conversationId: string, isOpen: boolean) => void;
+  setReplyTo: (conversationId: string, messageId: string | undefined) => void;
   clearConversationUI: (conversationId: string) => void;
   
   // Selectors
@@ -53,6 +57,7 @@ export const useChatUIStore = create<ChatUIState>()(
     visibleTimestampByConversation: {},
     inputTextByConversation: {},
     isAttachmentMenuOpenByConversation: {},
+    replyToByConversation: {},
 
     // Actions
     setVisibleTimestamp: (conversationId, messageId) => {
@@ -89,6 +94,15 @@ export const useChatUIStore = create<ChatUIState>()(
       }));
     },
 
+    setReplyTo: (conversationId, messageId) => {
+      set((state) => ({
+        replyToByConversation: {
+          ...state.replyToByConversation,
+          [conversationId]: messageId,
+        },
+      }));
+    },
+
     clearConversationUI: (conversationId) => {
       set((state) => {
         const { [conversationId]: removedTimestamp, ...visibleTimestampByConversation } = 
@@ -97,11 +111,14 @@ export const useChatUIStore = create<ChatUIState>()(
           state.inputTextByConversation;
         const { [conversationId]: removedMenu, ...isAttachmentMenuOpenByConversation } = 
           state.isAttachmentMenuOpenByConversation;
+        const { [conversationId]: removedReplyTo, ...replyToByConversation } = 
+          state.replyToByConversation;
         
         return {
           visibleTimestampByConversation,
           inputTextByConversation,
           isAttachmentMenuOpenByConversation,
+          replyToByConversation,
         };
       });
     },

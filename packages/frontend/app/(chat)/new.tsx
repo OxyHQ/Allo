@@ -17,16 +17,17 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/Header';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxyhq/services';
 import { useConversationsStore } from '@/stores';
 
+// Types
+import type { Conversation, ConversationType } from '@/app/(chat)/index';
+
 // Utils
 import { api } from '@/utils/api';
-import { colors } from '@/styles/colors';
 
 interface User {
   id: string;
@@ -45,15 +46,17 @@ interface User {
 export default function NewChatScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { oxyServices } = useOxy();
+  const { oxyServices, user: currentUser } = useOxy();
   const addConversation = useConversationsStore((state) => state.addConversation);
-  
+  const conversations = useConversationsStore((state) => state.conversations);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
 
-  // Search for users
+  // Search for users using Oxy Services
   const searchUsers = useCallback(async (query: string) => {
     if (!query.trim() || query.length < 2) {
       setUsers([]);
@@ -62,29 +65,24 @@ export default function NewChatScreen() {
 
     setIsLoading(true);
     try {
-      // Use Oxy Services to search for users
-      // This will search by username or name
-      const searchResults = await oxyServices.searchProfiles(query, { limit: 20 });
-      
+      const response = await oxyServices.searchProfiles(query, { limit: 20 });
+      const searchResults = Array.isArray(response) ? response : (response as any)?.data || [];
+
       // Map Oxy profile format to our User format
-      const mappedUsers: User[] = (searchResults || []).map((profile: any) => {
-        // Handle name object or string
+      const mappedUsers: User[] = searchResults.map((profile: any) => {
+        // Extract name
         let firstName = 'Unknown';
         let lastName = '';
-        
-        if (typeof profile.name === 'string') {
-          const parts = profile.name.split(' ');
-          firstName = parts[0] || 'Unknown';
-          lastName = parts.slice(1).join(' ') || '';
-        } else if (profile.name?.first) {
+
+        if (profile.name?.first) {
           firstName = profile.name.first;
           lastName = profile.name.last || '';
         } else if (profile.name?.full) {
           const parts = profile.name.full.split(' ');
           firstName = parts[0] || 'Unknown';
           lastName = parts.slice(1).join(' ') || '';
-        } else if (profile.displayName) {
-          const parts = profile.displayName.split(' ');
+        } else if (typeof profile.name === 'string') {
+          const parts = profile.name.split(' ');
           firstName = parts[0] || 'Unknown';
           lastName = parts.slice(1).join(' ') || '';
         } else {
@@ -101,7 +99,7 @@ export default function NewChatScreen() {
           avatar: profile.avatar || profile.profilePicture,
         };
       });
-      
+
       setUsers(mappedUsers);
     } catch (error) {
       console.error('[NewChat] Error searching users:', error);
@@ -114,7 +112,7 @@ export default function NewChatScreen() {
 
   // Debounced search
   const debouncedSearch = useMemo(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
     return (query: string) => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
@@ -134,14 +132,97 @@ export default function NewChatScreen() {
       const next = new Set(prev);
       if (next.has(userId)) {
         next.delete(userId);
+        // If no users selected, exit selection mode
+        if (next.size === 0) {
+          setIsSelectionMode(false);
+        }
       } else {
         next.add(userId);
+        // Enter selection mode when first user is selected
+        if (next.size === 1) {
+          setIsSelectionMode(true);
+        }
       }
       return next;
     });
   }, []);
 
-  // Create new conversation
+  // Open conversation directly with a user
+  const openConversation = useCallback(async (user: User) => {
+    // If in selection mode, toggle selection instead
+    if (isSelectionMode) {
+      toggleUserSelection(user.id);
+      return;
+    }
+
+    try {
+      // First check if conversation already exists
+      const existingConversation = conversations.find((conv) => {
+        if (conv.type !== 'direct') return false;
+        const otherParticipant = conv.participants?.find(p => p.id !== currentUser?.id);
+        return otherParticipant?.id === user.id || otherParticipant?.username === user.username;
+      });
+
+      if (existingConversation) {
+        // Navigate using user ID route for direct conversations
+        const otherParticipant = existingConversation.participants?.find(p => p.id !== currentUser?.id);
+        // Use the user's ID from the search result, or fallback to participant ID
+        const userIdToUse = user.id || otherParticipant?.id;
+        const route = (existingConversation.type === 'direct' && userIdToUse)
+          ? `/u/${userIdToUse}`
+          : `/c/${existingConversation.id}`;
+        router.replace(route as any);
+        return;
+      }
+
+      // Create new conversation
+      const response = await api.post<any>('/conversations', {
+        type: 'direct',
+        participantIds: [user.id],
+      });
+
+      const apiConversation = response.data.data || response.data;
+      const participants = (apiConversation.participants || []).map((p: any) => ({
+        id: p.userId,
+        name: {
+          first: p.name?.first || 'Unknown',
+          last: p.name?.last || '',
+        },
+        username: p.username,
+        avatar: p.avatar,
+      }));
+
+      const conversation: Conversation = {
+        id: apiConversation._id || apiConversation.id,
+        type: 'direct' as ConversationType,
+        name: apiConversation.name || 'Direct Chat',
+        lastMessage: '',
+        timestamp: new Date(apiConversation.createdAt).toISOString(),
+        unreadCount: 0,
+        avatar: apiConversation.avatar,
+        participants,
+        groupName: apiConversation.name,
+        groupAvatar: apiConversation.avatar,
+        participantCount: participants.length,
+      };
+
+      addConversation(conversation);
+
+      // Navigate to conversation - use username route for direct conversations
+      // Use the user's username directly from the search result
+      const route = (conversation.type === 'direct' && user.username)
+        ? `/@${user.username}`
+        : `/c/${conversation.id}`;
+      console.log('[NewChat] Navigating to new conversation:', route);
+      router.replace(route as any);
+    } catch (error: any) {
+      console.error('[NewChat] Error opening conversation:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to open conversation';
+      toast.error(errorMessage);
+    }
+  }, [isSelectionMode, toggleUserSelection, router, conversations, currentUser?.id, addConversation]);
+
+  // Create new conversation (for groups)
   const createConversation = useCallback(async () => {
     if (selectedUserIds.size === 0) {
       toast.error('Please select at least one user');
@@ -153,12 +234,13 @@ export default function NewChatScreen() {
       const type = participantIds.length === 1 ? 'direct' : 'group';
 
       // Create conversation via API
-      const response = await api.post<{ conversation: any }>('/conversations', {
+      const response = await api.post<any>('/conversations', {
         type,
         participantIds,
       });
 
-      const apiConversation = response.data.conversation;
+      // API returns { data: conversation }, so response.data is { data: conversation }
+      const apiConversation = response.data.data || response.data;
 
       // Transform to frontend format
       const participants = (apiConversation.participants || []).map((p: any) => ({
@@ -188,8 +270,15 @@ export default function NewChatScreen() {
       // Add to store
       addConversation(conversation);
 
-      // Navigate to conversation
-      router.push(`/c/${conversation.id}` as any);
+      // Clear selection and exit selection mode
+      setSelectedUserIds(new Set());
+      setIsSelectionMode(false);
+
+      // Navigate to conversation - use /@username for direct, /c/[id] for groups
+      const route = conversation.type === 'direct' && participants[0]?.username
+        ? `/@${participants[0].username}`
+        : `/c/${conversation.id}`;
+      router.push(route as any);
       router.back(); // Close this screen
     } catch (error: any) {
       console.error('[NewChat] Error creating conversation:', error);
@@ -302,17 +391,27 @@ export default function NewChatScreen() {
     return (
       <TouchableOpacity
         style={styles.userItem}
-        onPress={() => toggleUserSelection(item.id)}
+        onPress={() => {
+          console.log('[NewChat] User item pressed:', item.username);
+          openConversation(item);
+        }}
+        onLongPress={() => {
+          console.log('[NewChat] User item long pressed:', item.username);
+          toggleUserSelection(item.id);
+        }}
         activeOpacity={0.7}
+        delayLongPress={300}
       >
-        <View style={[
-          styles.selectionIndicator,
-          isSelected && styles.selectionIndicatorSelected,
-        ]}>
-          {isSelected && (
-            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-          )}
-        </View>
+        {isSelectionMode && (
+          <View style={[
+            styles.selectionIndicator,
+            isSelected && styles.selectionIndicatorSelected,
+          ]}>
+            {isSelected && (
+              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+            )}
+          </View>
+        )}
         <Avatar
           size={48}
           source={item.avatar ? { uri: item.avatar } : undefined}
@@ -328,20 +427,16 @@ export default function NewChatScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [selectedUserIds, toggleUserSelection, styles]);
+  }, [selectedUserIds, isSelectionMode, openConversation, toggleUserSelection, styles]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ThemedView style={styles.container}>
         <Header
-          title="New Chat"
-          leftComponent={
-            <HeaderIconButton
-              icon="arrow-back"
-              onPress={() => router.back()}
-              accessibilityLabel="Go back"
-            />
-          }
+          options={{
+            title: 'New Chat',
+            showBackButton: true,
+          }}
         />
 
         <View style={styles.searchContainer}>
@@ -410,7 +505,7 @@ export default function NewChatScreen() {
           </View>
         )}
 
-        {selectedUserIds.size > 0 && (
+        {isSelectionMode && selectedUserIds.size > 0 && (
           <TouchableOpacity
             style={[
               styles.createButton,

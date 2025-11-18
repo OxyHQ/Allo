@@ -87,6 +87,7 @@ export const isRouteActive = (
  */
 export const ROUTE_PATTERNS = {
   CONVERSATION: /^\/c\/([^/]+)$/,
+  USER_CONVERSATION: /^\/u\/([^/]+)$/,
   PROFILE: /^\/@([^/]+)$/,
   SETTINGS: /\/settings/,
   STATUS: /\/status/,

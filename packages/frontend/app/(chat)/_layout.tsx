@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, usePathname, useSegments, Slot, useRouter } from 'expo-router';
+import { Stack, usePathname, Slot, useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { ThemedView } from '@/components/ThemedView';
@@ -34,7 +34,6 @@ const ConversationViewWrapper = ({ conversationId }: { conversationId: string })
 export default function ChatLayout() {
   const theme = useTheme();
   const pathname = usePathname();
-  const segments = useSegments();
 
   // Check if we're on a large screen (tablet/desktop)
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
@@ -43,20 +42,19 @@ export default function ChatLayout() {
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
   const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
-
-  const lastSegment = segments[segments.length - 1];
-  // Check if we're on the index route (conversations list)
-  const isIndexRoute = pathname === '/(chat)' ||
-    pathname === '/(chat)/' ||
-    pathname === '/chat' ||
-    pathname === '/chat/' ||
-    (lastSegment === 'index' && !pathname.includes('/settings'));
+  const isNewChatRoute = pathname === '/(chat)/new' || pathname === '/new' || pathname?.endsWith('/new');
 
   // Check if we're on a conversation route - check /c/:id format
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
   const isConversationRoute = conversationIdMatch &&
     !pathname.includes('/settings') &&
-    !isIndexRoute;
+    !isNewChatRoute;
+
+  // Check if we're on a user route - check /u/:id format
+  const userRouteMatch = pathname?.match(/\/u\/([^/]+)$/);
+  const isUserRoute = userRouteMatch &&
+    !pathname.includes('/settings') &&
+    !isNewChatRoute;
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -116,7 +114,7 @@ export default function ChatLayout() {
           )}
         </View>
 
-        {/* Right pane - show conversation detail, nested settings, or empty state */}
+        {/* Right pane - show conversation detail, nested settings, new chat, or empty state */}
         <View style={styles.rightPane}>
           {isNestedSettingsRoute ? (
             // Show nested settings route - use Stack with all possible nested routes
@@ -173,10 +171,32 @@ export default function ChatLayout() {
                 options={{ title: 'Hide Counts' }}
               />
             </Stack>
+          ) : isNewChatRoute ? (
+            // Show new chat screen
+            (() => {
+              try {
+                const NewChatScreen = require('./new').default;
+                return <NewChatScreen />;
+              } catch (error) {
+                console.error('Failed to load new chat screen:', error);
+                return null;
+              }
+            })()
           ) : isConversationRoute && conversationIdMatch ? (
             // Show conversation detail from /c/:id route
             // Use the wrapper component that handles the require path correctly
             <ConversationViewWrapper conversationId={conversationIdMatch[1]} />
+          ) : isUserRoute ? (
+            // Show user conversation route
+            (() => {
+              try {
+                const UserRoute = require('./u/[id]').default;
+                return <UserRoute userId={userRouteMatch[1]} />;
+              } catch (error) {
+                console.error('Failed to load user route:', error);
+                return null;
+              }
+            })()
           ) : (
             // Empty state when on index route
             <View style={styles.rightPaneEmpty}>
@@ -207,6 +227,10 @@ export default function ChatLayout() {
         <Stack.Screen
           name="new"
           options={{ title: 'New Chat' }}
+        />
+        <Stack.Screen
+          name="u/[id]"
+          options={{ title: 'Chat' }}
         />
         <Stack.Screen
           name="settings/index"

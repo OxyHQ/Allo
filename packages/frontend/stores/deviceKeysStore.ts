@@ -43,15 +43,30 @@ export const useDeviceKeysStore = create<DeviceKeysState>()(
     initialize: async () => {
       set({ isLoading: true, error: null });
       try {
+        console.log('[DeviceKeys] Starting initialization...');
         const keys = await initializeDeviceKeys();
+        console.log('[DeviceKeys] Keys generated successfully:', {
+          deviceId: keys.deviceId,
+          hasIdentityKey: !!keys.identityKeyPublic,
+          preKeysCount: keys.preKeys.length,
+        });
+        
         set({ deviceKeys: keys, isInitialized: true, isLoading: false });
         
         // Auto-register device with backend
-        await get().registerDevice();
+        console.log('[DeviceKeys] Registering device with backend...');
+        const registered = await get().registerDevice();
+        if (!registered) {
+          console.warn('[DeviceKeys] Device registration failed, but keys are initialized');
+        } else {
+          console.log('[DeviceKeys] Device registered successfully');
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to initialize device keys';
-        set({ error: errorMessage, isLoading: false });
         console.error('[DeviceKeys] Error initializing:', error);
+        set({ error: errorMessage, isLoading: false, isInitialized: false });
+        // Re-throw so callers can handle it
+        throw error;
       }
     },
 

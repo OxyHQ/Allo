@@ -56,19 +56,37 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       // Handle new messages
       messagingSocket.on('newMessage', async (messageData: any) => {
         try {
-          // Decrypt message if encrypted
+          // Handle plaintext messages (legacy or when encryption unavailable)
           let decryptedText = messageData.text;
+          let isEncrypted = false;
+
+          // Only decrypt if message is encrypted and not sent by current user
           if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
-            try {
-              decryptedText = await deviceKeysStore.decryptMessageFromSender(
-                messageData.ciphertext,
-                messageData.senderId,
-                messageData.senderDeviceId
-              );
-            } catch (error) {
-              console.error('[RealtimeMessaging] Error decrypting message:', error);
-              decryptedText = '[Encrypted - Decryption failed]';
+            // Skip decryption for messages sent by current user (already plaintext locally)
+            if (messageData.senderId === user.id) {
+              // Use plaintext if available, otherwise skip
+              decryptedText = messageData.text || '[Your message]';
+              isEncrypted = false;
+            } else {
+              // Decrypt message from other users
+              isEncrypted = true;
+              try {
+                decryptedText = await deviceKeysStore.decryptMessageFromSender(
+                  messageData.ciphertext,
+                  messageData.senderId,
+                  messageData.senderDeviceId
+                );
+                isEncrypted = false; // Successfully decrypted
+              } catch (error) {
+                console.error('[RealtimeMessaging] Error decrypting message:', error);
+                decryptedText = '[Encrypted - Decryption failed]';
+                isEncrypted = true; // Still encrypted
+              }
             }
+          } else if (messageData.text) {
+            // Plaintext message
+            decryptedText = messageData.text;
+            isEncrypted = false;
           }
 
           const message: Message = {
@@ -80,8 +98,8 @@ export const useRealtimeMessaging = (conversationId?: string) => {
             isSent: messageData.senderId === user.id,
             conversationId: messageData.conversationId,
             fontSize: messageData.fontSize,
-            isEncrypted: !!messageData.ciphertext,
-            ciphertext: messageData.ciphertext,
+            isEncrypted: isEncrypted,
+            ...(messageData.ciphertext ? { ciphertext: messageData.ciphertext } : {}),
             messageType: messageData.messageType || 'user',
           };
 
@@ -101,16 +119,23 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       // Handle message updates (edits)
       messagingSocket.on('messageUpdated', async (messageData: any) => {
         try {
+          // Handle plaintext messages (legacy or when encryption unavailable)
           let decryptedText = messageData.text;
+
+          // Only decrypt if message is encrypted and not sent by current user
           if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
-            try {
-              decryptedText = await deviceKeysStore.decryptMessageFromSender(
-                messageData.ciphertext,
-                messageData.senderId,
-                messageData.senderDeviceId
-              );
-            } catch (error) {
-              console.error('[RealtimeMessaging] Error decrypting updated message:', error);
+            // Skip decryption for messages sent by current user (already plaintext locally)
+            if (messageData.senderId !== user.id) {
+              try {
+                decryptedText = await deviceKeysStore.decryptMessageFromSender(
+                  messageData.ciphertext,
+                  messageData.senderId,
+                  messageData.senderDeviceId
+                );
+              } catch (error) {
+                console.error('[RealtimeMessaging] Error decrypting updated message:', error);
+                decryptedText = '[Encrypted - Decryption failed]';
+              }
             }
           }
 

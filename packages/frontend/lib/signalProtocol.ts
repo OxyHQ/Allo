@@ -8,7 +8,7 @@
  */
 
 import { Storage } from '@/utils/storage';
-import * as SecureStore from 'expo-secure-store';
+import { getSecureItem, setSecureItem } from '@/lib/secureStorage';
 
 // Storage keys
 const DEVICE_ID_KEY = 'signal_device_id';
@@ -46,14 +46,14 @@ export interface EncryptedMessage {
  * Generate a new device ID
  */
 export async function generateDeviceId(): Promise<number> {
-  const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  const existing = await getSecureItem(DEVICE_ID_KEY);
   if (existing) {
     return parseInt(existing, 10);
   }
   
   // Generate random device ID (1-2147483647)
   const deviceId = Math.floor(Math.random() * 2147483647) + 1;
-  await SecureStore.setItemAsync(DEVICE_ID_KEY, deviceId.toString());
+  await setSecureItem(DEVICE_ID_KEY, deviceId.toString());
   return deviceId;
 }
 
@@ -94,14 +94,14 @@ export async function generateIdentityKeyPair(): Promise<{
  * Generate registration ID
  */
 export async function generateRegistrationId(): Promise<number> {
-  const existing = await SecureStore.getItemAsync(REGISTRATION_ID_KEY);
+  const existing = await getSecureItem(REGISTRATION_ID_KEY);
   if (existing) {
     return parseInt(existing, 10);
   }
   
   // Generate random registration ID (1-2147483647)
   const registrationId = Math.floor(Math.random() * 2147483647) + 1;
-  await SecureStore.setItemAsync(REGISTRATION_ID_KEY, registrationId.toString());
+  await setSecureItem(REGISTRATION_ID_KEY, registrationId.toString());
   return registrationId;
 }
 
@@ -221,14 +221,18 @@ export async function initializeDeviceKeys(): Promise<DeviceKeys> {
  * Store device keys securely
  */
 export async function storeDeviceKeys(keys: DeviceKeys): Promise<void> {
-  // Store private keys in SecureStore
-  await SecureStore.setItemAsync(IDENTITY_KEY_PAIR_KEY, JSON.stringify({
+  // Store private keys in secure storage (SecureStore on native, AsyncStorage on web)
+  await setSecureItem(IDENTITY_KEY_PAIR_KEY, JSON.stringify({
     public: keys.identityKeyPublic,
     private: keys.identityKeyPrivate,
   }));
   
-  await SecureStore.setItemAsync(SIGNED_PRE_KEY_KEY, JSON.stringify(keys.signedPreKey));
-  await SecureStore.setItemAsync(PRE_KEYS_KEY, JSON.stringify(keys.preKeys));
+  await setSecureItem(SIGNED_PRE_KEY_KEY, JSON.stringify(keys.signedPreKey));
+  await setSecureItem(PRE_KEYS_KEY, JSON.stringify(keys.preKeys));
+  
+  // Store device ID and registration ID
+  await setSecureItem(DEVICE_ID_KEY, keys.deviceId.toString());
+  await setSecureItem(REGISTRATION_ID_KEY, keys.registrationId.toString());
   
   // Store public keys in regular storage (for API registration)
   await Storage.set('signal_device_keys_public', {
@@ -252,11 +256,11 @@ export async function storeDeviceKeys(keys: DeviceKeys): Promise<void> {
  */
 export async function getDeviceKeys(): Promise<DeviceKeys | null> {
   try {
-    const identityKeyPairStr = await SecureStore.getItemAsync(IDENTITY_KEY_PAIR_KEY);
-    const signedPreKeyStr = await SecureStore.getItemAsync(SIGNED_PRE_KEY_KEY);
-    const preKeysStr = await SecureStore.getItemAsync(PRE_KEYS_KEY);
-    const deviceIdStr = await SecureStore.getItemAsync(DEVICE_ID_KEY);
-    const registrationIdStr = await SecureStore.getItemAsync(REGISTRATION_ID_KEY);
+    const identityKeyPairStr = await getSecureItem(IDENTITY_KEY_PAIR_KEY);
+    const signedPreKeyStr = await getSecureItem(SIGNED_PRE_KEY_KEY);
+    const preKeysStr = await getSecureItem(PRE_KEYS_KEY);
+    const deviceIdStr = await getSecureItem(DEVICE_ID_KEY);
+    const registrationIdStr = await getSecureItem(REGISTRATION_ID_KEY);
     
     if (!identityKeyPairStr || !signedPreKeyStr || !preKeysStr || !deviceIdStr || !registrationIdStr) {
       return null;

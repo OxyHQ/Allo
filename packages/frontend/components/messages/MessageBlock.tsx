@@ -296,7 +296,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       readStatus={message.isSent ? 'read' : undefined}
                       isEdited={false} // TODO: Add edited status to Message type
                       fontSize={message.fontSize} // Use custom font size if set
-                      onPress={() => handleMessagePress(message.id)}
                     />
                   </View>
                 </TouchableOpacity>

@@ -47,7 +47,7 @@ import ChatBackgroundImage from '@/assets/images/background.png';
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
-import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
+import { useConversationMetadata } from '@/hooks/useConversationMetadata';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -59,13 +59,16 @@ import {
   getConversationAvatar,
   getOtherParticipants,
   isGroupConversation,
+  useContactInfo,
 } from '@/utils/conversationUtils';
-import { getConversationId, getSenderNameFromParticipants } from '@/utils/conversationHelpers';
+import { getConversationId, useSenderName } from '@/utils/conversationHelpers';
 import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
-import { oxyServices } from '@/lib/oxyServices';
 import { useOxy } from '@oxyhq/services';
+import { useUserById } from '@/stores/usersStore';
+import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { useSenderInfo } from '@/hooks/useSenderInfo';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -81,6 +84,7 @@ import type { Message } from '@/stores';
  */
 interface ConversationViewProps {
   conversationId?: string;
+  username?: string; // For username-based routing
 }
 
 type SelectionContext = 'text' | 'media';
@@ -116,16 +120,16 @@ export default function ConversationView({ conversationId: propConversationId }:
   const bottomSheet = useContext(BottomSheetContext);
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
   const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
-  const { user } = useOxy();
+  const { user, oxyServices } = useOxy();
   const currentUserId = user?.id;
-  
+
   // Send button gesture state
   const [isSizeAdjusting, setIsSizeAdjusting] = useState(false);
   const [tempTextSize, setTempTextSize] = useState(messageTextSize);
   const baseTextSize = useRef(messageTextSize);
   const panY = useSharedValue(0);
   const scale = useSharedValue(1);
-  
+
   // Update temp size when messageTextSize changes externally
   useEffect(() => {
     setTempTextSize(messageTextSize);
@@ -133,10 +137,23 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [messageTextSize]);
 
   // Get conversation ID from multiple sources (prop > pathname > segments)
-  const conversationId = useMemo(
+  // Handle both /c/[id] and /@username formats
+  const conversationIdOrUsername = useMemo(
     () => getConversationId(propConversationId, pathname, segments),
     [propConversationId, pathname, segments]
   );
+
+  // Check if it's a username route (starts with @)
+  const isUsernameRoute = conversationIdOrUsername?.startsWith('@');
+  const username = isUsernameRoute ? conversationIdOrUsername.substring(1) : undefined;
+
+  // For username routes, we'll resolve to conversation ID in useEffect
+  // For now, use the ID directly if it's not a username
+  const conversationId = isUsernameRoute ? undefined : conversationIdOrUsername;
+
+  // Initialize realtime messaging and typing indicator hooks
+  const { sendTypingIndicator } = useRealtimeMessaging(conversationId);
+  const typingUserIds = useTypingIndicator(conversationId);
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
@@ -178,6 +195,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const lastFetchedConversationId = useRef<string | null>(null);
+  const typingTimeoutRef = useRef<any>(null);
 
   // Message actions state
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -214,37 +232,22 @@ export default function ConversationView({ conversationId: propConversationId }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUserId]); // Fetch when conversation or user changes
 
+  // Cleanup typing timeout when conversation changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    };
+  }, [conversationId]);
+
   // Get conversation data
   const conversation = useConversation(conversationId);
-  const isGroup = useMemo(
-    () => conversation ? isGroupConversation(conversation) : false,
-    [conversation]
-  );
-
-  // Extract conversation metadata
-  const conversationMetadata = useMemo(() => {
-    const contactInfo = getContactInfo(conversation ?? null);
-    const groupInfo = getGroupInfo(conversation ?? null);
-    const displayName = conversation
-      ? getConversationDisplayName(conversation, currentUserId)
-      : 'Unknown';
-    const avatar = conversation
-      ? getConversationAvatar(conversation, currentUserId)
-      : undefined;
-    const participants = isGroup && conversation ? (conversation.participants || []) : [];
-
-    return {
-      contactInfo,
-      groupInfo,
-      displayName,
-      avatar,
-      participants,
-      contactName: contactInfo?.name || groupInfo?.name || displayName,
-      contactUsername: contactInfo?.username || undefined,
-      contactAvatar: contactInfo?.avatar || groupInfo?.avatar || avatar,
-      isOnline: contactInfo?.isOnline || false,
-    };
-  }, [conversation, isGroup]);
+  
+  // Use custom hook for conversation metadata
+  const conversationMetadata = useConversationMetadata(conversation, currentUserId);
+  const { isGroup } = conversationMetadata;
 
   /**
    * Handle header press to show contact/group details
@@ -339,8 +342,8 @@ export default function ConversationView({ conversationId: propConversationId }:
       textAlignVertical: 'top',
       minHeight: 20,
       maxHeight: 84,
-      lineHeight: Platform.OS === 'android' 
-        ? (isSizeAdjusting ? tempTextSize : messageTextSize) * 1.2 
+      lineHeight: Platform.OS === 'android'
+        ? (isSizeAdjusting ? tempTextSize : messageTextSize) * 1.2
         : undefined,
       includeFontPadding: Platform.OS === 'android' ? false : undefined,
     },
@@ -427,15 +430,21 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleInputChange = useCallback((text: string) => {
     if (conversationId) {
       setInputText(conversationId, text);
-      
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
       // Send typing indicator
       if (text.length > 0) {
         sendTypingIndicator(true);
         // Stop typing after 2 seconds of no input
-        const timeout = setTimeout(() => {
+        typingTimeoutRef.current = setTimeout(() => {
           sendTypingIndicator(false);
+          typingTimeoutRef.current = null;
         }, 2000);
-        return () => clearTimeout(timeout);
       } else {
         sendTypingIndicator(false);
       }
@@ -449,7 +458,11 @@ export default function ConversationView({ conversationId: propConversationId }:
     const originalSize = messageTextSize;
     const finalSize = sizeToUse ?? messageTextSize;
 
-    // Stop typing indicator
+    // Clear typing timeout and stop typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
     sendTypingIndicator(false);
 
     // Clear input immediately for better UX (before sending)
@@ -489,14 +502,31 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     // Send message via store with custom font size if adjusted
     try {
-      await sendMessage(conversationId, text, currentUserId, recipientUserId, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
-      
+      const result = await sendMessage(conversationId, text, currentUserId, recipientUserId, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
+
+      if (!result) {
+        // Message failed to send - check for error in store
+        const error = useMessagesStore.getState().getError(conversationId);
+        const { toast } = await import('@/lib/sonner');
+        toast.error(error || 'Failed to send message. Please try again.');
+
+        // Restore text on error
+        if (conversationId) {
+          setInputText(conversationId, text);
+        }
+        return;
+      }
+
       // Scroll to bottom after sending
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
+      const { toast } = await import('@/lib/sonner');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
+      toast.error(errorMessage);
+
       // Restore text on error
       if (conversationId) {
         setInputText(conversationId, text);
@@ -594,32 +624,8 @@ export default function ConversationView({ conversationId: propConversationId }:
     console.log('Emoji pressed');
   }, []);
 
-  /**
-   * Get sender name for group conversations
-   */
-  const getSenderName = useCallback((senderId: string): string | undefined => {
-    return getSenderNameFromParticipants(senderId, conversation ?? null);
-  }, [conversation]);
-
-  /**
-   * Get sender avatar for incoming messages
-   */
-  const getSenderAvatar = useCallback((senderId: string): string | undefined => {
-    if (!conversation) {
-      return undefined;
-    }
-
-    // Direct conversation: use contact avatar
-    if (!isGroup) {
-      return conversationMetadata.contactAvatar;
-    }
-
-    const participants = conversation.participants || [];
-    const participant = participants.find(
-      (p) => p.id === senderId || ('userId' in p && p.userId === senderId)
-    );
-    return participant?.avatar;
-  }, [conversation, conversationMetadata.contactAvatar, isGroup]);
+  // Use the new hook for sender info
+  const { getSenderName, getSenderAvatar } = useSenderInfo(conversation, isGroup, conversationMetadata);
 
   /**
    * Toggle timestamp visibility for a message
@@ -660,7 +666,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       return `https://picsum.photos/seed/${hash}/400/300`;
     }
-  }, []);
+  }, [oxyServices]);
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
       return null;
@@ -680,8 +686,8 @@ export default function ConversationView({ conversationId: propConversationId }:
           media={mediaToRender}
           isAiMessage={selectedMessage.messageType === 'ai'}
           getMediaUrl={getMediaUrl}
-          onMediaPress={() => {}}
-          onMediaLongPress={() => {}}
+          onMediaPress={() => { }}
+          onMediaLongPress={() => { }}
         />
       );
     }
@@ -699,7 +705,6 @@ export default function ConversationView({ conversationId: propConversationId }:
           showTimestamp={false}
           isCloseToPrevious={false}
           messageType={selectedMessage.messageType || 'user'}
-          onPress={() => {}}
         />
       );
     }
@@ -780,7 +785,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState]);
 
   const setReplyTo = useChatUIStore((state) => state.setReplyTo);
-  const replyTo = useChatUIStore((state) => conversationId ? state.replyToByConversation[conversationId] : undefined);
+  const replyTo = useChatUIStore((state) => conversationId && state.replyToByConversation ? state.replyToByConversation[conversationId] : undefined);
 
   /**
    * Handle reply action

@@ -34,6 +34,7 @@ import { GroupAvatar } from '@/components/GroupAvatar';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
+import { useOxy } from '@oxyhq/services';
 import {
     useConversationsStore,
     useConversationSwipePreferencesStore,
@@ -146,7 +147,8 @@ export default function ConversationsList() {
     }, [pathname]);
 
     // Mock current user ID - replace with actual user ID from auth system
-    const currentUserId = 'current-user';
+    const { user } = useOxy();
+    const currentUserId = user?.id;
 
     // Multi-selection state
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(() => new Set());
@@ -441,7 +443,15 @@ export default function ConversationsList() {
             toggleConversationSelection(conversationId);
             return;
         }
-        router.push(`/c/${conversationId}` as any);
+        // Use /u/:id for direct conversations, /c/[id] for others
+        const conversation = conversations.find(c => c.id === conversationId);
+        const route = conversation?.type === 'direct' 
+          ? (() => {
+              const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
+              return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conversationId}`;
+            })()
+          : `/c/${conversationId}`;
+        router.push(route as any);
     }, [isSelectionMode, toggleConversationSelection, router]);
 
     /**
@@ -798,7 +808,7 @@ export default function ConversationsList() {
                                 <TouchableOpacity
                                     style={styles.headerIconButton}
                                     onPress={() => {
-                                        router.push('/(chat)/new' as any);
+                                        router.push('/new' as any);
                                     }}
                                     accessibilityLabel="New Chat"
                                     accessibilityRole="button"

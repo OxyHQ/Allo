@@ -14,6 +14,7 @@ export const ROUTE_CONSTANTS = {
   
   // Conversation routes
   CONVERSATION: (id: string) => `/c/${id}`,
+  DIRECT_CONVERSATION: (username: string) => `/@${username}`, // For direct conversations
   
   // Other routes
   CALLS: '/calls',
@@ -27,6 +28,7 @@ export const ROUTE_CONSTANTS = {
  */
 export const ROUTE_PATTERNS = {
   CONVERSATION: /^\/c\/([^/]+)$/,
+  DIRECT_CONVERSATION: /^\/@([^/]+)$/, // For direct conversations
   PROFILE: /^\/@([^/]+)$/,
   SETTINGS: /\/settings/,
   STATUS: /\/status/,

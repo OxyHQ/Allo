@@ -97,7 +97,7 @@ export const useMessagesStore = create<MessagesState>()(
     loadingByConversation: {},
     errorByConversation: {},
     lastUpdatedByConversation: {},
-    cloudSyncEnabled: false, // Device-first by default
+    cloudSyncEnabled: true, // Enable cloud sync by default for reliable messaging
 
     // Actions
     setMessages: async (conversationId, messages) => {
@@ -229,6 +229,12 @@ export const useMessagesStore = create<MessagesState>()(
           const deviceKeysStore = useDeviceKeysStore.getState();
           const decryptedMessages = await Promise.all(
             localMessages.map(async (msg) => {
+              // Skip decryption for messages sent by current user (already plaintext)
+              if (msg.senderId === currentUserId) {
+                return msg;
+              }
+
+              // Only decrypt if message is encrypted and has ciphertext
               if (msg.isEncrypted && msg.ciphertext && msg.senderId && msg.senderDeviceId) {
                 try {
                   const decryptedText = await deviceKeysStore.decryptMessageFromSender(
@@ -257,11 +263,34 @@ export const useMessagesStore = create<MessagesState>()(
               const response = await api.get('/messages', { conversationId });
               const serverMessages = response.data.messages || [];
               
-              // Decrypt server messages
+              // Process server messages (encrypted or plaintext)
               const deviceKeysStore = useDeviceKeysStore.getState();
-              const decryptedServerMessages = await Promise.all(
+              const processedServerMessages = await Promise.all(
                 serverMessages.map(async (msg: any) => {
+                  // Handle plaintext messages (legacy or when encryption unavailable)
+                  if (msg.text && !msg.ciphertext) {
+                    return {
+                      id: msg._id || msg.id,
+                      text: msg.text,
+                      senderId: msg.senderId,
+                      senderDeviceId: msg.senderDeviceId,
+                      timestamp: new Date(msg.createdAt),
+                      isSent: msg.senderId === currentUserId,
+                      conversationId: msg.conversationId,
+                      fontSize: msg.fontSize,
+                      isEncrypted: false,
+                      messageType: msg.messageType || 'user',
+                    };
+                  }
+
+                  // Handle encrypted messages
                   if (msg.ciphertext && msg.senderId && msg.senderDeviceId) {
+                    // Skip decryption for messages sent by current user (already plaintext locally)
+                    if (msg.senderId === currentUserId) {
+                      // This shouldn't happen, but if it does, skip it
+                      return null;
+                    }
+
                     try {
                       const decryptedText = await deviceKeysStore.decryptMessageFromSender(
                         msg.ciphertext,
@@ -277,19 +306,34 @@ export const useMessagesStore = create<MessagesState>()(
                         isSent: msg.senderId === currentUserId,
                         conversationId: msg.conversationId,
                         fontSize: msg.fontSize,
-                        isEncrypted: false,
+                        isEncrypted: false, // Mark as decrypted
                         messageType: msg.messageType || 'user',
                       };
                     } catch (error) {
                       console.error('[Messages] Error decrypting server message:', error);
-                      return null;
+                      // Return message with error indicator instead of null
+                      return {
+                        id: msg._id || msg.id,
+                        text: '[Encrypted - Decryption failed]',
+                        senderId: msg.senderId,
+                        senderDeviceId: msg.senderDeviceId,
+                        timestamp: new Date(msg.createdAt),
+                        isSent: msg.senderId === currentUserId,
+                        conversationId: msg.conversationId,
+                        fontSize: msg.fontSize,
+                        isEncrypted: true, // Still encrypted
+                        messageType: msg.messageType || 'user',
+                      };
                     }
                   }
+
+                  // Message has neither text nor ciphertext - invalid
+                  console.warn('[Messages] Server message missing both text and ciphertext:', msg);
                   return null;
                 })
               );
               
-              const validMessages = decryptedServerMessages.filter((msg): msg is Message => msg !== null);
+              const validMessages = processedServerMessages.filter((msg): msg is Message => msg !== null);
               
               // Merge with local messages
               const allMessages = [...localMessages, ...validMessages];
@@ -331,16 +375,74 @@ export const useMessagesStore = create<MessagesState>()(
         const deviceKeys = deviceKeysStore.deviceKeys;
         
         if (!deviceKeys) {
-          throw new Error('Device keys not initialized');
+          // Try to initialize device keys if not already initialized
+          if (!deviceKeysStore.isInitialized && !deviceKeysStore.isLoading) {
+            try {
+              console.log('[Messages] Initializing device keys...');
+              await deviceKeysStore.initialize();
+              
+              // Wait a bit for state to update
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Re-check device keys after initialization
+              const updatedStore = useDeviceKeysStore.getState();
+              console.log('[Messages] Device keys after init:', {
+                hasKeys: !!updatedStore.deviceKeys,
+                isInitialized: updatedStore.isInitialized,
+                isLoading: updatedStore.isLoading,
+                error: updatedStore.error,
+              });
+              
+              if (!updatedStore.deviceKeys) {
+                const errorMsg = updatedStore.error || 'Device keys initialization completed but keys are missing';
+                console.error('[Messages] Device keys initialization failed:', errorMsg);
+                throw new Error(`Encryption setup failed: ${errorMsg}. Please refresh the page and try again.`);
+              }
+            } catch (initError) {
+              console.error('[Messages] Error initializing device keys:', initError);
+              const errorMessage = initError instanceof Error ? initError.message : 'Unknown error';
+              throw new Error(`Encryption setup failed: ${errorMessage}. Please refresh the page and try again.`);
+            }
+          } else if (deviceKeysStore.isLoading) {
+            throw new Error('Encryption is initializing. Please wait a moment and try again.');
+          } else if (deviceKeysStore.error) {
+            throw new Error(`Encryption error: ${deviceKeysStore.error}. Please refresh the page.`);
+          } else {
+            throw new Error('Encryption not ready. Please wait a moment and try again.');
+          }
+        }
+        
+        // Re-get device keys in case they were just initialized
+        const finalDeviceKeys = useDeviceKeysStore.getState().deviceKeys;
+        if (!finalDeviceKeys) {
+          const storeState = useDeviceKeysStore.getState();
+          const errorDetails = storeState.error 
+            ? ` Error: ${storeState.error}` 
+            : ' Please check the console for details.';
+          throw new Error(`Encryption not available.${errorDetails}`);
         }
 
-        // Encrypt message
-        let ciphertext: string;
+        // Encrypt message (or use plaintext fallback if recipient keys unavailable)
+        let ciphertext: string | undefined;
+        let isEncrypted = false;
         try {
-          ciphertext = await deviceKeysStore.encryptMessageForRecipient(text, recipientUserId);
+          const updatedDeviceKeysStore = useDeviceKeysStore.getState();
+          ciphertext = await updatedDeviceKeysStore.encryptMessageForRecipient(text, recipientUserId);
+          isEncrypted = true;
         } catch (error) {
-          console.error('[Messages] Error encrypting message:', error);
-          throw new Error('Failed to encrypt message');
+          console.warn('[Messages] Encryption failed, using plaintext fallback:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown encryption error';
+          
+          // If recipient has no devices registered, allow plaintext as fallback
+          if (errorMessage.includes('No devices found') || errorMessage.includes('No preKeys')) {
+            console.warn('[Messages] Recipient has no registered devices. Sending as plaintext (less secure).');
+            // Continue without encryption - will send as plaintext
+            isEncrypted = false;
+            ciphertext = undefined;
+          } else {
+            // For other encryption errors, still throw
+            throw new Error('Failed to encrypt message. Please try again.');
+          }
         }
 
         // Create message object
@@ -348,22 +450,22 @@ export const useMessagesStore = create<MessagesState>()(
           id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           text: text.trim(), // Store plaintext locally for display
           senderId,
-          senderDeviceId: deviceKeys.deviceId,
+          senderDeviceId: finalDeviceKeys.deviceId,
           timestamp: new Date(),
           isSent: true,
           conversationId,
           fontSize,
-          isEncrypted: true,
-          ciphertext,
-          encryptionVersion: 1,
+          isEncrypted: isEncrypted,
+          ...(isEncrypted && ciphertext ? { ciphertext, encryptionVersion: 1 } : {}),
         };
 
         // Add to local storage immediately (offline-first)
         get().addMessage(message);
 
-        // Try to send via P2P first (if enabled)
+        // Try to send via P2P first (if enabled and encrypted)
+        // Note: P2P only works with encrypted messages
         const netInfo = await NetInfo.fetch();
-        if (netInfo.isConnected) {
+        if (netInfo.isConnected && isEncrypted && ciphertext) {
           try {
             const sentViaP2P = await p2pManager.sendMessage(
               conversationId,
@@ -379,18 +481,29 @@ export const useMessagesStore = create<MessagesState>()(
           } catch (error) {
             console.warn('[Messages] P2P send failed, using server:', error);
           }
+        }
 
-          // Fallback to server (if cloud sync enabled)
+        // Fallback to server (if cloud sync enabled)
+        if (netInfo.isConnected) {
           if (get().cloudSyncEnabled) {
             try {
-              await api.post('/messages', {
+              // Send encrypted or plaintext based on availability
+              const payload: any = {
                 conversationId,
-                senderDeviceId: deviceKeys.deviceId,
-                ciphertext,
-                encryptionVersion: 1,
+                senderDeviceId: finalDeviceKeys.deviceId,
                 messageType: 'text',
                 fontSize,
-              });
+              };
+              
+              if (isEncrypted && ciphertext) {
+                payload.ciphertext = ciphertext;
+                payload.encryptionVersion = 1;
+              } else {
+                // Send as plaintext when encryption unavailable
+                payload.text = text.trim();
+              }
+              
+              await api.post('/messages', payload);
             } catch (error) {
               console.error('[Messages] Error sending to server:', error);
               // Add to sync queue for retry
@@ -399,25 +512,32 @@ export const useMessagesStore = create<MessagesState>()(
                 conversationId,
                 data: {
                   conversationId,
-                  senderDeviceId: deviceKeys.deviceId,
-                  ciphertext,
-                  encryptionVersion: 1,
+                  senderDeviceId: finalDeviceKeys.deviceId,
+                  ...(isEncrypted && ciphertext 
+                    ? { ciphertext, encryptionVersion: 1 }
+                    : { text: text.trim() }
+                  ),
                   messageType: 'text',
                   fontSize,
                 },
               });
             }
           }
-        } else {
-          // Offline - add to sync queue
+        }
+        
+        // If offline or cloud sync disabled, add to sync queue
+        if (!netInfo.isConnected || !get().cloudSyncEnabled) {
+          // Offline or cloud sync disabled - add to sync queue
           await addToSyncQueue({
             type: 'send_message',
             conversationId,
             data: {
               conversationId,
-              senderDeviceId: deviceKeys.deviceId,
-              ciphertext,
-              encryptionVersion: 1,
+              senderDeviceId: finalDeviceKeys.deviceId,
+              ...(isEncrypted && ciphertext 
+                ? { ciphertext, encryptionVersion: 1 }
+                : { text: text.trim() }
+              ),
               messageType: 'text',
               fontSize,
             },
