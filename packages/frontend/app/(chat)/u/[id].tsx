@@ -16,7 +16,7 @@ import { toast } from '@/lib/sonner';
 export default function UserConversationRoute({ userId: propUserId }: { userId?: string }) {
   const { id: paramUserId } = useLocalSearchParams<{ id: string }>();
   const userId = propUserId || paramUserId;
-  
+
   const { user: currentUser } = useOxy();
   const conversations = useConversationsStore((state) => state.conversations);
   const addConversation = useConversationsStore((state) => state.addConversation);
@@ -32,7 +32,7 @@ export default function UserConversationRoute({ userId: propUserId }: { userId?:
     // First, try to find in existing conversations
     const directConv = conversations.find((conv) => {
       if (conv.type !== 'direct') return false;
-      
+
       // Check if the other participant matches the user ID
       const otherParticipant = conv.participants?.find(p => p.id !== currentUser.id);
       if (!otherParticipant) return false;

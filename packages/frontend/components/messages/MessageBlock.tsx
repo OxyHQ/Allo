@@ -60,13 +60,13 @@ export const MessageBlock = memo<MessageBlockProps>(({
   onMediaLongPress,
 }) => {
   const theme = useTheme();
-  
+
   const { messages, isAiGroup, senderId, isSent } = group;
   const isIncoming = !isSent;
   const senderName = isIncoming && senderId ? getSenderName?.(senderId) : undefined;
   const senderAvatar = isIncoming && senderId ? getSenderAvatar?.(senderId) : undefined;
   const showSenderName = Boolean(isGroup && !isAiGroup && isIncoming && senderName);
-  
+
   // Create refs map for each message bubble using useState
   const [bubbleRefsMap] = useState(() => {
     const map = new Map<string, React.RefObject<View>>();
@@ -75,7 +75,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
     });
     return map;
   });
-  
+
   // Update refs map when messages change
   useEffect(() => {
     messages.forEach(msg => {
@@ -91,7 +91,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
       }
     }
   }, [messages, bubbleRefsMap]);
-  
+
   // Collect all media items from all messages in the group
   const allMedia: MediaItem[] = useMemo(() => {
     return messages.flatMap(msg => msg.media || []);
@@ -233,7 +233,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
             onMediaPress={onMediaPress}
             onMediaLongPress={(mediaId, index, event) => {
               // Find the message that contains this media item
-              const messageWithMedia = messages.find(msg => 
+              const messageWithMedia = messages.find(msg =>
                 msg.media?.some(m => m.id === mediaId)
               );
               if (messageWithMedia && onMediaLongPress) {
@@ -271,10 +271,10 @@ export const MessageBlock = memo<MessageBlockProps>(({
               const prevMessage = index > 0 ? messages[index - 1] : null;
               const isCloseToPrevious = prevMessage !== null;
               const showTimestamp = message.messageType !== 'ai';
-              
+
               const bubbleRef = bubbleRefsMap.get(message.id);
               const handleBubbleLongPress = createBubbleLongPressHandler(message);
-              
+
               return (
                 <TouchableOpacity
                   key={message.id}

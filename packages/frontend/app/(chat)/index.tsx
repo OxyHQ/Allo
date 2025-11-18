@@ -445,12 +445,12 @@ export default function ConversationsList() {
         }
         // Use /u/:id for direct conversations, /c/[id] for others
         const conversation = conversations.find(c => c.id === conversationId);
-        const route = conversation?.type === 'direct' 
-          ? (() => {
-              const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
-              return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conversationId}`;
+        const route = conversation?.type === 'direct'
+            ? (() => {
+                const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
+                return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conversationId}`;
             })()
-          : `/c/${conversationId}`;
+            : `/c/${conversationId}`;
         router.push(route as any);
     }, [isSelectionMode, toggleConversationSelection, router]);
 

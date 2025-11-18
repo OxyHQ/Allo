@@ -244,7 +244,7 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Get conversation data
   const conversation = useConversation(conversationId);
-  
+
   // Use custom hook for conversation metadata
   const conversationMetadata = useConversationMetadata(conversation, currentUserId);
   const { isGroup } = conversationMetadata;
