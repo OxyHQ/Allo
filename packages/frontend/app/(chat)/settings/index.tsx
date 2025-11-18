@@ -26,6 +26,8 @@ import {
     useConversationSwipePreferencesStore,
     SwipeActionType,
 } from '@/stores';
+import { useMessagesStore } from '@/stores/messagesStore';
+import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 
 // Type assertion for Ionicons compatibility with React 19
 const IconComponent = Ionicons as any;

@@ -1,46 +1,50 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { api } from '@/utils/api';
+import { useDeviceKeysStore } from './deviceKeysStore';
+import {
+  storeMessagesLocally,
+  getMessagesLocally,
+  addMessageLocally,
+  updateMessageLocally,
+  removeMessageLocally,
+  addToSyncQueue,
+} from '@/lib/offlineStorage';
+import { p2pManager } from '@/lib/p2pMessaging';
+import NetInfo from '@react-native-community/netinfo';
 
 /**
- * Messages Store
+ * Messages Store with Signal Protocol Encryption
  * 
- * Manages message state including:
- * - Messages organized by conversation ID
- * - Message sending and receiving
- * - Message updates and deletions
- * - Loading and error states
- * 
- * Uses Zustand with subscribeWithSelector middleware for optimized subscriptions.
- * Always use selectors when subscribing to prevent unnecessary re-renders.
- * 
- * @example
- * ```tsx
- * // Good: Using selector
- * const messages = useMessagesStore(state => state.getMessages('conv-1'));
- * 
- * // Bad: Subscribing to entire store
- * const store = useMessagesStore();
- * ```
+ * Features:
+ * - End-to-end encryption using Signal Protocol
+ * - Offline-first storage (device-first)
+ * - Optional cloud sync
+ * - P2P messaging when available
  */
 
 export interface MediaItem {
   id: string;
   type: 'image' | 'video' | 'gif';
+  url?: string;
 }
 
 export interface Message {
   id: string;
   text: string;
   senderId: string;
+  senderDeviceId?: number;
   senderName?: string;
   timestamp: Date;
   isSent: boolean;
   conversationId: string;
-  messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
-  media?: MediaItem[]; // Array of media attachments (images, videos, gifs)
-  fontSize?: number; // Custom font size for this message (if adjusted via send button)
-  // Future: Add support for reactions, etc.
-  // reactions?: Reaction[];
+  messageType?: 'user' | 'ai';
+  media?: MediaItem[];
+  fontSize?: number;
+  // Encryption metadata
+  isEncrypted?: boolean;
+  ciphertext?: string;
+  encryptionVersion?: number;
 }
 
 interface MessagesState {
@@ -54,16 +58,26 @@ interface MessagesState {
   // Last updated timestamps by conversation
   lastUpdatedByConversation: Record<string, number>;
   
+  // Cloud sync enabled
+  cloudSyncEnabled: boolean;
+  
   // Actions
   setMessages: (conversationId: string, messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   removeMessage: (conversationId: string, messageId: string) => void;
   clearMessages: (conversationId: string) => void;
+  setCloudSyncEnabled: (enabled: boolean) => void;
   
   // Async actions
-  fetchMessages: (conversationId: string) => Promise<void>;
-  sendMessage: (conversationId: string, text: string, senderId: string, fontSize?: number) => Promise<Message | null>;
+  fetchMessages: (conversationId: string, recipientUserId?: string) => Promise<void>;
+  sendMessage: (
+    conversationId: string,
+    text: string,
+    senderId: string,
+    recipientUserId: string,
+    fontSize?: number
+  ) => Promise<Message | null>;
   
   // Selectors
   getMessages: (conversationId: string) => Message[];
@@ -72,9 +86,6 @@ interface MessagesState {
   getError: (conversationId: string) => string | null;
 }
 
-// Mock messages data - will be replaced with API calls
-import { getMockMessages } from '@/utils/mockMessages';
-
 export const useMessagesStore = create<MessagesState>()(
   subscribeWithSelector((set, get) => ({
     // Initial state
@@ -82,9 +93,10 @@ export const useMessagesStore = create<MessagesState>()(
     loadingByConversation: {},
     errorByConversation: {},
     lastUpdatedByConversation: {},
+    cloudSyncEnabled: false, // Device-first by default
 
     // Actions
-    setMessages: (conversationId, messages) => {
+    setMessages: async (conversationId, messages) => {
       set((state) => ({
         messagesByConversation: {
           ...state.messagesByConversation,
@@ -99,9 +111,12 @@ export const useMessagesStore = create<MessagesState>()(
           [conversationId]: null,
         },
       }));
+      
+      // Store locally (offline-first)
+      await storeMessagesLocally(conversationId, messages);
     },
 
-    addMessage: (message) => {
+    addMessage: async (message) => {
       set((state) => {
         const existing = state.messagesByConversation[message.conversationId] || [];
         const updated = [...existing, message];
@@ -116,9 +131,12 @@ export const useMessagesStore = create<MessagesState>()(
           },
         };
       });
+      
+      // Store locally
+      await addMessageLocally(message);
     },
 
-    updateMessage: (conversationId, messageId, updates) => {
+    updateMessage: async (conversationId, messageId, updates) => {
       set((state) => {
         const messages = state.messagesByConversation[conversationId] || [];
         const updated = messages.map(msg =>
@@ -135,9 +153,12 @@ export const useMessagesStore = create<MessagesState>()(
           },
         };
       });
+      
+      // Update locally
+      await updateMessageLocally(conversationId, messageId, updates);
     },
 
-    removeMessage: (conversationId, messageId) => {
+    removeMessage: async (conversationId, messageId) => {
       set((state) => {
         const messages = state.messagesByConversation[conversationId] || [];
         const filtered = messages.filter(msg => msg.id !== messageId);
@@ -152,6 +173,9 @@ export const useMessagesStore = create<MessagesState>()(
           },
         };
       });
+      
+      // Remove locally
+      await removeMessageLocally(conversationId, messageId);
     },
 
     clearMessages: (conversationId) => {
@@ -170,17 +194,15 @@ export const useMessagesStore = create<MessagesState>()(
       });
     },
 
+    setCloudSyncEnabled: (enabled) => {
+      set({ cloudSyncEnabled: enabled });
+    },
+
     // Async actions
-    fetchMessages: async (conversationId) => {
-      // Don't fetch if already loading or if messages already exist
+    fetchMessages: async (conversationId, recipientUserId) => {
       const currentState = get();
       if (currentState.loadingByConversation[conversationId]) {
-        return; // Already loading
-      }
-      
-      const existingMessages = currentState.messagesByConversation[conversationId];
-      if (existingMessages && existingMessages.length > 0) {
-        return; // Messages already loaded
+        return;
       }
 
       set((state) => ({
@@ -195,21 +217,88 @@ export const useMessagesStore = create<MessagesState>()(
       }));
 
       try {
-        // TODO: Replace with actual API call
-        // const response = await messageService.getMessages(conversationId);
-        // const messages = response.data.map(msg => ({
-        //   ...msg,
-        //   timestamp: new Date(msg.timestamp),
-        // }));
+        // Always load from local storage first (offline-first)
+        const localMessages = await getMessagesLocally(conversationId);
         
-        // For now, use mock data
-        const mockMessages = getMockMessages(conversationId);
-        const messages = mockMessages.map(msg => ({
-          ...msg,
-          conversationId,
-        }));
-        
-        get().setMessages(conversationId, messages);
+        if (localMessages.length > 0) {
+          // Decrypt messages if needed
+          const deviceKeysStore = useDeviceKeysStore.getState();
+          const decryptedMessages = await Promise.all(
+            localMessages.map(async (msg) => {
+              if (msg.isEncrypted && msg.ciphertext && msg.senderId && msg.senderDeviceId) {
+                try {
+                  const decryptedText = await deviceKeysStore.decryptMessageFromSender(
+                    msg.ciphertext,
+                    msg.senderId,
+                    msg.senderDeviceId
+                  );
+                  return { ...msg, text: decryptedText, isEncrypted: false };
+                } catch (error) {
+                  console.error('[Messages] Error decrypting message:', error);
+                  return { ...msg, text: '[Encrypted - Decryption failed]' };
+                }
+              }
+              return msg;
+            })
+          );
+          
+          get().setMessages(conversationId, decryptedMessages);
+        }
+
+        // If cloud sync is enabled, fetch from server
+        if (get().cloudSyncEnabled) {
+          try {
+            const netInfo = await NetInfo.fetch();
+            if (netInfo.isConnected) {
+              const response = await api.get('/messages', { conversationId });
+              const serverMessages = response.data.messages || [];
+              
+              // Decrypt server messages
+              const deviceKeysStore = useDeviceKeysStore.getState();
+              const decryptedServerMessages = await Promise.all(
+                serverMessages.map(async (msg: any) => {
+                  if (msg.ciphertext && msg.senderId && msg.senderDeviceId) {
+                    try {
+                      const decryptedText = await deviceKeysStore.decryptMessageFromSender(
+                        msg.ciphertext,
+                        msg.senderId,
+                        msg.senderDeviceId
+                      );
+                      return {
+                        id: msg._id || msg.id,
+                        text: decryptedText,
+                        senderId: msg.senderId,
+                        senderDeviceId: msg.senderDeviceId,
+                        timestamp: new Date(msg.createdAt),
+                        isSent: msg.senderId === senderId,
+                        conversationId: msg.conversationId,
+                        fontSize: msg.fontSize,
+                        isEncrypted: false,
+                      };
+                    } catch (error) {
+                      console.error('[Messages] Error decrypting server message:', error);
+                      return null;
+                    }
+                  }
+                  return null;
+                })
+              );
+              
+              const validMessages = decryptedServerMessages.filter((msg): msg is Message => msg !== null);
+              
+              // Merge with local messages
+              const allMessages = [...localMessages, ...validMessages];
+              const uniqueMessages = Array.from(
+                new Map(allMessages.map(msg => [msg.id, msg])).values()
+              ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+              
+              get().setMessages(conversationId, uniqueMessages);
+            }
+          } catch (error) {
+            console.warn('[Messages] Error fetching from server (using local):', error);
+          }
+        }
+
         set((state) => ({
           loadingByConversation: {
             ...state.loadingByConversation,
@@ -231,35 +320,104 @@ export const useMessagesStore = create<MessagesState>()(
       }
     },
 
-    sendMessage: async (conversationId, text, senderId, fontSize) => {
+    sendMessage: async (conversationId, text, senderId, recipientUserId, fontSize) => {
       try {
-        // TODO: Replace with actual API call
-        // const response = await messageService.sendMessage({
-        //   conversationId,
-        //   text,
-        //   senderId,
-        // });
-        // const message = response.data;
+        const deviceKeysStore = useDeviceKeysStore.getState();
+        const deviceKeys = deviceKeysStore.deviceKeys;
         
-        // For now, create message locally
+        if (!deviceKeys) {
+          throw new Error('Device keys not initialized');
+        }
+
+        // Encrypt message
+        let ciphertext: string;
+        try {
+          ciphertext = await deviceKeysStore.encryptMessageForRecipient(text, recipientUserId);
+        } catch (error) {
+          console.error('[Messages] Error encrypting message:', error);
+          throw new Error('Failed to encrypt message');
+        }
+
+        // Create message object
         const message: Message = {
           id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          text: text.trim(),
+          text: text.trim(), // Store plaintext locally for display
           senderId,
+          senderDeviceId: deviceKeys.deviceId,
           timestamp: new Date(),
           isSent: true,
           conversationId,
-          fontSize, // Store custom font size if provided
+          fontSize,
+          isEncrypted: true,
+          ciphertext,
+          encryptionVersion: 1,
         };
 
+        // Add to local storage immediately (offline-first)
         get().addMessage(message);
-        
-        // TODO: Optimistically update conversation last message
-        // const conversationsStore = useConversationsStore.getState();
-        // conversationsStore.updateConversation(conversationId, {
-        //   lastMessage: text,
-        //   timestamp: formatTimeAgo(new Date()),
-        // });
+
+        // Try to send via P2P first (if enabled)
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          try {
+            const sentViaP2P = await p2pManager.sendMessage(
+              conversationId,
+              recipientUserId,
+              message,
+              ciphertext
+            );
+            
+            if (sentViaP2P) {
+              // Message sent via P2P
+              return message;
+            }
+          } catch (error) {
+            console.warn('[Messages] P2P send failed, using server:', error);
+          }
+
+          // Fallback to server (if cloud sync enabled)
+          if (get().cloudSyncEnabled) {
+            try {
+              await api.post('/messages', {
+                conversationId,
+                senderDeviceId: deviceKeys.deviceId,
+                ciphertext,
+                encryptionVersion: 1,
+                messageType: 'text',
+                fontSize,
+              });
+            } catch (error) {
+              console.error('[Messages] Error sending to server:', error);
+              // Add to sync queue for retry
+              await addToSyncQueue({
+                type: 'send_message',
+                conversationId,
+                data: {
+                  conversationId,
+                  senderDeviceId: deviceKeys.deviceId,
+                  ciphertext,
+                  encryptionVersion: 1,
+                  messageType: 'text',
+                  fontSize,
+                },
+              });
+            }
+          }
+        } else {
+          // Offline - add to sync queue
+          await addToSyncQueue({
+            type: 'send_message',
+            conversationId,
+            data: {
+              conversationId,
+              senderDeviceId: deviceKeys.deviceId,
+              ciphertext,
+              encryptionVersion: 1,
+              messageType: 'text',
+              fontSize,
+            },
+          });
+        }
 
         return message;
       } catch (error) {
@@ -293,4 +451,3 @@ export const useMessagesStore = create<MessagesState>()(
     },
   }))
 );
-
