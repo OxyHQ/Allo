@@ -1,20 +1,20 @@
 # @allo/backend
 
-> The backend package of the allo monorepo - A robust API service built with Express.js and TypeScript.
+> The backend package of the Allo monorepo - A modern chat API service built with Express.js and TypeScript.
 
 ---
 
 ## Overview
 
-This is the **backend package** of the **allo** monorepo. The allo API is a robust backend service built with Express.js and TypeScript, providing functionality for social media interactions including posts, user management, authentication, and real-time communications.
+This is the **backend package** of the **Allo** monorepo. Allo is a modern chat application, and this backend provides the API service for messaging, conversations, and user settings. The backend uses Oxy for authentication, so no user management is needed.
 
 ## Tech Stack
 
 - Node.js with TypeScript
 - Express.js for REST API
 - MongoDB with Mongoose for data storage
-- Socket.IO for real-time features
-- JWT for authentication
+- Socket.IO for real-time messaging
+- Oxy Services for authentication (users managed by Oxy platform)
 
 ## Getting Started
 
@@ -29,8 +29,8 @@ This is the **backend package** of the **allo** monorepo. The allo API is a robu
 #### Option 1: From the Monorepo Root (Recommended)
 ```bash
 # Clone the repository
-git clone https://github.com/OxyHQ/allo.git
-cd allo
+git clone https://github.com/OxyHQ/Allo.git
+cd Allo
 
 # Install all dependencies
 npm run install:all
@@ -60,15 +60,15 @@ Create a `.env` file in this package directory with the following variables:
 MONGODB_URI=your_mongodb_connection_string
 
 # Authentication
-# WE USE OXY FOR AUTHENTICATION
+# WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
+OXY_API_URL=https://api.oxy.so
 
 # Server Configuration
 PORT=3000
 NODE_ENV=development
 
-# External Services
-OPENAI_API_KEY=your_openai_api_key
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+# Frontend URL (for CORS)
+FRONTEND_URL=https://allo.earth
 ```
 
 ### Running the API
@@ -88,166 +88,278 @@ npm start
 
 The API uses MongoDB with Mongoose. Make sure your MongoDB instance is running and accessible.
 
-#### Running Migrations
-```bash
-# Development environment
-npm run migrate:dev
-
-# Production environment
-npm run migrate
-```
-
 ## API Endpoints
-
-### Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API
-    participant Database
-    
-    Client->>API: POST /auth/signup
-    API->>Database: Create User
-    Database-->>API: User Created
-    API-->>Client: Access Token
-    
-    Client->>API: POST /auth/login
-    API->>Database: Verify Credentials
-    Database-->>API: User Found
-    API-->>Client: Access + Refresh Tokens
-```
 
 ### Authentication
 
-#### POST /auth/signup
-- Creates a new user account
-- Body: `{ username: string, email: string, password: string }`
-- Returns:
-```json
-{
-  "user": {
-    "id": "user_id",
-    "username": "john_doe",
-    "email": "john@example.com",
-    "createdAt": "2023-01-01T00:00:00Z"
-  },
-  "accessToken": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
+All authenticated endpoints require a Bearer token from Oxy. The backend uses `@oxyhq/services` for authentication middleware.
 
-#### POST /auth/login
-- Authenticates existing user
-- Body: `{ email: string, password: string }`
-- Returns:
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
+### Health Check
 
-### Posts
+#### GET /api/health
+- Public endpoint
+- Returns: `{ status: "ok", service: "allo-backend" }`
 
-#### POST /posts
-- Creates a new post
-- Authentication: Bearer token required
+### Conversations
+
+#### GET /api/conversations
+- Get all conversations for the authenticated user
+- Query params: `limit` (default: 50), `offset` (default: 0)
+- Returns: `{ conversations: Conversation[] }`
+
+#### GET /api/conversations/:id
+- Get a specific conversation by ID
+- Returns: `Conversation`
+
+#### POST /api/conversations
+- Create a new conversation
 - Body:
 ```json
 {
-  "text": "Hello world!",
-  "media": ["image1.jpg"],
-  "location": {
-    "longitude": -73.935242,
-    "latitude": 40.730610
-  }
+  "type": "direct" | "group",
+  "participantIds": ["user1", "user2"],
+  "name": "Group Name", // Optional, for groups only
+  "description": "Group description", // Optional, for groups only
+  "avatar": "avatar_url" // Optional, for groups only
 }
 ```
-- Returns:
+- Returns: `Conversation`
+
+#### PUT /api/conversations/:id
+- Update a conversation (name, description, avatar for groups)
+- Body:
 ```json
 {
-  "id": "post_id",
-  "text": "Hello world!",
-  "media": ["image1.jpg"],
-  "location": {
-    "type": "Point",
-    "coordinates": [-73.935242, 40.730610]
-  },
-  "createdAt": "2023-01-01T00:00:00Z",
-  "user": {
-    "id": "user_id",
-    "username": "john_doe"
-  }
+  "name": "Updated Name",
+  "description": "Updated description",
+  "avatar": "new_avatar_url"
 }
 ```
 
-#### GET /posts/explore
-- Retrieves posts for exploration
-- Query params: `limit` (default: 20), `offset` (default: 0)
-- Returns:
+#### POST /api/conversations/:id/participants
+- Add participants to a group conversation
+- Body: `{ "participantIds": ["user1", "user2"] }`
+
+#### DELETE /api/conversations/:id/participants/:participantId
+- Remove a participant from a group conversation
+
+#### POST /api/conversations/:id/archive
+- Archive a conversation
+
+#### POST /api/conversations/:id/unarchive
+- Unarchive a conversation
+
+#### POST /api/conversations/:id/mark-read
+- Mark conversation as read
+
+### Messages
+
+#### GET /api/messages
+- Get messages for a conversation
+- Query params:
+  - `conversationId` (required)
+  - `limit` (default: 50)
+  - `before` (ISO date string for pagination)
+- Returns: `{ messages: Message[] }`
+
+#### GET /api/messages/:id
+- Get a specific message by ID
+- Returns: `Message`
+
+#### POST /api/messages
+- Send a new message
+- Body:
 ```json
 {
-  "posts": [
+  "conversationId": "conv_id",
+  "text": "Message text",
+  "media": [ // Optional
     {
-      "id": "post_id",
-      "text": "Post content",
-      "user": {
-        "id": "user_id",
-        "username": "john_doe"
-      },
-      "createdAt": "2023-01-01T00:00:00Z"
+      "id": "media_id",
+      "type": "image" | "video" | "audio" | "file",
+      "url": "media_url",
+      "thumbnailUrl": "thumb_url", // Optional
+      "fileName": "file.jpg", // Optional
+      "fileSize": 1024, // Optional
+      "mimeType": "image/jpeg", // Optional
+      "width": 1920, // Optional
+      "height": 1080, // Optional
+      "duration": 120 // Optional, for video/audio
     }
   ],
-  "total": 100,
-  "hasMore": true
+  "replyTo": "message_id", // Optional
+  "fontSize": 16 // Optional, custom font size
 }
 ```
+- Returns: `Message`
 
-### Users
+#### PUT /api/messages/:id
+- Edit a message
+- Body: `{ "text": "Updated text" }`
 
-#### GET /users/:username
-- Retrieves user profile
-- Authentication: Bearer token required
-- Returns:
+#### DELETE /api/messages/:id
+- Delete a message (soft delete)
+
+#### POST /api/messages/:id/read
+- Mark a message as read
+
+#### POST /api/messages/:id/delivered
+- Mark a message as delivered
+
+### Profile Settings
+
+#### GET /api/profile/settings/me
+- Get current user's settings
+- Returns: `UserSettings`
+
+#### GET /api/profile/settings/:userId
+- Get settings by oxy user id
+- Returns: `UserSettings`
+
+#### PUT /api/profile/settings
+- Update current user's settings
+- Body:
 ```json
 {
-  "id": "user_id",
-  "username": "john_doe",
-  "bio": "Hello, I'm John!",
-  "followersCount": 1000,
-  "followingCount": 500,
-  "postsCount": 100,
-  "isFollowing": true
+  "appearance": {
+    "themeMode": "light" | "dark" | "system",
+    "primaryColor": "#000000"
+  },
+  "profileHeaderImage": "url",
+  "privacy": {
+    "profileVisibility": "public" | "private" | "followers_only",
+    "showContactInfo": true,
+    "allowTags": true,
+    "allowallos": true,
+    "showOnlineStatus": true,
+    "hideLikeCounts": false,
+    "hideShareCounts": false,
+    "hideReplyCounts": false,
+    "hideSaveCounts": false,
+    "hiddenWords": ["word1", "word2"],
+    "restrictedUsers": ["user1", "user2"]
+  },
+  "profileCustomization": {
+    "coverPhotoEnabled": true,
+    "minimalistMode": false,
+    "displayName": "Display Name",
+    "coverImage": "url"
+  }
 }
 ```
 
-## Database Schema Relationships
+#### DELETE /api/profile/settings/behavior
+- Reset user behavior/preferences
 
-```mermaid
-erDiagram
-    User ||--o{ Post : creates
-    User ||--o{ Saved : has
-    User ||--o{ Follow : follows
-    Post ||--o{ Like : receives
-    Post ||--o{ Comment : has
-    
-    User {
-        string id PK
-        string username
-        string email
-        string password
-        string[] saved
-        datetime createdAt
+#### GET /api/profile/blocks
+- Get list of blocked users
+
+#### POST /api/profile/blocks
+- Block a user
+- Body: `{ "blockedId": "user_id" }`
+
+#### DELETE /api/profile/blocks/:blockedId
+- Unblock a user
+
+#### GET /api/profile/restricts
+- Get list of restricted users
+
+#### POST /api/profile/restricts
+- Restrict a user
+- Body: `{ "restrictedId": "user_id" }`
+
+#### DELETE /api/profile/restricts/:restrictedId
+- Unrestrict a user
+
+## Real-time Messaging (Socket.IO)
+
+The backend provides real-time messaging through Socket.IO.
+
+### Connection
+
+Connect to the `/messaging` namespace:
+
+```javascript
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000/messaging', {
+  auth: {
+    token: 'your_oxy_token',
+    userId: 'your_user_id'
+  }
+});
+```
+
+### Events
+
+#### Client → Server
+
+- `joinConversation` - Join a conversation room
+  - Payload: `conversationId: string`
+
+- `leaveConversation` - Leave a conversation room
+  - Payload: `conversationId: string`
+
+#### Server → Client
+
+- `newMessage` - New message received
+  - Payload: `Message`
+
+- `messageUpdated` - Message was edited
+  - Payload: `Message`
+
+- `messageDeleted` - Message was deleted
+  - Payload: `{ id: string }`
+
+## Database Schema
+
+### Conversation
+
+```typescript
+{
+  type: "direct" | "group",
+  participants: [
+    {
+      userId: string, // Oxy user ID
+      role: "admin" | "member",
+      joinedAt: Date,
+      lastReadAt?: Date
     }
-    
-    Post {
-        string id PK
-        string userId FK
-        string text
-        string[] media
-        object location
-        datetime createdAt
-    }
+  ],
+  name?: string, // For groups
+  description?: string, // For groups
+  avatar?: string, // For groups
+  createdBy: string, // Oxy user ID
+  lastMessageAt?: Date,
+  lastMessage?: {
+    text?: string,
+    senderId: string,
+    timestamp: Date
+  },
+  unreadCounts: Record<string, number>, // userId -> unread count
+  archivedBy: string[], // Array of user IDs
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### Message
+
+```typescript
+{
+  conversationId: string,
+  senderId: string, // Oxy user ID
+  text?: string,
+  media?: MediaItem[],
+  replyTo?: string, // Message ID
+  fontSize?: number,
+  editedAt?: Date,
+  deletedAt?: Date,
+  readBy: Record<string, Date>, // userId -> read timestamp
+  deliveredTo: string[], // Array of user IDs
+  createdAt: Date,
+  updatedAt: Date
+}
 ```
 
 ## Development Scripts
@@ -257,137 +369,20 @@ erDiagram
 - `npm run start` — Start production server
 - `npm run lint` — Lint codebase
 - `npm run clean` — Clean build artifacts
-- `npm run migrate` — Run database migrations
-- `npm run migrate:dev` — Run database migrations in development
-- `npm run test` — Run tests (placeholder)
 
 ## Monorepo Integration
 
-This package is part of the allo monorepo and integrates with:
+This package is part of the Allo monorepo and integrates with:
 
 - **@allo/frontend**: React Native application
 - **@allo/shared-types**: Shared TypeScript type definitions
 
 ### Shared Dependencies
 - Uses `@allo/shared-types` for type safety across packages
-- Integrates with `@oxyhq/services` for common functionality
+- Integrates with `@oxyhq/services` for authentication
 
-## Performance Optimization
+## Notes
 
-### Caching Strategy
-- Implement Redis caching for:
-  - User profiles (TTL: 1 hour)
-  - Popular posts (TTL: 15 minutes)
-  - Trending hashtags (TTL: 5 minutes)
-
-### Database Indexing
-```javascript
-// User Collection Indexes
-db.users.createIndex({ "username": 1 }, { unique: true })
-db.users.createIndex({ "email": 1 }, { unique: true })
-
-// Post Collection Indexes
-db.posts.createIndex({ "userId": 1, "createdAt": -1 })
-db.posts.createIndex({ "location": "2dsphere" })
-```
-
-## Monitoring and Logging
-
-### Health Check Endpoint
-```
-GET /health
-Response: {
-  "status": "healthy",
-  "version": "1.0.0",
-  "uptime": 1000,
-  "mongoStatus": "connected"
-}
-```
-
-### Logging
-- Use Winston for structured logging
-- Log levels: error, warn, info, debug
-- Include request ID in all logs
-
-## Deployment
-
-### Docker Deployment
-```bash
-# Build the Docker image
-docker build -t allo-api .
-
-# Run the container
-docker run -p 3000:3000 -e MONGODB_URI=your_mongodb_uri allo-api
-```
-
-### Cloud Deployment (Vercel)
-1. Configure `vercel.json`:
-```json
-{
-  "version": 2,
-  "builds": [{
-    "src": "dist/server.js",
-    "use": "@vercel/node"
-  }],
-  "routes": [{
-    "src": "/(.*)",
-    "dest": "dist/server.js"
-  }]
-}
-```
-
-2. Deploy using Vercel CLI:
-```bash
-vercel --prod
-```
-
-## Push Notifications (FCM)
-
-Set these env vars in `packages/backend/.env`:
-
-```
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_SERVICE_ACCOUNT_BASE64=base64-encoded-service-account-json
-```
-
-Routes:
-- POST /api/notifications/push-token { token, type, platform, deviceId?, locale? }
-- DELETE /api/notifications/push-token { token }
-
-When a notification is created, the server attempts to send an FCM push to registered tokens.
-
-## Troubleshooting Guide
-
-### Common Issues
-
-1. Connection Timeouts
-```
-Error: MongoTimeoutError
-Solution: Check MongoDB connection string and network connectivity
-```
-
-2. Authentication Failures
-```
-Error: JsonWebTokenError
-Solution: Verify token expiration and secret keys
-```
-
-3. Rate Limit Exceeded
-```
-Error: 429 Too Many Requests
-Solution: Implement exponential backoff in client
-```
-
-## Contributing
-
-Contributions are welcome! Please see the [main README](../../README.md) for the complete contributing guidelines.
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting: `npm run test && npm run lint`
-5. Submit a pull request
-
-## License
-
-This project is licensed under the AGPL License.
+- **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
+- **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
+- **Real-time**: Socket.IO is used for real-time message delivery and updates.

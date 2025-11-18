@@ -129,6 +129,19 @@ router.put('/settings', async (req: AuthRequest, res: Response) => {
         update['privacy.restrictedUsers'] = privacy.restrictedUsers;
       }
     }
+    
+    if (req.body.security) {
+      const { security } = req.body;
+      if (typeof security.cloudSyncEnabled === 'boolean') {
+        update['security.cloudSyncEnabled'] = security.cloudSyncEnabled;
+      }
+      if (typeof security.encryptionEnabled === 'boolean') {
+        update['security.encryptionEnabled'] = security.encryptionEnabled;
+      }
+      if (typeof security.peerToPeerEnabled === 'boolean') {
+        update['security.peerToPeerEnabled'] = security.peerToPeerEnabled;
+      }
+    }
 
     const doc = await UserSettings.findOneAndUpdate(
       { oxyUserId },

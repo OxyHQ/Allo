@@ -21,6 +21,12 @@ export interface PrivacySettings {
   restrictedUsers?: string[]; // Users who can see limited content
 }
 
+export interface SecuritySettings {
+  cloudSyncEnabled?: boolean; // Enable cloud backup/sync (default: false for device-first)
+  encryptionEnabled?: boolean; // Signal Protocol encryption (default: true)
+  peerToPeerEnabled?: boolean; // Enable P2P messaging when possible (default: true)
+}
+
 export interface ProfileCustomization {
   coverPhotoEnabled?: boolean;
   minimalistMode?: boolean;
@@ -34,6 +40,7 @@ export interface IUserSettings extends Document {
   profileHeaderImage?: string;
   privacy?: PrivacySettings;
   profileCustomization?: ProfileCustomization;
+  security?: SecuritySettings;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,12 +71,19 @@ const ProfileCustomizationSchema = new Schema<ProfileCustomization>({
   coverImage: { type: String },
 }, { _id: false });
 
+const SecuritySchema = new Schema({
+  cloudSyncEnabled: { type: Boolean, default: false }, // Device-first by default
+  encryptionEnabled: { type: Boolean, default: true }, // Encryption always enabled
+  peerToPeerEnabled: { type: Boolean, default: true }, // P2P enabled by default
+}, { _id: false });
+
 const UserSettingsSchema = new Schema<IUserSettings>({
   oxyUserId: { type: String, required: true, index: true, unique: true },
   appearance: { type: AppearanceSchema, default: () => ({ themeMode: 'system' }) },
   profileHeaderImage: { type: String },
   privacy: { type: PrivacySchema, default: () => ({ profileVisibility: 'public' }) },
   profileCustomization: { type: ProfileCustomizationSchema },
+  security: { type: SecuritySchema, default: () => ({ cloudSyncEnabled: false, encryptionEnabled: true, peerToPeerEnabled: true }) },
 }, { timestamps: true, versionKey: false });
 
 export const UserSettings = mongoose.model<IUserSettings>('UserSettings', UserSettingsSchema);

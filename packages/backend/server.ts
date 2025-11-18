@@ -1,18 +1,16 @@
 // --- Imports ---
 import express from "express";
 import http from "http";
-import mongoose from "mongoose";
 import { connectToDatabase } from "./src/utils/database";
 import { Server as SocketIOServer, Socket, Namespace } from "socket.io";
-import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-
-
-// Models
+import { OxyServices } from "@oxyhq/services";
 
 // Routers
-import searchRoutes from "./src/routes/search";
-import profileSettingsRoutes from './src/routes/profileSettings';
+import profileSettingsRoutes from "./src/routes/profileSettings";
+import conversationsRoutes from "./src/routes/conversations";
+import messagesRoutes from "./src/routes/messages";
+import devicesRoutes from "./src/routes/devices";
 
 // Middleware
 import { rateLimiter, bruteForceProtection } from "./src/middleware/security";
@@ -22,33 +20,16 @@ dotenv.config();
 
 const app = express();
 
-export const oxy = new OxyServices({ baseURL: process.env.OXY_API_URL || 'https://api.oxy.so' });
-
+// Initialize Oxy Services for authentication
+export const oxy = new OxyServices({
+  baseURL: process.env.OXY_API_URL || "https://api.oxy.so",
+});
 
 // --- Middleware ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Middleware to parse nested query parameters (e.g., filters[authors]=user1,user2)
-app.use((req, res, next) => {
-  if (req.query && typeof req.query === 'object') {
-    const filters: any = {};
-    Object.keys(req.query).forEach(key => {
-      const match = key.match(/^filters\[(.+)\]$/);
-      if (match) {
-        const filterKey = match[1];
-        if (!filters[filterKey]) {
-          filters[filterKey] = req.query[key];
-        }
-      }
-    });
-    if (Object.keys(filters).length > 0) {
-      (req.query as any).filters = filters;
-    }
-  }
-  next();
-});
-
+// Database connection middleware
 app.use(async (req, res, next) => {
   try {
     await connectToDatabase();
@@ -64,7 +45,12 @@ app.use(async (req, res, next) => {
 
 // CORS and security headers
 app.use((req, res, next) => {
-  const allowedOrigins = [process.env.FRONTEND_URL || "https://allo.earth", "http://localhost:8081", "http://localhost:8082", "http://192.168.86.44:8081"];
+  const allowedOrigins = [
+    process.env.FRONTEND_URL || "https://allo.earth",
+    "http://localhost:8081",
+    "http://localhost:8082",
+    "http://192.168.86.44:8081",
+  ];
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -72,7 +58,10 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
+  );
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
@@ -91,9 +80,18 @@ interface AuthenticatedSocket extends Socket {
 }
 
 type DisconnectReason =
-  | "server disconnect" | "client disconnect" | "transport close" | "transport error" | "ping timeout" | "parse error" | "forced close" | "forced server close" | "server shutting down" | "client namespace disconnect" | "server namespace disconnect" | "unknown transport";
-
-interface SocketError extends Error { description?: string; context?: any; }
+  | "server disconnect"
+  | "client disconnect"
+  | "transport close"
+  | "transport error"
+  | "ping timeout"
+  | "parse error"
+  | "forced close"
+  | "forced server close"
+  | "server shutting down"
+  | "client namespace disconnect"
+  | "server namespace disconnect"
+  | "unknown transport";
 
 const SOCKET_CONFIG = {
   PING_TIMEOUT: 60000,
@@ -116,44 +114,59 @@ const io = new SocketIOServer(server, {
   maxHttpBufferSize: SOCKET_CONFIG.MAX_BUFFER_SIZE,
   connectTimeout: SOCKET_CONFIG.CONNECT_TIMEOUT,
   cors: {
-    origin: [process.env.FRONTEND_URL || "https://allo.earth", "http://localhost:8081", "http://localhost:8082"],
+    origin: [
+      process.env.FRONTEND_URL || "https://allo.earth",
+      "http://localhost:8081",
+      "http://localhost:8082",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-Requested-With", "Accept", "Accept-Version", "Content-Length", "Content-MD5", "Date", "X-Api-Version"]
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-CSRF-Token",
+      "X-Requested-With",
+      "Accept",
+      "Accept-Version",
+      "Content-Length",
+      "Content-MD5",
+      "Date",
+      "X-Api-Version",
+    ],
   },
   perMessageDeflate: {
     threshold: SOCKET_CONFIG.COMPRESSION_THRESHOLD,
-    zlibInflateOptions: { chunkSize: SOCKET_CONFIG.CHUNK_SIZE, windowBits: SOCKET_CONFIG.WINDOW_BITS },
-    zlibDeflateOptions: { chunkSize: SOCKET_CONFIG.CHUNK_SIZE, windowBits: SOCKET_CONFIG.WINDOW_BITS, level: SOCKET_CONFIG.COMPRESSION_LEVEL },
+    zlibInflateOptions: {
+      chunkSize: SOCKET_CONFIG.CHUNK_SIZE,
+      windowBits: SOCKET_CONFIG.WINDOW_BITS,
+    },
+    zlibDeflateOptions: {
+      chunkSize: SOCKET_CONFIG.CHUNK_SIZE,
+      windowBits: SOCKET_CONFIG.WINDOW_BITS,
+      level: SOCKET_CONFIG.COMPRESSION_LEVEL,
+    },
   },
 });
 
-const configureNamespaceErrorHandling = (namespace: Namespace) => {
-  namespace.on("connection_error", (error: Error) => {
-    console.error("Connection error:", error.message);
-  });
-  namespace.on("connect_error", (error: Error) => {
-    console.error("Connect error:", error.message);
-  });
-  namespace.on("connect_timeout", () => {
-    console.error("Connection timeout");
-  });
-};
-
-const notificationsNamespace = io.of("/notifications");
-const postsNamespace = io.of("/posts");
+// Messaging namespace for real-time chat
+const messagingNamespace = io.of("/messaging");
 
 // --- Socket Auth Middleware ---
-// Lightweight auth: accept userId from client handshake and attach to socket
-[notificationsNamespace, postsNamespace, io].forEach((namespaceOrServer: any) => {
-  // For namespaces we have .use; for main io server we also have .use
+[messagingNamespace, io].forEach((namespaceOrServer: any) => {
   if (namespaceOrServer && typeof namespaceOrServer.use === "function") {
     namespaceOrServer.use((socket: AuthenticatedSocket, next: (err?: any) => void) => {
       try {
         const auth = socket.handshake?.auth as any;
-        const userId = auth?.userId || auth?.id || auth?.user?.id;
-        if (userId && typeof userId === "string") {
-          socket.user = { id: userId };
+        const token = auth?.token || socket.handshake?.headers?.authorization?.replace("Bearer ", "");
+        
+        if (token) {
+          // Verify token with Oxy
+          // For now, accept userId from handshake auth
+          // TODO: Implement proper token verification with Oxy
+          const userId = auth?.userId || auth?.id || auth?.user?.id;
+          if (userId && typeof userId === "string") {
+            socket.user = { id: userId };
+          }
         }
       } catch (_) {
         // ignore – will be handled by connection handlers if user missing
@@ -163,217 +176,88 @@ const postsNamespace = io.of("/posts");
   }
 });
 
-// --- Socket Namespace Config ---
-
-// Configure notifications namespace
-notificationsNamespace.on("connection", (socket: AuthenticatedSocket) => {
-  console.log(
-    "Client connected to notifications namespace from ip:",
-    socket.handshake.address
-  );
+// Configure messaging namespace
+messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
+  console.log("Client connected to messaging namespace from ip:", socket.handshake.address);
 
   if (!socket.user?.id) {
-    console.log(
-      "Unauthenticated client attempted to connect to notifications namespace"
-    );
+    console.log("Unauthenticated client attempted to connect to messaging namespace");
     socket.disconnect(true);
     return;
   }
 
-  const userRoom = `user:${socket.user.id}`;
   const userId = socket.user.id;
+  const userRoom = `user:${userId}`;
   socket.join(userRoom);
-  console.log(`Client ${socket.id} joined notification room:`, userRoom);
+  console.log(`Client ${socket.id} joined messaging room:`, userRoom);
 
   socket.on("error", (error: Error) => {
-    console.error("Notifications socket error:", error.message);
+    console.error("Messaging socket error:", error.message);
   });
 
-  socket.on("markNotificationRead", async ({ notificationId }) => {
-    try {
-      if (!socket.user?.id) return;
-      const notification = await Notification.findOneAndUpdate(
-        { _id: notificationId, recipientId: userId },
-        { read: true },
-        { new: true }
-      ).populate("actorId", "username name avatar");
-      if (notification) {
-        notificationsNamespace
-          .to(userRoom)
-          .emit("notificationUpdated", notification);
-      }
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
-    }
+  // Join conversation room
+  socket.on("joinConversation", (conversationId: string) => {
+    const room = `conversation:${conversationId}`;
+    socket.join(room);
+    console.log(`Client ${socket.id} joined conversation room:`, room);
   });
 
-  socket.on("markAllNotificationsRead", async () => {
-    try {
-      if (!socket.user?.id) return;
-      await Notification.updateMany({ recipientId: userId }, { read: true });
-      notificationsNamespace.to(userRoom).emit("allNotificationsRead");
-    } catch (error) {
-      console.error("Error marking all notifications as read:", error);
-    }
+  // Leave conversation room
+  socket.on("leaveConversation", (conversationId: string) => {
+    const room = `conversation:${conversationId}`;
+    socket.leave(room);
+    console.log(`Client ${socket.id} left conversation room:`, room);
   });
 
-  socket.on("disconnect", (reason: DisconnectReason, description?: any) => {
-    console.log(
-      `Client ${socket.id} disconnected from notifications namespace:`,
-      reason,
-      description || ""
-    );
+  socket.on("disconnect", (reason: DisconnectReason) => {
+    console.log(`Client ${socket.id} disconnected from messaging namespace:`, reason);
     socket.leave(userRoom);
   });
 });
 
-// Configure postsNamespace events
-postsNamespace.on("connection", (socket: AuthenticatedSocket) => {
-  console.log(
-    "Client connected to posts namespace from ip:",
-    socket.handshake.address
-  );
-
-  socket.on("error", (error: Error) => {
-    console.error("Posts socket error:", error.message);
-  });
-
-  socket.on("joinPost", (postId: string) => {
-    const room = `post:${postId}`;
-    socket.join(room);
-    console.log(`Client ${socket.id} joined post room:`, room);
-  });
-
-  socket.on("leavePost", (postId: string) => {
-    const room = `post:${postId}`;
-    socket.leave(room);
-    console.log(`Client ${socket.id} left post room:`, room);
-  });
-
-  socket.on("disconnect", (reason: DisconnectReason) => {
-    console.log(
-      `Client ${socket.id} disconnected from posts namespace:`,
-      reason
-    );
-  });
-});
-
-// Apply verification middleware to all namespaces
-[
-  notificationsNamespace,
-  postsNamespace,
-].forEach((namespace) => {
-  configureNamespaceErrorHandling(namespace);
-});
-
-// Configure main namespace with enhanced error handling
+// Configure main namespace
 io.on("connection", (socket: AuthenticatedSocket) => {
   console.log("Client connected from ip:", socket.handshake.address);
 
-  // Enhanced error handling
   socket.on("error", (error: Error) => {
     console.error("Socket error:", error.message);
-    // Attempt to reconnect on error
     if (socket.connected) {
       socket.disconnect();
     }
   });
 
-  socket.on("disconnect", (reason: DisconnectReason, description?: any) => {
-    console.log("Client disconnected:", reason, description || "");
-    // Handle specific disconnect reasons
-    if (reason === "server disconnect") {
-      // Reconnect if server initiated the disconnect
-      socket.disconnect();
-    }
-    if (reason === "transport close" || reason === "transport error") {
-      console.log("Transport issue detected, attempting reconnection...");
-    }
-  });
-
-  socket.on("connect_error", (error: Error) => {
-    console.error("Connection error:", error.message);
-  });
-
-  socket.on("reconnect_attempt", (attemptNumber: number) => {
-    console.log(`Reconnection attempt ${attemptNumber}`);
-  });
-
-  socket.on("reconnect_error", (error: Error) => {
-    console.error("Reconnection error:", error.message);
-  });
-
-  socket.on("reconnect_failed", () => {
-    console.error("Failed to reconnect");
-  });
-
-  socket.on("joinPost", (postId: string) => {
-    const room = `post:${postId}`;
-    socket.join(room);
-    console.log(`Client ${socket.id} joined room:`, room);
-  });
-
-  socket.on("leavePost", (postId: string) => {
-    const room = `post:${postId}`;
-    socket.leave(room);
-    console.log(`Client ${socket.id} left room:`, room);
+  socket.on("disconnect", (reason: DisconnectReason) => {
+    console.log("Client disconnected:", reason);
   });
 });
 
-// Enhanced error handling for namespaces
-[notificationsNamespace, postsNamespace].forEach(
-  (namespace: Namespace) => {
-    namespace.on("connection_error", (error: Error) => {
-      console.error(
-        `Namespace ${namespace.name} connection error:`,
-        error.message
-      );
-    });
-
-    namespace.on("connect_error", (error: SocketError) => {
-      console.error(`${namespace.name}: Connect error:`, error.message);
-      // Log detailed error info
-      if (error.description)
-        console.error("Error description:", error.description);
-      if (error.context) console.error("Error context:", error.context);
-    });
-
-    namespace.on("connect_timeout", () => {
-      console.error(`${namespace.name}: Connect timeout`);
-    });
-  }
-);
-
 // --- Expose namespaces for use in routes ---
 app.set("io", io);
-// Expose io globally for utility modules that emit without direct access to req/app
-// Using any-cast to avoid augmenting global types across the project
+app.set("messagingNamespace", messagingNamespace);
 (global as any).io = io;
-app.set("notificationsNamespace", notificationsNamespace);
-app.set("postsNamespace", postsNamespace);
 
 // --- Optional Auth Middleware ---
 // Tries to authenticate but doesn't fail if no token is provided
-const optionalAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Check if Authorization header exists
+const optionalAuth = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader) {
-    // No auth header, continue as unauthenticated
-    console.log('Optional auth: No authorization header, continuing as unauthenticated');
     return next();
   }
-  
-  // Try to authenticate if header exists
+
   const authMiddleware = oxy.auth();
   authMiddleware(req, res, (err?: any) => {
     if (err) {
-      // Auth failed (invalid token, expired, etc.), but continue anyway
-      console.log('Optional auth: Authentication failed, continuing as unauthenticated:', err?.message || 'Unknown error');
-      // Clear any partial user data that might have been set
+      console.log(
+        "Optional auth: Authentication failed, continuing as unauthenticated:",
+        err?.message || "Unknown error"
+      );
       (req as any).user = undefined;
     }
-    // Always continue the request chain
     next();
   });
 };
@@ -381,73 +265,44 @@ const optionalAuth = (req: express.Request, res: express.Response, next: express
 // --- API ROUTES ---
 // Public API routes (no authentication required)
 const publicApiRouter = express.Router();
-publicApiRouter.use("/hashtags", hashtagsRoutes);
-// Move polls under authenticated router so req.user is available for create/vote
-// If you want public GET access later, split the router or add a public shim.
-// publicApiRouter.use("/polls", pollsRoutes);
-// Debug route removed for production
 
-// Feed routes with optional authentication (allow unauthenticated access for GET routes)
-// POST/PUT/DELETE routes in feedRoutes require authentication
-publicApiRouter.use("/feed", optionalAuth, feedRoutes);
-
-// Public profile endpoints
-// GET /api/profile/design/:userId - public profile design data (no auth required)
-publicApiRouter.use("/profile/design", profileDesignRoutes);
-publicApiRouter.use("/articles", articlesRoutes);
+// Health check
+publicApiRouter.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "allo-backend" });
+});
 
 // Authenticated API routes (require authentication)
 const authenticatedApiRouter = express.Router();
-// Note: The feed routes that require auth (like, save, repost, etc.) are in feedRoutes
-// They're protected by the oxy.auth() middleware applied to authenticatedApiRouter
-authenticatedApiRouter.use("/posts", postsRouter); // All post routes require authentication
-authenticatedApiRouter.use("/lists", listsRoutes);
-authenticatedApiRouter.use("/notifications", notificationsRouter);
-authenticatedApiRouter.use("/analytics", analyticsRoutes);
-authenticatedApiRouter.use("/statistics", statisticsRoutes);
-authenticatedApiRouter.use("/search", searchRoutes);
-authenticatedApiRouter.use("/feeds", customFeedsRoutes); // User-created feeds
-authenticatedApiRouter.use("/polls", pollsRoutes); // Polls now require authentication
-authenticatedApiRouter.use("/test", testRoutes);
 authenticatedApiRouter.use("/profile", profileSettingsRoutes);
-authenticatedApiRouter.use("/subscriptions", subscriptionsRoutes);
-authenticatedApiRouter.use("/gifs", gifsRoutes);
-// You can add more protected routers here as needed
+authenticatedApiRouter.use("/conversations", conversationsRoutes);
+authenticatedApiRouter.use("/messages", messagesRoutes);
+authenticatedApiRouter.use("/devices", devicesRoutes);
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
 app.use("/api", oxy.auth(), authenticatedApiRouter);
 
 // --- Root API Welcome Route ---
-app.get("", async (req, res) => {
-  try {
-    const postsCount = await Post.countDocuments();
-    res.json({ message: "Welcome to the API", posts: postsCount });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching stats", error });
-  }
+app.get("/", async (req, res) => {
+  res.json({ message: "Welcome to Allo API", version: "1.0.0" });
 });
 
 // --- MongoDB Connection ---
-const db = mongoose.connection;
-db.on("error", (error) => { console.error("MongoDB connection error:", error); });
-db.once("open", () => { console.log("Connected to MongoDB successfully"); });
-db.once("open", () => { 
-  require("./src/models/Post"); 
-  require("./src/models/Block"); 
-  require("./src/models/UserBehavior"); // Load UserBehavior model
+const db = require("mongoose").connection;
+db.on("error", (error: Error) => {
+  console.error("MongoDB connection error:", error);
 });
-
-// --- Initialize Feed Services ---
 db.once("open", () => {
-  // Start feed job scheduler for background feed computation
-  try {
-    const { feedJobScheduler } = require("./src/services/FeedJobScheduler");
-    feedJobScheduler.start();
-    console.log("Feed job scheduler started");
-  } catch (error) {
-    console.warn("Failed to start feed job scheduler:", error);
-  }
+  console.log("Connected to MongoDB successfully");
+  // Load models
+  require("./src/models/Conversation");
+  require("./src/models/Message");
+  require("./src/models/UserSettings");
+  require("./src/models/PushToken");
+  require("./src/models/Block");
+  require("./src/models/Restrict");
+  require("./src/models/UserBehavior");
+  require("./src/models/Device");
 });
 
 // --- Server Listen ---
@@ -456,7 +311,7 @@ const bootServer = async () => {
   try {
     await connectToDatabase();
     server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Allo backend server running on port ${PORT}`);
     });
   } catch (error) {
     console.error("Failed to start server: unable to connect to MongoDB", error);
@@ -468,5 +323,6 @@ if (require.main === module) {
   void bootServer();
 }
 
-export { io, notificationsNamespace };
+export { io, messagingNamespace };
 export default server;
+

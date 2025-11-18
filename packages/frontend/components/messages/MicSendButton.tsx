@@ -327,12 +327,29 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
     const stopRecording = useCallback(async (cancel: boolean = false) => {
         try {
             if (!recorderState.isRecording) {
+                // If not recording, still reset state in case we're in a bad state
+                if (cancel) {
+                    setIsLocked(false);
+                    isHolding.value = false;
+                    lockProgress.value = 0;
+                    dragY.value = 0;
+                    showLockIndicator.value = 0;
+                    isInCancelZone.value = 0;
+                }
                 return;
             }
 
             await audioRecorder.stop();
             const uri = audioRecorder.uri;
             const duration = recorderState.durationMillis / 1000; // Convert to seconds
+
+            // Reset all state when stopping
+            setIsLocked(false);
+            isHolding.value = false;
+            lockProgress.value = 0;
+            dragY.value = 0;
+            showLockIndicator.value = 0;
+            isInCancelZone.value = 0;
 
             if (!cancel && duration > 0.5 && uri) {
                 onRecordEnd?.(uri, duration);
@@ -341,9 +358,16 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
             }
         } catch (error) {
             console.error('Failed to stop recording:', error);
+            // Reset state even on error
+            setIsLocked(false);
+            isHolding.value = false;
+            lockProgress.value = 0;
+            dragY.value = 0;
+            showLockIndicator.value = 0;
+            isInCancelZone.value = 0;
             onRecordCancel?.();
         }
-    }, [audioRecorder, recorderState.isRecording, recorderState.durationMillis, onRecordEnd, onRecordCancel]);
+    }, [audioRecorder, recorderState.isRecording, recorderState.durationMillis, onRecordEnd, onRecordCancel, isHolding, lockProgress, dragY, showLockIndicator, isInCancelZone]);
 
     // Handle font size adjustment long press start
     const handleSizeAdjustmentLongPressStart = useCallback(() => {
@@ -504,8 +528,8 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
 
             if (translationY < lockThreshold) {
                 runOnJS(setIsLocked)(true);
-                // Once locked, we can release the hold
-                isHolding.value = false;
+                // Keep holding true when locked to prevent recording from stopping
+                isHolding.value = true;
             }
         }
     }, [isRecordingValue, isHolding, stopRecording, isLocked, dragY, lockProgress, showLockIndicator, isInCancelZone]);
@@ -521,10 +545,16 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
         })
         .onEnd(() => {
             'worklet';
-            isHolding.value = false;
             // Only stop recording if not locked - if locked, recording continues
+            // Don't set isHolding to false if locked, as we want recording to continue
             if (isRecordingValue.value && !isLocked) {
+                isHolding.value = false;
                 runOnJS(handleRecordingLongPressEnd)();
+            } else if (isLocked) {
+                // Keep holding true when locked to maintain recording
+                isHolding.value = true;
+            } else {
+                isHolding.value = false;
             }
         });
 
@@ -549,11 +579,6 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
         })
         .onEnd(() => {
             'worklet';
-            // Only set isHolding to false if not locked - if locked, we want to keep recording
-            if (!isLocked) {
-                isHolding.value = false;
-            }
-
             // If in cancel zone when released, cancel the recording
             if (isLocked && isInCancelZone.value === 1) {
                 runOnJS(stopRecording)(true);
@@ -563,10 +588,14 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
                 isInCancelZone.value = 0;
                 isHolding.value = false;
             } else {
-                // Reset drag position on end, but keep lock state
+                // Reset drag position on end, but keep lock state and recording
                 if (!isLocked) {
+                    isHolding.value = false;
                     dragY.value = withTiming(0);
                     lockProgress.value = withTiming(0);
+                } else {
+                    // Keep holding true when locked to maintain recording
+                    isHolding.value = true;
                 }
                 showLockIndicator.value = withTiming(0);
             }
@@ -689,30 +718,36 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
         const opacity = showLockIndicator.value;
         const dragYValue = dragY.value;
 
-        // Calculate center position: center of screen minus center of button
-        // If we have button layout, use it; otherwise estimate
-        let centerX = 0;
+        // Calculate position to center on screen
+        // Button is typically near bottom right, so we need to offset significantly
+        let translateX = 0;
         if (buttonLayout) {
+            // Calculate offset to center: screen center - button center
             const buttonCenterX = buttonLayout.x + buttonLayout.width / 2;
-            centerX = (windowWidth / 2) - buttonCenterX;
+            translateX = (windowWidth / 2) - buttonCenterX;
         } else {
-            // Estimate: button is typically on right side, ~20px from right edge
-            // So button center is approximately windowWidth - 20
-            const estimatedButtonCenterX = windowWidth - 20;
-            centerX = (windowWidth / 2) - estimatedButtonCenterX;
+            // Estimate: button is typically on right side, ~40px from right edge
+            // So button center is approximately windowWidth - 40
+            const estimatedButtonCenterX = windowWidth - 40;
+            translateX = (windowWidth / 2) - estimatedButtonCenterX;
         }
 
-        // Base position above button (-80px from button in container)
-        const baseOffset = -80;
+        // Base position: center of screen vertically relative to button position
+        // Button is near bottom (~100px from bottom), so center is roughly windowHeight/2 - buttonY
+        const estimatedButtonY = windowHeight - 100;
+        const screenCenterY = windowHeight / 2;
+        const baseTranslateY = screenCenterY - estimatedButtonY - 80; // -80 to position above button initially
+
         // Follow finger movement (only upward, clamp to max)
         const fingerOffset = Math.min(0, dragYValue);
-        const clampedOffset = Math.max(fingerOffset, -maxUpwardPixels);
+        const maxUpward = screenCenterY - safeTop - 50;
+        const clampedOffset = Math.max(fingerOffset, -maxUpward);
 
         return {
             opacity,
             transform: [
-                { translateY: baseOffset + clampedOffset },
-                { translateX: centerX },
+                { translateX },
+                { translateY: baseTranslateY + clampedOffset },
             ],
         };
     });
@@ -818,7 +853,7 @@ const styles = StyleSheet.create({
     },
     lockIndicator: {
         position: 'absolute',
-        top: -40,
+        top: -80,
         left: 0,
         width: 200,
         alignItems: 'center',

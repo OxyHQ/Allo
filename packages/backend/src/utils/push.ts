@@ -1,6 +1,5 @@
 import admin from 'firebase-admin';
 import PushToken from '../models/PushToken';
-import Post from '../models/Post';
 import { oxy } from '../../server';
 
 let firebaseInitialized = false;
@@ -108,28 +107,23 @@ export async function formatPushForNotification(n: any) {
     }
   } catch {}
   const map: Record<string, { title: string; body: string }> = {
-    like: { title: 'New like', body: `${actorName} liked your post` },
-    reply: { title: 'New reply', body: `${actorName} replied to your post` },
-    allo: { title: 'You were alloed', body: `${actorName} alloed you` },
-    repost: { title: 'Post reposted', body: `${actorName} reposted your post` },
-    quote: { title: 'Post quoted', body: `${actorName} quoted your post` },
-    follow: { title: 'New follower', body: `${actorName} followed you` },
-    welcome: { title: 'Welcome to allo', body: 'Thanks for joining!' },
-    post: { title: 'New post', body: `${actorName} posted a new update` },
+    message: { title: 'New message', body: `${actorName} sent you a message` },
+    welcome: { title: 'Welcome to Allo', body: 'Thanks for joining!' },
   };
   let f = map[n.type] || { title: 'Notification', body: 'You have a new notification' };
   let preview: string | undefined;
-  // For post notifications, try to include a short preview in the push body
+  // For message notifications, try to include a short preview in the push body
   try {
-    if (n.type === 'post' && n.entityType === 'post' && n.entityId) {
-      const post: any = await Post.findById(n.entityId, { 'content.text': 1 }).lean();
-      if (post) {
-        const text: string = post?.content?.text || '';
-        preview = buildPreview(text, 200);
-        if (preview) {
-          f = { title: 'New post', body: `${actorName} posted: ${preview}` };
-        }
-      }
+    if (n.type === 'message' && n.entityType === 'message' && n.entityId) {
+      // TODO: Load message preview if needed
+      // const message: any = await Message.findById(n.entityId, { text: 1 }).lean();
+      // if (message) {
+      //   const text: string = message?.text || '';
+      //   preview = buildPreview(text, 200);
+      //   if (preview) {
+      //     f = { title: 'New message', body: `${actorName}: ${preview}` };
+      //   }
+      // }
     }
   } catch {}
   const data: Record<string, string> = {

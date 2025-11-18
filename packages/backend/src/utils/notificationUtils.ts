@@ -1,49 +1,37 @@
-import Notification from '../models/Notification';
+// Notification utilities for Allo chat app
+// Note: Notification model not yet implemented - this is a placeholder for future use
+
 import { oxy } from '../../server';
 import { formatPushForNotification, sendPushToUser } from './push';
 
 export interface CreateNotificationData {
   recipientId: string;
   actorId: string;
-  type: 'like' | 'reply' | 'allo' | 'follow' | 'repost' | 'quote' | 'welcome' | 'post';
+  type: 'message' | 'welcome';
   entityId: string;
-  entityType: 'post' | 'reply' | 'profile';
+  entityType: 'message' | 'conversation';
 }
 
 /**
  * Creates a notification for a user action
  * Handles duplicate prevention and emits real-time events
+ * TODO: Implement Notification model and database storage
  */
 export const createNotification = async (
   data: CreateNotificationData,
   emitEvent: boolean = true
 ): Promise<void> => {
   try {
-    // Check if notification already exists to prevent duplicates
-    const existingNotification = await Notification.findOne({
-      recipientId: data.recipientId,
-      actorId: data.actorId,
-      type: data.type,
-      entityId: data.entityId,
-    });
-
-    if (existingNotification) {
-      // Update timestamp if notification already exists
-      await Notification.findByIdAndUpdate(existingNotification._id, {
-        createdAt: new Date(),
-      });
-      return;
-    }
-
     // Don't create notification if actor and recipient are the same
     if (data.actorId === data.recipientId) {
       return;
     }
 
-    const notification = new Notification(data);
-    await notification.save();
+    // TODO: Store notification in database when Notification model is implemented
+    // const notification = new Notification(data);
+    // await notification.save();
 
-  // Emit real-time notification if requested with actor profile data
+    // Emit real-time notification if requested with actor profile data
     if (emitEvent && (global as any).io) {
       let actor: any = null;
       try {
@@ -56,7 +44,7 @@ export const createNotification = async (
         // ignore actor resolution failures
       }
       const payload = {
-        ...notification.toObject(),
+        ...data,
         actorId_populated: actor ? {
           _id: actor.id || actor._id || data.actorId,
           username: actor.username || data.actorId,
@@ -70,7 +58,7 @@ export const createNotification = async (
 
     // Fire push notification (best-effort, non-blocking)
     try {
-      const push = await formatPushForNotification(notification);
+      const push = await formatPushForNotification(data as any);
       await sendPushToUser(data.recipientId, push);
     } catch (e) {
       // ignore push failures
@@ -80,50 +68,6 @@ export const createNotification = async (
   } catch (error) {
     console.error('Error creating notification:', error);
     // Don't throw error to avoid breaking the main flow
-  }
-};
-
-/**
- * Creates notifications for allos in content
- * @param alloUserIds - Array of Oxy user IDs who were alloed
- * @param postId - ID of the post containing the allos
- * @param actorId - ID of the user who created the post
- * @param entityType - Type of entity ('post' or 'reply')
- * @param emitEvent - Whether to emit real-time events
- */
-export const createalloNotifications = async (
-  alloUserIds: string[],
-  postId: string,
-  actorId: string,
-  entityType: 'post' | 'reply' = 'post',
-  emitEvent: boolean = true
-): Promise<void> => {
-  try {
-    if (!alloUserIds || alloUserIds.length === 0) return;
-
-    // Get unique user IDs
-    const uniqueUserIds = [...new Set(alloUserIds)];
-
-    // Create notification for each alloed user
-    for (const recipientId of uniqueUserIds) {
-      try {
-        // Skip if user is alloing themselves
-        if (recipientId === actorId) continue;
-
-        await createNotification({
-          recipientId,
-          actorId,
-          type: 'allo',
-          entityId: postId,
-          entityType,
-        }, emitEvent);
-      } catch (e) {
-        // If notification creation fails, log and continue
-        console.error('Failed to create allo notification for user', recipientId, e);
-      }
-    }
-  } catch (error) {
-    console.error('Error creating allo notifications:', error);
   }
 };
 
@@ -140,7 +84,7 @@ export const createWelcomeNotification = async (
       actorId: 'system', // System-generated notification
       type: 'welcome',
       entityId: userId,
-      entityType: 'profile',
+      entityType: 'conversation',
     }, emitEvent);
   } catch (error) {
     console.error('Error creating welcome notification:', error);
