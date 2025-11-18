@@ -708,6 +708,90 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
+                {/* Security & Encryption */}
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Security & Encryption</Text>
+
+                    <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        {/* Cloud Sync */}
+                        <View style={[styles.settingItem, styles.firstSettingItem]}>
+                            <View style={styles.settingInfo}>
+                                <View style={styles.settingIcon}>
+                                    <IconComponent name="cloud-outline" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                                        Cloud Sync
+                                    </Text>
+                                    <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                                        Enable cloud backup and sync (device-first by default)
+                                    </Text>
+                                </View>
+                            </View>
+                            <Toggle
+                                value={useMessagesStore((state) => state.cloudSyncEnabled)}
+                                onValueChange={async (enabled) => {
+                                    useMessagesStore.getState().setCloudSyncEnabled(enabled);
+                                    try {
+                                        await authenticatedClient.put('/profile/settings', {
+                                            security: {
+                                                cloudSyncEnabled: enabled,
+                                            },
+                                        });
+                                    } catch (error) {
+                                        console.error('Error updating cloud sync setting:', error);
+                                    }
+                                }}
+                            />
+                        </View>
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Encryption Status */}
+                        <View style={styles.settingItem}>
+                            <View style={styles.settingInfo}>
+                                <View style={styles.settingIcon}>
+                                    <IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                                        Signal Protocol Encryption
+                                    </Text>
+                                    <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                                        {useDeviceKeysStore((state) => state.isInitialized)
+                                            ? 'End-to-end encryption enabled'
+                                            : 'Initializing encryption...'}
+                                    </Text>
+                                </View>
+                            </View>
+                            <IconComponent
+                                name={useDeviceKeysStore((state) => state.isInitialized) ? 'checkmark-circle' : 'time-outline'}
+                                size={20}
+                                color={useDeviceKeysStore((state) => state.isInitialized) ? '#4CAF50' : theme.colors.textSecondary}
+                            />
+                        </View>
+
+                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                        {/* Device Info */}
+                        <View style={styles.settingItem}>
+                            <View style={styles.settingInfo}>
+                                <View style={styles.settingIcon}>
+                                    <IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                                        Device ID
+                                    </Text>
+                                    <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                                        {useDeviceKeysStore((state) => state.deviceKeys?.deviceId || 'Not initialized')}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+
                 {/* App Preferences */}
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{t('settings.sections.preferences')}</Text>

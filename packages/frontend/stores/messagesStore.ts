@@ -70,7 +70,7 @@ interface MessagesState {
   setCloudSyncEnabled: (enabled: boolean) => void;
   
   // Async actions
-  fetchMessages: (conversationId: string, recipientUserId?: string) => Promise<void>;
+  fetchMessages: (conversationId: string, currentUserId?: string) => Promise<void>;
   sendMessage: (
     conversationId: string,
     text: string,
@@ -199,7 +199,7 @@ export const useMessagesStore = create<MessagesState>()(
     },
 
     // Async actions
-    fetchMessages: async (conversationId, recipientUserId) => {
+    fetchMessages: async (conversationId, currentUserId?) => {
       const currentState = get();
       if (currentState.loadingByConversation[conversationId]) {
         return;
@@ -270,10 +270,11 @@ export const useMessagesStore = create<MessagesState>()(
                         senderId: msg.senderId,
                         senderDeviceId: msg.senderDeviceId,
                         timestamp: new Date(msg.createdAt),
-                        isSent: msg.senderId === senderId,
+                        isSent: msg.senderId === currentUserId,
                         conversationId: msg.conversationId,
                         fontSize: msg.fontSize,
                         isEncrypted: false,
+                        messageType: msg.messageType || 'user',
                       };
                     } catch (error) {
                       console.error('[Messages] Error decrypting server message:', error);

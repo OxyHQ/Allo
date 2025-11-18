@@ -8,6 +8,15 @@
 import NetInfo from '@react-native-community/netinfo';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
+
+// Note: SOCKET_URL might not be defined, use fallback
+const getSocketUrl = () => {
+  try {
+    return SOCKET_URL || process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000';
+  } catch {
+    return 'http://localhost:3000';
+  }
+};
 import { encryptMessage, decryptMessage, getDeviceKeys } from './signalProtocol';
 import { Message } from '@/stores/messagesStore';
 
@@ -35,7 +44,7 @@ class P2PManager {
     }
 
     // Connect to main signaling server
-    this.mainSocket = io(SOCKET_URL, {
+    this.mainSocket = io(getSocketUrl(), {
       auth: {
         token,
         userId,
