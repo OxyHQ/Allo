@@ -16,7 +16,7 @@ import { toast } from '@/lib/sonner';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
-import { Header } from '@/components/Header';
+import { Header } from '@/components/layout/Header';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';

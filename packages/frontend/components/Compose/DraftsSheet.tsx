@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Header } from '@/components/Header';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { Header } from '@/components/layout/Header';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { CloseIcon } from '@/assets/icons/close-icon';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';

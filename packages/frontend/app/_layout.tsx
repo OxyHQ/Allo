@@ -10,11 +10,11 @@ import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react
 
 // Components
 import AppSplashScreen from '@/components/AppSplashScreen';
-import { NotificationPermissionGate } from '@/components/NotificationPermissionGate';
-import RegisterPush from '@/components/RegisterPushToken';
+import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
+import RegisterPush from '@/components/notifications/RegisterPushToken';
 import { RightBar } from "@/components/RightBar";
 import { SideBar } from "@/components/SideBar";
-import { BottomBar } from "@/components/BottomBar";
+import { BottomBar } from "@/components/layout/BottomBar";
 import { ThemedView } from "@/components/ThemedView";
 import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';

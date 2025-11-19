@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, Animated } from "react-native";
 import { ThemedView } from "@/components/ThemedView";
-import { Header } from "@/components/Header";
-import { HeaderIconButton } from "@/components/HeaderIconButton";
+import { Header } from "@/components/layout/Header";
+import { HeaderIconButton } from "@/components/layout/HeaderIconButton";
 import { Toggle } from "@/components/Toggle";
 import { BackArrowIcon } from "@/assets/icons/back-arrow-icon";
 import { useOxy } from "@oxyhq/services";

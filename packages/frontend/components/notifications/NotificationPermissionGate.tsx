@@ -7,7 +7,7 @@ import React, { useContext, useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { BottomSheetContext } from '@/context/BottomSheetContext';
-import { NotificationPermissionSheet } from '@/components/NotificationPermissionSheet';
+import { NotificationPermissionSheet } from '@/components/notifications/NotificationPermissionSheet';
 import {
   hasNotificationPermission,
   requestNotificationPermissions,

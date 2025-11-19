@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Components
-import Avatar from './Avatar';
+import Avatar from '@/components/Avatar';
 
 // Icons
 import { Home, HomeActive } from '@/assets/icons/home-icon';

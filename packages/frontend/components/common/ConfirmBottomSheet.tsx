@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon } from '@/assets/icons/close-icon';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 
 interface ConfirmBottomSheetProps {
     title: string;

@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ThemedText } from './ThemedText';
-import { colors } from '../styles/colors';
+import { ThemedText } from '@/components/ThemedText';
+import { colors } from '@/styles/colors';
 import { useTranslation } from 'react-i18next';
-import { useNotificationTransformer, RawNotification } from '../utils/notificationTransformer';
+import { useNotificationTransformer, RawNotification } from '@/utils/notificationTransformer';
 import { useOxy } from '@oxyhq/services';
 import PostItem from './Feed/PostItem';
 import { usePostsStore } from '../stores/postsStore';

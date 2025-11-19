@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Header } from '@/components/Header';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { Header } from '@/components/layout/Header';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
