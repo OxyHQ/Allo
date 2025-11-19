@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
-import { HeaderIconButton } from "@/components/HeaderIconButton";
+import { HeaderIconButton } from "@/components/layout/HeaderIconButton";
 import { CloseIcon } from "@/assets/icons/close-icon";
 
 interface ArticleEditorProps {
