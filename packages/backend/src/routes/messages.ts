@@ -176,20 +176,38 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     };
 
     // Increment unread counts for all participants except sender
+    // Mongoose Map types need to be accessed as Maps, not Records
+    const unreadCounts = (conversation as any).unreadCounts as Map<string, number>;
     conversation.participants.forEach((participant) => {
       if (participant.userId !== userId) {
-        const currentCount = conversation.unreadCounts.get(participant.userId) || 0;
-        conversation.unreadCounts.set(participant.userId, currentCount + 1);
+        const currentCount = unreadCounts.get(participant.userId) || 0;
+        unreadCounts.set(participant.userId, currentCount + 1);
       }
     });
 
     await conversation.save();
 
-    // Emit real-time event
+    // Emit real-time event to both conversation room AND all participant user rooms
+    // This ensures users receive messages even when not viewing that conversation (like WhatsApp)
     const io = (global as any).io;
     if (io) {
       const messagingNamespace = io.of("/messaging");
-      messagingNamespace.to(`conversation:${conversationId}`).emit("newMessage", message);
+      
+      // Convert message to plain object for socket emission
+      const messageData = message.toObject ? message.toObject() : message;
+      
+      // Emit to conversation room (for active viewers)
+      messagingNamespace.to(`conversation:${conversationId}`).emit("newMessage", messageData);
+      console.log(`[Messages] Emitted newMessage to conversation:${conversationId}`);
+      
+      // Also emit to all participant user rooms (so users receive messages globally)
+      // This allows messages to appear in conversation list even when not viewing that conversation
+      conversation.participants.forEach((participant) => {
+        messagingNamespace.to(`user:${participant.userId}`).emit("newMessage", messageData);
+        console.log(`[Messages] Emitted newMessage to user:${participant.userId}`);
+      });
+    } else {
+      console.error('[Messages] Socket.IO not available - messages will not be sent via socket');
     }
 
     return sendSuccessResponse(res, 201, message);
@@ -275,25 +293,33 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
     }
 
     // Initialize reactions if not exists
+    // Mongoose Map types need to be accessed as Maps, not Records
     if (!message.reactions) {
-      message.reactions = new Map();
+      (message as any).reactions = new Map<string, string[]>();
     }
+    const reactions = (message as any).reactions as Map<string, string[]>;
 
-    const currentReactions = message.reactions.get(emoji) || [];
+    const currentReactions = reactions.get(emoji) || [];
     const hasReacted = currentReactions.includes(userId);
 
     if (hasReacted) {
       // Remove reaction
-      message.reactions.set(
+      reactions.set(
         emoji,
-        currentReactions.filter((uid) => uid !== userId)
+        currentReactions.filter((uid: string) => uid !== userId)
       );
     } else {
       // Add reaction
-      message.reactions.set(emoji, [...currentReactions, userId]);
+      reactions.set(emoji, [...currentReactions, userId]);
     }
 
     await message.save();
+
+    // Convert Map to plain object for socket emission
+    const reactionsObj: Record<string, string[]> = {};
+    reactions.forEach((userIds: string[], emojiKey: string) => {
+      reactionsObj[emojiKey] = userIds;
+    });
 
     // Emit real-time event
     const io = (global as any).io;
@@ -306,7 +332,7 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
           emoji,
           userId,
           hasReacted: !hasReacted,
-          reactions: Object.fromEntries(message.reactions),
+          reactions: reactionsObj,
         });
     }
 
@@ -314,7 +340,7 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
       messageId: message._id,
       emoji,
       hasReacted: !hasReacted,
-      reactions: Object.fromEntries(message.reactions),
+      reactions: reactionsObj,
     });
   } catch (err) {
     console.error("[Messages] Error updating reaction:", err);
@@ -384,7 +410,9 @@ router.post("/:id/read", async (req: AuthRequest, res: Response) => {
     }
 
     // Mark as read
-    message.readBy.set(userId, new Date());
+    // Mongoose Map types need to be accessed as Maps, not Records
+    const readBy = (message as any).readBy as Map<string, Date>;
+    readBy.set(userId, new Date());
     await message.save();
 
     return sendSuccessResponse(res, 200, message);

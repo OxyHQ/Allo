@@ -13,6 +13,7 @@ import { useUserById } from '@/stores/usersStore';
 import { useOxy } from '@oxyhq/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
+import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 
 // Wrapper component to render conversation view with ID from pathname
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
@@ -48,6 +49,10 @@ export default function ChatLayout() {
 
   const { user: currentUser } = useOxy();
   const conversations = useConversationsStore(state => state.conversations);
+  
+  // Initialize global socket connection for all conversations (like WhatsApp)
+  // This ensures messages are received even when not viewing a specific conversation
+  useRealtimeMessaging(undefined); // No conversationId means global connection
 
   // Determine current route types
   const isSettingsRoute = pathname?.includes('/settings');
