@@ -59,13 +59,13 @@ export function ContactDetails({
   // Define tabs based on conversation type
   const tabs = isGroup
     ? [
-        { id: 'participants', label: 'Participants' },
-        { id: 'info', label: 'Info' },
-      ]
+      { id: 'participants', label: 'Participants' },
+      { id: 'info', label: 'Info' },
+    ]
     : [
-        { id: 'info', label: 'Info' },
-        { id: 'media', label: 'Media' },
-      ];
+      { id: 'info', label: 'Info' },
+      { id: 'media', label: 'Media' },
+    ];
 
   const [activeTab, setActiveTab] = useState(tabs[0].id);
 
@@ -293,7 +293,7 @@ export function ContactDetails({
                 const { first, last } = participant.name;
                 const fullName = `${first}${last ? ` ${last}` : ''}`.trim();
                 const initial = first?.charAt(0).toUpperCase() || '?';
-                
+
                 return (
                   <TouchableOpacity key={participant.id} style={styles.participantItem} activeOpacity={0.7}>
                     <Avatar
@@ -347,7 +347,7 @@ export function ContactDetails({
               {!isGroup && (
                 <View style={styles.section}>
                   <ThemedText style={styles.sectionTitle}>Contact Information</ThemedText>
-                  
+
                   {mockContact.phone && (
                     <TouchableOpacity style={styles.infoItem} activeOpacity={0.7}>
                       <View style={styles.infoIcon}>

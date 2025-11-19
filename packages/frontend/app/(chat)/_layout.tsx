@@ -76,8 +76,8 @@ export default function ChatLayout() {
       return conversations.find(c => c.id === conversationIdMatch[1]);
     }
     if (targetUserId) {
-      return conversations.find(c => 
-        c.type === 'direct' && 
+      return conversations.find(c =>
+        c.type === 'direct' &&
         c.participants?.some(p => p.id === targetUserId)
       );
     }
@@ -92,7 +92,7 @@ export default function ChatLayout() {
       const isGroup = activeConversation.type === 'group';
       const contactInfo = getContactInfo(activeConversation);
       const groupInfo = getGroupInfo(activeConversation);
-      
+
       return {
         conversationId: activeConversation.id,
         conversationType: activeConversation.type,
@@ -129,7 +129,7 @@ export default function ChatLayout() {
         currentUserId: currentUser?.id,
       };
     }
-    
+
     return null;
   }, [activeConversation, targetUser, currentUser?.id]);
 
