@@ -3,6 +3,9 @@ import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useOxy, OxyServices } from '@oxyhq/services';
 import { useEffect } from 'react';
 
+// Import useUsersStore for direct access in non-hook functions
+const getUsersStore = () => useUsersStore.getState();
+
 /**
  * Get full name from participant (name.first + name.last)
  * Falls back to Oxy user data if participant data is incomplete
@@ -63,11 +66,11 @@ export function useParticipantFullName(
 
 /**
  * Generate a group conversation name from participant names
+ * Uses zustand cache efficiently (like WhatsApp)
  * @param participants Array of participants (excluding current user)
  * @param currentUserId Current user's ID to exclude from name generation
  * @param maxNames Maximum number of names to include (default: 2)
  * @returns Generated group name
- * @deprecated Use useGroupName hook instead for Oxy integration
  */
 export function generateGroupName(
   participants: ConversationParticipant[],
@@ -83,12 +86,42 @@ export function generateGroupName(
     return '';
   }
 
+  const usersStore = getUsersStore();
+
+  // Helper to get name from zustand cache or participant data
+  const getParticipantDisplayName = (p: ConversationParticipant): string => {
+    // Try zustand cache first (efficient)
+    const cachedUser = usersStore.getCachedById(p.id);
+    if (cachedUser) {
+      if (typeof cachedUser.name === 'string') {
+        return cachedUser.name;
+      }
+      if (cachedUser.name?.full) {
+        return cachedUser.name.full;
+      }
+      if (cachedUser.name?.first) {
+        const lastName = cachedUser.name.last ? ` ${cachedUser.name.last}` : '';
+        return `${cachedUser.name.first}${lastName}`.trim();
+      }
+      if (cachedUser.username || cachedUser.handle) {
+        return cachedUser.username || cachedUser.handle || '';
+      }
+    }
+    
+    // Fallback to participant data (from backend enrichment)
+    if (p.name?.first) {
+      const lastName = p.name.last ? ` ${p.name.last}` : '';
+      return `${p.name.first}${lastName}`.trim();
+    }
+    return p.username || p.id || 'Unknown';
+  };
+
   if (otherParticipants.length === 1) {
-    return getParticipantFullName(otherParticipants[0], otherParticipants[0].id);
+    return getParticipantDisplayName(otherParticipants[0]);
   }
 
   // Take first maxNames participants
-  const namesToShow = otherParticipants.slice(0, maxNames).map(p => getParticipantFullName(p, p.id));
+  const namesToShow = otherParticipants.slice(0, maxNames).map(getParticipantDisplayName);
   const remainingCount = otherParticipants.length - maxNames;
 
   if (remainingCount > 0) {
@@ -100,6 +133,7 @@ export function generateGroupName(
 
 /**
  * Get the display name for a conversation
+ * Uses zustand cache efficiently (like WhatsApp)
  * @param conversation Conversation object
  * @param currentUserId Current user's ID
  * @returns Display name
@@ -109,11 +143,42 @@ export function getConversationDisplayName(
   currentUserId?: string
 ): string {
   if (conversation.type === 'direct') {
+    // For direct conversations, get name from zustand cache (backend already enriched with Oxy data)
+    const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
+    if (otherParticipant) {
+      // Try zustand cache first (efficient)
+      const cachedUser = useUsersStore.getState().getCachedById(otherParticipant.id);
+      if (cachedUser) {
+        if (typeof cachedUser.name === 'string') {
+          return cachedUser.name;
+        }
+        if (cachedUser.name?.full) {
+          return cachedUser.name.full;
+        }
+        if (cachedUser.name?.first) {
+          const lastName = cachedUser.name.last ? ` ${cachedUser.name.last}` : '';
+          return `${cachedUser.name.first}${lastName}`.trim();
+        }
+        if (cachedUser.username || cachedUser.handle) {
+          return cachedUser.username || cachedUser.handle || '';
+        }
+      }
+      
+      // Fallback to participant data (from backend enrichment)
+      if (otherParticipant.name?.first) {
+        const lastName = otherParticipant.name.last ? ` ${otherParticipant.name.last}` : '';
+        return `${otherParticipant.name.first}${lastName}`.trim();
+      }
+      if (otherParticipant.username) {
+        return otherParticipant.username;
+      }
+    }
+    
     // Filter out generic "Direct Chat" name
     if (conversation.name === 'Direct Chat') {
       return '';
     }
-    return conversation.name;
+    return conversation.name || '';
   }
 
   // For groups, prefer groupName if available
@@ -121,7 +186,7 @@ export function getConversationDisplayName(
     return conversation.groupName;
   }
 
-  // Otherwise generate from participants
+  // Otherwise generate from participants (using zustand cache)
   if (conversation.participants && conversation.participants.length > 0) {
     return generateGroupName(conversation.participants, currentUserId);
   }

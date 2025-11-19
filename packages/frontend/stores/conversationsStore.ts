@@ -159,9 +159,55 @@ export const useConversationsStore = create<ConversationsState>()(
     fetchConversations: async () => {
       set({ isLoading: true, error: null });
       try {
-        // Fetch conversations from API
+        // Fetch conversations from API (backend already enriches with Oxy data)
         const response = await api.get<{ conversations: any[] }>('/conversations');
         const apiConversations = response.data.conversations || [];
+        
+        // Import usersStore dynamically to avoid circular dependency
+        const { useUsersStore } = await import('./usersStore');
+        const usersStore = useUsersStore.getState();
+        
+        // Collect all unique user IDs for batch caching (WhatsApp-style efficiency)
+        const userIds = new Set<string>();
+        apiConversations.forEach((conv: any) => {
+          (conv.participants || []).forEach((p: any) => {
+            if (p.userId) userIds.add(p.userId);
+          });
+        });
+
+        // Batch pre-cache user data in zustand (like WhatsApp - efficient prefetching)
+        // Backend already enriched with Oxy data, so we just cache it
+        const usersToCache: any[] = [];
+        apiConversations.forEach((conv: any) => {
+          (conv.participants || []).forEach((p: any) => {
+            if (p.userId && p.name) {
+              // Convert backend format to frontend format
+              const user: any = {
+                id: p.userId,
+                username: p.username,
+                avatar: p.avatar,
+              };
+              
+              // Handle name format
+              if (typeof p.name === 'string') {
+                user.name = p.name;
+              } else if (p.name.first || p.name.last) {
+                user.name = {
+                  first: p.name.first || '',
+                  last: p.name.last || '',
+                  full: `${p.name.first || ''} ${p.name.last || ''}`.trim() || undefined,
+                };
+              }
+              
+              usersToCache.push(user);
+            }
+          });
+        });
+
+        // Batch upsert all users into zustand cache (efficient like WhatsApp)
+        if (usersToCache.length > 0) {
+          usersStore.upsertMany(usersToCache);
+        }
         
         // Transform API response to frontend Conversation format
         const conversations: Conversation[] = apiConversations.map((conv: any) => {
@@ -169,7 +215,7 @@ export const useConversationsStore = create<ConversationsState>()(
           const participants: ConversationParticipant[] = (conv.participants || []).map((p: any) => ({
             id: p.userId,
             name: {
-              first: p.name?.first || 'Unknown',
+              first: p.name?.first || p.name || 'Unknown',
               last: p.name?.last || '',
             },
             username: p.username,

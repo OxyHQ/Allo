@@ -4,8 +4,70 @@ import Message from "../models/Message";
 import { AuthRequest } from "../middleware/auth";
 import { getAuthenticatedUserId } from "../utils/auth";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
+import { oxy } from "../../server";
 
 const router = Router();
+
+/**
+ * Enrich conversation participants with Oxy user data (name, username, avatar)
+ * This is like WhatsApp - backend processes names using Oxy for efficiency
+ */
+async function enrichParticipantsWithOxyData(participants: any[]) {
+  const userIds = Array.from(new Set(participants.map(p => p.userId).filter(Boolean)));
+  if (userIds.length === 0) return participants;
+
+  // Batch fetch user data from Oxy (efficient like WhatsApp - deduplicated and parallel)
+  const userPromises = userIds.map(async (userId) => {
+    try {
+      const user = await oxy.getUserById(userId);
+      return { userId, user };
+    } catch (error) {
+      console.error(`[Conversations] Error fetching Oxy user ${userId}:`, error);
+      return { userId, user: null };
+    }
+  });
+
+  const userResults = await Promise.all(userPromises);
+  const userMap = new Map(userResults.map(r => [r.userId, r.user]));
+
+  // Enrich participants with Oxy data
+  return participants.map((participant) => {
+    const oxyUser = userMap.get(participant.userId);
+    if (!oxyUser) {
+      return {
+        ...participant,
+        name: participant.name || { first: 'Unknown', last: '' },
+        username: participant.username || undefined,
+        avatar: participant.avatar || undefined,
+      };
+    }
+
+    // Extract name from Oxy user (can be string or object)
+    let name = participant.name || { first: '', last: '' };
+    if (typeof oxyUser.name === 'string') {
+      const parts = oxyUser.name.split(' ');
+      name = {
+        first: parts[0] || '',
+        last: parts.slice(1).join(' ') || '',
+      };
+    } else if (oxyUser.name) {
+      name = {
+        first: oxyUser.name.first || '',
+        last: oxyUser.name.last || '',
+      };
+    } else {
+      // Fallback to username if no name
+      name = { first: oxyUser.username || oxyUser.handle || 'Unknown', last: '' };
+    }
+
+    return {
+      ...participant,
+      name,
+      username: oxyUser.username || oxyUser.handle || participant.username,
+      avatar: oxyUser.avatar || participant.avatar,
+    };
+  });
+}
 
 /**
  * Conversations API
@@ -30,7 +92,18 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       .skip(Number(offset))
       .lean();
 
-    return sendSuccessResponse(res, 200, { conversations });
+    // Enrich all participants with Oxy user data (like WhatsApp - efficient batch processing)
+    const enrichedConversations = await Promise.all(
+      conversations.map(async (conv) => {
+        const enrichedParticipants = await enrichParticipantsWithOxyData(conv.participants || []);
+        return {
+          ...conv,
+          participants: enrichedParticipants,
+        };
+      })
+    );
+
+    return sendSuccessResponse(res, 200, { conversations: enrichedConversations });
   } catch (err) {
     console.error("[Conversations] Error fetching conversations:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch conversations");
@@ -60,7 +133,14 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 404, "Not Found", "Conversation not found");
     }
 
-    return sendSuccessResponse(res, 200, conversation);
+    // Enrich participants with Oxy user data
+    const enrichedParticipants = await enrichParticipantsWithOxyData(conversation.participants || []);
+    const enrichedConversation = {
+      ...conversation,
+      participants: enrichedParticipants,
+    };
+
+    return sendSuccessResponse(res, 200, enrichedConversation);
   } catch (err) {
     console.error("[Conversations] Error fetching conversation:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch conversation");
