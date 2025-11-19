@@ -174,10 +174,7 @@ export function getConversationDisplayName(
       }
     }
     
-    // Filter out generic "Direct Chat" name
-    if (conversation.name === 'Direct Chat') {
-      return '';
-    }
+    // Return conversation name as-is (fallback if no participant data)
     return conversation.name || '';
   }
 
