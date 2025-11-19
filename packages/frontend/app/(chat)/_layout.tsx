@@ -125,7 +125,8 @@ export default function ChatLayout() {
         contactName,
         contactUsername: targetUser.username,
         contactAvatar: targetUser.avatar,
-        isOnline: false,
+        isOnline: targetUser.isOnline,
+        lastSeen: targetUser.lastSeen,
         currentUserId: currentUser?.id,
       };
     }
