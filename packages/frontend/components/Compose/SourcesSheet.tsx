@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { CloseIcon } from '@/assets/icons/close-icon';
 import { Plus } from '@/assets/icons/plus-icon';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 
 type SourceField = 'title' | 'url';
 

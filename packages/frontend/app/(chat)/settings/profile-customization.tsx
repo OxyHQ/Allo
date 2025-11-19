@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Animated, Platform } from 'react-native';
 import { useAppearanceStore } from '@/store/appearanceStore';
-import { Header } from '@/components/Header';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { Header } from '@/components/layout/Header';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';

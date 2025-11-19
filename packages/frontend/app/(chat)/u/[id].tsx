@@ -8,7 +8,7 @@ import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
 import { toast } from "@/lib/sonner";
 import { ThemedText } from "@/components/ThemedText";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 /**
  * Route handler for /u/:id direct conversations

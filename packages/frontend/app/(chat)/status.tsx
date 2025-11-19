@@ -14,8 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
-import { Header } from '@/components/Header';
-import { HeaderIconButton } from '@/components/HeaderIconButton';
+import { Header } from '@/components/layout/Header';
+import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
