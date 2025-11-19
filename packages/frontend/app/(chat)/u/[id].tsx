@@ -1,10 +1,10 @@
 import React, { useMemo, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text } from 'react-native';
-import ConversationView from '../../c/[id]';
+import ConversationView from '../c/[id]';
 import { useConversationsStore } from '@/stores';
 import { useOxy } from '@oxyhq/services';
-import { useUserById } from '@/stores/usersStore';
+import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { api } from '@/utils/api';
 import { toast } from '@/lib/sonner';
 
@@ -17,13 +17,21 @@ export default function UserConversationRoute({ userId: propUserId }: { userId?:
   const { id: paramUserId } = useLocalSearchParams<{ id: string }>();
   const userId = propUserId || paramUserId;
 
-  const { user: currentUser } = useOxy();
+  const { user: currentUser, oxyServices } = useOxy();
   const conversations = useConversationsStore((state) => state.conversations);
   const addConversation = useConversationsStore((state) => state.addConversation);
+  const ensureById = useUsersStore((state) => state.ensureById);
   const router = useRouter();
 
   // Get user by ID
   const targetUser = useUserById(userId);
+
+  // Ensure user is loaded in store
+  useEffect(() => {
+    if (userId && oxyServices) {
+      ensureById(userId, (id) => oxyServices.getProfileByUsername(id));
+    }
+  }, [userId, ensureById, oxyServices]);
 
   // Find existing direct conversation with this user
   const existingConversation = useMemo(() => {

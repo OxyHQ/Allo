@@ -5,13 +5,19 @@ import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
+import { ContactDetails } from '@/components/ContactDetails';
 import ConversationsList from './index';
 import StatusScreen from './status';
+import { useConversationsStore } from '@/stores';
+import { useUserById } from '@/stores/usersStore';
+import { useOxy } from '@oxyhq/services';
+import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
+import { BREAKPOINTS } from '@/constants/responsive';
 
 // Wrapper component to render conversation view with ID from pathname
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
   try {
-    const ConversationView = require('../c/[id]').default;
+    const ConversationView = require('./c/[id]').default;
     // Pass the conversation ID as a prop so it works when rendered outside the route context
     return <ConversationView conversationId={conversationId} />;
   } catch (error) {
@@ -37,6 +43,11 @@ export default function ChatLayout() {
 
   // Check if we're on a large screen (tablet/desktop)
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
+  // Show contact details only on desktop screens (>= 1024px)
+  const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
+
+  const { user: currentUser } = useOxy();
+  const conversations = useConversationsStore(state => state.conversations);
 
   // Determine current route types
   const isSettingsRoute = pathname?.includes('/settings');
@@ -56,6 +67,72 @@ export default function ChatLayout() {
     !pathname.includes('/settings') &&
     !isNewChatRoute;
 
+  const targetUserId = isUserRoute && userRouteMatch ? userRouteMatch[1] : undefined;
+  const targetUser = useUserById(targetUserId);
+
+  // Find active conversation for 3rd pane
+  const activeConversation = useMemo(() => {
+    if (isConversationRoute && conversationIdMatch) {
+      return conversations.find(c => c.id === conversationIdMatch[1]);
+    }
+    if (targetUserId) {
+      return conversations.find(c => 
+        c.type === 'direct' && 
+        c.participants?.some(p => p.id === targetUserId)
+      );
+    }
+    return null;
+  }, [isConversationRoute, conversationIdMatch, targetUserId, conversations]);
+
+  const showContactDetails = isExtraLargeScreen && (activeConversation || targetUser);
+
+  // Prepare contact details props
+  const contactDetailsProps = useMemo(() => {
+    if (activeConversation) {
+      const isGroup = activeConversation.type === 'group';
+      const contactInfo = getContactInfo(activeConversation);
+      const groupInfo = getGroupInfo(activeConversation);
+      
+      return {
+        conversationId: activeConversation.id,
+        conversationType: activeConversation.type,
+        contactName: contactInfo?.name || groupInfo?.name || activeConversation.name,
+        contactUsername: contactInfo?.username,
+        contactAvatar: contactInfo?.avatar || groupInfo?.avatar || activeConversation.avatar,
+        isOnline: contactInfo?.isOnline,
+        lastSeen: contactInfo?.lastSeen,
+        participants: activeConversation.participants,
+        groupName: groupInfo?.name,
+        groupAvatar: groupInfo?.avatar,
+        currentUserId: currentUser?.id,
+      };
+    }
+
+    // Fallback: if no conversation but we have a target user (from /u/:id)
+    if (targetUser) {
+      let contactName = targetUser.username || 'Unknown';
+      if (targetUser.name) {
+        if (typeof targetUser.name === 'string') {
+          contactName = targetUser.name;
+        } else if (targetUser.name.first) {
+          contactName = `${targetUser.name.first} ${targetUser.name.last || ''}`.trim();
+        }
+      }
+
+      return {
+        conversationId: undefined,
+        conversationType: 'direct' as const,
+        contactName,
+        contactUsername: targetUser.username,
+        contactAvatar: targetUser.avatar,
+        isOnline: false,
+        currentUserId: currentUser?.id,
+      };
+    }
+    
+    return null;
+  }, [activeConversation, targetUser, currentUser?.id]);
+
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
@@ -70,6 +147,14 @@ export default function ChatLayout() {
     },
     rightPane: {
       flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    middlePaneWithBorder: {
+      borderRightWidth: 1,
+      borderRightColor: theme.colors.border,
+    },
+    thirdPane: {
+      width: 350,
       backgroundColor: theme.colors.background,
     },
     rightPaneEmpty: {
@@ -115,7 +200,10 @@ export default function ChatLayout() {
         </View>
 
         {/* Right pane - show conversation detail, nested settings, new chat, or empty state */}
-        <View style={styles.rightPane}>
+        <View style={[
+          styles.rightPane,
+          showContactDetails && styles.middlePaneWithBorder
+        ]}>
           {isNestedSettingsRoute ? (
             // Show nested settings route - use Stack with all possible nested routes
             <Stack
@@ -207,6 +295,13 @@ export default function ChatLayout() {
             </View>
           )}
         </View>
+
+        {/* 3rd Pane - Contact Details */}
+        {showContactDetails && contactDetailsProps && (
+          <View style={styles.thirdPane}>
+            <ContactDetails {...contactDetailsProps} />
+          </View>
+        )}
       </ThemedView>
     );
   }
@@ -227,6 +322,10 @@ export default function ChatLayout() {
         <Stack.Screen
           name="new"
           options={{ title: 'New Chat' }}
+        />
+        <Stack.Screen
+          name="c/[id]"
+          options={{ title: 'Chat' }}
         />
         <Stack.Screen
           name="u/[id]"

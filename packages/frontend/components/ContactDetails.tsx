@@ -20,7 +20,7 @@ import { getConversationDisplayName, getOtherParticipants, isGroupConversation }
 import { GroupAvatar } from './GroupAvatar';
 
 interface ContactDetailsProps {
-  conversationId: string;
+  conversationId?: string;
   conversationType?: ConversationType;
   contactName?: string;
   contactAvatar?: string;
