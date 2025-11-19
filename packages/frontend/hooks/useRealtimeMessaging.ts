@@ -39,9 +39,14 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     // Messages come from both conversation rooms and user rooms (backend emits to both)
     messagingSocket.on('newMessage', async (messageData: any) => {
       try {
+        // Get current user ID dynamically from socket auth or useOxy store
+        // This ensures we always have the correct user ID, even if it changes
+        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        
         console.log('[RealtimeMessaging] Received newMessage event:', {
           conversationId: messageData.conversationId,
           senderId: messageData.senderId,
+          currentUserId,
           hasText: !!messageData.text,
           hasCiphertext: !!messageData.ciphertext,
         });
@@ -53,12 +58,12 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         // Only decrypt if message is encrypted and not sent by current user
         if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
           // Skip decryption for messages sent by current user (already plaintext locally)
-          if (messageData.senderId === user.id) {
+          if (currentUserId && messageData.senderId === currentUserId) {
             // Use plaintext if available, otherwise skip
             decryptedText = messageData.text || '[Your message]';
             isEncrypted = false;
           } else {
-            // Decrypt message from other users
+            // Decrypt message from other users (or if currentUserId is not available yet)
             isEncrypted = true;
             try {
               decryptedText = await deviceKeysStore.decryptMessageFromSender(
@@ -74,9 +79,13 @@ export const useRealtimeMessaging = (conversationId?: string) => {
             }
           }
         } else if (messageData.text) {
-          // Plaintext message
+          // Plaintext message - always process these, regardless of sender
           decryptedText = messageData.text;
           isEncrypted = false;
+        } else {
+          // No text and no ciphertext - might be media only or invalid message
+          console.warn('[RealtimeMessaging] Message has no text or ciphertext:', messageData);
+          decryptedText = '[Media or invalid message]';
         }
 
         const message: Message = {
@@ -85,7 +94,9 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           senderId: messageData.senderId,
           senderDeviceId: messageData.senderDeviceId,
           timestamp: new Date(messageData.createdAt),
-          isSent: messageData.senderId === user.id,
+          // Mark as sent only if we have a currentUserId AND it matches the sender
+          // If currentUserId is undefined, mark as not sent (from other user)
+          isSent: !!(currentUserId && messageData.senderId === currentUserId),
           conversationId: messageData.conversationId,
           fontSize: messageData.fontSize,
           isEncrypted: isEncrypted,
@@ -97,6 +108,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           conversationId: message.conversationId,
           messageId: message.id,
           text: decryptedText?.substring(0, 50),
+          isSent: message.isSent,
         });
 
         // Add message to store - this updates the conversation list immediately
@@ -111,7 +123,8 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           lastMessage: decryptedText || '[Encrypted]',
           timestamp: new Date(messageData.createdAt).toISOString(),
           // Increment unread count if message is from another user
-          unreadCount: messageData.senderId !== user.id 
+          // If currentUserId is undefined, treat as unread (from other user)
+          unreadCount: !currentUserId || messageData.senderId !== currentUserId 
             ? currentUnreadCount + 1 
             : currentUnreadCount,
         });
@@ -128,10 +141,13 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         // Handle plaintext messages (legacy or when encryption unavailable)
         let decryptedText = messageData.text;
 
+        // Get current user ID dynamically
+        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        
         // Only decrypt if message is encrypted and not sent by current user
         if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
           // Skip decryption for messages sent by current user (already plaintext locally)
-          if (messageData.senderId !== user.id) {
+          if (messageData.senderId !== currentUserId) {
             try {
               decryptedText = await deviceKeysStore.decryptMessageFromSender(
                 messageData.ciphertext,
@@ -226,7 +242,11 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       });
 
       messagingSocket.on('connect', () => {
-        console.log('[RealtimeMessaging] Connected to messaging socket');
+        console.log('[RealtimeMessaging] Connected to messaging socket', {
+          socketId: messagingSocket?.id,
+          userId: user?.id,
+          authUserId: (messagingSocket?.auth as any)?.userId,
+        });
         // Set up listeners once connected
         setupEventListeners();
       });
