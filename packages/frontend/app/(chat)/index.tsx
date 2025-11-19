@@ -146,8 +146,8 @@ export default function ConversationsList() {
         return cMatch?.[1] || chatMatch?.[2] || null;
     }, [pathname]);
 
-    // Mock current user ID - replace with actual user ID from auth system
-    const { user } = useOxy();
+    // Get current user ID and oxy services
+    const { user, oxyServices } = useOxy();
     const currentUserId = user?.id;
 
     // Multi-selection state
@@ -673,7 +673,7 @@ export default function ConversationsList() {
         const isItemSelected = selectedConversationIds.has(item.id);
         const isGroup = isGroupConversation(item);
         const displayName = getConversationDisplayName(item, currentUserId);
-        const avatar = getConversationAvatar(item, currentUserId);
+        const avatar = getConversationAvatar(item, currentUserId, oxyServices);
         const otherParticipants = getOtherParticipants(item, currentUserId);
         const participantCount = getParticipantCount(item, currentUserId);
         const leftEnabled = leftSwipeAction !== 'none';

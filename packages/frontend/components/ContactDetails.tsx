@@ -14,10 +14,99 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from './Avatar';
 import { Ionicons } from '@expo/vector-icons';
+import { useOxy } from '@oxyhq/services';
+import { useUserById, useUsersStore } from '@/stores/usersStore';
+import { useParticipantFullName } from '@/utils/conversationUtils';
 
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
+import { OxyServices } from '@oxyhq/services';
+
+/**
+ * Participant item component for group conversations
+ * Extracted to separate component to allow using hooks properly
+ */
+function ParticipantItem({
+  participant,
+  oxyServices,
+  usersStore,
+}: {
+  participant: ConversationParticipant;
+  oxyServices: OxyServices;
+  usersStore: ReturnType<typeof useUsersStore>;
+}) {
+  const theme = useTheme();
+  const participantUser = useUserById(participant.id);
+  const fullName = useParticipantFullName(participant);
+  const initial = fullName?.charAt(0).toUpperCase() || '?';
+  
+  // Ensure we fetch user data if missing
+  React.useEffect(() => {
+    if (!participantUser) {
+      if (participant.username) {
+        usersStore.ensureByUsername(participant.username, (u) => oxyServices.getProfileByUsername(u));
+      } else if (participant.id) {
+        usersStore.ensureById(participant.id, (id) => oxyServices.getProfileByUsername(id));
+      }
+    }
+  }, [participant.username, participant.id, participantUser, usersStore, oxyServices]);
+  
+  // Get avatar URL using oxyServices
+  const participantAvatar = React.useMemo(() => {
+    let avatar = participantUser?.avatar || participant.avatar;
+    if (avatar && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
+      try {
+        return oxyServices.getFileDownloadUrl(avatar, 'thumb');
+      } catch (e) {
+        // Ignore error
+      }
+    }
+    return avatar;
+  }, [participantUser?.avatar, participant.avatar, oxyServices]);
+  
+  const participantUsername = participantUser?.username || participantUser?.handle || participant.username;
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    participantItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+    },
+    participantInfo: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    participantName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    participantUsername: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+  }), [theme]);
+
+  return (
+    <TouchableOpacity style={styles.participantItem} activeOpacity={0.7}>
+      <Avatar
+        size={40}
+        source={participantAvatar ? { uri: participantAvatar } : undefined}
+        label={initial}
+      />
+      <View style={styles.participantInfo}>
+        <ThemedText style={styles.participantName}>{fullName}</ThemedText>
+        {participantUsername && (
+          <ThemedText style={styles.participantUsername}>@{participantUsername}</ThemedText>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 interface ContactDetailsProps {
   conversationId?: string;
@@ -69,17 +158,55 @@ export function ContactDetails({
 
   const [activeTab, setActiveTab] = useState(tabs[0].id);
 
-  // Mock data - replace with actual contact data from your store/API
-  const mockContact = {
+  // Get oxy services for avatar URLs
+  const { oxyServices } = useOxy();
+  const usersStore = useUsersStore();
+
+  // For direct conversations, get the other participant's user data from Oxy
+  const otherParticipant = !isGroup && participants?.find(p => p.id !== currentUserId);
+  const contactUser = !isGroup && otherParticipant ? useUserById(otherParticipant.id) : null;
+
+  // Ensure we fetch user data if missing
+  React.useEffect(() => {
+    if (!isGroup && otherParticipant && !contactUser) {
+      if (otherParticipant.username) {
+        usersStore.ensureByUsername(otherParticipant.username, (u) => oxyServices.getProfileByUsername(u));
+      } else if (otherParticipant.id) {
+        usersStore.ensureById(otherParticipant.id, (id) => oxyServices.getProfileByUsername(id));
+      }
+    }
+  }, [isGroup, otherParticipant, contactUser, usersStore, oxyServices]);
+
+  // Get contact avatar URL using oxyServices
+  const contactAvatarUrl = useMemo(() => {
+    if (isGroup) return groupAvatar || contactAvatar;
+    
+    // For direct conversations, try Oxy user data first
+    let avatar = contactUser?.avatar || contactAvatar;
+    
+    if (avatar && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
+      try {
+        return oxyServices.getFileDownloadUrl(avatar, 'thumb');
+      } catch (e) {
+        // Ignore error
+      }
+    }
+    
+    return avatar;
+  }, [isGroup, contactUser?.avatar, contactAvatar, groupAvatar, oxyServices]);
+
+  // Get contact bio from Oxy user data
+  const contactBio = contactUser?.bio || contactUser?.description;
+  
+  // Use actual contact data from Oxy
+  const contactData = {
     name: contactName,
-    username: contactUsername,
-    avatar: contactAvatar,
-    bio: 'This is a sample bio for the contact.',
-    phone: '+1 234 567 8900',
-    email: 'contact@example.com',
+    username: contactUsername || contactUser?.username || contactUser?.handle,
+    avatar: contactAvatarUrl,
+    bio: contactBio,
     isOnline,
     lastSeen: lastSeen || new Date(),
-    verified: false,
+    verified: contactUser?.verified || false,
   };
 
   const styles = useMemo(() => StyleSheet.create({
@@ -184,27 +311,6 @@ export function ContactDetails({
       color: '#FFFFFF',
       marginLeft: 8,
     },
-    participantItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.border,
-    },
-    participantInfo: {
-      marginLeft: 12,
-      flex: 1,
-    },
-    participantName: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.colors.text,
-    },
-    participantUsername: {
-      fontSize: 14,
-      color: theme.colors.textSecondary,
-      marginTop: 2,
-    },
     tabsContainer: {
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border,
@@ -248,7 +354,7 @@ export function ContactDetails({
             />
           ) : (
             <Avatar
-              source={(contactAvatar || groupAvatar) ? { uri: contactAvatar || groupAvatar } : undefined}
+              source={contactAvatarUrl ? { uri: contactAvatarUrl } : undefined}
               size={100}
               style={styles.avatar}
               label={displayName.charAt(0)}
@@ -265,11 +371,11 @@ export function ContactDetails({
               </ThemedText>
             )}
             {!isGroup && (
-              mockContact.isOnline ? (
+              contactData.isOnline ? (
                 <ThemedText style={styles.onlineStatus}>Online</ThemedText>
               ) : (
                 <ThemedText style={styles.status}>
-                  Last seen {formatLastSeen(mockContact.lastSeen)}
+                  Last seen {formatLastSeen(contactData.lastSeen)}
                 </ThemedText>
               )
             )}
@@ -289,27 +395,14 @@ export function ContactDetails({
           {/* Participants Tab - Only for groups */}
           {isGroup && activeTab === 'participants' && otherParticipants.length > 0 && (
             <View style={styles.section}>
-              {otherParticipants.map((participant) => {
-                const { first, last } = participant.name;
-                const fullName = `${first}${last ? ` ${last}` : ''}`.trim();
-                const initial = first?.charAt(0).toUpperCase() || '?';
-
-                return (
-                  <TouchableOpacity key={participant.id} style={styles.participantItem} activeOpacity={0.7}>
-                    <Avatar
-                      size={40}
-                      source={participant.avatar ? { uri: participant.avatar } : undefined}
-                      label={initial}
-                    />
-                    <View style={styles.participantInfo}>
-                      <ThemedText style={styles.participantName}>{fullName}</ThemedText>
-                      {participant.username && (
-                        <ThemedText style={styles.participantUsername}>{participant.username}</ThemedText>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+              {otherParticipants.map((participant) => (
+                <ParticipantItem
+                  key={participant.id}
+                  participant={participant}
+                  oxyServices={oxyServices}
+                  usersStore={usersStore}
+                />
+              ))}
             </View>
           )}
 
@@ -334,43 +427,29 @@ export function ContactDetails({
               )}
 
               {/* About - Only for direct conversations */}
-              {!isGroup && mockContact.bio && (
+              {!isGroup && contactData.bio && (
                 <View style={styles.section}>
                   <ThemedText style={styles.sectionTitle}>About</ThemedText>
                   <ThemedText style={{ color: theme.colors.text, fontSize: 15, lineHeight: 22 }}>
-                    {mockContact.bio}
+                    {contactData.bio}
                   </ThemedText>
                 </View>
               )}
 
               {/* Contact Information - Only for direct conversations */}
-              {!isGroup && (
+              {!isGroup && contactData.username && (
                 <View style={styles.section}>
                   <ThemedText style={styles.sectionTitle}>Contact Information</ThemedText>
 
-                  {mockContact.phone && (
-                    <TouchableOpacity style={styles.infoItem} activeOpacity={0.7}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons name="call-outline" size={20} color={theme.colors.textSecondary} />
-                      </View>
-                      <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>Phone</Text>
-                        <Text style={styles.infoValue}>{mockContact.phone}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-
-                  {mockContact.email && (
-                    <TouchableOpacity style={styles.infoItem} activeOpacity={0.7}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons name="mail-outline" size={20} color={theme.colors.textSecondary} />
-                      </View>
-                      <View style={styles.infoContent}>
-                        <Text style={styles.infoLabel}>Email</Text>
-                        <Text style={styles.infoValue}>{mockContact.email}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity style={styles.infoItem} activeOpacity={0.7}>
+                    <View style={styles.infoIcon}>
+                      <Ionicons name="at-outline" size={20} color={theme.colors.textSecondary} />
+                    </View>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoLabel}>Username</Text>
+                      <Text style={styles.infoValue}>@{contactData.username}</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               )}
 

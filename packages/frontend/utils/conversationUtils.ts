@@ -268,6 +268,8 @@ export function useContactInfo(conversation: Conversation | null, currentUserId?
     }
   }
 
+  const username = user?.username || user?.handle || otherParticipant?.username;
+
   if (!name && otherParticipant) {
     if (otherParticipant.name?.first) {
       name = `${otherParticipant.name.first}${otherParticipant.name.last ? ` ${otherParticipant.name.last}` : ''}`.trim();
@@ -286,8 +288,16 @@ export function useContactInfo(conversation: Conversation | null, currentUserId?
     }
   }
 
-  const username = user?.username || user?.handle || otherParticipant?.username;
-  const avatar = user?.avatar || otherParticipant?.avatar || conversation.avatar;
+  let avatar = user?.avatar || otherParticipant?.avatar || conversation.avatar;
+  
+  // Convert avatar ID to URL using oxyServices if needed
+  if (avatar && oxyServices && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
+    try {
+      avatar = oxyServices.getFileDownloadUrl(avatar, 'thumb');
+    } catch (e) {
+      // Ignore error and keep original avatar
+    }
+  }
 
   return {
     name,
