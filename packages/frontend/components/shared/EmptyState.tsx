@@ -30,7 +30,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const theme = useTheme();
 
   // Constrain lottieSize to reasonable limits (WhatsApp/Telegram pattern)
-  const constrainedSize = Math.min(lottieSize, 250); // Max 250px
+  const constrainedSize = Math.min(lottieSize, 200); // Max 200px
   const minSize = Math.max(constrainedSize, 120); // Min 120px
 
   const styles = useMemo(() => StyleSheet.create({
@@ -63,9 +63,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     },
     lottieAnimation: {
       width: minSize,
-      height: minSize,
-      maxWidth: 250, // Hard limit
-      maxHeight: 250, // Hard limit
+      aspectRatio: 1, // Maintain square aspect ratio
       marginBottom: 24,
     },
   }), [theme.colors, subtitle, minSize]);
