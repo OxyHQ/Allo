@@ -31,8 +31,8 @@ export interface MediaItem {
 
 export interface StickerItem {
   id: string;
-  /** URL or local require() path for Lottie JSON */
-  source: string;
+  /** URL string, local require() asset (number for images, object for JSON), or Lottie JSON object */
+  source: string | number | object;
   /** Optional emoji fallback if Lottie fails to load */
   emoji?: string;
   /** Sticker pack identifier */

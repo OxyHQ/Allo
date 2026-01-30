@@ -45,13 +45,31 @@ export const StickerBubble = memo<StickerBubbleProps>(({
     },
   }), [isSent]);
 
-  const isRemoteSource = typeof sticker.source === 'string' && sticker.source.startsWith('http');
+  // Determine source type:
+  // - object: parsed Lottie JSON (from require('./file.json') or inline)
+  // - number: bundled image asset (from require('./file.png'))
+  // - string starting with http: remote URL
+  // - string: local file path
+  const sourceType = typeof sticker.source;
+  const isLottieObject = sourceType === 'object' && sticker.source !== null;
+  const isAssetNumber = sourceType === 'number';
+  const isRemoteUrl = sourceType === 'string' && (sticker.source as string).startsWith('http');
+
+  const lottieSource = isLottieObject
+    ? (sticker.source as object)
+    : isAssetNumber
+      ? (sticker.source as number)
+      : isRemoteUrl
+        ? { uri: sticker.source as string }
+        : sourceType === 'string'
+          ? (sticker.source as string)
+          : null;
 
   return (
     <View style={styles.container}>
-      {typeof sticker.source === 'string' ? (
+      {lottieSource ? (
         <LottieView
-          source={isRemoteSource ? { uri: sticker.source } : sticker.source}
+          source={lottieSource as any}
           autoPlay
           loop
           style={styles.lottie}

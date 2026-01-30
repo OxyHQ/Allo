@@ -223,19 +223,19 @@ export default function ConversationsList() {
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
 
-    // Offline-first: load cached conversations instantly, then fetch from API
-    // In dev mode, seed mock data if the API returns nothing
+    // Offline-first: load cached conversations instantly, then fetch from API in parallel
+    // Cache shows data immediately; API fetch updates in the background
     useEffect(() => {
-        loadCachedConversations().then(() => {
-            fetchConversations().then(() => {
-                if (__DEV__) {
-                    // Seed mock data only if the store is still empty after fetch
-                    const { conversations } = useConversationsStore.getState();
-                    if (conversations.length === 0) {
-                        seedMockData();
-                    }
+        // Fire both immediately — cache resolves fast, API runs in background
+        loadCachedConversations();
+        fetchConversations().then(() => {
+            if (__DEV__) {
+                // Seed mock data only if the store is still empty after fetch
+                const { conversations } = useConversationsStore.getState();
+                if (conversations.length === 0) {
+                    seedMockData();
                 }
-            });
+            }
         });
     }, [loadCachedConversations, fetchConversations]);
 

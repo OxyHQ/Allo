@@ -54,9 +54,9 @@ export const MESSAGING_CONSTANTS = {
   MEDIA_BORDER_RADIUS_AI: 12,
   MEDIA_MARGIN_BOTTOM: 4,
 
-  // Stickers
-  STICKER_SIZE: 150,
-  STICKER_SIZE_SMALL: 120,
+  // Stickers (100x100 square)
+  STICKER_SIZE: 100,
+  STICKER_SIZE_SMALL: 70,
 
   // Typography
   LINE_HEIGHT_MULTIPLIER: 1.4, // Multiplier for line height based on font size

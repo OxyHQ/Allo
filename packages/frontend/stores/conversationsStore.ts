@@ -3,6 +3,11 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
 import { useUsersStore } from './usersStore';
+import {
+  getConversationsLocally,
+  storeConversationsLocally,
+  getMessagesLocally,
+} from '@/lib/offlineStorage';
 
 /**
  * Format last message with sender name for group conversations
@@ -273,7 +278,6 @@ export const useConversationsStore = create<ConversationsState>()(
     // Offline-first: load cached conversations from AsyncStorage instantly
     loadCachedConversations: async () => {
       try {
-        const { getConversationsLocally } = await import('@/lib/offlineStorage');
         const cached = await getConversationsLocally();
         if (cached.length > 0 && get().conversations.length === 0) {
           get().setConversations(cached);
@@ -294,8 +298,6 @@ export const useConversationsStore = create<ConversationsState>()(
         const response = await api.get<{ conversations: any[] }>('/conversations');
         const apiConversations = response.data.conversations || [];
         
-        // Import usersStore dynamically to avoid circular dependency
-        const { useUsersStore } = await import('./usersStore');
         const usersStore = useUsersStore.getState();
         
         // Collect all unique user IDs for batch caching (WhatsApp-style efficiency)
@@ -341,7 +343,6 @@ export const useConversationsStore = create<ConversationsState>()(
         }
 
         // Batch check local storage for decrypted messages (efficient - parallel reads)
-        const { getMessagesLocally } = await import('@/lib/offlineStorage');
         const encryptedConversationIds = apiConversations
           .filter((conv: any) => conv.lastMessage?.text === '[Encrypted]')
           .map((conv: any) => conv._id || conv.id);
@@ -433,9 +434,7 @@ export const useConversationsStore = create<ConversationsState>()(
         set({ isLoading: false, hasFetchedOnce: true });
 
         // Persist to AsyncStorage for offline-first cold starts
-        import('@/lib/offlineStorage').then(({ storeConversationsLocally }) => {
-          storeConversationsLocally(conversations).catch(() => {});
-        });
+        storeConversationsLocally(conversations).catch(() => {});
       } catch (error) {
         console.error('[Conversations] Error fetching conversations:', error);
         // Never clear existing/cached data on network error (WhatsApp pattern)

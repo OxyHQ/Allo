@@ -8,6 +8,13 @@ interface MediaItem {
   type: 'image' | 'video' | 'gif';
 }
 
+interface StickerItem {
+  id: string;
+  source: string | number | object;
+  emoji?: string;
+  packId?: string;
+}
+
 interface Message {
   id: string;
   text: string;
@@ -17,7 +24,11 @@ interface Message {
   isSent: boolean;
   messageType?: 'user' | 'ai'; // Type of message: user (with bubble) or ai (plain text, no bubble)
   media?: MediaItem[]; // Array of media attachments
+  sticker?: StickerItem; // Lottie sticker attachment
 }
+
+// Pre-resolve the local Lottie asset so require() runs at module load time
+const WELCOME_STICKER = require('@/assets/lottie/welcome.json');
 
 /**
  * Get mock messages for a conversation
@@ -70,6 +81,14 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         isSent: false,
         media: [{ id: 'img-restaurant-1', type: 'image' }],
       },
+      {
+        id: 'm1-sticker-1',
+        text: '',
+        senderId: 'current-user',
+        timestamp: new Date(now - 10 * 1000),
+        isSent: true,
+        sticker: { id: 'stk-welcome-1', source: WELCOME_STICKER, emoji: '👋', packId: 'allo-default' },
+      },
     ],
 
     // Direct conversation 2 - Michael Rodriguez
@@ -104,6 +123,15 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         timestamp: new Date(now - 8 * 60 * 1000),
         isSent: true,
         media: [{ id: 'img-project-screenshot-1', type: 'image' }],
+      },
+      {
+        id: 'm2-sticker-1',
+        text: '',
+        senderId: '2',
+        senderName: 'Michael',
+        timestamp: new Date(now - 5 * 60 * 1000),
+        isSent: false,
+        sticker: { id: 'stk-welcome-2', source: WELCOME_STICKER, emoji: '👋', packId: 'allo-default' },
       },
     ],
 
@@ -308,6 +336,15 @@ export function getMockMessages(conversationId: string | null | undefined): Mess
         senderId: 'current-user',
         timestamp: new Date(now - 45 * 60 * 1000),
         isSent: true,
+      },
+      {
+        id: 'm7-sticker-1',
+        text: '',
+        senderId: '13',
+        senderName: 'Mom',
+        timestamp: new Date(now - 40 * 60 * 1000),
+        isSent: false,
+        sticker: { id: 'stk-welcome-3', source: WELCOME_STICKER, emoji: '👋', packId: 'allo-default' },
       },
     ],
 

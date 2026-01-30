@@ -1,27 +1,29 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { View } from "react-native";
 import ConversationView from "@/components/conversation/ConversationView";
 import { useConversationsStore } from "@/stores";
 import { useOxy } from "@oxyhq/services";
 import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
 import { toast } from "@/lib/sonner";
-import { ThemedText } from "@/components/ThemedText";
-import LoadingSpinner from "@/components/LoadingSpinner";
 
 /**
  * Route handler for /u/:id direct conversations
  * This route is used for direct conversations with specific users
  * It finds or creates the conversation and displays it
+ *
+ * Offline-first: renders ConversationView immediately using an optimistic
+ * conversation when no existing one is found, so the user never sees a
+ * loading spinner. The real conversation is created in the background.
  */
 export default function UserConversationRoute() {
   const { id: userId } = useLocalSearchParams<{ id: string }>();
 
-  const { user: currentUser, oxyServices } = useOxy();
+  const { user: currentUser } = useOxy();
   const conversations = useConversationsStore((state) => state.conversations);
   const addConversation = useConversationsStore((state) => state.addConversation);
   const ensureById = useUsersStore((state) => state.ensureById);
+  const oxyServices = useOxy().oxyServices;
 
   // Get user by ID
   const targetUser = useUserById(userId);
@@ -37,32 +39,73 @@ export default function UserConversationRoute() {
   const existingConversation = useMemo(() => {
     if (!userId || !currentUser?.id) return null;
 
-    // Try to find in existing conversations
     const directConv = conversations.find((conv) => {
       if (conv.type !== "direct") return false;
-
-      // Check if the other participant matches the user ID
       const otherParticipant = conv.participants?.find(
         (p) => p.id !== currentUser.id
       );
-      if (!otherParticipant) return false;
-
-      return otherParticipant.id === userId;
+      return otherParticipant?.id === userId;
     });
 
     return directConv || null;
   }, [conversations, userId, currentUser?.id]);
 
-  // If conversation exists, use it
-  if (existingConversation) {
-    return <ConversationView conversationId={existingConversation.id} />;
-  }
+  // Build an optimistic conversation ID so we can render immediately
+  const optimisticId = useMemo(() => {
+    if (!userId || !currentUser?.id) return null;
+    // Deterministic temp ID based on participants
+    const sorted = [userId, currentUser.id].sort();
+    return `optimistic-dm-${sorted[0]}-${sorted[1]}`;
+  }, [userId, currentUser?.id]);
 
-  // If user found but no conversation exists, create it
+  // Add optimistic conversation to store if none exists yet
+  const addedOptimistic = useRef(false);
   useEffect(() => {
-    const createDirectConversation = async () => {
-      if (!userId || !currentUser?.id || existingConversation) return;
+    if (existingConversation || !optimisticId || !userId || !currentUser?.id || addedOptimistic.current) return;
 
+    // Only add optimistic if it doesn't exist yet
+    const store = useConversationsStore.getState();
+    if (store.conversationsById[optimisticId]) return;
+
+    const displayName = targetUser
+      ? (typeof targetUser.name === 'string'
+          ? targetUser.name
+          : targetUser.name?.first
+            ? `${targetUser.name.first} ${targetUser.name?.last || ''}`.trim()
+            : targetUser.username || 'Chat')
+      : 'Chat';
+
+    addConversation({
+      id: optimisticId,
+      type: "direct",
+      name: displayName,
+      lastMessage: "",
+      timestamp: new Date().toISOString(),
+      unreadCount: 0,
+      avatar: targetUser?.avatar,
+      participants: [
+        {
+          id: userId,
+          name: { first: displayName.split(' ')[0], last: displayName.split(' ').slice(1).join(' ') },
+          username: targetUser?.username,
+          avatar: targetUser?.avatar,
+        },
+      ],
+      participantCount: 2,
+    });
+    addedOptimistic.current = true;
+  }, [existingConversation, optimisticId, userId, currentUser?.id, targetUser, addConversation]);
+
+  // Create real conversation in the background
+  const creatingRef = useRef(false);
+  useEffect(() => {
+    if (!userId || !currentUser?.id || existingConversation || creatingRef.current) return;
+    // Don't create if we already have a real (non-optimistic) conversation
+    if (existingConversation) return;
+
+    creatingRef.current = true;
+
+    (async () => {
       try {
         const response = await api.post<any>("/conversations", {
           type: "direct",
@@ -84,7 +127,7 @@ export default function UserConversationRoute() {
 
         const conversation = {
           id: apiConversation._id || apiConversation.id,
-          type: "direct",
+          type: "direct" as const,
           name: apiConversation.name || "Direct Chat",
           lastMessage: "",
           timestamp: new Date(apiConversation.createdAt).toISOString(),
@@ -96,37 +139,20 @@ export default function UserConversationRoute() {
           participantCount: participants.length,
         };
 
+        // Remove optimistic and add real conversation
+        if (optimisticId) {
+          useConversationsStore.getState().removeConversation(optimisticId);
+        }
         addConversation(conversation);
       } catch (error: any) {
         console.error("[UserRoute] Error creating conversation:", error);
         toast.error("Failed to create conversation");
       }
-    };
+    })();
+  }, [userId, currentUser?.id, existingConversation, addConversation, optimisticId]);
 
-    if (userId && !existingConversation) {
-      createDirectConversation();
-    }
-  }, [userId, currentUser, existingConversation, addConversation]);
+  // Always render ConversationView immediately — either with the real or optimistic conversation
+  const conversationId = existingConversation?.id || optimisticId;
 
-  // Show conversation view if it exists, otherwise show loading
-  if (existingConversation) {
-    return <ConversationView conversationId={existingConversation.id} />;
-  }
-
-  // Loading state - wait for conversation to be created
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 32,
-      }}
-    >
-      <LoadingSpinner />
-      <ThemedText style={{ marginTop: 16, textAlign: "center" }}>
-        Loading conversation...
-      </ThemedText>
-    </View>
-  );
+  return <ConversationView conversationId={conversationId || undefined} />;
 }
