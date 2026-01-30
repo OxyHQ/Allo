@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useState, useCallback } from 'react';
-import { View, Image, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import type { MediaItem } from '@/stores';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -12,7 +13,7 @@ export interface MediaCarouselProps {
   onMediaLongPress?: (mediaId: string, index: number, event: any) => void;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Use hook inside component instead of module-level Dimensions.get (handles rotation)
 
 /**
  * MediaCarousel Component
@@ -38,6 +39,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
   onMediaLongPress,
 }) => {
   const theme = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const handleMediaPress = useCallback((mediaId: string, index: number) => {
@@ -73,13 +75,12 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
       overflow: 'hidden',
     },
     image: {
-      width: isAiMessage ? SCREEN_WIDTH - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
+      width: isAiMessage ? screenWidth - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
       maxWidth: isAiMessage ? '100%' : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
       height: MESSAGING_CONSTANTS.MEDIA_HEIGHT,
-      resizeMode: 'cover',
     },
     videoPlaceholder: {
-      width: isAiMessage ? SCREEN_WIDTH - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
+      width: isAiMessage ? screenWidth - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
       maxWidth: isAiMessage ? '100%' : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH,
       height: MESSAGING_CONSTANTS.MEDIA_HEIGHT,
       backgroundColor: theme.colors.border || '#E5E5E5',
@@ -109,7 +110,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
       height: 8,
       borderRadius: 4,
     },
-  }), [isAiMessage, media.length, theme]);
+  }), [isAiMessage, media.length, theme, screenWidth]);
 
   if (!media || media.length === 0) {
     return null;
@@ -150,6 +151,10 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
             <Image
               source={{ uri: mediaUrl }}
               style={styles.image}
+              contentFit="cover"
+              cachePolicy="disk"
+              transition={200}
+              recyclingKey={item.id}
               accessibilityLabel={`Media attachment: ${item.type}`}
             />
           </TouchableOpacity>
@@ -189,6 +194,10 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
               <Image
                 source={{ uri: mediaUrl }}
                 style={styles.image}
+                contentFit="cover"
+                cachePolicy="disk"
+                transition={200}
+                recyclingKey={item.id}
                 accessibilityLabel="Video thumbnail"
               />
               {/* TODO: Add video play overlay icon */}
@@ -218,7 +227,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / (isAiMessage ? SCREEN_WIDTH - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH + 4));
+          const index = Math.round(event.nativeEvent.contentOffset.x / (isAiMessage ? screenWidth - 32 : MESSAGING_CONSTANTS.MEDIA_MAX_WIDTH + 4));
           setActiveIndex(index);
         }}
         style={styles.scrollView}

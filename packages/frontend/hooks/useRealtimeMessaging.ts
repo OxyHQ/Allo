@@ -64,10 +64,10 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           return;
         }
 
-        // Check if message already exists in store (prevent duplicates - O(n) check but necessary)
-        const existingMessages = useMessagesStore.getState().messagesByConversation[messageData.conversationId] || [];
+        // O(1) dedup check via ID Set (WhatsApp/Telegram pattern)
         const messageId = messageData._id || messageData.id;
-        if (existingMessages.some(msg => msg.id === messageId)) {
+        const idSet = useMessagesStore.getState().messageIdsByConversation[messageData.conversationId];
+        if (idSet?.has(messageId)) {
           return;
         }
 
@@ -349,9 +349,15 @@ export const useRealtimeMessaging = (conversationId?: string) => {
 
   const disconnectSocket = useCallback(() => {
     if (messagingSocket) {
+      messagingSocket.removeAllListeners();
       messagingSocket.disconnect();
       messagingSocket = null;
     }
+    // Clean up all module-level globals to prevent memory leaks
+    listenersInitializedSocketId = null;
+    typingUsers.clear();
+    typingTimeoutRef.current.forEach((timeout) => clearTimeout(timeout));
+    typingTimeoutRef.current.clear();
   }, []);
 
   // Join conversation room when conversationId changes

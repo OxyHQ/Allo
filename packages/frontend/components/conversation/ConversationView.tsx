@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   TextInput,
-  FlatList,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +10,7 @@ import {
   TextInputKeyPressEventData,
   ImageBackground,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -95,6 +95,9 @@ type SelectionContext = 'text' | 'media';
 
 // Stable empty array to prevent Zustand selector from creating new references
 const EMPTY_MESSAGES: Message[] = [];
+
+// Stable empty style for FlashList contentContainer
+const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 12 };
 
 
 /**
@@ -194,7 +197,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const sendMessage = useMessagesStore(state => state.sendMessage);
 
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
   const lastFetchedConversationId = useRef<string | null>(null);
   const typingTimeoutRef = useRef<any>(null);
@@ -423,27 +426,35 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
   }, [messageGroups.length]);
 
-  // Send typing indicator when user types
+  // Typing indicator: throttle to max 1 emit per 5s (Telegram pattern)
+  const lastTypingEmitRef = useRef<number>(0);
+
   const handleInputChange = useCallback((text: string) => {
     if (conversationId) {
       setInputText(conversationId, text);
 
-      // Clear existing timeout
+      // Clear existing stop-typing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
 
-      // Send typing indicator
       if (text.length > 0) {
-        sendTypingIndicator(true);
-        // Stop typing after 2 seconds of no input
+        // Throttle: only send typing=true once every 5 seconds
+        const now = Date.now();
+        if (now - lastTypingEmitRef.current > 5000) {
+          sendTypingIndicator(true);
+          lastTypingEmitRef.current = now;
+        }
+        // Stop typing after 3 seconds of no input
         typingTimeoutRef.current = setTimeout(() => {
           sendTypingIndicator(false);
+          lastTypingEmitRef.current = 0;
           typingTimeoutRef.current = null;
-        }, 2000);
+        }, 3000);
       } else {
         sendTypingIndicator(false);
+        lastTypingEmitRef.current = 0;
       }
     }
   }, [conversationId, setInputText, sendTypingIndicator]);
@@ -1026,14 +1037,12 @@ export default function ConversationView({ conversationId: propConversationId }:
           {/* Messages List */}
           {messageGroups.length > 0 ? (
             <>
-              <FlatList
-                ref={flatListRef}
-                style={styles.messagesList}
+              <FlashList
+                ref={flatListRef as any}
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}
-                contentContainerStyle={{ paddingVertical: 12 }}
-                inverted={false}
+                estimatedItemSize={80}
               />
               {/* Typing Indicator */}
               {typingUserIds.length > 0 && (

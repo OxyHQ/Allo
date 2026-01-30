@@ -54,14 +54,16 @@ export interface Message {
 interface MessagesState {
   // Data: messages organized by conversation ID
   messagesByConversation: Record<string, Message[]>;
-  
+  // O(1) dedup: Set of message IDs per conversation (WhatsApp/Telegram pattern)
+  messageIdsByConversation: Record<string, Set<string>>;
+
   // Loading states by conversation
   loadingByConversation: Record<string, boolean>;
   errorByConversation: Record<string, string | null>;
-  
+
   // Last updated timestamps by conversation
   lastUpdatedByConversation: Record<string, number>;
-  
+
   // Cloud sync enabled
   cloudSyncEnabled: boolean;
   
@@ -96,6 +98,7 @@ export const useMessagesStore = create<MessagesState>()(
   subscribeWithSelector((set, get) => ({
     // Initial state
     messagesByConversation: {},
+    messageIdsByConversation: {},
     loadingByConversation: {},
     errorByConversation: {},
     lastUpdatedByConversation: {},
@@ -103,10 +106,15 @@ export const useMessagesStore = create<MessagesState>()(
 
     // Actions
     setMessages: async (conversationId, messages) => {
+      const idSet = new Set(messages.map(m => m.id));
       set((state) => ({
         messagesByConversation: {
           ...state.messagesByConversation,
           [conversationId]: messages,
+        },
+        messageIdsByConversation: {
+          ...state.messageIdsByConversation,
+          [conversationId]: idSet,
         },
         lastUpdatedByConversation: {
           ...state.lastUpdatedByConversation,
@@ -174,19 +182,26 @@ export const useMessagesStore = create<MessagesState>()(
 
     addMessage: async (message) => {
       set((state) => {
-        const existing = state.messagesByConversation[message.conversationId] || [];
-        
-        // Check if message already exists (prevent duplicates)
-        const messageExists = existing.some(msg => msg.id === message.id);
-        if (messageExists) {
+        const idSet = state.messageIdsByConversation[message.conversationId] || new Set();
+
+        // O(1) dedup check (WhatsApp/Telegram pattern)
+        if (idSet.has(message.id)) {
           return state;
         }
-        
+
+        const existing = state.messagesByConversation[message.conversationId] || [];
         const updated = [...existing, message];
+        const newIdSet = new Set(idSet);
+        newIdSet.add(message.id);
+
         return {
           messagesByConversation: {
             ...state.messagesByConversation,
             [message.conversationId]: updated,
+          },
+          messageIdsByConversation: {
+            ...state.messageIdsByConversation,
+            [message.conversationId]: newIdSet,
           },
           lastUpdatedByConversation: {
             ...state.lastUpdatedByConversation,
@@ -271,10 +286,16 @@ export const useMessagesStore = create<MessagesState>()(
       set((state) => {
         const messages = state.messagesByConversation[conversationId] || [];
         const filtered = messages.filter(msg => msg.id !== messageId);
+        const newIdSet = new Set(state.messageIdsByConversation[conversationId] || []);
+        newIdSet.delete(messageId);
         return {
           messagesByConversation: {
             ...state.messagesByConversation,
             [conversationId]: filtered,
+          },
+          messageIdsByConversation: {
+            ...state.messageIdsByConversation,
+            [conversationId]: newIdSet,
           },
           lastUpdatedByConversation: {
             ...state.lastUpdatedByConversation,
