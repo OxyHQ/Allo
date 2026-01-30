@@ -77,6 +77,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             autoPlay
             loop
             style={styles.lottieAnimation}
+            webStyle={{ width: minSize, height: minSize }}
           />
         )}
         {!lottieSource && icon && <View style={styles.iconContainer}>{icon}</View>}
