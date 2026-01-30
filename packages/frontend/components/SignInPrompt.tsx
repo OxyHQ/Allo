@@ -2,11 +2,10 @@ import React from 'react';
 import {
     View,
     StyleSheet,
-    TouchableOpacity,
     Text,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useOxy } from '@oxyhq/services';
+import { OxySignInButton, useAuth } from '@oxyhq/services';
 import { Logo } from './Logo';
 import { colors } from '../styles/colors';
 import { useTheme } from '@/hooks/useTheme';
@@ -16,14 +15,24 @@ interface SignInPromptProps {
 }
 
 const SignInPrompt: React.FC<SignInPromptProps> = ({ onSignInPress }) => {
-    const { showBottomSheet } = useOxy();
+    const { signIn } = useAuth();
     const theme = useTheme();
 
-    const handleSignInPress = () => {
+    const handleSignInPress = async () => {
         if (onSignInPress) {
             onSignInPress();
         } else {
-            showBottomSheet?.('SignIn');
+            try {
+                await signIn();
+            } catch (error: any) {
+                // Handle authentication cancellation gracefully
+                if (error?.message?.includes('cancelled') || error?.message?.includes('closed')) {
+                    console.log('Authentication cancelled by user');
+                    return;
+                }
+                // Log other errors
+                console.error('Authentication error:', error);
+            }
         }
     };
 
@@ -54,10 +63,17 @@ const SignInPrompt: React.FC<SignInPromptProps> = ({ onSignInPress }) => {
                     </View>
                 </View>
 
+                {/* Option 1: Use built-in OxySignInButton (handles everything automatically) */}
+                <View style={styles.signInButtonContainer}>
+                    <OxySignInButton />
+                </View>
+
+                {/* Option 2: Custom button with manual signIn (commented out)
                 <TouchableOpacity style={[styles.signInButton, { backgroundColor: theme.colors.primary }]} onPress={handleSignInPress}>
                     <Text style={[styles.signInButtonText, { color: theme.colors.card }]}>Get Started</Text>
                     <Ionicons name="arrow-forward" size={18} color={theme.colors.card} />
                 </TouchableOpacity>
+                */}
 
                 <Text style={[styles.signInFooter, { color: theme.colors.textSecondary }]}>
                     By signing in, you agree to our Terms of Service and Privacy Policy
@@ -123,6 +139,10 @@ const styles = StyleSheet.create({
         color: colors.COLOR_BLACK_LIGHT_2,
         marginLeft: 12,
         flex: 1,
+    },
+    signInButtonContainer: {
+        width: '100%',
+        marginBottom: 8,
     },
     signInButton: {
         backgroundColor: colors.primaryColor,

@@ -1,4 +1,4 @@
-import { OxyServices } from '@oxyhq/services';
+import { oxyClient } from '@oxyhq/core';
 import { Platform } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '@/config';
@@ -8,9 +8,8 @@ const API_CONFIG = {
   baseURL: API_URL,
 };
 
-// Initialize OxyServices - if it automatically adds /api prefix, we don't need it in baseURL
-const oxyServices = new OxyServices({ baseURL: API_CONFIG.baseURL });
-const authenticatedClient = oxyServices.getClient();
+// Use oxyClient singleton for authenticated requests
+const authenticatedClient = oxyClient.getClient();
 
 // Public API client (no authentication required)
 const publicClient = axios.create({
@@ -95,4 +94,4 @@ export const publicApi = {
   },
 };
 
-export { API_CONFIG, oxyServices, authenticatedClient, publicClient };
+export { API_CONFIG, authenticatedClient, publicClient };

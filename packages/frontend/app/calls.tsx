@@ -11,6 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Ionicons } from '@expo/vector-icons';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 const IconComponent = Ionicons as any;
 
@@ -134,17 +135,6 @@ export default function CallsScreen() {
             fontSize: 14,
             color: theme.colors.textSecondary,
         },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 32,
-        },
-        emptyStateText: {
-            fontSize: 16,
-            color: theme.colors.textSecondary,
-            textAlign: 'center',
-        },
     }), [theme]);
 
     const formatTimestamp = (date: Date) => {
@@ -240,11 +230,11 @@ export default function CallsScreen() {
                         contentContainerStyle={{ flexGrow: 1 }}
                     />
                 ) : (
-                    <View style={styles.emptyState}>
-                        <ThemedText style={styles.emptyStateText}>
-                            No calls yet.{'\n'}Your call history will appear here!
-                        </ThemedText>
-                    </View>
+                    <EmptyState
+                        lottieSource={require('@/assets/lottie/welcome.json')}
+                        title="No calls yet"
+                        subtitle="Your call history will appear here!"
+                    />
                 )}
             </ThemedView>
         </SafeAreaView>

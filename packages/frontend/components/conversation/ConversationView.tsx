@@ -14,6 +14,7 @@ import {
 import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LottieView from 'lottie-react-native';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -32,6 +33,7 @@ import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
 import { MicSendButton } from '@/components/messages/MicSendButton';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
 import { CopyIcon } from '@/assets/icons/copy-icon';
@@ -369,11 +371,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       justifyContent: 'center',
       alignItems: 'center',
       padding: 32,
-    },
-    emptyStateText: {
-      fontSize: 16,
-      color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
-      textAlign: 'center',
     },
     typingIndicator: {
       paddingHorizontal: 16,
@@ -1048,11 +1045,11 @@ export default function ConversationView({ conversationId: propConversationId }:
               )}
             </>
           ) : (
-            <View style={styles.emptyState}>
-              <ThemedText style={styles.emptyStateText}>
-                No messages yet.{'\n'}Start the conversation!
-              </ThemedText>
-            </View>
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title="No messages yet"
+              subtitle="Start the conversation!"
+            />
           )}
 
           {/* Message Actions Menu - rendered first (will be below reactions) */}

@@ -11,7 +11,7 @@ export interface MessageMetadataProps {
   timestamp: Date;
   isSent?: boolean;
   isEdited?: boolean;
-  readStatus?: 'sent' | 'delivered' | 'read';
+  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
   showTimestamp?: boolean;
   variant?: 'default' | 'bubble';
 }
@@ -108,6 +108,8 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
       case 'delivered':
         return <MsgCheckIcon {...commonProps} />;
       case 'sent':
+        return <MsgCheckIcon {...commonProps} />;
+      case 'pending':
       default:
         return <MsgPendingIcon {...commonProps} />;
     }

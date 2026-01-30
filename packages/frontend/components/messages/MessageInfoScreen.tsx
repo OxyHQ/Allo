@@ -17,6 +17,7 @@ import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { MessageMetadata } from './MessageMetadata';
 import { MessageAvatar } from './MessageAvatar';
+import { EmptyState } from '@/components/shared/EmptyState';
 import type { Message } from '@/stores';
 import { TIME_FORMAT_OPTIONS } from '@/constants/messaging';
 import { colors } from '@/styles/colors';
@@ -140,17 +141,6 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
       fontSize: 14,
       color: theme.colors.textSecondary || '#666666',
     },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 32,
-    },
-    emptyStateText: {
-      fontSize: 16,
-      color: theme.colors.textSecondary || '#666666',
-      textAlign: 'center',
-    },
   }), [theme]);
 
   if (!visible) {
@@ -263,15 +253,16 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
                   timestamp={message.timestamp}
                   isSent={message.isSent}
                   isEdited={false}
-                  readStatus={message.isSent ? 'read' : undefined}
+                  readStatus={message.readStatus}
                   showTimestamp={true}
                 />
               </View>
             </ScrollView>
           ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No message selected</Text>
-            </View>
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title="No message selected"
+            />
           )}
         </ThemedView>
       </SafeAreaView>

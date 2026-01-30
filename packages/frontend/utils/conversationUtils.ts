@@ -1,6 +1,6 @@
 import { Conversation, ConversationType, ConversationParticipant } from '@/app/(chat)/index';
 import { useUserById, useUsersStore } from '@/stores/usersStore';
-import { useOxy, OxyServices } from '@oxyhq/services';
+import { useOxy } from '@oxyhq/services';
 import { useEffect } from 'react';
 
 // Import useUsersStore for direct access in non-hook functions
@@ -247,7 +247,7 @@ export function getParticipantCount(
 export function getConversationAvatar(
   conversation: Conversation,
   currentUserId?: string,
-  oxyServices?: OxyServices
+  oxyServices?: any
 ): string | undefined {
   let avatar: string | undefined;
 

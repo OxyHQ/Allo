@@ -19,6 +19,8 @@ import { useOxy } from '@oxyhq/services';
 import { toast } from 'sonner';
 import { Platform } from 'react-native';
 import { api } from '@/utils/api';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { GifGridSkeleton } from '@/components/shared/Skeleton';
 
 interface GifPickerSheetProps {
   onClose: () => void;
@@ -267,19 +269,12 @@ const GifPickerSheet: React.FC<GifPickerSheetProps> = ({ onClose, onSelectGif })
       </View>
 
       {loading && gifs.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-            {t('Loading GIFs...')}
-          </Text>
-        </View>
+        <GifGridSkeleton />
       ) : gifs.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="image-outline" size={64} color={theme.colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-            {t('No GIFs found')}
-          </Text>
-        </View>
+        <EmptyState
+          lottieSource={require('@/assets/lottie/welcome.json')}
+          title={t('No GIFs found')}
+        />
       ) : (
         <FlatList
           data={gifs}

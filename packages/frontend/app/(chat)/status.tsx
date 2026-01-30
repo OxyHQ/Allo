@@ -9,6 +9,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -16,6 +17,7 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -277,17 +279,6 @@ export default function StatusScreen() {
       color: theme.colors.textSecondary,
       lineHeight: 18,
     },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 32,
-    },
-    emptyStateText: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: 'center',
-    },
   }), [theme]);
 
   const renderMyStatus = useCallback(() => {
@@ -407,12 +398,11 @@ export default function StatusScreen() {
             />
           </View>
         ) : (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              No status updates yet.{'\n'}
-              Your contacts' status updates will appear here
-            </ThemedText>
-          </View>
+          <EmptyState
+            lottieSource={require('@/assets/lottie/welcome.json')}
+            title="No status updates yet"
+            subtitle="Your contacts' status updates will appear here"
+          />
         )}
       </ThemedView>
     </SafeAreaView>

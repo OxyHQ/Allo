@@ -18,18 +18,18 @@ export const colors = {
   primaryLight: '#ffffff',
   primaryLight_1: '#DDF3F5',
   primaryLight_2: '#E5F0FF',
-  primaryDark: '#1A1A1A',
-  primaryDark_1: '#2D2D2D',
-  primaryDark_2: '#404040',
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  shadow: 'rgba(0, 0, 0, 0.1)',
+  primaryDark: '#000000', // Pure black background (WhatsApp/Telegram style)
+  primaryDark_1: '#0A0A0A', // Darker secondary background
+  primaryDark_2: '#1A1A1A', // Darker tertiary background
+  overlay: 'rgba(0, 0, 0, 0.7)', // Darker overlay
+  shadow: 'rgba(0, 0, 0, 0.3)', // Stronger shadow for dark mode
   COLOR_BLACK: '#000',
-  COLOR_BLACK_LIGHT_1: '#111111',
-  COLOR_BLACK_LIGHT_2: '#1e1e1e',
-  COLOR_BLACK_LIGHT_3: '#3c3c3c',
-  COLOR_BLACK_LIGHT_4: '#5e5e5e',
-  COLOR_BLACK_LIGHT_5: '#949494',
-  COLOR_BLACK_LIGHT_6: '#ededed',
+  COLOR_BLACK_LIGHT_1: '#0F0F0F', // Darker
+  COLOR_BLACK_LIGHT_2: '#1A1A1A', // Darker
+  COLOR_BLACK_LIGHT_3: '#2A2A2A', // Darker
+  COLOR_BLACK_LIGHT_4: '#707070', // Slightly brighter for better contrast
+  COLOR_BLACK_LIGHT_5: '#A0A0A0', // Brighter for better text visibility
+  COLOR_BLACK_LIGHT_6: '#E8E8E8', // Slightly less bright
   COLOR_BLACK_LIGHT_7: '#F5F5F5',
   COLOR_BLACK_LIGHT_8: '#FAFAFA',
   COLOR_BLACK_LIGHT_9: '#FDFDFD',

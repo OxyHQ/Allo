@@ -38,7 +38,7 @@ export interface MessageBubbleProps {
   /** Type of message: 'user' (with bubble) or 'ai' (plain text, no bubble) */
   messageType?: MessageType;
   /** Read status for sent messages */
-  readStatus?: 'sent' | 'delivered' | 'read';
+  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
   /** Whether the message was edited */
   isEdited?: boolean;
   /** Custom font size for this message (if adjusted via send button) */

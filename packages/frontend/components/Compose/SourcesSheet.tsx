@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { CloseIcon } from '@/assets/icons/close-icon';
 import { Plus } from '@/assets/icons/plus-icon';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 type SourceField = 'title' | 'url';
 
@@ -79,12 +80,12 @@ const SourcesSheet: React.FC<SourcesSheetProps> = ({
       >
         {sources.length === 0 ? (
           <View style={[styles.emptyState, { backgroundColor: theme.colors.backgroundSecondary, borderColor: theme.colors.border }]}>
-            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
-              {t('compose.sources.emptyTitle', { defaultValue: 'No sources added yet' })}
-            </Text>
-            <Text style={[styles.emptyStateSubtitle, { color: theme.colors.textSecondary }]}>
-              {t('compose.sources.emptySubtitle', { defaultValue: 'Add credible references to support your post.' })}
-            </Text>
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              lottieSize={180}
+              title={t('compose.sources.emptyTitle', { defaultValue: 'No sources added yet' })}
+              subtitle={t('compose.sources.emptySubtitle', { defaultValue: 'Add credible references to support your post.' })}
+            />
             <TouchableOpacity
               onPress={onAdd}
               style={[styles.addButton, {

@@ -6,7 +6,7 @@
 import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { OxyServices } from '@oxyhq/services';
+import { oxyClient } from '@oxyhq/core';
 
 import { useAppearanceStore } from '@/store/appearanceStore';
 import {
@@ -31,27 +31,6 @@ export interface AppInitializationState {
   authReady: boolean;
   appearanceLoaded: boolean;
   videoMuteLoaded: boolean;
-}
-
-/**
- * Waits for authentication to be ready
- */
-async function waitForAuth(
-  services: OxyServices,
-  timeoutMs: number = INITIALIZATION_TIMEOUT.AUTH
-): Promise<boolean> {
-  const maybe = services as unknown as {
-    waitForAuth?: (ms?: number) => Promise<boolean>;
-  };
-  if (typeof maybe.waitForAuth === 'function') {
-    try {
-      return await maybe.waitForAuth(timeoutMs);
-    } catch (e) {
-      console.warn('waitForAuth failed:', e);
-      return false;
-    }
-  }
-  return false;
 }
 
 /**
@@ -82,17 +61,14 @@ async function loadAppearanceSettings(): Promise<void> {
 }
 
 /**
- * Fetches current user if auth is ready
+ * Fetches current user
  */
-async function fetchCurrentUser(services: OxyServices, authReady: boolean): Promise<void> {
-  if (!authReady) {
-    return;
-  }
-
+async function fetchCurrentUser(): Promise<void> {
   try {
-    await services.getCurrentUser();
+    await oxyClient.getCurrentUser();
   } catch (error) {
-    console.warn('Failed to fetch current user during init:', error);
+    // User might not be authenticated yet, which is fine
+    console.log('User not authenticated during init');
   }
 }
 
@@ -118,10 +94,11 @@ export class AppInitializer {
 
   /**
    * Initializes the entire app
+   * Only blocks on critical-path work (user + appearance).
+   * Heavy tasks (Signal Protocol, notifications) are deferred.
    */
   static async initializeApp(
-    fontsLoaded: boolean,
-    services: OxyServices
+    fontsLoaded: boolean
   ): Promise<InitializationResult> {
     if (!fontsLoaded) {
       return {
@@ -131,22 +108,13 @@ export class AppInitializer {
     }
 
     try {
-      // Setup notifications for native platforms
-      await setupNotificationsIfNeeded();
+      // Critical path: fetch user and appearance in parallel
+      await Promise.all([
+        fetchCurrentUser(),
+        loadAppearanceSettings(),
+      ]);
 
-      // Wait for auth to be ready
-      const authReady = await waitForAuth(services, INITIALIZATION_TIMEOUT.AUTH);
-
-      // Fetch current user if auth is ready
-      await fetchCurrentUser(services, authReady);
-
-      // Load appearance settings (uses cache for instant theme)
-      await loadAppearanceSettings();
-
-      // Initialize Signal Protocol device keys
-      await initializeSignalProtocol(services);
-
-      // Hide splash screen
+      // Hide native splash screen
       try {
         await SplashScreen.hideAsync();
       } catch (error) {
@@ -159,6 +127,22 @@ export class AppInitializer {
         success: false,
         error: error instanceof Error ? error : new Error('Unknown initialization error'),
       };
+    }
+  }
+
+  /**
+   * Deferred initialization — runs after the app is visible.
+   * Signal Protocol, P2P messaging, and notifications don't need
+   * to block the first render.
+   */
+  static async initializeDeferred(): Promise<void> {
+    try {
+      await Promise.all([
+        setupNotificationsIfNeeded(),
+        initializeSignalProtocol(),
+      ]);
+    } catch (error) {
+      console.warn('[AppInitializer] Deferred init error:', error);
     }
   }
 
@@ -176,12 +160,12 @@ export class AppInitializer {
 /**
  * Initialize Signal Protocol encryption
  */
-async function initializeSignalProtocol(services: OxyServices): Promise<void> {
+async function initializeSignalProtocol(): Promise<void> {
   try {
     // Get current user - try multiple methods
     let user: any = null;
     try {
-      user = await services.getCurrentUser();
+      user = await oxyClient.getCurrentUser();
     } catch {
       // If getCurrentUser fails, user might not be authenticated yet
       console.log('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
@@ -201,7 +185,7 @@ async function initializeSignalProtocol(services: OxyServices): Promise<void> {
 
     // Load cloud sync setting from backend
     try {
-      const response = await services.getClient().get('/profile/settings/me');
+      const response = await oxyClient.getClient().get('/profile/settings/me');
       const settings = response.data;
       const cloudSyncEnabled = settings.security?.cloudSyncEnabled || false;
       useMessagesStore.getState().setCloudSyncEnabled(cloudSyncEnabled);
@@ -211,10 +195,10 @@ async function initializeSignalProtocol(services: OxyServices): Promise<void> {
 
     // Initialize P2P manager
     // Get token from storage or client
-    const client = services.getClient();
-    const token = (client.defaults?.headers?.common?.Authorization as string)?.replace('Bearer ', '') || 
+    const client = oxyClient.getClient();
+    const token = (client.defaults?.headers?.common?.Authorization as string)?.replace('Bearer ', '') ||
                   (client.defaults?.headers?.Authorization as string)?.replace('Bearer ', '');
-    
+
     if (token) {
       await p2pManager.initialize(user.id, token);
     }

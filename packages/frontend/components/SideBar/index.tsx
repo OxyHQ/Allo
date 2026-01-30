@@ -24,7 +24,7 @@ import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
 
 // Hooks
 import { useTheme } from "@/hooks/useTheme";
-import { useOxy } from "@oxyhq/services";
+import { useOxy, useAuth } from "@oxyhq/services";
 
 // Utils
 import { confirmDialog } from "@/utils/alerts";
@@ -39,7 +39,8 @@ const WindowHeight = Dimensions.get('window').height;
 export function SideBar() {
     const { t } = useTranslation();
     const router = useRouter();
-    const { isAuthenticated: _isAuthenticated, user, showBottomSheet, logout, oxyServices } = useOxy();
+    const { isAuthenticated: _isAuthenticated, user, logout, oxyServices } = useOxy();
+    const { signIn } = useAuth();
     const theme = useTheme();
 
     const avatarUri = user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
@@ -209,7 +210,16 @@ export function SideBar() {
                                 text={t('Sign In')}
                                 isExpanded={isExpanded}
                                 onHoverExpand={handleHoverIn}
-                                onPress={() => showBottomSheet?.('SignIn')}
+                                onPress={async () => {
+                                    try {
+                                        await signIn();
+                                    } catch (error: any) {
+                                        // Silently handle auth cancellation
+                                        if (!error?.message?.includes('cancelled') && !error?.message?.includes('closed')) {
+                                            console.error('Authentication error:', error);
+                                        }
+                                    }
+                                }}
                             />
                         )}
                     </View>

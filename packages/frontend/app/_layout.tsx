@@ -1,3 +1,5 @@
+// Required polyfill for @oxyhq/services - must be imported first
+import 'react-native-url-polyfill/auto';
 // Import Reanimated early to ensure proper initialization before other modules
 import 'react-native-reanimated';
 
@@ -31,7 +33,6 @@ import { usePathname } from 'expo-router';
 import { routeMatchers } from '@/utils/routeUtils';
 
 // Services & Utils
-import { oxyServices } from '@/lib/oxyServices';
 import { AppInitializer } from '@/lib/appInitializer';
 
 // Styles
@@ -144,7 +145,7 @@ export default function RootLayout() {
   const initializeApp = useCallback(async () => {
     if (!fontsLoaded) return;
 
-    const result = await AppInitializer.initializeApp(fontsLoaded, oxyServices);
+    const result = await AppInitializer.initializeApp(fontsLoaded);
 
     if (result.success) {
       setSplashState((prev) => ({ ...prev, initializationComplete: true }));
@@ -197,6 +198,13 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, splashState.initializationComplete, splashState.startFade]);
 
+  // Run deferred initialization after the app is visible
+  useEffect(() => {
+    if (appIsReady) {
+      AppInitializer.initializeDeferred();
+    }
+  }, [appIsReady]);
+
   const theme = useTheme();
   const colorScheme = useColorScheme();
 
@@ -213,7 +221,6 @@ export default function RootLayout() {
 
     return (
       <AppProviders
-        oxyServices={oxyServices}
         colorScheme={colorScheme}
         queryClient={queryClient}
       >
@@ -238,7 +245,6 @@ export default function RootLayout() {
     keyboardVisible,
     handleSplashFadeComplete,
     queryClient,
-    // oxyServices is stable (imported singleton), but included for completeness
   ]);
 
   return (

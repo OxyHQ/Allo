@@ -11,12 +11,14 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/sonner';
+import LottieView from 'lottie-react-native';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -490,19 +492,17 @@ export default function NewChatScreen() {
             keyboardShouldPersistTaps="handled"
           />
         ) : searchQuery.length >= 2 ? (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              No users found
-            </ThemedText>
-          </View>
+          <EmptyState
+            lottieSource={require('@/assets/lottie/welcome.json')}
+            title="No users found"
+          />
         ) : (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyStateText}>
-              {searchQuery.length === 0
-                ? 'Search for users to start a conversation'
-                : 'Type at least 2 characters to search'}
-            </ThemedText>
-          </View>
+          <EmptyState
+            lottieSource={require('@/assets/lottie/welcome.json')}
+            title={searchQuery.length === 0
+              ? 'Search for users to start a conversation'
+              : 'Type at least 2 characters to search'}
+          />
         )}
 
         {isSelectionMode && selectedUserIds.size > 0 && (

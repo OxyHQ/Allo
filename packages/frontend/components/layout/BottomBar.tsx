@@ -16,7 +16,7 @@ import { CallIcon, CallIconActive } from '@/assets/icons/call-icon';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useOxy } from '@oxyhq/services';
+import { useOxy, useAuth } from '@oxyhq/services';
 import { useHomeRefresh } from '@/context/HomeRefreshContext';
 
 // Utils
@@ -28,7 +28,8 @@ import type { NavigationItem } from '@/types/navigation';
 export const BottomBar = () => {
     const { t } = useTranslation();
     const pathname = usePathname();
-    const { showBottomSheet, user, isAuthenticated, oxyServices } = useOxy();
+    const { user, isAuthenticated, oxyServices } = useOxy();
+    const { signIn } = useAuth();
     const insets = useSafeAreaInsets();
     const theme = useTheme();
     const { triggerHomeRefresh } = useHomeRefresh();
@@ -199,15 +200,22 @@ export const BottomBar = () => {
                 asChild
             >
                 <Pressable
-                    onPress={() => {
+                    onPress={async () => {
                         if (!isAuthenticated || !user?.username) {
-                            showBottomSheet?.('SignIn');
+                            try {
+                                await signIn();
+                            } catch (error: any) {
+                                // Silently handle auth cancellation
+                                if (!error?.message?.includes('cancelled') && !error?.message?.includes('closed')) {
+                                    console.error('Authentication error:', error);
+                                }
+                            }
                         }
                     }}
                     onLongPress={() => {
                         if (isAuthenticated) {
                             Vibration.vibrate(50);
-                            showBottomSheet?.('AccountCenter');
+                            // Note: AccountCenter might need similar update if it exists in new API
                         }
                     }}
                     style={({ pressed }: any) => [

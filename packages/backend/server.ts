@@ -4,7 +4,7 @@ import http from "http";
 import { connectToDatabase } from "./src/utils/database";
 import { Server as SocketIOServer, Socket, Namespace } from "socket.io";
 import dotenv from "dotenv";
-import { OxyServices } from "@oxyhq/services";
+import { oxyClient } from "@oxyhq/core";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -20,10 +20,8 @@ dotenv.config();
 
 const app = express();
 
-// Initialize Oxy Services for authentication
-export const oxy = new OxyServices({
-  baseURL: process.env.OXY_API_URL || "https://api.oxy.so",
-});
+// Initialize Oxy client for authentication
+export const oxy = oxyClient;
 
 // --- Middleware ---
 app.use(express.json());

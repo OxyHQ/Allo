@@ -21,15 +21,12 @@ export const HeaderIconButton: React.FC<HeaderIconButtonProps> = ({
         <TouchableOpacity
             style={[
                 styles.button,
-                {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.border,
-                },
+                disabled && { opacity: 0.5 },
                 style,
             ]}
             onPress={onPress}
             disabled={disabled}
-            activeOpacity={0.7}
+            activeOpacity={0.6}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
             {children}
@@ -40,10 +37,11 @@ export const HeaderIconButton: React.FC<HeaderIconButtonProps> = ({
 const styles = StyleSheet.create({
     button: {
         padding: 8,
-        borderRadius: 100,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
+        // Removed border and background for cleaner look
+        // Icons now match bottom bar style
     },
 });
 

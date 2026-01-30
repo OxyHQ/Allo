@@ -47,6 +47,8 @@ export interface Message {
   isEncrypted?: boolean;
   ciphertext?: string;
   encryptionVersion?: number;
+  // Read receipt status
+  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
 }
 
 interface MessagesState {
@@ -116,13 +118,70 @@ export const useMessagesStore = create<MessagesState>()(
         },
       }));
       
-      // Store locally (offline-first)
-      await storeMessagesLocally(conversationId, messages);
+      // Store locally (offline-first) - don't await, do in background
+      storeMessagesLocally(conversationId, messages).catch(() => {});
+      
+      // Update conversation's lastMessage if we have decrypted messages (synchronous, efficient)
+      if (messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage.text && !lastMessage.isEncrypted && lastMessage.text !== '[Encrypted]') {
+          // Use require for synchronous access (faster than async import)
+          try {
+            const { useConversationsStore } = require('./conversationsStore');
+            const { useUsersStore } = require('./usersStore');
+            const conversationsStore = useConversationsStore.getState();
+            const conversation = conversationsStore.conversationsById[conversationId];
+            
+            if (conversation) {
+              // Format with sender name for groups (O(1) lookup from cache)
+              let formattedText = lastMessage.text;
+              if (conversation.type === 'group' && lastMessage.senderId) {
+                const usersStore = useUsersStore.getState();
+                const senderUser = usersStore.getCachedById(lastMessage.senderId);
+                const participant = conversation.participants?.find(p => p.id === lastMessage.senderId);
+                
+                let senderName: string | undefined;
+                if (senderUser) {
+                  if (typeof senderUser.name === 'string') {
+                    senderName = senderUser.name.split(' ')[0];
+                  } else if (senderUser.name?.first) {
+                    senderName = senderUser.name.first;
+                  } else if (senderUser.username || senderUser.handle) {
+                    senderName = senderUser.username || senderUser.handle;
+                  }
+                } else if (participant?.name?.first) {
+                  senderName = participant.name.first;
+                } else if (participant?.username) {
+                  senderName = participant.username;
+                }
+                
+                if (senderName) {
+                  formattedText = `${senderName}: ${lastMessage.text}`;
+                }
+              }
+              
+              conversationsStore.updateConversation(conversationId, {
+                lastMessage: formattedText,
+                timestamp: lastMessage.timestamp.toISOString(),
+              });
+            }
+          } catch (error) {
+            // Silently fail
+          }
+        }
+      }
     },
 
     addMessage: async (message) => {
       set((state) => {
         const existing = state.messagesByConversation[message.conversationId] || [];
+        
+        // Check if message already exists (prevent duplicates)
+        const messageExists = existing.some(msg => msg.id === message.id);
+        if (messageExists) {
+          return state;
+        }
+        
         const updated = [...existing, message];
         return {
           messagesByConversation: {
@@ -136,8 +195,54 @@ export const useMessagesStore = create<MessagesState>()(
         };
       });
       
-      // Store locally
-      await addMessageLocally(message);
+      // Store locally - don't await, do in background
+      addMessageLocally(message).catch(() => {});
+      
+      // Update conversation's lastMessage if this is a decrypted message (synchronous, efficient)
+      if (message.text && !message.isEncrypted && message.text !== '[Encrypted]') {
+        try {
+          const { useConversationsStore } = require('./conversationsStore');
+          const { useUsersStore } = require('./usersStore');
+          const conversationsStore = useConversationsStore.getState();
+          const conversation = conversationsStore.conversationsById[message.conversationId];
+          
+          if (conversation) {
+            // Format with sender name for groups (O(1) lookup from cache)
+            let formattedText = message.text;
+            if (conversation.type === 'group' && message.senderId) {
+              const usersStore = useUsersStore.getState();
+              const senderUser = usersStore.getCachedById(message.senderId);
+              const participant = conversation.participants?.find(p => p.id === message.senderId);
+              
+              let senderName: string | undefined;
+              if (senderUser) {
+                if (typeof senderUser.name === 'string') {
+                  senderName = senderUser.name.split(' ')[0];
+                } else if (senderUser.name?.first) {
+                  senderName = senderUser.name.first;
+                } else if (senderUser.username || senderUser.handle) {
+                  senderName = senderUser.username || senderUser.handle;
+                }
+              } else if (participant?.name?.first) {
+                senderName = participant.name.first;
+              } else if (participant?.username) {
+                senderName = participant.username;
+              }
+              
+              if (senderName) {
+                formattedText = `${senderName}: ${message.text}`;
+              }
+            }
+            
+            conversationsStore.updateConversation(message.conversationId, {
+              lastMessage: formattedText,
+              timestamp: message.timestamp.toISOString(),
+            });
+          }
+        } catch (error) {
+          // Silently fail
+        }
+      }
     },
 
     updateMessage: async (conversationId, messageId, updates) => {
@@ -209,16 +314,22 @@ export const useMessagesStore = create<MessagesState>()(
         return;
       }
 
-      set((state) => ({
-        loadingByConversation: {
-          ...state.loadingByConversation,
-          [conversationId]: true,
-        },
-        errorByConversation: {
-          ...state.errorByConversation,
-          [conversationId]: null,
-        },
-      }));
+      // TELEGRAM/WHATSAPP PATTERN: Only show loading if no cached messages
+      // Otherwise show cached and fetch in background
+      const hasCache = (currentState.messagesByConversation[conversationId]?.length || 0) > 0;
+
+      if (!hasCache) {
+        set((state) => ({
+          loadingByConversation: {
+            ...state.loadingByConversation,
+            [conversationId]: true,
+          },
+          errorByConversation: {
+            ...state.errorByConversation,
+            [conversationId]: null,
+          },
+        }));
+      }
 
       try {
         // Always load from local storage first (offline-first)
@@ -269,6 +380,24 @@ export const useMessagesStore = create<MessagesState>()(
                 serverMessages.map(async (msg: any) => {
                   // Handle plaintext messages (legacy or when encryption unavailable)
                   if (msg.text && !msg.ciphertext) {
+                    // Determine read status for sent messages
+                    let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
+                    if (msg.senderId === currentUserId) {
+                      if (msg.readBy && typeof msg.readBy === 'object') {
+                        const readBy = msg.readBy as Record<string, Date>;
+                        const readByUserIds = Object.keys(readBy);
+                        const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
+                        readStatus = recipientRead ? 'read' : 
+                          (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
+                            ? 'delivered' : 'sent';
+                      } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
+                        const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
+                        readStatus = recipientDelivered ? 'delivered' : 'sent';
+                      } else {
+                        readStatus = 'sent';
+                      }
+                    }
+                    
                     return {
                       id: msg._id || msg.id,
                       text: msg.text,
@@ -279,6 +408,7 @@ export const useMessagesStore = create<MessagesState>()(
                       conversationId: msg.conversationId,
                       fontSize: msg.fontSize,
                       isEncrypted: false,
+                      readStatus,
                       messageType: msg.messageType || 'user',
                     };
                   }
@@ -297,6 +427,24 @@ export const useMessagesStore = create<MessagesState>()(
                         msg.senderId,
                         msg.senderDeviceId
                       );
+                      // Determine read status for sent messages
+                      let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
+                      if (msg.senderId === currentUserId) {
+                        if (msg.readBy && typeof msg.readBy === 'object') {
+                          const readBy = msg.readBy as Record<string, Date>;
+                          const readByUserIds = Object.keys(readBy);
+                          const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
+                          readStatus = recipientRead ? 'read' : 
+                            (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
+                              ? 'delivered' : 'sent';
+                        } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
+                          const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
+                          readStatus = recipientDelivered ? 'delivered' : 'sent';
+                        } else {
+                          readStatus = 'sent';
+                        }
+                      }
+                      
                       return {
                         id: msg._id || msg.id,
                         text: decryptedText,
@@ -307,6 +455,7 @@ export const useMessagesStore = create<MessagesState>()(
                         conversationId: msg.conversationId,
                         fontSize: msg.fontSize,
                         isEncrypted: false, // Mark as decrypted
+                        readStatus,
                         messageType: msg.messageType || 'user',
                       };
                     } catch (error) {
@@ -445,7 +594,7 @@ export const useMessagesStore = create<MessagesState>()(
           }
         }
 
-        // Create message object
+        // Create message object with pending status (will update when sent)
         const message: Message = {
           id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           text: text.trim(), // Store plaintext locally for display
@@ -456,6 +605,7 @@ export const useMessagesStore = create<MessagesState>()(
           conversationId,
           fontSize,
           isEncrypted: isEncrypted,
+          readStatus: 'pending', // Pending while sending
           ...(isEncrypted && ciphertext ? { ciphertext, encryptionVersion: 1 } : {}),
         };
 
@@ -475,7 +625,8 @@ export const useMessagesStore = create<MessagesState>()(
             );
             
             if (sentViaP2P) {
-              // Message sent via P2P
+              // Message sent via P2P - update status to 'sent'
+              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
               return message;
             }
           } catch (error) {
@@ -504,8 +655,12 @@ export const useMessagesStore = create<MessagesState>()(
               }
               
               await api.post('/messages', payload);
+              
+              // Update message status to 'sent' after successful send
+              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
             } catch (error) {
               console.error('[Messages] Error sending to server:', error);
+              // Keep as 'pending' if send fails - will retry
               // Add to sync queue for retry
               await addToSyncQueue({
                 type: 'send_message',

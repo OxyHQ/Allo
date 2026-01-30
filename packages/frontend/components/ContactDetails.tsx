@@ -14,6 +14,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from './Avatar';
 import { Ionicons } from '@expo/vector-icons';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { useOxy } from '@oxyhq/services';
 import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useParticipantFullName } from '@/utils/conversationUtils';
@@ -21,7 +22,6 @@ import { useParticipantFullName } from '@/utils/conversationUtils';
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
-import { OxyServices } from '@oxyhq/services';
 
 /**
  * Participant item component for group conversations
@@ -29,29 +29,27 @@ import { OxyServices } from '@oxyhq/services';
  */
 function ParticipantItem({
   participant,
-  oxyServices,
-  usersStore,
 }: {
   participant: ConversationParticipant;
-  oxyServices: OxyServices;
-  usersStore: ReturnType<typeof useUsersStore>;
 }) {
   const theme = useTheme();
+  const { oxyServices } = useOxy();
+  const usersStore = useUsersStore();
   const participantUser = useUserById(participant.id);
   const fullName = useParticipantFullName(participant);
   const initial = fullName?.charAt(0).toUpperCase() || '?';
-  
+
   // Ensure we fetch user data if missing
   React.useEffect(() => {
-    if (!participantUser) {
+    if (!participantUser && oxyServices) {
       if (participant.username) {
-        usersStore.ensureByUsername(participant.username, (u) => oxyServices.getProfileByUsername(u));
+        usersStore.ensureByUsername(participant.username, (u: string) => oxyServices.getProfileByUsername(u));
       } else if (participant.id) {
-        usersStore.ensureById(participant.id, (id) => oxyServices.getProfileByUsername(id));
+        usersStore.ensureById(participant.id, (id: string) => oxyServices.getProfileByUsername(id));
       }
     }
   }, [participant.username, participant.id, participantUser, usersStore, oxyServices]);
-  
+
   // Get avatar URL using oxyServices
   const participantAvatar = React.useMemo(() => {
     let avatar = participantUser?.avatar || participant.avatar;
@@ -399,8 +397,6 @@ export function ContactDetails({
                 <ParticipantItem
                   key={participant.id}
                   participant={participant}
-                  oxyServices={oxyServices}
-                  usersStore={usersStore}
                 />
               ))}
             </View>
@@ -490,11 +486,10 @@ export function ContactDetails({
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
-              <View style={{ padding: 32, alignItems: 'center' }}>
-                <ThemedText style={{ color: theme.colors.textSecondary }}>
-                  No media shared yet
-                </ThemedText>
-              </View>
+              <EmptyState
+                lottieSource={require('@/assets/lottie/welcome.json')}
+                title="No media shared yet"
+              />
             </View>
           )}
         </ScrollView>

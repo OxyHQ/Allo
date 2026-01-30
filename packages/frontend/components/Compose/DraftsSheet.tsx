@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { DraftsIcon } from '@/assets/icons/drafts';
 import { useDrafts, Draft } from '@/hooks/useDrafts';
 import { toast } from 'sonner';
+import { DraftsListSkeleton } from '@/components/shared/Skeleton';
 import { confirmDialog } from '@/utils/alerts';
 
 interface DraftsSheetProps {
@@ -213,9 +214,7 @@ const DraftsSheet: React.FC<DraftsSheetProps> = ({ onClose, onLoadDraft, current
           hideBottomBorder={true}
           disableSticky={true}
         />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <DraftsListSkeleton />
       </View>
     );
   }

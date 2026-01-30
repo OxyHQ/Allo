@@ -6,12 +6,13 @@ import {
     TouchableOpacity,
     StyleSheet,
     FlatList,
-    ActivityIndicator,
     Keyboard,
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { useOxy } from "@oxyhq/services";
 import Avatar from "./Avatar";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { UserListSkeleton } from "@/components/shared/Skeleton";
 
 export interface alloUser {
     id: string;
@@ -102,15 +103,13 @@ const alloPicker: React.FC<alloPickerProps> = ({
             ]}
         >
             {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator color={theme.colors.primary} />
-                </View>
+                <UserListSkeleton count={3} />
             ) : users.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                    <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                        No users found
-                    </Text>
-                </View>
+                <EmptyState
+                    lottieSource={require("@/assets/lottie/welcome.json")}
+                    lottieSize={150}
+                    title="No users found"
+                />
             ) : (
                 <FlatList
                     data={users}

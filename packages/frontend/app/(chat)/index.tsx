@@ -8,7 +8,6 @@ import {
     TextInput,
     useWindowDimensions,
     RefreshControl,
-    ActivityIndicator,
 } from 'react-native';
 import { Link, useRouter, usePathname } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -31,6 +30,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -80,10 +80,62 @@ export interface Conversation {
     participantCount?: number; // Number of participants (for groups)
 }
 
+function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof useTheme> }) {
+    const opacity = useSharedValue(0.3);
+
+    useEffect(() => {
+        opacity.value = withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }, () => {
+            opacity.value = withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) });
+        });
+        const interval = setInterval(() => {
+            opacity.value = withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }, () => {
+                opacity.value = withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) });
+            });
+        }, 1600);
+        return () => clearInterval(interval);
+    }, []);
+
+    const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+    const bone = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+    const nameWidths = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125];
+    const msgWidths = [200, 170, 220, 180, 150, 210, 190, 160, 230, 175];
+
+    return (
+        <Animated.View style={[{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            minHeight: 64,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: theme.colors.border,
+        }, animStyle]}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: bone, marginRight: 12 }} />
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <View style={{ width: nameWidths[index % nameWidths.length], height: 14, borderRadius: 4, backgroundColor: bone }} />
+                    <View style={{ width: 40, height: 10, borderRadius: 3, backgroundColor: bone }} />
+                </View>
+                <View style={{ width: msgWidths[index % msgWidths.length], height: 12, borderRadius: 4, backgroundColor: bone }} />
+            </View>
+        </Animated.View>
+    );
+}
+
+function ConversationsSkeleton({ theme }: { theme: ReturnType<typeof useTheme> }) {
+    return (
+        <View style={{ flex: 1 }}>
+            {Array.from({ length: 10 }, (_, i) => (
+                <SkeletonRow key={i} index={i} theme={theme} />
+            ))}
+        </View>
+    );
+}
+
 /**
  * Conversations list component
  * Displays list of all conversations with support for direct and group chats
- * 
+ *
  * Follows Expo Router 54 best practices:
  * - Uses Link components for navigation
  * - Derives selected state from pathname
@@ -336,28 +388,6 @@ export default function ConversationsList() {
             color: '#FFFFFF',
             fontSize: 12,
             fontWeight: '600',
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 32,
-        },
-        emptyStateText: {
-            fontSize: 16,
-            color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
-            textAlign: 'center',
-        },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 32,
-        },
-        loadingText: {
-            marginTop: 16,
-            fontSize: 16,
-            color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
         },
         swipeActionContainer: {
             justifyContent: 'center',
@@ -904,10 +934,7 @@ export default function ConversationsList() {
                 </Animated.View>
 
                 {isLoading && conversations.length === 0 ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={theme.colors.primary} />
-                        <ThemedText style={styles.loadingText}>Loading conversations...</ThemedText>
-                    </View>
+                    <ConversationsSkeleton theme={theme} />
                 ) : visibleConversations.length > 0 ? (
                     <FlatList
                         style={styles.list}
@@ -930,11 +957,10 @@ export default function ConversationsList() {
                 ) : (
                     <>
                         {SearchBarHeader}
-                        <View style={styles.emptyState}>
-                            <ThemedText style={styles.emptyStateText}>
-                                {emptyStateCopy}
-                            </ThemedText>
-                        </View>
+                        <EmptyState
+                            lottieSource={require('@/assets/lottie/welcome.json')}
+                            title={emptyStateCopy}
+                        />
                     </>
                 )}
 

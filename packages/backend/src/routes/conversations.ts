@@ -21,8 +21,13 @@ async function enrichParticipantsWithOxyData(participants: any[]) {
     try {
       const user = await oxy.getUserById(userId);
       return { userId, user };
-    } catch (error) {
-      console.error(`[Conversations] Error fetching Oxy user ${userId}:`, error);
+    } catch (error: any) {
+      // Handle 404 errors gracefully (user might be deleted) - don't log as error
+      if (error?.status === 404 || error?.code === 'ERR_BAD_REQUEST') {
+        console.log(`[Conversations] Oxy user ${userId} not found (404) - using participant data`);
+      } else {
+        console.error(`[Conversations] Error fetching Oxy user ${userId}:`, error);
+      }
       return { userId, user: null };
     }
   });

@@ -293,7 +293,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       showTimestamp={showTimestamp}
                       isCloseToPrevious={isCloseToPrevious}
                       messageType={message.messageType || 'user'}
-                      readStatus={message.isSent ? 'read' : undefined}
+                      readStatus={message.readStatus}
                       isEdited={false} // TODO: Add edited status to Message type
                       fontSize={message.fontSize} // Use custom font size if set
                     />

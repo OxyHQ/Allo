@@ -1,24 +1,15 @@
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Animated, StyleSheet, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { cssInterop } from 'nativewind';
 import { LogoIcon } from '@/assets/logo';
 import LoadingSpinner from './LoadingSpinner';
 import { useTheme } from '@/hooks/useTheme';
-
-// Configure LinearGradient for NativeWind
-cssInterop(LinearGradient, {
-    className: {
-        target: 'style',
-    },
-});
 
 interface AppSplashScreenProps {
     onFadeComplete?: () => void;
     startFade?: boolean;
 }
 
-const FADE_DURATION = 500;
+const FADE_DURATION = 200;
 const LOGO_SIZE = 100;
 const SPINNER_SIZE = 28;
 
@@ -67,25 +58,19 @@ const AppSplashScreen: React.FC<AppSplashScreenProps> = ({
         [fadeAnim]
     );
 
-    // Gradient colors: background to primary for visual depth
-    const gradientColors = useMemo(
-        () => [theme.colors.background, theme.colors.primary] as const,
-        [theme.colors.background, theme.colors.primary]
-    );
+    const backgroundColor = theme.isDark ? '#000000' : '#FFFFFF';
+    const contentColor = theme.isDark ? '#FFFFFF' : '#000000';
 
     return (
         <Animated.View style={containerStyle}>
-            <LinearGradient
-                colors={gradientColors}
-                style={styles.gradient}
-            >
+            <View style={[styles.background, { backgroundColor }]}>
                 <View style={styles.logoContainer}>
-                    <LogoIcon size={LOGO_SIZE} color="white" />
+                    <LogoIcon size={LOGO_SIZE} color={contentColor} />
                     <View style={styles.spinnerContainer}>
-                        <LoadingSpinner size={SPINNER_SIZE} color="white" showText={false} />
+                        <LoadingSpinner size={SPINNER_SIZE} color={contentColor} showText={false} />
                     </View>
                 </View>
-            </LinearGradient>
+            </View>
         </Animated.View>
     );
 };
@@ -94,7 +79,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    gradient: {
+    background: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
