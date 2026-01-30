@@ -59,6 +59,7 @@ import {
     getParticipantCount,
     isGroupConversation,
 } from '@/utils/conversationUtils';
+import { formatConversationTimestamp } from '@/utils/dateUtils';
 
 // Export types for use in other files
 export type ConversationType = 'direct' | 'group';
@@ -863,7 +864,7 @@ export default function ConversationsList() {
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <ThemedText style={styles.conversationTimestamp} numberOfLines={1}>
-                                {item.timestamp}
+                                {formatConversationTimestamp(item.timestamp)}
                             </ThemedText>
                             {item.unreadCount > 0 && (
                                 <View style={styles.unreadBadge}>
