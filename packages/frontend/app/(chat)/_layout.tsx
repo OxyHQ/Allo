@@ -6,6 +6,7 @@ import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ContactDetails } from '@/components/ContactDetails';
+import { EmptyState } from '@/components/shared/EmptyState';
 import ConversationsList from './index';
 import StatusScreen from './status';
 import { useConversationsStore } from '@/stores';
@@ -163,31 +164,11 @@ export default function ChatLayout() {
       width: 350,
       backgroundColor: theme.colors.background,
     },
-    rightPaneEmpty: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 32,
-      backgroundColor: theme.colors.background,
-    },
-    emptyTitle: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.colors.text,
-      marginBottom: 12,
-      textAlign: 'center',
-    },
-    emptySubtitle: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 24,
-    },
     mobileContainer: {
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-  }), [theme.colors.background, theme.colors.border, theme.colors.text, theme.colors.textSecondary]);
+  }), [theme.colors.background, theme.colors.border]);
 
   // On large screens, show two-pane layout
   if (isLargeScreen) {
@@ -293,12 +274,11 @@ export default function ChatLayout() {
             })()
           ) : (
             // Empty state when on index route
-            <View style={styles.rightPaneEmpty}>
-              <ThemedText style={styles.emptyTitle}>Select a conversation</ThemedText>
-              <ThemedText style={styles.emptySubtitle}>
-                Choose a conversation from the list to start messaging
-              </ThemedText>
-            </View>
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title="Select a conversation"
+              subtitle="Choose a conversation from the list to start messaging"
+            />
           )}
         </View>
 

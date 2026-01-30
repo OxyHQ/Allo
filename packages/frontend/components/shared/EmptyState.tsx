@@ -30,8 +30,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const theme = useTheme();
 
   // Constrain lottieSize to reasonable limits (WhatsApp/Telegram pattern)
-  const constrainedSize = Math.min(lottieSize, 200); // Max 200px
-  const minSize = Math.max(constrainedSize, 120); // Min 120px
+  const constrainedSize = Math.min(lottieSize, 150); // Max 150px
+  const minSize = Math.max(constrainedSize, 50); // Min 100px
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -40,9 +40,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       alignItems: 'center',
       padding: 32,
       backgroundColor: theme.colors.background,
-      maxWidth: 400, // Constrain content width
-      alignSelf: 'center',
-      width: '100%',
+    },
+    content: {
+      alignItems: 'center',
+      maxWidth: 400,
     },
     title: {
       fontSize: 16,
@@ -63,24 +64,26 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     },
     lottieAnimation: {
       width: minSize,
-      aspectRatio: 1, // Maintain square aspect ratio
+      height: minSize, // Explicitly set same height to maintain 1:1 aspect ratio
       marginBottom: 24,
     },
   }), [theme.colors, subtitle, minSize]);
 
   return (
     <View style={styles.container}>
-      {lottieSource && (
-        <LottieView
-          source={lottieSource}
-          autoPlay
-          loop
-          style={styles.lottieAnimation}
-        />
-      )}
-      {!lottieSource && icon && <View style={styles.iconContainer}>{icon}</View>}
-      <ThemedText style={styles.title}>{title}</ThemedText>
-      {subtitle && <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>}
+      <View style={styles.content}>
+        {lottieSource && (
+          <LottieView
+            source={lottieSource}
+            autoPlay
+            loop
+            style={styles.lottieAnimation}
+          />
+        )}
+        {!lottieSource && icon && <View style={styles.iconContainer}>{icon}</View>}
+        <ThemedText style={styles.title}>{title}</ThemedText>
+        {subtitle && <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>}
+      </View>
     </View>
   );
 };
