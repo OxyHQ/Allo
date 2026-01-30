@@ -3,12 +3,12 @@ import {
     StyleSheet,
     View,
     Text,
-    FlatList,
     TouchableOpacity,
     TextInput,
     useWindowDimensions,
     RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Link, useRouter, usePathname } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,6 +31,7 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { OfflineBanner } from '@/components/shared/OfflineBanner';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -148,20 +149,24 @@ export default function ConversationsList() {
     const { width: windowWidth } = useWindowDimensions();
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
+    const loadCachedConversations = useConversationsStore(state => state.loadCachedConversations);
     const fetchConversations = useConversationsStore(state => state.fetchConversations);
     const refreshConversations = useConversationsStore(state => state.refreshConversations);
     const isLoading = useConversationsStore(state => state.isLoading);
     const isRefreshing = useConversationsStore(state => state.isRefreshing);
+    const hasFetchedOnce = useConversationsStore(state => state.hasFetchedOnce);
     const archiveConversation = useConversationsStore(state => state.archiveConversation);
     const unarchiveConversation = useConversationsStore(state => state.unarchiveConversation);
     const removeConversation = useConversationsStore(state => state.removeConversation);
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
 
-    // Fetch conversations on mount
+    // Offline-first: load cached conversations instantly, then fetch from API
     useEffect(() => {
-        fetchConversations();
-    }, [fetchConversations]);
+        loadCachedConversations().then(() => {
+            fetchConversations();
+        });
+    }, [loadCachedConversations, fetchConversations]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -696,9 +701,9 @@ export default function ConversationsList() {
     }, [isSelectionMode, searchQuery, theme.colors.textSecondary, styles.searchBarContainer, styles.searchInputWrapper, styles.searchInput]);
 
     /**
-     * Render individual conversation item
+     * Render individual conversation item (useCallback for FlatList stability)
      */
-    const renderConversationItem = ({ item }: { item: Conversation }) => {
+    const renderConversationItem = useCallback(({ item }: { item: Conversation }) => {
         const isActiveConversation = selectedId === item.id;
         const isItemSelected = selectedConversationIds.has(item.id);
         const isGroup = isGroupConversation(item);
@@ -821,7 +826,12 @@ export default function ConversationsList() {
                 {rowContent}
             </Swipeable>
         );
-    };
+    }, [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress]);
+
+    // FlashList performance: stable references prevent re-renders
+    const ITEM_HEIGHT = 64;
+    const keyExtractor = useCallback((item: Conversation) => item.id, []);
+    const listContentStyle = useMemo(() => ({ paddingBottom: 0 }), []);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -933,18 +943,21 @@ export default function ConversationsList() {
                     )}
                 </Animated.View>
 
-                {isLoading && conversations.length === 0 ? (
+                <OfflineBanner />
+
+                {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
                     <ConversationsSkeleton theme={theme} />
                 ) : visibleConversations.length > 0 ? (
-                    <FlatList
-                        style={styles.list}
+                    <FlashList
                         data={visibleConversations}
                         renderItem={renderConversationItem}
-                        keyExtractor={(item) => item.id}
+                        keyExtractor={keyExtractor}
                         extraData={selectedConversationIds}
                         ListHeaderComponent={SearchBarHeader}
-                        contentContainerStyle={{ flexGrow: 1 }}
+                        contentContainerStyle={listContentStyle}
                         keyboardShouldPersistTaps="handled"
+                        // FlashList: native RecyclerView/UICollectionView-level perf
+                        estimatedItemSize={ITEM_HEIGHT}
                         refreshControl={
                             <RefreshControl
                                 refreshing={isRefreshing}

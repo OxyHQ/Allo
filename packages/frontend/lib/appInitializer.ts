@@ -108,13 +108,19 @@ export class AppInitializer {
     }
 
     try {
-      // Critical path: fetch user and appearance in parallel
-      await Promise.all([
-        fetchCurrentUser(),
-        loadAppearanceSettings(),
+      // Hard timeout: app MUST launch within 2s regardless of network.
+      // WhatsApp/Telegram never block startup on API calls.
+      const STARTUP_TIMEOUT_MS = 2000;
+
+      await Promise.race([
+        Promise.all([
+          fetchCurrentUser(),
+          loadAppearanceSettings(),
+        ]),
+        new Promise<void>((resolve) => setTimeout(resolve, STARTUP_TIMEOUT_MS)),
       ]);
 
-      // Hide native splash screen
+      // Hide native splash screen - always, even if API calls timed out
       try {
         await SplashScreen.hideAsync();
       } catch (error) {
@@ -123,10 +129,11 @@ export class AppInitializer {
 
       return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error('Unknown initialization error'),
-      };
+      // Always succeed - never block the user from using the app
+      try {
+        await SplashScreen.hideAsync();
+      } catch (_) {}
+      return { success: true };
     }
   }
 

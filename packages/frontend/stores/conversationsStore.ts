@@ -111,15 +111,16 @@ interface ConversationsState {
   conversations: Conversation[];
   conversationsById: Record<string, Conversation>;
   activeConversationId: string | null;
-  
+
   // Loading states
   isLoading: boolean;
   isRefreshing: boolean;
+  hasFetchedOnce: boolean; // Tracks if we ever completed a fetch (cache or API)
   error: string | null;
-  
+
   // Last updated timestamp
   lastUpdated: number;
-  
+
   // Actions
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
@@ -128,12 +129,13 @@ interface ConversationsState {
   archiveConversation: (id: string) => void;
   unarchiveConversation: (id: string) => void;
   setActiveConversation: (id: string | null) => void;
-  
+
   // Async actions
+  loadCachedConversations: () => Promise<void>;
   fetchConversations: () => Promise<void>;
   refreshConversations: () => Promise<void>;
   markAsRead: (id: string) => void;
-  
+
   // Selectors (computed values)
   getConversation: (id: string) => Conversation | undefined;
   getUnreadCount: () => number;
@@ -147,12 +149,13 @@ const withArchiveFlag = (conversation: Conversation): Conversation => ({
 
 export const useConversationsStore = create<ConversationsState>()(
   subscribeWithSelector((set, get) => ({
-    // Initial state - start with empty conversations (will be fetched from API)
+    // Initial state - start with empty conversations (cache loaded first, then API)
     conversations: [],
     conversationsById: {},
     activeConversationId: null,
     isLoading: false,
     isRefreshing: false,
+    hasFetchedOnce: false,
     error: null,
     lastUpdated: Date.now(),
 
@@ -267,9 +270,25 @@ export const useConversationsStore = create<ConversationsState>()(
       set({ activeConversationId: id });
     },
 
+    // Offline-first: load cached conversations from AsyncStorage instantly
+    loadCachedConversations: async () => {
+      try {
+        const { getConversationsLocally } = await import('@/lib/offlineStorage');
+        const cached = await getConversationsLocally();
+        if (cached.length > 0 && get().conversations.length === 0) {
+          get().setConversations(cached);
+          set({ hasFetchedOnce: true });
+        }
+      } catch (error) {
+        // Cache miss is fine — API will fill it
+      }
+    },
+
     // Async actions
     fetchConversations: async () => {
-      set({ isLoading: true, error: null });
+      // Only show loading skeleton if we have NO data at all (first launch, no cache)
+      const hasData = get().conversations.length > 0 || get().hasFetchedOnce;
+      set({ isLoading: !hasData, error: null });
       try {
         // Fetch conversations from API (backend already enriches with Oxy data)
         const response = await api.get<{ conversations: any[] }>('/conversations');
@@ -411,16 +430,20 @@ export const useConversationsStore = create<ConversationsState>()(
         });
 
         get().setConversations(conversations);
-        set({ isLoading: false });
+        set({ isLoading: false, hasFetchedOnce: true });
+
+        // Persist to AsyncStorage for offline-first cold starts
+        import('@/lib/offlineStorage').then(({ storeConversationsLocally }) => {
+          storeConversationsLocally(conversations).catch(() => {});
+        });
       } catch (error) {
         console.error('[Conversations] Error fetching conversations:', error);
-        // No fallback - show empty state if API fails
+        // Never clear existing/cached data on network error (WhatsApp pattern)
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch conversations';
-        set({ 
-          isLoading: false, 
+        set({
+          isLoading: false,
+          hasFetchedOnce: true,
           error: errorMessage,
-          conversations: [], // Clear conversations on error
-          conversationsById: {},
         });
       }
     },

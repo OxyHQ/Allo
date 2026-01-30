@@ -9,6 +9,7 @@ import { Message } from '@/stores/messagesStore';
 
 const MESSAGES_PREFIX = 'messages_';
 const CONVERSATIONS_PREFIX = 'conversations_';
+const CONVERSATIONS_LIST_KEY = 'conversations_list';
 const SYNC_QUEUE_KEY = 'sync_queue';
 
 export interface SyncQueueItem {
@@ -18,6 +19,33 @@ export interface SyncQueueItem {
   data: any;
   timestamp: number;
   retries: number;
+}
+
+/**
+ * Store conversations list locally (offline-first like WhatsApp/Telegram)
+ * Called after every successful API fetch to keep cache fresh
+ */
+export async function storeConversationsLocally(conversations: any[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CONVERSATIONS_LIST_KEY, JSON.stringify(conversations));
+  } catch (error) {
+    console.error('[OfflineStorage] Error storing conversations:', error);
+  }
+}
+
+/**
+ * Get cached conversations list from local storage
+ * Returns instantly on cold start before API responds
+ */
+export async function getConversationsLocally(): Promise<any[]> {
+  try {
+    const data = await AsyncStorage.getItem(CONVERSATIONS_LIST_KEY);
+    if (!data) return [];
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('[OfflineStorage] Error getting conversations:', error);
+    return [];
+  }
 }
 
 /**

@@ -34,6 +34,7 @@ import { routeMatchers } from '@/utils/routeUtils';
 
 // Services & Utils
 import { AppInitializer } from '@/lib/appInitializer';
+import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
 
 // Styles
 import '../styles/global.css';
@@ -169,12 +170,15 @@ export default function RootLayout() {
     AppInitializer.loadEagerSettings();
   }, []);
 
-  // React Query managers - setup once on mount
+  // React Query managers + connection monitoring - setup once on mount
   useEffect(() => {
     // React Query online manager using NetInfo
     const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
       onlineManager.setOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
     });
+
+    // Start global connection status monitoring (powers OfflineBanner)
+    const stopMonitoring = startConnectionMonitoring();
 
     // React Query focus manager using AppState
     const onAppStateChange = (status: AppStateStatus) => {
@@ -184,6 +188,7 @@ export default function RootLayout() {
 
     return () => {
       unsubscribeNetInfo();
+      stopMonitoring();
       appStateSub.remove();
     };
   }, []); // Empty deps - setup once
