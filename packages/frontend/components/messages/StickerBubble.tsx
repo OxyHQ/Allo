@@ -34,6 +34,7 @@ export const StickerBubble = memo<StickerBubbleProps>(({
     lottie: {
       width: MESSAGING_CONSTANTS.STICKER_SIZE,
       height: MESSAGING_CONSTANTS.STICKER_SIZE,
+      overflow: 'hidden' as const,
     },
     emojiFallback: {
       fontSize: 64,
@@ -68,13 +69,15 @@ export const StickerBubble = memo<StickerBubbleProps>(({
   return (
     <View style={styles.container}>
       {lottieSource ? (
-        <LottieView
-          source={lottieSource as any}
-          autoPlay
-          loop
-          style={styles.lottie}
-          resizeMode="contain"
-        />
+        <View style={styles.lottie}>
+          <LottieView
+            source={lottieSource as any}
+            autoPlay
+            loop
+            style={styles.lottie}
+            resizeMode="contain"
+          />
+        </View>
       ) : sticker.emoji ? (
         <Text style={styles.emojiFallback}>{sticker.emoji}</Text>
       ) : null}

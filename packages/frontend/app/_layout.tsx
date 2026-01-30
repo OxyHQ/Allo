@@ -6,7 +6,7 @@ import 'react-native-reanimated';
 import NetInfo from '@react-native-community/netinfo';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { useFonts } from "expo-font";
-import { Slot } from "expo-router";
+import { Slot, usePathname } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
 
@@ -14,7 +14,6 @@ import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react
 import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
 import RegisterPush from '@/components/notifications/RegisterPushToken';
-import { RightBar } from "@/components/RightBar";
 import { SideBar } from "@/components/SideBar";
 import { BottomBar } from "@/components/layout/BottomBar";
 import { ThemedView } from "@/components/ThemedView";
@@ -22,12 +21,9 @@ import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 
 // Hooks
-// Hooks
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { useKeyboardVisibility } from "@/hooks/useKeyboardVisibility";
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
-import { usePathname } from 'expo-router';
 
 // Utils
 import { routeMatchers } from '@/utils/routeUtils';
@@ -115,8 +111,6 @@ export default function RootLayout() {
 
   // Hooks
   const isScreenNotMobile = useIsScreenNotMobile();
-  const keyboardVisible = useKeyboardVisibility();
-
   // Memoized instances
   const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
 
@@ -210,7 +204,6 @@ export default function RootLayout() {
     }
   }, [appIsReady]);
 
-  const theme = useTheme();
   const colorScheme = useColorScheme();
 
   // Memoize app content to prevent unnecessary re-renders
@@ -247,7 +240,6 @@ export default function RootLayout() {
     splashState.initializationComplete,
     colorScheme,
     isScreenNotMobile,
-    keyboardVisible,
     handleSplashFadeComplete,
     queryClient,
   ]);

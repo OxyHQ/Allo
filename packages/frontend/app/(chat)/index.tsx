@@ -831,7 +831,7 @@ export default function ConversationsList() {
                         <GroupAvatar
                             participants={otherParticipants}
                             size={44}
-                            maxAvatars={2}
+                            maxAvatars={6}
                         />
                     ) : (
                         <Avatar
