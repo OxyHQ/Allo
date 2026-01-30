@@ -36,6 +36,7 @@ export interface UserAppearance {
     minimalistMode?: boolean;
     displayName?: string;
     coverImage?: string;
+    avatarShape?: string;
   };
   createdAt?: string;
   updatedAt?: string;

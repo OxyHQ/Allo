@@ -3,6 +3,7 @@ import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import Avatar from './Avatar';
 import { ConversationParticipant } from '@/app/(chat)/index';
 import { useTheme } from '@/hooks/useTheme';
+import { useAvatarShape } from '@/hooks/useAvatarShape';
 
 interface GroupAvatarProps {
   participants: ConversationParticipant[];
@@ -51,6 +52,23 @@ const LAYOUTS: Record<number, AvatarSlot[]> = {
   ],
 };
 
+/** Single participant avatar with shape lookup (needs to be a component for hooks). */
+const ParticipantAvatar: React.FC<{
+  participant: ConversationParticipant;
+  size: number;
+}> = ({ participant, size }) => {
+  const shape = useAvatarShape(participant.id);
+  const label = participant.name?.first?.charAt(0).toUpperCase() || '?';
+  return (
+    <Avatar
+      size={size}
+      source={participant.avatar ? { uri: participant.avatar } : undefined}
+      label={label}
+      shape={shape}
+    />
+  );
+};
+
 /**
  * GroupAvatar
  *
@@ -65,9 +83,6 @@ export const GroupAvatar: React.FC<GroupAvatarProps> = ({
   style,
 }) => {
   const theme = useTheme();
-
-  const getInitial = (p: ConversationParticipant): string =>
-    p.name?.first?.charAt(0).toUpperCase() || '?';
 
   // Empty group fallback
   if (!participants || participants.length === 0) {
@@ -92,12 +107,9 @@ export const GroupAvatar: React.FC<GroupAvatarProps> = ({
   // Single participant — just show a normal avatar
   if (participants.length === 1) {
     return (
-      <Avatar
-        size={size}
-        source={participants[0].avatar ? { uri: participants[0].avatar } : undefined}
-        label={getInitial(participants[0])}
-        style={style}
-      />
+      <View style={style}>
+        <ParticipantAvatar participant={participants[0]} size={size} />
+      </View>
     );
   }
 
@@ -131,11 +143,7 @@ export const GroupAvatar: React.FC<GroupAvatarProps> = ({
               top: Math.round(slot.y * size),
             }}
           >
-            <Avatar
-              size={avatarSize}
-              source={participant.avatar ? { uri: participant.avatar } : undefined}
-              label={getInitial(participant)}
-            />
+            <ParticipantAvatar participant={participant} size={avatarSize} />
           </View>
         );
       })}

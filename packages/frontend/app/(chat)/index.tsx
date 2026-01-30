@@ -60,6 +60,7 @@ import {
     isGroupConversation,
 } from '@/utils/conversationUtils';
 import { formatConversationTimestamp } from '@/utils/dateUtils';
+import { useAvatarShape } from '@/hooks/useAvatarShape';
 
 // Export types for use in other files
 export type ConversationType = 'direct' | 'group';
@@ -88,6 +89,32 @@ export interface Conversation {
     groupName?: string; // Custom group name (optional)
     groupAvatar?: string; // Custom group avatar (optional)
     participantCount?: number; // Number of participants (for groups)
+}
+
+/**
+ * Direct conversation avatar with shape support.
+ * Extracts userId from participants to look up avatar shape.
+ */
+function ShapedConversationAvatar({
+    userId,
+    avatar,
+    displayName,
+    size = 44,
+}: {
+    userId?: string;
+    avatar?: string;
+    displayName: string;
+    size?: number;
+}) {
+    const shape = useAvatarShape(userId);
+    return (
+        <Avatar
+            size={size}
+            source={avatar ? { uri: avatar } : undefined}
+            label={displayName.charAt(0).toUpperCase()}
+            shape={shape}
+        />
+    );
 }
 
 /**
@@ -449,26 +476,37 @@ export default function ConversationsList() {
             color: theme.colors.text,
         },
         conversationTimestamp: {
-            fontSize: 11,
+            fontSize: 12,
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+        },
+        conversationTimestampUnread: {
+            color: colors.primaryColor,
+            fontWeight: '600',
+        },
+        conversationBottomRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
         },
         conversationMessage: {
             fontSize: 13,
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+            flex: 1,
+            marginRight: 8,
         },
         unreadBadge: {
-            backgroundColor: colors.chatUnreadBadge,
-            borderRadius: 10,
-            minWidth: 20,
-            height: 20,
+            backgroundColor: colors.primaryColor,
+            borderRadius: 12,
+            minWidth: 22,
+            height: 22,
             paddingHorizontal: 6,
             justifyContent: 'center',
             alignItems: 'center',
         },
         unreadText: {
             color: '#FFFFFF',
-            fontSize: 12,
-            fontWeight: '600',
+            fontSize: 11,
+            fontWeight: '700',
         },
         swipeActionContainer: {
             justifyContent: 'center',
@@ -835,10 +873,11 @@ export default function ConversationsList() {
                             maxAvatars={6}
                         />
                     ) : (
-                        <Avatar
+                        <ShapedConversationAvatar
+                            userId={otherParticipants[0]?.id}
+                            avatar={avatar}
+                            displayName={displayName}
                             size={44}
-                            source={avatar ? { uri: avatar } : undefined}
-                            label={displayName.charAt(0).toUpperCase()}
                         />
                     )}
                 </TouchableOpacity>
@@ -862,22 +901,28 @@ export default function ConversationsList() {
                                 )}
                             </View>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <ThemedText style={styles.conversationTimestamp} numberOfLines={1}>
-                                {formatConversationTimestamp(item.timestamp)}
-                            </ThemedText>
-                            {item.unreadCount > 0 && (
-                                <View style={styles.unreadBadge}>
-                                    <Text style={styles.unreadText}>
-                                        {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
+                        <ThemedText
+                            style={[
+                                styles.conversationTimestamp,
+                                item.unreadCount > 0 && styles.conversationTimestampUnread,
+                            ]}
+                            numberOfLines={1}
+                        >
+                            {formatConversationTimestamp(item.timestamp)}
+                        </ThemedText>
                     </View>
-                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                        {item.lastMessage}
-                    </ThemedText>
+                    <View style={styles.conversationBottomRow}>
+                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                            {item.lastMessage}
+                        </ThemedText>
+                        {item.unreadCount > 0 && (
+                            <View style={styles.unreadBadge}>
+                                <Text style={styles.unreadText}>
+                                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </TouchableOpacity>
         );

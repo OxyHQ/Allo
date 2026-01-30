@@ -10,6 +10,9 @@ import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { Toggle } from '@/components/Toggle';
+import AvatarShapePicker from '@/components/avatar/AvatarShapePicker';
+import { useMyAvatarShape } from '@/hooks/useAvatarShape';
+import type { AvatarShapeKey } from '@/components/avatar/avatarShapes';
 
 const IconComponent = Ionicons as any;
 
@@ -35,6 +38,7 @@ export default function ProfileCustomizationScreen() {
   const [coverPhotoEnabled, setCoverPhotoEnabled] = useState<boolean>(true);
   const [minimalistMode, setMinimalistMode] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
+  const currentAvatarShape = useMyAvatarShape();
   
   const pulseAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -185,6 +189,19 @@ export default function ProfileCustomizationScreen() {
       // Revert state on error
       setCoverPhotoEnabled(mySettings?.profileCustomization?.coverPhotoEnabled ?? true);
       setMinimalistMode(mySettings?.profileCustomization?.minimalistMode ?? false);
+    }
+  };
+
+  const handleAvatarShapeSelect = async (shape: AvatarShapeKey) => {
+    try {
+      await updateMySettings({
+        profileCustomization: {
+          ...mySettings?.profileCustomization,
+          avatarShape: shape,
+        },
+      } as any);
+    } catch (error) {
+      console.error('Error updating avatar shape:', error);
     }
   };
 
@@ -356,6 +373,17 @@ export default function ProfileCustomizationScreen() {
               onValueChange={handleMinimalistModeToggle}
             />
           </View>
+        </View>
+
+        {/* Avatar Shape */}
+        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 32 }]}>
+          Avatar Shape
+        </Text>
+        <View style={[styles.settingCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <AvatarShapePicker
+            selected={currentAvatarShape}
+            onSelect={handleAvatarShapeSelect}
+          />
         </View>
 
         {/* Info Text */}

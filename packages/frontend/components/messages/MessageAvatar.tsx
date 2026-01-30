@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import Avatar from '@/components/Avatar';
+import type { AvatarShapeKey } from '@/components/avatar/avatarShapes';
 
 interface MessageAvatarProps {
   name?: string;
   avatarUri?: string;
   size?: number;
   style?: StyleProp<ViewStyle>;
+  shape?: AvatarShapeKey;
 }
 
 const getInitials = (name?: string | null): string => {
@@ -21,6 +23,7 @@ export const MessageAvatar: React.FC<MessageAvatarProps> = ({
   avatarUri,
   size = 32,
   style,
+  shape,
 }) => {
   const initials = useMemo(() => getInitials(name), [name]);
 
@@ -30,6 +33,7 @@ export const MessageAvatar: React.FC<MessageAvatarProps> = ({
       label={initials}
       size={size}
       style={style}
+      shape={shape}
     />
   );
 };

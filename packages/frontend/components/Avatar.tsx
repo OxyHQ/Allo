@@ -15,6 +15,8 @@ import { VerifiedIcon } from '@/assets/icons/verified-icon';
 import { colors } from '../styles/colors';
 import DefaultAvatar from '@/assets/images/default-avatar.jpg';
 import { useTheme } from '@/hooks/useTheme';
+import ShapedAvatar from './avatar/ShapedAvatar';
+import type { AvatarShapeKey } from './avatar/avatarShapes';
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -24,9 +26,10 @@ interface AvatarProps {
   verified?: boolean;
   style?: StyleProp<ViewStyle>;
   imageStyle?: StyleProp<ImageStyle>;
-  label?: string; // initials or single char to show when no image
+  label?: string;
   onPress?: () => void;
-  useAnimated?: boolean; // render Animated.Image so parent can pass animated styles in imageStyle
+  useAnimated?: boolean;
+  shape?: AvatarShapeKey;
 }
 
 const Avatar: React.FC<AvatarProps> = ({
@@ -38,6 +41,7 @@ const Avatar: React.FC<AvatarProps> = ({
   label,
   onPress,
   useAnimated = false,
+  shape,
 }) => {
   const theme = useTheme();
   const [errored, setErrored] = React.useState(false);
@@ -48,54 +52,52 @@ const Avatar: React.FC<AvatarProps> = ({
 
   const Container: any = onPress ? TouchableOpacity : View;
 
+  const inner = source && !errored ? (
+    useAnimated ? (
+      <AnimatedImage
+        source={imageSource}
+        onError={() => setErrored(true)}
+        resizeMode="cover"
+        style={[StyleSheet.absoluteFillObject, imageStyle]}
+        defaultSource={DefaultAvatar}
+      />
+    ) : (
+      <Image
+        source={imageSource}
+        onError={() => setErrored(true)}
+        resizeMode="cover"
+        style={[StyleSheet.absoluteFillObject, imageStyle]}
+        defaultSource={DefaultAvatar}
+      />
+    )
+  ) : (
+    <View style={[styles.fallback, { width: size, height: size, backgroundColor: theme.colors.backgroundSecondary }]}>
+      {label ? (
+        <Text style={[styles.fallbackText, { fontSize: Math.round(size * 0.4), color: theme.colors.text }]}>
+          {label}
+        </Text>
+      ) : null}
+    </View>
+  );
+
   const content = (
-    <Animated.View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }, style]}>
-      {source && !errored ? (
-        useAnimated ? (
-          <AnimatedImage
-            source={imageSource}
-            onError={() => setErrored(true)}
-            resizeMode="cover"
-            style={[StyleSheet.absoluteFillObject, { borderRadius: size / 2 }, imageStyle]}
-            defaultSource={DefaultAvatar}
-          />
-        ) : (
-          <Image
-            source={imageSource}
-            onError={() => setErrored(true)}
-            resizeMode="cover"
-            style={[StyleSheet.absoluteFillObject, { borderRadius: size / 2 }, imageStyle]}
-            defaultSource={DefaultAvatar}
-          />
-        )
-      ) : (
-        <View style={[styles.fallback, { width: size, height: size, borderRadius: size / 2, backgroundColor: theme.colors.backgroundSecondary }]}>
-          {label ? (
-            <Text style={[styles.fallbackText, { fontSize: Math.round(size * 0.4), color: theme.colors.text }]}>
-              {label}
-            </Text>
-          ) : null}
-        </View>
-      )}
+    <View style={[{ width: size, height: size }, style]}>
+      <ShapedAvatar shape={shape} size={size}>
+        {inner}
+      </ShapedAvatar>
 
       {verified && (
         <View style={[styles.verifiedBadge, { width: size * 0.36, height: size * 0.36 }]}>
           <VerifiedIcon size={Math.round(size * 0.36)} color={colors.primaryColor} />
         </View>
       )}
-    </Animated.View>
+    </View>
   );
 
   return <Container onPress={onPress}>{content}</Container>;
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   verifiedBadge: {
     position: 'absolute',
     bottom: -2,
