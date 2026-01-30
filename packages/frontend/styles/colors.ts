@@ -35,15 +35,21 @@ export const colors = {
   COLOR_BLACK_LIGHT_9: '#FDFDFD',
   COLOR_BACKGROUND: lightenColor(primaryColor, 90),
     
-    // New modern messaging colors
+    // New modern messaging colors (light mode)
     messageBubbleSent: primaryColor,
     messageBubbleReceived: '#EDF2F7',
     messageTextSent: '#FFFFFF',
     messageTextReceived: '#1A202C',
     messageTimestamp: '#A0AEC0',
     messageSeparator: '#CBD5E0',
-    
-    // Chat UI specific colors
+
+    // Dark mode messaging colors
+    messageBubbleReceivedDark: '#1A1A1A',
+    messageTextReceivedDark: '#E8E8E8',
+    messageTimestampDark: '#707070',
+    messageSeparatorDark: '#2A2A2A',
+
+    // Chat UI specific colors (light mode)
     chatInputBackground: '#F7FAFC',
     chatInputBorder: '#E2E8F0',
     chatInputText: '#2D3748',
@@ -51,6 +57,13 @@ export const colors = {
     chatHeaderBorder: '#E2E8F0',
     chatUnreadBadge: '#FF3B30',
     chatTypingIndicator: '#00C853',
+
+    // Dark mode chat UI
+    chatInputBackgroundDark: '#0A0A0A',
+    chatInputBorderDark: '#2A2A2A',
+    chatInputTextDark: '#E8E8E8',
+    chatInputPlaceholderDark: '#707070',
+    chatHeaderBorderDark: '#1A1A1A',
     
     // Interactive elements
     buttonPrimary: primaryColor,
