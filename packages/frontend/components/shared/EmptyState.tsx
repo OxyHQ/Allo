@@ -29,9 +29,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   const theme = useTheme();
 
-  // Constrain lottieSize to reasonable limits (WhatsApp/Telegram pattern)
-  const constrainedSize = Math.min(lottieSize, 150); // Max 150px
-  const minSize = Math.max(constrainedSize, 50); // Min 100px
+  // Constrain lottieSize to 120x120 (WhatsApp/Telegram pattern)
+  const minSize = Math.min(Math.max(lottieSize, 50), 120);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
