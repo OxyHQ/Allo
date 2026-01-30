@@ -26,7 +26,7 @@ export const DaySeparator = memo<DaySeparatorProps>(({ date }) => {
     container: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 12,
+      paddingVertical: 8,
       paddingHorizontal: 16,
     },
     line: {
@@ -38,10 +38,10 @@ export const DaySeparator = memo<DaySeparatorProps>(({ date }) => {
     },
     label: {
       backgroundColor: theme.colors.background || '#FFFFFF',
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 10,
+      fontSize: 11,
       fontWeight: '500',
       color: theme.colors.textSecondary || '#666666',
     },

@@ -97,7 +97,7 @@ type SelectionContext = 'text' | 'media';
 const EMPTY_MESSAGES: Message[] = [];
 
 // Stable empty style for FlashList contentContainer
-const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 12 };
+const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 8 };
 
 
 /**

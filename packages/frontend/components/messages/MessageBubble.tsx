@@ -122,8 +122,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
         fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
         fontWeight: '600',
         color: theme.colors.textSecondary,
-        marginBottom: 2,
-        marginLeft: 12,
+        marginBottom: 1,
+        marginLeft: 10,
       },
       bubble: {
         paddingHorizontal: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL,

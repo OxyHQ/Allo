@@ -10,17 +10,19 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Link, useRouter, usePathname } from 'expo-router';
-import { Swipeable } from 'react-native-gesture-handler';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
     Easing,
     FadeIn,
     FadeOut,
     LinearTransition,
+    interpolate,
     interpolateColor,
     useAnimatedStyle,
     useSharedValue,
     withTiming,
+    type SharedValue,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/sonner';
@@ -41,6 +43,12 @@ import {
     useConversationSwipePreferencesStore,
     SwipeActionType,
 } from '@/stores';
+
+// Dev utilities
+import { seedMockData } from '@/utils/seedMockData';
+
+// Conversation peek preview
+import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
 
 // Utils
 import { colors } from '@/styles/colors';
@@ -79,6 +87,60 @@ export interface Conversation {
     groupName?: string; // Custom group name (optional)
     groupAvatar?: string; // Custom group avatar (optional)
     participantCount?: number; // Number of participants (for groups)
+}
+
+/**
+ * Swipe action rendered inside ReanimatedSwipeable.
+ * Must be a component (not a closure) so we can use useAnimatedStyle.
+ */
+function SwipeAction({
+    action,
+    direction,
+    dragAnimatedValue,
+    windowWidth,
+}: {
+    action: SwipeActionType;
+    direction: 'left' | 'right';
+    dragAnimatedValue: SharedValue<number>;
+    windowWidth: number;
+}) {
+    const isDelete = action === 'delete';
+
+    const animatedStyle = useAnimatedStyle(() => {
+        const drag = dragAnimatedValue.value;
+        const width = interpolate(
+            drag,
+            direction === 'left' ? [0, windowWidth] : [-windowWidth, 0],
+            [0, windowWidth],
+            'clamp',
+        );
+        return { width, maxWidth: windowWidth };
+    });
+
+    return (
+        <Animated.View
+            style={[
+                {
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    overflow: 'hidden',
+                    backgroundColor: isDelete ? colors.chatUnreadBadge : colors.chatTypingIndicator,
+                },
+                animatedStyle,
+            ]}
+        >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20 }}>
+                <Ionicons
+                    name={isDelete ? 'trash-outline' : 'archive-outline'}
+                    size={20}
+                    color="#FFFFFF"
+                />
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>
+                    {isDelete ? 'Delete' : 'Archive'}
+                </Text>
+            </View>
+        </Animated.View>
+    );
 }
 
 function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof useTheme> }) {
@@ -162,9 +224,18 @@ export default function ConversationsList() {
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
 
     // Offline-first: load cached conversations instantly, then fetch from API
+    // In dev mode, seed mock data if the API returns nothing
     useEffect(() => {
         loadCachedConversations().then(() => {
-            fetchConversations();
+            fetchConversations().then(() => {
+                if (__DEV__) {
+                    // Seed mock data only if the store is still empty after fetch
+                    const { conversations } = useConversationsStore.getState();
+                    if (conversations.length === 0) {
+                        seedMockData();
+                    }
+                }
+            });
         });
     }, [loadCachedConversations, fetchConversations]);
 
@@ -212,8 +283,12 @@ export default function ConversationsList() {
     const isSelectionMode = selectedConversationIds.size > 0;
     const selectedCount = selectedConversationIds.size;
 
+    // Peek preview state
+    const [peekConversation, setPeekConversation] = useState<Conversation | null>(null);
+    const peekVisible = peekConversation !== null;
+
     // Animation and refs
-    const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
+    const swipeableRefs = useRef<Record<string, { close: () => void } | null>>({});
     const selectionModeProgress = useSharedValue(0);
 
     // Sync animation progress with selection mode
@@ -471,6 +546,30 @@ export default function ConversationsList() {
     }, []);
 
     /**
+     * Handle avatar long-press to show peek preview (Telegram-style)
+     */
+    const handleAvatarLongPress = useCallback((conversation: Conversation) => {
+        if (isSelectionMode) return; // Don't peek in selection mode
+        setPeekConversation(conversation);
+    }, [isSelectionMode]);
+
+    /**
+     * Handle opening the conversation from peek preview
+     */
+    const handlePeekOpen = useCallback(() => {
+        if (!peekConversation) return;
+        const conv = peekConversation;
+        setPeekConversation(null);
+        const route = conv.type === 'direct'
+            ? (() => {
+                const otherParticipant = conv.participants?.find(p => p.id !== currentUserId);
+                return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conv.id}`;
+            })()
+            : `/c/${conv.id}`;
+        router.push(route as any);
+    }, [peekConversation, currentUserId, router]);
+
+    /**
      * Handle conversation press - navigate or toggle selection
      */
     const handleConversationPress = useCallback((conversationId: string) => {
@@ -594,46 +693,20 @@ export default function ConversationsList() {
      * Render swipe action with animated width that fills space
      */
     const renderSwipeAction = useCallback((action: SwipeActionType, direction: 'left' | 'right') => {
-        return (progress: any, dragX: any) => {
+        return (_progress: SharedValue<number>, dragX: SharedValue<number>) => {
             if (action === 'none') {
                 return null;
             }
-
-            const isDelete = action === 'delete';
-
-            const swipeGapWidth = dragX.interpolate({
-                inputRange: direction === 'left'
-                    ? [0, windowWidth]
-                    : [-windowWidth, 0],
-                outputRange: [0, windowWidth],
-                extrapolate: 'clamp',
-            });
-
             return (
-                <Animated.View
-                    style={[
-                        styles.swipeActionContainer,
-                        isDelete ? styles.swipeActionDelete : styles.swipeActionArchive,
-                        {
-                            width: swipeGapWidth,
-                            maxWidth: windowWidth,
-                        },
-                    ]}
-                >
-                    <View style={styles.swipeActionContent}>
-                        <Ionicons
-                            name={isDelete ? 'trash-outline' : 'archive-outline'}
-                            size={20}
-                            color="#FFFFFF"
-                        />
-                        <Text style={styles.swipeActionText}>
-                            {isDelete ? 'Delete' : 'Archive'}
-                        </Text>
-                    </View>
-                </Animated.View>
+                <SwipeAction
+                    action={action}
+                    direction={direction}
+                    dragAnimatedValue={dragX}
+                    windowWidth={windowWidth}
+                />
             );
         };
-    }, [styles, windowWidth]);
+    }, [windowWidth]);
 
     /**
      * Handle swipe action on a conversation
@@ -728,7 +801,12 @@ export default function ConversationsList() {
                 onPress={() => handleConversationPress(item.id)}
                 style={wrapperStyles}
             >
-                <View style={styles.avatarContainer}>
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    onLongPress={() => handleAvatarLongPress(item)}
+                    delayLongPress={300}
+                    style={styles.avatarContainer}
+                >
                     {isSelectionMode && (
                         <Animated.View
                             layout={LinearTransition.springify().damping(20)}
@@ -762,7 +840,7 @@ export default function ConversationsList() {
                             label={displayName.charAt(0).toUpperCase()}
                         />
                     )}
-                </View>
+                </TouchableOpacity>
                 <View style={styles.conversationContent}>
                     <View style={styles.conversationHeader}>
                         <View style={{ flex: 1, marginRight: 8 }}>
@@ -804,8 +882,9 @@ export default function ConversationsList() {
         );
 
         return (
-            <Swipeable
-                ref={(ref) => {
+            <ReanimatedSwipeable
+                // @ts-expect-error ReanimatedSwipeable expects RefObject but callback ref works at runtime
+                ref={(ref: any) => {
                     swipeableRefs.current[item.id] = ref;
                 }}
                 enabled={swipeEnabled}
@@ -824,9 +903,9 @@ export default function ConversationsList() {
                 }}
             >
                 {rowContent}
-            </Swipeable>
+            </ReanimatedSwipeable>
         );
-    }, [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress]);
+    }, [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress]);
 
     // FlashList performance: stable references prevent re-renders
     const ITEM_HEIGHT = 64;
@@ -986,6 +1065,15 @@ export default function ConversationsList() {
                         <ThemedText style={styles.settingsButtonText}>Settings</ThemedText>
                     </TouchableOpacity>
                 </Link>
+
+                {/* Telegram-style peek preview on avatar long-press */}
+                <ConversationPeekPreview
+                    visible={peekVisible}
+                    conversation={peekConversation}
+                    currentUserId={currentUserId}
+                    onClose={() => setPeekConversation(null)}
+                    onOpen={handlePeekOpen}
+                />
             </ThemedView>
         </SafeAreaView>
     );

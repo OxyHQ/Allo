@@ -2,6 +2,7 @@ import React, { memo, useMemo, useCallback, useRef, useState, useEffect } from '
 import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { MessageBubble } from './MessageBubble';
+import { StickerBubble } from './StickerBubble';
 import { MediaCarousel } from './MediaCarousel';
 import { MessageAvatar } from './MessageAvatar';
 import type { MediaItem, Message } from '@/stores';
@@ -100,13 +101,16 @@ export const MessageBlock = memo<MessageBlockProps>(({
   // Check if there's text content
   const hasText = messages.some(msg => msg.text && msg.text.trim().length > 0);
 
+  // Check if any message in the group is a sticker
+  const hasSticker = messages.some(msg => msg.sticker);
+
   const styles = useMemo(() => StyleSheet.create({
     container: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      marginVertical: 2,
+      paddingHorizontal: MESSAGING_CONSTANTS.BLOCK_PADDING_HORIZONTAL,
+      paddingVertical: MESSAGING_CONSTANTS.BLOCK_PADDING_VERTICAL,
+      marginVertical: MESSAGING_CONSTANTS.BLOCK_MARGIN_VERTICAL,
     },
     containerAi: {
       paddingLeft: 0,
@@ -122,19 +126,19 @@ export const MessageBlock = memo<MessageBlockProps>(({
       justifyContent: 'flex-end',
     },
     avatarSlot: {
-      width: 40,
+      width: 36,
       marginRight: 6,
       alignItems: 'center',
       justifyContent: 'flex-end',
     },
     avatarSpacer: {
-      width: 40,
-      height: 40,
+      width: 36,
+      height: 36,
     },
     content: {
       flexShrink: 1,
-      maxWidth: isAiGroup ? '100%' : '78%',
-      rowGap: 4,
+      maxWidth: isAiGroup ? '100%' : MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
+      rowGap: MESSAGING_CONSTANTS.BLOCK_CONTENT_ROW_GAP,
     },
     contentAi: {
       maxWidth: '100%',
@@ -152,11 +156,11 @@ export const MessageBlock = memo<MessageBlockProps>(({
       fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
       fontWeight: '600',
       color: theme.colors.textSecondary || '#666666',
-      marginBottom: 4,
-      marginLeft: 12,
+      marginBottom: 2,
+      marginLeft: 10,
     },
     bubblesContainer: {
-      gap: 2,
+      gap: MESSAGING_CONSTANTS.BLOCK_BUBBLES_GAP,
     },
   }), [isAiGroup, theme]);
 
@@ -212,7 +216,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
           <MessageAvatar
             name={senderName}
             avatarUri={senderAvatar}
-            size={40}
+            size={36}
           />
         </View>
       )}
@@ -264,10 +268,25 @@ export const MessageBlock = memo<MessageBlockProps>(({
           />
         )}
 
+        {/* Stickers (Lottie animations — no bubble, standalone) */}
+        {hasSticker && messages.map((message) =>
+          message.sticker ? (
+            <StickerBubble
+              key={`sticker-${message.id}`}
+              sticker={message.sticker}
+              isSent={message.isSent}
+              timestamp={message.timestamp}
+            />
+          ) : null
+        )}
+
         {/* Message bubbles */}
         {hasText && (
           <View style={styles.bubblesContainer}>
             {messages.map((message, index) => {
+              // Skip sticker-only messages (no text)
+              if (message.sticker && (!message.text || !message.text.trim())) return null;
+
               const prevMessage = index > 0 ? messages[index - 1] : null;
               const isCloseToPrevious = prevMessage !== null;
               const showTimestamp = message.messageType !== 'ai';

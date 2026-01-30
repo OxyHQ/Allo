@@ -150,6 +150,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           isEncrypted: isEncrypted,
           readStatus,
           ...(messageData.ciphertext ? { ciphertext: messageData.ciphertext } : {}),
+          ...(messageData.sticker ? { sticker: messageData.sticker } : {}),
           messageType: messageData.messageType || 'user',
         };
 
@@ -167,7 +168,10 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         // Format last message with sender name for groups (e.g., "Albert: Hello")
         // Use decrypted text, never show "[Encrypted]" if we successfully decrypted
         let formattedLastMessage: string;
-        if (!decryptedText || decryptedText === '[Encrypted - Decryption failed]' || decryptedText === '[Media or invalid message]') {
+        if (messageData.sticker) {
+          // Sticker messages show emoji or "Sticker" in conversation list
+          formattedLastMessage = messageData.sticker.emoji || 'Sticker';
+        } else if (!decryptedText || decryptedText === '[Encrypted - Decryption failed]' || decryptedText === '[Media or invalid message]') {
           // Only show these placeholders if decryption actually failed or message is invalid
           formattedLastMessage = decryptedText || '';
         } else {

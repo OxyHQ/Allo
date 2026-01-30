@@ -29,6 +29,16 @@ export interface MediaItem {
   url?: string;
 }
 
+export interface StickerItem {
+  id: string;
+  /** URL or local require() path for Lottie JSON */
+  source: string;
+  /** Optional emoji fallback if Lottie fails to load */
+  emoji?: string;
+  /** Sticker pack identifier */
+  packId?: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -40,6 +50,7 @@ export interface Message {
   conversationId: string;
   messageType?: 'user' | 'ai';
   media?: MediaItem[];
+  sticker?: StickerItem;
   fontSize?: number;
   replyTo?: string; // Message ID this is replying to
   reactions?: Record<string, string[]>; // emoji -> array of userIds
