@@ -23,51 +23,83 @@ import { LogoIcon } from '@/assets/logo';
 
 const IconComponent = Ionicons as any;
 
-// Theme presets: each defines a themeMode + primaryColor combination
-const THEME_PRESETS = [
+// Color themes: each supports both light and dark modes
+const COLOR_THEMES = [
   {
     id: 'classic',
     label: 'Classic',
-    themeMode: 'light' as const,
     primaryColor: '#21C063',
-    bubbleSent: '#21C063',
-    bubbleReceived: '#FFFFFF',
-    textSent: '#FFFFFF',
-    textReceived: '#000000',
-    background: '#E5DDD5',
+    light: {
+      bubbleSent: '#21C063',
+      bubbleReceived: '#FFFFFF',
+      textSent: '#FFFFFF',
+      textReceived: '#000000',
+      background: '#E5DDD5',
+    },
+    dark: {
+      bubbleSent: '#21C063',
+      bubbleReceived: '#1E1E2E',
+      textSent: '#FFFFFF',
+      textReceived: '#E0E0E0',
+      background: '#0D0D1A',
+    },
   },
   {
     id: 'day',
     label: 'Day',
-    themeMode: 'light' as const,
     primaryColor: '#1D9BF0',
-    bubbleSent: '#1D9BF0',
-    bubbleReceived: '#FFFFFF',
-    textSent: '#FFFFFF',
-    textReceived: '#000000',
-    background: '#C8DCF0',
+    light: {
+      bubbleSent: '#1D9BF0',
+      bubbleReceived: '#FFFFFF',
+      textSent: '#FFFFFF',
+      textReceived: '#000000',
+      background: '#C8DCF0',
+    },
+    dark: {
+      bubbleSent: '#1D9BF0',
+      bubbleReceived: '#1E1E2E',
+      textSent: '#FFFFFF',
+      textReceived: '#E0E0E0',
+      background: '#0D1A24',
+    },
   },
   {
-    id: 'night',
-    label: 'Night',
-    themeMode: 'dark' as const,
+    id: 'purple',
+    label: 'Purple',
     primaryColor: '#8B5CF6',
-    bubbleSent: '#8B5CF6',
-    bubbleReceived: '#1E1E2E',
-    textSent: '#FFFFFF',
-    textReceived: '#E0E0E0',
-    background: '#0D0D1A',
+    light: {
+      bubbleSent: '#8B5CF6',
+      bubbleReceived: '#FFFFFF',
+      textSent: '#FFFFFF',
+      textReceived: '#000000',
+      background: '#E9D5FF',
+    },
+    dark: {
+      bubbleSent: '#8B5CF6',
+      bubbleReceived: '#1E1E2E',
+      textSent: '#FFFFFF',
+      textReceived: '#E0E0E0',
+      background: '#0D0D1A',
+    },
   },
   {
     id: 'teal',
     label: 'Teal',
-    themeMode: 'light' as const,
     primaryColor: '#005c67',
-    bubbleSent: '#005c67',
-    bubbleReceived: '#FFFFFF',
-    textSent: '#FFFFFF',
-    textReceived: '#000000',
-    background: '#B2D8D8',
+    light: {
+      bubbleSent: '#005c67',
+      bubbleReceived: '#FFFFFF',
+      textSent: '#FFFFFF',
+      textReceived: '#000000',
+      background: '#B2D8D8',
+    },
+    dark: {
+      bubbleSent: '#005c67',
+      bubbleReceived: '#1E1E2E',
+      textSent: '#FFFFFF',
+      textReceived: '#E0E0E0',
+      background: '#0A1414',
+    },
   },
 ];
 
@@ -92,44 +124,68 @@ export default function AppearanceSettingsScreen() {
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
   const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
 
-  const [selectedThemeId, setSelectedThemeId] = useState('classic');
+  const [selectedColorThemeId, setSelectedColorThemeId] = useState('classic');
+  const [selectedThemeMode, setSelectedThemeMode] = useState<'light' | 'dark' | 'system'>('system');
   const [selectedIconId, setSelectedIconId] = useState('default');
 
   useEffect(() => {
     loadMySettings();
   }, [loadMySettings]);
 
-  // Derive selected theme from current settings
+  // Derive selected color theme and mode from current settings
   useEffect(() => {
     if (mySettings) {
       const mode = mySettings.appearance?.themeMode || 'system';
-      const color = mySettings.appearance?.primaryColor || '';
-      // Find matching preset
-      const match = THEME_PRESETS.find(
-        (p) => p.themeMode === (mode === 'system' ? 'light' : mode) && p.primaryColor === color
-      );
-      if (match) {
-        setSelectedThemeId(match.id);
-      }
+      const colorTheme = mySettings.appearance?.colorTheme || 'classic';
+      setSelectedThemeMode(mode);
+      setSelectedColorThemeId(colorTheme);
     }
   }, [mySettings]);
 
-  const selectedPreset = useMemo(
-    () => THEME_PRESETS.find((p) => p.id === selectedThemeId) || THEME_PRESETS[0],
-    [selectedThemeId]
+  // Get the effective theme mode (resolve 'system' to light or dark based on device settings)
+  const effectiveMode = useMemo(() => {
+    if (selectedThemeMode === 'system') {
+      return theme.isDark ? 'dark' : 'light';
+    }
+    return selectedThemeMode;
+  }, [selectedThemeMode, theme.isDark]);
+
+  const selectedColorTheme = useMemo(
+    () => COLOR_THEMES.find((t) => t.id === selectedColorThemeId) || COLOR_THEMES[0],
+    [selectedColorThemeId]
   );
 
-  const onSelectTheme = useCallback(
-    async (preset: (typeof THEME_PRESETS)[0]) => {
-      setSelectedThemeId(preset.id);
+  const selectedVariant = useMemo(
+    () => selectedColorTheme[effectiveMode],
+    [selectedColorTheme, effectiveMode]
+  );
+
+  const onSelectColorTheme = useCallback(
+    async (colorTheme: (typeof COLOR_THEMES)[0]) => {
+      setSelectedColorThemeId(colorTheme.id);
       await updateMySettings({
         appearance: {
-          themeMode: preset.themeMode,
-          primaryColor: preset.primaryColor,
+          themeMode: selectedThemeMode,
+          colorTheme: colorTheme.id,
+          primaryColor: colorTheme.primaryColor,
         },
       } as any);
     },
-    [updateMySettings]
+    [updateMySettings, selectedThemeMode]
+  );
+
+  const onSelectThemeMode = useCallback(
+    async (mode: 'light' | 'dark' | 'system') => {
+      setSelectedThemeMode(mode);
+      await updateMySettings({
+        appearance: {
+          themeMode: mode,
+          colorTheme: selectedColorThemeId,
+          primaryColor: selectedColorTheme.primaryColor,
+        },
+      } as any);
+    },
+    [updateMySettings, selectedColorThemeId, selectedColorTheme]
   );
 
   const onTextSizeChange = useCallback(
@@ -154,8 +210,45 @@ export default function AppearanceSettingsScreen() {
         disableSticky={true}
       />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* COLOR THEME */}
+        {/* THEME MODE */}
         <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+          THEME MODE
+        </Text>
+        <View style={styles.themeModeRow}>
+          {(['light', 'dark', 'system'] as const).map((mode) => {
+            const isSelected = selectedThemeMode === mode;
+            const modeLabels = { light: 'Light', dark: 'Dark', system: 'System' };
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.themeModeButton,
+                  {
+                    backgroundColor: isSelected ? selectedColorTheme.primaryColor : theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+                onPress={() => onSelectThemeMode(mode)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.themeModeLabel,
+                    {
+                      color: isSelected ? '#FFFFFF' : theme.colors.text,
+                      fontWeight: isSelected ? '600' : '400',
+                    },
+                  ]}
+                >
+                  {modeLabels[mode]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* COLOR THEME */}
+        <Text style={[styles.sectionTitle, styles.sectionTitleSpaced, { color: theme.colors.textSecondary }]}>
           COLOR THEME
         </Text>
 
@@ -163,7 +256,7 @@ export default function AppearanceSettingsScreen() {
         <View
           style={[
             styles.previewCard,
-            { backgroundColor: selectedPreset.background, borderColor: theme.colors.border },
+            { backgroundColor: selectedVariant.background, borderColor: theme.colors.border },
           ]}
         >
           <MessageBubble
@@ -188,39 +281,40 @@ export default function AppearanceSettingsScreen() {
           />
         </View>
 
-        {/* Theme preset picker */}
+        {/* Color theme picker */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.themePicker}
         >
-          {THEME_PRESETS.map((preset) => {
-            const isSelected = selectedThemeId === preset.id;
+          {COLOR_THEMES.map((colorTheme) => {
+            const isSelected = selectedColorThemeId === colorTheme.id;
+            const variant = colorTheme[effectiveMode];
             return (
               <TouchableOpacity
-                key={preset.id}
+                key={colorTheme.id}
                 style={[
                   styles.themeCard,
                   {
-                    borderColor: isSelected ? preset.primaryColor : theme.colors.border,
+                    borderColor: isSelected ? colorTheme.primaryColor : theme.colors.border,
                     borderWidth: isSelected ? 2.5 : 1,
                   },
                 ]}
-                onPress={() => onSelectTheme(preset)}
+                onPress={() => onSelectColorTheme(colorTheme)}
                 activeOpacity={0.8}
               >
                 {/* Mini preview */}
-                <View style={[styles.themeCardPreview, { backgroundColor: preset.background }]}>
+                <View style={[styles.themeCardPreview, { backgroundColor: variant.background }]}>
                   <View
                     style={[
                       styles.themeCardBubbleLeft,
-                      { backgroundColor: preset.bubbleReceived },
+                      { backgroundColor: variant.bubbleReceived },
                     ]}
                   />
                   <View
                     style={[
                       styles.themeCardBubbleRight,
-                      { backgroundColor: preset.bubbleSent },
+                      { backgroundColor: variant.bubbleSent },
                     ]}
                   />
                 </View>
@@ -228,12 +322,12 @@ export default function AppearanceSettingsScreen() {
                   style={[
                     styles.themeCardLabel,
                     {
-                      color: isSelected ? preset.primaryColor : theme.colors.text,
+                      color: isSelected ? colorTheme.primaryColor : theme.colors.text,
                       fontWeight: isSelected ? '600' : '400',
                     },
                   ]}
                 >
-                  {preset.label}
+                  {colorTheme.label}
                 </Text>
               </TouchableOpacity>
             );
@@ -292,9 +386,9 @@ export default function AppearanceSettingsScreen() {
             step={1}
             value={messageTextSize}
             onValueChange={onTextSizeChange}
-            minimumTrackTintColor={selectedPreset.primaryColor}
+            minimumTrackTintColor={selectedColorTheme.primaryColor}
             maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={selectedPreset.primaryColor}
+            thumbTintColor={selectedColorTheme.primaryColor}
           />
           <Text style={[styles.sliderLabelLarge, { color: theme.colors.text }]}>A</Text>
         </View>
@@ -368,6 +462,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 12,
     marginBottom: 16,
+  },
+
+  // Theme mode toggle
+  themeModeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  themeModeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeModeLabel: {
+    fontSize: 15,
   },
 
   // Theme picker

@@ -24,6 +24,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;
+  colorTheme?: string;
   primaryColor?: string;
 }
 
@@ -117,9 +118,25 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
   },
 
   async updateMySettings(partial: Partial<UserAppearance>) {
+    const previous = get().mySettings;
     try {
       set({ loading: true, error: null });
-      
+
+      // Optimistic update — merge partial into current settings immediately
+      if (previous) {
+        const optimistic: UserAppearance = {
+          ...previous,
+          ...(partial.appearance && { appearance: { ...previous.appearance, ...partial.appearance } }),
+          ...(Object.prototype.hasOwnProperty.call(partial, 'profileHeaderImage') && {
+            profileHeaderImage: partial.profileHeaderImage,
+          }),
+          ...(partial.profileCustomization && {
+            profileCustomization: { ...previous.profileCustomization, ...partial.profileCustomization },
+          }),
+        };
+        set({ mySettings: optimistic });
+      }
+
       // Build payload with only allowed fields
       const payload: Partial<UserAppearance> = {
         ...(partial.appearance && { appearance: partial.appearance }),
@@ -130,7 +147,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
           profileCustomization: partial.profileCustomization,
         }),
       };
-      
+
       const res = await api.put<UserAppearance>('profile/settings', payload);
       const doc = unwrapApiData<UserAppearance>(res.data);
 
@@ -150,7 +167,8 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       set({ loading: false });
       return null;
     } catch (e: any) {
-      set({ loading: false, error: e?.message || 'Failed to update settings' });
+      // Revert optimistic update on error
+      set({ mySettings: previous, loading: false, error: e?.message || 'Failed to update settings' });
       return null;
     }
   },
