@@ -1104,7 +1104,7 @@ export default function ConversationsList() {
                 )}
 
                 <Link
-                    href="/(chat)/settings" as any
+                    href="/(chat)/settings"
                     style={styles.settingsButton}
                     asChild
                 >
