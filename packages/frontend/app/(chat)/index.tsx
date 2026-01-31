@@ -1083,6 +1083,7 @@ export default function ConversationsList() {
                         contentContainerStyle={listContentStyle}
                         keyboardShouldPersistTaps="handled"
                         // FlashList: native RecyclerView/UICollectionView-level perf
+                        // @ts-expect-error - estimatedItemSize exists at runtime but may not be in types
                         estimatedItemSize={ITEM_HEIGHT}
                         refreshControl={
                             <RefreshControl
