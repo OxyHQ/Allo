@@ -2,6 +2,7 @@ import { oxyClient } from '@oxyhq/core';
 import { Platform } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '@/config';
+import { CircuitBreaker } from '@/lib/api/retryLogic';
 
 // API Configuration
 const API_CONFIG = {
@@ -11,38 +12,72 @@ const API_CONFIG = {
 // Use oxyClient singleton for authenticated requests
 const authenticatedClient = oxyClient.getClient();
 
+// Add timeout to authenticated client to prevent indefinite hangs
+// Use try-catch in case defaults is not available at initialization time
+try {
+  if (authenticatedClient?.defaults) {
+    authenticatedClient.defaults.timeout = 10000; // 10 second timeout
+  }
+} catch (error) {
+  console.warn('[API] Could not set timeout on authenticated client:', error);
+}
+
+// Add request interceptor to ensure timeout is set for all requests
+authenticatedClient?.interceptors?.request?.use((config) => {
+  // Set timeout if not already set
+  if (!config.timeout) {
+    config.timeout = 10000; // 10 second timeout
+  }
+  return config;
+});
+
+// Circuit breaker to prevent cascading failures
+// Opens after 5 consecutive failures, stays open for 30 seconds
+const apiCircuitBreaker = new CircuitBreaker(5, 60000, 30000);
+
 // Public API client (no authentication required)
 const publicClient = axios.create({
   baseURL: API_CONFIG.baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout to prevent indefinite hangs
 });
 
-// API methods using authenticatedClient (with token handling)
+// API methods using authenticatedClient (with token handling and circuit breaker)
 export const api = {
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<{ data: T }> {
-    const response = await authenticatedClient.get(endpoint, { params });
+    const response = await apiCircuitBreaker.execute(() =>
+      authenticatedClient.get(endpoint, { params })
+    );
     return { data: response.data };
   },
 
   async post<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
-    const response = await authenticatedClient.post(endpoint, body);
+    const response = await apiCircuitBreaker.execute(() =>
+      authenticatedClient.post(endpoint, body)
+    );
     return { data: response.data };
   },
 
   async put<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
-    const response = await authenticatedClient.put(endpoint, body);
+    const response = await apiCircuitBreaker.execute(() =>
+      authenticatedClient.put(endpoint, body)
+    );
     return { data: response.data };
   },
 
   async delete<T = any>(endpoint: string): Promise<{ data: T }> {
-    const response = await authenticatedClient.delete(endpoint);
+    const response = await apiCircuitBreaker.execute(() =>
+      authenticatedClient.delete(endpoint)
+    );
     return { data: response.data };
   },
 
   async patch<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
-    const response = await authenticatedClient.patch(endpoint, body);
+    const response = await apiCircuitBreaker.execute(() =>
+      authenticatedClient.patch(endpoint, body)
+    );
     return { data: response.data };
   },
 };

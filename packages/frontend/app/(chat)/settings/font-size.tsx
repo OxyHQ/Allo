@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -38,10 +38,10 @@ export default function FontSizeSettingsScreen() {
   const isDefault = localSize === MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE;
 
   return (
-    <ThemedView style={styles.container}>
-      <Header 
-        options={{ 
-          title: 'Font Size', 
+    <ThemedView className="flex-1">
+      <Header
+        options={{
+          title: 'Font Size',
           leftComponents: [
             <HeaderIconButton
               key="back"
@@ -50,59 +50,68 @@ export default function FontSizeSettingsScreen() {
               <BackArrowIcon size={20} color={theme.colors.text} />
             </HeaderIconButton>,
           ],
-        }} 
+        }}
         hideBottomBorder={true}
         disableSticky={true}
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerClassName="p-4">
         {/* Preview Section */}
-        <View style={[styles.previewCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <Text style={[styles.previewLabel, { color: theme.colors.textSecondary }]}>Preview</Text>
-          <View style={[styles.previewBubble, { backgroundColor: theme.colors.primary || '#007AFF' }]}>
-            <Text style={[styles.previewText, { fontSize: localSize, color: '#FFFFFF' }]}>
+        <View
+          className="rounded-xl border p-4 mb-6"
+          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+        >
+          <Text
+            className="text-[13px] font-semibold mb-3 uppercase tracking-wide"
+            style={{ color: theme.colors.textSecondary }}
+          >
+            Preview
+          </Text>
+          <View
+            className="rounded-[18px] px-3 py-2 self-end max-w-[80%]"
+            style={{ backgroundColor: theme.colors.primary || '#007AFF' }}
+          >
+            <Text className="leading-5 text-white" style={{ fontSize: localSize }}>
               This is how your messages will look
             </Text>
           </View>
         </View>
 
         {/* Size Selection Section */}
-        <View style={styles.sizeSection}>
-          <View style={styles.sizeHeader}>
-            <Text style={[styles.sizeLabel, { color: theme.colors.text }]}>Message Font Size</Text>
-            <Text style={[styles.sizeValue, { color: theme.colors.primary || '#007AFF' }]}>
+        <View className="mb-8">
+          <View className="flex-row justify-between items-center mb-4">
+            <Text className="text-base font-semibold" style={{ color: theme.colors.text }}>
+              Message Font Size
+            </Text>
+            <Text className="text-base font-bold" style={{ color: theme.colors.primary || '#007AFF' }}>
               {localSize}px
             </Text>
           </View>
-          
+
           {/* Size Buttons */}
-          <View style={styles.sizeButtons}>
+          <View className="flex-row flex-wrap gap-2 justify-center">
             {Array.from({ length: FONT_SIZE_MAX - FONT_SIZE_MIN + 1 }, (_, i) => {
               const size = FONT_SIZE_MIN + i;
               const isSelected = localSize === size;
               return (
                 <TouchableOpacity
                   key={size}
-                  style={[
-                    styles.sizeButton,
-                    {
-                      backgroundColor: isSelected
-                        ? (theme.colors.primary || '#007AFF')
-                        : theme.colors.card,
-                      borderColor: isSelected
-                        ? (theme.colors.primary || '#007AFF')
-                        : theme.colors.border,
-                    },
-                  ]}
+                  className="w-12 h-12 rounded-full border-2 items-center justify-center"
+                  style={{
+                    backgroundColor: isSelected
+                      ? (theme.colors.primary || '#007AFF')
+                      : theme.colors.card,
+                    borderColor: isSelected
+                      ? (theme.colors.primary || '#007AFF')
+                      : theme.colors.border,
+                  }}
                   onPress={() => handleSizeChange(size)}
                 >
                   <Text
-                    style={[
-                      styles.sizeButtonText,
-                      {
-                        color: isSelected ? '#FFFFFF' : theme.colors.text,
-                        fontSize: size,
-                      },
-                    ]}
+                    className="font-semibold"
+                    style={{
+                      color: isSelected ? '#FFFFFF' : theme.colors.text,
+                      fontSize: size,
+                    }}
                   >
                     Aa
                   </Text>
@@ -113,179 +122,69 @@ export default function FontSizeSettingsScreen() {
         </View>
 
         {/* Size Presets */}
-        <View style={styles.presetsSection}>
-          <Text style={[styles.presetsLabel, { color: theme.colors.text }]}>Quick Presets</Text>
-          <View style={styles.presetsRow}>
+        <View className="mb-6">
+          <Text className="text-base font-semibold mb-3" style={{ color: theme.colors.text }}>
+            Quick Presets
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
             {[
               { label: 'Small', size: 14 },
               { label: 'Medium', size: 16 },
               { label: 'Large', size: 18 },
               { label: 'Extra Large', size: 20 },
-            ].map((preset) => (
-              <TouchableOpacity
-                key={preset.label}
-                style={[
-                  styles.presetButton,
-                  { 
-                    backgroundColor: localSize === preset.size 
+            ].map((preset) => {
+              const isSelected = localSize === preset.size;
+              return (
+                <TouchableOpacity
+                  key={preset.label}
+                  className="flex-1 min-w-[45%] py-4 px-3 rounded-xl items-center"
+                  style={{
+                    backgroundColor: isSelected
                       ? (theme.colors.primary || '#007AFF')
                       : theme.colors.card,
                     borderColor: theme.colors.border,
-                  },
-                  localSize === preset.size && styles.presetButtonActive,
-                ]}
-                onPress={() => handleSizeChange(preset.size)}
-              >
-                <Text
-                  style={[
-                    styles.presetText,
-                    { 
-                      color: localSize === preset.size 
-                        ? '#FFFFFF'
-                        : theme.colors.text,
-                    },
-                  ]}
+                    borderWidth: isSelected ? 2 : 1,
+                  }}
+                  onPress={() => handleSizeChange(preset.size)}
                 >
-                  {preset.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.presetSize,
-                    { 
-                      color: localSize === preset.size 
+                  <Text
+                    className="text-sm font-semibold mb-1"
+                    style={{
+                      color: isSelected ? '#FFFFFF' : theme.colors.text,
+                    }}
+                  >
+                    {preset.label}
+                  </Text>
+                  <Text
+                    className="text-xs"
+                    style={{
+                      color: isSelected
                         ? 'rgba(255,255,255,0.8)'
                         : theme.colors.textSecondary,
-                    },
-                  ]}
-                >
-                  {preset.size}px
-                </Text>
-              </TouchableOpacity>
-            ))}
+                    }}
+                  >
+                    {preset.size}px
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {/* Reset Button */}
         {!isDefault && (
           <TouchableOpacity
-            style={[styles.resetButton, { borderColor: theme.colors.border }]}
+            className="py-3.5 rounded-xl border items-center mt-2"
+            style={{ borderColor: theme.colors.border }}
             onPress={handleReset}
           >
-            <Text style={[styles.resetButtonText, { color: theme.colors.text }]}>Reset to Default</Text>
+            <Text className="text-[15px] font-semibold" style={{ color: theme.colors.text }}>
+              Reset to Default
+            </Text>
           </TouchableOpacity>
         )}
       </ScrollView>
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  previewCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 24,
-  },
-  previewLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  previewBubble: {
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: 'flex-end',
-    maxWidth: '80%',
-  },
-  previewText: {
-    lineHeight: 20,
-  },
-  sizeSection: {
-    marginBottom: 32,
-  },
-  sizeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sizeLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  sizeValue: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sizeButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  sizeButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sizeButtonText: {
-    fontWeight: '600',
-  },
-  presetsSection: {
-    marginBottom: 24,
-  },
-  presetsLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  presetsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  presetButton: {
-    flex: 1,
-    minWidth: '45%',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  presetButtonActive: {
-    borderWidth: 2,
-  },
-  presetText: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  presetSize: {
-    fontSize: 12,
-  },
-  resetButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  resetButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
 

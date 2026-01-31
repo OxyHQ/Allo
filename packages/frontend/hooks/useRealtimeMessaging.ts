@@ -337,8 +337,12 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           token,
           userId: user.id,
         },
-        transports: ['websocket', 'polling'],
+        transports: ['websocket'], // Only WebSocket, no polling fallback
         path: '/socket.io',
+        reconnectionAttempts: 5, // Limit to 5 reconnection attempts
+        reconnectionDelay: 1000, // Start with 1 second delay
+        reconnectionDelayMax: 5000, // Max 5 seconds between attempts
+        timeout: 10000, // 10 second connection timeout
       });
 
         messagingSocket.on('connect', () => {

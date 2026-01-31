@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -14,7 +14,7 @@ export default function AutoNightModeScreen() {
   const theme = useTheme();
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <Header
         options={{
           title: 'Auto-Night Mode',
@@ -27,13 +27,19 @@ export default function AutoNightModeScreen() {
         hideBottomBorder={true}
         disableSticky={true}
       />
-      <View style={styles.content}>
-        <View style={[styles.placeholder, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+      <View className="flex-1 p-4 justify-center items-center">
+        <View
+          className="rounded-2xl border p-8 items-center w-full"
+          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+        >
           <IconComponent name="moon-outline" size={48} color={theme.colors.textTertiary} />
-          <Text style={[styles.placeholderTitle, { color: theme.colors.text }]}>
+          <Text className="text-lg font-semibold mt-4" style={{ color: theme.colors.text }}>
             Auto-Night Mode
           </Text>
-          <Text style={[styles.placeholderDesc, { color: theme.colors.textSecondary }]}>
+          <Text
+            className="text-sm text-center mt-2 leading-5"
+            style={{ color: theme.colors.textSecondary }}
+          >
             Automatically switch to dark theme based on time of day or ambient light. Coming soon.
           </Text>
         </View>
@@ -41,26 +47,3 @@ export default function AutoNightModeScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { flex: 1, padding: 16, justifyContent: 'center', alignItems: 'center' },
-  placeholder: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 32,
-    alignItems: 'center',
-    width: '100%',
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  placeholderDesc: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
-  },
-});

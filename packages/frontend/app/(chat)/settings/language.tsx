@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
@@ -71,7 +71,7 @@ export default function LanguageSettingsScreen() {
     };
 
     return (
-        <ThemedView style={styles.container}>
+        <ThemedView className="flex-1">
             <Header
                 options={{
                     title: t('Language'),
@@ -88,48 +88,55 @@ export default function LanguageSettingsScreen() {
                 disableSticky={true}
             />
 
-            <ScrollView 
-                style={styles.scrollView}
-                contentContainerStyle={styles.content}
+            <ScrollView
+                className="flex-1"
+                contentContainerClassName="px-4 pt-5 pb-6"
                 showsVerticalScrollIndicator={false}
             >
                 {saving && (
-                    <View style={styles.savingIndicator}>
+                    <View className="flex-row items-center justify-center py-3 mb-4 gap-2">
                         <ActivityIndicator size="small" color={theme.colors.primary} />
-                        <Text style={[styles.savingText, { color: theme.colors.textSecondary }]}>
+                        <Text className="text-sm" style={{ color: theme.colors.textSecondary }}>
                             {t('common.saving')}
                         </Text>
                     </View>
                 )}
 
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                <View className="mt-2">
+                    <Text
+                        className="text-[13px] font-semibold uppercase tracking-wide mb-3 px-1"
+                        style={{ color: theme.colors.text }}
+                    >
                         {t('settings.language.selectLanguage')}
                     </Text>
 
-                    <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <View
+                        className="rounded-2xl border overflow-hidden"
+                        style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+                    >
                         {LANGUAGE_OPTIONS.map((option, index) => {
                             const isSelected = currentLanguage === option.code;
                             const isChanging = saving && isSelected;
+                            const isFirst = index === 0;
+                            const isLast = index === LANGUAGE_OPTIONS.length - 1;
 
                             return (
                                 <View key={option.code}>
                                     <TouchableOpacity
-                                        style={[
-                                            styles.optionItem,
-                                            index === 0 && styles.firstOptionItem,
-                                            index === LANGUAGE_OPTIONS.length - 1 && styles.lastOptionItem,
-                                        ]}
+                                        className={`px-4 ${isFirst ? 'pt-4.5' : 'py-4.5'} ${isLast ? 'pb-4.5' : ''}`}
                                         onPress={() => !saving && handleLanguageChange(option.code)}
                                         disabled={saving}
                                         activeOpacity={0.7}
                                     >
-                                        <View style={styles.optionContent}>
-                                            <Text style={[styles.optionText, { color: theme.colors.text }]}>
+                                        <View className="flex-row items-center justify-between">
+                                            <Text
+                                                className="text-base font-medium flex-1"
+                                                style={{ color: theme.colors.text }}
+                                            >
                                                 {getLanguageDisplayName(option)}
                                             </Text>
                                             {isSelected && (
-                                                <View style={styles.selectedIndicator}>
+                                                <View className="ml-3">
                                                     {isChanging ? (
                                                         <ActivityIndicator size="small" color={theme.colors.primary} />
                                                     ) : (
@@ -140,7 +147,7 @@ export default function LanguageSettingsScreen() {
                                         </View>
                                     </TouchableOpacity>
                                     {index < LANGUAGE_OPTIONS.length - 1 && (
-                                        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
                                     )}
                                 </View>
                             );
@@ -151,72 +158,4 @@ export default function LanguageSettingsScreen() {
         </ThemedView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    content: {
-        paddingHorizontal: 16,
-        paddingTop: 20,
-        paddingBottom: 24,
-    },
-    savingIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        marginBottom: 16,
-        gap: 8,
-    },
-    savingText: {
-        fontSize: 14,
-    },
-    section: {
-        marginTop: 8,
-    },
-    sectionTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: 12,
-        paddingHorizontal: 4,
-    },
-    settingsCard: {
-        borderRadius: 16,
-        borderWidth: 1,
-        overflow: 'hidden',
-    },
-    optionItem: {
-        paddingHorizontal: 16,
-        paddingVertical: 18,
-    },
-    firstOptionItem: {
-        paddingTop: 18,
-    },
-    lastOptionItem: {
-        paddingBottom: 18,
-    },
-    optionContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    optionText: {
-        fontSize: 16,
-        fontWeight: '500',
-        flex: 1,
-    },
-    selectedIndicator: {
-        marginLeft: 12,
-    },
-    divider: {
-        height: 1,
-        marginHorizontal: 16,
-    },
-});
 

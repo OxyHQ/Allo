@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { useAppearanceStore } from '@/store/appearanceStore';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
@@ -53,7 +53,7 @@ export default function ProfileCustomizationScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <Header
         options={{
           title: t('settings.profileCustomization.title'),
@@ -69,21 +69,24 @@ export default function ProfileCustomizationScreen() {
         hideBottomBorder={true}
         disableSticky={true}
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerClassName="p-4">
         {/* Avatar Preview */}
-        <View style={[styles.previewCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.previewInner}>
+        <View
+          className="rounded-xl border p-6 mb-6"
+          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+        >
+          <View className="items-center">
             <Avatar
               size={80}
               source={avatarUri ? { uri: avatarUri } : undefined}
               label={displayName.charAt(0).toUpperCase()}
               shape={currentAvatarShape}
             />
-            <Text style={[styles.previewName, { color: theme.colors.text }]}>
+            <Text className="text-lg font-bold mt-3" style={{ color: theme.colors.text }}>
               {displayName}
             </Text>
             {user?.username && (
-              <Text style={[styles.previewUsername, { color: theme.colors.textSecondary }]}>
+              <Text className="text-sm mt-0.5" style={{ color: theme.colors.textSecondary }}>
                 @{user.username}
               </Text>
             )}
@@ -91,10 +94,13 @@ export default function ProfileCustomizationScreen() {
         </View>
 
         {/* Avatar Shape */}
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+        <Text className="text-lg font-bold mb-3" style={{ color: theme.colors.text }}>
           Avatar Shape
         </Text>
-        <View style={[styles.shapeCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <View
+          className="rounded-xl border p-4"
+          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+        >
           <AvatarShapePicker
             selected={currentAvatarShape}
             onSelect={handleAvatarShapeSelect}
@@ -102,53 +108,13 @@ export default function ProfileCustomizationScreen() {
         </View>
 
         {/* Info Text */}
-        <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+        <Text
+          className="text-[13px] leading-[18px] mt-4 px-1"
+          style={{ color: theme.colors.textSecondary }}
+        >
           {t('settings.profileCustomization.info')}
         </Text>
       </ScrollView>
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  previewCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 24,
-    marginBottom: 24,
-  },
-  previewInner: {
-    alignItems: 'center',
-  },
-  previewName: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 12,
-  },
-  previewUsername: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  shapeCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-  },
-  infoText: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 16,
-    paddingHorizontal: 4,
-  },
-});

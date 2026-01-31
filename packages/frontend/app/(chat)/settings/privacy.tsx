@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
@@ -99,7 +99,7 @@ export default function PrivacySettingsScreen() {
 
     if (loading) {
         return (
-            <ThemedView style={styles.container}>
+            <ThemedView className="flex-1">
                 <Header
                     options={{
                         title: t('settings.privacy.title'),
@@ -115,7 +115,7 @@ export default function PrivacySettingsScreen() {
                     hideBottomBorder={true}
                     disableSticky={true}
                 />
-                <View style={styles.loadingContainer}>
+                <View className="flex-1 justify-center items-center">
                     <ActivityIndicator size="large" color={theme.colors.primary} />
                 </View>
             </ThemedView>
@@ -123,7 +123,7 @@ export default function PrivacySettingsScreen() {
     }
 
     return (
-        <ThemedView style={styles.container}>
+        <ThemedView className="flex-1">
             <Header
                 options={{
                     title: t('settings.privacy.title'),
@@ -141,48 +141,51 @@ export default function PrivacySettingsScreen() {
             />
 
             <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.content}
+                className="flex-1"
+                contentContainerClassName="px-4 pt-5 pb-6"
                 showsVerticalScrollIndicator={false}
             >
                 {/* Privacy settings card */}
-                <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <View
+                    className="rounded-2xl border overflow-hidden"
+                    style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
+                >
                     {/* Private profile */}
                     <TouchableOpacity
-                        style={[styles.settingItem, styles.firstSettingItem]}
+                        className="flex-row items-center justify-between px-4 py-4 pt-4.5"
                         onPress={handlePrivateProfilePress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="lock-closed" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.privateProfile')}
                                 </Text>
                             </View>
                         </View>
-                        <View style={styles.settingRight}>
-                            <Text style={[styles.settingValue, { color: theme.colors.textSecondary }]}>
+                        <View className="flex-row items-center gap-2">
+                            <Text className="text-sm font-medium" style={{ color: theme.colors.textSecondary }}>
                                 {getProfileVisibilityText()}
                             </Text>
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </View>
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Tags and allos */}
                     <TouchableOpacity
-                        style={styles.settingItem}
+                        className="flex-row items-center justify-between px-4 py-4"
                         onPress={handleTagsallosPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="at" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.tagsAndallos')}
                                 </Text>
                             </View>
@@ -190,19 +193,19 @@ export default function PrivacySettingsScreen() {
                         <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Online status */}
                     <TouchableOpacity
-                        style={styles.settingItem}
+                        className="flex-row items-center justify-between px-4 py-4"
                         onPress={handleOnlineStatusPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="ellipse" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.onlineStatus')}
                                 </Text>
                             </View>
@@ -210,19 +213,19 @@ export default function PrivacySettingsScreen() {
                         <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Restricted profiles */}
                     <TouchableOpacity
-                        style={styles.settingItem}
+                        className="flex-row items-center justify-between px-4 py-4"
                         onPress={handleRestrictedProfilesPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="people" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.restrictedProfiles')}
                                 </Text>
                             </View>
@@ -230,19 +233,19 @@ export default function PrivacySettingsScreen() {
                         <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Blocked profiles */}
                     <TouchableOpacity
-                        style={styles.settingItem}
+                        className="flex-row items-center justify-between px-4 py-4"
                         onPress={handleBlockedProfilesPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="close-circle" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.blockedProfiles')}
                                 </Text>
                             </View>
@@ -250,19 +253,19 @@ export default function PrivacySettingsScreen() {
                         <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Hidden Words */}
                     <TouchableOpacity
-                        style={styles.settingItem}
+                        className="flex-row items-center justify-between px-4 py-4"
                         onPress={handleHiddenWordsPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="eye-off" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.hiddenWords')}
                                 </Text>
                             </View>
@@ -270,19 +273,19 @@ export default function PrivacySettingsScreen() {
                         <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                     </TouchableOpacity>
 
-                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
 
                     {/* Hide like and share counts */}
                     <TouchableOpacity
-                        style={[styles.settingItem, styles.lastSettingItem]}
+                        className="flex-row items-center justify-between px-4 py-4 pb-4.5"
                         onPress={handleHideLikeShareCountsPress}
                     >
-                        <View style={styles.settingInfo}>
-                            <View style={styles.settingIcon}>
+                        <View className="flex-row items-center flex-1">
+                            <View className="mr-3 items-center justify-center">
                                 <IconComponent name="heart-outline" size={20} color={theme.colors.text} />
                             </View>
-                            <View style={styles.settingTextContainer}>
-                                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                            <View className="flex-1">
+                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
                                     {t('settings.privacy.hideLikeShareCounts')}
                                 </Text>
                             </View>
@@ -294,71 +297,4 @@ export default function PrivacySettingsScreen() {
         </ThemedView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    content: {
-        paddingHorizontal: 16,
-        paddingTop: 20,
-        paddingBottom: 24,
-    },
-    settingsCard: {
-        borderRadius: 16,
-        borderWidth: 1,
-        overflow: 'hidden',
-    },
-    settingItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-    },
-    firstSettingItem: {
-        paddingTop: 18,
-    },
-    lastSettingItem: {
-        paddingBottom: 18,
-    },
-    divider: {
-        height: 1,
-        marginHorizontal: 16,
-    },
-    settingInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    settingIcon: {
-        marginRight: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    settingTextContainer: {
-        flex: 1,
-    },
-    settingLabel: {
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    settingRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    settingValue: {
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-});
 
