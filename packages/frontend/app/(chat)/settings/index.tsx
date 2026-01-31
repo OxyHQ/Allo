@@ -28,6 +28,7 @@ import {
 } from '@/stores';
 import { useMessagesStore } from '@/stores/messagesStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
+import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
 // Type assertion for Ionicons compatibility with React 19
 const IconComponent = Ionicons as any;
@@ -304,19 +305,19 @@ export default function SettingsScreen() {
 
             <Animated.ScrollView
                 className="flex-1"
-                contentContainerClassName="px-4 pt-4 pb-5"
+                contentContainerClassName={`px-${SPACING.screen.horizontal} pt-${SPACING.screen.vertical} pb-${SPACING.content.gapLarge}`}
                 showsVerticalScrollIndicator={false}
             >
                 {/* User Info */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t("settings.sections.account")}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t("settings.sections.account")}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         <TouchableOpacity
-                            className="px-4 py-3 pt-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={() => showBottomSheet?.("AccountSettings")}
                         >
-                            <View className="w-10 h-10 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.colors.primary }}>
+                            <View className={`w-10 h-10 rounded-full items-center justify-center mr-${SPACING.item.iconMargin}`} style={{ backgroundColor: theme.colors.primary }}>
                                 <IconComponent name="person" size={24} color={theme.colors.card} />
                             </View>
                             <View className="flex-row items-center flex-1">
@@ -333,12 +334,12 @@ export default function SettingsScreen() {
                             </View>
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
                         <TouchableOpacity
-                            className="px-4 py-3 pb-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={() => showBottomSheet?.("FileManagement")}
                         >
-                            <View className="w-10 h-10 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.colors.primary }}>
+                            <View className={`w-10 h-10 rounded-full items-center justify-center mr-${SPACING.item.iconMargin}`} style={{ backgroundColor: theme.colors.primary }}>
                                 <IconComponent name="person" size={24} color={theme.colors.card} />
                             </View>
                             <View className="flex-row items-center flex-1">
@@ -359,14 +360,14 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* About allo */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t('settings.sections.aboutallo')}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.aboutallo')}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         {/* App Title and Version */}
-                        <View className="px-4 py-3 pt-3.5 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <LogoIcon size={20} color={theme.colors.primary} />
                                 </View>
                                 <View>
@@ -380,12 +381,12 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Build Info */}
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="hammer" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -399,12 +400,12 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Platform Info */}
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent
                                         name="phone-portrait"
                                         size={20}
@@ -424,12 +425,12 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Oxy SDK */}
-                        <TouchableOpacity className="px-4 py-3 flex-row items-center justify-between" onPress={() => showBottomSheet?.('AppInfo')}>
+                        <TouchableOpacity className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`} onPress={() => showBottomSheet?.('AppInfo')}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -439,12 +440,12 @@ export default function SettingsScreen() {
                             </View>
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Expo SDK */}
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -454,12 +455,12 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* API URL (from env/config) */}
-                        <View className="px-4 py-3 pb-3.5 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="globe" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -472,15 +473,15 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Conversation Swipes */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>
                         {t('settings.sections.conversations', 'Conversations')}
                     </Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        <View className="px-4 py-3 pt-3.5 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="swap-horizontal" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -494,10 +495,10 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
-                        <View className="px-4 py-3.5">
-                            <Text className="text-[13px] font-semibold mb-2 uppercase" style={{ color: theme.colors.text }}>
+                        <View className={`px-${SPACING.item.paddingHorizontal} py-${SPACING.item.paddingVertical}`}>
+                            <Text className={`text-[13px] font-semibold mb-${SPACING.content.gap} uppercase`} style={{ color: theme.colors.text }}>
                                 {t('settings.conversations.leftSwipe', 'Left swipe')}
                             </Text>
                             <View className="flex-row">
@@ -507,7 +508,7 @@ export default function SettingsScreen() {
                                     return (
                                         <TouchableOpacity
                                             key={`left-${option.value}`}
-                                            className={`flex-1 py-2.5 rounded-[18px] border items-center ${!isLast ? 'mr-2' : ''}`}
+                                            className={`flex-1 py-2.5 rounded-[18px] border items-center ${!isLast ? `mr-${SPACING.content.gap}` : ''}`}
                                             style={{
                                                 backgroundColor: isSelected ? '#005c67' : 'transparent',
                                                 borderColor: isSelected ? '#005c67' : '#E2E8F0',
@@ -532,10 +533,10 @@ export default function SettingsScreen() {
                             )}
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
-                        <View className="px-4 py-3.5 pb-3.5">
-                            <Text className="text-[13px] font-semibold mb-2 uppercase" style={{ color: theme.colors.text }}>
+                        <View className={`px-${SPACING.item.paddingHorizontal} py-${SPACING.item.paddingVertical} pb-${SPACING.item.paddingVertical}`}>
+                            <Text className={`text-[13px] font-semibold mb-${SPACING.content.gap} uppercase`} style={{ color: theme.colors.text }}>
                                 {t('settings.conversations.rightSwipe', 'Right swipe')}
                             </Text>
                             <View className="flex-row">
@@ -545,7 +546,7 @@ export default function SettingsScreen() {
                                     return (
                                         <TouchableOpacity
                                             key={`right-${option.value}`}
-                                            className={`flex-1 py-2.5 rounded-[18px] border items-center ${!isLast ? 'mr-2' : ''}`}
+                                            className={`flex-1 py-2.5 rounded-[18px] border items-center ${!isLast ? `mr-${SPACING.content.gap}` : ''}`}
                                             style={{
                                                 backgroundColor: isSelected ? '#005c67' : 'transparent',
                                                 borderColor: isSelected ? '#005c67' : '#E2E8F0',
@@ -573,12 +574,12 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Support & Feedback */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t('settings.sections.supportFeedback')}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.supportFeedback')}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         <TouchableOpacity
-                            className="px-4 py-3 pt-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={() => {
                                 Alert.alert(
                                     t('settings.supportFeedback.helpSupport'),
@@ -588,7 +589,7 @@ export default function SettingsScreen() {
                             }}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="help-circle" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -601,10 +602,10 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         <TouchableOpacity
-                            className="px-4 py-3 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => {
                                 Alert.alert(
                                     t('settings.supportFeedback.sendFeedback'),
@@ -625,7 +626,7 @@ export default function SettingsScreen() {
                             }}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="chatbubble" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -640,10 +641,10 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         <TouchableOpacity
-                            className="px-4 py-3 pb-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={() => {
                                 Alert.alert(
                                     t('settings.supportFeedback.rateApp'),
@@ -664,7 +665,7 @@ export default function SettingsScreen() {
                             }}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="star" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -680,16 +681,16 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Privacy */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t('settings.sections.privacy')}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.privacy')}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         <TouchableOpacity
-                            className="px-4 py-3 pt-3.5 pb-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => router.push('/settings/privacy')}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -707,14 +708,14 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Security & Encryption */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>Security & Encryption</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>Security & Encryption</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         {/* Cloud Sync */}
-                        <View className="px-4 py-3 pt-3.5 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="cloud-outline" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View style={{ flex: 1 }}>
@@ -743,12 +744,12 @@ export default function SettingsScreen() {
                             />
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Encryption Status */}
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View style={{ flex: 1 }}>
@@ -769,12 +770,12 @@ export default function SettingsScreen() {
                             />
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Device Info */}
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View style={{ flex: 1 }}>
@@ -791,17 +792,17 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* App Preferences */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t('settings.sections.preferences')}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.preferences')}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         {/* Appearance */}
                         <TouchableOpacity
-                            className="px-4 py-3 pt-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={() => router.push('/settings/appearance')}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="color-palette" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -814,15 +815,15 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Language Selection */}
                         <TouchableOpacity
-                            className="px-4 py-3 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => router.push('/settings/language')}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="language" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -837,11 +838,11 @@ export default function SettingsScreen() {
 
                         {/* Font Size */}
                         <TouchableOpacity
-                            className="px-4 py-3 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => router.push('/settings/font-size')}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="text" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -856,15 +857,15 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         {/* Profile Customization */}
                         <TouchableOpacity
-                            className="px-4 py-3 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => router.push('/settings/profile-customization')}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="person-circle-outline" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -879,11 +880,11 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
-                        <View className="px-4 py-3 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent
                                         name="notifications"
                                         size={20}
@@ -903,11 +904,11 @@ export default function SettingsScreen() {
                             />
                         </View>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
-                        <View className="px-4 py-3 pb-3.5 flex-row items-center justify-between">
+                        <View className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="moon" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -926,16 +927,16 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Data Management */}
-                <View className="mb-6">
-                    <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.text }}>{t('settings.sections.data')}</Text>
+                <View className={`mb-${SPACING.section.gap}`}>
+                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.data')}</Text>
 
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         <TouchableOpacity
-                            className="px-4 py-3 pt-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={handleExportData}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="download" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View>
@@ -946,14 +947,14 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         <TouchableOpacity
-                            className="px-4 py-3 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={handleClearCache}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="trash" size={20} color={theme.colors.error} />
                                 </View>
                                 <View>
@@ -966,14 +967,14 @@ export default function SettingsScreen() {
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
 
-                        <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
                         <TouchableOpacity
-                            className="px-4 py-3 pb-3.5 flex-row items-center justify-between"
+                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
                             onPress={handleResetPersonalization}
                         >
                             <View className="flex-row items-center flex-1">
-                                <View className="mr-3 items-center justify-center">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="refresh" size={20} color={theme.colors.error} />
                                 </View>
                                 <View>
@@ -991,9 +992,9 @@ export default function SettingsScreen() {
                 </View>
 
                 {/* Sign Out */}
-                <View className="mb-6">
+                <View className={`mb-${SPACING.section.gap}`}>
                     <TouchableOpacity
-                        className="px-4 py-3 pt-3.5 pb-3.5 flex-row items-center justify-between rounded-2xl border overflow-hidden"
+                        className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between rounded-2xl border overflow-hidden`}
                         style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.error }}
                         onPress={handleSignOut}
                     >

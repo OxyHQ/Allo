@@ -98,43 +98,6 @@ class PerformanceMonitor {
 export const perfMonitor = new PerformanceMonitor();
 
 /**
- * HOC to measure component render performance
- */
-export function withPerformance<P extends object>(
-  Component: React.ComponentType<P>,
-  componentName?: string
-): React.ComponentType<P> {
-  const name = componentName || Component.displayName || Component.name || 'Component';
-
-  return (props: P) => {
-    const renderCount = React.useRef(0);
-
-    React.useEffect(() => {
-      renderCount.current += 1;
-      if (renderCount.current > 10 && renderCount.current % 10 === 0) {
-        console.warn(`[Performance] ${name} has rendered ${renderCount.current} times`);
-      }
-    });
-
-    return <Component {...props} />;
-  };
-}
-
-/**
- * Hook to measure async operations
- */
-export function usePerfMeasure(name: string) {
-  const markName = `${name}-${Date.now()}`;
-
-  React.useEffect(() => {
-    perfMonitor.mark(markName);
-    return () => {
-      perfMonitor.measure(markName);
-    };
-  }, [markName]);
-}
-
-/**
  * Measure API call performance
  */
 export async function measureApiCall<T>(

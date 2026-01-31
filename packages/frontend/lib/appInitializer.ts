@@ -18,6 +18,7 @@ import { INITIALIZATION_TIMEOUT } from './constants';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { useMessagesStore } from '@/stores/messagesStore';
 import { p2pManager } from './p2pMessaging';
+import { runStartupHealthCheck } from '@/utils/appHealthCheck';
 
 export interface InitializationResult {
   success: boolean;
@@ -144,6 +145,9 @@ export class AppInitializer {
    */
   static async initializeDeferred(): Promise<void> {
     try {
+      // Run health check first (development only)
+      await runStartupHealthCheck();
+
       await Promise.all([
         setupNotificationsIfNeeded(),
         initializeSignalProtocol(),

@@ -12,7 +12,8 @@ export const useTypingIndicator = (conversationId?: string) => {
   const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    if (!conversationId || typeof window === 'undefined') return;
+    // Check if window.addEventListener exists (web only, not React Native)
+    if (!conversationId || typeof window === 'undefined' || !window.addEventListener) return;
 
     const handleTypingEvent = (event: CustomEvent) => {
       const data = event.detail as { conversationId: string; userId: string; isTyping: boolean };

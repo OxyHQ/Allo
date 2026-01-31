@@ -21,6 +21,7 @@ import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { LogoIcon } from '@/assets/logo';
 import { COLOR_THEMES } from '@/styles/colorThemes';
+import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
 const IconComponent = Ionicons as any;
 
@@ -131,19 +132,19 @@ export default function AppearanceSettingsScreen() {
         hideBottomBorder={true}
         disableSticky={true}
       />
-      <ScrollView className="px-4 pt-2 pb-10" showsVerticalScrollIndicator={false}>
+      <ScrollView className={SPACING_CLASSES.screen} showsVerticalScrollIndicator={false}>
         {/* THEME MODE */}
-        <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: theme.colors.textSecondary }}>
+        <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.textSecondary }}>
           THEME MODE
         </Text>
-        <View className="flex-row gap-2.5 mb-5">
+        <View className={`flex-row gap-${SPACING.content.gap} mb-${SPACING.content.gapLarge}`}>
           {(['light', 'dark', 'system'] as const).map((mode) => {
             const isSelected = selectedThemeMode === mode;
             const modeLabels = { light: 'Light', dark: 'Dark', system: 'System' };
             return (
               <TouchableOpacity
                 key={mode}
-                className="flex-1 py-3 px-4 rounded-xl border items-center justify-center"
+                className={`flex-1 py-${SPACING.item.gap} px-${SPACING.item.paddingHorizontal} rounded-xl border items-center justify-center`}
                 style={{
                   backgroundColor: isSelected ? selectedColorTheme.primaryColor : theme.colors.card,
                   borderColor: theme.colors.border,
@@ -166,13 +167,13 @@ export default function AppearanceSettingsScreen() {
         </View>
 
         {/* COLOR THEME */}
-        <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1 mt-7" style={{ color: theme.colors.textSecondary }}>
+        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
           COLOR THEME
         </Text>
 
         {/* Live chat preview using real MessageBubble components */}
         <View
-          className="rounded-[14px] border p-3 mb-4"
+          className={`rounded-2xl border p-${SPACING.card.padding} mb-${SPACING.content.gapLarge}`}
           style={{ backgroundColor: selectedVariant.chatBackground, borderColor: theme.colors.border }}
         >
           <MessageBubble
@@ -188,7 +189,7 @@ export default function AppearanceSettingsScreen() {
             bubbleColor={selectedVariant.bubbleReceived}
             textColor={selectedVariant.textReceived}
           />
-          <View className="h-1.5" />
+          <View className={`h-${SPACING.content.gapSmall}`} />
           <MessageBubble
             key={`preview-sent-${selectedColorThemeId}-${effectiveMode}`}
             id="preview-sent"
@@ -207,7 +208,8 @@ export default function AppearanceSettingsScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="pb-5 gap-3"
+          className={`pb-${SPACING.content.gapLarge}`}
+          contentContainerStyle={{ gap: 12 }}
         >
           {COLOR_THEMES.map((colorTheme) => {
             const isSelected = selectedColorThemeId === colorTheme.id;
@@ -254,7 +256,7 @@ export default function AppearanceSettingsScreen() {
           style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
         >
           <TouchableOpacity
-            className="flex-row items-center justify-between px-4 py-3.5 pt-4"
+            className={`flex-row items-center justify-between ${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal}`}
             onPress={() => router.push('/settings/chat-background' as any)}
           >
             <Text className="text-base" style={{ color: theme.colors.text }}>
@@ -262,8 +264,8 @@ export default function AppearanceSettingsScreen() {
             </Text>
             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
           </TouchableOpacity>
-          <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-          <View className="flex-row items-center justify-between px-4 py-3.5 pb-4">
+          <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
+          <View className={`flex-row items-center justify-between ${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal}`}>
             <Text className="text-base" style={{ color: theme.colors.text }}>
               Auto-Night Mode
             </Text>
@@ -278,11 +280,11 @@ export default function AppearanceSettingsScreen() {
         </View>
 
         {/* TEXT SIZE */}
-        <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1 mt-7" style={{ color: theme.colors.textSecondary }}>
+        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
           TEXT SIZE
         </Text>
         <View
-          className="rounded-2xl border flex-row items-center px-4 py-3.5"
+          className={`rounded-2xl border flex-row items-center ${SPACING_CLASSES.listItem}`}
           style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
         >
           <Text className="text-sm" style={{ color: theme.colors.text }}>A</Text>
@@ -301,10 +303,10 @@ export default function AppearanceSettingsScreen() {
         </View>
 
         {/* APP ICON */}
-        <Text className="text-[13px] font-semibold uppercase tracking-wide mb-2 px-1 mt-7" style={{ color: theme.colors.textSecondary }}>
+        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
           APP ICON
         </Text>
-        <View className="flex-row gap-4 py-1">
+        <View className={`flex-row gap-${SPACING.item.paddingHorizontal} py-1`}>
           {APP_ICONS.map((appIcon) => {
             const isSelected = selectedIconId === appIcon.id;
             return (

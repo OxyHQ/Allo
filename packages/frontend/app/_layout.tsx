@@ -31,6 +31,7 @@ import { routeMatchers } from '@/utils/routeUtils';
 // Services & Utils
 import { AppInitializer } from '@/lib/appInitializer';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
+import { loadFontsWithFallback } from '@/utils/fontLoader';
 
 // Styles
 import '../styles/global.css';
@@ -187,23 +188,16 @@ export default function RootLayout() {
     };
   }, []); // Empty deps - setup once
 
-  // Initialize app with timeout - don't wait forever for fonts
+  // Initialize app with professional font loading (WhatsApp/Telegram pattern)
   useEffect(() => {
-    // Set timeout to initialize even if fonts haven't loaded (prevents blocking)
-    const timeout = setTimeout(() => {
+    if (splashState.initializationComplete) return;
+
+    // Use Promise-based font loading with progressive enhancement
+    loadFontsWithFallback(fontsLoaded, fontError).then((result) => {
       if (!splashState.initializationComplete) {
-        console.log('Font loading timeout - initializing app anyway');
         initializeApp();
       }
-    }, 2000); // Give fonts 2 seconds, then continue anyway
-
-    // Also call when fonts actually load
-    if (fontsLoaded || fontError) {
-      clearTimeout(timeout);
-      initializeApp();
-    }
-
-    return () => clearTimeout(timeout);
+    });
   }, [fontsLoaded, fontError, initializeApp, splashState.initializationComplete]);
 
   useEffect(() => {
