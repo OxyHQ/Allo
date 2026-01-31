@@ -132,12 +132,12 @@ export default function RootLayout() {
   }, []);
 
   const initializeApp = useCallback(async () => {
-    // Don't block app if fonts are still loading (unless there's an error)
-    if (!fontsLoaded && !fontError) return;
-
-    // Continue with system fonts if custom fonts fail to load
+    // Don't block app - continue with system fonts if custom fonts not ready
+    // This prevents the 6s fontfaceobserver timeout from blocking the app
     if (fontError) {
       console.warn('Font loading failed, using system fonts:', fontError);
+    } else if (!fontsLoaded) {
+      console.log('Fonts still loading, continuing with system fonts temporarily...');
     }
 
     const result = await AppInitializer.initializeApp(fontsLoaded || false);
@@ -187,16 +187,31 @@ export default function RootLayout() {
     };
   }, []); // Empty deps - setup once
 
+  // Initialize app with timeout - don't wait forever for fonts
   useEffect(() => {
-    initializeApp();
-  }, [initializeApp]);
+    // Set timeout to initialize even if fonts haven't loaded (prevents blocking)
+    const timeout = setTimeout(() => {
+      if (!splashState.initializationComplete) {
+        console.log('Font loading timeout - initializing app anyway');
+        initializeApp();
+      }
+    }, 2000); // Give fonts 2 seconds, then continue anyway
+
+    // Also call when fonts actually load
+    if (fontsLoaded || fontError) {
+      clearTimeout(timeout);
+      initializeApp();
+    }
+
+    return () => clearTimeout(timeout);
+  }, [fontsLoaded, fontError, initializeApp, splashState.initializationComplete]);
 
   useEffect(() => {
-    // Start fade when fonts loaded (or failed) AND initialization complete
-    if ((fontsLoaded || fontError) && splashState.initializationComplete && !splashState.startFade) {
+    // Start fade when initialization complete (fonts are optional, not required)
+    if (splashState.initializationComplete && !splashState.startFade) {
       setSplashState((prev) => ({ ...prev, startFade: true }));
     }
-  }, [fontsLoaded, fontError, splashState.initializationComplete, splashState.startFade]);
+  }, [splashState.initializationComplete, splashState.startFade]);
 
   // Run deferred initialization after the app is visible
   useEffect(() => {
