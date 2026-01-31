@@ -1,7 +1,9 @@
 const pkg = require('./package.json')
+const fs = require('fs')
+const path = require('path')
 
 module.exports = function(_config) {
-    
+
     /**
      * App version number. Should be incremented as part of a release cycle.
      */
@@ -17,6 +19,10 @@ module.exports = function(_config) {
   const IS_TESTFLIGHT = process.env.EXPO_PUBLIC_ENV === 'testflight'
   const IS_PRODUCTION = process.env.EXPO_PUBLIC_ENV === 'production'
   const IS_DEV = !IS_TESTFLIGHT || !IS_PRODUCTION
+
+  // Check if google-services.json exists
+  const googleServicesPath = path.resolve(__dirname, '../../google-services.json')
+  const hasGoogleServices = fs.existsSync(googleServicesPath)
 
 
 return {
@@ -49,8 +55,8 @@ return {
             ],
             // Must match google-services.json package_name
             package: "com.allo.app",
-            // Point to your google-services.json for FCM
-            googleServicesFile: "../../google-services.json",
+            // Point to your google-services.json for FCM (only if file exists)
+            ...(hasGoogleServices && { googleServicesFile: "../../google-services.json" }),
             intentFilters: [
                     {
                         action: 'VIEW',
@@ -90,7 +96,7 @@ return {
         web: {
             bundler: "metro",
             output: "static",
-            favicon: "./assets/images/favicon.png",
+            favicon: "./public/favicon.ico",
             manifest: "./public/manifest.json",
             meta: {
                 viewport: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no",

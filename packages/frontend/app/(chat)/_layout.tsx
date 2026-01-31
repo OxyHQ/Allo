@@ -1,14 +1,12 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, usePathname, Slot, useRouter } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedText } from '@/components/ThemedText';
 import { ContactDetails } from '@/components/ContactDetails';
 import { EmptyState } from '@/components/shared/EmptyState';
 import ConversationsList from './index';
-import StatusScreen from './status';
 import { useConversationsStore } from '@/stores';
 import { useUserById } from '@/stores/usersStore';
 import { useOxy } from '@oxyhq/services';
@@ -16,11 +14,9 @@ import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 
-// Wrapper component to render conversation view with ID from pathname
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
   try {
     const ConversationView = require('./c/[id]').default;
-    // Pass the conversation ID as a prop so it works when rendered outside the route context
     return <ConversationView conversationId={conversationId} />;
   } catch (error) {
     console.error('Failed to load conversation view:', error);
@@ -28,46 +24,28 @@ const ConversationViewWrapper = ({ conversationId }: { conversationId: string })
   }
 };
 
-/**
- * Chat Layout with responsive two-pane support
- * - Large screens (>= 768px): Two-pane layout (conversations list + current conversation)
- * - Small screens (< 768px): Single-pane layout (stack navigation)
- * 
- * Routes:
- * - / (index.tsx) - Conversations list
- * - /c/:id - Individual conversation (handled by app/c/_layout.tsx)
- * - /settings (settings/index.tsx) - Chat settings (shown in left pane on large screens)
- * - /settings/:subroute (settings/*.tsx) - Nested settings (shown in right pane on large screens)
- */
 export default function ChatLayout() {
   const theme = useTheme();
   const pathname = usePathname();
 
-  // Check if we're on a large screen (tablet/desktop)
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  // Show contact details only on desktop screens (>= 1024px)
   const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
 
   const { user: currentUser } = useOxy();
   const conversations = useConversationsStore(state => state.conversations);
-  
-  // Initialize global socket connection for all conversations (like WhatsApp)
-  // This ensures messages are received even when not viewing a specific conversation
-  useRealtimeMessaging(undefined); // No conversationId means global connection
 
-  // Determine current route types
+  useRealtimeMessaging(undefined);
+
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
   const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
   const isNewChatRoute = pathname === '/(chat)/new' || pathname === '/new' || pathname?.endsWith('/new');
 
-  // Check if we're on a conversation route - check /c/:id format
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
   const isConversationRoute = conversationIdMatch &&
     !pathname.includes('/settings') &&
     !isNewChatRoute;
 
-  // Check if we're on a user route - check /u/:id format
   const userRouteMatch = pathname?.match(/\/u\/([^/]+)$/);
   const isUserRoute = userRouteMatch &&
     !pathname.includes('/settings') &&
@@ -76,7 +54,6 @@ export default function ChatLayout() {
   const targetUserId = isUserRoute && userRouteMatch ? userRouteMatch[1] : undefined;
   const targetUser = useUserById(targetUserId);
 
-  // Find active conversation for 3rd pane
   const activeConversation = useMemo(() => {
     if (isConversationRoute && conversationIdMatch) {
       return conversations.find(c => c.id === conversationIdMatch[1]);
@@ -92,10 +69,8 @@ export default function ChatLayout() {
 
   const showContactDetails = isExtraLargeScreen && (activeConversation || targetUser);
 
-  // Prepare contact details props
   const contactDetailsProps = useMemo(() => {
     if (activeConversation) {
-      const isGroup = activeConversation.type === 'group';
       const contactInfo = getContactInfo(activeConversation);
       const groupInfo = getGroupInfo(activeConversation);
 
@@ -114,7 +89,6 @@ export default function ChatLayout() {
       };
     }
 
-    // Fallback: if no conversation but we have a target user (from /u/:id)
     if (targetUser) {
       let contactName = targetUser.username || 'Unknown';
       if (targetUser.name) {
@@ -170,14 +144,11 @@ export default function ChatLayout() {
     },
   }), [theme.colors.background, theme.colors.border]);
 
-  // On large screens, show two-pane layout
   if (isLargeScreen) {
-    // Dynamically import settings only when needed to avoid circular imports
     const ChatSettings = isSettingsRoute ? require('./settings/index').default : null;
 
     return (
       <ThemedView style={styles.container}>
-        {/* Left pane - show conversations list or settings index */}
         <View style={styles.leftPane}>
           {isSettingsRoute && ChatSettings ? (
             <ChatSettings />
@@ -186,13 +157,11 @@ export default function ChatLayout() {
           )}
         </View>
 
-        {/* Right pane - show conversation detail, nested settings, new chat, or empty state */}
         <View style={[
           styles.rightPane,
           showContactDetails && styles.middlePaneWithBorder
         ]}>
           {isNestedSettingsRoute ? (
-            // Show nested settings route - use Stack with all possible nested routes
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -200,51 +169,18 @@ export default function ChatLayout() {
               }}
             >
               {/* First level nested routes */}
-              <Stack.Screen
-                name="settings/appearance"
-                options={{ title: 'Appearance' }}
-              />
-              <Stack.Screen
-                name="settings/language"
-                options={{ title: 'Language' }}
-              />
-              <Stack.Screen
-                name="settings/privacy"
-                options={{ title: 'Privacy' }}
-              />
-              <Stack.Screen
-                name="settings/profile-customization"
-                options={{ title: 'Profile Customization' }}
-              />
+              <Stack.Screen name="settings/appearance" />
+              <Stack.Screen name="settings/language" />
+              <Stack.Screen name="settings/privacy" />
+              <Stack.Screen name="settings/profile-customization" />
               {/* Second level nested routes under privacy */}
-              <Stack.Screen
-                name="settings/privacy/profile-visibility"
-                options={{ title: 'Profile Visibility' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/tags-allos"
-                options={{ title: 'Tags & allos' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/online-status"
-                options={{ title: 'Online Status' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/restricted"
-                options={{ title: 'Restricted' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/blocked"
-                options={{ title: 'Blocked' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/hidden-words"
-                options={{ title: 'Hidden Words' }}
-              />
-              <Stack.Screen
-                name="settings/privacy/hide-counts"
-                options={{ title: 'Hide Counts' }}
-              />
+              <Stack.Screen name="settings/privacy/profile-visibility" />
+              <Stack.Screen name="settings/privacy/tags-allos" />
+              <Stack.Screen name="settings/privacy/online-status" />
+              <Stack.Screen name="settings/privacy/restricted" />
+              <Stack.Screen name="settings/privacy/blocked" />
+              <Stack.Screen name="settings/privacy/hidden-words" />
+              <Stack.Screen name="settings/privacy/hide-counts" />
             </Stack>
           ) : isNewChatRoute ? (
             // Show new chat screen
@@ -273,9 +209,8 @@ export default function ChatLayout() {
               }
             })()
           ) : (
-            // Empty state when on index route
             <EmptyState
-              lottieSource={require('@/assets/lottie/welcome.json')}
+              imageSource={require('@/assets/images/welcome.png')}
               title="Select a conversation"
               subtitle="Choose a conversation from the list to start messaging"
             />
@@ -301,42 +236,15 @@ export default function ChatLayout() {
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        <Stack.Screen
-          name="index"
-          options={{ title: 'Conversations' }}
-        />
-        <Stack.Screen
-          name="new"
-          options={{ title: 'New Chat' }}
-        />
-        <Stack.Screen
-          name="c/[id]"
-          options={{ title: 'Chat' }}
-        />
-        <Stack.Screen
-          name="u/[id]"
-          options={{ title: 'Chat' }}
-        />
-        <Stack.Screen
-          name="settings/index"
-          options={{ title: 'Settings' }}
-        />
-        <Stack.Screen
-          name="settings/appearance"
-          options={{ title: 'Appearance' }}
-        />
-        <Stack.Screen
-          name="settings/language"
-          options={{ title: 'Language' }}
-        />
-        <Stack.Screen
-          name="settings/privacy"
-          options={{ title: 'Privacy' }}
-        />
-        <Stack.Screen
-          name="settings/profile-customization"
-          options={{ title: 'Profile Customization' }}
-        />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="new" />
+        <Stack.Screen name="c/[id]" />
+        <Stack.Screen name="u/[id]" />
+        <Stack.Screen name="settings/index" />
+        <Stack.Screen name="settings/appearance" />
+        <Stack.Screen name="settings/language" />
+        <Stack.Screen name="settings/privacy" />
+        <Stack.Screen name="settings/profile-customization" />
       </Stack>
     </ThemedView>
   );

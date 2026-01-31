@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image, ImageSourcePropType } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,28 +9,25 @@ export interface EmptyStateProps {
   title: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  lottieSource?: any; // Lottie animation source
-  lottieSize?: number; // Size of Lottie animation (default: 200)
+  lottieSource?: any;
+  imageSource?: ImageSourcePropType;
+  lottieSize?: number;
+  imageSize?: number;
 }
 
-/**
- * Empty state component for displaying placeholder content
- *
- * Used across the application for consistent empty states
- * Follows design system patterns
- * Now supports Lottie animations for engaging empty states
- */
 export const EmptyState: React.FC<EmptyStateProps> = ({
   title,
   subtitle,
   icon,
   lottieSource,
-  lottieSize = 200
+  imageSource,
+  lottieSize = 200,
+  imageSize = 200
 }) => {
   const theme = useTheme();
 
-  // Constrain lottieSize to 120x120 (WhatsApp/Telegram pattern)
   const minSize = Math.min(Math.max(lottieSize, 50), 120);
+  const finalImageSize = Math.min(Math.max(imageSize, 50), 200);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -63,15 +60,22 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     },
     lottieAnimation: {
       width: minSize,
-      height: minSize, // Explicitly set same height to maintain 1:1 aspect ratio
+      height: minSize,
       marginBottom: 24,
     },
-  }), [theme.colors, subtitle, minSize]);
+    image: {
+      width: finalImageSize,
+      height: finalImageSize,
+      marginBottom: 24,
+      resizeMode: 'contain',
+    },
+  }), [theme.colors, subtitle, minSize, finalImageSize]);
 
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {lottieSource && (
+        {imageSource && <Image source={imageSource} style={styles.image} />}
+        {!imageSource && lottieSource && (
           <LottieView
             source={lottieSource}
             autoPlay
@@ -80,7 +84,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             webStyle={{ width: minSize, height: minSize }}
           />
         )}
-        {!lottieSource && icon && <View style={styles.iconContainer}>{icon}</View>}
+        {!imageSource && !lottieSource && icon && <View style={styles.iconContainer}>{icon}</View>}
         <ThemedText style={styles.title}>{title}</ThemedText>
         {subtitle && <ThemedText style={styles.subtitle}>{subtitle}</ThemedText>}
       </View>

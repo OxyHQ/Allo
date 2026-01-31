@@ -6,7 +6,7 @@ import 'react-native-reanimated';
 import NetInfo from '@react-native-community/netinfo';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { useFonts } from "expo-font";
-import { Slot, usePathname } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
 
@@ -24,6 +24,7 @@ import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
+import { useOxy } from '@oxyhq/services';
 
 // Utils
 import { routeMatchers } from '@/utils/routeUtils';
@@ -53,9 +54,9 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   const theme = useTheme();
   const pathname = usePathname();
-  
-  // Determine if BottomBar should be visible
-  // Hide BottomBar on conversation routes (handled by /c/_layout.tsx)
+  const { user: currentUser } = useOxy();
+
+  const needsAuth = !currentUser;
   const isConversationRoute = routeMatchers.isConversationRoute(pathname);
   const shouldShowBottomBar = !isScreenNotMobile && !isConversationRoute;
 
@@ -87,14 +88,15 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
 
   return (
     <View style={styles.container}>
-      {/* Show SideBar only on large screens (when isScreenNotMobile is true) */}
       {isScreenNotMobile && <SideBar />}
       <View style={styles.mainContent}>
         <ThemedView style={styles.mainContentWrapper}>
-          <Slot />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(auth)" redirect={!needsAuth} />
+          </Stack>
         </ThemedView>
       </View>
-      {/* Show BottomBar only on small screens when NOT on conversation route */}
       {shouldShowBottomBar && <BottomBar />}
     </View>
   );
@@ -103,38 +105,28 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
 MainLayout.displayName = 'MainLayout';
 
 export default function RootLayout() {
-  // State
   const [appIsReady, setAppIsReady] = useState(false);
   const [splashState, setSplashState] = useState<SplashState>({
     initializationComplete: false,
     startFade: false,
   });
 
-  // Hooks
   const isScreenNotMobile = useIsScreenNotMobile();
-  // Memoized instances
   const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
 
-  // Font Loading - Optimized: Load only essential fonts to reduce initial load time
-  // Reduced from 13 fonts to 5 fonts (Inter: 4 weights, Phudu: 1 variable font)
   const [fontsLoaded, fontError] = useFonts({
-    // Inter fonts - load only commonly used weights
     'Inter-Regular': require('@/assets/fonts/inter/Inter-Regular.otf'),
     'Inter-Medium': require('@/assets/fonts/inter/Inter-Medium.otf'),
     'Inter-SemiBold': require('@/assets/fonts/inter/Inter-SemiBold.otf'),
     'Inter-Bold': require('@/assets/fonts/inter/Inter-Bold.otf'),
-    // Phudu - Variable font (handles all weights, load once)
     'Phudu': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
   });
 
-  // Callbacks
   const handleSplashFadeComplete = useCallback(() => {
     setAppIsReady(true);
   }, []);
 
   const initializeApp = useCallback(async () => {
-    // Don't block app - continue with system fonts if custom fonts not ready
-    // This prevents the 6s fontfaceobserver timeout from blocking the app
     if (fontError) {
       console.warn('Font loading failed, using system fonts:', fontError);
     } else if (!fontsLoaded) {
@@ -147,35 +139,28 @@ export default function RootLayout() {
       setSplashState((prev) => ({ ...prev, initializationComplete: true }));
     } else {
       console.error('App initialization failed:', result.error);
-      // Still mark as complete to prevent blocking the app
       setSplashState((prev) => ({ ...prev, initializationComplete: true }));
     }
   }, [fontsLoaded, fontError]);
 
 
-  // Initialize i18n once when the app mounts
   useEffect(() => {
     AppInitializer.initializeI18n().catch((error) => {
       console.error('Failed to initialize i18n:', error);
     });
   }, []);
 
-  // Load eager settings that don't block app initialization
   useEffect(() => {
     AppInitializer.loadEagerSettings();
   }, []);
 
-  // React Query managers + connection monitoring - setup once on mount
   useEffect(() => {
-    // React Query online manager using NetInfo
     const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
       onlineManager.setOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
     });
 
-    // Start global connection status monitoring (powers OfflineBanner)
     const stopMonitoring = startConnectionMonitoring();
 
-    // React Query focus manager using AppState
     const onAppStateChange = (status: AppStateStatus) => {
       focusManager.setFocused(status === 'active');
     };
@@ -186,14 +171,12 @@ export default function RootLayout() {
       stopMonitoring();
       appStateSub.remove();
     };
-  }, []); // Empty deps - setup once
+  }, []);
 
-  // Initialize app with professional font loading (WhatsApp/Telegram pattern)
   useEffect(() => {
     if (splashState.initializationComplete) return;
 
-    // Use Promise-based font loading with progressive enhancement
-    loadFontsWithFallback(fontsLoaded, fontError).then((result) => {
+    loadFontsWithFallback(fontsLoaded, fontError).then(() => {
       if (!splashState.initializationComplete) {
         initializeApp();
       }
@@ -201,13 +184,11 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError, initializeApp, splashState.initializationComplete]);
 
   useEffect(() => {
-    // Start fade when initialization complete (fonts are optional, not required)
     if (splashState.initializationComplete && !splashState.startFade) {
       setSplashState((prev) => ({ ...prev, startFade: true }));
     }
   }, [splashState.initializationComplete, splashState.startFade]);
 
-  // Run deferred initialization after the app is visible
   useEffect(() => {
     if (appIsReady) {
       AppInitializer.initializeDeferred();
@@ -216,7 +197,6 @@ export default function RootLayout() {
 
   const colorScheme = useColorScheme();
 
-  // Memoize app content to prevent unnecessary re-renders
   const appContent = useMemo(() => {
     if (!appIsReady) {
       return (
@@ -228,11 +208,7 @@ export default function RootLayout() {
     }
 
     return (
-      <AppProviders
-        colorScheme={colorScheme}
-        queryClient={queryClient}
-      >
-        {/* Shows bottom sheet permission prompt when needed (native only) */}
+      <AppProviders colorScheme={colorScheme} queryClient={queryClient}>
         {Platform.OS !== 'web' && (
           <NotificationPermissionGate
             appIsReady={appIsReady}
@@ -241,7 +217,6 @@ export default function RootLayout() {
         )}
         <MainLayout isScreenNotMobile={isScreenNotMobile} />
         <RegisterPush />
-        {/* BottomBar removed */}
       </AppProviders>
     );
   }, [
