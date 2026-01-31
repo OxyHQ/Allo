@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
 import { useUsersStore } from './usersStore';
@@ -153,7 +154,8 @@ const withArchiveFlag = (conversation: Conversation): Conversation => ({
 });
 
 export const useConversationsStore = create<ConversationsState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector(
+    immer((set, get) => ({
     // Initial state - start with empty conversations (cache loaded first, then API)
     conversations: [],
     conversationsById: {},
@@ -203,14 +205,9 @@ export const useConversationsStore = create<ConversationsState>()(
           return timeB - timeA; // Most recent first
         });
         
-        return {
-          conversations: sorted,
-          conversationsById: {
-            ...state.conversationsById,
-            [normalized.id]: normalized,
-          },
-          lastUpdated: Date.now(),
-        };
+        state.conversations = sorted;
+        state.conversationsById[normalized.id] = normalized;
+        state.lastUpdated = Date.now();
       });
     },
 
@@ -236,14 +233,9 @@ export const useConversationsStore = create<ConversationsState>()(
           return timeB - timeA; // Most recent first
         });
         
-        return {
-          conversations: sorted,
-          conversationsById: {
-            ...state.conversationsById,
-            [id]: updated,
-          },
-          lastUpdated: Date.now(),
-        };
+        state.conversations = sorted;
+        state.conversationsById[id] = updated;
+        state.lastUpdated = Date.now();
       });
     },
 
@@ -476,6 +468,6 @@ export const useConversationsStore = create<ConversationsState>()(
       const conversation = get().conversationsById[id];
       return conversation ? conversation.unreadCount > 0 : false;
     },
-  }))
+  })))
 );
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 import { api } from '@/utils/api';
 import { useDeviceKeysStore } from './deviceKeysStore';
 import {
@@ -106,7 +107,8 @@ interface MessagesState {
 }
 
 export const useMessagesStore = create<MessagesState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector(
+    immer((set, get) => ({
     // Initial state
     messagesByConversation: {},
     messageIdsByConversation: {},
@@ -118,24 +120,12 @@ export const useMessagesStore = create<MessagesState>()(
     // Actions
     setMessages: async (conversationId, messages) => {
       const idSet = new Set(messages.map(m => m.id));
-      set((state) => ({
-        messagesByConversation: {
-          ...state.messagesByConversation,
-          [conversationId]: messages,
-        },
-        messageIdsByConversation: {
-          ...state.messageIdsByConversation,
-          [conversationId]: idSet,
-        },
-        lastUpdatedByConversation: {
-          ...state.lastUpdatedByConversation,
-          [conversationId]: Date.now(),
-        },
-        errorByConversation: {
-          ...state.errorByConversation,
-          [conversationId]: null,
-        },
-      }));
+      set((state) => {
+        state.messagesByConversation[conversationId] = messages;
+        state.messageIdsByConversation[conversationId] = idSet;
+        state.lastUpdatedByConversation[conversationId] = Date.now();
+        state.errorByConversation[conversationId] = null;
+      });
       
       // Store locally (offline-first) - don't await, do in background
       storeMessagesLocally(conversationId, messages).catch(() => {});
@@ -201,24 +191,12 @@ export const useMessagesStore = create<MessagesState>()(
         }
 
         const existing = state.messagesByConversation[message.conversationId] || [];
-        const updated = [...existing, message];
+        state.messagesByConversation[message.conversationId] = [...existing, message];
+
         const newIdSet = new Set(idSet);
         newIdSet.add(message.id);
-
-        return {
-          messagesByConversation: {
-            ...state.messagesByConversation,
-            [message.conversationId]: updated,
-          },
-          messageIdsByConversation: {
-            ...state.messageIdsByConversation,
-            [message.conversationId]: newIdSet,
-          },
-          lastUpdatedByConversation: {
-            ...state.lastUpdatedByConversation,
-            [message.conversationId]: Date.now(),
-          },
-        };
+        state.messageIdsByConversation[message.conversationId] = newIdSet;
+        state.lastUpdatedByConversation[message.conversationId] = Date.now();
       });
       
       // Store locally - don't await, do in background
@@ -274,19 +252,10 @@ export const useMessagesStore = create<MessagesState>()(
     updateMessage: async (conversationId, messageId, updates) => {
       set((state) => {
         const messages = state.messagesByConversation[conversationId] || [];
-        const updated = messages.map(msg =>
+        state.messagesByConversation[conversationId] = messages.map(msg =>
           msg.id === messageId ? { ...msg, ...updates } : msg
         );
-        return {
-          messagesByConversation: {
-            ...state.messagesByConversation,
-            [conversationId]: updated,
-          },
-          lastUpdatedByConversation: {
-            ...state.lastUpdatedByConversation,
-            [conversationId]: Date.now(),
-          },
-        };
+        state.lastUpdatedByConversation[conversationId] = Date.now();
       });
       
       // Update locally
@@ -296,23 +265,12 @@ export const useMessagesStore = create<MessagesState>()(
     removeMessage: async (conversationId, messageId) => {
       set((state) => {
         const messages = state.messagesByConversation[conversationId] || [];
-        const filtered = messages.filter(msg => msg.id !== messageId);
+        state.messagesByConversation[conversationId] = messages.filter(msg => msg.id !== messageId);
+
         const newIdSet = new Set(state.messageIdsByConversation[conversationId] || []);
         newIdSet.delete(messageId);
-        return {
-          messagesByConversation: {
-            ...state.messagesByConversation,
-            [conversationId]: filtered,
-          },
-          messageIdsByConversation: {
-            ...state.messageIdsByConversation,
-            [conversationId]: newIdSet,
-          },
-          lastUpdatedByConversation: {
-            ...state.lastUpdatedByConversation,
-            [conversationId]: Date.now(),
-          },
-        };
+        state.messageIdsByConversation[conversationId] = newIdSet;
+        state.lastUpdatedByConversation[conversationId] = Date.now();
       });
       
       // Remove locally
@@ -321,17 +279,11 @@ export const useMessagesStore = create<MessagesState>()(
 
     clearMessages: (conversationId) => {
       set((state) => {
-        const { [conversationId]: removed, ...messagesByConversation } = state.messagesByConversation;
-        const { [conversationId]: removedLoading, ...loadingByConversation } = state.loadingByConversation;
-        const { [conversationId]: removedError, ...errorByConversation } = state.errorByConversation;
-        const { [conversationId]: removedUpdated, ...lastUpdatedByConversation } = state.lastUpdatedByConversation;
-        
-        return {
-          messagesByConversation,
-          loadingByConversation,
-          errorByConversation,
-          lastUpdatedByConversation,
-        };
+        delete state.messagesByConversation[conversationId];
+        delete state.messageIdsByConversation[conversationId];
+        delete state.loadingByConversation[conversationId];
+        delete state.errorByConversation[conversationId];
+        delete state.lastUpdatedByConversation[conversationId];
       });
     },
 
@@ -351,16 +303,10 @@ export const useMessagesStore = create<MessagesState>()(
       const hasCache = (currentState.messagesByConversation[conversationId]?.length || 0) > 0;
 
       if (!hasCache) {
-        set((state) => ({
-          loadingByConversation: {
-            ...state.loadingByConversation,
-            [conversationId]: true,
-          },
-          errorByConversation: {
-            ...state.errorByConversation,
-            [conversationId]: null,
-          },
-        }));
+        set((state) => {
+          state.loadingByConversation[conversationId] = true;
+          state.errorByConversation[conversationId] = null;
+        });
       }
 
       try {
@@ -529,24 +475,15 @@ export const useMessagesStore = create<MessagesState>()(
           }
         }
 
-        set((state) => ({
-          loadingByConversation: {
-            ...state.loadingByConversation,
-            [conversationId]: false,
-          },
-        }));
+        set((state) => {
+          state.loadingByConversation[conversationId] = false;
+        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch messages';
-        set((state) => ({
-          loadingByConversation: {
-            ...state.loadingByConversation,
-            [conversationId]: false,
-          },
-          errorByConversation: {
-            ...state.errorByConversation,
-            [conversationId]: errorMessage,
-          },
-        }));
+        set((state) => {
+          state.loadingByConversation[conversationId] = false;
+          state.errorByConversation[conversationId] = errorMessage;
+        });
       }
     },
 
@@ -761,5 +698,5 @@ export const useMessagesStore = create<MessagesState>()(
     getError: (conversationId) => {
       return get().errorByConversation[conversationId] || null;
     },
-  }))
+  })))
 );
