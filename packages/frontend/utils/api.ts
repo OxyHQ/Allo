@@ -35,6 +35,34 @@ authenticatedClient?.interceptors?.request?.use((config) => {
 // Opens after 5 consecutive failures, stays open for 30 seconds
 const apiCircuitBreaker = new CircuitBreaker(5, 60000, 30000);
 
+// Request deduplication cache - prevents duplicate simultaneous requests
+// WhatsApp/Telegram pattern: if same request is in flight, return same promise
+const pendingRequests = new Map<string, Promise<any>>();
+
+function createRequestKey(method: string, endpoint: string, params?: any): string {
+  return `${method}:${endpoint}:${JSON.stringify(params || {})}`;
+}
+
+async function deduplicateRequest<T>(
+  key: string,
+  requestFn: () => Promise<T>
+): Promise<T> {
+  // Check if this exact request is already in flight
+  const pending = pendingRequests.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  // Execute new request and cache the promise
+  const promise = requestFn().finally(() => {
+    // Clean up after request completes (success or error)
+    pendingRequests.delete(key);
+  });
+
+  pendingRequests.set(key, promise);
+  return promise;
+}
+
 // Public API client (no authentication required)
 const publicClient = axios.create({
   baseURL: API_CONFIG.baseURL,
@@ -44,16 +72,20 @@ const publicClient = axios.create({
   timeout: 10000, // 10 second timeout to prevent indefinite hangs
 });
 
-// API methods using authenticatedClient (with token handling and circuit breaker)
+// API methods using authenticatedClient (with token handling, circuit breaker, and deduplication)
 export const api = {
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<{ data: T }> {
-    const response = await apiCircuitBreaker.execute(() =>
-      authenticatedClient.get(endpoint, { params })
+    const key = createRequestKey('GET', endpoint, params);
+    const response = await deduplicateRequest(key, () =>
+      apiCircuitBreaker.execute(() =>
+        authenticatedClient.get(endpoint, { params })
+      )
     );
     return { data: response.data };
   },
 
   async post<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+    // Don't deduplicate POST requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
       authenticatedClient.post(endpoint, body)
     );
@@ -61,6 +93,7 @@ export const api = {
   },
 
   async put<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+    // Don't deduplicate PUT requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
       authenticatedClient.put(endpoint, body)
     );
@@ -68,6 +101,7 @@ export const api = {
   },
 
   async delete<T = any>(endpoint: string): Promise<{ data: T }> {
+    // Don't deduplicate DELETE requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
       authenticatedClient.delete(endpoint)
     );
@@ -75,6 +109,7 @@ export const api = {
   },
 
   async patch<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+    // Don't deduplicate PATCH requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
       authenticatedClient.patch(endpoint, body)
     );

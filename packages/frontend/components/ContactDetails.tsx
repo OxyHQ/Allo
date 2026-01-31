@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -18,6 +18,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useOxy } from '@oxyhq/services';
 import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useParticipantFullName } from '@/utils/conversationUtils';
+import { COLOR_THEMES } from '@/styles/colorThemes';
+import { useConversationsStore } from '@/stores';
+import { api } from '@/utils/api';
 
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
@@ -119,6 +122,7 @@ interface ContactDetailsProps {
   groupName?: string;
   groupAvatar?: string;
   currentUserId?: string;
+  conversationTheme?: string; // Current conversation theme ID
 }
 
 export function ContactDetails({
@@ -133,8 +137,10 @@ export function ContactDetails({
   groupName,
   groupAvatar,
   currentUserId,
+  conversationTheme,
 }: ContactDetailsProps) {
   const theme = useTheme();
+  const updateConversation = useConversationsStore(state => state.updateConversation);
   const isGroup = conversationType === 'group';
   const otherParticipants = isGroup && participants
     ? getOtherParticipants({ participants, type: 'group' } as any, currentUserId)
@@ -142,6 +148,22 @@ export function ContactDetails({
   const displayName = isGroup && groupName
     ? groupName
     : contactName;
+
+  // Handler to update conversation theme
+  const handleThemeChange = useCallback(async (themeId: string) => {
+    if (!conversationId) return;
+
+    try {
+      // Optimistically update the UI
+      updateConversation(conversationId, { theme: themeId });
+
+      // Call backend API to persist theme and sync with other participants
+      await api.put(`/conversations/${conversationId}`, { theme: themeId });
+    } catch (error) {
+      console.error('[ContactDetails] Error updating conversation theme:', error);
+      // Could add error handling/rollback here if needed
+    }
+  }, [conversationId, updateConversation]);
 
   // Define tabs based on conversation type
   const tabs = isGroup
@@ -448,6 +470,78 @@ export function ContactDetails({
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* Chat Theme */}
+              <View style={styles.section}>
+                <ThemedText style={styles.sectionTitle}>Chat Theme</ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingVertical: 8 }}
+                >
+                  {COLOR_THEMES.map((colorTheme) => {
+                    const isSelected = conversationTheme === colorTheme.id;
+                    const variant = theme.isDark ? colorTheme.dark : colorTheme.light;
+
+                    return (
+                      <TouchableOpacity
+                        key={colorTheme.id}
+                        onPress={() => handleThemeChange(colorTheme.id)}
+                        activeOpacity={0.8}
+                        style={{
+                          width: 80,
+                          marginRight: 12,
+                          alignItems: 'center',
+                        }}
+                      >
+                        {/* Mini preview */}
+                        <View
+                          style={{
+                            width: 80,
+                            height: 60,
+                            borderRadius: 12,
+                            padding: 8,
+                            justifyContent: 'space-between',
+                            backgroundColor: variant.chatBackground,
+                            borderWidth: isSelected ? 2.5 : 1,
+                            borderColor: isSelected ? colorTheme.primaryColor : theme.colors.border,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: '60%',
+                              height: 14,
+                              borderRadius: 7,
+                              backgroundColor: variant.bubbleReceived,
+                              alignSelf: 'flex-start',
+                            }}
+                          />
+                          <View
+                            style={{
+                              width: '50%',
+                              height: 14,
+                              borderRadius: 7,
+                              backgroundColor: variant.bubbleSent,
+                              alignSelf: 'flex-end',
+                            }}
+                          />
+                        </View>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            marginTop: 6,
+                            color: isSelected ? colorTheme.primaryColor : theme.colors.text,
+                            fontWeight: isSelected ? '600' : '400',
+                          }}
+                        >
+                          {colorTheme.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
               {/* Common Actions */}
               <View style={styles.section}>

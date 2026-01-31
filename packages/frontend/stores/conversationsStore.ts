@@ -415,6 +415,7 @@ export const useConversationsStore = create<ConversationsState>()(
             timestamp: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : new Date().toISOString(),
             unreadCount: conv.unreadCounts ? Object.values(conv.unreadCounts).reduce((sum: number, count: any) => sum + (count || 0), 0) : 0,
             avatar: conv.avatar,
+            theme: conv.theme, // Color theme ID
             participants,
             groupName: conv.name,
             groupAvatar: conv.avatar,

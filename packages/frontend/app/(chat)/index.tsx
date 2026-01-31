@@ -84,6 +84,7 @@ export interface Conversation {
     unreadCount: number;
     avatar?: string; // For direct: contact avatar, for group: group avatar or first participant avatar
     isArchived?: boolean;
+    theme?: string; // Color theme ID (shared with all participants)
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
     groupName?: string; // Custom group name (optional)

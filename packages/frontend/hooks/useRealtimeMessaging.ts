@@ -47,6 +47,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     messagingSocket.off('messageDeleted');
     messagingSocket.off('typing');
     messagingSocket.off('messageRead');
+    messagingSocket.off('conversationThemeUpdated');
     messagingSocket.off('disconnect');
     messagingSocket.off('connect_error');
 
@@ -282,13 +283,23 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         // Update message status to 'read' if this is our message
         const existingMessages = useMessagesStore.getState().messagesByConversation[data.conversationId] || [];
         const message = existingMessages.find(msg => msg.id === data.messageId);
-        
+
         if (message && message.senderId === currentUserId && message.isSent) {
           // This is our message that was read by the recipient
           updateMessage(data.conversationId, data.messageId, { readStatus: 'read' });
         }
       } catch (error) {
         console.error('[RealtimeMessaging] Error handling message read:', error);
+      }
+    });
+
+    // Handle conversation theme updates
+    messagingSocket.on('conversationThemeUpdated', (data: { conversationId: string; theme: string }) => {
+      try {
+        // Update conversation theme in store
+        updateConversation(data.conversationId, { theme: data.theme });
+      } catch (error) {
+        console.error('[RealtimeMessaging] Error handling conversation theme update:', error);
       }
     });
 

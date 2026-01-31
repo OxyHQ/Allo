@@ -114,22 +114,16 @@ export default function RootLayout() {
   // Memoized instances
   const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
 
-  // Font Loading
-  const [fontsLoaded] = useFonts({
-    'Inter-Black': require('@/assets/fonts/inter/Inter-Black.otf'),
-    'Inter-Bold': require('@/assets/fonts/inter/Inter-Bold.otf'),
-    'Inter-ExtraBold': require('@/assets/fonts/inter/Inter-ExtraBold.otf'),
-    'Inter-ExtraLight': require('@/assets/fonts/inter/Inter-ExtraLight.otf'),
-    'Inter-Light': require('@/assets/fonts/inter/Inter-Light.otf'),
-    'Inter-Medium': require('@/assets/fonts/inter/Inter-Medium.otf'),
+  // Font Loading - Optimized: Load only essential fonts to reduce initial load time
+  // Reduced from 13 fonts to 5 fonts (Inter: 4 weights, Phudu: 1 variable font)
+  const [fontsLoaded, fontError] = useFonts({
+    // Inter fonts - load only commonly used weights
     'Inter-Regular': require('@/assets/fonts/inter/Inter-Regular.otf'),
+    'Inter-Medium': require('@/assets/fonts/inter/Inter-Medium.otf'),
     'Inter-SemiBold': require('@/assets/fonts/inter/Inter-SemiBold.otf'),
-    'Inter-Thin': require('@/assets/fonts/inter/Inter-Thin.otf'),
-    'Phudu-Thin': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
-    'Phudu-Regular': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
-    'Phudu-Medium': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
-    'Phudu-SemiBold': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
-    'Phudu-Bold': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
+    'Inter-Bold': require('@/assets/fonts/inter/Inter-Bold.otf'),
+    // Phudu - Variable font (handles all weights, load once)
+    'Phudu': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
   });
 
   // Callbacks
@@ -138,9 +132,15 @@ export default function RootLayout() {
   }, []);
 
   const initializeApp = useCallback(async () => {
-    if (!fontsLoaded) return;
+    // Don't block app if fonts are still loading (unless there's an error)
+    if (!fontsLoaded && !fontError) return;
 
-    const result = await AppInitializer.initializeApp(fontsLoaded);
+    // Continue with system fonts if custom fonts fail to load
+    if (fontError) {
+      console.warn('Font loading failed, using system fonts:', fontError);
+    }
+
+    const result = await AppInitializer.initializeApp(fontsLoaded || false);
 
     if (result.success) {
       setSplashState((prev) => ({ ...prev, initializationComplete: true }));
@@ -149,7 +149,7 @@ export default function RootLayout() {
       // Still mark as complete to prevent blocking the app
       setSplashState((prev) => ({ ...prev, initializationComplete: true }));
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
 
   // Initialize i18n once when the app mounts
@@ -192,10 +192,11 @@ export default function RootLayout() {
   }, [initializeApp]);
 
   useEffect(() => {
-    if (fontsLoaded && splashState.initializationComplete && !splashState.startFade) {
+    // Start fade when fonts loaded (or failed) AND initialization complete
+    if ((fontsLoaded || fontError) && splashState.initializationComplete && !splashState.startFade) {
       setSplashState((prev) => ({ ...prev, startFade: true }));
     }
-  }, [fontsLoaded, splashState.initializationComplete, splashState.startFade]);
+  }, [fontsLoaded, fontError, splashState.initializationComplete, splashState.startFade]);
 
   // Run deferred initialization after the app is visible
   useEffect(() => {

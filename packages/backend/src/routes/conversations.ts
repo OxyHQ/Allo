@@ -5,6 +5,7 @@ import { AuthRequest } from "../middleware/auth";
 import { getAuthenticatedUserId } from "../utils/auth";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { oxy } from "../../server";
+import { getIO } from "../utils/socket";
 
 const router = Router();
 
@@ -218,13 +219,13 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
 /**
  * PUT /api/conversations/:id
- * Update a conversation (name, description, avatar for groups)
+ * Update a conversation (name, description, avatar for groups, theme for all)
  */
 router.put("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
-    const { name, description, avatar } = req.body;
+    const { name, description, avatar, theme } = req.body;
 
     const conversation = await Conversation.findOne({
       _id: id,
@@ -235,6 +236,15 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 404, "Not Found", "Conversation not found");
     }
 
+    // Track if theme was changed for socket emission
+    const themeChanged = theme !== undefined && conversation.theme !== theme;
+
+    // Theme can be updated for both group and direct conversations
+    if (theme !== undefined) {
+      conversation.theme = theme;
+    }
+
+    // Name, description, and avatar are group-only
     if (conversation.type === "group") {
       if (name !== undefined) conversation.name = name;
       if (description !== undefined) conversation.description = description;
@@ -242,6 +252,23 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     }
 
     await conversation.save();
+
+    // Emit socket event to all conversation participants when theme changes
+    if (themeChanged) {
+      const io = getIO();
+      if (io) {
+        // Emit to all participants except the user who made the change
+        conversation.participants.forEach((participant) => {
+          if (participant.userId !== userId) {
+            io.to(`user:${participant.userId}`).emit('conversationThemeUpdated', {
+              conversationId: conversation._id,
+              theme: conversation.theme,
+            });
+          }
+        });
+      }
+    }
+
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
     console.error("[Conversations] Error updating conversation:", err);

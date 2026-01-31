@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
 
 /**
  * Chat UI Store
@@ -52,74 +53,51 @@ interface ChatUIState {
 }
 
 export const useChatUIStore = create<ChatUIState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector(
+    immer((set, get) => ({
     // Initial state
     visibleTimestampByConversation: {},
     inputTextByConversation: {},
     isAttachmentMenuOpenByConversation: {},
     replyToByConversation: {},
 
-    // Actions
+    // Actions - Optimized with immer for O(1) updates (critical for typing performance)
     setVisibleTimestamp: (conversationId, messageId) => {
-      set((state) => ({
-        visibleTimestampByConversation: {
-          ...state.visibleTimestampByConversation,
-          [conversationId]: messageId,
-        },
-      }));
+      set((state) => {
+        state.visibleTimestampByConversation[conversationId] = messageId;
+      });
     },
 
     setInputText: (conversationId, text) => {
-      set((state) => ({
-        inputTextByConversation: {
-          ...state.inputTextByConversation,
-          [conversationId]: text,
-        },
-      }));
+      set((state) => {
+        state.inputTextByConversation[conversationId] = text;
+      });
     },
 
     clearInputText: (conversationId) => {
       set((state) => {
-        const { [conversationId]: removed, ...inputTextByConversation } = state.inputTextByConversation;
-        return { inputTextByConversation };
+        delete state.inputTextByConversation[conversationId];
       });
     },
 
     setAttachmentMenuOpen: (conversationId, isOpen) => {
-      set((state) => ({
-        isAttachmentMenuOpenByConversation: {
-          ...state.isAttachmentMenuOpenByConversation,
-          [conversationId]: isOpen,
-        },
-      }));
+      set((state) => {
+        state.isAttachmentMenuOpenByConversation[conversationId] = isOpen;
+      });
     },
 
     setReplyTo: (conversationId, messageId) => {
-      set((state) => ({
-        replyToByConversation: {
-          ...state.replyToByConversation,
-          [conversationId]: messageId,
-        },
-      }));
+      set((state) => {
+        state.replyToByConversation[conversationId] = messageId;
+      });
     },
 
     clearConversationUI: (conversationId) => {
       set((state) => {
-        const { [conversationId]: removedTimestamp, ...visibleTimestampByConversation } = 
-          state.visibleTimestampByConversation;
-        const { [conversationId]: removedInput, ...inputTextByConversation } = 
-          state.inputTextByConversation;
-        const { [conversationId]: removedMenu, ...isAttachmentMenuOpenByConversation } = 
-          state.isAttachmentMenuOpenByConversation;
-        const { [conversationId]: removedReplyTo, ...replyToByConversation } = 
-          state.replyToByConversation;
-        
-        return {
-          visibleTimestampByConversation,
-          inputTextByConversation,
-          isAttachmentMenuOpenByConversation,
-          replyToByConversation,
-        };
+        delete state.visibleTimestampByConversation[conversationId];
+        delete state.inputTextByConversation[conversationId];
+        delete state.isAttachmentMenuOpenByConversation[conversationId];
+        delete state.replyToByConversation[conversationId];
       });
     },
 
@@ -135,7 +113,7 @@ export const useChatUIStore = create<ChatUIState>()(
     isAttachmentMenuOpen: (conversationId) => {
       return get().isAttachmentMenuOpenByConversation[conversationId] || false;
     },
-  }))
+  })))
 );
 
 

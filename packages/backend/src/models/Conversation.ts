@@ -15,6 +15,7 @@ export interface IConversation extends Document {
   name?: string; // For group conversations
   description?: string; // For group conversations
   avatar?: string; // For group conversations
+  theme?: string; // Color theme ID (shared with all participants)
   createdBy: string; // Oxy user ID
   lastMessageAt?: Date;
   lastMessage?: {
@@ -59,6 +60,7 @@ const ConversationSchema = new Schema<IConversation>(
     name: { type: String },
     description: { type: String },
     avatar: { type: String },
+    theme: { type: String }, // Color theme ID (classic, day, purple, teal, etc.)
     createdBy: { type: String, required: true, index: true },
     lastMessageAt: { type: Date, index: true },
     lastMessage: {

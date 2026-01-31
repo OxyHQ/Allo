@@ -47,6 +47,7 @@ import ChatBackgroundImage from '@/assets/images/background.png';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
+import { useConversationTheme } from '@/hooks/useConversationTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
@@ -118,7 +119,6 @@ const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 8 };
  * ```
  */
 export default function ConversationView({ conversationId: propConversationId }: ConversationViewProps = {}) {
-  const theme = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const segments = useSegments();
@@ -155,6 +155,12 @@ export default function ConversationView({ conversationId: propConversationId }:
   // For username routes, we'll resolve to conversation ID in useEffect
   // For now, use the ID directly if it's not a username
   const conversationId = isUsernameRoute ? undefined : conversationIdOrUsername;
+
+  // Get conversation data early so we can use its theme
+  const conversation = useConversation(conversationId);
+
+  // Use conversation-specific theme (falls back to global theme if no conversation theme set)
+  const theme = useConversationTheme(conversation?.theme);
 
   // Initialize realtime messaging and typing indicator hooks
   const { sendTypingIndicator } = useRealtimeMessaging(conversationId);
@@ -247,9 +253,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     };
   }, [conversationId]);
 
-  // Get conversation data
-  const conversation = useConversation(conversationId);
-
   // Use custom hook for conversation metadata
   const conversationMetadata = useConversationMetadata(conversation, currentUserId);
   const { isGroup } = conversationMetadata;
@@ -276,11 +279,12 @@ export default function ConversationView({ conversationId: propConversationId }:
           groupName={conversationMetadata.groupInfo?.name}
           groupAvatar={conversationMetadata.groupInfo?.avatar}
           currentUserId={currentUserId}
+          conversationTheme={conversation?.theme}
         />
       );
       bottomSheet.openBottomSheet(true);
     }
-  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata]);
+  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata, currentUserId]);
 
   // Styles memoized for performance
   const styles = useMemo(() => StyleSheet.create({
