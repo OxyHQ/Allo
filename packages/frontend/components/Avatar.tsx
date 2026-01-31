@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   View,
-  Image,
   Animated,
   StyleSheet,
   ImageSourcePropType,
@@ -11,6 +10,7 @@ import {
   ImageStyle,
   TouchableOpacity,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { VerifiedIcon } from '@/assets/icons/verified-icon';
 import { colors } from '../styles/colors';
 import DefaultAvatar from '@/assets/images/default-avatar.jpg';
@@ -57,17 +57,23 @@ const Avatar: React.FC<AvatarProps> = ({
       <AnimatedImage
         source={imageSource}
         onError={() => setErrored(true)}
-        resizeMode="cover"
+        contentFit="cover"
         style={[StyleSheet.absoluteFillObject, imageStyle]}
-        defaultSource={DefaultAvatar}
+        placeholder={DefaultAvatar}
+        transition={200}
+        cachePolicy="memory-disk"
+        priority="normal"
       />
     ) : (
       <Image
         source={imageSource}
         onError={() => setErrored(true)}
-        resizeMode="cover"
+        contentFit="cover"
         style={[StyleSheet.absoluteFillObject, imageStyle]}
-        defaultSource={DefaultAvatar}
+        placeholder={DefaultAvatar}
+        transition={200}
+        cachePolicy="memory-disk"
+        priority="normal"
       />
     )
   ) : (

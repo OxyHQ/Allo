@@ -56,6 +56,9 @@ export interface ThemeColors {
   messageBubbleReceived: string;
   messageTextSent: string;
   messageTextReceived: string;
+
+  // Chat background
+  chatBackground: string;
 }
 
 export interface Theme {
@@ -130,6 +133,9 @@ export function useTheme(): Theme {
         messageBubbleReceived: themeVariant.bubbleReceived,
         messageTextSent: themeVariant.textSent,
         messageTextReceived: themeVariant.textReceived,
+
+        // Chat background from selected theme
+        chatBackground: themeVariant.chatBackground,
       };
     } else {
       return {
@@ -169,6 +175,9 @@ export function useTheme(): Theme {
         messageBubbleReceived: themeVariant.bubbleReceived,
         messageTextSent: themeVariant.textSent,
         messageTextReceived: themeVariant.textReceived,
+
+        // Chat background from selected theme
+        chatBackground: themeVariant.chatBackground,
       };
     }
   }, [isDark, customPrimaryColor, themeVariant]);

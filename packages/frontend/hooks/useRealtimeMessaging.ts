@@ -339,9 +339,9 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         },
         transports: ['websocket'], // Only WebSocket, no polling fallback
         path: '/socket.io',
-        reconnectionAttempts: 5, // Limit to 5 reconnection attempts
-        reconnectionDelay: 1000, // Start with 1 second delay
-        reconnectionDelayMax: 5000, // Max 5 seconds between attempts
+        reconnectionAttempts: 15, // 15 attempts over ~2 minutes before giving up
+        reconnectionDelay: 2000, // Start with 2 second delay (less spammy)
+        reconnectionDelayMax: 10000, // Max 10 seconds between attempts
         timeout: 10000, // 10 second connection timeout
       });
 

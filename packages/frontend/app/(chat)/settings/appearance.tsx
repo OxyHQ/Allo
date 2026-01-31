@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  Switch,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAppearanceStore } from '@/store/appearanceStore';
@@ -47,6 +48,7 @@ export default function AppearanceSettingsScreen() {
   const [selectedColorThemeId, setSelectedColorThemeId] = useState('classic');
   const [selectedThemeMode, setSelectedThemeMode] = useState<'light' | 'dark' | 'system'>('system');
   const [selectedIconId, setSelectedIconId] = useState('default');
+  const [autoNightMode, setAutoNightMode] = useState(false);
 
   useEffect(() => {
     loadMySettings();
@@ -171,7 +173,7 @@ export default function AppearanceSettingsScreen() {
         {/* Live chat preview using real MessageBubble components */}
         <View
           className="rounded-[14px] border p-3 mb-4"
-          style={{ backgroundColor: selectedVariant.background, borderColor: theme.colors.border }}
+          style={{ backgroundColor: selectedVariant.chatBackground, borderColor: theme.colors.border }}
         >
           <MessageBubble
             key={`preview-received-${selectedColorThemeId}-${effectiveMode}`}
@@ -222,7 +224,7 @@ export default function AppearanceSettingsScreen() {
                 activeOpacity={0.8}
               >
                 {/* Mini preview */}
-                <View className="w-full h-[60px] p-2.5 justify-between" style={{ backgroundColor: variant.background }}>
+                <View className="w-full h-[60px] p-2.5 justify-between" style={{ backgroundColor: variant.chatBackground }}>
                   <View
                     className="w-[60%] h-3.5 rounded-[7px] self-start"
                     style={{ backgroundColor: variant.bubbleReceived }}
@@ -261,20 +263,18 @@ export default function AppearanceSettingsScreen() {
             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
           </TouchableOpacity>
           <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-          <TouchableOpacity
-            className="flex-row items-center justify-between px-4 py-3.5 pb-4"
-            onPress={() => router.push('/settings/auto-night-mode' as any)}
-          >
+          <View className="flex-row items-center justify-between px-4 py-3.5 pb-4">
             <Text className="text-base" style={{ color: theme.colors.text }}>
               Auto-Night Mode
             </Text>
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-base" style={{ color: theme.colors.textTertiary }}>
-                Disabled
-              </Text>
-              <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-            </View>
-          </TouchableOpacity>
+            <Switch
+              value={autoNightMode}
+              onValueChange={setAutoNightMode}
+              trackColor={{ false: theme.colors.border, true: selectedColorTheme.primaryColor }}
+              thumbColor="#FFFFFF"
+              ios_backgroundColor={theme.colors.border}
+            />
+          </View>
         </View>
 
         {/* TEXT SIZE */}

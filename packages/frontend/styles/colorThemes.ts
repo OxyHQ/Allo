@@ -1,9 +1,20 @@
 export interface ColorThemeVariant {
+  // Message bubble colors
   bubbleSent: string;
   bubbleReceived: string;
   textSent: string;
   textReceived: string;
-  background: string;
+
+  // Chat background (solid color fallback)
+  chatBackground: string;
+
+  // Optional background image (can be local require() or URI)
+  chatBackgroundImage?: any;
+  chatBackgroundImageOpacity?: number; // 0-1, defaults to 1
+
+  // App backgrounds (optional overrides)
+  appBackground?: string;
+  cardBackground?: string;
 }
 
 export interface ColorTheme {
@@ -25,14 +36,14 @@ export const COLOR_THEMES: ColorTheme[] = [
       bubbleReceived: '#FFFFFF',
       textSent: '#FFFFFF',
       textReceived: '#000000',
-      background: '#E5DDD5',
+      chatBackground: '#E5DDD5',
     },
     dark: {
       bubbleSent: '#21C063',
       bubbleReceived: '#1E1E2E',
       textSent: '#FFFFFF',
       textReceived: '#E0E0E0',
-      background: '#0D0D1A',
+      chatBackground: '#0D0D1A',
     },
   },
   {
@@ -44,14 +55,14 @@ export const COLOR_THEMES: ColorTheme[] = [
       bubbleReceived: '#FFFFFF',
       textSent: '#FFFFFF',
       textReceived: '#000000',
-      background: '#C8DCF0',
+      chatBackground: '#C8DCF0',
     },
     dark: {
       bubbleSent: '#1D9BF0',
       bubbleReceived: '#1E1E2E',
       textSent: '#FFFFFF',
       textReceived: '#E0E0E0',
-      background: '#0D1A24',
+      chatBackground: '#0D1A24',
     },
   },
   {
@@ -63,14 +74,14 @@ export const COLOR_THEMES: ColorTheme[] = [
       bubbleReceived: '#FFFFFF',
       textSent: '#FFFFFF',
       textReceived: '#000000',
-      background: '#E9D5FF',
+      chatBackground: '#E9D5FF',
     },
     dark: {
       bubbleSent: '#8B5CF6',
       bubbleReceived: '#1E1E2E',
       textSent: '#FFFFFF',
       textReceived: '#E0E0E0',
-      background: '#0D0D1A',
+      chatBackground: '#0D0D1A',
     },
   },
   {
@@ -82,14 +93,14 @@ export const COLOR_THEMES: ColorTheme[] = [
       bubbleReceived: '#FFFFFF',
       textSent: '#FFFFFF',
       textReceived: '#000000',
-      background: '#B2D8D8',
+      chatBackground: '#B2D8D8',
     },
     dark: {
       bubbleSent: '#005c67',
       bubbleReceived: '#1E1E2E',
       textSent: '#FFFFFF',
       textReceived: '#E0E0E0',
-      background: '#0A1414',
+      chatBackground: '#0A1414',
     },
   },
 ];

@@ -10,18 +10,43 @@ export const queryClient = new QueryClient({
     queries: {
       // Data considered fresh for 5 minutes
       staleTime: 1000 * 60 * 5,
-      
+
       // Keep unused data in cache for 10 minutes before garbage collection
       gcTime: 1000 * 60 * 10,
-      
-      // Only retry failed requests once
-      retry: 1,
-      
+
+      // Smart retry: retry network errors, don't retry 4xx client errors
+      retry: (failureCount, error: any) => {
+        // Don't retry on 4xx errors (client errors like 404, 401)
+        if (error?.response?.status && error.response.status >= 400 && error.response.status < 500) {
+          return false;
+        }
+        // Retry up to 2 times for network errors and 5xx errors
+        return failureCount < 2;
+      },
+
+      // Exponential backoff for retries
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+
       // Disable automatic refetching when window gets focus (better for mobile apps)
       refetchOnWindowFocus: false,
-      
-      // Disable refetching on reconnect (handled by socket connections when needed)
-      refetchOnReconnect: false
+
+      // Enable refetching on reconnect (good for recovering from network issues)
+      refetchOnReconnect: true,
+
+      // Network mode: online-first, but allow cache when offline
+      networkMode: 'online',
+    },
+    mutations: {
+      // Retry mutations once for network errors
+      retry: (failureCount, error: any) => {
+        if (error?.response?.status && error.response.status >= 400 && error.response.status < 500) {
+          return false;
+        }
+        return failureCount < 1;
+      },
+
+      // Network mode for mutations
+      networkMode: 'online',
     },
   },
 });

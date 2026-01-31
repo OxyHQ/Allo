@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOxy } from '@oxyhq/services';
 import { io, Socket } from 'socket.io-client';
@@ -6,6 +6,19 @@ import { API_URL_SOCKET } from '../config';
 import { ZRawNotification } from '../types/validation';
 
 let socket: Socket | null = null;
+let invalidationTimer: NodeJS.Timeout | null = null;
+
+// Batch invalidations to prevent 4x queries on rapid socket events
+const batchedInvalidateNotifications = (queryClient: any) => {
+  if (invalidationTimer) {
+    clearTimeout(invalidationTimer);
+  }
+
+  invalidationTimer = setTimeout(() => {
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    invalidationTimer = null;
+  }, 100); // 100ms debounce - batches multiple events into single refetch
+};
 
 /**
  * Hook for real-time notification updates via WebSocket
@@ -25,9 +38,9 @@ export const useRealtimeNotifications = () => {
         },
         transports: ['websocket'], // Only WebSocket, no polling fallback
         path: '/socket.io',
-        reconnectionAttempts: 5, // Limit to 5 reconnection attempts
-        reconnectionDelay: 1000, // Start with 1 second delay
-        reconnectionDelayMax: 5000, // Max 5 seconds between attempts
+        reconnectionAttempts: 15, // 15 attempts over ~2 minutes before giving up
+        reconnectionDelay: 2000, // Start with 2 second delay (less spammy)
+        reconnectionDelayMax: 10000, // Max 10 seconds between attempts
         timeout: 10000, // 10 second connection timeout
       });
 
@@ -44,8 +57,8 @@ export const useRealtimeNotifications = () => {
         }
         console.log('New notification received:', parsed.data);
 
-        // Invalidate notifications query to refetch
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        // Batch invalidations to prevent 4x queries
+        batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('notificationUpdated', (notification: any) => {
@@ -55,17 +68,17 @@ export const useRealtimeNotifications = () => {
           return;
         }
         console.log('Notification updated:', parsed.data);
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('notificationDeleted', (notificationId: string) => {
         console.log('Notification deleted:', notificationId);
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('allNotificationsRead', () => {
         console.log('All notifications marked as read');
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('disconnect', () => {

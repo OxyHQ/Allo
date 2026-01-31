@@ -291,9 +291,10 @@ export default function ConversationView({ conversationId: propConversationId }:
     background: {
       flex: 1,
       width: '100%',
+      backgroundColor: theme.colors.chatBackground,
     },
     backgroundImage: {
-      opacity: 0.18,
+      opacity: 0.08, // Reduced opacity to let theme color show through
     },
     container: {
       flex: 1,
