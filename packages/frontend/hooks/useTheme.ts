@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useAppearanceStore } from "@/store/appearanceStore";
 import { colors as baseColors } from "@/styles/colors";
+import { getColorTheme } from "@/styles/colorThemes";
 
 /**
  * Centralized theme system that provides consistent theming across the app
@@ -49,6 +50,12 @@ export interface ThemeColors {
   card: string;
   shadow: string;
   overlay: string;
+
+  // Message bubble colors
+  messageBubbleSent: string;
+  messageBubbleReceived: string;
+  messageTextSent: string;
+  messageTextReceived: string;
 }
 
 export interface Theme {
@@ -69,13 +76,20 @@ export function useTheme(): Theme {
   const colorScheme = useColorScheme();
   // Use selector to only subscribe to mySettings.appearance, not the entire store
   const mySettings = useAppearanceStore((state) => state.mySettings);
-  
+
+  // Get user's selected color theme (if set) or use default
+  const selectedColorThemeId = mySettings?.appearance?.colorTheme || 'classic';
+  const selectedColorTheme = getColorTheme(selectedColorThemeId);
+
   // Get user's custom primary color (if set) or use default
   // This comes from Oxy user settings via the appearance store
-  const customPrimaryColor = mySettings?.appearance?.primaryColor || baseColors.primaryColor;
-  
+  const customPrimaryColor = mySettings?.appearance?.primaryColor || selectedColorTheme.primaryColor;
+
   const isDark = colorScheme === "dark";
   const isLight = colorScheme === "light";
+
+  // Get the appropriate theme variant (light or dark)
+  const themeVariant = isDark ? selectedColorTheme.dark : selectedColorTheme.light;
   
   const colors = useMemo<ThemeColors>(() => {
     if (isDark) {
@@ -110,6 +124,12 @@ export function useTheme(): Theme {
         card: baseColors.primaryDark_1,
         shadow: "rgba(0, 0, 0, 0.3)",
         overlay: "rgba(0, 0, 0, 0.5)",
+
+        // Message bubble colors from selected theme
+        messageBubbleSent: themeVariant.bubbleSent,
+        messageBubbleReceived: themeVariant.bubbleReceived,
+        messageTextSent: themeVariant.textSent,
+        messageTextReceived: themeVariant.textReceived,
       };
     } else {
       return {
@@ -143,9 +163,15 @@ export function useTheme(): Theme {
         card: baseColors.primaryLight,
         shadow: "rgba(0, 0, 0, 0.1)",
         overlay: "rgba(0, 0, 0, 0.5)",
+
+        // Message bubble colors from selected theme
+        messageBubbleSent: themeVariant.bubbleSent,
+        messageBubbleReceived: themeVariant.bubbleReceived,
+        messageTextSent: themeVariant.textSent,
+        messageTextReceived: themeVariant.textReceived,
       };
     }
-  }, [isDark, customPrimaryColor]);
+  }, [isDark, customPrimaryColor, themeVariant]);
   
   return {
     mode: colorScheme,

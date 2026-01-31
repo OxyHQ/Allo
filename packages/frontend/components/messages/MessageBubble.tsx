@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
@@ -43,6 +43,10 @@ export interface MessageBubbleProps {
   isEdited?: boolean;
   /** Custom font size for this message (if adjusted via send button) */
   fontSize?: number;
+  /** Optional override for bubble background color (for previews) */
+  bubbleColor?: string;
+  /** Optional override for text color (for previews) */
+  textColor?: string;
 }
 
 /**
@@ -81,6 +85,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   readStatus,
   isEdited = false,
   fontSize,
+  bubbleColor,
+  textColor,
 }) => {
   const theme = useTheme();
   const defaultMessageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
@@ -102,96 +108,28 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     return 0; // No margin when in a block - spacing handled at block level
   }, [showSenderName, isCloseToPrevious]);
   
-  // Memoize styles to prevent recalculation on every render
-  const styles = useMemo(() => {
-    // Use tighter line height for more compact bubbles (WhatsApp-style)
+  // Memoize dynamic text styles
+  const textStyles = useMemo(() => {
     const lineHeight = messageTextSize * 1.25;
-    
-    return StyleSheet.create({
-      container: {
-        flexDirection: 'column',
-        marginTop,
-        maxWidth: isAiMessage ? '100%' : MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
-        alignSelf: 'flex-start',
-      },
-      containerSent: {
-        alignSelf: 'flex-end',
-        alignItems: 'flex-end',
-      },
-      senderName: {
-        fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
-        fontWeight: '600',
-        color: theme.colors.textSecondary,
-        marginBottom: 1,
-        marginLeft: 10,
-      },
-      bubble: {
-        paddingHorizontal: MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL,
-        paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
-        borderRadius: MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
-        backgroundColor: colors.messageBubbleReceived,
-      },
-      bubbleSent: {
-        backgroundColor: colors.messageBubbleSent,
-      },
-      bubbleAi: {
-        paddingHorizontal: 0,
-        paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
-        borderRadius: 0,
-        backgroundColor: 'transparent',
-      },
-      textContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-      },
-      textWrapper: {
-        flex: 1,
-        flexShrink: 1,
-      },
-      text: {
-        fontSize: messageTextSize,
-        lineHeight,
-        color: colors.messageTextReceived,
-      },
-      textSent: {
-        color: colors.messageTextSent,
-      },
-      textAi: {
-        fontSize: messageTextSize,
-        lineHeight,
-        color: theme.colors.text || colors.messageTextReceived,
-      },
-      metadataContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 4,
-        paddingBottom: 0,
-        flexShrink: 0,
-      },
-    });
-  }, [marginTop, theme.colors.textSecondary, theme.colors.text, isAiMessage, messageTextSize]);
+    return {
+      fontSize: messageTextSize,
+      lineHeight,
+    };
+  }, [messageTextSize]);
+
+  // Memoize bubble background color
+  const bubbleBackgroundColor = useMemo(() =>
+    bubbleColor || (isSent ? theme.colors.messageBubbleSent : theme.colors.messageBubbleReceived),
+    [bubbleColor, isSent, theme.colors.messageBubbleSent, theme.colors.messageBubbleReceived]
+  );
+
+  // Memoize text color
+  const messageTextColor = useMemo(() => {
+    if (isAiMessage) return theme.colors.text;
+    return textColor || (isSent ? theme.colors.messageTextSent : theme.colors.messageTextReceived);
+  }, [textColor, isSent, isAiMessage, theme.colors.text, theme.colors.messageTextSent, theme.colors.messageTextReceived]);
   
   const shouldShowMetadata = !isAiMessage && showTimestamp;
-  
-  // Memoize container style array
-  const containerStyle = useMemo<StyleProp<ViewStyle>>(() => [
-    styles.container,
-    !isAiMessage && isSent && styles.containerSent,
-  ], [styles, isAiMessage, isSent]);
-  
-  // Memoize bubble style array
-  const bubbleStyle = useMemo<StyleProp<ViewStyle>>(() => [
-    !isAiMessage && styles.bubble,
-    !isAiMessage && isSent && styles.bubbleSent,
-    isAiMessage && styles.bubbleAi,
-  ], [styles, isAiMessage, isSent]);
-  
-  // Memoize text style array
-  const textStyle = useMemo<StyleProp<TextStyle>>(() => [
-    !isAiMessage && styles.text,
-    !isAiMessage && isSent && styles.textSent,
-    isAiMessage && styles.textAi,
-  ], [styles, isAiMessage, isSent]);
   
   if (!hasText) {
     return null;
@@ -199,26 +137,44 @@ export const MessageBubble = memo<MessageBubbleProps>(({
 
   return (
     <View
-      style={containerStyle}
+      className="flex-col self-start"
+      style={{
+        marginTop,
+        maxWidth: isAiMessage ? '100%' : MESSAGING_CONSTANTS.MAX_MESSAGE_WIDTH,
+        ...((!isAiMessage && isSent) && { alignSelf: 'flex-end', alignItems: 'flex-end' }),
+      }}
       testID={`message-${id}`}
       accessibilityRole="text"
       accessibilityLabel={`Message from ${senderName || (isSent ? 'you' : 'sender')}`}
     >
       {showSenderName && senderName && (
-        <ThemedText style={styles.senderName}>
+        <ThemedText
+          className="font-semibold mb-[1px] ml-2.5"
+          style={{
+            fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
+            color: theme.colors.textSecondary,
+          }}
+        >
           {senderName}
         </ThemedText>
       )}
-      
-      <View style={bubbleStyle}>
-        <View style={styles.textContainer}>
-          <View style={styles.textWrapper}>
-            <Text style={textStyle}>
+
+      <View
+        style={{
+          paddingHorizontal: isAiMessage ? 0 : MESSAGING_CONSTANTS.MESSAGE_PADDING_HORIZONTAL,
+          paddingVertical: MESSAGING_CONSTANTS.MESSAGE_PADDING_VERTICAL,
+          borderRadius: isAiMessage ? 0 : MESSAGING_CONSTANTS.MESSAGE_BUBBLE_BORDER_RADIUS,
+          backgroundColor: isAiMessage ? 'transparent' : bubbleBackgroundColor,
+        }}
+      >
+        <View className="flex-row items-end">
+          <View className="flex-1 shrink">
+            <Text style={{ ...textStyles, color: messageTextColor }}>
               {text}
             </Text>
           </View>
           {shouldShowMetadata && (
-            <View style={styles.metadataContainer}>
+            <View className="flex-row items-center ml-1 pb-0 shrink-0">
               <MessageMetadata
                 timestamp={timestamp}
                 isSent={isSent}
@@ -236,7 +192,7 @@ export const MessageBubble = memo<MessageBubbleProps>(({
 }, (prevProps, nextProps) => {
   // Custom comparison function for better memoization
   // Returns true if props are equal (component should NOT re-render)
-  
+
   if (
     prevProps.id !== nextProps.id ||
     prevProps.text !== nextProps.text ||
@@ -245,16 +201,19 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     prevProps.showSenderName !== nextProps.showSenderName ||
     prevProps.showTimestamp !== nextProps.showTimestamp ||
     prevProps.isCloseToPrevious !== nextProps.isCloseToPrevious ||
-    prevProps.messageType !== nextProps.messageType
+    prevProps.messageType !== nextProps.messageType ||
+    prevProps.bubbleColor !== nextProps.bubbleColor ||
+    prevProps.textColor !== nextProps.textColor ||
+    prevProps.fontSize !== nextProps.fontSize
   ) {
     return false;
   }
-  
+
   // Timestamp comparison
   if (prevProps.timestamp.getTime() !== nextProps.timestamp.getTime()) {
     return false;
   }
-  
+
   return true;
 });
 
