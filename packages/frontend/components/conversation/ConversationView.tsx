@@ -123,8 +123,8 @@ export default function ConversationView({ conversationId: propConversationId }:
   const pathname = usePathname();
   const segments = useSegments();
   const bottomSheet = useContext(BottomSheetContext);
-  const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
-  const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
+  const messageTextSize = useMessagePreferencesStore((state) => state?.messageTextSize ?? MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE);
+  const setMessageTextSize = useMessagePreferencesStore((state) => state?.setMessageTextSize);
   const { user, oxyServices } = useOxy();
   const currentUserId = user?.id;
 

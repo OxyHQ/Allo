@@ -40,13 +40,17 @@ export default function ProfileCustomizationScreen() {
   }, [user]);
 
   const handleAvatarShapeSelect = async (shape: AvatarShapeKey) => {
+    console.log('[ProfileCustomization] Avatar shape selected:', shape);
+    console.log('[ProfileCustomization] Current mySettings:', mySettings);
+    console.log('[ProfileCustomization] Current avatar shape:', currentAvatarShape);
     try {
-      await updateMySettings({
+      const result = await updateMySettings({
         profileCustomization: {
           ...mySettings?.profileCustomization,
           avatarShape: shape,
         },
       } as any);
+      console.log('[ProfileCustomization] Update result:', result);
     } catch (error) {
       console.error('Error updating avatar shape:', error);
     }

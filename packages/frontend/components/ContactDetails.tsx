@@ -25,6 +25,7 @@ import { api } from '@/utils/api';
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
+import { useAvatarShape } from '@/hooks/useAvatarShape';
 
 /**
  * Participant item component for group conversations
@@ -41,6 +42,7 @@ function ParticipantItem({
   const participantUser = useUserById(participant.id);
   const fullName = useParticipantFullName(participant);
   const initial = fullName?.charAt(0).toUpperCase() || '?';
+  const participantShape = useAvatarShape(participant.id);
 
   // Ensure we fetch user data if missing
   React.useEffect(() => {
@@ -98,6 +100,7 @@ function ParticipantItem({
         size={40}
         source={participantAvatar ? { uri: participantAvatar } : undefined}
         label={initial}
+        shape={participantShape}
       />
       <View style={styles.participantInfo}>
         <ThemedText style={styles.participantName}>{fullName}</ThemedText>
@@ -143,7 +146,7 @@ export function ContactDetails({
   const updateConversation = useConversationsStore(state => state.updateConversation);
   const isGroup = conversationType === 'group';
   const otherParticipants = isGroup && participants
-    ? getOtherParticipants({ participants, type: 'group' } as any, currentUserId)
+    ? (getOtherParticipants({ participants, type: 'group' } as any, currentUserId) || [])
     : [];
   const displayName = isGroup && groupName
     ? groupName
@@ -228,6 +231,9 @@ export function ContactDetails({
     lastSeen: lastSeen || new Date(),
     verified: contactUser?.verified || false,
   };
+
+  // Get avatar shape for the contact (only for direct conversations)
+  const contactAvatarShape = useAvatarShape(!isGroup ? otherParticipant?.id : undefined);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -365,7 +371,7 @@ export function ContactDetails({
 
         {/* Avatar and Name - Always visible */}
         <View style={styles.avatarContainer}>
-          {isGroup && otherParticipants.length > 0 ? (
+          {isGroup && otherParticipants?.length > 0 ? (
             <GroupAvatar
               participants={otherParticipants}
               size={100}
@@ -378,6 +384,7 @@ export function ContactDetails({
               size={100}
               style={styles.avatar}
               label={displayName.charAt(0)}
+              shape={contactAvatarShape}
             />
           )}
           <View style={styles.nameContainer}>
@@ -385,7 +392,7 @@ export function ContactDetails({
             {!isGroup && contactUsername && (
               <ThemedText style={styles.username}>{contactUsername}</ThemedText>
             )}
-            {isGroup && otherParticipants.length > 0 && (
+            {isGroup && otherParticipants?.length > 0 && (
               <ThemedText style={styles.username}>
                 {otherParticipants.length} participant{otherParticipants.length > 1 ? 's' : ''}
               </ThemedText>
@@ -413,7 +420,7 @@ export function ContactDetails({
         {/* Tab Content */}
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Participants Tab - Only for groups */}
-          {isGroup && activeTab === 'participants' && otherParticipants.length > 0 && (
+          {isGroup && activeTab === 'participants' && otherParticipants?.length > 0 && (
             <View style={styles.section}>
               {otherParticipants.map((participant) => (
                 <ParticipantItem

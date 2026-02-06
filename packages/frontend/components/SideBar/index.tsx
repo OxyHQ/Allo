@@ -25,6 +25,7 @@ import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
 // Hooks
 import { useTheme } from "@/hooks/useTheme";
 import { useOxy, useAuth } from "@oxyhq/services";
+import { useMyAvatarShape } from "@/hooks/useAvatarShape";
 
 // Utils
 import { confirmDialog } from "@/utils/alerts";
@@ -44,6 +45,7 @@ export function SideBar() {
     const theme = useTheme();
 
     const avatarUri = user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
+    const myAvatarShape = useMyAvatarShape();
 
     const handleSignOut = async () => {
         const confirmed = await confirmDialog({
@@ -82,8 +84,8 @@ export function SideBar() {
         if (user?.username) {
             items.push({
                 title: t("Profile"),
-                icon: <Avatar source={avatarUri} size={24} />,
-                iconActive: <Avatar source={avatarUri} size={24} />,
+                icon: <Avatar source={avatarUri} size={24} shape={myAvatarShape} />,
+                iconActive: <Avatar source={avatarUri} size={24} shape={myAvatarShape} />,
                 route: `/@${user.username}`,
             });
         }

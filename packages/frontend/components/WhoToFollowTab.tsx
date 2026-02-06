@@ -7,6 +7,7 @@ import * as OxyServicesNS from '@oxyhq/services';
 import Avatar from '@/components/Avatar';
 import { useUsersStore } from '@/stores/usersStore';
 import { useTheme } from '@/hooks/useTheme';
+import { useAvatarShape } from '@/hooks/useAvatarShape';
 import LegendList from '@/components/LegendList';
 import { ThemedText } from '@/components/ThemedText';
 import { colors } from '@/styles/colors';
@@ -116,7 +117,7 @@ export function WhoToFollowTab() {
 
   const FollowButton = (OxyServicesNS as any).FollowButton as React.ComponentType<{ userId: string; size?: 'small' | 'medium' | 'large' }>;
 
-  const renderUser = ({ item }: { item: any }) => {
+  const UserItem = React.memo(({ item }: { item: any }) => {
     if (!item?.id) return null;
 
     const displayName = item.name?.first
@@ -127,6 +128,7 @@ export function WhoToFollowTab() {
       ? oxyServices.getFileDownloadUrl(item.avatar as string, 'thumb')
       : undefined;
     const username = item.username || item.id;
+    const avatarShape = useAvatarShape(item.id);
 
     return (
       <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
@@ -135,7 +137,7 @@ export function WhoToFollowTab() {
           onPress={() => router.push(`/@${username}`)}
           activeOpacity={0.7}
         >
-          <Avatar source={avatarUri} size={48} />
+          <Avatar source={avatarUri} size={48} shape={avatarShape} />
           <View style={styles.rowTextWrap}>
             <ThemedText style={[styles.rowTitle, { color: theme.colors.text }]}>
               {displayName}
@@ -153,7 +155,9 @@ export function WhoToFollowTab() {
         <FollowButton userId={item.id} size="small" />
       </View>
     );
-  };
+  });
+
+  const renderUser = ({ item }: { item: any }) => <UserItem item={item} />;
 
   if (loading && recommendations.length === 0) {
     return (

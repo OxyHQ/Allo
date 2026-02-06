@@ -92,8 +92,10 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
       <View style={styles.mainContent}>
         <ThemedView style={styles.mainContentWrapper}>
           <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(chat)" redirect={needsAuth} />
             <Stack.Screen name="(auth)" redirect={!needsAuth} />
+            <Stack.Screen name="calls" />
+            <Stack.Screen name="+not-found" />
           </Stack>
         </ThemedView>
       </View>

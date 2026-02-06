@@ -1,6 +1,13 @@
 import mongoose from "mongoose";
 
+const APP_NAME = "allo";
+
 let connectPromise: Promise<typeof mongoose> | null = null;
+
+function getDatabaseName(): string {
+  const env = process.env.NODE_ENV || "development";
+  return `${APP_NAME}-${env}`;
+}
 
 export async function connectToDatabase(): Promise<typeof mongoose> {
   if (mongoose.connection.readyState === 1) {
@@ -17,7 +24,10 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     throw new Error("MONGODB_URI environment variable is not defined");
   }
 
+  const dbName = getDatabaseName();
+
   connectPromise = mongoose.connect(mongoUri, {
+    dbName,
     autoIndex: true,
     autoCreate: true,
     serverSelectionTimeoutMS: 20000,
