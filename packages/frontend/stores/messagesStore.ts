@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { api } from '@/utils/api';
 import { useDeviceKeysStore } from './deviceKeysStore';
@@ -16,12 +15,14 @@ import NetInfo from '@react-native-community/netinfo';
 
 /**
  * Messages Store with Signal Protocol Encryption
- * 
+ *
  * Features:
  * - End-to-end encryption using Signal Protocol
  * - Offline-first storage (device-first)
  * - Optional cloud sync
  * - P2P messaging when available
+ *
+ * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
 
 export interface MediaItem {
@@ -107,8 +108,7 @@ interface MessagesState {
 }
 
 export const useMessagesStore = create<MessagesState>()(
-  subscribeWithSelector(
-    immer((set, get) => ({
+  immer((set, get) => ({
     // Initial state
     messagesByConversation: {},
     messageIdsByConversation: {},
@@ -698,5 +698,5 @@ export const useMessagesStore = create<MessagesState>()(
     getError: (conversationId) => {
       return get().errorByConversation[conversationId] || null;
     },
-  })))
+  }))
 );

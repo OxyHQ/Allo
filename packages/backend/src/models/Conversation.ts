@@ -23,7 +23,7 @@ export interface IConversation extends Document {
     senderId: string;
     timestamp: Date;
   };
-  unreadCounts: Record<string, number>; // userId -> unread count
+  unreadCounts: Map<string, number>; // userId -> unread count
   archivedBy: string[]; // Array of user IDs who archived this conversation
   createdAt: Date;
   updatedAt: Date;
@@ -71,7 +71,7 @@ const ConversationSchema = new Schema<IConversation>(
     unreadCounts: {
       type: Map,
       of: Number,
-      default: {},
+      default: new Map(),
     },
     archivedBy: [{ type: String }],
   },

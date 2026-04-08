@@ -11,11 +11,11 @@ const getUsersStore = () => useUsersStore.getState();
  * Falls back to Oxy user data if participant data is incomplete
  */
 function getParticipantFullName(participant: ConversationParticipant, userId?: string): string {
-  const { first, last } = participant.name;
+  const first = participant.name?.first;
+  const last = participant.name?.last;
   if (first) {
     return `${first}${last ? ` ${last}` : ''}`.trim();
   }
-  // If participant data is incomplete, this will be handled by hooks that use Oxy
   return participant.username || userId || '';
 }
 
@@ -309,8 +309,7 @@ export function useContactInfo(conversation: Conversation | null, currentUserId?
       if (otherParticipant?.username) {
         usersStore.ensureByUsername(otherParticipant.username, (u) => oxyServices.getProfileByUsername(u));
       } else if (otherUserId) {
-        // Try fetching by ID using getProfileByUsername as it might support IDs based on docs
-        usersStore.ensureById(otherUserId, (id) => oxyServices.getProfileByUsername(id));
+        usersStore.ensureById(otherUserId, (id) => oxyServices.getUserById(id));
       }
     }
   }, [otherParticipant?.username, otherUserId, user, usersStore]);

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 import { AvatarShapeKey, DEFAULT_SHAPE } from '@/components/avatar/avatarShapes';
 
 /**

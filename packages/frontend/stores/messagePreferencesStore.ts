@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 
 interface MessagePreferencesState {
@@ -14,18 +13,18 @@ interface MessagePreferencesState {
  *
  * Holds user-adjustable chat preferences such as message text size.
  * Exposed via selectors for future settings UI integration.
+ *
+ * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
-export const useMessagePreferencesStore = create<MessagePreferencesState>()(
-  subscribeWithSelector((set) => ({
-    messageTextSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
+export const useMessagePreferencesStore = create<MessagePreferencesState>((set) => ({
+  messageTextSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE,
 
-    setMessageTextSize: (size: number) => {
-      set({ messageTextSize: size });
-    },
+  setMessageTextSize: (size: number) => {
+    set({ messageTextSize: size });
+  },
 
-    resetMessageTextSize: () => {
-      set({ messageTextSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE });
-    },
-  }))
-);
+  resetMessageTextSize: () => {
+    set({ messageTextSize: MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE });
+  },
+}));
 

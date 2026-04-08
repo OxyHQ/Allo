@@ -7,7 +7,7 @@ import {
   Switch,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 import { colors as baseColors } from '@/styles/colors';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';

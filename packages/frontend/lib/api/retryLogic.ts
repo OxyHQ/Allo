@@ -207,7 +207,14 @@ export class CircuitBreaker {
       }
 
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      // Don't count auth errors (401/403) toward circuit breaker —
+      // these are not transient service failures
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        throw error;
+      }
+
       this.failures++;
       this.lastFailureTime = Date.now();
 

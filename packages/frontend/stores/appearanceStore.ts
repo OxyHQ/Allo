@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, publicApi } from '@/utils/api';
+import { api } from '@/utils/api';
 import { Storage } from '@/utils/storage';
 
 const APPEARANCE_CACHE_KEY = 'oxy_appearance_settings';
@@ -102,7 +102,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       const cached = get().byUserId[userId];
       if (cached && !forceRefresh) return cached;
       
-      const res = await publicApi.get<UserAppearance>(`profile/design/${userId}`);
+      const res = await api.get<UserAppearance>(`profile/design/${userId}`);
       const doc = unwrapApiData<UserAppearance>(res.data);
       
       if (doc) {
@@ -119,8 +119,6 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
 
   async updateMySettings(partial: Partial<UserAppearance>) {
     const previous = get().mySettings;
-    console.log('[AppearanceStore] updateMySettings called with:', partial);
-    console.log('[AppearanceStore] Previous mySettings:', previous);
     try {
       set({ loading: true, error: null });
 
@@ -144,7 +142,6 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
         }),
       } as UserAppearance;
 
-      console.log('[AppearanceStore] Optimistic update:', optimistic);
       set({ mySettings: optimistic });
 
       // Build payload with only allowed fields
@@ -160,7 +157,6 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
 
       const res = await api.put<UserAppearance>('profile/settings', payload);
       const doc = unwrapApiData<UserAppearance>(res.data);
-      console.log('[AppearanceStore] API response:', doc);
 
       if (doc) {
         // Update cache
@@ -172,7 +168,6 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
           loading: false,
         }));
 
-        console.log('[AppearanceStore] State updated with server response');
         return doc;
       }
 
@@ -181,7 +176,6 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     } catch (e: any) {
       // Revert optimistic update on error
       console.error('[AppearanceStore] Error updating settings:', e);
-      console.log('[AppearanceStore] Reverting to previous settings');
       set({ mySettings: previous, loading: false, error: e?.message || 'Failed to update settings' });
       return null;
     }

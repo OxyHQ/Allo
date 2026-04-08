@@ -44,9 +44,6 @@ import {
     SwipeActionType,
 } from '@/stores';
 
-// Dev utilities
-import { seedMockData } from '@/utils/seedMockData';
-
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
 
@@ -62,12 +59,16 @@ import {
 import { formatConversationTimestamp } from '@/utils/dateUtils';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
 
+// Skeleton dimension lookup tables (module-level to avoid re-allocation per render)
+const SKELETON_NAME_WIDTHS = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125] as const;
+const SKELETON_MSG_WIDTHS = [200, 170, 220, 180, 150, 210, 190, 160, 230, 175] as const;
+
 // Export types for use in other files
 export type ConversationType = 'direct' | 'group';
 
 export interface ConversationParticipant {
     id: string;
-    name: {
+    name?: {
         first: string;
         last: string;
     };
@@ -185,12 +186,11 @@ function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof
             });
         }, 1600);
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
     const bone = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-    const nameWidths = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125];
-    const msgWidths = [200, 170, 220, 180, 150, 210, 190, 160, 230, 175];
 
     return (
         <Animated.View style={[{
@@ -205,10 +205,10 @@ function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof
             <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: bone, marginRight: 12 }} />
             <View style={{ flex: 1, justifyContent: 'center' }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <View style={{ width: nameWidths[index % nameWidths.length], height: 14, borderRadius: 4, backgroundColor: bone }} />
+                    <View style={{ width: SKELETON_NAME_WIDTHS[index % SKELETON_NAME_WIDTHS.length], height: 14, borderRadius: 4, backgroundColor: bone }} />
                     <View style={{ width: 40, height: 10, borderRadius: 3, backgroundColor: bone }} />
                 </View>
-                <View style={{ width: msgWidths[index % msgWidths.length], height: 12, borderRadius: 4, backgroundColor: bone }} />
+                <View style={{ width: SKELETON_MSG_WIDTHS[index % SKELETON_MSG_WIDTHS.length], height: 12, borderRadius: 4, backgroundColor: bone }} />
             </View>
         </Animated.View>
     );
@@ -257,15 +257,7 @@ export default function ConversationsList() {
     useEffect(() => {
         // Fire both immediately — cache resolves fast, API runs in background
         loadCachedConversations();
-        fetchConversations().then(() => {
-            if (__DEV__) {
-                // Seed mock data only if the store is still empty after fetch
-                const { conversations } = useConversationsStore.getState();
-                if (conversations.length === 0) {
-                    seedMockData();
-                }
-            }
-        });
+        fetchConversations();
     }, [loadCachedConversations, fetchConversations]);
 
     // Search state
@@ -318,6 +310,7 @@ export default function ConversationsList() {
 
     // Animation and refs
     const swipeableRefs = useRef<Record<string, { close: () => void } | null>>({});
+    const swipeActionInFlight = useRef<Set<string>>(new Set());
     const selectionModeProgress = useSharedValue(0);
 
     // Sync animation progress with selection mode
@@ -543,6 +536,18 @@ export default function ConversationsList() {
             color: theme.colors.text,
             fontWeight: '500',
         },
+        conversationNameContainer: {
+            flex: 1,
+            marginRight: 8,
+        },
+        conversationNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+        },
+        participantCountLabel: {
+            marginLeft: 4,
+        },
     }), [theme]);
 
     /**
@@ -571,19 +576,8 @@ export default function ConversationsList() {
      * Handle long press to enter/exit selection mode
      */
     const handleConversationLongPress = useCallback((conversationId: string) => {
-        setSelectedConversationIds((prev) => {
-            if (prev.size === 0) {
-                return new Set([conversationId]);
-            }
-            const next = new Set(prev);
-            if (next.has(conversationId)) {
-                next.delete(conversationId);
-            } else {
-                next.add(conversationId);
-            }
-            return next;
-        });
-    }, []);
+        toggleConversationSelection(conversationId);
+    }, [toggleConversationSelection]);
 
     /**
      * Handle avatar long-press to show peek preview (Telegram-style)
@@ -600,14 +594,9 @@ export default function ConversationsList() {
         if (!peekConversation) return;
         const conv = peekConversation;
         setPeekConversation(null);
-        const route = conv.type === 'direct'
-            ? (() => {
-                const otherParticipant = conv.participants?.find(p => p.id !== currentUserId);
-                return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conv.id}`;
-            })()
-            : `/c/${conv.id}`;
-        router.push(route as any);
-    }, [peekConversation, currentUserId, router]);
+        // Use unified /c/:id route for all conversations
+        router.push(`/c/${conv.id}` as any);
+    }, [peekConversation, router]);
 
     /**
      * Handle conversation press - navigate or toggle selection
@@ -617,15 +606,8 @@ export default function ConversationsList() {
             toggleConversationSelection(conversationId);
             return;
         }
-        // Use /u/:id for direct conversations, /c/[id] for others
-        const conversation = conversations.find(c => c.id === conversationId);
-        const route = conversation?.type === 'direct'
-            ? (() => {
-                const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
-                return otherParticipant?.id ? `/u/${otherParticipant.id}` : `/c/${conversationId}`;
-            })()
-            : `/c/${conversationId}`;
-        router.push(route as any);
+        // Use unified /c/:id route for all conversations
+        router.push(`/c/${conversationId}` as any);
     }, [isSelectionMode, toggleConversationSelection, router]);
 
     /**
@@ -651,22 +633,12 @@ export default function ConversationsList() {
      * Note: For undo to work, we'd need to store deleted conversations temporarily
      */
     const handleDeleteConversation = useCallback((conversationId: string, conversationName: string) => {
-        const conversation = conversations.find(c => c.id === conversationId);
-
         removeConversation(conversationId);
 
         toast.error(`Deleted "${conversationName}"`, {
-            action: conversation ? {
-                label: 'Undo',
-                onClick: () => {
-                    // Re-add the conversation (this would need proper implementation in the store)
-                    toast.info('Delete undone - restoring conversation');
-                    // TODO: Implement proper restore functionality in the store
-                },
-            } : undefined,
             duration: 4000,
         });
-    }, [removeConversation, conversations]);
+    }, [removeConversation]);
 
     /**
      * Archive all selected conversations
@@ -733,7 +705,7 @@ export default function ConversationsList() {
      * Render swipe action with animated width that fills space
      */
     const renderSwipeAction = useCallback((action: SwipeActionType, direction: 'left' | 'right') => {
-        return (_progress: SharedValue<number>, dragX: SharedValue<number>) => {
+        const SwipeActionRenderer = (_progress: SharedValue<number>, dragX: SharedValue<number>) => {
             if (action === 'none') {
                 return null;
             }
@@ -746,16 +718,23 @@ export default function ConversationsList() {
                 />
             );
         };
+        SwipeActionRenderer.displayName = `SwipeActionRenderer(${action})`;
+        return SwipeActionRenderer;
     }, [windowWidth]);
 
     /**
      * Handle swipe action on a conversation
      */
     const handleSwipeAction = useCallback((direction: 'left' | 'right', conversation: Conversation) => {
+        // Guard against onSwipeableOpen firing twice for the same gesture
+        if (swipeActionInFlight.current.has(conversation.id)) return;
+        swipeActionInFlight.current.add(conversation.id);
+
         const action = direction === 'left' ? leftSwipeAction : rightSwipeAction;
 
         if (action === 'none') {
             closeSwipeable(conversation.id);
+            swipeActionInFlight.current.delete(conversation.id);
             return;
         }
 
@@ -767,6 +746,7 @@ export default function ConversationsList() {
 
         setTimeout(() => {
             closeSwipeable(conversation.id);
+            swipeActionInFlight.current.delete(conversation.id);
         }, 200);
     }, [leftSwipeAction, rightSwipeAction, closeSwipeable, handleArchiveConversation, handleDeleteConversation]);
 
@@ -884,8 +864,8 @@ export default function ConversationsList() {
                 </TouchableOpacity>
                 <View style={styles.conversationContent}>
                     <View style={styles.conversationHeader}>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <View style={styles.conversationNameContainer}>
+                            <View style={styles.conversationNameRow}>
                                 <ThemedText style={styles.conversationName} numberOfLines={1}>
                                     {displayName}
                                 </ThemedText>
@@ -893,7 +873,7 @@ export default function ConversationsList() {
                                     <ThemedText
                                         style={[
                                             styles.conversationTimestamp,
-                                            { marginLeft: 4 },
+                                            styles.participantCountLabel,
                                         ]}
                                         numberOfLines={1}
                                     >
@@ -957,7 +937,6 @@ export default function ConversationsList() {
     // FlashList performance: stable references prevent re-renders
     const ITEM_HEIGHT = 64;
     const keyExtractor = useCallback((item: Conversation) => item.id, []);
-    const listContentStyle = useMemo(() => ({ paddingBottom: 0 }), []);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -989,7 +968,6 @@ export default function ConversationsList() {
                                     style={styles.headerIconButton}
                                     onPress={() => {
                                         // TODO: Implement camera functionality
-                                        console.log('Camera pressed');
                                     }}
                                     accessibilityLabel="Camera"
                                     accessibilityRole="button"
@@ -1004,7 +982,6 @@ export default function ConversationsList() {
                                     style={styles.headerIconButton}
                                     onPress={() => {
                                         // TODO: Implement options menu
-                                        console.log('Options pressed');
                                     }}
                                     accessibilityLabel="More options"
                                     accessibilityRole="button"
@@ -1080,10 +1057,9 @@ export default function ConversationsList() {
                         keyExtractor={keyExtractor}
                         extraData={selectedConversationIds}
                         ListHeaderComponent={SearchBarHeader}
-                        contentContainerStyle={listContentStyle}
+
                         keyboardShouldPersistTaps="handled"
-                        // FlashList: native RecyclerView/UICollectionView-level perf
-                        // @ts-expect-error - estimatedItemSize exists at runtime but may not be in types
+                        // @ts-expect-error estimatedItemSize exists at runtime but not in this version's types
                         estimatedItemSize={ITEM_HEIGHT}
                         refreshControl={
                             <RefreshControl

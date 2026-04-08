@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { useAppearanceStore } from "@/store/appearanceStore";
+import { useAppearanceStore } from "@/stores/appearanceStore";
 import { colors as baseColors } from "@/styles/colors";
 import { getColorTheme } from "@/styles/colorThemes";
 

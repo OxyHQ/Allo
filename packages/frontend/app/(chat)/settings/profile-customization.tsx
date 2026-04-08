@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -40,17 +40,13 @@ export default function ProfileCustomizationScreen() {
   }, [user]);
 
   const handleAvatarShapeSelect = async (shape: AvatarShapeKey) => {
-    console.log('[ProfileCustomization] Avatar shape selected:', shape);
-    console.log('[ProfileCustomization] Current mySettings:', mySettings);
-    console.log('[ProfileCustomization] Current avatar shape:', currentAvatarShape);
     try {
-      const result = await updateMySettings({
+      await updateMySettings({
         profileCustomization: {
           ...mySettings?.profileCustomization,
           avatarShape: shape,
         },
       } as any);
-      console.log('[ProfileCustomization] Update result:', result);
     } catch (error) {
       console.error('Error updating avatar shape:', error);
     }

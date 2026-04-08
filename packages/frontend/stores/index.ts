@@ -28,7 +28,6 @@ export type { SwipeActionType } from './conversationSwipePreferencesStore';
 export { useUsersStore } from './usersStore';
 export type { UserEntity } from './usersStore';
 
-// Store from /store directory (legacy)
-export { useAppearanceStore } from '../store/appearanceStore';
-export { useProfileStore } from '../store/profileStore';
+// Appearance store
+export { useAppearanceStore } from './appearanceStore';
 

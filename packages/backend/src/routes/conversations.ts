@@ -305,7 +305,7 @@ router.post("/:id/participants", async (req: AuthRequest, res: Response) => {
       .filter((pid: string) => !existingUserIds.includes(pid))
       .map((pid: string) => ({
         userId: pid,
-        role: "member",
+        role: "member" as "member",
         joinedAt: new Date(),
       }));
 

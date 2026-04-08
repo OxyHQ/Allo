@@ -46,28 +46,14 @@ export default function ChatLayout() {
     !pathname.includes('/settings') &&
     !isNewChatRoute;
 
-  const userRouteMatch = pathname?.match(/\/u\/([^/]+)$/);
-  const isUserRoute = userRouteMatch &&
-    !pathname.includes('/settings') &&
-    !isNewChatRoute;
-
-  const targetUserId = isUserRoute && userRouteMatch ? userRouteMatch[1] : undefined;
-  const targetUser = useUserById(targetUserId);
-
   const activeConversation = useMemo(() => {
     if (isConversationRoute && conversationIdMatch) {
       return conversations.find(c => c.id === conversationIdMatch[1]);
     }
-    if (targetUserId) {
-      return conversations.find(c =>
-        c.type === 'direct' &&
-        c.participants?.some(p => p.id === targetUserId)
-      );
-    }
     return null;
-  }, [isConversationRoute, conversationIdMatch, targetUserId, conversations]);
+  }, [isConversationRoute, conversationIdMatch, conversations]);
 
-  const showContactDetails = isExtraLargeScreen && (activeConversation || targetUser);
+  const showContactDetails = isExtraLargeScreen && activeConversation;
 
   const contactDetailsProps = useMemo(() => {
     if (activeConversation) {
@@ -89,30 +75,8 @@ export default function ChatLayout() {
       };
     }
 
-    if (targetUser) {
-      let contactName = targetUser.username || 'Unknown';
-      if (targetUser.name) {
-        if (typeof targetUser.name === 'string') {
-          contactName = targetUser.name;
-        } else if (targetUser.name.first) {
-          contactName = `${targetUser.name.first} ${targetUser.name.last || ''}`.trim();
-        }
-      }
-
-      return {
-        conversationId: undefined,
-        conversationType: 'direct' as const,
-        contactName,
-        contactUsername: targetUser.username,
-        contactAvatar: targetUser.avatar,
-        isOnline: targetUser.isOnline,
-        lastSeen: targetUser.lastSeen,
-        currentUserId: currentUser?.id,
-      };
-    }
-
     return null;
-  }, [activeConversation, targetUser, currentUser?.id]);
+  }, [activeConversation, currentUser?.id]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -197,17 +161,6 @@ export default function ChatLayout() {
             // Show conversation detail from /c/:id route
             // Use the wrapper component that handles the require path correctly
             <ConversationViewWrapper conversationId={conversationIdMatch[1]} />
-          ) : isUserRoute ? (
-            // Show user conversation route
-            (() => {
-              try {
-                const UserRoute = require('./u/[id]').default;
-                return <UserRoute userId={userRouteMatch[1]} />;
-              } catch (error) {
-                console.error('Failed to load user route:', error);
-                return null;
-              }
-            })()
           ) : (
             <EmptyState
               imageSource={require('@/assets/images/welcome.png')}

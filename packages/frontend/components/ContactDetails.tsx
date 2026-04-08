@@ -15,12 +15,12 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from './Avatar';
 import { Ionicons } from '@expo/vector-icons';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { useOxy } from '@oxyhq/services';
 import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useParticipantFullName } from '@/utils/conversationUtils';
 import { COLOR_THEMES } from '@/styles/colorThemes';
 import { useConversationsStore } from '@/stores';
 import { api } from '@/utils/api';
+import { useOxy } from '@oxyhq/services';
 
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
@@ -37,7 +37,7 @@ function ParticipantItem({
   participant: ConversationParticipant;
 }) {
   const theme = useTheme();
-  const { oxyServices } = useOxy();
+  const { oxyServices } = useOxy(); // Telegram-style: calls backend
   const usersStore = useUsersStore();
   const participantUser = useUserById(participant.id);
   const fullName = useParticipantFullName(participant);
@@ -182,12 +182,12 @@ export function ContactDetails({
   const [activeTab, setActiveTab] = useState(tabs[0].id);
 
   // Get oxy services for avatar URLs
-  const { oxyServices } = useOxy();
+  const { oxyServices } = useOxy(); // Telegram-style: calls backend
   const usersStore = useUsersStore();
 
   // For direct conversations, get the other participant's user data from Oxy
   const otherParticipant = !isGroup && participants?.find(p => p.id !== currentUserId);
-  const contactUser = !isGroup && otherParticipant ? useUserById(otherParticipant.id) : null;
+  const contactUser = useUserById(!isGroup && otherParticipant ? otherParticipant.id : undefined);
 
   // Ensure we fetch user data if missing
   React.useEffect(() => {

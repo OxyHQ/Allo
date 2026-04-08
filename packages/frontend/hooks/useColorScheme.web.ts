@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 
 /**
  * To support static rendering, this value needs to be re-calculated on the client side for web

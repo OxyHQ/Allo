@@ -167,13 +167,8 @@ export default function NewChatScreen() {
 
       if (existingConversation) {
         // Navigate using user ID route for direct conversations
-        const otherParticipant = existingConversation.participants?.find(p => p.id !== currentUser?.id);
-        // Use the user's ID from the search result, or fallback to participant ID
-        const userIdToUse = user.id || otherParticipant?.id;
-        const route = (existingConversation.type === 'direct' && userIdToUse)
-          ? `/u/${userIdToUse}`
-          : `/c/${existingConversation.id}`;
-        router.replace(route as any);
+        // Use unified /c/:id route for all conversations
+        router.replace(`/c/${existingConversation.id}` as any);
         return;
       }
 
@@ -210,13 +205,8 @@ export default function NewChatScreen() {
 
       addConversation(conversation);
 
-      // Navigate to conversation - use username route for direct conversations
-      // Use the user's username directly from the search result
-      const route = (conversation.type === 'direct' && user.username)
-        ? `/@${user.username}`
-        : `/c/${conversation.id}`;
-      console.log('[NewChat] Navigating to new conversation:', route);
-      router.replace(route as any);
+      console.log('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
+      router.replace(`/c/${conversation.id}` as any);
     } catch (error: any) {
       console.error('[NewChat] Error opening conversation:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to open conversation';
@@ -276,12 +266,7 @@ export default function NewChatScreen() {
       setSelectedUserIds(new Set());
       setIsSelectionMode(false);
 
-      // Navigate to conversation - use /@username for direct, /c/[id] for groups
-      const route = conversation.type === 'direct' && participants[0]?.username
-        ? `/@${participants[0].username}`
-        : `/c/${conversation.id}`;
-      router.push(route as any);
-      router.back(); // Close this screen
+      router.replace(`/c/${conversation.id}` as any);
     } catch (error: any) {
       console.error('[NewChat] Error creating conversation:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create conversation';

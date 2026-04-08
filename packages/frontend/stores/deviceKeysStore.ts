@@ -1,11 +1,12 @@
 /**
  * Device Keys Store
- * 
+ *
  * Manages Signal Protocol device keys and key exchange
+ *
+ * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
 
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
 import {
   initializeDeviceKeys,
   getDeviceKeys,
@@ -31,8 +32,7 @@ interface DeviceKeysState {
   decryptMessageFromSender: (ciphertext: string, senderUserId: string, senderDeviceId: number) => Promise<string>;
 }
 
-export const useDeviceKeysStore = create<DeviceKeysState>()(
-  subscribeWithSelector((set, get) => ({
+export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
     // Initial state
     deviceKeys: null,
     isInitialized: false,
@@ -177,6 +177,6 @@ export const useDeviceKeysStore = create<DeviceKeysState>()(
         throw error;
       }
     },
-  }))
+  })
 );
 

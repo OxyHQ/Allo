@@ -9,7 +9,7 @@ import type { MediaItem, Message } from '@/stores';
 import { MessageGroup } from '@/utils/messageGrouping';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { colors } from '@/styles/colors';
-import { useAvatarShape } from '@/hooks/useAvatarShape';
+import { useAvatarShape, useMyAvatarShape } from '@/hooks/useAvatarShape';
 
 export interface MessageBlockProps {
   group: MessageGroup;
@@ -67,7 +67,9 @@ export const MessageBlock = memo<MessageBlockProps>(({
   const isIncoming = !isSent;
   const senderName = isIncoming && senderId ? getSenderName?.(senderId) : undefined;
   const senderAvatar = isIncoming && senderId ? getSenderAvatar?.(senderId) : undefined;
-  const senderShape = useAvatarShape(isIncoming ? senderId : undefined);
+  const myAvatarShape = useMyAvatarShape();
+  const incomingSenderShape = useAvatarShape(isIncoming ? senderId : undefined);
+  const senderShape = isIncoming ? incomingSenderShape : myAvatarShape;
   const showSenderName = Boolean(isGroup && !isAiGroup && isIncoming && senderName);
 
   // Create refs map for each message bubble using useState

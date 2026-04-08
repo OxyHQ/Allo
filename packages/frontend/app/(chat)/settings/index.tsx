@@ -19,7 +19,7 @@ import { getData, storeData } from "@/utils/storage";
 import { hasNotificationPermission, requestNotificationPermissions, getDevicePushToken } from "@/utils/notifications";
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
-import { useAppearanceStore } from "@/store/appearanceStore";
+import { useAppearanceStore } from "@/stores/appearanceStore";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import i18n from 'i18next';
 import {

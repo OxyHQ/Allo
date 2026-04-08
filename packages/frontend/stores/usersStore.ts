@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { subscribeWithSelector } from "zustand/middleware";
 
 export interface UserEntity {
   id: string;
@@ -55,8 +54,7 @@ interface UsersState {
 
 const now = () => Date.now();
 
-export const useUsersStore = create<UsersState>()(
-  subscribeWithSelector((set, get) => ({
+export const useUsersStore = create<UsersState>((set, get) => ({
     usersById: {},
     idByUsername: {},
     ttlMs: 5 * 60 * 1000, // 5 minutes default
@@ -190,7 +188,7 @@ export const useUsersStore = create<UsersState>()(
     },
 
     clearAll: () => set({ usersById: {}, idByUsername: {} })
-  }))
+  })
 );
 
 // Hooks/selectors

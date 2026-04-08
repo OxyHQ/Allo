@@ -9,27 +9,32 @@ const API_CONFIG = {
   baseURL: API_URL,
 };
 
-// Use oxyClient singleton for authenticated requests
-const authenticatedClient = oxyClient.getClient();
+// IMPORTANT: Create dedicated client for local backend API (conversations, messages, etc.)
+// This is separate from oxyClient which is for Oxy-specific API calls
+const backendClient = axios.create({
+  baseURL: API_CONFIG.baseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000, // 10 second timeout
+});
 
-// Add timeout to authenticated client to prevent indefinite hangs
-// Use try-catch in case defaults is not available at initialization time
-try {
-  if (authenticatedClient?.defaults) {
-    authenticatedClient.defaults.timeout = 10000; // 10 second timeout
-  }
-} catch (error) {
-  console.warn('[API] Could not set timeout on authenticated client:', error);
-}
-
-// Add request interceptor to ensure timeout is set for all requests
-authenticatedClient?.interceptors?.request?.use((config) => {
-  // Set timeout if not already set
-  if (!config.timeout) {
-    config.timeout = 10000; // 10 second timeout
+// Add request interceptor to backend client to include auth token from Oxy
+backendClient.interceptors.request.use((config) => {
+  try {
+    // Get token from Oxy client's TokenStore (not axios headers)
+    const token = oxyClient.getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (error) {
+    console.warn('[API] Could not get auth token for backend request:', error);
   }
   return config;
 });
+
+// Keep oxyClient reference for Oxy-specific API calls (if needed)
+const authenticatedClient = oxyClient.getClient();
 
 // Circuit breaker to prevent cascading failures
 // Opens after 5 consecutive failures, stays open for 30 seconds
@@ -72,13 +77,14 @@ const publicClient = axios.create({
   timeout: 10000, // 10 second timeout to prevent indefinite hangs
 });
 
-// API methods using authenticatedClient (with token handling, circuit breaker, and deduplication)
+// API methods using backendClient for local backend (conversations, messages, etc.)
+// NOTE: This calls your local backend at http://localhost:3000/api, NOT the Oxy API
 export const api = {
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<{ data: T }> {
     const key = createRequestKey('GET', endpoint, params);
     const response = await deduplicateRequest(key, () =>
       apiCircuitBreaker.execute(() =>
-        authenticatedClient.get(endpoint, { params })
+        backendClient.get(endpoint, { params })
       )
     );
     return { data: response.data };
@@ -87,7 +93,7 @@ export const api = {
   async post<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
     // Don't deduplicate POST requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
-      authenticatedClient.post(endpoint, body)
+      backendClient.post(endpoint, body)
     );
     return { data: response.data };
   },
@@ -95,7 +101,7 @@ export const api = {
   async put<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
     // Don't deduplicate PUT requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
-      authenticatedClient.put(endpoint, body)
+      backendClient.put(endpoint, body)
     );
     return { data: response.data };
   },
@@ -103,7 +109,7 @@ export const api = {
   async delete<T = any>(endpoint: string): Promise<{ data: T }> {
     // Don't deduplicate DELETE requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
-      authenticatedClient.delete(endpoint)
+      backendClient.delete(endpoint)
     );
     return { data: response.data };
   },
@@ -111,7 +117,7 @@ export const api = {
   async patch<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
     // Don't deduplicate PATCH requests as they may have side effects
     const response = await apiCircuitBreaker.execute(() =>
-      authenticatedClient.patch(endpoint, body)
+      backendClient.patch(endpoint, body)
     );
     return { data: response.data };
   },
@@ -152,6 +158,42 @@ export function webAlert(
 export const healthApi = {
   async checkHealth() {
     const response = await api.get('/api/health');
+    return response.data;
+  },
+};
+
+// Profiles API - Telegram-style: Frontend calls backend, backend calls Oxy
+export const profilesApi = {
+  async getByUsername(username: string) {
+    const response = await api.get(`/api/profiles/username/${username}`);
+    return response.data;
+  },
+
+  async getById(id: string) {
+    const response = await api.get(`/api/profiles/${id}`);
+    return response.data;
+  },
+
+  async search(query: string, limit: number = 20) {
+    const response = await api.get('/api/profiles/search', { q: query, limit });
+    return response.data;
+  },
+
+  async getRecommendations() {
+    const response = await api.get('/api/profiles/recommendations');
+    return response.data;
+  },
+};
+
+// Files API - Telegram-style: Frontend calls backend, backend calls Oxy
+export const filesApi = {
+  async getFileUrl(fileId: string, size: 'thumb' | 'full' | string = 'full'): Promise<string> {
+    const response = await api.get(`/api/files/url/${fileId}`, { size });
+    return response.data.url;
+  },
+
+  async uploadFile(file: any, options?: any) {
+    const response = await api.post('/api/files/upload', { file, options });
     return response.data;
   },
 };

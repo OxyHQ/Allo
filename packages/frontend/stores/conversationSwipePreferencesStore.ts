@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import {
-  subscribeWithSelector,
   persist,
   createJSONStorage,
 } from 'zustand/middleware';
@@ -26,9 +25,8 @@ const STORAGE_KEY = 'conversation-swipe-preferences';
 
 export const useConversationSwipePreferencesStore =
   create<ConversationSwipePreferencesState>()(
-    subscribeWithSelector(
-      persist(
-        (set) => ({
+    persist(
+      (set) => ({
           leftSwipeAction: DEFAULT_LEFT_ACTION,
           rightSwipeAction: DEFAULT_RIGHT_ACTION,
 
@@ -45,7 +43,6 @@ export const useConversationSwipePreferencesStore =
           storage: createJSONStorage(() => AsyncStorage),
           version: 1,
         }
-      )
     )
   );
 

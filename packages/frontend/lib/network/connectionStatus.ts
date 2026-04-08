@@ -1,12 +1,13 @@
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
 
 /**
  * Connection Status Manager
  *
  * WhatsApp/Telegram-level: Real-time connection monitoring
  * Provides offline detection, queue management, and automatic retry
+ *
+ * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
 
 export type ConnectionStatus = 'online' | 'offline' | 'reconnecting';
@@ -26,8 +27,7 @@ interface ConnectionStatusState {
   resetReconnectAttempts: () => void;
 }
 
-export const useConnectionStatusStore = create<ConnectionStatusState>()(
-  subscribeWithSelector((set, get) => ({
+export const useConnectionStatusStore = create<ConnectionStatusState>((set, get) => ({
     status: 'online',
     isConnected: true,
     connectionType: null,
@@ -71,7 +71,7 @@ export const useConnectionStatusStore = create<ConnectionStatusState>()(
     resetReconnectAttempts: () => {
       set({ reconnectAttempts: 0 });
     },
-  }))
+  })
 );
 
 /**

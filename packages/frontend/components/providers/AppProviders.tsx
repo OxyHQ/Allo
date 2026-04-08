@@ -19,7 +19,6 @@ import { BottomSheetProvider } from '@/context/BottomSheetContext';
 import { HomeRefreshProvider } from '@/context/HomeRefreshContext';
 import { Toaster } from '@/lib/sonner';
 import i18n from '@/lib/i18n';
-import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { OXY_BASE_URL } from '@/config';
 
 interface AppProvidersProps {

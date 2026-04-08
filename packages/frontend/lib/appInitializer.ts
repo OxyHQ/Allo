@@ -8,7 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { oxyClient } from '@oxyhq/core';
 
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 import {
   hasNotificationPermission,
   setupNotifications,
@@ -158,10 +158,13 @@ export class AppInitializer {
   }
 
   /**
-   * Loads eager settings that don't block app initialization
+   * Loads eager settings that don't block app initialization.
+   * Skips if user is not yet authenticated (token not available).
    */
   static async loadEagerSettings(): Promise<void> {
-    // Load these in parallel as they don't block app startup
+    // Only load if we have an auth token — otherwise these calls will 401
+    if (!oxyClient.getAccessToken()) return;
+
     await Promise.allSettled([
       loadAppearanceSettings(),
     ]);
@@ -205,10 +208,8 @@ async function initializeSignalProtocol(): Promise<void> {
     }
 
     // Initialize P2P manager
-    // Get token from storage or client
-    const client = oxyClient.getClient();
-    const token = (client.defaults?.headers?.common?.Authorization as string)?.replace('Bearer ', '') ||
-                  (client.defaults?.headers?.Authorization as string)?.replace('Bearer ', '');
+    // Get token from Oxy client's TokenStore
+    const token = oxyClient.getAccessToken();
 
     if (token) {
       await p2pManager.initialize(user.id, token);

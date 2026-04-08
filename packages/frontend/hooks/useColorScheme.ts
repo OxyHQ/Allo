@@ -1,5 +1,5 @@
 import { useColorScheme as useRNColorScheme } from 'react-native';
-import { useAppearanceStore } from '@/store/appearanceStore';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 
 // Returns 'light' or 'dark' based on user preference; falls back to OS setting
 export function useColorScheme(): 'light' | 'dark' {

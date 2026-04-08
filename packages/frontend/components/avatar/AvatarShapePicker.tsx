@@ -45,11 +45,9 @@ const AvatarShapePicker: React.FC<AvatarShapePickerProps> = ({ selected, onSelec
 
   const handlePress = useCallback(
     (key: AvatarShapeKey) => {
-      console.log('[AvatarShapePicker] Shape selected:', key);
-      console.log('[AvatarShapePicker] Currently selected:', selected);
       onSelect(key);
     },
-    [onSelect, selected],
+    [onSelect],
   );
 
   return (
