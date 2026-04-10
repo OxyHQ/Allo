@@ -7,20 +7,20 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces",
-    "dev:frontend": "npm run dev --workspace=@allo/frontend",
-    "dev:backend": "npm run dev --workspace=@allo/backend",
-    "build": "npm run build --workspaces",
-    "build:shared-types": "npm run build --workspace=@allo/shared-types",
-    "build:frontend": "npm run build --workspace=@allo/frontend",
-    "build:backend": "npm run build --workspace=@allo/backend",
-    "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces",
-    "clean": "npm run clean --workspaces && rm -rf node_modules",
-    "install:all": "npm install && npm install --workspaces",
-    "start:frontend": "npm run start --workspace=@allo/frontend",
-    "start:backend": "npm run start --workspace=@allo/backend",
-    "postinstall": "npm run build:shared-types"
+    "dev": "bun run dev --filter '*'",
+    "dev:frontend": "bun run --filter @allo/frontend dev",
+    "dev:backend": "bun run --filter @allo/backend dev",
+    "build": "bun run --filter '*' build",
+    "build:shared-types": "bun run --filter @allo/shared-types build",
+    "build:frontend": "bun run --filter @allo/frontend build",
+    "build:backend": "bun run --filter @allo/backend build",
+    "test": "bun run --filter '*' test",
+    "lint": "bun run --filter '*' lint",
+    "clean": "bun run --filter '*' clean && rm -rf node_modules",
+    "install:all": "bun install",
+    "start:frontend": "bun run --filter @allo/frontend start",
+    "start:backend": "bun run --filter @allo/backend start",
+    "postinstall": "bun run build:shared-types"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -29,11 +29,11 @@
   },
   "engines": {
     "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "bun": ">=1.0.0"
   },
   "dependencies": {
     "@oxyhq/core": "1.11.11",
-    "@oxyhq/services": "6.9.12",
+    "@oxyhq/services": "6.9.45",
     "@react-native/js-polyfills": "^0.81.1",
     "react-native-css-interop": "^0.2.0",
     "react-native-worklets": "0.5.1",
