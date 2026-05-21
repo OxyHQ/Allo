@@ -4,6 +4,7 @@ import 'react-native-url-polyfill/auto';
 import 'react-native-reanimated';
 
 import NetInfo from '@react-native-community/netinfo';
+import { BloomThemeProvider } from '@oxyhq/bloom';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
@@ -116,11 +117,9 @@ export default function RootLayout() {
   const isScreenNotMobile = useIsScreenNotMobile();
   const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
 
+  // Inter is now provided by @oxyhq/bloom via <BloomThemeProvider fonts>.
+  // Phudu is Allo-specific (used in SideBar headings) so we still load it here.
   const [fontsLoaded, fontError] = useFonts({
-    'Inter-Regular': require('@/assets/fonts/inter/Inter-Regular.otf'),
-    'Inter-Medium': require('@/assets/fonts/inter/Inter-Medium.otf'),
-    'Inter-SemiBold': require('@/assets/fonts/inter/Inter-SemiBold.otf'),
-    'Inter-Bold': require('@/assets/fonts/inter/Inter-Bold.otf'),
     'Phudu': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
   });
 
@@ -232,8 +231,10 @@ export default function RootLayout() {
   ]);
 
   return (
-    <ThemedView style={{ flex: 1 }}>
-      {appContent}
-    </ThemedView>
+    <BloomThemeProvider fonts onFontsLoading={<AppSplashScreen />}>
+      <ThemedView style={{ flex: 1 }}>
+        {appContent}
+      </ThemedView>
+    </BloomThemeProvider>
   );
 }

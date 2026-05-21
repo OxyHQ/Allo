@@ -5,6 +5,19 @@ const { withNativeWind } = require('nativewind/metro');
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
+// Register `.woff2` / `.woff` as Metro asset extensions so `@oxyhq/bloom`'s
+// web-only font-face injection (which imports the bundled font binaries from
+// `@oxyhq/bloom/lib/module/fonts/assets/`) resolves on `expo export --platform
+// web`. Without this, Metro's default `assetExts` (which doesn't include
+// `.woff2` or `.woff`) fails to load Bloom's font assets during the web bundle
+// pass. Native bundling is unaffected — Bloom's native code path is a no-op
+// stub that never imports `.woff2`/`.woff`.
+for (const ext of ['woff2', 'woff']) {
+  if (!config.resolver.assetExts.includes(ext)) {
+    config.resolver.assetExts.push(ext);
+  }
+}
+
 // Enable NativeWind CSS support for native platforms
 module.exports = withNativeWind(config, { input: './styles/global.css' });
 

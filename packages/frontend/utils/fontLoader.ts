@@ -123,15 +123,17 @@ export function getFontLoadConfig() {
 }
 
 /**
- * Font family map for consistent usage across the app
+ * Font family map for consistent usage across the app.
+ *
+ * Inter is now provided by `@oxyhq/bloom` as a variable font registered as
+ * `'Inter'`. Use `fontFamily: FontFamily.inter` together with a `fontWeight`
+ * (e.g. `'500'` for medium, `'600'` for semibold, `'700'` for bold) instead
+ * of the legacy weight-named families.
  */
 export const FontFamily = {
-  // Inter fonts
-  regular: 'Inter-Regular',
-  medium: 'Inter-Medium',
-  semiBold: 'Inter-SemiBold',
-  bold: 'Inter-Bold',
-  // Phudu (variable font - supports all weights)
+  // Inter variable font (weight via fontWeight, shipped by @oxyhq/bloom)
+  inter: 'Inter',
+  // Phudu (variable font, used in SideBar headings — Allo-specific)
   phudu: 'Phudu',
 } as const;
 

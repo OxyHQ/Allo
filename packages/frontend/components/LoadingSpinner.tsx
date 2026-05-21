@@ -40,7 +40,8 @@ const styles = StyleSheet.create({
     text: {
         marginTop: 8,
         fontSize: 14,
-        fontFamily: 'Inter-Medium',
+        fontFamily: 'Inter',
+        fontWeight: '500',
         textAlign: 'center',
     },
 });
