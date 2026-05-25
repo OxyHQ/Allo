@@ -1,0 +1,178 @@
+---
+title: Encryption
+description: Signal Protocol key bundle, ECDH derivation, AES-GCM message framing, and where keys live.
+order: 2
+---
+
+# Encryption
+
+Allo encrypts every message end-to-end with a Signal-style key bundle (ECDH P-256 + ECDSA signatures) and AES-256-GCM for the actual message bytes. All crypto runs through the Web Crypto API (`crypto.subtle`) — there are no third-party crypto libraries on the hot path, so the platform's audited implementation is the trust boundary.
+
+## Primitives
+
+| Operation | Algorithm | Where |
+|-----------|-----------|-------|
+| Identity key pair | ECDH P-256 | `crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits'])` |
+| Signed pre-key | ECDH P-256 | Same as identity key |
+| Pre-key signature | ECDSA P-256 + SHA-256 | `crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, identityPrivate, preKeyPublic)` |
+| Shared-secret derivation | ECDH | `crypto.subtle.deriveBits({ name: 'ECDH', public: theirPub }, ourPriv, 256)` |
+| Symmetric encryption | AES-256-GCM, 96-bit IV | `crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)` |
+| Random nonces / IDs | `crypto.getRandomValues` | All IVs and registration ids |
+
+Source: `packages/frontend/lib/signalProtocol.ts`.
+
+## Key bundle
+
+Each install owns a Signal-style key bundle generated on first launch via `initializeDeviceKeys()`:
+
+```ts
+interface DeviceKeys {
+  deviceId: number;           // Per-install 31-bit random id
+  identityKeyPublic: string;  // ECDH P-256, base64 raw
+  identityKeyPrivate: string; // PKCS8, base64
+  signedPreKey: {
+    keyId: number;
+    publicKey: string;        // ECDH P-256, base64 raw
+    privateKey: string;       // PKCS8, base64
+    signature: string;        // ECDSA over publicKey, base64
+  };
+  preKeys: Array<{
+    keyId: number;
+    publicKey: string;        // ECDH P-256, base64 raw
+    privateKey: string;       // PKCS8, base64
+  }>;
+  registrationId: number;     // 31-bit random
+}
+```
+
+- **Identity key pair** — long-lived, identifies the device across sessions.
+- **Signed pre-key** — medium-lived, replaced on rotation. Its public half is signed by the identity key so a relying party can prove who issued it.
+- **One-time pre-keys** — a batch of 100 generated up front, consumed on first message from each new peer device, replenished as they drop.
+
+## Where keys live
+
+| Layer | What's there |
+|-------|--------------|
+| `expo-secure-store` (iOS Keychain / Android Keystore) | All private key material + the device id + the registration id (`secureStorage.ts`). Gated by the OS credential. |
+| AsyncStorage | Only the **public** half of the bundle (under `signal_device_keys_public`) for fast access when registering with the API. |
+| `@allo/backend` (`Device` collection) | Public keys only — never private material. Unique index on `(userId, deviceId)`. |
+| Server `Message.ciphertext` | The output of `AES-GCM(plaintext, iv, sharedSecret)`. Server has no key to undo it. |
+
+The server has zero ability to decrypt anything. Wiping `expo-secure-store` (uninstall, factory reset, or explicit clear) permanently destroys the device's private keys. Without cloud-synced backups elsewhere, that destroys the device's view of every conversation it participated in.
+
+## Registration
+
+On first launch the client runs:
+
+```ts
+const keys = await initializeDeviceKeys();
+await api.post('/devices', {
+  deviceId: keys.deviceId,
+  identityKeyPublic: keys.identityKeyPublic,
+  signedPreKey: {
+    keyId: keys.signedPreKey.keyId,
+    publicKey: keys.signedPreKey.publicKey,
+    signature: keys.signedPreKey.signature,
+  },
+  preKeys: keys.preKeys.map(k => ({ keyId: k.keyId, publicKey: k.publicKey })),
+  registrationId: keys.registrationId,
+});
+```
+
+The backend writes to the `Device` collection keyed on `(userId, deviceId)`. Other clients that want to send to this device fetch via:
+
+- `GET /api/devices/user/:userId` — full list of devices for a user (public keys only)
+- `GET /api/devices/user/:userId/prekeys/:deviceId` — a fresh batch of one-time pre-keys
+
+The server consumes pre-keys atomically so two senders never get the same one.
+
+## Sending a message
+
+```ts
+import { encryptMessage } from '@/lib/signalProtocol';
+
+const ciphertext = await encryptMessage(plaintext, recipientPublicKey);
+
+await api.post('/messages', {
+  conversationId,
+  senderDeviceId: ourDevice.deviceId,
+  ciphertext,
+  encryptionVersion: 1,
+  messageType: 'text',
+});
+```
+
+Inside `encryptMessage` (`lib/signalProtocol.ts`):
+
+1. Import the recipient's raw ECDH public key.
+2. Import our PKCS8 ECDH private key.
+3. `deriveBits({ name: 'ECDH', public: recipient }, ourPrivate, 256)` -> 32-byte shared secret.
+4. Import the shared secret as an AES-GCM key (256-bit).
+5. Generate a fresh 12-byte IV with `crypto.getRandomValues`.
+6. `encrypt({ name: 'AES-GCM', iv }, aesKey, plaintext)` -> ciphertext + 16-byte GCM auth tag (already appended by `subtle.encrypt`).
+7. Frame as `IV || ciphertext` and base64-encode.
+
+The IV is fresh per message — replaying the same plaintext to the same recipient produces a different ciphertext every time, and AES-GCM's auth tag makes any tampering produce a decryption error on the recipient.
+
+## Receiving a message
+
+```ts
+const plaintext = await decryptMessage(message.ciphertext, sender.identityKeyPublic);
+```
+
+Inside `decryptMessage`:
+
+1. Base64-decode and split off the leading 12-byte IV.
+2. Import the sender's raw ECDH public key.
+3. Import our PKCS8 ECDH private key.
+4. Derive the same 32-byte shared secret (ECDH is symmetric).
+5. Import as AES-GCM key.
+6. `decrypt({ name: 'AES-GCM', iv }, aesKey, encryptedData)` — throws if the auth tag fails.
+
+A decryption failure surfaces as a UI placeholder (`couldn't decrypt`) rather than a crash; the client logs the device + message id pair so the user can re-request a new pre-key handshake.
+
+## Media
+
+Media uploads (images, video, audio, files) follow the same envelope:
+
+```ts
+encryptedMedia: [
+  {
+    id: string;
+    type: 'image' | 'video' | 'audio' | 'file';
+    ciphertext: string;              // Base64 IV || AES-GCM
+    thumbnailCiphertext?: string;    // Encrypted thumbnail for previews
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+    width?: number; height?: number; // Encrypted-out for media
+    duration?: number;               // For video / audio
+  }
+]
+```
+
+The server sees only the descriptor (no plaintext bytes). The client uploads the raw encrypted blob; recipients pull and decrypt locally.
+
+## Device-first + cloud sync
+
+By default `UserSettings.security.cloudSyncEnabled` is `false`. That means:
+
+- Encrypted messages still land on the server (so other devices the same user owns can fetch them after a fresh install).
+- The server holds only ciphertext, indistinguishable from random bytes to it.
+- The user can flip `cloudSyncEnabled` off in `Settings -> Security & Encryption`, in which case the client stops POSTing to `/api/messages` and relies on P2P + local storage only.
+
+Even with cloud sync on, the server is a relay — it cannot read anything. The toggle is more about whether the user wants their ciphertext durably stored across devices.
+
+## Peer-to-peer
+
+When both peers are online and reachable, `lib/p2pMessaging.ts` opens a WebRTC data channel (signaled over Socket.IO). It sends the same Signal-encrypted ciphertext directly — the server only sees the signaling, never the message bytes. If the data channel fails, the client falls back to the REST `/api/messages` relay. Either way, the payload is the exact same opaque AES-GCM frame.
+
+## Threats this does NOT defend against
+
+- A compromised device with a screen reader, screenshots, or root access can read plaintext after the local decrypt — encryption is end-to-end, not end-to-eye.
+- Forgetting the device credential + losing every other signed-in device (with cloud sync off) destroys the conversations permanently. There is no server-side reset.
+- A malicious peer can lie about who they are at the human level; the protocol only proves "messages from device X are consistent across the session". Out-of-band identity verification is the user's job.
+
+## Audit trail
+
+The encryption module is `packages/frontend/lib/signalProtocol.ts`. The server-side device key registry is `packages/backend/src/models/Device.ts` + `packages/backend/src/routes/devices.ts`. Both are deliberately small and read-through.

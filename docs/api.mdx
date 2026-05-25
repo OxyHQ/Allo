@@ -1,0 +1,308 @@
+---
+title: API
+description: REST endpoints and Socket.IO events exposed by @allo/backend.
+order: 3
+---
+
+# API
+
+The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `oxy.auth()`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
+
+## Base URL
+
+| Env | URL |
+|-----|-----|
+| Production | `https://api.allo.earth` |
+| Development | `http://localhost:3000` |
+
+## Health
+
+### `GET /api/health`
+
+Public. Returns:
+
+```json
+{ "status": "ok", "service": "allo-backend" }
+```
+
+## Conversations
+
+### `GET /api/conversations`
+
+List the authenticated user's conversations.
+
+Query params: `limit` (default 50), `offset` (default 0).
+
+Returns: `{ conversations: Conversation[] }`.
+
+### `GET /api/conversations/:id`
+
+Fetch one conversation. Returns the `Conversation`. 404 if the authenticated user is not a participant.
+
+### `POST /api/conversations`
+
+Create a new conversation.
+
+```jsonc
+{
+  "type": "direct" | "group",
+  "participantIds": ["oxyUserA", "oxyUserB"],
+  "name": "Project Allo",        // group only
+  "description": "Team chat",    // group only
+  "avatar": "https://…"          // group only
+}
+```
+
+`direct` conversations dedupe — if one already exists between the same two participants, the existing one is returned.
+
+### `PUT /api/conversations/:id`
+
+Update group metadata. Body fields are all optional: `name`, `description`, `avatar`.
+
+### `POST /api/conversations/:id/participants`
+
+Add participants (group only). Body: `{ participantIds: string[] }`.
+
+### `DELETE /api/conversations/:id/participants/:participantId`
+
+Remove a participant. Admin only.
+
+### `POST /api/conversations/:id/archive` / `unarchive`
+
+Toggle the per-user archive flag (writes the calling user's id into / out of `archivedBy`).
+
+### `POST /api/conversations/:id/mark-read`
+
+Mark the conversation read for the calling user — updates `unreadCounts[userId] = 0` and writes `participants[i].lastReadAt`.
+
+## Messages
+
+All messages are end-to-end encrypted. The server stores only ciphertext and metadata — it cannot read the body.
+
+### `GET /api/messages`
+
+Required query params:
+
+- `conversationId` — id of the conversation
+- `limit` (default 50)
+- `before` — ISO timestamp for pagination (older than)
+
+Returns `{ messages: Message[] }` with the encrypted payloads as the server saw them. The client decrypts locally with the sender's public key.
+
+### `GET /api/messages/:id`
+
+Fetch a single message by id.
+
+### `POST /api/messages`
+
+Send a new message.
+
+```jsonc
+{
+  "conversationId": "…",
+  "senderDeviceId": 1,
+  "ciphertext": "base64(IV || AES-GCM(plaintext))",
+  "encryptedMedia": [             // optional
+    {
+      "id": "media_…",
+      "type": "image",
+      "ciphertext": "base64",
+      "thumbnailCiphertext": "base64",
+      "fileName": "photo.jpg",
+      "fileSize": 102400,
+      "mimeType": "image/jpeg",
+      "width": 1920,
+      "height": 1080,
+      "duration": 0
+    }
+  ],
+  "encryptionVersion": 1,
+  "messageType": "text" | "media" | "system",
+  "replyTo": "messageId",         // optional
+  "fontSize": 16                  // optional
+}
+```
+
+The backend stores the payload, denormalizes `lastMessage` on the conversation, increments `unreadCounts` for every other participant, and emits `newMessage` to the conversation's Socket.IO room.
+
+### `PUT /api/messages/:id`
+
+Edit a message (sender only). Body: `{ text }` for legacy plaintext, or a new encrypted `ciphertext` payload.
+
+### `DELETE /api/messages/:id`
+
+Soft-delete (sender only). Sets `deletedAt`; clients render a tombstone in place.
+
+### `POST /api/messages/:id/read` / `delivered`
+
+Receipts. Updates `readBy[userId] = now` / appends to `deliveredTo`. Emits `messageUpdated` over Socket.IO.
+
+## Devices (Signal Protocol)
+
+### `GET /api/devices`
+
+List the authenticated user's registered devices.
+
+### `GET /api/devices/:deviceId`
+
+Fetch one device by Signal `deviceId` (numeric, per-install).
+
+### `POST /api/devices`
+
+Register a device with its public key bundle.
+
+```jsonc
+{
+  "deviceId": 12345,
+  "identityKeyPublic": "base64",
+  "signedPreKey": {
+    "keyId": 1,
+    "publicKey": "base64",
+    "signature": "base64"
+  },
+  "preKeys": [
+    { "keyId": 1, "publicKey": "base64" },
+    { "keyId": 2, "publicKey": "base64" }
+  ],
+  "registrationId": 67890
+}
+```
+
+Unique on `(userId, deviceId)`. Posting the same `deviceId` again replaces the bundle (key rotation).
+
+### `GET /api/devices/user/:userId`
+
+List another user's devices — **public keys only**. Used by senders to bootstrap a new conversation.
+
+### `GET /api/devices/user/:userId/prekeys/:deviceId`
+
+Pull a batch of one-time pre-keys for a target device. The server consumes them atomically so two senders never get the same one. Returns `{ preKeys: PreKey[] }`. When a device runs low, the client uploads a fresh batch via `POST /api/devices`.
+
+## Profile settings
+
+Per-user settings document. There is no separate user record — these settings hang off the Oxy user id.
+
+### `GET /api/profile/settings/me`
+
+Returns the calling user's `UserSettings`.
+
+### `GET /api/profile/settings/:userId`
+
+Returns another user's public-facing settings (subject to their privacy flags).
+
+### `PUT /api/profile/settings`
+
+Patch settings. Top-level keys are merged; nested objects are deep-merged.
+
+```jsonc
+{
+  "appearance": {
+    "themeMode": "light" | "dark" | "system",
+    "primaryColor": "#000000"
+  },
+  "profileHeaderImage": "https://…",
+  "privacy": {
+    "profileVisibility": "public" | "private" | "followers_only",
+    "showContactInfo": true,
+    "allowTags": true,
+    "showOnlineStatus": true,
+    "hideLikeCounts": false,
+    "hideShareCounts": false,
+    "hideReplyCounts": false,
+    "hideSaveCounts": false,
+    "hiddenWords": ["spoiler"],
+    "restrictedUsers": ["userId"]
+  },
+  "profileCustomization": {
+    "coverPhotoEnabled": true,
+    "minimalistMode": false,
+    "displayName": "Display Name",
+    "coverImage": "https://…"
+  },
+  "security": {
+    "cloudSyncEnabled": false,
+    "encryptionEnabled": true,
+    "peerToPeerEnabled": true
+  }
+}
+```
+
+### `DELETE /api/profile/settings/behavior`
+
+Reset learned UX preferences (`UserBehavior` collection).
+
+### Blocks and restricts
+
+| Method | Path | Body |
+|--------|------|------|
+| `GET` | `/api/profile/blocks` | — |
+| `POST` | `/api/profile/blocks` | `{ blockedId }` |
+| `DELETE` | `/api/profile/blocks/:blockedId` | — |
+| `GET` | `/api/profile/restricts` | — |
+| `POST` | `/api/profile/restricts` | `{ restrictedId }` |
+| `DELETE` | `/api/profile/restricts/:restrictedId` | — |
+
+Blocks hide the user across the app and reject incoming messages. Restricts hide their messages without telling them.
+
+## Real-time (Socket.IO)
+
+The Socket.IO server is attached to the same HTTP server. The primary namespace is `/messaging`.
+
+### Connecting
+
+```ts
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000/messaging', {
+  auth: {
+    token: '<oxy access token>',
+    userId: '<oxy user id>',
+  },
+});
+```
+
+The middleware in `server.ts` reads `socket.handshake.auth`, populates `socket.user = { id }`, and disconnects unauthenticated sockets on connect. Each authenticated socket auto-joins `user:<userId>` for personal events.
+
+### Client -> Server
+
+| Event | Payload | Effect |
+|-------|---------|--------|
+| `joinConversation` | `conversationId: string` | Joins `conversation:<id>` room |
+| `leaveConversation` | `conversationId: string` | Leaves `conversation:<id>` room |
+| `typing` | `{ conversationId, userId, isTyping }` | Broadcast to peers in the conversation room |
+
+### Server -> Client
+
+| Event | Payload | Notes |
+|-------|---------|-------|
+| `newMessage` | `Message` | Encrypted — client decrypts locally |
+| `messageUpdated` | `Message` | Edits + read / delivered receipts |
+| `messageDeleted` | `{ id: string }` | Soft delete |
+| `typing` | `{ conversationId, userId, isTyping }` | Mirrored from peers |
+
+Only three event categories ever trigger client-side side effects beyond updating UI state — anything else logs a dev warning and no-ops, in line with the rest of the Oxy ecosystem's "explicit whitelist, never an `else` branch" pattern.
+
+## Errors
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Validation error. Body: `{ message: string, field?: string }` |
+| `401` | Missing or invalid Oxy bearer token |
+| `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
+| `404` | Resource not found, or you are not a participant |
+| `429` | Rate limited (see `src/middleware/security.ts`) |
+| `503` | MongoDB temporarily unavailable — retry with backoff |
+
+All error bodies are JSON.
+
+## Schemas
+
+The full Mongoose models are in `packages/backend/src/models/`:
+
+- `Conversation.ts` — direct / group, participants[], unreadCounts, archivedBy, lastMessage
+- `Message.ts` — ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo
+- `Device.ts` — userId + deviceId (unique), identityKeyPublic, signedPreKey, preKeys[], registrationId
+- `UserSettings.ts` — appearance / privacy / security / profileCustomization
+- `Block.ts`, `Restrict.ts`, `PushToken.ts`, `UserBehavior.ts`
+
+TypeScript shapes are re-exported from `@allo/shared-types` for the frontend.

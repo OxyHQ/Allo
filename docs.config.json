@@ -1,0 +1,11 @@
+{
+  "package": "allo",
+  "displayName": "Allo",
+  "shortName": "allo",
+  "repo": "https://github.com/OxyHQ/Allo",
+  "category": "app",
+  "versions": ["main"],
+  "defaultVersion": "main",
+  "docsPath": "docs/",
+  "description": "End-to-end encrypted, device-first chat app for iOS, Android, and Web."
+}

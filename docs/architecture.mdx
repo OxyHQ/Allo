@@ -1,0 +1,157 @@
+---
+title: Architecture
+description: Monorepo layout, frontend/backend split, and how the pieces wire together.
+order: 1
+---
+
+# Architecture
+
+Allo is a three-workspace monorepo managed with Bun. The split is intentional and strict: nothing in the frontend imports from the backend, and the only shared surface is `@allo/shared-types`.
+
+## Workspaces
+
+```
+packages/
+  shared-types/   @allo/shared-types   TS-only, built first via postinstall
+  frontend/       @allo/frontend       Expo Router app (iOS / Android / Web)
+  backend/        @allo/backend        Express + Socket.IO + MongoDB
+```
+
+Root `package.json` declares `workspaces: ["packages/*"]` and orchestrates with `bun run --filter`:
+
+```sh
+bun run dev                # all workspaces in parallel
+bun run dev:frontend       # @allo/frontend only
+bun run dev:backend        # @allo/backend only
+bun run build              # build all
+bun run build:shared-types # rebuild types (runs on postinstall too)
+```
+
+## Dependency graph
+
+```
+@allo/shared-types  ◀── @allo/frontend
+                    ◀── @allo/backend
+```
+
+`shared-types` has zero internal deps. Both `frontend` and `backend` consume its compiled `dist/` output (the `postinstall` script in the root `package.json` makes sure the build is always fresh after `bun install`).
+
+External shared deps both halves pull from npm:
+
+- `@oxyhq/core` — auth client + types
+- `@oxyhq/services` — RN auth context (frontend only)
+- `@oxyhq/bloom` — UI primitives (frontend only)
+
+## Frontend
+
+`packages/frontend/` is an Expo SDK 54 app using Expo Router for file-based routing. Highlights:
+
+| Area | Module |
+|------|--------|
+| Routing | `app/` (Expo Router v54, typed routes) |
+| Styling | NativeWind 4 (Tailwind for RN) + Bloom theme tokens |
+| State (UI) | Zustand stores in `stores/` |
+| State (server) | Custom hooks in `hooks/` over the offline-aware API client in `lib/api/` |
+| Encryption | `lib/signalProtocol.ts` + `stores/deviceKeysStore.ts` |
+| Offline cache | `lib/offlineStorage.ts` + `lib/offlineQueue/` (AsyncStorage) |
+| Secure storage | `lib/secureStorage.ts` (wraps `expo-secure-store`) |
+| Real-time | Socket.IO client (`lib/network/`) |
+| P2P | `lib/p2pMessaging.ts` (WebRTC data channels) |
+| i18n | `lib/i18n.ts` + `locales/` (en, es, it) |
+| Notifications | `expo-notifications` + backend `/api/notifications/push-token` |
+
+### Responsive layout
+
+Breakpoints live in `constants/responsive.ts`:
+
+- `< 768px` — single-pane stack
+- `768 - 1023px` — list + thread two-pane
+- `>= 1024px` — list + thread + details three-pane
+
+The chat layouts (`app/(chat)/_layout.tsx`, `app/c/_layout.tsx`) read these breakpoints and switch component trees at the boundary.
+
+### Stores
+
+Zustand-backed stores in `stores/`:
+
+| Store | Responsibility |
+|-------|---------------|
+| `messagesStore` | In-memory + AsyncStorage-persisted decrypted message cache, keyed by conversation id. |
+| `conversationsStore` | List of conversations + denormalized last-message + unread counts. |
+| `deviceKeysStore` | Local device key bundle (public + private), regen / rotation triggers. |
+| `usersStore` | Resolved user profiles fetched from Oxy. |
+| `appearanceStore` | Theme mode + accent color. Mirrors backend `UserSettings.appearance`. |
+| `chatUIStore` | Transient UI: active conversation, draft text, scroll position. |
+| `messagePreferencesStore` | Per-conversation font size, density, mute state. |
+| `conversationSwipePreferencesStore` | User-customized swipe actions. |
+
+State that needs to survive launch goes through Zustand's persist middleware over AsyncStorage; ephemeral UI state lives in plain Zustand.
+
+## Backend
+
+`packages/backend/` is a single Express app + a Socket.IO server attached to the same HTTP server. Entry point is `server.ts`.
+
+```
+src/
+  middleware/   security (rate limiter, brute force protection)
+  models/       Mongoose schemas
+  routes/       Express routers mounted under /api
+  services/     business logic shared across routes
+  types/        backend-only TS types
+  utils/        helpers (database connect, logger, etc.)
+```
+
+### Mongoose models
+
+| Model | What it stores |
+|-------|---------------|
+| `Conversation` | `direct` or `group`, participants[], unreadCounts, lastMessage, archivedBy |
+| `Message` | Ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo |
+| `Device` | Signal Protocol public key bundle per `(userId, deviceId)` — unique index |
+| `UserSettings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
+| `Block` / `Restrict` | Per-user block + restrict lists |
+| `PushToken` | Expo / FCM tokens for push delivery |
+| `UserBehavior` | Per-user UX preferences / analytics counters |
+
+There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxyhq/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
+
+### Authentication
+
+```ts
+import { oxyClient } from "@oxyhq/core";
+
+const oxy = oxyClient;
+
+// Public routes
+publicApiRouter.get("/health", (req, res) => res.json({ status: "ok" }));
+
+// Authenticated routes
+app.use("/api", oxy.auth(), authenticatedApiRouter);
+```
+
+`oxy.auth()` validates the incoming `Authorization: Bearer <jwt>` against the Oxy API, populates `req.user = { id, ... }`, and rejects with 401 if the token is missing or invalid. Optional auth is available via the `optionalAuth` middleware in `server.ts` for routes that surface different data depending on sign-in state.
+
+### Real-time
+
+The Socket.IO server lives on the same HTTP server. The `/messaging` namespace is the primary surface; the main namespace is reserved for ambient connection tracking.
+
+Connection authentication mirrors REST — the client sends `{ token, userId }` in `socket.handshake.auth`. The middleware in `server.ts` populates `socket.user = { id }`; unauthenticated sockets are disconnected on connect.
+
+Each authenticated socket auto-joins `user:<userId>`. The client then sends `joinConversation` / `leaveConversation` to subscribe to per-thread rooms. The server broadcasts `newMessage`, `messageUpdated`, `messageDeleted`, and `typing` into the conversation room.
+
+### Security middleware
+
+`src/middleware/security.ts` exports `rateLimiter` and `bruteForceProtection`. They are applied in `server.ts` to surface-area routes (login attempts via Oxy, sensitive mutations). MongoDB connection failures surface as `503 Database temporarily unavailable` rather than 500s, so clients can retry.
+
+## Shared types
+
+`packages/shared-types/` is a plain TypeScript package. `bun run build` emits `dist/` and the `postinstall` script in the root runs `bun run build:shared-types` so the latest types are always present after `bun install`. Both frontend and backend `import { … } from "@allo/shared-types"`.
+
+## Build & deploy
+
+| Target | Command | Output |
+|--------|---------|--------|
+| Web | `bun run build:frontend` then `bun run --filter @allo/frontend build-web:prod` | `packages/frontend/dist/` (deployed to Vercel — see `vercel.json`) |
+| iOS | `eas build --platform ios` in `packages/frontend/` | EAS-managed `.ipa` |
+| Android | `eas build --platform android` in `packages/frontend/` | EAS-managed `.aab` |
+| Backend | `bun run build:backend` | `packages/backend/dist/`. Containerized via the included `Dockerfile`; also deployable to DigitalOcean (`.do/` app spec) or Vercel functions (`packages/backend/vercel.json`). |

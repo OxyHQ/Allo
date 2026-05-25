@@ -1,0 +1,180 @@
+---
+title: Allo
+description: End-to-end encrypted, device-first chat app for iOS, Android, and Web.
+order: 0
+---
+
+# Allo
+
+A modern, cross-platform chat app built with Expo, React Native, and a Node.js / Express backend. Every message is end-to-end encrypted with Signal-style ECDH + AES-GCM, stored on the device first, and only relayed through the server as opaque ciphertext.
+
+<Badge variant="success">App</Badge> <Badge>iOS / Android / Web</Badge>
+
+## What it is
+
+Allo is the Oxy ecosystem's encrypted messenger. The frontend is an Expo Router app that targets iOS, Android, and Web from one codebase. The backend is a stateless Express service that brokers conversations, device keys, and Socket.IO traffic — it never holds plaintext.
+
+Identity is delegated to the Oxy platform: users sign in with their Oxy account through `@oxyhq/services`, the backend trusts the resulting JWT, and there is no separate user database in Allo. The only per-user records the server holds are conversation membership, device keys, encrypted message blobs, and a small `UserSettings` document.
+
+For account management UI see [MyAccount](/developers/docs/accounts). For the underlying RN SDK see [@oxyhq/services](/developers/docs/services).
+
+## Architecture
+
+```
+   ┌──────────────────────┐                  ┌──────────────────────┐
+   │   Allo Frontend      │  ── REST ─────▶  │   Allo Backend       │
+   │   (Expo / RN / Web)  │                  │   (Express + Mongo)  │
+   │                      │  ◀── Socket.IO ─ │                      │
+   └──────────────────────┘                  └──────────────────────┘
+            │                                          │
+            ▼                                          ▼
+     SecureStore / AsyncStorage              MongoDB (ciphertext only)
+     (device keys, message cache,            +  Oxy API (auth, profiles)
+      offline queue)
+```
+
+The split is strict: every byte the server stores for a `Message` document is opaque to it. Plaintext only exists on the sender's device, on the recipient's device, and in transit over TLS to the API.
+
+Inside `packages/`:
+
+| Package | Role |
+|---------|------|
+| `frontend` (`@allo/frontend`) | Expo + Expo Router app. NativeWind for styling, Zustand for local state, TanStack-style stores around the encrypted message cache. |
+| `backend` (`@allo/backend`) | Express + Socket.IO. Mongoose models for conversations, messages, devices, settings, blocks, restricts, push tokens. Auth via `@oxyhq/core`'s `oxy.auth()`. |
+| `shared-types` (`@allo/shared-types`) | TypeScript-only package built ahead of the others (a `postinstall` script runs `build:shared-types`). |
+
+Build order matters: `shared-types` -> `backend` + `frontend` (in parallel).
+
+## Threat model
+
+- **What the server sees:** ciphertext, message size, sender/recipient envelope (conversation id, sender Oxy user id, sender device id), timing, and the optional encrypted media descriptors.
+- **What the server cannot see:** message bodies, media bytes, thumbnails, reactions, or anything else encrypted by Signal Protocol.
+- **What a stolen device cannot do:** read messages without the OS-level credential that gates `expo-secure-store` (Face ID / fingerprint / passcode). Private keys live in SecureStore on iOS / Android and never leave the device.
+- **Recovery:** there is no server-side reset. Messages stored only on-device are gone if the device is lost without cloud sync enabled.
+
+Cloud sync is **opt-in** per user in `Settings -> Security & Encryption`. Until they enable it, the server's `Message` collection is the only off-device copy — and even that is ciphertext.
+
+## Install
+
+Clone the repo and install with bun:
+
+```sh
+git clone https://github.com/OxyHQ/Allo.git
+cd Allo
+bun install
+```
+
+`bun install` resolves the three workspaces, then `postinstall` builds `@allo/shared-types` so the other packages can type-check immediately.
+
+### Prerequisites
+
+- Node.js 18+ and Bun 1.0+
+- MongoDB (local or hosted) — connection string goes into `packages/backend/.env`
+- For iOS: macOS + Xcode. For Android: Android Studio.
+
+### Environment
+
+`packages/backend/.env`:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/allo
+OXY_API_URL=https://api.oxy.so
+FRONTEND_URL=https://allo.earth
+PORT=3000
+NODE_ENV=development
+```
+
+`packages/frontend/.env`:
+
+```env
+EXPO_PUBLIC_API_URL=http://localhost:3000
+EXPO_PUBLIC_WS_URL=ws://localhost:3000
+EXPO_PUBLIC_POSTHOG_KEY=optional_posthog_key
+```
+
+## Quick start
+
+```sh
+# Start everything (frontend + backend)
+bun run dev
+
+# Or one at a time
+bun run dev:backend
+bun run dev:frontend
+```
+
+Then in the Expo CLI, press `w` for web, `i` for iOS simulator, or `a` for Android emulator.
+
+## Core concepts
+
+### Device-first storage
+
+Allo treats the device as the source of truth. When a user sends a message:
+
+1. The client encrypts the plaintext locally using its Signal Protocol device keys.
+2. The ciphertext is written to AsyncStorage via `lib/offlineStorage.ts` and added to the conversation's Zustand `messagesStore`.
+3. The encrypted payload is POSTed to `/api/messages`. If the network is unavailable, the mutation sits in the offline queue (`lib/offlineQueue/`) and replays on reconnect.
+4. The recipient's device pulls or receives the ciphertext, decrypts locally, and renders.
+
+The UI never blocks on the network — sent messages appear immediately and reconcile when the server responds.
+
+### Signal Protocol device keys
+
+Each install generates its own Signal-style key bundle on first launch (`lib/signalProtocol.ts`, `stores/deviceKeysStore.ts`):
+
+- **Identity key pair** — ECDH P-256, long-lived.
+- **Signed pre-key** — ECDH P-256, signed by the identity key with ECDSA over SHA-256.
+- **One-time pre-keys** — 100 ECDH P-256 key pairs, replenished as they are consumed.
+- **Registration id** — random 31-bit integer, persisted in `expo-secure-store`.
+
+Public keys are published to `POST /api/devices`. Private keys never leave the device. Encryption is ECDH derive-bits to a shared secret, then AES-GCM with a fresh 96-bit IV per message.
+
+See [Encryption](./encryption) for the full key model and choreography.
+
+### Conversations and messages
+
+A `Conversation` is either `direct` (two participants) or `group` (named, with admins). The server-side schema lives in `packages/backend/src/models/Conversation.ts`:
+
+- `participants[]` — `{ userId, role, joinedAt, lastReadAt }`
+- `unreadCounts` — `Record<userId, number>` updated when a participant marks read
+- `archivedBy` — per-user soft archive
+- `lastMessage` — denormalized summary of the most recent message for list views
+
+`Message` documents (`models/Message.ts`) store `ciphertext`, `senderDeviceId`, `encryptionVersion`, optional `encryptedMedia[]`, plus `readBy`, `deliveredTo`, and a soft-delete `deletedAt`.
+
+### Real-time over Socket.IO
+
+The backend exposes a `/messaging` namespace (`server.ts`). The client authenticates with the same Oxy bearer token and joins:
+
+- `user:<userId>` — personal room for delivery / device events
+- `conversation:<conversationId>` — per-conversation room for `newMessage`, `messageUpdated`, `messageDeleted`, and `typing` indicators
+
+`joinConversation` / `leaveConversation` events scope subscriptions when the active thread changes. Typing indicators are broadcast to peers in the conversation room except the sender.
+
+### Peer-to-peer fallback
+
+When both ends are online, `lib/p2pMessaging.ts` opens a WebRTC data channel (signaled through Socket.IO) and sends the same ciphertext directly device-to-device, skipping the server hop. If P2P fails or one side is offline, the client falls back to the REST relay. P2P payloads are still Signal-encrypted — losing the P2P channel never downgrades the security boundary.
+
+### Routing
+
+Frontend routing follows Expo Router v54 conventions:
+
+```
+app/
+  _layout.tsx
+  (chat)/
+    _layout.tsx          # two-pane on >=768px
+    index.tsx            # conversation list
+    settings/...
+  c/
+    _layout.tsx          # three-pane on >=1024px
+    [id].tsx             # individual conversation
+```
+
+Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a details column.
+
+## Documentation map
+
+- [Architecture](./architecture) — package layout, dependency graph, build order
+- [Encryption](./encryption) — Signal Protocol key bundle, ECDH derivation, AES-GCM framing
+- [API](./api) — backend REST and Socket.IO surface
