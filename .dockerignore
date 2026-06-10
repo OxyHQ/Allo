@@ -1,0 +1,36 @@
+# Build context exclusions for backend Docker image.
+# Keeps the context small and prevents host node_modules / build
+# artifacts from leaking into the image (which would break the
+# in-container install and bloat the image).
+
+# Dependencies (always installed fresh inside the image)
+**/node_modules
+
+# Frontend source is not needed for the backend image, but its package.json
+# must remain available so `bun install --frozen-lockfile` can validate the
+# workspace lockfile (the frontend deps themselves are not installed).
+packages/frontend/*
+!packages/frontend/package.json
+
+# Build output / caches
+**/dist
+**/.expo
+**/.next
+**/coverage
+**/tsconfig.tsbuildinfo
+
+# VCS / CI / editor
+.git
+.github
+.gitignore
+.vscode
+.idea
+
+# Local env files (secrets are injected at runtime)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Docs and misc
+docs
+*.md
