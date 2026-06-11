@@ -6,6 +6,12 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "@oxyhq/core": "1.11.23"
+  },
+  "resolutions": {
+    "@oxyhq/core": "1.11.23"
+  },
   "scripts": {
     "dev": "bun run dev --filter '*'",
     "dev:frontend": "bun run --filter @allo/frontend dev",
