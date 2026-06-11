@@ -136,7 +136,9 @@ export class ConversationService {
         return {
           ...conv,
           participants: convEnrichedParticipants,
-        } as IConversation;
+          // Interop bridge (F3.0): native conversations report 'allo'.
+          network: conv.bridge?.network ?? "allo",
+        } as unknown as IConversation;
       });
     } catch (error) {
       logger.error('Error fetching user conversations:', error);
@@ -169,7 +171,9 @@ export class ConversationService {
       return {
         ...conversation,
         participants: enrichedParticipants,
-      } as IConversation;
+        // Interop bridge (F3.0): native conversations report 'allo'.
+        network: conversation.bridge?.network ?? "allo",
+      } as unknown as IConversation;
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error fetching conversation:', error);
@@ -208,7 +212,7 @@ export class ConversationService {
           .exec();
 
         if (existing) {
-          return existing as IConversation;
+          return existing as unknown as IConversation;
         }
       }
 

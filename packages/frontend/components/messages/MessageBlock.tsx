@@ -8,8 +8,13 @@ import { MessageAvatar } from './MessageAvatar';
 import type { MediaItem, Message } from '@/stores';
 import { MessageGroup } from '@/utils/messageGrouping';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import { colors } from '@/styles/colors';
 import { useAvatarShape, useMyAvatarShape } from '@/hooks/useAvatarShape';
+import { LocationMessage } from '@/components/conversation/LocationMessage';
+import { ContactMessage } from '@/components/conversation/ContactMessage';
+import { PollMessage } from '@/components/conversation/PollMessage';
+import { FileMessage } from '@/components/conversation/FileMessage';
+import { AudioMessage } from '@/components/conversation/AudioMessage';
+import { useOxy } from '@oxyhq/services';
 
 export interface MessageBlockProps {
   group: MessageGroup;
@@ -71,6 +76,8 @@ export const MessageBlock = memo<MessageBlockProps>(({
   const incomingSenderShape = useAvatarShape(isIncoming ? senderId : undefined);
   const senderShape = isIncoming ? incomingSenderShape : myAvatarShape;
   const showSenderName = Boolean(isGroup && !isAiGroup && isIncoming && senderName);
+  const { user } = useOxy();
+  const currentUserId = user?.id;
 
   // Create refs map for each message bubble using useState
   const [bubbleRefsMap] = useState(() => {
@@ -101,6 +108,15 @@ export const MessageBlock = memo<MessageBlockProps>(({
   const allMedia: MediaItem[] = useMemo(() => {
     return messages.flatMap(msg => msg.media || []);
   }, [messages]);
+
+  // Visual media (carousel) vs files / audio (rendered as their own bubbles).
+  const visualMedia: MediaItem[] = useMemo(
+    () =>
+      allMedia.filter(
+        (m) => m.type === 'image' || m.type === 'video' || m.type === 'gif'
+      ),
+    [allMedia]
+  );
 
   // Check if there's text content
   const hasText = messages.some(msg => msg.text && msg.text.trim().length > 0);
@@ -159,7 +175,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
     senderName: {
       fontSize: MESSAGING_CONSTANTS.SENDER_NAME_SIZE,
       fontWeight: '600',
-      color: theme.colors.textSecondary || '#666666',
+      color: theme.colors.textSecondary,
       marginBottom: 2,
       marginLeft: 10,
     },
@@ -233,10 +249,10 @@ export const MessageBlock = memo<MessageBlockProps>(({
           <Text style={styles.senderName}>{senderName}</Text>
         )}
 
-        {/* Media carousel (all media from all messages in group) */}
-        {allMedia.length > 0 && (
+        {/* Media carousel (only visual media: images, videos, gifs) */}
+        {visualMedia.length > 0 && (
           <MediaCarousel
-            media={allMedia}
+            media={visualMedia}
             isAiMessage={isAiGroup}
             getMediaUrl={getMediaUrl}
             onMediaPress={onMediaPress}
@@ -285,6 +301,68 @@ export const MessageBlock = memo<MessageBlockProps>(({
           ) : null
         )}
 
+        {/* Structured attachments (location / contact / poll) */}
+        {messages.map((message) => {
+          const elements: React.ReactNode[] = [];
+          if (message.location) {
+            elements.push(
+              <LocationMessage
+                key={`loc-${message.id}`}
+                location={message.location}
+                isSent={message.isSent}
+              />
+            );
+          }
+          if (message.contact) {
+            elements.push(
+              <ContactMessage
+                key={`contact-${message.id}`}
+                contact={message.contact}
+                isSent={message.isSent}
+              />
+            );
+          }
+          if (message.poll) {
+            elements.push(
+              <PollMessage
+                key={`poll-${message.id}`}
+                conversationId={message.conversationId}
+                messageId={message.id}
+                poll={message.poll}
+                isSent={message.isSent}
+                currentUserId={currentUserId}
+              />
+            );
+          }
+          // Non-visual media (file & audio)
+          (message.media || []).forEach((m) => {
+            if (m.type === 'audio') {
+              elements.push(
+                <AudioMessage
+                  key={`audio-${m.id}`}
+                  media={m}
+                  isSent={message.isSent}
+                  getMediaUrl={getMediaUrl}
+                />
+              );
+            } else if (m.type === 'file') {
+              elements.push(
+                <FileMessage
+                  key={`file-${m.id}`}
+                  media={m}
+                  isSent={message.isSent}
+                  getMediaUrl={getMediaUrl}
+                />
+              );
+            }
+          });
+          return elements.length > 0 ? (
+            <View key={`attach-${message.id}`} style={{ gap: 6 }}>
+              {elements}
+            </View>
+          ) : null;
+        })}
+
         {/* Message bubbles */}
         {hasText && (
           <View style={styles.bubblesContainer}>
@@ -318,7 +396,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       isCloseToPrevious={isCloseToPrevious}
                       messageType={message.messageType || 'user'}
                       readStatus={message.readStatus}
-                      isEdited={false} // TODO: Add edited status to Message type
+                      isEdited={Boolean(message.editedAt)}
                       fontSize={message.fontSize} // Use custom font size if set
                     />
                   </View>

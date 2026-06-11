@@ -1,7 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';

@@ -38,6 +38,7 @@ jest.mock("@/lib/signalProtocol", () => ({
   decryptFromPeer: jest.fn(),
   remainingOneTimePreKeys: jest.fn(async () => 100),
   generateAndStoreNewPreKeys: jest.fn(async () => []),
+  wipeAllSignalState: jest.fn(async () => undefined),
   PREKEY_LOW_THRESHOLD: 20,
   LegacyMessageError: class LegacyMessageError extends Error {},
 }));
@@ -80,18 +81,23 @@ import { useConversationsStore } from "@/stores/conversationsStore";
 // eslint-disable-next-line import/first
 import { getMessagesLocally } from "@/lib/offlineStorage";
 // eslint-disable-next-line import/first
-import { buildIncomingMessage } from "@/hooks/useRealtimeMessaging";
+import { buildIncomingMessage, handleMessagingConnectError } from "@/hooks/useRealtimeMessaging";
 // eslint-disable-next-line import/first
 import { api as mockApi, setApiDeviceId } from "@/utils/api";
 // eslint-disable-next-line import/first
-import { encryptForPeer, decryptFromPeer } from "@/lib/signalProtocol";
+import { encryptForPeer, decryptFromPeer, wipeAllSignalState } from "@/lib/signalProtocol";
 // eslint-disable-next-line import/first
 import { loadSession } from "@/lib/signal/sessionStore";
+// eslint-disable-next-line import/first
+import { useDeviceListRefreshStore } from "@/stores/deviceListRefreshStore";
+// eslint-disable-next-line import/first
+import { serializeMediaBody } from "@/lib/mediaPayload";
 
 const mockEncryptForPeer = encryptForPeer as jest.Mock;
 const mockDecryptFromPeer = decryptFromPeer as jest.Mock;
 const mockLoadSession = loadSession as jest.Mock;
 const mockSetApiDeviceId = setApiDeviceId as jest.Mock;
+const mockWipeAllSignalState = wipeAllSignalState as jest.Mock;
 // `mockApi` methods are jest.fn() from the factory above.
 const apiGet = mockApi.get as jest.Mock;
 const apiPost = mockApi.post as jest.Mock;
@@ -262,6 +268,56 @@ describe("encryptForConversation", () => {
     expect(batchCalls).toHaveLength(1);
     const requestedTargets = (batchCalls[0][1] as { targets: { deviceId: number }[] }).targets;
     expect(requestedTargets.map((t) => t.deviceId)).toEqual([2001]);
+  });
+
+  it("serializes session establishment: concurrent fan-outs to the same new peer batch-fetch once", async () => {
+    apiGet.mockImplementation(async (endpoint: string) => {
+      if (endpoint === `/devices/user/${OWN_USER}`) return devicesResponse([OWN_DEVICE]);
+      if (endpoint === "/devices/user/userB") return devicesResponse([2000]);
+      throw new Error(`unexpected GET ${endpoint}`);
+    });
+    // Peer 2000 is session-less for the whole test (mocked encrypt never persists
+    // a real session). The per-peer establishment lock is what must prevent the
+    // second concurrent fan-out from running a second X3DH bundle fetch.
+    mockLoadSession.mockResolvedValue(null);
+
+    // Hold the establishing encrypt open until both fan-outs have had a chance to
+    // reach the claim step, proving the lock (not timing) does the serialization.
+    let releaseEncrypt: (() => void) | undefined;
+    const encryptGate = new Promise<void>((resolve) => {
+      releaseEncrypt = resolve;
+    });
+    let encryptCalls = 0;
+    mockEncryptForPeer.mockImplementation(async (peer: { userId: string; deviceId: number }) => {
+      encryptCalls += 1;
+      if (encryptCalls === 1) await encryptGate; // first (establishing) call blocks
+      return `ct-${peer.userId}-${peer.deviceId}`;
+    });
+
+    const callA = useDeviceKeysStore
+      .getState()
+      .encryptForConversation("from A", [OWN_USER, "userB"], OWN_USER);
+    const callB = useDeviceKeysStore
+      .getState()
+      .encryptForConversation("from B", [OWN_USER, "userB"], OWN_USER);
+
+    // Let both fan-outs run up to the (blocked) establishing encrypt, then release.
+    await Promise.resolve();
+    releaseEncrypt?.();
+
+    const [resultA, resultB] = await Promise.all([callA, callB]);
+
+    // The batch prekey endpoint was hit exactly once for the shared new device,
+    // so only one one-time prekey was consumed (no double burn / no overwrite).
+    const batchCalls = apiPost.mock.calls.filter((c) => c[0] === "/devices/prekeys/batch");
+    expect(batchCalls).toHaveLength(1);
+    const requestedTargets = (batchCalls[0][1] as { targets: { deviceId: number }[] }).targets;
+    expect(requestedTargets.map((t) => t.deviceId)).toEqual([2000]);
+
+    // Both fan-outs still produced an envelope for the recipient (each with its
+    // own plaintext — the second encrypts steady-state after awaiting the lock).
+    expect(resultA.envelopes.map((e) => e.recipientDeviceId)).toEqual([2000]);
+    expect(resultB.envelopes.map((e) => e.recipientDeviceId)).toEqual([2000]);
   });
 });
 
@@ -595,6 +651,115 @@ describe("realtime newMessage — own-other-device sync", () => {
     expect(result.message?.isSent).toBe(false);
     expect(result.message?.text).toBe("plain:ct-peer");
   });
+
+  it("reconstructs media + caption from a decrypted encrypted-media body (Fase 1D)", async () => {
+    // The decrypted plaintext is a versioned media payload carrying the caption
+    // and a key-bearing media ref; buildIncomingMessage must surface text + media
+    // + attachmentType (not the raw JSON) so live media renders immediately.
+    const mediaBody = serializeMediaBody({
+      text: "look at this",
+      mediaRefs: [
+        {
+          mediaId: "blob1",
+          url: "https://cdn.example/blob1.bin",
+          key: "a2V5",
+          mime: "image/png",
+          size: 2048,
+          type: "image",
+          fileName: "pic.png",
+        },
+      ],
+    });
+    const decrypt = jest.fn(async () => mediaBody);
+    const result = await buildIncomingMessage(
+      {
+        _id: "peer-media-1",
+        conversationId: "conv1",
+        senderId: "userB",
+        senderDeviceId: 2000,
+        ciphertext: "ct-media",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+      OWN_USER,
+      OWN_DEVICE,
+      decrypt
+    );
+
+    expect(result.skip).toBe(false);
+    expect(result.decryptionSucceeded).toBe(true);
+    expect(result.message?.text).toBe("look at this");
+    expect(result.message?.attachmentType).toBe("image");
+    expect(result.message?.media).toHaveLength(1);
+    expect(result.message?.media?.[0]).toMatchObject({
+      id: "blob1",
+      type: "image",
+      url: "https://cdn.example/blob1.bin",
+      encrypted: true,
+      encryptionKey: "a2V5",
+      mimeType: "image/png",
+    });
+  });
+
+  it("reconstructs a location card from a decrypted location body (F2.6)", async () => {
+    // The decrypted plaintext is a v2 attachment body carrying a structured
+    // location; buildIncomingMessage must surface location + attachmentType so the
+    // map card renders live instead of waiting for a refetch.
+    const locationBody = serializeMediaBody({
+      mediaRefs: [],
+      location: { latitude: 41.3851, longitude: 2.1734, label: "Barcelona" },
+    });
+    const decrypt = jest.fn(async () => locationBody);
+    const result = await buildIncomingMessage(
+      {
+        _id: "peer-loc-1",
+        conversationId: "conv1",
+        senderId: "userB",
+        senderDeviceId: 2000,
+        ciphertext: "ct-loc",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+      OWN_USER,
+      OWN_DEVICE,
+      decrypt
+    );
+
+    expect(result.skip).toBe(false);
+    expect(result.decryptionSucceeded).toBe(true);
+    expect(result.message?.attachmentType).toBe("location");
+    expect(result.message?.location).toEqual({
+      latitude: 41.3851,
+      longitude: 2.1734,
+      label: "Barcelona",
+    });
+    expect(result.message?.media).toBeUndefined();
+  });
+
+  it("reconstructs a contact card from a decrypted contact body (F2.6)", async () => {
+    const contactBody = serializeMediaBody({
+      mediaRefs: [],
+      contact: { name: "Ada Lovelace", phones: ["+44 20 7946 0000"] },
+    });
+    const decrypt = jest.fn(async () => contactBody);
+    const result = await buildIncomingMessage(
+      {
+        _id: "peer-contact-1",
+        conversationId: "conv1",
+        senderId: "userB",
+        senderDeviceId: 2000,
+        ciphertext: "ct-contact",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+      OWN_USER,
+      OWN_DEVICE,
+      decrypt
+    );
+
+    expect(result.message?.attachmentType).toBe("contact");
+    expect(result.message?.contact).toEqual({
+      name: "Ada Lovelace",
+      phones: ["+44 20 7946 0000"],
+    });
+  });
 });
 
 describe("device id wiring", () => {
@@ -620,5 +785,120 @@ describe("device id wiring", () => {
   it("clears the device id on reset", () => {
     useDeviceKeysStore.getState().reset();
     expect(mockSetApiDeviceId).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("handleRevocation", () => {
+  const NEW_DEVICE = 2222;
+
+  beforeEach(() => {
+    const signal = jest.requireMock("@/lib/signalProtocol") as {
+      initializeDeviceKeys: jest.Mock;
+    };
+    // Re-initialization mints a brand new device identity.
+    signal.initializeDeviceKeys.mockResolvedValue({
+      deviceId: NEW_DEVICE,
+      identityKeyPublic: "ikpub-new",
+      identityKeyPrivate: "ikpriv-new",
+      signedPreKey: { keyId: 1, publicKey: "spk", privateKey: "spkpriv", signature: "sig" },
+      preKeys: [],
+      registrationId: 99,
+    });
+    // registerDevice POST succeeds during initialize().
+    apiPost.mockResolvedValue({ data: { data: {} } });
+  });
+
+  it("wipes Signal state, clears the device id, re-initializes and returns the new device id", async () => {
+    seedDeviceKeys(); // current device is OWN_DEVICE
+    // Warm the device-list cache so we can prove revocation clears it.
+    apiGet.mockImplementation(async () => devicesResponse([2000]));
+    await useDeviceKeysStore.getState().getDevicesForUsers(["userB"]);
+
+    const newId = await useDeviceKeysStore.getState().handleRevocation();
+
+    // All persisted Signal state was wiped exactly once.
+    expect(mockWipeAllSignalState).toHaveBeenCalledTimes(1);
+    // The old device id was cleared from the API header, then the NEW id set by
+    // initialize() (which calls setApiDeviceId again).
+    expect(mockSetApiDeviceId).toHaveBeenCalledWith(null);
+    expect(mockSetApiDeviceId).toHaveBeenLastCalledWith(NEW_DEVICE);
+    // Re-initialized as a new device.
+    expect(newId).toBe(NEW_DEVICE);
+    expect(useDeviceKeysStore.getState().deviceKeys?.deviceId).toBe(NEW_DEVICE);
+    expect(useDeviceKeysStore.getState().isInitialized).toBe(true);
+
+    // The device-list cache was cleared: the next lookup hits the network again.
+    apiGet.mockClear();
+    apiGet.mockImplementation(async () => devicesResponse([2000]));
+    await useDeviceKeysStore.getState().getDevicesForUsers(["userB"]);
+    expect(apiGet.mock.calls.filter((c) => c[0] === "/devices/user/userB")).toHaveLength(1);
+  });
+
+  it("de-duplicates concurrent revocation events into a single re-key", async () => {
+    seedDeviceKeys();
+    const signal = jest.requireMock("@/lib/signalProtocol") as {
+      initializeDeviceKeys: jest.Mock;
+    };
+
+    const [a, b] = await Promise.all([
+      useDeviceKeysStore.getState().handleRevocation(),
+      useDeviceKeysStore.getState().handleRevocation(),
+    ]);
+
+    // Wipe + re-init ran once despite two concurrent events.
+    expect(mockWipeAllSignalState).toHaveBeenCalledTimes(1);
+    expect(signal.initializeDeviceKeys).toHaveBeenCalledTimes(1);
+    expect(a).toBe(NEW_DEVICE);
+    expect(b).toBe(NEW_DEVICE);
+  });
+
+  it("returns null and stays un-initialized when re-initialization fails", async () => {
+    seedDeviceKeys();
+    const signal = jest.requireMock("@/lib/signalProtocol") as {
+      initializeDeviceKeys: jest.Mock;
+    };
+    signal.initializeDeviceKeys.mockRejectedValueOnce(new Error("init failed"));
+
+    const result = await useDeviceKeysStore.getState().handleRevocation();
+
+    expect(result).toBeNull();
+    expect(mockWipeAllSignalState).toHaveBeenCalledTimes(1);
+    expect(useDeviceKeysStore.getState().isInitialized).toBe(false);
+    expect(useDeviceKeysStore.getState().deviceKeys).toBeNull();
+  });
+});
+
+describe("handleMessagingConnectError — revoked-while-offline self-heal", () => {
+  let revocationSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    // Spy so we assert the self-heal trigger without running a real re-key.
+    revocationSpy = jest
+      .spyOn(useDeviceKeysStore.getState(), "handleRevocation")
+      .mockResolvedValue(2222);
+  });
+
+  afterEach(() => {
+    revocationSpy.mockRestore();
+  });
+
+  it("re-keys this device when the server rejects the handshake as unregistered", () => {
+    handleMessagingConnectError(new Error("unregistered_device"));
+    expect(revocationSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT re-key on an ordinary transient connection error", () => {
+    handleMessagingConnectError(new Error("timeout"));
+    handleMessagingConnectError(new Error("xhr poll error"));
+    handleMessagingConnectError(undefined);
+    expect(revocationSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("device list refresh signal", () => {
+  it("bumps the revision so a mounted linked-devices screen refetches", () => {
+    const before = useDeviceListRefreshStore.getState().revision;
+    useDeviceListRefreshStore.getState().bump();
+    expect(useDeviceListRefreshStore.getState().revision).toBe(before + 1);
   });
 });

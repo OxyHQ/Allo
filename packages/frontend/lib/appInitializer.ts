@@ -17,8 +17,8 @@ import { initializeI18n } from './i18n';
 import { INITIALIZATION_TIMEOUT } from './constants';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { useMessagesStore } from '@/stores/messagesStore';
-import { p2pManager } from './p2pMessaging';
 import { runStartupHealthCheck } from '@/utils/appHealthCheck';
+import { initBitdrift } from './bitdrift';
 
 export interface InitializationResult {
   success: boolean;
@@ -26,7 +26,6 @@ export interface InitializationResult {
 }
 
 export interface AppInitializationState {
-  fontsLoaded: boolean;
   i18nInitialized: boolean;
   notificationsSetup: boolean;
   authReady: boolean;
@@ -97,17 +96,12 @@ export class AppInitializer {
    * Initializes the entire app
    * Only blocks on critical-path work (user + appearance).
    * Heavy tasks (Signal Protocol, notifications) are deferred.
+   *
+   * Fonts are not part of the critical path: the Bloom font system is gated by
+   * `<BloomThemeProvider fonts onFontsLoading={...}>`, and the app-specific
+   * Phudu font degrades gracefully to a system font while it loads.
    */
-  static async initializeApp(
-    fontsLoaded: boolean
-  ): Promise<InitializationResult> {
-    if (!fontsLoaded) {
-      return {
-        success: false,
-        error: new Error('Fonts not loaded'),
-      };
-    }
-
+  static async initializeApp(): Promise<InitializationResult> {
     try {
       // Hard timeout: app MUST launch within 2s regardless of network.
       // WhatsApp/Telegram never block startup on API calls.
@@ -151,6 +145,7 @@ export class AppInitializer {
       await Promise.all([
         setupNotificationsIfNeeded(),
         initializeSignalProtocol(),
+        initBitdrift(),
       ]);
     } catch (error) {
       console.warn('[AppInitializer] Deferred init error:', error);
@@ -199,21 +194,16 @@ async function initializeSignalProtocol(): Promise<void> {
 
     // Load cloud sync setting from backend
     try {
-      const response = await oxyClient.getClient().get('/profile/settings/me');
-      const settings = response.data;
-      const cloudSyncEnabled = settings.security?.cloudSyncEnabled || false;
+      const settings = await oxyClient.getClient().get<{ security?: { cloudSyncEnabled?: boolean } }>('/profile/settings/me');
+      const cloudSyncEnabled = settings.security?.cloudSyncEnabled ?? false;
       useMessagesStore.getState().setCloudSyncEnabled(cloudSyncEnabled);
     } catch (error) {
       console.warn('[AppInitializer] Failed to load security settings:', error);
     }
 
-    // Initialize P2P manager
-    // Get token from Oxy client's TokenStore
-    const token = oxyClient.getAccessToken();
-
-    if (token) {
-      await p2pManager.initialize(user.id, token);
-    }
+    // P2P manager is wired up from the chat layout via `useP2PMessaging`,
+    // which owns the messaging-namespace socket lifecycle (mirrors the
+    // pattern used by `useCallSignaling`). Nothing to do here.
   } catch (error) {
     console.error('[AppInitializer] Error initializing Signal Protocol:', error);
     // Don't throw - encryption initialization shouldn't block app startup

@@ -18,6 +18,18 @@ import {
   type MessageEnvelopeDTO,
   type DeviceTarget,
 } from '@allo/shared-types';
+import {
+  prepareEncryptedMedia,
+  preparePlaintextMedia,
+  type OutgoingMediaSource,
+} from '@/lib/outgoingMedia';
+import {
+  serializeMediaBody,
+  parseMessageBody,
+  mediaRefsToItems,
+  type MediaRef,
+} from '@/lib/mediaPayload';
+import { seedDecryptedMediaUrl } from '@/lib/mediaCache';
 
 /** Placeholder shown when a legacy/undecryptable message can't be read. */
 const PLACEHOLDER_UNDECRYPTABLE = '[Mensaje no descifrable]';
@@ -81,6 +93,38 @@ async function isP2PEligible(
   } catch (error) {
     console.warn('[Messages] P2P eligibility check failed:', error);
     return false;
+  }
+}
+
+/**
+ * True when at least one recipient (or the sender's own other devices) has a
+ * registered Signal device, so the conversation can carry end-to-end encryption.
+ * Used to decide UP FRONT whether outgoing media is encrypted (default) or sent
+ * as plaintext (only when every participant is genuinely deviceless).
+ */
+async function hasEncryptableRecipients(
+  conversationId: string,
+  senderId: string
+): Promise<boolean> {
+  try {
+    const participantUserIds = resolveParticipantUserIds(conversationId, senderId);
+    if (!participantUserIds) return false;
+    const deviceKeysStore = useDeviceKeysStore.getState();
+    const ownDeviceId = deviceKeysStore.deviceKeys?.deviceId;
+    const devicesByUser = await deviceKeysStore.getDevicesForUsers(participantUserIds);
+    for (const userId of participantUserIds) {
+      const devices = devicesByUser.get(userId) || [];
+      for (const device of devices) {
+        // The sender's CURRENT device can't receive its own envelope; ignore it.
+        if (userId === senderId && device.deviceId === ownDeviceId) continue;
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.warn('[Messages] hasEncryptableRecipients check failed:', error);
+    // Default to the encrypted path on uncertainty — never silently downgrade.
+    return true;
   }
 }
 
@@ -232,6 +276,15 @@ export interface MediaItem {
   width?: number;
   height?: number;
   duration?: number;
+  /**
+   * End-to-end encryption (Fase 1D). When true, `url` points to an OPAQUE
+   * ciphertext blob and `encryptionKey` is the base64 ChaCha20-Poly1305 key
+   * (recovered from the E2E message body) needed to decrypt it for display. The
+   * key is never persisted server-side. Absent/false for legacy plaintext media.
+   */
+  encrypted?: boolean;
+  /** Base64 media key — present only locally, only for `encrypted` items. */
+  encryptionKey?: string;
 }
 
 export interface LocationData {
@@ -316,7 +369,13 @@ export interface Message {
 export interface AttachmentPayload {
   attachmentType: AttachmentType;
   text?: string;
-  media?: MediaItem[];
+  /**
+   * Media sources to send. Each item SHOULD carry a `localUri` (the plaintext
+   * file on device) so the store can encrypt it once and upload only the
+   * ciphertext (Fase 1D). Items with only a remote `url` (already-uploaded
+   * plaintext, e.g. a forwarded plaintext attachment) are sent as-is.
+   */
+  media?: OutgoingMediaSource[];
   location?: LocationData;
   contact?: ContactData;
   poll?: PollData;
@@ -394,6 +453,54 @@ function mapCommonMessageFields(msg: RawServerMessage, currentUserId?: string): 
   };
 }
 
+/** Fields derived from a decrypted message body (plain text or attachment payload). */
+export interface DecryptedBodyFields {
+  text: string;
+  media?: MediaItem[];
+  attachmentType?: AttachmentType;
+  /** Structured location recovered from the encrypted body (E2E chats). */
+  location?: LocationData;
+  /** Structured contact recovered from the encrypted body (E2E chats). */
+  contact?: ContactData;
+}
+
+/**
+ * Interpret a decrypted message body. A versioned attachment payload yields the
+ * caption plus any of: renderable, key-bearing media items (so the display layer
+ * can fetch+decrypt the ciphertext), a structured location, or a contact card.
+ * Anything else is plain text, verbatim. Media keys and personal location/contact
+ * data never leave the device unencrypted.
+ *
+ * Exported so every decrypt site (fetch, local cache, and the realtime socket
+ * handler in `useRealtimeMessaging`) interprets attachment payloads identically.
+ */
+export function applyDecryptedBody(decryptedText: string): DecryptedBodyFields {
+  const parsed = parseMessageBody(decryptedText);
+  if (parsed.kind === 'text') {
+    return { text: parsed.text };
+  }
+  const media = mediaRefsToItems(parsed.body.mediaRefs);
+  const { location, contact } = parsed.body;
+  // Infer the attachment type so the renderer routes to the right component.
+  // Media (carousel / audio / file rows) takes precedence over structured cards
+  // when both are present; otherwise location/contact select their own card.
+  const firstType = media[0]?.type;
+  const attachmentType: AttachmentType | undefined = firstType
+    ? firstType === 'gif'
+      ? 'gif'
+      : firstType
+    : location
+      ? 'location'
+      : contact
+        ? 'contact'
+        : undefined;
+  const result: DecryptedBodyFields = { text: parsed.body.text || '', attachmentType };
+  if (media.length > 0) result.media = media;
+  if (location) result.location = location;
+  if (contact) result.contact = contact;
+  return result;
+}
+
 /**
  * Transform one raw server message into a local Message, decrypting when needed.
  *
@@ -439,7 +546,7 @@ async function transformServerMessage(
     const decryptedText = await decrypt(msg.ciphertext, msg.senderId, msg.senderDeviceId);
     return {
       ...mapCommonMessageFields(msg, currentUserId),
-      text: decryptedText,
+      ...applyDecryptedBody(decryptedText),
       isEncrypted: false,
     };
   } catch (error) {
@@ -736,7 +843,7 @@ export const useMessagesStore = create<MessagesState>()(
             if (msg.isEncrypted && msg.ciphertext && msg.senderId && msg.senderDeviceId) {
               try {
                 const decryptedText = await decrypt(msg.ciphertext, msg.senderId, msg.senderDeviceId);
-                return { ...msg, text: decryptedText, isEncrypted: false };
+                return { ...msg, ...applyDecryptedBody(decryptedText), isEncrypted: false };
               } catch (error) {
                 console.error('[Messages] Error decrypting local message:', error);
                 const errMsg = error instanceof Error ? error.message : '';
@@ -1025,22 +1132,85 @@ export const useMessagesStore = create<MessagesState>()(
         }
 
         const captionText = (payload.text || '').trim();
+        const mediaSources: OutgoingMediaSource[] = payload.media || [];
+        const hasMedia = mediaSources.length > 0;
 
-        // Only the caption is encrypted. Media/structured payloads are public.
-        // A captioned message fans out one envelope per recipient device (v3);
-        // a caption-less attachment is sent without any ciphertext.
+        // Decide the security model up front. Media is end-to-end encrypted
+        // whenever the conversation has any encryptable recipient device; it
+        // degrades to plaintext only when every participant is deviceless.
+        const canEncrypt = await hasEncryptableRecipients(conversationId, senderId);
+
+        // Prepare media: encrypt-once + upload ciphertext (E2E), or upload
+        // plaintext (deviceless fallback). `displayMedia` is what we render
+        // locally (it keeps `localUri` for an instant optimistic preview).
+        let displayMedia: MediaItem[] = [];
+        let mediaRefs: MediaRef[] = [];
+        if (hasMedia) {
+          if (canEncrypt) {
+            const prepared = await prepareEncryptedMedia(mediaSources);
+            mediaRefs = prepared.mediaRefs;
+            displayMedia = prepared.mediaItems;
+            // Seed the decrypted-media cache with the local plaintext source the
+            // sender already holds, so its own render skips download+decrypt.
+            prepared.mediaItems.forEach((item, i) => {
+              const localUri = mediaSources[i]?.localUri;
+              if (localUri) seedDecryptedMediaUrl(item.id, localUri);
+            });
+          } else {
+            // Deviceless fallback: upload plaintext via the backend endpoint.
+            displayMedia = await preparePlaintextMedia(mediaSources, undefined);
+          }
+        }
+
+        // Personal location / contact data is end-to-end encrypted whenever the
+        // conversation can be encrypted: it travels INSIDE the body wrapper, never
+        // as plaintext POST metadata (the backend must not see coordinates or
+        // contact details). The deviceless fallback keeps them as public metadata
+        // since there is no encryption to carry them.
+        const encryptedLocation = canEncrypt ? payload.location : undefined;
+        const encryptedContact = canEncrypt ? payload.contact : undefined;
+
+        // Build the E2E plaintext body. For an encrypted attachment the body is a
+        // versioned JSON wrapper carrying the caption plus any key-bearing media
+        // refs, location, or contact; for a caption-only message it is the plain
+        // caption string.
+        const isEncryptedMediaMessage = hasMedia && canEncrypt && mediaRefs.length > 0;
+        const hasEncryptedStructured = Boolean(encryptedLocation || encryptedContact);
+        const isEncryptedAttachmentBody = isEncryptedMediaMessage || hasEncryptedStructured;
+        const e2ePlaintext = isEncryptedAttachmentBody
+          ? serializeMediaBody({
+              text: captionText || undefined,
+              mediaRefs,
+              location: encryptedLocation,
+              contact: encryptedContact,
+            })
+          : captionText;
+
+        // Encrypt the body into per-device envelopes when there is something to
+        // encrypt (an encrypted attachment payload, or a caption in an
+        // encryptable chat).
         let envelopes: MessageEnvelopeDTO[] = [];
         let isEncrypted = false;
-        if (captionText.length > 0) {
+        if (isEncryptedAttachmentBody || (captionText.length > 0 && canEncrypt)) {
           try {
-            const result = await encryptEnvelopes(conversationId, captionText, senderId);
+            const result = await encryptEnvelopes(conversationId, e2ePlaintext, senderId);
             if (!result.plaintextFallback && result.envelopes.length > 0) {
               envelopes = result.envelopes;
               isEncrypted = true;
             }
           } catch (error) {
-            console.warn('[Messages] Attachment caption encryption failed:', error);
+            console.warn('[Messages] Attachment body encryption failed:', error);
           }
+        }
+
+        // The media ciphertext is already uploaded, but its keys — and any
+        // location/contact data — live ONLY inside the E2E body. If that body
+        // failed to encrypt we must not send a message with no keys / lost
+        // attachment (a media message would be permanently undecryptable; a
+        // location/contact would arrive empty) — fail loudly so the caller shows
+        // the error UX. No optimistic message has been added yet.
+        if (isEncryptedAttachmentBody && !isEncrypted) {
+          throw new Error('Failed to encrypt attachment message for delivery.');
         }
 
         const localMessage: Message = {
@@ -1054,7 +1224,7 @@ export const useMessagesStore = create<MessagesState>()(
           isEncrypted: false, // stored locally as decrypted plaintext caption
           readStatus: 'pending',
           attachmentType: payload.attachmentType,
-          media: payload.media,
+          media: hasMedia ? displayMedia : undefined,
           location: payload.location,
           contact: payload.contact,
           poll: payload.poll,
@@ -1075,14 +1245,23 @@ export const useMessagesStore = create<MessagesState>()(
           gif: 'media',
         };
 
-        // Public attachment metadata, shared by both the encrypted (v3) and
-        // plaintext send paths.
+        // Public attachment metadata. For ENCRYPTED media the `media[]` array is
+        // NOT sent to the server — the media refs (URL + key + mime) live inside
+        // the E2E ciphertext body. Only plaintext media is exposed in `media[]`.
+        // Likewise, location/contact are sent as public metadata ONLY on the
+        // deviceless plaintext path; when encrypted they live inside the E2E body
+        // (`encryptedLocation`/`encryptedContact` are undefined there, so they are
+        // omitted here). `attachmentType` is always public so the backend can
+        // route/notify; the actual coordinates / contact details stay encrypted.
+        const publicMedia = isEncryptedMediaMessage ? undefined : displayMedia;
+        const publicLocation = encryptedLocation ? undefined : payload.location;
+        const publicContact = encryptedContact ? undefined : payload.contact;
         const attachmentMeta: Record<string, unknown> = {
           messageType: messageTypeMap[payload.attachmentType] || 'media',
           attachmentType: payload.attachmentType,
-          ...(payload.media ? { media: payload.media } : {}),
-          ...(payload.location ? { location: payload.location } : {}),
-          ...(payload.contact ? { contact: payload.contact } : {}),
+          ...(publicMedia && publicMedia.length > 0 ? { media: publicMedia } : {}),
+          ...(publicLocation ? { location: publicLocation } : {}),
+          ...(publicContact ? { contact: publicContact } : {}),
           ...(payload.poll ? { poll: payload.poll } : {}),
           ...(payload.forwardedFrom ? { forwardedFrom: payload.forwardedFrom } : {}),
         };

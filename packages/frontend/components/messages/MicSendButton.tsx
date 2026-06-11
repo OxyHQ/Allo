@@ -28,7 +28,6 @@ import {
 import { SendIcon } from '@/assets/icons/send-icon';
 import { MicIcon } from '@/assets/icons';
 import { useTheme } from '@/hooks/useTheme';
-import { colors } from '@/styles/colors';
 import { BottomSheetContext } from '@/context/BottomSheetContext';
 import { MicPermissionSheet } from './MicPermissionSheet';
 
@@ -692,16 +691,16 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
     });
 
     const buttonBackgroundColor = hasText
-        ? (colors.buttonPrimary || theme.colors.primary || '#007AFF')
+        ? theme.colors.primary
         : (recorderState.isRecording
-            ? '#FF3B30'
+            ? theme.colors.error
             : 'transparent');
 
     const iconColor = hasText
         ? '#FFFFFF'
         : (recorderState.isRecording
             ? '#FFFFFF'
-            : (theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5 || '#666666'));
+            : (theme.colors.textSecondary));
 
     // Get window dimensions and safe area to ensure indicator stays on screen
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -772,7 +771,7 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
                 <Animated.View
                     style={[
                         styles.sliderTrack,
-                        { backgroundColor: theme.colors.border || 'rgba(0,0,0,0.2)' },
+                        { backgroundColor: theme.colors.border },
                         sliderTrackStyle,
                     ]}
                     pointerEvents="none"

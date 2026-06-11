@@ -24,6 +24,7 @@ import {
   decryptFromPeer,
   remainingOneTimePreKeys,
   generateAndStoreNewPreKeys,
+  wipeAllSignalState,
   PREKEY_LOW_THRESHOLD,
   LegacyMessageError,
 } from '@/lib/signalProtocol';
@@ -84,6 +85,13 @@ interface DeviceKeysState {
     senderUserId: string,
     senderDeviceId: number
   ) => Promise<string>;
+  /**
+   * Handle server-side revocation of THIS device (`device:revoked`): wipe all
+   * persisted Signal state, reset in-memory state and re-initialize as a brand
+   * new device (fresh keys + registration). Returns the new numeric device id on
+   * success, or null if re-initialization failed.
+   */
+  handleRevocation: () => Promise<number | null>;
   reset: () => void;
 }
 
@@ -92,6 +100,47 @@ interface DeviceKeysState {
  * it never triggers React re-renders — it is a pure network/IO cache.
  */
 const deviceListCache = new Map<string, DeviceListCacheEntry>();
+
+/**
+ * In-flight session-ESTABLISHMENT locks, keyed `${userId}:${deviceId}`. Used so
+ * that two concurrent fan-outs never run X3DH for the same session-less device
+ * twice (which would consume two one-time prekeys and overwrite the first
+ * session). Only establishment is serialized — steady-state encrypts proceed
+ * concurrently. The entry is the establishing call's promise; it is deleted on
+ * settle.
+ */
+const sessionEstablishLocks = new Map<string, Promise<void>>();
+
+/**
+ * In-flight revocation re-key, if any. Guards against repeated `device:revoked`
+ * events triggering more than one concurrent wipe + re-initialize.
+ */
+let revocationInFlight: Promise<number | null> | null = null;
+
+/** A deferred establishment lock: a promise plus its settle handles. */
+interface EstablishLock {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
+/** Create a deferred lock whose promise others can await. */
+function createEstablishLock(): EstablishLock {
+  let resolve!: () => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  // Avoid unhandled-rejection warnings: awaiters attach their own handlers.
+  promise.catch(() => {});
+  return { promise, resolve, reject };
+}
+
+/** Stable map key for a (user, device) pair. */
+function targetKey(target: { userId: string; deviceId: number }): string {
+  return `${target.userId}:${target.deviceId}`;
+}
 
 function buildPublicBundlePayload(keys: DeviceKeys): PublicBundle {
   return {
@@ -306,38 +355,77 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
       }
     }
 
-    // Prefetch X3DH bundles for targets that don't yet have a local session, in
-    // one batched request. encryptForPeer establishes the session from these.
-    const bundlesByTarget = await prefetchMissingBundles(targets);
+    // Determine which targets still need a Signal session established.
+    const sessionState = await Promise.all(
+      targets.map(async (target) => ({
+        target,
+        hasSession: !!(await loadSession({ userId: target.userId, deviceId: target.deviceId })),
+      }))
+    );
+
+    // Atomically CLAIM the session-less targets that no concurrent fan-out is
+    // already establishing, registering an establishment lock for each in the
+    // SAME synchronous tick (no await between the has-check and the set) so two
+    // overlapping sends (e.g. a send racing its own 409 retry) can never both run
+    // X3DH for the same new device — that would burn two one-time prekeys and
+    // overwrite the first session (leaving its message undecryptable). We are the
+    // establisher only for the locks WE registered here.
+    const establishers = new Map<string, EstablishLock>();
+    const claimedTargets: DeviceTarget[] = [];
+    for (const { target, hasSession } of sessionState) {
+      const key = targetKey(target);
+      if (hasSession || sessionEstablishLocks.has(key) || establishers.has(key)) continue;
+      const lock = createEstablishLock();
+      sessionEstablishLocks.set(key, lock.promise);
+      establishers.set(key, lock);
+      claimedTargets.push(target);
+    }
 
     const envelopes: MessageEnvelopeDTO[] = [];
     const failures: DeviceTarget[] = [];
 
-    for (const target of targets) {
-      try {
-        const ciphertext = await encryptForPeer(
-          { userId: target.userId, deviceId: target.deviceId },
-          plaintext,
-          {
-            fetchPreKeyBundle: async (peer) => {
-              const prefetched = bundlesByTarget.get(`${peer.userId}:${peer.deviceId}`);
+    try {
+      // Batch X3DH bundles for the targets WE are establishing, in one request.
+      const bundlesByTarget =
+        claimedTargets.length > 0
+          ? await prefetchBundles(claimedTargets)
+          : new Map<string, RemotePublicBundle>();
+
+      for (const target of targets) {
+        try {
+          const ciphertext = await encryptForPeerSerialized(
+            target,
+            plaintext,
+            establishers.get(targetKey(target)),
+            async (peer) => {
+              const prefetched = bundlesByTarget.get(targetKey(peer));
               if (prefetched) return prefetched;
               // Fall back to the single-device endpoint if the batch missed it.
               return get().getRecipientBundle(peer.userId, peer.deviceId);
-            },
-          }
-        );
-        envelopes.push({
-          recipientUserId: target.userId,
-          recipientDeviceId: target.deviceId,
-          ciphertext,
-        });
-      } catch (error) {
-        console.warn(
-          `[DeviceKeys] Failed to encrypt for ${target.userId}:${target.deviceId}:`,
-          error
-        );
-        failures.push(target);
+            }
+          );
+          envelopes.push({
+            recipientUserId: target.userId,
+            recipientDeviceId: target.deviceId,
+            ciphertext,
+          });
+        } catch (error) {
+          console.warn(
+            `[DeviceKeys] Failed to encrypt for ${target.userId}:${target.deviceId}:`,
+            error
+          );
+          failures.push(target);
+        }
+      }
+    } finally {
+      // Safety net: release any establishment lock not already settled by the
+      // loop (e.g. if a throw escaped before its target was processed), so
+      // concurrent awaiters are never left hanging on this fan-out.
+      for (const [key, lock] of establishers) {
+        if (sessionEstablishLocks.get(key) === lock.promise) {
+          sessionEstablishLocks.delete(key);
+          lock.reject(new Error('Session establishment aborted'));
+        }
       }
     }
 
@@ -401,6 +489,38 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
     }
   },
 
+  handleRevocation: async () => {
+    // De-dup concurrent / repeated `device:revoked` events: re-key only once.
+    if (revocationInFlight) return revocationInFlight;
+
+    const run = (async (): Promise<number | null> => {
+      try {
+        console.warn('[DeviceKeys] Device revoked by server; wiping Signal state and re-initializing');
+        // 1. Discard all persisted Signal state (identity, prekeys, sessions) and
+        //    the cached device-list — everything was tied to the revoked device.
+        await wipeAllSignalState();
+        setApiDeviceId(null);
+        deviceListCache.clear();
+        // 2. Drop the in-memory snapshot so initialize() rebuilds from scratch.
+        set({ deviceKeys: null, isInitialized: false, isLoading: false, error: null });
+        // 3. Re-initialize as a brand new device: mints a fresh device id, sets
+        //    the X-Device-Id header and registers the new public bundle. The
+        //    socket connect effect re-reads the new device id from this store and
+        //    reconnects with it (the server disconnected the old one).
+        await get().initialize();
+        return get().deviceKeys?.deviceId ?? null;
+      } catch (error) {
+        console.error('[DeviceKeys] Failed to re-initialize after revocation:', error);
+        return null;
+      } finally {
+        revocationInFlight = null;
+      }
+    })();
+
+    revocationInFlight = run;
+    return run;
+  },
+
   /**
    * Reset only the in-memory store snapshot on logout / account switch.
    *
@@ -418,29 +538,62 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
 }));
 
 /**
- * Fetch X3DH prekey bundles for every target that lacks a local Double Ratchet
- * session, in batched `/devices/prekeys/batch` requests. Targets that already
- * have a session are skipped (encryptForPeer won't call fetchPreKeyBundle for
- * them). Returns a map keyed by `${userId}:${deviceId}`.
+ * Encrypt `plaintext` for one peer, serializing SESSION ESTABLISHMENT per peer.
+ *
+ * - `lock` set → WE are the establisher for this session-less peer. The
+ *   establishing `encryptForPeer` (which runs X3DH + persists the session) settles
+ *   the pre-registered lock so concurrent fan-outs wait instead of re-establishing.
+ * - `lock` unset, session already exists → steady-state encrypt (no waiting).
+ * - `lock` unset, another fan-out is establishing this peer → await its lock, then
+ *   encrypt steady-state against the now-persisted session.
  */
-async function prefetchMissingBundles(
+async function encryptForPeerSerialized(
+  target: DeviceTarget,
+  plaintext: string,
+  lock: EstablishLock | undefined,
+  fetchPreKeyBundle: (peer: { userId: string; deviceId: number }) => Promise<RemotePublicBundle>
+): Promise<string> {
+  const key = targetKey(target);
+  const peer = { userId: target.userId, deviceId: target.deviceId };
+
+  if (lock) {
+    try {
+      const ciphertext = await encryptForPeer(peer, plaintext, { fetchPreKeyBundle });
+      lock.resolve();
+      return ciphertext;
+    } catch (error) {
+      lock.reject(error);
+      throw error;
+    } finally {
+      sessionEstablishLocks.delete(key);
+    }
+  }
+
+  // Not the establisher: if another fan-out is establishing this peer, wait for
+  // it so we encrypt against the shared session rather than racing a second one.
+  const inflight = sessionEstablishLocks.get(key);
+  if (inflight) {
+    try {
+      await inflight;
+    } catch {
+      // The establisher failed; fall through and attempt establishment ourselves.
+    }
+  }
+  return encryptForPeer(peer, plaintext, { fetchPreKeyBundle });
+}
+
+/**
+ * Fetch X3DH prekey bundles for the given (session-less) targets in batched
+ * `/devices/prekeys/batch` requests. Returns a map keyed `${userId}:${deviceId}`.
+ */
+async function prefetchBundles(
   targets: DeviceTarget[]
 ): Promise<Map<string, RemotePublicBundle>> {
   const bundles = new Map<string, RemotePublicBundle>();
+  if (targets.length === 0) return bundles;
 
-  // Only targets without an existing session need a fresh X3DH bundle.
-  const needsBundle: DeviceTarget[] = [];
-  await Promise.all(
-    targets.map(async (target) => {
-      const session = await loadSession({ userId: target.userId, deviceId: target.deviceId });
-      if (!session) needsBundle.push(target);
-    })
-  );
-
-  if (needsBundle.length === 0) return bundles;
-
-  for (let i = 0; i < needsBundle.length; i += PREKEY_BATCH_MAX_TARGETS) {
-    const chunk = needsBundle.slice(i, i + PREKEY_BATCH_MAX_TARGETS);
+  for (let i = 0; i < targets.length; i += PREKEY_BATCH_MAX_TARGETS) {
+    const chunk = targets.slice(i, i + PREKEY_BATCH_MAX_TARGETS);
     try {
       const response = await api.post('/devices/prekeys/batch', { targets: chunk });
       const payload = unwrapBatch(response.data);

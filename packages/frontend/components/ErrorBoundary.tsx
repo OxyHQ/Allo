@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { colors } from '@/styles/colors';
 import { withTranslation } from 'react-i18next';
+import { logError as logErrorToBitdrift } from '@/lib/bitdrift';
 
 /**
  * Error Boundary Component
@@ -56,8 +57,14 @@ class ErrorBoundaryBase extends Component<Props, State> {
         // Call custom error handler (for analytics, Sentry, etc.)
         this.props.onError?.(error, errorInfo);
 
-        // TODO: Send to error tracking service
-        // logErrorToService({ error, errorInfo, userAgent: navigator.userAgent });
+        // Ship the error to Bitdrift Capture when available.
+        // No-op when Bitdrift was not initialized (missing key, web, etc.).
+        void logErrorToBitdrift(error.message || 'ErrorBoundary caught error', {
+            name: error.name,
+            stack: error.stack,
+            componentStack: errorInfo.componentStack,
+            errorCount: this.state.errorCount + 1,
+        });
     }
 
     private handleRetry = () => {

@@ -16,7 +16,7 @@ import { CallIcon, CallIconActive } from '@/assets/icons/call-icon';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useOxy, useAuth } from '@oxyhq/services';
+import { useOxy } from '@oxyhq/services';
 import { useHomeRefresh } from '@/context/HomeRefreshContext';
 
 // Utils
@@ -29,7 +29,6 @@ export const BottomBar = () => {
     const { t } = useTranslation();
     const pathname = usePathname();
     const { user, isAuthenticated, oxyServices } = useOxy();
-    const { signIn } = useAuth();
     const insets = useSafeAreaInsets();
     const theme = useTheme();
     const { triggerHomeRefresh } = useHomeRefresh();
@@ -193,62 +192,49 @@ export const BottomBar = () => {
                 );
             })}
             
-            {/* Profile/Avatar button */}
-            <Link
-                href={user?.username ? `/@${user.username}` as any : '#' as any}
-                style={styles.tab}
-                asChild
-            >
-                <Pressable
-                    onPress={async () => {
-                        if (!isAuthenticated || !user?.username) {
-                            try {
-                                await signIn();
-                            } catch (error: any) {
-                                // Silently handle auth cancellation
-                                if (!error?.message?.includes('cancelled') && !error?.message?.includes('closed')) {
-                                    console.error('Authentication error:', error);
-                                }
-                            }
-                        }
-                    }}
-                    onLongPress={() => {
-                        if (isAuthenticated) {
-                            Vibration.vibrate(50);
-                            // Note: AccountCenter might need similar update if it exists in new API
-                        }
-                    }}
-                    style={({ pressed }: any) => [
-                        styles.tab,
-                        pressed && {
-                            backgroundColor: `${theme.colors.primary}10`,
-                            borderRadius: 8,
-                        },
-                        pathname?.startsWith('/@') && {
-                            backgroundColor: `${theme.colors.primary}15`,
-                            borderRadius: 8,
-                        },
-                    ]}
+            {/* Profile/Avatar button — only when authenticated */}
+            {isAuthenticated && user?.username && (
+                <Link
+                    href={`/@${user.username}` as any}
+                    style={styles.tab}
+                    asChild
                 >
-                    <View style={styles.tabContent}>
-                        <View style={styles.tabIcon}>
-                            <Avatar
-                                size={24}
-                                source={avatarUri ? { uri: avatarUri } : undefined}
-                            />
+                    <Pressable
+                        onLongPress={() => {
+                            Vibration.vibrate(50);
+                        }}
+                        style={({ pressed }: any) => [
+                            styles.tab,
+                            pressed && {
+                                backgroundColor: `${theme.colors.primary}10`,
+                                borderRadius: 8,
+                            },
+                            pathname?.startsWith('/@') && {
+                                backgroundColor: `${theme.colors.primary}15`,
+                                borderRadius: 8,
+                            },
+                        ]}
+                    >
+                        <View style={styles.tabContent}>
+                            <View style={styles.tabIcon}>
+                                <Avatar
+                                    size={24}
+                                    source={avatarUri ? { uri: avatarUri } : undefined}
+                                />
+                            </View>
+                            <Text style={[
+                                styles.tabText,
+                                pathname?.startsWith('/@') && styles.tabTextActive,
+                                {
+                                    color: pathname?.startsWith('/@') ? theme.colors.primary : theme.colors.textSecondary,
+                                }
+                            ]}>
+                                {t("Profile")}
+                            </Text>
                         </View>
-                        <Text style={[
-                            styles.tabText,
-                            pathname?.startsWith('/@') && styles.tabTextActive,
-                            {
-                                color: pathname?.startsWith('/@') ? theme.colors.primary : theme.colors.textSecondary,
-                            }
-                        ]}>
-                            {user?.username ? t("Profile") : t("Sign In")}
-                        </Text>
-                    </View>
-                </Pressable>
-            </Link>
+                    </Pressable>
+                </Link>
+            )}
         </View>
     );
 };

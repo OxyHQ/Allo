@@ -15,6 +15,18 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
+import { useTranslation } from 'react-i18next';
+
+// New conversation-specific UI components
+import { AttachmentSheet } from '@/components/conversation/AttachmentSheet';
+import { EmojiPicker } from '@/components/conversation/EmojiPicker';
+import { MediaViewer } from '@/components/conversation/MediaViewer';
+import { ForwardSheet } from '@/components/conversation/ForwardSheet';
+import { DeleteMessageSheet } from '@/components/conversation/DeleteMessageSheet';
+import { useVoiceRecorder } from '@/components/conversation/VoiceRecorder';
+import { resolveMediaUrl } from '@/utils/uploadAttachment';
+import { toast } from '@/lib/sonner';
+import type { MediaItem, AttachmentPayload } from '@/stores/messagesStore';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -27,7 +39,6 @@ import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { MessageBlock } from '@/components/messages/MessageBlock';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { DaySeparator } from '@/components/messages/DaySeparator';
-import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
 import { MessageActionsMenu, MessageAction } from '@/components/messages/MessageActionsMenu';
 import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
@@ -41,6 +52,9 @@ import { TrashIcon } from '@/assets/icons/trash-icon';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
+import { Ionicons } from '@expo/vector-icons';
+
+const IconAdapter = Ionicons as any;
 import { Plus } from '@/assets/icons/plus-icon';
 import { EmojiIcon } from '@/assets/icons/emoji-icon';
 import ChatBackgroundImage from '@/assets/images/background.png';
@@ -56,7 +70,6 @@ import { useConversationMetadata } from '@/hooks/useConversationMetadata';
 import { BottomSheetContext } from '@/context/BottomSheetContext';
 
 // Utils
-import { colors } from '@/styles/colors';
 import {
   getConversationDisplayName,
   getConversationAvatar,
@@ -70,6 +83,10 @@ import { useOxy } from '@oxyhq/services';
 import { useUserById } from '@/stores/usersStore';
 import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
+import { useSubscribePresence } from '@/hooks/usePresence';
+import { usePresence } from '@/stores/presenceStore';
+import { formatRelativeLastSeen } from '@/utils/dateUtils';
+import { useCallsStore } from '@/stores/callsStore';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useSenderInfo } from '@/hooks/useSenderInfo';
 
@@ -201,6 +218,9 @@ export default function ConversationView({ conversationId: propConversationId }:
   const setInputText = useChatUIStore(state => state.setInputText);
   const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
   const sendMessage = useMessagesStore(state => state.sendMessage);
+  const sendAttachmentMessage = useMessagesStore(state => state.sendAttachmentMessage);
+  const deleteMessageForScope = useMessagesStore(state => state.deleteMessageForScope);
+  const { t } = useTranslation();
 
 
   const flatListRef = useRef<any>(null);
@@ -215,6 +235,20 @@ export default function ConversationView({ conversationId: propConversationId }:
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
   const [infoScreenVisible, setInfoScreenVisible] = useState(false);
+
+  // Fullscreen media viewer state
+  const [mediaViewerState, setMediaViewerState] = useState<{
+    visible: boolean;
+    media: MediaItem[];
+    initialIndex: number;
+  }>({ visible: false, media: [], initialIndex: 0 });
+
+  // Resolve the (direct) recipient user id for this conversation
+  const recipientUserId = useMemo(() => {
+    if (!conversation) return undefined;
+    const others = getOtherParticipants(conversation, currentUserId);
+    return others[0]?.id;
+  }, [conversation, currentUserId]);
   const selectedMediaItem = useMemo(() => {
     if (!selectedMessage || !selectedMediaId || !selectedMessage.media) {
       return null;
@@ -256,6 +290,36 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Use custom hook for conversation metadata
   const conversationMetadata = useConversationMetadata(conversation, currentUserId);
   const { isGroup } = conversationMetadata;
+
+  // Online presence for the direct recipient (no-op for groups). Bootstraps via
+  // REST + subscribes to live `presence:update`; the row reads its own entry.
+  const presenceUserIds = useMemo(
+    () => (!isGroup && recipientUserId ? [recipientUserId] : []),
+    [isGroup, recipientUserId]
+  );
+  useSubscribePresence(presenceUserIds);
+  const recipientPresence = usePresence(!isGroup ? recipientUserId : undefined);
+
+  // Header subtitle: for a 1:1 chat show live presence (online / last seen);
+  // when presence is unknown (no entry yet) fall back to the contact username.
+  // For groups keep the participant-count subtitle.
+  const headerSubtitle = useMemo<string | undefined>(() => {
+    if (isGroup) {
+      return conversationMetadata.groupInfo
+        ? `${conversationMetadata.groupInfo.participantCount} participants`
+        : undefined;
+    }
+    if (recipientPresence?.online) {
+      return t('presence.online', 'Online');
+    }
+    if (recipientPresence && recipientPresence.lastSeenAt) {
+      return t('presence.lastSeen', {
+        time: formatRelativeLastSeen(recipientPresence.lastSeenAt, t),
+        defaultValue: 'Last seen {{time}}',
+      });
+    }
+    return conversationMetadata.contactUsername;
+  }, [isGroup, recipientPresence, conversationMetadata.groupInfo, conversationMetadata.contactUsername, t]);
 
   /**
    * Handle header press to show contact/group details
@@ -325,10 +389,10 @@ export default function ConversationView({ conversationId: propConversationId }:
       paddingHorizontal: 8,
       paddingVertical: 8,
       paddingBottom: Platform.OS === 'ios' ? 8 : 12,
-      backgroundColor: theme.colors.background || '#FFFFFF',
+      backgroundColor: theme.colors.background,
       gap: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border || 'rgba(0,0,0,0.08)',
+      borderTopColor: theme.colors.border,
     },
     inputWrapper: {
       flex: 1,
@@ -389,13 +453,13 @@ export default function ConversationView({ conversationId: propConversationId }:
     typingText: {
       fontSize: 14,
       fontStyle: 'italic',
-      color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+      color: theme.colors.textSecondary,
     },
     sizeIndicator: {
       position: 'absolute',
       bottom: 60,
       alignSelf: 'center',
-      backgroundColor: theme.colors.card || '#FFFFFF',
+      backgroundColor: theme.colors.card,
       borderRadius: 20,
       paddingHorizontal: 16,
       paddingVertical: 12,
@@ -405,7 +469,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       shadowRadius: 8,
       elevation: 8,
       borderWidth: 1,
-      borderColor: theme.colors.border || 'rgba(0,0,0,0.1)',
+      borderColor: theme.colors.border,
     },
     sizeIndicatorText: {
       fontSize: 16,
@@ -488,23 +552,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       setMessageTextSize(sizeToUse);
     }
 
-    // Get recipient user ID from conversation
-    // For direct messages, get the other participant
-    // For groups, we'll need to handle multiple recipients (for now, use first other participant)
-    let recipientUserId: string | undefined;
-    if (conversation) {
-      if (isGroup) {
-        // For groups, get the first other participant (in a real implementation, 
-        // we'd send to all participants, but for now use first one)
-        const otherParticipants = getOtherParticipants(conversation, currentUserId);
-        recipientUserId = otherParticipants[0]?.id;
-      } else {
-        // For direct messages, get the other participant
-        const otherParticipants = getOtherParticipants(conversation, currentUserId);
-        recipientUserId = otherParticipants[0]?.id;
-      }
-    }
-
     if (!recipientUserId || !currentUserId) {
       console.error('Cannot send message: missing recipient or current user ID');
       if (conversationId) {
@@ -563,7 +610,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, recipientUserId, currentUserId, sendTypingIndicator]);
 
   /**
    * Handle Enter key press to send message
@@ -590,52 +637,78 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [inputText, handleSend]);
 
   /**
-   * Handle attach button press
-   * Opens WhatsApp-style attachment menu in bottom sheet
+   * Dispatch a prepared attachment payload (uploaded media / location / poll / …)
+   * through the encrypted message pipeline.
+   */
+  const dispatchAttachmentPayload = useCallback(
+    async (payload: AttachmentPayload) => {
+      if (!conversationId || !currentUserId || !recipientUserId) {
+        toast.error(t('chat.uploadFailed'));
+        return;
+      }
+      try {
+        const result = await sendAttachmentMessage(
+          conversationId,
+          payload,
+          currentUserId,
+          recipientUserId
+        );
+        if (!result) {
+          toast.error(t('chat.uploadFailed'));
+        } else {
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      } catch (error) {
+        console.error('[Conversation] dispatchAttachmentPayload error:', error);
+        toast.error(t('chat.uploadFailed'));
+      }
+    },
+    [conversationId, currentUserId, recipientUserId, sendAttachmentMessage, t]
+  );
+
+  /**
+   * Open the attachment grid (photos, documents, location, camera, contact, poll).
    */
   const handleAttach = useCallback(() => {
     if (!bottomSheet) return;
 
+    const closeSheet = () => bottomSheet.openBottomSheet(false);
+
     bottomSheet.setBottomSheetContent(
-      <AttachmentMenu
-        onClose={() => bottomSheet.openBottomSheet(false)}
-        onSelectPhoto={() => {
-          // TODO: Implement photo picker
-          console.log('Photo selected');
+      <AttachmentSheet
+        onSendAttachment={(payload) => {
+          closeSheet();
+          void dispatchAttachmentPayload(payload);
         }}
-        onSelectDocument={() => {
-          // TODO: Implement document picker
-          console.log('Document selected');
+        openSubSheet={(content) => {
+          bottomSheet.setBottomSheetContent(content);
+          bottomSheet.openBottomSheet(true);
         }}
-        onSelectLocation={() => {
-          // TODO: Implement location picker
-          console.log('Location selected');
-        }}
-        onSelectCamera={() => {
-          // TODO: Implement camera
-          console.log('Camera selected');
-        }}
-        onSelectContact={() => {
-          // TODO: Implement contact picker
-          console.log('Contact selected');
-        }}
-        onSelectPoll={() => {
-          // TODO: Implement poll creator
-          console.log('Poll selected');
-        }}
+        closeSheet={closeSheet}
       />
     );
     bottomSheet.openBottomSheet(true);
-  }, [bottomSheet]);
+  }, [bottomSheet, dispatchAttachmentPayload]);
 
   /**
-   * Handle emoji button press
-   * TODO: Implement emoji picker
+   * Open the emoji picker in a bottom sheet and insert the selected emoji
+   * at the end of the current input text.
    */
   const handleEmoji = useCallback(() => {
-    // Placeholder for emoji picker functionality
-    console.log('Emoji pressed');
-  }, []);
+    if (!bottomSheet || !conversationId) return;
+    const closeSheet = () => bottomSheet.openBottomSheet(false);
+    bottomSheet.setBottomSheetContent(
+      <EmojiPicker
+        onSelect={(emoji) => {
+          const currentState = useChatUIStore.getState();
+          const existing = currentState.inputTextByConversation[conversationId] || '';
+          setInputText(conversationId, existing + emoji);
+        }}
+        onClose={closeSheet}
+      />
+    );
+    bottomSheet.openBottomSheet(true);
+  }, [bottomSheet, conversationId, setInputText]);
 
   // Use the new hook for sender info
   const { getSenderName, getSenderAvatar } = useSenderInfo(conversation, isGroup, conversationMetadata);
@@ -654,32 +727,23 @@ export default function ConversationView({ conversationId: propConversationId }:
 
 
   /**
-   * Get media URL from media ID
-   * Uses oxyServices to get the file download URL
-   * For mock data, uses placeholder images
+   * Get media URL from media ID. We prefer the `url` cached on the MediaItem
+   * (set when the asset was uploaded through our local backend) and fall back
+   * to `oxyServices.getFileDownloadUrl` for assets stored in the Oxy CDN.
    */
-  const getMediaUrl = useCallback((mediaId: string): string => {
-    try {
-      // Check if this is a mock media ID (starts with 'img-')
-      // For mock data, use placeholder images that actually work
-      if (mediaId.startsWith('img-')) {
-        // Use picsum.photos for reliable placeholder images
-        const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-        const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        return `https://picsum.photos/seed/${hash}/400/300`;
-      }
-
-      // For real media IDs, use oxyServices to get the file download URL
-      // Use 'full' for full resolution images in messages
-      return oxyServices.getFileDownloadUrl(mediaId, 'full');
-    } catch (error) {
-      console.error('Error getting media URL:', error);
-      // Fallback to placeholder if service fails
-      const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-      const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return `https://picsum.photos/seed/${hash}/400/300`;
-    }
-  }, [oxyServices]);
+  const getMediaUrl = useCallback(
+    (mediaId: string): string => {
+      // Search all messages for the matching media item so we can read its `url`
+      const found = messages
+        .flatMap((m) => m.media || [])
+        .find((m) => m.id === mediaId);
+      return resolveMediaUrl(mediaId, oxyServices, {
+        url: found?.url,
+        variant: 'full',
+      });
+    },
+    [messages, oxyServices]
+  );
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
       return null;
@@ -740,12 +804,26 @@ export default function ConversationView({ conversationId: propConversationId }:
   ]);
 
   /**
-   * Handle media press (open in fullscreen, etc.)
+   * Open the fullscreen media viewer at the tapped item.
+   * The viewer pages through all media of the message that contains it.
    */
-  const handleMediaPress = useCallback((mediaId: string, index: number) => {
-    // TODO: Implement media viewer
-    console.log('Media pressed:', mediaId, index);
-  }, []);
+  const handleMediaPress = useCallback(
+    (mediaId: string, _index: number) => {
+      const owningMessage = messages.find((m) => m.media?.some((media) => media.id === mediaId));
+      const messageMedia = owningMessage?.media || [];
+      const visualMedia = messageMedia.filter(
+        (m) => m.type === 'image' || m.type === 'video' || m.type === 'gif'
+      );
+      const localIndex = Math.max(0, visualMedia.findIndex((m) => m.id === mediaId));
+      if (visualMedia.length === 0) return;
+      setMediaViewerState({
+        visible: true,
+        media: visualMedia,
+        initialIndex: localIndex,
+      });
+    },
+    [messages]
+  );
 
   /**
    * Handle message long press (show reaction bar and actions menu)
@@ -812,13 +890,20 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [resetSelectionState, conversationId, setReplyTo]);
 
   /**
-   * Handle forward action
+   * Handle forward action — opens the multi-select forward sheet.
    */
-  const handleForward = useCallback((message: Message) => {
-    resetSelectionState({ preserveMessage: true });
-    // TODO: Implement forward functionality
-    console.log('Forward message:', message.id);
-  }, [resetSelectionState]);
+  const handleForward = useCallback(
+    (message: Message) => {
+      resetSelectionState({ preserveMessage: false });
+      if (!bottomSheet) return;
+      const closeSheet = () => bottomSheet.openBottomSheet(false);
+      bottomSheet.setBottomSheetContent(
+        <ForwardSheet message={message} onClose={closeSheet} />
+      );
+      bottomSheet.openBottomSheet(true);
+    },
+    [resetSelectionState, bottomSheet]
+  );
 
   /**
    * Handle copy action
@@ -826,28 +911,49 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleCopy = useCallback(async (message: Message) => {
     resetSelectionState({ preserveMessage: true });
     try {
-      // Try React Native Clipboard first
-      const { default: Clipboard } = await import('@react-native-clipboard/clipboard');
-      await Clipboard.setString(message.text || '');
-      const { toast } = await import('@/lib/sonner');
-      toast.success('Message copied to clipboard');
+      const Clipboard = await import('expo-clipboard');
+      await Clipboard.setStringAsync(message.text || '');
+      toast.success(t('chat.copySuccess'));
     } catch (error) {
-      // Fallback for web
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(message.text || '');
+        await navigator.clipboard.writeText(message.text || '');
+        toast.success(t('chat.copySuccess'));
+      } else {
+        toast.error(t('chat.copyFailed'));
       }
-      console.log('Copy message:', message.text);
     }
-  }, [resetSelectionState]);
+  }, [resetSelectionState, t]);
 
   /**
-   * Handle delete action
+   * Handle delete action — opens the "delete for me / for everyone" sheet.
    */
-  const handleDelete = useCallback((message: Message) => {
-    resetSelectionState({ preserveMessage: true });
-    // TODO: Implement delete functionality
-    console.log('Delete message:', message.id);
-  }, [resetSelectionState]);
+  const handleDelete = useCallback(
+    (message: Message) => {
+      resetSelectionState({ preserveMessage: false });
+      if (!bottomSheet || !conversationId) return;
+
+      const isOwn = message.senderId === currentUserId;
+      const closeSheet = () => bottomSheet.openBottomSheet(false);
+
+      const runDelete = async (scope: 'me' | 'everyone') => {
+        closeSheet();
+        const ok = await deleteMessageForScope(conversationId, message.id, scope);
+        if (ok) toast.success(t('chat.deleteSuccess'));
+        else toast.error(t('chat.deleteFailed'));
+      };
+
+      bottomSheet.setBottomSheetContent(
+        <DeleteMessageSheet
+          canDeleteForEveryone={isOwn}
+          onDeleteForMe={() => void runDelete('me')}
+          onDeleteForEveryone={() => void runDelete('everyone')}
+          onCancel={closeSheet}
+        />
+      );
+      bottomSheet.openBottomSheet(true);
+    },
+    [resetSelectionState, bottomSheet, conversationId, currentUserId, deleteMessageForScope, t]
+  );
 
   /**
    * Handle info action
@@ -964,6 +1070,13 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   const canSend = inputText.trim().length > 0;
 
+  // Voice recorder hooks
+  const voiceRecorder = useVoiceRecorder({
+    conversationId: conversationId || '',
+    senderId: currentUserId,
+    recipientUserId,
+  });
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ImageBackground
@@ -978,10 +1091,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             <Header
               options={{
                 title: conversationMetadata.displayName,
-                subtitle: conversationMetadata.contactUsername ||
-                  (isGroup && conversationMetadata.groupInfo
-                    ? `${conversationMetadata.groupInfo.participantCount} participants`
-                    : undefined),
+                subtitle: headerSubtitle,
                 leftComponents: !isLargeScreen ? [
                   <HeaderIconButton
                     key="back"
@@ -991,6 +1101,43 @@ export default function ConversationView({ conversationId: propConversationId }:
                   </HeaderIconButton>,
                 ] : [],
                 rightComponents: [
+                  // Voice + video call buttons (1:1 conversations only).
+                  !isGroup && recipientUserId ? (
+                    <HeaderIconButton
+                      key="call-voice"
+                      onPress={() => {
+                        void useCallsStore
+                          .getState()
+                          .startCall(recipientUserId, 'audio', conversationId)
+                          .then(() => {
+                            const active = useCallsStore.getState().active;
+                            if (active) {
+                              router.push(`/(chat)/call/${active.callId}` as any);
+                            }
+                          });
+                      }}
+                    >
+                      <IconAdapter name="call-outline" size={20} color={theme.colors.text} />
+                    </HeaderIconButton>
+                  ) : null,
+                  !isGroup && recipientUserId ? (
+                    <HeaderIconButton
+                      key="call-video"
+                      onPress={() => {
+                        void useCallsStore
+                          .getState()
+                          .startCall(recipientUserId, 'video', conversationId)
+                          .then(() => {
+                            const active = useCallsStore.getState().active;
+                            if (active) {
+                              router.push(`/(chat)/call/${active.callId}` as any);
+                            }
+                          });
+                      }}
+                    >
+                      <IconAdapter name="videocam-outline" size={20} color={theme.colors.text} />
+                    </HeaderIconButton>
+                  ) : null,
                   isGroup && conversationMetadata.participants.length > 0 ? (
                     <TouchableOpacity
                       key="group-avatar"
@@ -1078,6 +1225,17 @@ export default function ConversationView({ conversationId: propConversationId }:
             onReactionSelect={handleReactionSelect}
           />
 
+          {/* Fullscreen media viewer */}
+          <MediaViewer
+            visible={mediaViewerState.visible}
+            media={mediaViewerState.media}
+            initialIndex={mediaViewerState.initialIndex}
+            getMediaUrl={getMediaUrl}
+            onClose={() =>
+              setMediaViewerState((prev) => ({ ...prev, visible: false }))
+            }
+          />
+
           {/* Message Info Screen */}
           <MessageInfoScreen
             visible={infoScreenVisible}
@@ -1106,7 +1264,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Plus
-                  color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                  color={theme.colors.textSecondary}
                   size={24}
                 />
               </TouchableOpacity>
@@ -1119,7 +1277,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                   value={inputText}
                   onChangeText={handleInputChange}
                   placeholder="Message"
-                  placeholderTextColor={colors.chatInputPlaceholder || theme.colors.textSecondary || '#999999'}
+                  placeholderTextColor={theme.colors.textSecondary}
                   multiline
                   maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
                   textAlignVertical="top"
@@ -1139,7 +1297,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <EmojiIcon
-                      color={theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5}
+                      color={theme.colors.textSecondary}
                       size={22}
                     />
                   </TouchableOpacity>
@@ -1158,16 +1316,9 @@ export default function ConversationView({ conversationId: propConversationId }:
                 baseSizeRef={baseTextSize}
                 panY={panY}
                 scale={scale}
-                onRecordStart={() => {
-                  console.log('Recording started');
-                }}
-                onRecordEnd={(uri, duration) => {
-                  console.log('Recording ended:', uri, duration);
-                  // TODO: Send audio message
-                }}
-                onRecordCancel={() => {
-                  console.log('Recording cancelled');
-                }}
+                onRecordStart={voiceRecorder.handleRecordStart}
+                onRecordEnd={voiceRecorder.handleRecordEnd}
+                onRecordCancel={voiceRecorder.handleRecordCancel}
               />
             </View>
           </KeyboardAvoidingView>

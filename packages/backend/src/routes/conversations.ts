@@ -49,17 +49,18 @@ async function enrichParticipantsWithOxyData(participants: any[]) {
     }
 
     // Extract name from Oxy user (can be string or object)
+    const oxyName: any = (oxyUser as any).name;
     let name = participant.name || { first: '', last: '' };
-    if (typeof oxyUser.name === 'string') {
-      const parts = oxyUser.name.split(' ');
+    if (typeof oxyName === 'string') {
+      const parts = oxyName.split(' ');
       name = {
         first: parts[0] || '',
         last: parts.slice(1).join(' ') || '',
       };
-    } else if (oxyUser.name) {
+    } else if (oxyName) {
       name = {
-        first: oxyUser.name.first || '',
-        last: oxyUser.name.last || '',
+        first: oxyName.first || '',
+        last: oxyName.last || '',
       };
     } else {
       // Fallback to username if no name
@@ -105,6 +106,8 @@ router.get("/", async (req: AuthRequest, res: Response) => {
         return {
           ...conv,
           participants: enrichedParticipants,
+          // Interop bridge (F3.0): native conversations report 'allo'.
+          network: conv.bridge?.network ?? "allo",
         };
       })
     );
@@ -144,6 +147,8 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
     const enrichedConversation = {
       ...conversation,
       participants: enrichedParticipants,
+      // Interop bridge (F3.0): native conversations report 'allo'.
+      network: conversation.bridge?.network ?? "allo",
     };
 
     return sendSuccessResponse(res, 200, enrichedConversation);

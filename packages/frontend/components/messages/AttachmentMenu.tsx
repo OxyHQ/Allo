@@ -12,15 +12,16 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
-import { colors } from '@/styles/colors';
 import { MediaIcon } from '@/assets/icons/media-icon';
 import { LocationIcon } from '@/assets/icons/location-icon';
 import { DocumentIcon } from '@/assets/icons/document-icon';
 import { CameraIcon } from '@/assets/icons/camera-icon';
 import { ProfileIcon } from '@/assets/icons/profile-icon';
 import { PollIcon } from '@/assets/icons/poll-icon';
+import { GifIcon } from '@/assets/icons/gif-icon';
 
 export interface AttachmentOption {
   id: string;
@@ -39,6 +40,7 @@ export interface AttachmentMenuProps {
   onSelectCamera?: () => void;
   onSelectContact?: () => void;
   onSelectPoll?: () => void;
+  onSelectGif?: () => void;
 }
 
 /**
@@ -61,13 +63,15 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
   onSelectCamera,
   onSelectContact,
   onSelectPoll,
+  onSelectGif,
 }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const attachmentOptions = useMemo<AttachmentOption[]>(() => [
     {
       id: 'photo',
-      label: 'Photo & Video',
+      label: t('chat.photoAndVideo'),
       icon: <MediaIcon color="#FF7A00" size={30} />,
       accentColor: '#FF7A00',
       accentBackground: '#FFF2E6',
@@ -77,8 +81,19 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
       },
     },
     {
+      id: 'gif',
+      label: t('chat.gifLabel'),
+      icon: <GifIcon color="#8E44AD" size={30} />,
+      accentColor: '#8E44AD',
+      accentBackground: '#F3E9FB',
+      onPress: () => {
+        onSelectGif?.();
+        onClose();
+      },
+    },
+    {
       id: 'document',
-      label: 'Document',
+      label: t('chat.document'),
       icon: <DocumentIcon color="#5C6BC0" size={30} />,
       accentColor: '#5C6BC0',
       accentBackground: '#E9ECFF',
@@ -89,7 +104,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     },
     {
       id: 'location',
-      label: 'Location',
+      label: t('chat.locationLabel'),
       icon: <LocationIcon color="#00B894" size={30} />,
       accentColor: '#00B894',
       accentBackground: '#E0FFF7',
@@ -100,7 +115,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     },
     {
       id: 'camera',
-      label: 'Camera',
+      label: t('chat.cameraLabel'),
       icon: <CameraIcon color="#D84393" size={30} />,
       accentColor: '#D84393',
       accentBackground: '#FFE7F3',
@@ -111,7 +126,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     },
     {
       id: 'contact',
-      label: 'Contact',
+      label: t('chat.contactLabel'),
       icon: <ProfileIcon color="#0087FF" size={30} />,
       accentColor: '#0087FF',
       accentBackground: '#E3F2FF',
@@ -122,7 +137,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     },
     {
       id: 'poll',
-      label: 'Poll',
+      label: t('chat.pollLabel'),
       icon: <PollIcon color="#FF5252" size={30} />,
       accentColor: '#FF5252',
       accentBackground: '#FFE7E7',
@@ -133,12 +148,14 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
     },
   ], [
     onSelectPhoto,
+    onSelectGif,
     onSelectDocument,
     onSelectLocation,
     onSelectCamera,
     onSelectContact,
     onSelectPoll,
     onClose,
+    t,
   ]);
 
   const styles = useMemo(() => StyleSheet.create({

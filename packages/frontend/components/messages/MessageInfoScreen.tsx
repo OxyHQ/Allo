@@ -20,7 +20,6 @@ import { MessageAvatar } from './MessageAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import type { Message } from '@/stores';
 import { TIME_FORMAT_OPTIONS } from '@/constants/messaging';
-import { colors } from '@/styles/colors';
 
 export interface MessageInfoScreenProps {
   visible: boolean;
@@ -72,7 +71,7 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
   const styles = useMemo(() => StyleSheet.create({
     modal: {
       flex: 1,
-      backgroundColor: theme.colors.background || '#FFFFFF',
+      backgroundColor: theme.colors.background,
     },
     container: {
       flex: 1,
@@ -86,7 +85,7 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
     sectionTitle: {
       fontSize: 14,
       fontWeight: '600',
-      color: theme.colors.textSecondary || '#666666',
+      color: theme.colors.textSecondary,
       marginBottom: 12,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -96,30 +95,30 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
       alignItems: 'center',
       paddingVertical: 12,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.colors.border || '#E5E5E5',
+      borderBottomColor: theme.colors.border,
     },
     infoRowLast: {
       borderBottomWidth: 0,
     },
     infoLabel: {
       fontSize: 16,
-      color: theme.colors.textSecondary || '#666666',
+      color: theme.colors.textSecondary,
       width: 100,
     },
     infoValue: {
       fontSize: 16,
-      color: theme.colors.text || '#000000',
+      color: theme.colors.text,
       flex: 1,
     },
     messagePreview: {
-      backgroundColor: theme.colors.backgroundSecondary || '#F5F5F5',
+      backgroundColor: theme.colors.backgroundSecondary,
       padding: 16,
       borderRadius: 12,
       marginBottom: 16,
     },
     messageText: {
       fontSize: 16,
-      color: theme.colors.text || '#000000',
+      color: theme.colors.text,
       lineHeight: 22,
     },
     senderRow: {
@@ -134,12 +133,12 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
     senderName: {
       fontSize: 17,
       fontWeight: '600',
-      color: theme.colors.text || '#000000',
+      color: theme.colors.text,
       marginBottom: 4,
     },
     senderId: {
       fontSize: 14,
-      color: theme.colors.textSecondary || '#666666',
+      color: theme.colors.textSecondary,
     },
   }), [theme]);
 
@@ -185,7 +184,7 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
                         styles.messageText, 
                         { 
                           marginTop: message.text ? 8 : 0,
-                          color: theme.colors.textSecondary || '#666666'
+                          color: theme.colors.textSecondary
                         }
                       ]}>
                         {message.media.length} attachment{message.media.length > 1 ? 's' : ''}

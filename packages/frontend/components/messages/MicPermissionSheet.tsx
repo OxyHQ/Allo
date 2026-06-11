@@ -2,7 +2,6 @@ import React from "react";
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from "react-native";
 import { ThemedView } from "@/components/ThemedView";
 import { useTheme } from "@/hooks/useTheme";
-import { colors } from "@/styles/colors";
 import { MicIcon } from "@/assets/icons";
 
 interface MicPermissionSheetProps {
@@ -16,18 +15,18 @@ export const MicPermissionSheet: React.FC<MicPermissionSheetProps> = ({ onEnable
     return (
         <ThemedView style={styles.container}>
             <View style={styles.iconWrap}>
-                <MicIcon size={64} color={theme.colors.primary || colors.buttonPrimary || '#007AFF'} />
+                <MicIcon size={64} color={theme.colors.primary} />
             </View>
             <Text style={[styles.title, { color: theme.colors.text }]}>
                 Allow Microphone Access
             </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5 }]}>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
                 To record voice messages, we need access to your microphone. Please enable microphone permissions in your device settings.
             </Text>
             <View style={styles.actions}>
                 <TouchableOpacity 
                     onPress={onLater} 
-                    style={[styles.button, styles.secondary, { borderColor: theme.colors.border || colors.chatInputBorder }]}
+                    style={[styles.button, styles.secondary, { borderColor: theme.colors.border }]}
                 >
                     <Text style={[styles.buttonText, styles.secondaryText, { color: theme.colors.text }]}>
                         Not Now
@@ -35,7 +34,7 @@ export const MicPermissionSheet: React.FC<MicPermissionSheetProps> = ({ onEnable
                 </TouchableOpacity>
                 <TouchableOpacity 
                     onPress={onEnable} 
-                    style={[styles.button, styles.primary, { backgroundColor: theme.colors.primary || colors.buttonPrimary || '#007AFF' }]}
+                    style={[styles.button, styles.primary, { backgroundColor: theme.colors.primary }]}
                 >
                     <Text style={[styles.buttonText, styles.primaryText]}>
                         Enable Microphone

@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
 import { useTranslation } from "react-i18next";
-import { colors } from "@/styles/colors";
 import { ThemedView } from "@/components/ThemedView";
 import { NoUpdatesIllustration } from "@/assets/illustrations/NoUpdates";
 import { TouchableOpacity } from "react-native-gesture-handler";
+import { useTheme } from "@/hooks/useTheme";
 
 interface Props {
     onEnable: () => void;
@@ -13,6 +13,61 @@ interface Props {
 
 export const NotificationPermissionSheet: React.FC<Props> = ({ onEnable, onLater }) => {
     const { t } = useTranslation();
+    const theme = useTheme();
+
+    const styles = useMemo(() => StyleSheet.create({
+        container: {
+            paddingHorizontal: 20,
+            paddingTop: 8,
+            paddingBottom: 16,
+        },
+        illustrationWrap: {
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 6,
+            marginBottom: 10,
+        },
+        title: {
+            fontSize: 18,
+            fontWeight: Platform.OS === 'web' ? 'bold' : '600',
+            textAlign: 'center',
+            color: theme.colors.text,
+            marginBottom: 6,
+        },
+        subtitle: {
+            fontSize: 14,
+            textAlign: 'center',
+            color: theme.colors.textSecondary,
+            marginHorizontal: 8,
+        },
+        actions: {
+            marginTop: 14,
+            gap: 10,
+        },
+        button: {
+            borderRadius: 10,
+            paddingVertical: 12,
+            alignItems: 'center',
+        },
+        primary: {
+            backgroundColor: theme.colors.primary,
+        },
+        secondary: {
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+        },
+        buttonText: {
+            fontSize: 15,
+        },
+        primaryText: {
+            color: theme.colors.primaryForeground,
+            fontWeight: Platform.OS === 'web' ? 'bold' : '600',
+        },
+        secondaryText: {
+            color: theme.colors.text,
+        },
+    }), [theme]);
 
     return (
         <ThemedView style={styles.container}>
@@ -34,59 +89,5 @@ export const NotificationPermissionSheet: React.FC<Props> = ({ onEnable, onLater
         </ThemedView>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 20,
-        paddingTop: 8,
-        paddingBottom: 16,
-    },
-    illustrationWrap: {
-        alignItems: "center",
-        justifyContent: "center",
-        marginTop: 6,
-        marginBottom: 10,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: Platform.OS === 'web' ? 'bold' : '600',
-        textAlign: 'center',
-        color: colors.COLOR_BLACK_LIGHT_1,
-        marginBottom: 6,
-    },
-    subtitle: {
-        fontSize: 14,
-        textAlign: 'center',
-        color: colors.COLOR_BLACK_LIGHT_4,
-        marginHorizontal: 8,
-    },
-    actions: {
-        marginTop: 14,
-        gap: 10,
-    },
-    button: {
-        borderRadius: 10,
-        paddingVertical: 12,
-        alignItems: 'center',
-    },
-    primary: {
-        backgroundColor: colors.secondaryColor,
-    },
-    secondary: {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: colors.chatInputBorder,
-    },
-    buttonText: {
-        fontSize: 15,
-    },
-    primaryText: {
-        color: '#fff',
-        fontWeight: Platform.OS === 'web' ? 'bold' : '600',
-    },
-    secondaryText: {
-        color: colors.COLOR_BLACK_LIGHT_1,
-    },
-});
 
 export default NotificationPermissionSheet;

@@ -18,7 +18,6 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
-import { colors } from '@/styles/colors';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { MessageBlock } from '@/components/messages/MessageBlock';
@@ -223,7 +222,7 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
     footerButtonText: {
       fontSize: 14,
       fontWeight: '500',
-      color: theme.colors.primary || colors.primaryColor,
+      color: theme.colors.primary,
     },
     footerDivider: {
       width: StyleSheet.hairlineWidth,
@@ -325,7 +324,7 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
               <Ionicons
                 name="chatbubble-outline"
                 size={18}
-                color={theme.colors.primary || colors.primaryColor}
+                color={theme.colors.primary}
               />
               <Text style={styles.footerButtonText}>Open</Text>
             </TouchableOpacity>
@@ -338,7 +337,7 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
               <Ionicons
                 name="close-outline"
                 size={18}
-                color={theme.colors.primary || colors.primaryColor}
+                color={theme.colors.primary}
               />
               <Text style={styles.footerButtonText}>Close</Text>
             </TouchableOpacity>

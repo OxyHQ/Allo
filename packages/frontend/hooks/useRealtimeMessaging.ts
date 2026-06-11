@@ -4,11 +4,12 @@ import { oxyClient } from '@oxyhq/core';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/config';
 import { api } from '@/utils/api';
-import { useMessagesStore } from '@/stores/messagesStore';
+import { useMessagesStore, applyDecryptedBody } from '@/stores/messagesStore';
 import { useConversationsStore } from '@/stores/conversationsStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
+import { bumpDeviceListRefresh } from '@/stores/deviceListRefreshStore';
 import { useUsersStore } from '@/stores/usersStore';
-import type { Message } from '@/stores/messagesStore';
+import type { Message, DecryptedBodyFields } from '@/stores/messagesStore';
 
 let messagingSocket: Socket | null = null;
 const typingUsers: Map<string, Set<string>> = new Map(); // conversationId -> Set of userIds
@@ -45,9 +46,24 @@ export function disconnectMessagingSocket(): void {
   }
   listenersInitializedSocketId = null;
   typingUsers.clear();
+  // Cancel any pending coalesced refresh so it can't fire after logout and hit
+  // freshly-reset stores with the previous session's token (cross-user leak).
+  if (conversationRefreshTimer) {
+    clearTimeout(conversationRefreshTimer);
+    conversationRefreshTimer = null;
+  }
 }
 
-/** Raw realtime `newMessage` payload (device-addressed; ciphertext is ours). */
+/**
+ * Accessor for the shared module-level messaging socket. Other hooks (e.g.
+ * presence) attach their own listeners to this single connection rather than
+ * opening a second socket. Returns null until the connect effect establishes it.
+ */
+export function getMessagingSocket(): Socket | null {
+  return messagingSocket;
+}
+
+/** Raw realtime `newMessage` / `messageUpdated` payload (device-addressed). */
 export interface IncomingMessagePayload {
   _id?: string;
   id?: string;
@@ -58,10 +74,47 @@ export interface IncomingMessagePayload {
   ciphertext?: string | null;
   fontSize?: number;
   createdAt: string;
+  /** Set on `messageUpdated` (edit) payloads. */
+  updatedAt?: string;
   sticker?: Message['sticker'];
   messageType?: string;
   readBy?: Record<string, string>;
   deliveredTo?: string[];
+}
+
+/** Socket.IO handshake auth carried on the `/messaging` connection. */
+interface SocketAuth {
+  token?: string;
+  userId?: string;
+  deviceId?: number;
+}
+
+/** Read the current socket's handshake auth in a typed way (no `as any`). */
+function getSocketAuth(): SocketAuth {
+  return (messagingSocket?.auth as SocketAuth | undefined) ?? {};
+}
+
+/** Handshake-rejection message the server sends for a revoked/unknown device. */
+const UNREGISTERED_DEVICE_ERROR = 'unregistered_device';
+
+/**
+ * Handle a `/messaging` `connect_error`. The server rejects a revoked device at
+ * the handshake with `unregistered_device`; since the connection never
+ * establishes, the `device:revoked` push can't arrive, so without self-healing
+ * the client exhausts its reconnect attempts and gets permanently stuck.
+ *
+ * On that specific error we re-key this device (idempotent — `handleRevocation`
+ * has its own in-flight guard) and tear down the doomed socket. Re-initialization
+ * mints a fresh device id, which the reactive `ownDeviceId` selector picks up so
+ * the connect effect reconnects with the new identity. Exported for unit testing.
+ */
+export function handleMessagingConnectError(error: Error | undefined): void {
+  console.error('[RealtimeMessaging] Socket connection error:', error);
+  if (error?.message === UNREGISTERED_DEVICE_ERROR) {
+    console.warn('[RealtimeMessaging] Device unregistered server-side; re-keying and reconnecting');
+    void useDeviceKeysStore.getState().handleRevocation();
+    disconnectMessagingSocket();
+  }
 }
 
 /** Outcome of processing an incoming realtime message. */
@@ -137,9 +190,19 @@ export async function buildIncomingMessage(
     }
   }
 
+  // On a successful decrypt the plaintext body may be a versioned attachment
+  // payload (carrying the caption + key-bearing media refs, or a structured
+  // location / contact card). `applyDecryptedBody` reconstructs `text` / `media` /
+  // `attachmentType` / `location` / `contact` from it (and returns plain text
+  // verbatim otherwise) so live-delivered encrypted attachments render
+  // immediately instead of showing raw JSON until a refetch.
+  const body: DecryptedBodyFields = decryptionSucceeded
+    ? applyDecryptedBody(decryptedText || '')
+    : { text: decryptedText || '' };
+
   const message: Message = {
     id: messageData._id || messageData.id || '',
-    text: decryptedText || '',
+    text: body.text,
     senderId: messageData.senderId,
     senderDeviceId: messageData.senderDeviceId,
     timestamp: new Date(messageData.createdAt),
@@ -148,6 +211,10 @@ export async function buildIncomingMessage(
     fontSize: messageData.fontSize,
     isEncrypted,
     readStatus,
+    ...(body.media ? { media: body.media } : {}),
+    ...(body.attachmentType ? { attachmentType: body.attachmentType } : {}),
+    ...(body.location ? { location: body.location } : {}),
+    ...(body.contact ? { contact: body.contact } : {}),
     ...(messageData.ciphertext ? { ciphertext: messageData.ciphertext } : {}),
     ...(messageData.sticker ? { sticker: messageData.sticker } : {}),
     messageType: messageData.messageType === 'ai' ? 'ai' : 'user',
@@ -211,20 +278,27 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     messagingSocket.off('typing');
     messagingSocket.off('messageRead');
     messagingSocket.off('conversationThemeUpdated');
+    messagingSocket.off('device:revoked');
+    messagingSocket.off('deviceListChanged');
+    messagingSocket.off('deviceIdentityChanged');
     messagingSocket.off('disconnect');
     messagingSocket.off('connect_error');
 
     // Handle new messages - this listener is set once globally and receives ALL messages
     // Messages come from both conversation rooms and user rooms (backend emits to both)
-    messagingSocket.on('newMessage', async (messageData: any) => {
+    messagingSocket.on('newMessage', async (messageData: IncomingMessagePayload) => {
       try {
         // Get current user ID dynamically from socket auth or useOxy store
         // This ensures we always have the correct user ID, even if it changes
-        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        const currentUserId = getSocketAuth().userId || user?.id;
         const myDeviceId = useDeviceKeysStore.getState().deviceKeys?.deviceId;
 
         // O(1) dedup check via ID Set (WhatsApp/Telegram pattern)
         const messageId = messageData._id || messageData.id;
+        if (!messageId) {
+          console.warn('[RealtimeMessaging] Dropping newMessage with no id');
+          return;
+        }
         const idSet = useMessagesStore.getState().messageIdsByConversation[messageData.conversationId];
         if (idSet?.has(messageId)) {
           return;
@@ -329,7 +403,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       'conversationActivity',
       (data: { conversationId: string; messageId: string; senderId: string; createdAt: string }) => {
         try {
-          const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+          const currentUserId = getSocketAuth().userId || user?.id;
           if (currentUserId && data.senderId === currentUserId) {
             return;
           }
@@ -347,14 +421,15 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     );
 
     // Handle message updates (edits)
-    messagingSocket.on('messageUpdated', async (messageData: any) => {
+    messagingSocket.on('messageUpdated', async (messageData: IncomingMessagePayload) => {
       try {
         // Handle plaintext messages (legacy or when encryption unavailable)
         let decryptedText = messageData.text;
+        let decryptionSucceeded = false;
 
         // Get current user ID dynamically
-        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
-        
+        const currentUserId = getSocketAuth().userId || user?.id;
+
         // Only decrypt if message is encrypted and not sent by current user
         if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
           // Skip decryption for messages sent by current user (already plaintext locally)
@@ -365,6 +440,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
                 messageData.senderId,
                 messageData.senderDeviceId
               );
+              decryptionSucceeded = true;
             } catch (error) {
               console.error('[RealtimeMessaging] Error decrypting updated message:', error);
               decryptedText = '[Encrypted - Decryption failed]';
@@ -372,9 +448,27 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           }
         }
 
-        updateMessage(messageData.conversationId, messageData._id || messageData.id, {
-          text: decryptedText,
-          editedAt: new Date(messageData.updatedAt),
+        const updatedId = messageData._id || messageData.id;
+        if (!updatedId) {
+          console.warn('[RealtimeMessaging] Dropping messageUpdated with no id');
+          return;
+        }
+
+        // A successfully-decrypted body may be a versioned attachment payload;
+        // decode it so an edited message updates its text / media / location /
+        // contact (plain text and own/failed paths pass through verbatim with no
+        // synthesized attachments).
+        const body: DecryptedBodyFields = decryptionSucceeded
+          ? applyDecryptedBody(decryptedText || '')
+          : { text: decryptedText || '' };
+
+        updateMessage(messageData.conversationId, updatedId, {
+          text: body.text,
+          ...(messageData.updatedAt ? { editedAt: new Date(messageData.updatedAt) } : {}),
+          ...(body.media ? { media: body.media } : {}),
+          ...(body.attachmentType ? { attachmentType: body.attachmentType } : {}),
+          ...(body.location ? { location: body.location } : {}),
+          ...(body.contact ? { contact: body.contact } : {}),
         });
       } catch (error) {
         console.error('[RealtimeMessaging] Error handling message update:', error);
@@ -424,7 +518,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       'messageRead',
       (data: { conversationId: string; userId: string; messageId: string; readAt?: string }) => {
         try {
-          const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+          const currentUserId = getSocketAuth().userId || user?.id;
 
           // Our own read from ANOTHER device: clear local unread for this
           // conversation so the badge stays consistent across our devices.
@@ -456,6 +550,60 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       }
     });
 
+    // This device was revoked server-side. Wipe Signal state and re-register as a
+    // brand new device, then drop the (server-disconnected) socket so the connect
+    // effect — re-triggered by the new device id — reconnects with the NEW id.
+    // The old socket's handshake carries the revoked id and would be rejected.
+    messagingSocket.on('device:revoked', (data: { deviceId?: number }) => {
+      void (async () => {
+        try {
+          console.warn('[RealtimeMessaging] device:revoked received for device', data?.deviceId);
+          await useDeviceKeysStore.getState().handleRevocation();
+        } catch (error) {
+          console.error('[RealtimeMessaging] Error handling device revocation:', error);
+        } finally {
+          // Sever the old connection unconditionally; the connect effect rebuilds
+          // a fresh socket using the re-initialized device id.
+          disconnectMessagingSocket();
+        }
+      })();
+    });
+
+    // The owner's device list changed (a device was linked or revoked elsewhere).
+    // Invalidate the fan-out device-list cache so subsequent sends target the
+    // current set, and refresh any mounted linked-devices screen via the store.
+    messagingSocket.on('deviceListChanged', (data: { userId?: string }) => {
+      try {
+        const currentUserId = (messagingSocket?.auth as { userId?: string } | undefined)?.userId || user?.id;
+        const target = data?.userId;
+        // Only react to our own list changing.
+        if (target && currentUserId && target !== currentUserId) return;
+        useDeviceKeysStore.getState().invalidateDeviceCache(currentUserId ? [currentUserId] : undefined);
+        bumpDeviceListRefresh();
+      } catch (error) {
+        console.error('[RealtimeMessaging] Error handling device list change:', error);
+      }
+    });
+
+    // A device's identity (security code) changed. Invalidate the cache so the
+    // refreshed identity key is fetched before the next fan-out. The in-chat
+    // "security code changed" system row is a later phase; warn for now.
+    messagingSocket.on('deviceIdentityChanged', (data: { userId?: string; deviceId?: number }) => {
+      try {
+        console.warn(
+          '[RealtimeMessaging] deviceIdentityChanged for user',
+          data?.userId,
+          'device',
+          data?.deviceId
+        );
+        if (data?.userId) {
+          useDeviceKeysStore.getState().invalidateDeviceCache([data.userId]);
+        }
+      } catch (error) {
+        console.error('[RealtimeMessaging] Error handling device identity change:', error);
+      }
+    });
+
     messagingSocket.on('disconnect', () => {
       // Reset flag on disconnect so listeners can be re-setup on reconnect
       if (listenersInitializedSocketId === messagingSocket?.id) {
@@ -464,7 +612,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     });
 
     messagingSocket.on('connect_error', (error) => {
-      console.error('[RealtimeMessaging] Socket connection error:', error);
+      handleMessagingConnectError(error);
     });
 
     // Mark this socket instance as having listeners set up

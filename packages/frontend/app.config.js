@@ -51,7 +51,9 @@ return {
             },
             permissions: [
                 "android.permission.CAMERA",
-                "android.permission.RECORD_AUDIO"
+                "android.permission.RECORD_AUDIO",
+                "android.permission.MODIFY_AUDIO_SETTINGS",
+                "android.permission.ACCESS_NETWORK_STATE"
             ],
             // Must match google-services.json package_name
             package: "com.allo.app",
@@ -91,7 +93,6 @@ return {
                     },
             ],
             softwareKeyboardLayoutMode: "pan",
-            edgeToEdgeEnabled: true,
         },
         web: {
             bundler: "metro",
@@ -179,12 +180,12 @@ return {
                     'expo-build-properties',
                     {
                       ios: {
-                        deploymentTarget: '15.1',
+                        deploymentTarget: '16.4',
                       },
                       android: {
-                        compileSdkVersion: 35,
-                        targetSdkVersion: 35,
-                        buildToolsVersion: '35.0.0',
+                        compileSdkVersion: 36,
+                        targetSdkVersion: 36,
+                        buildToolsVersion: '36.0.0',
                         enableProguardInReleaseBuilds: true,
                         enableShrinkResourcesInReleaseBuilds: true,
                         useLegacyPackaging: false
@@ -192,6 +193,13 @@ return {
                     },
                 ],
                 "expo-web-browser",
+                [
+                    "@config-plugins/react-native-webrtc",
+                    {
+                        cameraPermission: "Allow $(PRODUCT_NAME) to access your camera for video calls.",
+                        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone for calls.",
+                    },
+                ],
             ];
 
             // Only include expo-notifications for native builds (android/ios)

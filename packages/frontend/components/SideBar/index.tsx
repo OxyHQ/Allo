@@ -7,7 +7,7 @@ import {
     StyleSheet,
 } from "react-native";
 import { Pressable } from "react-native-web-hover";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname } from "expo-router";
 import { useMediaQuery } from "react-responsive";
 import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,7 +39,6 @@ const WindowHeight = Dimensions.get('window').height;
 
 export function SideBar() {
     const { t } = useTranslation();
-    const router = useRouter();
     const { isAuthenticated: _isAuthenticated, user, logout, oxyServices } = useOxy();
     const { signIn } = useAuth();
     const theme = useTheme();
@@ -56,9 +55,10 @@ export function SideBar() {
             destructive: true,
         });
         if (!confirmed) return;
+        // The protected-route guard navigates to the welcome screen automatically
+        // once `isAuthenticated` flips; `useAuthCleanup` wipes session state.
         try {
             await logout();
-            router.replace('/');
         } catch (error) {
             console.error('Logout failed:', error);
         }
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     heroTagline: {
         fontSize: 20,
         fontWeight: 'bold',
-        fontFamily: 'Phudu',
+        fontFamily: 'BlomusModernus',
         flexWrap: 'wrap',
         textAlign: 'left',
         maxWidth: 200,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     signUpButtonText: {
         fontSize: 13,
         fontWeight: "bold",
-        fontFamily: "Phudu",
+        fontFamily: "BlomusModernus",
     },
     signInButton: {
         justifyContent: "center",
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     signInButtonText: {
         fontSize: 13,
         fontWeight: "bold",
-        fontFamily: "Phudu",
+        fontFamily: "BlomusModernus",
     },
     navigationSection: {
         flex: 1,
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         textAlign: 'center',
         margin: 0,
-        fontFamily: 'Phudu',
+        fontFamily: 'BlomusModernus',
     },
     footer: {
         flexDirection: 'column',

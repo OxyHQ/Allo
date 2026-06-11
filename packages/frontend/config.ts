@@ -2,16 +2,16 @@
 // Base URLs (prod first → env → fallback)
 export const API_URL =
   process.env.NODE_ENV === 'production'
-    ? 'https://api.allo.earth/api'
+    ? 'https://api.allo.oxy.so/api'
     : (process.env.API_URL ?? 'http://localhost:3000/api');
 export const SOCKET_URL =
   process.env.NODE_ENV === "production"
-    ? "wss://api.allo.earth"
+    ? "wss://api.allo.oxy.so"
     : (process.env.API_URL_SOCKET ?? "ws://localhost:3000");
 
 export const API_URL_SOCKET =
   process.env.NODE_ENV === "production"
-    ? "wss://api.allo.earth"
+    ? "wss://api.allo.oxy.so"
     : (process.env.API_URL_SOCKET ?? "ws://localhost:3000");
 
 export const API_URL_SOCKET_CHAT = process.env.API_URL_SOCKET_CHAT || 'http://localhost:4000';
@@ -24,5 +24,9 @@ export const OXY_BASE_URL =
 export const STRIPE_LINK_PLUS = process.env.EXPO_PUBLIC_STRIPE_LINK_PLUS || '';
 export const STRIPE_LINK_FILE = process.env.EXPO_PUBLIC_STRIPE_LINK_FILE || '';
 
-// KLIPY API
+// KLIPY API — GIF search / trending (https://docs.klipy.com).
+// The app key is interpolated into the path: `/api/v1/{app_key}/gifs/...`.
 export const KLIPY_APP_KEY = process.env.EXPO_PUBLIC_KLIPY_APP_KEY || '';
+export const KLIPY_API_URL = process.env.EXPO_PUBLIC_KLIPY_API_URL || 'https://api.klipy.com/api/v1';
+/** Items requested per GIF page (search + trending). */
+export const KLIPY_PAGE_SIZE = 24;

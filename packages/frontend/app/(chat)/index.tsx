@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
+import React, { useContext, useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import {
+    Platform,
     StyleSheet,
     View,
     Text,
@@ -12,6 +13,9 @@ import { FlashList } from '@shopify/flash-list';
 import { Link, useRouter, usePathname } from 'expo-router';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Menu, MenuOptions, MenuOption, MenuTrigger } from 'react-native-popup-menu';
+import * as ImagePicker from 'expo-image-picker';
+import { useTranslation } from 'react-i18next';
 import Animated, {
     Easing,
     FadeIn,
@@ -34,6 +38,7 @@ import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
+import { ChatPicker } from '@/components/shared/ChatPicker';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -41,14 +46,16 @@ import { useOxy } from '@oxyhq/services';
 import {
     useConversationsStore,
     useConversationSwipePreferencesStore,
+    useMessagesStore,
     SwipeActionType,
 } from '@/stores';
+import { BottomSheetContext } from '@/context/BottomSheetContext';
 
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
+import { PresenceDot } from '@/components/conversation/PresenceDot';
 
 // Utils
-import { colors } from '@/styles/colors';
 import {
     getConversationDisplayName,
     getConversationAvatar,
@@ -58,6 +65,7 @@ import {
 } from '@/utils/conversationUtils';
 import { formatConversationTimestamp } from '@/utils/dateUtils';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
+import { useSubscribePresence } from '@/hooks/usePresence';
 
 // Skeleton dimension lookup tables (module-level to avoid re-allocation per render)
 const SKELETON_NAME_WIDTHS = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125] as const;
@@ -135,6 +143,7 @@ function SwipeAction({
     windowWidth: number;
 }) {
     const isDelete = action === 'delete';
+    const theme = useTheme();
 
     const animatedStyle = useAnimatedStyle(() => {
         const drag = dragAnimatedValue.value;
@@ -154,7 +163,7 @@ function SwipeAction({
                     justifyContent: 'center',
                     alignItems: 'center',
                     overflow: 'hidden',
-                    backgroundColor: isDelete ? colors.chatUnreadBadge : colors.chatTypingIndicator,
+                    backgroundColor: isDelete ? theme.colors.error : theme.colors.success,
                 },
                 animatedStyle,
             ]}
@@ -237,7 +246,10 @@ export default function ConversationsList() {
     const theme = useTheme();
     const pathname = usePathname();
     const router = useRouter();
+    const { t } = useTranslation();
     const { width: windowWidth } = useWindowDimensions();
+    const bottomSheet = useContext(BottomSheetContext);
+    const sendAttachmentMessage = useMessagesStore(state => state.sendAttachmentMessage);
     // Get conversations from store
     const conversations = useConversationsStore(state => state.conversations);
     const loadCachedConversations = useConversationsStore(state => state.loadCachedConversations);
@@ -296,8 +308,23 @@ export default function ConversationsList() {
     }, [pathname]);
 
     // Get current user ID and oxy services
-    const { user, oxyServices } = useOxy();
+    const { user, oxyServices, logout } = useOxy();
     const currentUserId = user?.id;
+
+    // Online presence: subscribe to the direct (1:1) partners currently in the
+    // list. Group conversations don't show a presence dot, so they're excluded.
+    // The hook bootstraps via REST and wires the shared `presence:update`
+    // listener; rows read their own dot via the per-user store selector.
+    const directPartnerIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const conv of conversations) {
+            if (isGroupConversation(conv)) continue;
+            const partnerId = getOtherParticipants(conv, currentUserId)[0]?.id;
+            if (partnerId) ids.add(partnerId);
+        }
+        return Array.from(ids);
+    }, [conversations, currentUserId]);
+    useSubscribePresence(directPartnerIds);
 
     // Multi-selection state
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(() => new Set());
@@ -352,6 +379,21 @@ export default function ConversationsList() {
         headerIconButton: {
             padding: 4,
         },
+        menuOptionRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+        },
+        menuOptionText: {
+            fontSize: 15,
+            color: theme.colors.text,
+            fontWeight: '500',
+        },
+        menuOptionTextDanger: {
+            color: theme.colors.error,
+        },
         searchBarContainer: {
             paddingHorizontal: 16,
             paddingTop: 12,
@@ -361,7 +403,7 @@ export default function ConversationsList() {
         searchInputWrapper: {
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: theme.colors.backgroundSecondary || '#f0f2f5',
+            backgroundColor: theme.colors.backgroundSecondary,
             borderRadius: 20,
             paddingHorizontal: 16,
             paddingVertical: 8,
@@ -471,10 +513,10 @@ export default function ConversationsList() {
         },
         conversationTimestamp: {
             fontSize: 12,
-            color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+            color: theme.colors.textSecondary,
         },
         conversationTimestampUnread: {
-            color: colors.primaryColor,
+            color: theme.colors.primary,
             fontWeight: '600',
         },
         conversationBottomRow: {
@@ -484,12 +526,12 @@ export default function ConversationsList() {
         },
         conversationMessage: {
             fontSize: 13,
-            color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+            color: theme.colors.textSecondary,
             flex: 1,
             marginRight: 8,
         },
         unreadBadge: {
-            backgroundColor: colors.primaryColor,
+            backgroundColor: theme.colors.primary,
             borderRadius: 12,
             minWidth: 22,
             height: 22,
@@ -515,10 +557,10 @@ export default function ConversationsList() {
             paddingHorizontal: 20,
         },
         swipeActionArchive: {
-            backgroundColor: colors.chatTypingIndicator,
+            backgroundColor: theme.colors.success,
         },
         swipeActionDelete: {
-            backgroundColor: colors.chatUnreadBadge,
+            backgroundColor: theme.colors.error,
         },
         swipeActionText: {
             color: '#FFFFFF',
@@ -677,22 +719,128 @@ export default function ConversationsList() {
         });
     }, [selectedConversationIds, removeConversation, clearSelection]);
 
+    /**
+     * Send a captured photo to the chosen conversation. The store encrypts the
+     * local source once and uploads only the ciphertext (E2E media, Fase 1D).
+     */
+    const sendPhotoToConversation = useCallback(async (
+        conversation: Conversation,
+        asset: ImagePicker.ImagePickerAsset,
+    ) => {
+        if (!currentUserId) return;
+
+        const recipient = getOtherParticipants(conversation, currentUserId)[0]?.id;
+        if (!recipient) {
+            toast.error(t('chat.photoSendFailed'));
+            return;
+        }
+
+        const toastId = toast.loading(t('chat.uploadingMedia'));
+        try {
+            const mime = asset.mimeType || 'image/jpeg';
+            const result = await sendAttachmentMessage(
+                conversation.id,
+                {
+                    attachmentType: 'image',
+                    media: [
+                        {
+                            id: `local-${Date.now()}`,
+                            type: mime === 'image/gif' ? 'gif' : 'image',
+                            localUri: asset.uri,
+                            width: asset.width,
+                            height: asset.height,
+                            fileSize: asset.fileSize,
+                            mimeType: mime,
+                            fileName: asset.fileName || `photo-${Date.now()}.jpg`,
+                        },
+                    ],
+                },
+                currentUserId,
+                recipient,
+            );
+
+            if (result) {
+                toast.success(t('chat.photoSent'));
+            } else {
+                toast.error(t('chat.photoSendFailed'));
+            }
+        } catch (error) {
+            console.error('[ConversationsList] Error sending camera photo:', error);
+            toast.error(t('chat.photoSendFailed'));
+        } finally {
+            toast.dismiss(toastId);
+        }
+    }, [currentUserId, sendAttachmentMessage, t]);
+
+    /**
+     * Camera header button — open the camera, then pick a destination chat.
+     */
+    const handleCameraPress = useCallback(async () => {
+        try {
+            if (Platform.OS !== 'web') {
+                const perm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!perm.granted) {
+                    toast.error(t('chat.cameraPermissionDenied'));
+                    return;
+                }
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.9,
+                exif: false,
+            });
+            if (result.canceled || !result.assets?.length) return;
+
+            const asset = result.assets[0];
+            const closeSheet = () => bottomSheet.openBottomSheet(false);
+            bottomSheet.setBottomSheetContent(
+                <ChatPicker
+                    title={t('chat.selectChat')}
+                    onSelect={(conversation) => {
+                        void sendPhotoToConversation(conversation, asset);
+                    }}
+                    onClose={closeSheet}
+                />
+            );
+            bottomSheet.openBottomSheet(true);
+        } catch (error) {
+            console.error('[ConversationsList] Camera flow error:', error);
+            toast.error(t('chat.photoSendFailed'));
+        }
+    }, [bottomSheet, sendPhotoToConversation, t]);
+
+    /**
+     * Options menu — sign out with confirmation handled by Oxy session manager.
+     */
+    const handleSignOut = useCallback(async () => {
+        // The protected-route guard navigates to the welcome screen automatically
+        // once `isAuthenticated` flips; `useAuthCleanup` wipes session state.
+        try {
+            await logout?.();
+        } catch (error) {
+            console.error('[ConversationsList] Sign out error:', error);
+            toast.error(t('chat.signOutFailed'));
+        }
+    }, [logout, t]);
+
     // Animated styles for header background during selection mode
     const headerBackgroundColor = theme.colors.background;
     const headerBorderColor = theme.colors.border;
+    const headerSelectionColor = theme.colors.primary;
 
     const headerAnimatedStyle = useAnimatedStyle(() => ({
         backgroundColor: interpolateColor(
             selectionModeProgress.value,
             [0, 1],
-            [headerBackgroundColor, colors.primaryColor],
+            [headerBackgroundColor, headerSelectionColor],
         ),
         borderBottomColor: interpolateColor(
             selectionModeProgress.value,
             [0, 1],
-            [headerBorderColor, colors.primaryColor],
+            [headerBorderColor, headerSelectionColor],
         ),
-    }), [headerBackgroundColor, headerBorderColor]);
+    }), [headerBackgroundColor, headerBorderColor, headerSelectionColor]);
 
     /**
      * Close a swipeable row
@@ -861,6 +1009,10 @@ export default function ConversationsList() {
                             size={44}
                         />
                     )}
+                    {/* Online dot for direct conversations (subscribes to its own user). */}
+                    {!isGroup && (
+                        <PresenceDot userId={otherParticipants[0]?.id} />
+                    )}
                 </TouchableOpacity>
                 <View style={styles.conversationContent}>
                     <View style={styles.conversationHeader}>
@@ -967,7 +1119,7 @@ export default function ConversationsList() {
                                 <TouchableOpacity
                                     style={styles.headerIconButton}
                                     onPress={() => {
-                                        // TODO: Implement camera functionality
+                                        void handleCameraPress();
                                     }}
                                     accessibilityLabel="Camera"
                                     accessibilityRole="button"
@@ -978,20 +1130,67 @@ export default function ConversationsList() {
                                         color={theme.colors.text}
                                     />
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.headerIconButton}
-                                    onPress={() => {
-                                        // TODO: Implement options menu
-                                    }}
-                                    accessibilityLabel="More options"
-                                    accessibilityRole="button"
-                                >
-                                    <Ionicons
-                                        name="ellipsis-vertical"
-                                        size={24}
-                                        color={theme.colors.text}
-                                    />
-                                </TouchableOpacity>
+                                <Menu>
+                                    <MenuTrigger
+                                        customStyles={{
+                                            triggerWrapper: styles.headerIconButton,
+                                        }}
+                                    >
+                                        <Ionicons
+                                            name="ellipsis-vertical"
+                                            size={24}
+                                            color={theme.colors.text}
+                                        />
+                                    </MenuTrigger>
+                                    <MenuOptions
+                                        customStyles={{
+                                            optionsContainer: {
+                                                backgroundColor: theme.colors.card || theme.colors.background,
+                                                borderRadius: 12,
+                                                paddingVertical: 4,
+                                                marginTop: 32,
+                                                width: 200,
+                                            },
+                                        }}
+                                    >
+                                        <MenuOption onSelect={() => router.push('/new' as any)}>
+                                            <View style={styles.menuOptionRow}>
+                                                <Ionicons
+                                                    name="people-outline"
+                                                    size={20}
+                                                    color={theme.colors.text}
+                                                />
+                                                <Text style={styles.menuOptionText}>
+                                                    {t('chat.menuNewGroup')}
+                                                </Text>
+                                            </View>
+                                        </MenuOption>
+                                        <MenuOption onSelect={() => router.push('/(chat)/settings' as any)}>
+                                            <View style={styles.menuOptionRow}>
+                                                <Ionicons
+                                                    name="settings-outline"
+                                                    size={20}
+                                                    color={theme.colors.text}
+                                                />
+                                                <Text style={styles.menuOptionText}>
+                                                    {t('chat.menuSettings')}
+                                                </Text>
+                                            </View>
+                                        </MenuOption>
+                                        <MenuOption onSelect={() => { void handleSignOut(); }}>
+                                            <View style={styles.menuOptionRow}>
+                                                <Ionicons
+                                                    name="log-out-outline"
+                                                    size={20}
+                                                    color={theme.colors.error}
+                                                />
+                                                <Text style={[styles.menuOptionText, styles.menuOptionTextDanger]}>
+                                                    {t('chat.menuSignOut')}
+                                                </Text>
+                                            </View>
+                                        </MenuOption>
+                                    </MenuOptions>
+                                </Menu>
                             </View>
                         </Animated.View>
                     ) : (

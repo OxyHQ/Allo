@@ -46,6 +46,7 @@ interface ChatUIState {
   setAttachmentMenuOpen: (conversationId: string, isOpen: boolean) => void;
   setReplyTo: (conversationId: string, messageId: string | undefined) => void;
   clearConversationUI: (conversationId: string) => void;
+  reset: () => void;
 
   // Selectors
   getVisibleTimestampId: (conversationId: string) => string | null;
@@ -98,6 +99,17 @@ export const useChatUIStore = create<ChatUIState>()(
         delete state.inputTextByConversation[conversationId];
         delete state.isAttachmentMenuOpenByConversation[conversationId];
         delete state.replyToByConversation[conversationId];
+      });
+    },
+
+    // Lifecycle: drop all draft input / transient chat UI on logout so one
+    // account's unsent drafts never appear under another account.
+    reset: () => {
+      set((state) => {
+        state.visibleTimestampByConversation = {};
+        state.inputTextByConversation = {};
+        state.isAttachmentMenuOpenByConversation = {};
+        state.replyToByConversation = {};
       });
     },
 

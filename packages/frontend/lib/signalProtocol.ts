@@ -1,25 +1,123 @@
 /**
- * Signal Protocol Implementation for Allo
- * 
- * This module provides Signal Protocol encryption/decryption functionality
- * for end-to-end encrypted messaging.
- * 
- * Uses Web Crypto API for encryption (compatible with Signal Protocol)
+ * Signal Protocol — real X3DH + Double Ratchet implementation.
+ *
+ * High-level flow:
+ *   1. `initializeDeviceKeys()` generates and persists this device's long-term
+ *      identity (Ed25519 + X25519), a signed prekey (X25519 signed with Ed25519),
+ *      a set of one-time prekeys, a numeric device id and a registration id.
+ *   2. `getPublicBundle()` returns the public bundle that is uploaded to the
+ *      backend so other devices can run X3DH against us.
+ *   3. `encryptForPeer({ userId, deviceId }, plaintext, opts)` performs X3DH on
+ *      the first call (fetching the peer prekey bundle via `opts.fetchPreKeyBundle`),
+ *      sets up a Double Ratchet session, persists it and returns a base64 wire
+ *      payload.
+ *   4. `decryptFromPeer({ userId, deviceId }, payload, opts)` parses the wire
+ *      payload, completes X3DH on the receiver side if the payload contains an
+ *      `x3dh` header, advances the ratchet and returns plaintext. Legacy payloads
+ *      throw `LegacyMessageError` so the caller can render a friendly
+ *      "[Mensaje no descifrable]" instead of crashing.
+ *
+ * Backwards compatible surface for existing call sites:
+ *   - `initializeDeviceKeys`, `getDeviceKeys`, `storeDeviceKeys`,
+ *     `generateIdentityKeyPair`, `generatePreKeys`, `generateSignedPreKey`,
+ *     `generateRegistrationId`, `generateDeviceId` are kept.
+ *   - `encryptMessage` / `decryptMessage` are kept as thin shims that throw
+ *     instructive errors so callers migrate to the session-aware API in
+ *     `deviceKeysStore.ts`.
  */
 
 import { Storage } from '@/utils/storage';
-import { getSecureItem, setSecureItem } from '@/lib/secureStorage';
+import { getSecureItem, setSecureItem, removeSecureItem } from '@/lib/secureStorage';
 
-// Storage keys
-const DEVICE_ID_KEY = 'signal_device_id';
-const IDENTITY_KEY_PAIR_KEY = 'signal_identity_keypair';
-const REGISTRATION_ID_KEY = 'signal_registration_id';
-const SIGNED_PRE_KEY_KEY = 'signal_signed_prekey';
-const PRE_KEYS_KEY = 'signal_prekeys';
+import {
+  KeyPair,
+  generateX25519KeyPair,
+  generateEd25519KeyPair,
+  sign,
+  bytesToBase64,
+  base64ToBytes,
+  utf8ToBytes,
+  bytesToUtf8,
+  random,
+} from '@/lib/signal/keys';
+import {
+  PreKeyBundle,
+  InitialMessageHeader,
+  x3dhInitiate,
+  x3dhReceive,
+} from '@/lib/signal/x3dh';
+import {
+  RatchetState,
+  initRatchetInitiator,
+  initRatchetReceiver,
+  ratchetEncrypt,
+  ratchetDecrypt,
+} from '@/lib/signal/doubleRatchet';
+import {
+  loadSession,
+  saveSession,
+  wipeAllSessions,
+  PeerAddress,
+} from '@/lib/signal/sessionStore';
+import {
+  encodeWire,
+  decodeWire,
+  LegacyMessageError,
+  X3dhWireHeader,
+} from '@/lib/signal/wire';
+
+// ---------------------------------------------------------------------------
+// Persistence keys.
+// ---------------------------------------------------------------------------
+
+const DEVICE_ID_KEY = 'signal_device_id_v2';
+const REGISTRATION_ID_KEY = 'signal_registration_id_v2';
+const IDENTITY_ED_KEY = 'signal_identity_ed25519_v2';
+const IDENTITY_DH_KEY = 'signal_identity_x25519_v2';
+const SIGNED_PRE_KEY_KEY = 'signal_signed_prekey_v2';
+const PRE_KEYS_KEY = 'signal_prekeys_v2';
+
+/** Public bundle cached in regular storage (mirror of the device's public keys). */
+const PUBLIC_BUNDLE_KEY = 'signal_device_keys_public';
+
+/** Every fixed (non-session) secure key holding this device's Signal identity. */
+const SIGNAL_IDENTITY_SECURE_KEYS = [
+  DEVICE_ID_KEY,
+  REGISTRATION_ID_KEY,
+  IDENTITY_ED_KEY,
+  IDENTITY_DH_KEY,
+  SIGNED_PRE_KEY_KEY,
+  PRE_KEYS_KEY,
+] as const;
+
+const SIGNED_PRE_KEY_ID = 1;
+const PREKEY_COUNT = 100;
+const PREKEY_LOW_WATERMARK = 20;
+
+// ---------------------------------------------------------------------------
+// Public types kept compatible with the legacy interface used by the stores.
+// ---------------------------------------------------------------------------
+
+export interface SignedPreKeyPublic {
+  keyId: number;
+  publicKey: string;
+  signature: string;
+}
+
+export interface PreKeyPublic {
+  keyId: number;
+  publicKey: string;
+}
 
 export interface DeviceKeys {
   deviceId: number;
+  /**
+   * Combined identity public key: base64(Ed25519 pub || X25519 pub).
+   * Kept under the same JSON property name so the backend schema does not
+   * need to change.
+   */
   identityKeyPublic: string;
+  /** Combined identity private key: base64(Ed25519 priv || X25519 priv). */
   identityKeyPrivate: string;
   signedPreKey: {
     keyId: number;
@@ -35,207 +133,215 @@ export interface DeviceKeys {
   registrationId: number;
 }
 
-export interface EncryptedMessage {
-  ciphertext: string;
-  messageType: 'text' | 'media' | 'system';
-  encryptionVersion: number;
-  senderDeviceId: number;
+export interface PublicBundle {
+  deviceId: number;
+  identityKeyPublic: string;
+  signedPreKey: SignedPreKeyPublic;
+  preKeys: PreKeyPublic[];
+  registrationId: number;
 }
 
-/**
- * Generate a new device ID
- */
+export { LegacyMessageError };
+
+// ---------------------------------------------------------------------------
+// Helpers.
+// ---------------------------------------------------------------------------
+
+const ED_PUB_LEN = 32;
+const X_PUB_LEN = 32;
+const ED_PRIV_LEN = 32;
+const X_PRIV_LEN = 32;
+
+function packIdentityPublic(ed: Uint8Array, dh: Uint8Array): string {
+  const out = new Uint8Array(ED_PUB_LEN + X_PUB_LEN);
+  out.set(ed, 0);
+  out.set(dh, ED_PUB_LEN);
+  return bytesToBase64(out);
+}
+
+function unpackIdentityPublic(base64: string): { ed: Uint8Array; dh: Uint8Array } {
+  const all = base64ToBytes(base64);
+  if (all.length !== ED_PUB_LEN + X_PUB_LEN) {
+    throw new Error('Invalid identity public key length');
+  }
+  return {
+    ed: all.subarray(0, ED_PUB_LEN),
+    dh: all.subarray(ED_PUB_LEN),
+  };
+}
+
+function packIdentityPrivate(ed: Uint8Array, dh: Uint8Array): string {
+  const out = new Uint8Array(ED_PRIV_LEN + X_PRIV_LEN);
+  out.set(ed, 0);
+  out.set(dh, ED_PRIV_LEN);
+  return bytesToBase64(out);
+}
+
+function unpackIdentityPrivate(base64: string): { ed: Uint8Array; dh: Uint8Array } {
+  const all = base64ToBytes(base64);
+  if (all.length !== ED_PRIV_LEN + X_PRIV_LEN) {
+    throw new Error('Invalid identity private key length');
+  }
+  return {
+    ed: all.subarray(0, ED_PRIV_LEN),
+    dh: all.subarray(ED_PRIV_LEN),
+  };
+}
+
+function randomNonZeroInt32(): number {
+  // Use cryptographic randomness for ids.
+  const bytes = random(4);
+  const v =
+    ((bytes[0] & 0x7f) << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+  return v === 0 ? 1 : v;
+}
+
+// ---------------------------------------------------------------------------
+// Key generation primitives (compat-named exports).
+// ---------------------------------------------------------------------------
+
 export async function generateDeviceId(): Promise<number> {
   const existing = await getSecureItem(DEVICE_ID_KEY);
-  if (existing) {
-    return parseInt(existing, 10);
-  }
-  
-  // Generate random device ID (1-2147483647)
-  const deviceId = Math.floor(Math.random() * 2147483647) + 1;
+  if (existing) return parseInt(existing, 10);
+  const deviceId = randomNonZeroInt32();
   await setSecureItem(DEVICE_ID_KEY, deviceId.toString());
   return deviceId;
 }
 
-/**
- * Generate cryptographic key pair using Web Crypto API
- */
-async function generateKeyPair(): Promise<{ publicKey: string; privateKey: string }> {
-  const keyPair = await crypto.subtle.generateKey(
-    {
-      name: 'ECDH',
-      namedCurve: 'P-256',
-    },
-    true,
-    ['deriveKey', 'deriveBits']
-  );
-  
-  const publicKeyRaw = await crypto.subtle.exportKey('raw', keyPair.publicKey);
-  const privateKeyRaw = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-  
-  // Convert to base64
-  const publicKey = arrayBufferToBase64(publicKeyRaw);
-  const privateKey = arrayBufferToBase64(privateKeyRaw);
-  
-  return { publicKey, privateKey };
+export async function generateRegistrationId(): Promise<number> {
+  const existing = await getSecureItem(REGISTRATION_ID_KEY);
+  if (existing) return parseInt(existing, 10);
+  const id = randomNonZeroInt32();
+  await setSecureItem(REGISTRATION_ID_KEY, id.toString());
+  return id;
 }
 
 /**
- * Generate Signal Protocol identity key pair
+ * Generate a fresh identity key pair (Ed25519 for signatures + X25519 for DH).
+ * Returns the combined base64 representation used by the rest of the app.
  */
 export async function generateIdentityKeyPair(): Promise<{
   publicKey: string;
   privateKey: string;
 }> {
-  return generateKeyPair();
+  const ed = generateEd25519KeyPair();
+  const dh = generateX25519KeyPair();
+  return {
+    publicKey: packIdentityPublic(ed.publicKey, dh.publicKey),
+    privateKey: packIdentityPrivate(ed.privateKey, dh.privateKey),
+  };
 }
 
-/**
- * Generate registration ID
- */
-export async function generateRegistrationId(): Promise<number> {
-  const existing = await getSecureItem(REGISTRATION_ID_KEY);
-  if (existing) {
-    return parseInt(existing, 10);
-  }
-  
-  // Generate random registration ID (1-2147483647)
-  const registrationId = Math.floor(Math.random() * 2147483647) + 1;
-  await setSecureItem(REGISTRATION_ID_KEY, registrationId.toString());
-  return registrationId;
-}
-
-/**
- * Generate signed pre-key
- */
 export async function generateSignedPreKey(
   identityKeyPair: { publicKey: string; privateKey: string },
-  keyId: number = 1
+  keyId: number = SIGNED_PRE_KEY_ID
 ): Promise<{
   keyId: number;
   publicKey: string;
   privateKey: string;
   signature: string;
 }> {
-  const preKeyPair = await generateKeyPair();
-  
-  // Sign the pre-key with identity key (simplified - in production use proper signing)
-  const signature = await signData(preKeyPair.publicKey, identityKeyPair.privateKey);
-  
+  const spk = generateX25519KeyPair();
+  const { ed: edPriv } = unpackIdentityPrivate(identityKeyPair.privateKey);
+  const signature = sign(spk.publicKey, edPriv);
   return {
     keyId,
-    publicKey: preKeyPair.publicKey,
-    privateKey: preKeyPair.privateKey,
-    signature,
+    publicKey: bytesToBase64(spk.publicKey),
+    privateKey: bytesToBase64(spk.privateKey),
+    signature: bytesToBase64(signature),
   };
 }
 
-/**
- * Generate one-time pre-keys
- */
 export async function generatePreKeys(
-  count: number = 100,
+  count: number = PREKEY_COUNT,
   startKeyId: number = 1
-): Promise<Array<{
-  keyId: number;
-  publicKey: string;
-  privateKey: string;
-}>> {
-  const preKeys = [];
+): Promise<
+  Array<{
+    keyId: number;
+    publicKey: string;
+    privateKey: string;
+  }>
+> {
+  const out: Array<{ keyId: number; publicKey: string; privateKey: string }> = [];
   for (let i = 0; i < count; i++) {
-    const keyPair = await generateKeyPair();
-    preKeys.push({
+    const pair = generateX25519KeyPair();
+    out.push({
       keyId: startKeyId + i,
-      publicKey: keyPair.publicKey,
-      privateKey: keyPair.privateKey,
+      publicKey: bytesToBase64(pair.publicKey),
+      privateKey: bytesToBase64(pair.privateKey),
     });
   }
-  return preKeys;
+  return out;
 }
 
-/**
- * Sign data with private key
- */
-async function signData(data: string, privateKeyBase64: string): Promise<string> {
-  try {
-    const privateKeyBuffer = base64ToArrayBuffer(privateKeyBase64);
-    const privateKey = await crypto.subtle.importKey(
-      'pkcs8',
-      privateKeyBuffer,
-      {
-        name: 'ECDSA',
-        namedCurve: 'P-256',
-      },
-      false,
-      ['sign']
-    );
-    
-    const dataBuffer = new TextEncoder().encode(data);
-    const signature = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      privateKey,
-      dataBuffer
-    );
-    
-    return arrayBufferToBase64(signature);
-  } catch (error) {
-    console.error('[SignalProtocol] Error signing data:', error);
-    // Fallback: simple hash-based signature
-    return btoa(data + privateKeyBase64.slice(0, 32));
-  }
-}
+// ---------------------------------------------------------------------------
+// Device key lifecycle.
+// ---------------------------------------------------------------------------
 
-/**
- * Initialize device keys (generate if not exists)
- */
 export async function initializeDeviceKeys(): Promise<DeviceKeys> {
-  // Check if keys already exist
-  const existingKeys = await getDeviceKeys();
-  if (existingKeys) {
-    return existingKeys;
-  }
-  
-  // Generate new keys
+  const existing = await getDeviceKeys();
+  if (existing) return existing;
+
   const deviceId = await generateDeviceId();
-  const identityKeyPair = await generateIdentityKeyPair();
+  const identity = await generateIdentityKeyPair();
   const registrationId = await generateRegistrationId();
-  const signedPreKey = await generateSignedPreKey(identityKeyPair);
-  const preKeys = await generatePreKeys(100);
-  
-  const deviceKeys: DeviceKeys = {
+  const signedPreKey = await generateSignedPreKey(identity);
+  const preKeys = await generatePreKeys();
+
+  const keys: DeviceKeys = {
     deviceId,
-    identityKeyPublic: identityKeyPair.publicKey,
-    identityKeyPrivate: identityKeyPair.privateKey,
+    identityKeyPublic: identity.publicKey,
+    identityKeyPrivate: identity.privateKey,
     signedPreKey,
     preKeys,
     registrationId,
   };
-  
-  // Store keys securely
-  await storeDeviceKeys(deviceKeys);
-  
-  return deviceKeys;
+  await storeDeviceKeys(keys);
+  return keys;
 }
 
 /**
- * Store device keys securely
+ * Wipe ALL persisted Signal Protocol state for this device: the long-term
+ * identity (Ed25519 + X25519), signed prekey, one-time prekeys, device id,
+ * registration id, the cached public bundle and every Double Ratchet session.
+ *
+ * After this call `getDeviceKeys()` returns null and `generateDeviceId()` mints
+ * a fresh device id, so a subsequent `initializeDeviceKeys()` produces a brand
+ * new device identity. Used when the server revokes this device (`device:revoked`):
+ * the old identity is no longer trusted and must not be reused.
  */
+export async function wipeAllSignalState(): Promise<void> {
+  await Promise.all([
+    ...SIGNAL_IDENTITY_SECURE_KEYS.map((key) => removeSecureItem(key)),
+    Storage.remove(PUBLIC_BUNDLE_KEY),
+    wipeAllSessions(),
+  ]);
+}
+
 export async function storeDeviceKeys(keys: DeviceKeys): Promise<void> {
-  // Store private keys in secure storage (SecureStore on native, AsyncStorage on web)
-  await setSecureItem(IDENTITY_KEY_PAIR_KEY, JSON.stringify({
-    public: keys.identityKeyPublic,
-    private: keys.identityKeyPrivate,
-  }));
-  
+  const id = unpackIdentityPublic(keys.identityKeyPublic);
+  const idPriv = unpackIdentityPrivate(keys.identityKeyPrivate);
+
+  await setSecureItem(
+    IDENTITY_ED_KEY,
+    JSON.stringify({
+      public: bytesToBase64(id.ed),
+      private: bytesToBase64(idPriv.ed),
+    })
+  );
+  await setSecureItem(
+    IDENTITY_DH_KEY,
+    JSON.stringify({
+      public: bytesToBase64(id.dh),
+      private: bytesToBase64(idPriv.dh),
+    })
+  );
   await setSecureItem(SIGNED_PRE_KEY_KEY, JSON.stringify(keys.signedPreKey));
   await setSecureItem(PRE_KEYS_KEY, JSON.stringify(keys.preKeys));
-  
-  // Store device ID and registration ID
   await setSecureItem(DEVICE_ID_KEY, keys.deviceId.toString());
   await setSecureItem(REGISTRATION_ID_KEY, keys.registrationId.toString());
-  
-  // Store public keys in regular storage (for API registration)
-  await Storage.set('signal_device_keys_public', {
+
+  await Storage.set(PUBLIC_BUNDLE_KEY, {
     deviceId: keys.deviceId,
     identityKeyPublic: keys.identityKeyPublic,
     signedPreKey: {
@@ -243,42 +349,51 @@ export async function storeDeviceKeys(keys: DeviceKeys): Promise<void> {
       publicKey: keys.signedPreKey.publicKey,
       signature: keys.signedPreKey.signature,
     },
-    preKeys: keys.preKeys.map(k => ({
-      keyId: k.keyId,
-      publicKey: k.publicKey,
-    })),
+    preKeys: keys.preKeys.map((k) => ({ keyId: k.keyId, publicKey: k.publicKey })),
     registrationId: keys.registrationId,
   });
 }
 
-/**
- * Get stored device keys
- */
 export async function getDeviceKeys(): Promise<DeviceKeys | null> {
   try {
-    const identityKeyPairStr = await getSecureItem(IDENTITY_KEY_PAIR_KEY);
-    const signedPreKeyStr = await getSecureItem(SIGNED_PRE_KEY_KEY);
-    const preKeysStr = await getSecureItem(PRE_KEYS_KEY);
-    const deviceIdStr = await getSecureItem(DEVICE_ID_KEY);
-    const registrationIdStr = await getSecureItem(REGISTRATION_ID_KEY);
-    
-    if (!identityKeyPairStr || !signedPreKeyStr || !preKeysStr || !deviceIdStr || !registrationIdStr) {
+    const [
+      edRaw,
+      dhRaw,
+      signedPreKeyStr,
+      preKeysStr,
+      deviceIdStr,
+      registrationIdStr,
+    ] = await Promise.all([
+      getSecureItem(IDENTITY_ED_KEY),
+      getSecureItem(IDENTITY_DH_KEY),
+      getSecureItem(SIGNED_PRE_KEY_KEY),
+      getSecureItem(PRE_KEYS_KEY),
+      getSecureItem(DEVICE_ID_KEY),
+      getSecureItem(REGISTRATION_ID_KEY),
+    ]);
+
+    if (!edRaw || !dhRaw || !signedPreKeyStr || !preKeysStr || !deviceIdStr || !registrationIdStr) {
       return null;
     }
-    
-    const identityKeyPair = JSON.parse(identityKeyPairStr);
+
+    const ed = JSON.parse(edRaw) as { public: string; private: string };
+    const dh = JSON.parse(dhRaw) as { public: string; private: string };
     const signedPreKey = JSON.parse(signedPreKeyStr);
     const preKeys = JSON.parse(preKeysStr);
-    const deviceId = parseInt(deviceIdStr, 10);
-    const registrationId = parseInt(registrationIdStr, 10);
-    
+
     return {
-      deviceId,
-      identityKeyPublic: identityKeyPair.public,
-      identityKeyPrivate: identityKeyPair.private,
+      deviceId: parseInt(deviceIdStr, 10),
+      registrationId: parseInt(registrationIdStr, 10),
+      identityKeyPublic: packIdentityPublic(
+        base64ToBytes(ed.public),
+        base64ToBytes(dh.public)
+      ),
+      identityKeyPrivate: packIdentityPrivate(
+        base64ToBytes(ed.private),
+        base64ToBytes(dh.private)
+      ),
       signedPreKey,
       preKeys,
-      registrationId,
     };
   } catch (error) {
     console.error('[SignalProtocol] Error getting device keys:', error);
@@ -286,196 +401,273 @@ export async function getDeviceKeys(): Promise<DeviceKeys | null> {
   }
 }
 
+export async function getPublicBundle(): Promise<PublicBundle | null> {
+  const keys = await getDeviceKeys();
+  if (!keys) return null;
+  return {
+    deviceId: keys.deviceId,
+    identityKeyPublic: keys.identityKeyPublic,
+    signedPreKey: {
+      keyId: keys.signedPreKey.keyId,
+      publicKey: keys.signedPreKey.publicKey,
+      signature: keys.signedPreKey.signature,
+    },
+    preKeys: keys.preKeys.map((k) => ({ keyId: k.keyId, publicKey: k.publicKey })),
+    registrationId: keys.registrationId,
+  };
+}
+
 /**
- * Encrypt a message for a recipient using ECDH + AES-GCM
+ * Remove a one-time prekey we have already consumed. Persists the updated list
+ * back to secure storage.
  */
+export async function consumeLocalOneTimePreKey(keyId: number): Promise<void> {
+  const keys = await getDeviceKeys();
+  if (!keys) return;
+  const next = keys.preKeys.filter((k) => k.keyId !== keyId);
+  if (next.length === keys.preKeys.length) return;
+  keys.preKeys = next;
+  await storeDeviceKeys(keys);
+}
+
+/** Returns the number of remaining one-time prekeys (used to trigger replenish). */
+export async function remainingOneTimePreKeys(): Promise<number> {
+  const keys = await getDeviceKeys();
+  return keys ? keys.preKeys.length : 0;
+}
+
+export const PREKEY_LOW_THRESHOLD = PREKEY_LOW_WATERMARK;
+
+/**
+ * Generate `count` new one-time prekeys, append them locally and return ONLY
+ * the public portion suitable for upload to the server.
+ */
+export async function generateAndStoreNewPreKeys(
+  count: number = PREKEY_COUNT
+): Promise<PreKeyPublic[]> {
+  const keys = await getDeviceKeys();
+  if (!keys) throw new Error('Device keys not initialized');
+  const nextId =
+    keys.preKeys.reduce((max, k) => (k.keyId > max ? k.keyId : max), 0) + 1;
+  const fresh = await generatePreKeys(count, nextId);
+  keys.preKeys = keys.preKeys.concat(fresh);
+  await storeDeviceKeys(keys);
+  return fresh.map((k) => ({ keyId: k.keyId, publicKey: k.publicKey }));
+}
+
+// ---------------------------------------------------------------------------
+// Session-aware encryption / decryption.
+// ---------------------------------------------------------------------------
+
+/** Public bundle as received from the server (REST shape). */
+export interface RemotePublicBundle {
+  deviceId: number;
+  identityKeyPublic: string;
+  signedPreKey: SignedPreKeyPublic;
+  /** Single one-time prekey that the server atomically consumed for us. */
+  preKey?: PreKeyPublic | null;
+  registrationId?: number;
+}
+
+export interface EncryptOptions {
+  /**
+   * Called on the very first message to a peer. Must perform the network round
+   * trip to fetch the prekey bundle (and atomically consume one OPK).
+   */
+  fetchPreKeyBundle: (peer: PeerAddress) => Promise<RemotePublicBundle>;
+}
+
+export interface DecryptOptions {
+  /**
+   * Called on the very first inbound message to look up the receiver's local
+   * private one-time prekey by id (returns null if the prekey is unknown).
+   */
+  getLocalPreKeyPrivate?: (keyId: number) => Promise<string | null>;
+}
+
+/**
+ * Encrypt `plaintext` for the given peer. Establishes a session via X3DH on the
+ * first call (using `opts.fetchPreKeyBundle`).
+ */
+export async function encryptForPeer(
+  peer: PeerAddress,
+  plaintext: string,
+  opts: EncryptOptions
+): Promise<string> {
+  let state = await loadSession(peer);
+  let x3dhWire: X3dhWireHeader | undefined;
+
+  if (!state) {
+    const ourKeys = await getDeviceKeys();
+    if (!ourKeys) throw new Error('Device keys not initialized');
+
+    const remoteBundle = await opts.fetchPreKeyBundle(peer);
+    if (!remoteBundle) {
+      throw new Error('No prekey bundle available for peer');
+    }
+
+    const remoteIds = unpackIdentityPublic(remoteBundle.identityKeyPublic);
+
+    const bundle: PreKeyBundle = {
+      identityKeyEd: remoteIds.ed,
+      identityKeyDh: remoteIds.dh,
+      signedPreKey: {
+        keyId: remoteBundle.signedPreKey.keyId,
+        publicKey: base64ToBytes(remoteBundle.signedPreKey.publicKey),
+        signature: base64ToBytes(remoteBundle.signedPreKey.signature),
+      },
+      oneTimePreKey: remoteBundle.preKey
+        ? {
+            keyId: remoteBundle.preKey.keyId,
+            publicKey: base64ToBytes(remoteBundle.preKey.publicKey),
+          }
+        : undefined,
+    };
+
+    const ourIdPriv = unpackIdentityPrivate(ourKeys.identityKeyPrivate);
+    const ourIdPub = unpackIdentityPublic(ourKeys.identityKeyPublic);
+
+    const initResult = x3dhInitiate(
+      {
+        publicKey: ourIdPub.dh,
+        privateKey: ourIdPriv.dh,
+      },
+      bundle
+    );
+
+    state = initRatchetInitiator(initResult.sharedSecret, initResult.peerSignedPreKey);
+
+    x3dhWire = {
+      ek: bytesToBase64(initResult.ephemeralPublicKey),
+      ikE: bytesToBase64(ourIdPub.ed),
+      ikD: bytesToBase64(ourIdPub.dh),
+      spk: initResult.usedSignedPreKeyId,
+      ...(initResult.usedOneTimePreKeyId !== undefined
+        ? { opk: initResult.usedOneTimePreKeyId }
+        : {}),
+    };
+  }
+
+  const ratchetMsg = ratchetEncrypt(state, utf8ToBytes(plaintext));
+  await saveSession(peer, state);
+
+  return encodeWire(ratchetMsg, x3dhWire);
+}
+
+/**
+ * Decrypt `payload` from the given peer. Establishes a session via X3DH on the
+ * first inbound message (looking up our local prekey by `opts.getLocalPreKeyPrivate`).
+ *
+ * Throws `LegacyMessageError` for unknown / legacy formats so the caller can
+ * render a friendly error.
+ */
+export async function decryptFromPeer(
+  peer: PeerAddress,
+  payload: string,
+  opts: DecryptOptions = {}
+): Promise<string> {
+  const decoded = decodeWire(payload); // throws LegacyMessageError for old format
+
+  let state = await loadSession(peer);
+
+  if (!state) {
+    if (!decoded.x3dh) {
+      // No session and no X3DH handshake — we cannot decrypt.
+      throw new Error('No session for peer and missing X3DH header');
+    }
+    const ourKeys = await getDeviceKeys();
+    if (!ourKeys) throw new Error('Device keys not initialized');
+
+    const ourIdPriv = unpackIdentityPrivate(ourKeys.identityKeyPrivate);
+    const ourIdPub = unpackIdentityPublic(ourKeys.identityKeyPublic);
+
+    if (decoded.x3dh.spk !== ourKeys.signedPreKey.keyId) {
+      throw new Error('X3DH: signed prekey id mismatch');
+    }
+    const spkPair: KeyPair = {
+      publicKey: base64ToBytes(ourKeys.signedPreKey.publicKey),
+      privateKey: base64ToBytes(ourKeys.signedPreKey.privateKey),
+    };
+
+    let opkPair: KeyPair | undefined;
+    if (decoded.x3dh.opk !== undefined) {
+      const local = ourKeys.preKeys.find((k) => k.keyId === decoded.x3dh!.opk);
+      if (local) {
+        opkPair = {
+          publicKey: base64ToBytes(local.publicKey),
+          privateKey: base64ToBytes(local.privateKey),
+        };
+      } else if (opts.getLocalPreKeyPrivate) {
+        const privB64 = await opts.getLocalPreKeyPrivate(decoded.x3dh.opk);
+        if (privB64) {
+          // We only have the private key; the public key isn't needed for x3dhReceive.
+          opkPair = {
+            publicKey: new Uint8Array(0),
+            privateKey: base64ToBytes(privB64),
+          };
+        }
+      }
+      if (!opkPair) {
+        throw new Error('X3DH: one-time prekey not found locally');
+      }
+    }
+
+    const header: InitialMessageHeader = {
+      identityKeyEd: base64ToBytes(decoded.x3dh.ikE),
+      identityKeyDh: base64ToBytes(decoded.x3dh.ikD),
+      ephemeralKey: base64ToBytes(decoded.x3dh.ek),
+      usedSignedPreKeyId: decoded.x3dh.spk,
+      usedOneTimePreKeyId: decoded.x3dh.opk,
+    };
+
+    const sharedSecret = x3dhReceive(
+      {
+        identityKeyDh: {
+          publicKey: ourIdPub.dh,
+          privateKey: ourIdPriv.dh,
+        },
+        signedPreKey: spkPair,
+        oneTimePreKey: opkPair,
+      },
+      header
+    );
+
+    state = initRatchetReceiver(sharedSecret, spkPair);
+
+    // Consume the OPK locally now that we've used it.
+    if (decoded.x3dh.opk !== undefined) {
+      await consumeLocalOneTimePreKey(decoded.x3dh.opk);
+    }
+  }
+
+  const plaintext = ratchetDecrypt(state, decoded.message);
+  await saveSession(peer, state);
+  return bytesToUtf8(plaintext);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy compatibility shims.
+//
+// Callers that previously used encryptMessage / decryptMessage with a raw public
+// key are no longer supported because the Double Ratchet requires a stateful
+// session keyed by peer userId+deviceId. The store layer (`deviceKeysStore`) is
+// updated to use the new session-aware API.
+// ---------------------------------------------------------------------------
+
 export async function encryptMessage(
-  message: string,
-  recipientPublicKey: string
+  _message: string,
+  _recipientPublicKey: string
 ): Promise<string> {
-  try {
-    // Get our device keys
-    const ourKeys = await getDeviceKeys();
-    if (!ourKeys) {
-      throw new Error('Device keys not initialized');
-    }
-    
-    // Import recipient's public key
-    const recipientKeyBuffer = base64ToArrayBuffer(recipientPublicKey);
-    const recipientPublicKeyObj = await crypto.subtle.importKey(
-      'raw',
-      recipientKeyBuffer,
-      {
-        name: 'ECDH',
-        namedCurve: 'P-256',
-      },
-      false,
-      []
-    );
-    
-    // Import our private key
-    const ourPrivateKeyBuffer = base64ToArrayBuffer(ourKeys.identityKeyPrivate);
-    const ourPrivateKey = await crypto.subtle.importKey(
-      'pkcs8',
-      ourPrivateKeyBuffer,
-      {
-        name: 'ECDH',
-        namedCurve: 'P-256',
-      },
-      false,
-      ['deriveKey', 'deriveBits']
-    );
-    
-    // Derive shared secret
-    const sharedSecret = await crypto.subtle.deriveBits(
-      {
-        name: 'ECDH',
-        public: recipientPublicKeyObj,
-      },
-      ourPrivateKey,
-      256
-    );
-    
-    // Derive AES key from shared secret
-    const aesKey = await crypto.subtle.importKey(
-      'raw',
-      sharedSecret,
-      {
-        name: 'AES-GCM',
-        length: 256,
-      },
-      false,
-      ['encrypt']
-    );
-    
-    // Encrypt message
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const plaintext = new TextEncoder().encode(message);
-    const ciphertext = await crypto.subtle.encrypt(
-      {
-        name: 'AES-GCM',
-        iv,
-      },
-      aesKey,
-      plaintext
-    );
-    
-    // Combine IV + ciphertext and encode as base64
-    const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(ciphertext), iv.length);
-    
-    return arrayBufferToBase64(combined.buffer);
-  } catch (error) {
-    console.error('[SignalProtocol] Error encrypting message:', error);
-    throw error;
-  }
+  throw new Error(
+    'encryptMessage(plaintext, recipientPublicKey) is no longer supported. Use encryptForPeer(peer, plaintext, opts) via deviceKeysStore.'
+  );
 }
 
-/**
- * Decrypt a message from a sender
- */
 export async function decryptMessage(
-  ciphertext: string,
-  senderPublicKey: string
+  _ciphertext: string,
+  _senderPublicKey: string
 ): Promise<string> {
-  try {
-    // Get our device keys
-    const ourKeys = await getDeviceKeys();
-    if (!ourKeys) {
-      throw new Error('Device keys not initialized');
-    }
-    
-    // Import sender's public key
-    const senderKeyBuffer = base64ToArrayBuffer(senderPublicKey);
-    const senderPublicKeyObj = await crypto.subtle.importKey(
-      'raw',
-      senderKeyBuffer,
-      {
-        name: 'ECDH',
-        namedCurve: 'P-256',
-      },
-      false,
-      []
-    );
-    
-    // Import our private key
-    const ourPrivateKeyBuffer = base64ToArrayBuffer(ourKeys.identityKeyPrivate);
-    const ourPrivateKey = await crypto.subtle.importKey(
-      'pkcs8',
-      ourPrivateKeyBuffer,
-      {
-        name: 'ECDH',
-        namedCurve: 'P-256',
-      },
-      false,
-      ['deriveKey', 'deriveBits']
-    );
-    
-    // Derive shared secret
-    const sharedSecret = await crypto.subtle.deriveBits(
-      {
-        name: 'ECDH',
-        public: senderPublicKeyObj,
-      },
-      ourPrivateKey,
-      256
-    );
-    
-    // Derive AES key from shared secret
-    const aesKey = await crypto.subtle.importKey(
-      'raw',
-      sharedSecret,
-      {
-        name: 'AES-GCM',
-        length: 256,
-      },
-      false,
-      ['decrypt']
-    );
-    
-    // Decode ciphertext
-    const combined = base64ToArrayBuffer(ciphertext);
-    const iv = combined.slice(0, 12);
-    const encryptedData = combined.slice(12);
-    
-    // Decrypt message
-    const plaintext = await crypto.subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv,
-      },
-      aesKey,
-      encryptedData
-    );
-    
-    return new TextDecoder().decode(plaintext);
-  } catch (error) {
-    console.error('[SignalProtocol] Error decrypting message:', error);
-    throw error;
-  }
-}
-
-/**
- * Utility: Convert ArrayBuffer to base64
- */
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
- * Utility: Convert base64 to ArrayBuffer
- */
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
+  throw new Error(
+    'decryptMessage(ciphertext, senderPublicKey) is no longer supported. Use decryptFromPeer(peer, payload, opts) via deviceKeysStore.'
+  );
 }

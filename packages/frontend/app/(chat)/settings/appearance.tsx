@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAppearanceStore } from '@/stores/appearanceStore';
-import { colors as baseColors } from '@/styles/colors';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';

@@ -18,6 +18,8 @@ export interface IDevice extends Document {
     publicKey: string; // Base64 encoded
   }>;
   registrationId: number; // Signal registration ID
+  deviceName?: string; // User-facing label, e.g. "iPhone 15"
+  platform?: "ios" | "android" | "web"; // Device platform
   lastSeen: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +50,8 @@ const DeviceSchema = new Schema<IDevice>(
     signedPreKey: { type: SignedPreKeySchema, required: true },
     preKeys: [PreKeySchema],
     registrationId: { type: Number, required: true },
+    deviceName: { type: String },
+    platform: { type: String, enum: ["ios", "android", "web"] },
     lastSeen: { type: Date, default: Date.now },
   },
   { timestamps: true }
@@ -55,6 +59,10 @@ const DeviceSchema = new Schema<IDevice>(
 
 // Unique constraint: one device per user+deviceId combination
 DeviceSchema.index({ userId: 1, deviceId: 1 }, { unique: true });
+
+// Activity lookups: list a user's devices ordered by recency, and support
+// inactivity / deletion sweeps that filter on lastSeen.
+DeviceSchema.index({ userId: 1, lastSeen: -1 });
 
 export const Device = mongoose.model<IDevice>("Device", DeviceSchema);
 export default Device;

@@ -5,6 +5,13 @@
  * Intl.DateTimeFormat on every call (significant perf win in lists).
  */
 
+import type { TFunction } from 'i18next';
+
+/** Relative-time bucket boundaries (ms). */
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
 export const addMinutes = (date: Date, minutes: number) => new Date(date.getTime() + minutes * 60000);
 
 export const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -83,4 +90,38 @@ export const formatConversationTimestamp = (input: string | Date): string => {
   } catch {
     return '';
   }
+};
+
+/**
+ * Format a "last seen" timestamp into a short relative string, reusing the
+ * shared `settings.linkedDevices.lastSeen*` i18n keys (Now / Nm / Nh / Nd /
+ * unknown) so presence and the linked-devices screen read identically.
+ *
+ * Returns the localized "unknown" string for a null/invalid timestamp.
+ */
+export const formatRelativeLastSeen = (
+  iso: string | null | undefined,
+  t: TFunction
+): string => {
+  if (!iso) {
+    return t('settings.linkedDevices.lastSeenUnknown', 'Last activity unknown');
+  }
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) {
+    return t('settings.linkedDevices.lastSeenUnknown', 'Last activity unknown');
+  }
+  const diff = Date.now() - then;
+  if (diff < MINUTE_MS) {
+    return t('settings.linkedDevices.lastSeenNow', 'Active now');
+  }
+  if (diff < HOUR_MS) {
+    const minutes = Math.floor(diff / MINUTE_MS);
+    return t('settings.linkedDevices.lastSeenMinutes', { count: minutes, defaultValue: '{{count}}m ago' });
+  }
+  if (diff < DAY_MS) {
+    const hours = Math.floor(diff / HOUR_MS);
+    return t('settings.linkedDevices.lastSeenHours', { count: hours, defaultValue: '{{count}}h ago' });
+  }
+  const days = Math.floor(diff / DAY_MS);
+  return t('settings.linkedDevices.lastSeenDays', { count: days, defaultValue: '{{count}}d ago' });
 };

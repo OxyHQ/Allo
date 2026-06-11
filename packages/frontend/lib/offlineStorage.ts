@@ -218,3 +218,34 @@ export async function clearSyncQueue(): Promise<void> {
   }
 }
 
+/**
+ * Wipe every offline cache owned by this module: per-conversation message
+ * caches (`messages_*`), per-conversation metadata (`conversations_*`), the
+ * conversation list (`conversations_list`), and the pending sync queue
+ * (`sync_queue`).
+ *
+ * PRIVACY: messages are cached in *plaintext* on-device (they're decrypted for
+ * display), so they MUST NOT survive a logout — otherwise the next person to
+ * sign in on this device could read the previous account's conversations.
+ * Device-level preferences (theme, swipe settings) live under different keys and
+ * are deliberately preserved.
+ */
+export async function clearAllOfflineData(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const toRemove = keys.filter(
+      (key) =>
+        // Message caches, plus conversation caches AND the conversations list
+        // (`conversations_list` starts with `conversations_`), plus sync queue.
+        key.startsWith(MESSAGES_PREFIX) ||
+        key.startsWith(CONVERSATIONS_PREFIX) ||
+        key === SYNC_QUEUE_KEY
+    );
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
+  } catch (error) {
+    console.error('[OfflineStorage] Error clearing offline data:', error);
+  }
+}
+

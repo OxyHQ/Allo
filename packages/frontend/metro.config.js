@@ -1,23 +1,53 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
+const path = require('path');
+
+const projectRoot = __dirname;
+const monorepoRoot = path.resolve(projectRoot, '../..');
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(__dirname);
+const config = getDefaultConfig(projectRoot);
 
-// Register `.woff2` / `.woff` as Metro asset extensions so `@oxyhq/bloom`'s
-// web-only font-face injection (which imports the bundled font binaries from
-// `@oxyhq/bloom/lib/module/fonts/assets/`) resolves on `expo export --platform
-// web`. Without this, Metro's default `assetExts` (which doesn't include
-// `.woff2` or `.woff`) fails to load Bloom's font assets during the web bundle
-// pass. Native bundling is unaffected — Bloom's native code path is a no-op
-// stub that never imports `.woff2`/`.woff`.
-for (const ext of ['woff2', 'woff']) {
-  if (!config.resolver.assetExts.includes(ext)) {
-    config.resolver.assetExts.push(ext);
-  }
-}
+// Monorepo support: watch the entire monorepo so Metro can resolve files
+// that live in workspace sibling packages and inside deeply nested
+// `node_modules/<pkg>/node_modules/...` trees.
+config.projectRoot = projectRoot;
+config.watchFolders = [monorepoRoot];
 
-// Enable NativeWind CSS support for native platforms
-module.exports = withNativeWind(config, { input: './styles/global.css' });
+const blockPath = (dir) => {
+  const resolved = path.resolve(dir);
+  return new RegExp(`${resolved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/.*`);
+};
 
+config.resolver = {
+  ...config.resolver,
+  blockList: [
+    blockPath(path.join(monorepoRoot, 'packages/backend')),
+    blockPath(path.join(monorepoRoot, 'packages/shared-types/src')),
+    /\.expo\/.*/,
+    /\.metro\/.*/,
+    /\.cache\/.*/,
+  ],
+  extraNodeModules: {
+    '@allo/shared-types': path.join(monorepoRoot, 'packages/shared-types'),
+  },
+  nodeModulesPaths: [
+    path.join(projectRoot, 'node_modules'),
+    path.join(monorepoRoot, 'node_modules'),
+  ],
+  unstable_enableSymlinks: true,
+  assetExts: [
+    ...config.resolver.assetExts.filter((ext) => ext !== 'svg' && ext !== 'woff' && ext !== 'woff2'),
+    'woff2',
+    'woff',
+  ],
+};
+
+// NativeWind: 1rem === 16px on every platform (browser default).
+const REM_PX = 16;
+
+module.exports = withNativeWind(config, {
+  input: './styles/global.css',
+  inlineRem: REM_PX,
+});

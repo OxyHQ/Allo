@@ -17,31 +17,35 @@
 
 ## About
 
-**Allo** is a secure, universal chat platform designed for mobile and web with **Signal Protocol encryption**, **device-first architecture**, and **peer-to-peer messaging**. It features end-to-end encrypted messaging, offline support, and a clean, modern UI. Built with Expo, React Native, and a Node.js backend in a modern monorepo structure, it supports file-based routing, multi-language support, and a modern UI.
+**Allo** is a secure, universal chat platform designed for mobile and web with **Signal Protocol encryption**, **device-first architecture**, **peer-to-peer messaging**, and **WebRTC voice/video calls**. It features end-to-end encrypted messaging, offline support, and the shared **Bloom** design system used across the Oxy ecosystem (Mention, Clarity, Homiio, …). Built with Expo, React Native, and a Node.js backend in a Bun-powered monorepo.
 
 ### Key Security Features
 
-- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages (even more secure than Signal)
-- 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
-- ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Automatic Key Management** - Signal Protocol device keys generated and managed automatically
-- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
-- 🔒 **Forward Secrecy** - Each message uses a unique encryption key
-- 🌐 **Peer-to-Peer** - Direct device-to-device messaging when both users are online
+- 🔐 **Signal Protocol Encryption** — X3DH + Double Ratchet (X25519, Ed25519, ChaCha20-Poly1305)
+- 📱 **Device-First Architecture** — Messages stored locally first, cloud is secondary
+- ☁️ **Optional Cloud Sync** — Users can enable/disable cloud backup in settings
+- 🔑 **Automatic Key Management** — Signal Protocol device keys generated and managed automatically
+- 🚫 **No Plaintext Storage** — Server never sees unencrypted message content
+- 🔒 **Forward Secrecy** — Each message uses a unique encryption key
+- 🌐 **Peer-to-Peer** — Direct device-to-device messaging via WebRTC data channels when both users are online
+- 📞 **E2E Voice & Video Calls** — WebRTC, with Socket.io signaling and call history
 
 ## Project Structure
 
-This is a **monorepo** using npm workspaces with the following structure:
+This is a **monorepo** using Bun workspaces with the following structure:
 
 ```
 /
 ├── packages/            # All code packages
 │   ├── frontend/        # Expo React Native app (Allo)
-│   │   ├── app/         # App entry, screens, and routing
-│   │   │   ├── [username]/  # User profile, followers, following
-│   │   │   ├── kaana/       # AI assistant or help section
-│   │   │   ├── p/[id]/      # Post details, replies, quotes
-│   │   │   └── ...
+│   │   ├── app/         # File-based routing (Expo Router 6)
+│   │   │   ├── (auth)/      # Authentication flow
+│   │   │   ├── (chat)/      # Conversation list, settings, status, calls
+│   │   │   │   ├── c/[id]/      # Conversation detail
+│   │   │   │   ├── call/[id]/   # Call screen
+│   │   │   │   ├── settings/    # User settings (appearance, privacy, …)
+│   │   │   │   └── status/      # Status (24h ephemeral posts)
+│   │   │   └── @[username]/   # User profile
 │   │   ├── components/  # UI components
 │   │   ├── assets/      # Images, icons, fonts
 │   │   ├── constants/   # App-wide constants
@@ -92,9 +96,9 @@ This is a **monorepo** using npm workspaces with the following structure:
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm 8+
+- Bun 1.x (or Node.js 20+)
 - MongoDB instance
-- Expo CLI for mobile development
+- Expo CLI for mobile development (`bunx expo`)
 
 ### Initial Setup
 1. **Clone the repository**
@@ -105,14 +109,14 @@ This is a **monorepo** using npm workspaces with the following structure:
 
 2. **Install all dependencies**
    ```bash
-   npm run install:all
+   bun install
    ```
 
 ### Development
 
 #### Start All Services
 ```bash
-npm run dev
+bun run dev
 ```
 
 #### Start Individual Services

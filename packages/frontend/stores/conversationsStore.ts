@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
+import { toast } from '@/lib/sonner';
 import { useUsersStore } from './usersStore';
 import {
   getConversationsLocally,
@@ -145,6 +146,9 @@ interface ConversationsState {
   getConversation: (id: string) => Conversation | undefined;
   getUnreadCount: () => number;
   hasUnreadMessages: (id: string) => boolean;
+
+  // Lifecycle
+  reset: () => void;
 }
 
 const withArchiveFlag = (conversation: Conversation): Conversation => ({
@@ -152,17 +156,35 @@ const withArchiveFlag = (conversation: Conversation): Conversation => ({
   isArchived: conversation.isArchived ?? false,
 });
 
+type ConversationsInitialState = Pick<
+  ConversationsState,
+  | 'conversations'
+  | 'conversationsById'
+  | 'activeConversationId'
+  | 'isLoading'
+  | 'isRefreshing'
+  | 'hasFetchedOnce'
+  | 'error'
+  | 'lastUpdated'
+>;
+
+/** Build a fresh initial-state object. `lastUpdated` is sampled per call. */
+const createInitialState = (): ConversationsInitialState => ({
+  // Start with empty conversations (cache loaded first, then API)
+  conversations: [],
+  conversationsById: {},
+  activeConversationId: null,
+  isLoading: false,
+  isRefreshing: false,
+  hasFetchedOnce: false,
+  error: null,
+  lastUpdated: Date.now(),
+});
+
 export const useConversationsStore = create<ConversationsState>()(
   immer((set, get) => ({
-    // Initial state - start with empty conversations (cache loaded first, then API)
-    conversations: [],
-    conversationsById: {},
-    activeConversationId: null,
-    isLoading: false,
-    isRefreshing: false,
-    hasFetchedOnce: false,
-    error: null,
-    lastUpdated: Date.now(),
+    // Initial state
+    ...createInitialState(),
 
     // Actions
     setConversations: (conversations) => {
@@ -439,14 +461,23 @@ export const useConversationsStore = create<ConversationsState>()(
     },
 
     refreshConversations: async () => {
+      // Pull-to-refresh: re-fetch from API without showing a loading skeleton.
+      // The existing data stays visible until the request completes (WhatsApp pattern).
       set({ isRefreshing: true, error: null });
       try {
-        // TODO: Replace with actual API call
         await get().fetchConversations();
-        set({ isRefreshing: false });
+        // If fetchConversations recorded an error, surface it via toast
+        const fetchError = get().error;
+        if (fetchError) {
+          toast.error(fetchError);
+        }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to refresh conversations';
-        set({ isRefreshing: false, error: errorMessage });
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to refresh conversations';
+        set({ error: errorMessage });
+        toast.error(errorMessage);
+      } finally {
+        set({ isRefreshing: false });
       }
     },
 
@@ -466,6 +497,12 @@ export const useConversationsStore = create<ConversationsState>()(
     hasUnreadMessages: (id) => {
       const conversation = get().conversationsById[id];
       return conversation ? conversation.unreadCount > 0 : false;
+    },
+
+    // Lifecycle: restore the store to its initial empty state (used on logout /
+    // account switch so one account's conversations never bleed into another).
+    reset: () => {
+      set(createInitialState());
     },
   }))
 );

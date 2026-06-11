@@ -11,43 +11,20 @@ export * from './common';
 // Profile types
 export * from './profile';
 
-// Post types
-export * from './post';
-
-// Interaction types
-export * from './interaction';
-
 // Media types
 export * from './media';
 
 // Notification types
 export * from './notification';
 
-// List types
-export * from './list';
+// Call (WebRTC) types
+export * from './call';
 
-// Analytics types
-export * from './analytics';
+// Status (WhatsApp-style Stories) types
+export * from './status';
 
-// Feed types - use specific exports to avoid conflicts
-export { 
-  FeedUser, 
-  FeedEngagement, 
-  Post as UIPost, 
-  Reply, 
-  FeedRepost, 
-  FeedType, 
-  PostAction, 
-  FeedItem, 
-  FeedResponse, 
-  FeedRequest, 
-  FeedFilters, 
-  FeedStats, 
-  CreateReplyRequest, 
-  CreateRepostRequest, 
-  LikeRequest, 
-  UnlikeRequest 
-} from './feed';
+// Messaging (multi-device per-device envelope) types
+export * from './messaging';
 
-// Custom feeds (user-created timelines)
-export * from './customFeed';
+// Interop bridge (F3.0 SEAM) types
+export * from './interop';

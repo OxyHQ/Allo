@@ -1,63 +1,29 @@
 import { useMemo } from "react";
-import { useColorScheme } from "@/hooks/useColorScheme";
+import { useTheme as useBloomTheme } from "@oxyhq/bloom/theme";
+import type { Theme as BloomTheme, ThemeColors as BloomThemeColors } from "@oxyhq/bloom/theme";
 import { useAppearanceStore } from "@/stores/appearanceStore";
-import { colors as baseColors } from "@/styles/colors";
 import { getColorTheme } from "@/styles/colorThemes";
 
 /**
- * Centralized theme system that provides consistent theming across the app
- * Following Oxy AI Development Instructions for theming
- * 
- * This hook does NOT depend on OxyProvider to avoid context errors.
- * It uses the local appearance store which syncs with Oxy settings.
+ * Centralized theme system — thin wrapper over `@oxyhq/bloom/theme`.
+ *
+ * Bloom provides the canonical palette (background, text, border, primary, …)
+ * for the Oxy ecosystem; this hook augments Bloom's `ThemeColors` with the
+ * Allo-specific chat surfaces (`messageBubble*`, `chatBackground`) that come
+ * from the user-selected `colorTheme` in the appearance store.
+ *
+ * All other apps in the Oxy monorepo (Mention, Clarity, Homiio, …) use
+ * `@oxyhq/bloom/theme` directly. Allo uses this hook so chat components keep
+ * working unchanged, while everything else benefits from the shared palette
+ * and dark-mode handling that Bloom owns.
  */
 
-export interface ThemeColors {
-  // Background colors
-  background: string;
-  backgroundSecondary: string;
-  backgroundTertiary: string;
-  
-  // Text colors
-  text: string;
-  textSecondary: string;
-  textTertiary: string;
-  
-  // Border colors
-  border: string;
-  borderLight: string;
-  
-  // Primary brand colors
-  primary: string;
-  primaryLight: string;
-  primaryDark: string;
-  
-  // Secondary/Oxy brand color
-  secondary: string;
-  
-  // Interactive colors
-  tint: string;
-  icon: string;
-  iconActive: string;
-  
-  // Status colors
-  success: string;
-  error: string;
-  warning: string;
-  info: string;
-  
-  // Component-specific
-  card: string;
-  shadow: string;
-  overlay: string;
-
-  // Message bubble colors
+export interface ThemeColors extends BloomThemeColors {
+  // Allo-specific chat surfaces
   messageBubbleSent: string;
   messageBubbleReceived: string;
   messageTextSent: string;
   messageTextReceived: string;
-
-  // Chat background
   chatBackground: string;
 }
 
@@ -69,132 +35,30 @@ export interface Theme {
 }
 
 /**
- * Main theme hook - use this throughout the app for consistent theming
- * Instead of hardcoded colors, always use theme.colors.xxx
- * 
- * This hook uses the local appearance store which is synced with Oxy user settings,
- * so it indirectly integrates with OxyProvider without requiring the context.
+ * Main theme hook. Always use this (not raw Bloom hooks) inside Allo
+ * components so chat-specific colors are available.
  */
 export function useTheme(): Theme {
-  const colorScheme = useColorScheme();
-  // Use selector to only subscribe to mySettings.appearance, not the entire store
+  const bloom: BloomTheme = useBloomTheme();
   const mySettings = useAppearanceStore((state) => state.mySettings);
 
-  // Get user's selected color theme (if set) or use default
   const selectedColorThemeId = mySettings?.appearance?.colorTheme || 'classic';
   const selectedColorTheme = getColorTheme(selectedColorThemeId);
+  const themeVariant = bloom.isDark ? selectedColorTheme.dark : selectedColorTheme.light;
 
-  // Get user's custom primary color (if set) or use default
-  // This comes from Oxy user settings via the appearance store
-  const customPrimaryColor = mySettings?.appearance?.primaryColor || selectedColorTheme.primaryColor;
+  const colors = useMemo<ThemeColors>(() => ({
+    ...bloom.colors,
+    messageBubbleSent: themeVariant.bubbleSent,
+    messageBubbleReceived: themeVariant.bubbleReceived,
+    messageTextSent: themeVariant.textSent,
+    messageTextReceived: themeVariant.textReceived,
+    chatBackground: themeVariant.chatBackground,
+  }), [bloom.colors, themeVariant]);
 
-  const isDark = colorScheme === "dark";
-  const isLight = colorScheme === "light";
-
-  // Get the appropriate theme variant (light or dark)
-  const themeVariant = isDark ? selectedColorTheme.dark : selectedColorTheme.light;
-  
-  const colors = useMemo<ThemeColors>(() => {
-    if (isDark) {
-      return {
-        // Dark mode colors
-        background: baseColors.primaryDark,
-        backgroundSecondary: baseColors.primaryDark_1,
-        backgroundTertiary: baseColors.primaryDark_2,
-        
-        text: baseColors.COLOR_BLACK_LIGHT_6,
-        textSecondary: baseColors.COLOR_BLACK_LIGHT_5,
-        textTertiary: baseColors.COLOR_BLACK_LIGHT_4,
-        
-        border: baseColors.COLOR_BLACK_LIGHT_3,
-        borderLight: baseColors.COLOR_BLACK_LIGHT_2,
-        
-        primary: customPrimaryColor,
-        primaryLight: baseColors.primaryLight_1,
-        primaryDark: baseColors.primaryDark,
-        
-        secondary: baseColors.secondaryColor,
-        
-        tint: customPrimaryColor,
-        icon: baseColors.COLOR_BLACK_LIGHT_5,
-        iconActive: customPrimaryColor,
-        
-        success: "#10B981",
-        error: "#EF4444",
-        warning: "#F59E0B",
-        info: "#3B82F6",
-        
-        card: baseColors.primaryDark_1,
-        shadow: "rgba(0, 0, 0, 0.3)",
-        overlay: "rgba(0, 0, 0, 0.5)",
-
-        // Message bubble colors from selected theme
-        messageBubbleSent: themeVariant.bubbleSent,
-        messageBubbleReceived: themeVariant.bubbleReceived,
-        messageTextSent: themeVariant.textSent,
-        messageTextReceived: themeVariant.textReceived,
-
-        // Chat background from selected theme
-        chatBackground: themeVariant.chatBackground,
-      };
-    } else {
-      return {
-        // Light mode colors
-        background: baseColors.COLOR_BLACK_LIGHT_9,
-        backgroundSecondary: baseColors.COLOR_BLACK_LIGHT_8,
-        backgroundTertiary: baseColors.COLOR_BLACK_LIGHT_7,
-        
-        text: baseColors.COLOR_BLACK_LIGHT_2,
-        textSecondary: baseColors.COLOR_BLACK_LIGHT_4,
-        textTertiary: baseColors.COLOR_BLACK_LIGHT_5,
-        
-        border: baseColors.COLOR_BLACK_LIGHT_6,
-        borderLight: baseColors.COLOR_BLACK_LIGHT_7,
-        
-        primary: customPrimaryColor,
-        primaryLight: baseColors.primaryLight_1,
-        primaryDark: baseColors.primaryDark,
-        
-        secondary: baseColors.secondaryColor,
-        
-        tint: customPrimaryColor,
-        icon: baseColors.COLOR_BLACK_LIGHT_4,
-        iconActive: customPrimaryColor,
-        
-        success: "#10B981",
-        error: "#EF4444",
-        warning: "#F59E0B",
-        info: "#3B82F6",
-        
-        card: baseColors.primaryLight,
-        shadow: "rgba(0, 0, 0, 0.1)",
-        overlay: "rgba(0, 0, 0, 0.5)",
-
-        // Message bubble colors from selected theme
-        messageBubbleSent: themeVariant.bubbleSent,
-        messageBubbleReceived: themeVariant.bubbleReceived,
-        messageTextSent: themeVariant.textSent,
-        messageTextReceived: themeVariant.textReceived,
-
-        // Chat background from selected theme
-        chatBackground: themeVariant.chatBackground,
-      };
-    }
-  }, [isDark, customPrimaryColor, themeVariant]);
-  
   return {
-    mode: colorScheme,
+    mode: bloom.mode,
     colors,
-    isDark,
-    isLight,
+    isDark: bloom.isDark,
+    isLight: bloom.isLight,
   };
-}
-
-/**
- * Helper hook to get a specific color from the theme
- * Usage: const bgColor = useThemeColor('background')
- */
-export function useThemeColor(colorKey: keyof ThemeColors): string {
-  const theme = useTheme();
-  return theme.colors[colorKey];
 }

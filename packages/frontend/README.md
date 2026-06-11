@@ -42,24 +42,46 @@ This package contains the complete React Native application that runs on Android
 
 ### User Experience
 - Universal app: Android, iOS, and Web
-- User profiles with followers/following
 - Notifications (push and in-app)
 - Multi-language support (English, Spanish, Italian)
-- Responsive design and theming
+- Responsive design with Bloom theming (light/dark + user color preset)
+- Per-conversation chat-bubble themes (`styles/colorThemes.ts`)
 - Modern UI with custom icons and animations
 
 ## Tech Stack
-- [Expo](https://expo.dev/) & React Native
-- TypeScript
-- NativeWind (Tailwind CSS for React Native)
-- Zustand (state management)
+- [Expo](https://expo.dev/) 56 & React Native 0.85
+- React 19, TypeScript
+- **Bloom** (`@oxyhq/bloom`) — shared Oxy design system (theme, components, fonts)
+- NativeWind 4 (Tailwind CSS for React Native)
+- Zustand + Immer (state management)
+- TanStack React Query 5
 - i18next (internationalization)
-- Expo Router (file-based routing)
+- Expo Router 6 (file-based routing)
 - Custom SVG icons
 - Expo Notifications, Secure Store, Camera, Video, Image Picker
-- **Signal Protocol** - End-to-end encryption (ECDH + AES-GCM)
-- **AsyncStorage** - Offline-first message storage
-- **Socket.IO** - Real-time messaging and P2P signaling
+- **Signal Protocol** — End-to-end encryption (X25519 + Double Ratchet + ChaCha20-Poly1305)
+- **AsyncStorage** — Offline-first message storage
+- **Socket.IO** — Real-time messaging and P2P signaling
+- **WebRTC** — Voice/video calls and P2P data channels
+
+## Theming
+
+This app uses **Bloom** (`@oxyhq/bloom`) — the shared Oxy design system also
+used by Mention, Clarity, Homiio, and other Oxy apps. Bloom owns the global
+palette (background, text, border, primary, success, error, …) and the dark
+mode / color-preset machinery.
+
+- **Provider**: `<BloomThemeProvider>` is mounted at the root in
+  `app/_layout.tsx` and is wired to the `appearanceStore`, so changing theme
+  mode or color preset persists to the user's Oxy profile settings.
+- **Hook**: components read theme via `useTheme()` from `@/hooks/useTheme`,
+  a thin wrapper over Bloom that adds Allo-specific chat surfaces
+  (`messageBubbleSent`, `messageBubbleReceived`, `messageTextSent`,
+  `messageTextReceived`, `chatBackground`) coming from
+  `styles/colorThemes.ts` (per-conversation bubble themes).
+- **Rule**: never hardcode colors. Always use `theme.colors.*`. The static
+  palette in `styles/colors.ts` is only used as fallback `color` defaults
+  for SVG icon components.
 
 ## Project Structure
 ```

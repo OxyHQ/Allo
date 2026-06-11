@@ -2,7 +2,6 @@ import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS, TIME_FORMAT_OPTIONS } from '@/constants/messaging';
-import { colors } from '@/styles/colors';
 import { MsgDblCheckIcon } from '@/assets/icons/msgdblcheck-icon';
 import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
 import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
@@ -53,7 +52,7 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
     if (isBubbleVariant) {
       return isSent ? 'rgba(255,255,255,0.85)' : 'rgba(26,32,44,0.7)';
     }
-    return colors.messageTimestamp || theme.colors.textSecondary || '#999999';
+    return theme.colors.textSecondary;
   }, [isBubbleVariant, isSent, theme]);
 
   const styles = useMemo(() => StyleSheet.create({
@@ -92,9 +91,9 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
       return timestampColor;
     }
     if (readStatus === 'read') {
-      return colors.buttonPrimary || colors.primaryColor || theme.colors.primary || '#007AFF';
+      return theme.colors.primary;
     }
-    return colors.messageTimestamp || theme.colors.textSecondary || '#999999';
+    return theme.colors.textSecondary;
   }, [isBubbleVariant, readStatus, theme, timestampColor]);
 
   const statusIcon = useMemo(() => {

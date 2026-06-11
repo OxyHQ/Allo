@@ -1,8 +1,8 @@
 # Architecture & Best Practices
 
-This document outlines the architecture and best practices followed in this Expo Router 54 application.
+This document outlines the architecture and best practices followed in this Expo Router 6 (SDK 56) application.
 
-## Expo Router 54 Best Practices
+## Expo Router 6 Best Practices
 
 ### 1. File-Based Routing
 - Routes are defined by the file system structure

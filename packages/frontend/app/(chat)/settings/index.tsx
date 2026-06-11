@@ -20,7 +20,7 @@ import { hasNotificationPermission, requestNotificationPermissions, getDevicePus
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
 import { useAppearanceStore } from "@/stores/appearanceStore";
-import { useColorScheme } from "@/hooks/useColorScheme";
+
 import i18n from 'i18next';
 import {
     useConversationSwipePreferencesStore,
@@ -36,7 +36,7 @@ const IconComponent = Ionicons as any;
 export default function SettingsScreen() {
     const { t } = useTranslation();
     const router = useRouter();
-    const { user, showBottomSheet } = useOxy();
+    const { user, showBottomSheet, logout } = useOxy();
     const theme = useTheme();
     const leftSwipeAction = useConversationSwipePreferencesStore((state) => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore((state) => state.rightSwipeAction);
@@ -165,8 +165,6 @@ export default function SettingsScreen() {
     const mySettings = useAppearanceStore((state) => state.mySettings);
     const updateMySettings = useAppearanceStore((state) => state.updateMySettings);
     const loadMySettings = useAppearanceStore((state) => state.loadMySettings);
-    const currentColorScheme = useColorScheme();
-
     // Load settings on mount if not already loaded
     useEffect(() => {
         if (!mySettings) {
@@ -174,8 +172,8 @@ export default function SettingsScreen() {
         }
     }, [mySettings, loadMySettings]);
 
-    // Determine if dark mode is currently active (useColorScheme already handles system preference)
-    const isDarkModeActive = currentColorScheme === 'dark';
+    // Determine if dark mode is currently active (theme already handles system preference)
+    const isDarkModeActive = theme.isDark;
 
     const handleDarkModeToggle = useCallback(async (value: boolean) => {
         const newThemeMode = value ? 'dark' : 'light';
@@ -231,8 +229,13 @@ export default function SettingsScreen() {
             destructive: true,
         });
         if (!confirmed) return;
-        // For now, just navigate back - the actual sign out would depend on your auth system
-        router.replace('/');
+        // The protected-route guard navigates to the welcome screen automatically
+        // once `isAuthenticated` flips; `useAuthCleanup` wipes session state.
+        try {
+            await logout();
+        } catch (error) {
+            console.error('Logout failed:', error);
+        }
     };
 
     const handleClearCache = async () => {
@@ -772,18 +775,41 @@ export default function SettingsScreen() {
 
                         <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
-                        {/* Device Info */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
+                        {/* Linked Devices */}
+                        <TouchableOpacity
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
+                            onPress={() => router.push('/settings/linked-devices')}
+                        >
                             <View className="flex-row items-center flex-1">
                                 <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
                                     <IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        Device ID
+                                        {t('settings.linkedDevices.title', 'Linked Devices')}
                                     </Text>
                                     <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {useDeviceKeysStore((state) => state.deviceKeys?.deviceId || 'Not initialized')}
+                                        {t('settings.linkedDevices.rowDescription', 'Manage devices linked to your account')}
+                                    </Text>
+                                </View>
+                            </View>
+                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+                        </TouchableOpacity>
+
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
+
+                        {/* Device Info */}
+                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
+                            <View className="flex-row items-center flex-1">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
+                                    <IconComponent name="finger-print-outline" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
+                                        {t('settings.security.deviceId', 'Device ID')}
+                                    </Text>
+                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
+                                        {useDeviceKeysStore((state) => state.deviceKeys?.deviceId ?? t('settings.security.notInitialized', 'Not initialized'))}
                                     </Text>
                                 </View>
                             </View>

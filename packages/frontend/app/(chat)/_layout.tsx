@@ -13,6 +13,10 @@ import { useOxy } from '@oxyhq/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
+import { useRealtimeStatus } from '@/hooks/useRealtimeStatus';
+import { useCallSignaling } from '@/hooks/useCallSignaling';
+import { useP2PMessaging } from '@/hooks/useP2PMessaging';
+import { IncomingCallOverlay } from '@/components/calls/IncomingCallOverlay';
 
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
   try {
@@ -35,6 +39,9 @@ export default function ChatLayout() {
   const conversations = useConversationsStore(state => state.conversations);
 
   useRealtimeMessaging(undefined);
+  useRealtimeStatus();
+  useCallSignaling();
+  useP2PMessaging();
 
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
@@ -135,6 +142,9 @@ export default function ChatLayout() {
               {/* First level nested routes */}
               <Stack.Screen name="settings/appearance" />
               <Stack.Screen name="settings/language" />
+              <Stack.Screen name="settings/linked-devices" />
+              <Stack.Screen name="settings/transfer-history" />
+              <Stack.Screen name="settings/transfer-history-send" />
               <Stack.Screen name="settings/privacy" />
               <Stack.Screen name="settings/profile-customization" />
               {/* Second level nested routes under privacy */}
@@ -176,6 +186,8 @@ export default function ChatLayout() {
             <ContactDetails {...contactDetailsProps} />
           </View>
         )}
+
+        <IncomingCallOverlay />
       </ThemedView>
     );
   }
@@ -193,12 +205,17 @@ export default function ChatLayout() {
         <Stack.Screen name="new" />
         <Stack.Screen name="c/[id]" />
         <Stack.Screen name="u/[id]" />
+        <Stack.Screen name="call/[id]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/appearance" />
         <Stack.Screen name="settings/language" />
+        <Stack.Screen name="settings/linked-devices" />
+        <Stack.Screen name="settings/transfer-history" />
+        <Stack.Screen name="settings/transfer-history-send" />
         <Stack.Screen name="settings/privacy" />
         <Stack.Screen name="settings/profile-customization" />
       </Stack>
+      <IncomingCallOverlay />
     </ThemedView>
   );
 }

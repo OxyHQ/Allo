@@ -1,5 +1,8 @@
 import admin from 'firebase-admin';
 import PushToken from '../models/PushToken';
+import Message from '../models/Message';
+import UserSettings from '../models/UserSettings';
+import { isEncrypted } from './signalProtocol';
 import { oxy } from '../../server';
 
 let firebaseInitialized = false;
@@ -112,18 +115,49 @@ export async function formatPushForNotification(n: any) {
   };
   let f = map[n.type] || { title: 'Notification', body: 'You have a new notification' };
   let preview: string | undefined;
-  // For message notifications, try to include a short preview in the push body
+  // For message notifications, try to include a short preview in the push body.
+  // Respects the recipient's privacy setting (notifications.showMessagePreview).
+  // Since the app is E2E encrypted the server cannot read message content:
+  // a preview is only possible for legacy plaintext messages; encrypted
+  // messages keep the generic "sent you a message" body.
   try {
     if (n.type === 'message' && n.entityType === 'message' && n.entityId) {
-      // TODO: Load message preview if needed
-      // const message: any = await Message.findById(n.entityId, { text: 1 }).lean();
-      // if (message) {
-      //   const text: string = message?.text || '';
-      //   preview = buildPreview(text, 200);
-      //   if (preview) {
-      //     f = { title: 'New message', body: `${actorName}: ${preview}` };
-      //   }
-      // }
+      // Check recipient's privacy preference (default: show preview)
+      let showPreview = true;
+      try {
+        if (n.recipientId) {
+          const settings = await UserSettings.findOne(
+            { oxyUserId: n.recipientId },
+            { 'notifications.showMessagePreview': 1 }
+          ).lean();
+          if (settings?.notifications?.showMessagePreview === false) {
+            showPreview = false;
+          }
+        }
+      } catch {}
+
+      if (!showPreview) {
+        // Maximum privacy: hide sender identity too
+        f = { title: 'Allo', body: 'New message' };
+      } else {
+        const message: any = await Message.findById(n.entityId, {
+          ciphertext: 1,
+          encryptedMedia: 1,
+          text: 1,
+          media: 1,
+        }).lean();
+        if (message && !isEncrypted(message)) {
+          // Legacy plaintext message: include a short text preview
+          const text: string = message?.text || '';
+          preview = buildPreview(text, 200);
+          if (preview) {
+            f = { title: 'New message', body: `${actorName}: ${preview}` };
+          } else if (message?.media?.length) {
+            f = { title: 'New message', body: `${actorName} sent ${message.media.length} media file(s)` };
+          }
+        }
+        // Encrypted message: keep the default `${actorName} sent you a message`
+      }
     }
   } catch {}
   const data: Record<string, string> = {

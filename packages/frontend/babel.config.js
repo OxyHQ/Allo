@@ -1,6 +1,25 @@
 // packages/frontend/babel.config.js
 module.exports = function (api) {
     api.cache(true);
+
+    // Minimal config for Jest unit tests. Avoids babel-preset-expo (which injects
+    // Expo's "winter" runtime and breaks Jest 30) — tests only need TS + ESM transforms.
+    if (process.env.NODE_ENV === 'test') {
+      return {
+        presets: [
+          ['@babel/preset-env', { targets: { node: 'current' } }],
+          '@babel/preset-typescript',
+        ],
+        plugins: [
+          ['module-resolver', {
+            root: ['.'],
+            alias: { '@': './' },
+            extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+          }],
+        ],
+      };
+    }
+
     return {
       // 👇 Treat NativeWind as a PRESET for your version
       presets: [

@@ -34,6 +34,10 @@ export interface ProfileCustomization {
   coverImage?: string; // Custom cover image (alternative to profileHeaderImage)
 }
 
+export interface NotificationSettings {
+  showMessagePreview?: boolean; // Show sender/preview info in push notifications (default: true)
+}
+
 export interface IUserSettings extends Document {
   oxyUserId: string;
   appearance: AppearanceSettings;
@@ -41,6 +45,7 @@ export interface IUserSettings extends Document {
   privacy?: PrivacySettings;
   profileCustomization?: ProfileCustomization;
   security?: SecuritySettings;
+  notifications?: NotificationSettings;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,6 +82,10 @@ const SecuritySchema = new Schema({
   peerToPeerEnabled: { type: Boolean, default: true }, // P2P enabled by default
 }, { _id: false });
 
+const NotificationSettingsSchema = new Schema<NotificationSettings>({
+  showMessagePreview: { type: Boolean, default: true },
+}, { _id: false });
+
 const UserSettingsSchema = new Schema<IUserSettings>({
   oxyUserId: { type: String, required: true, index: true, unique: true },
   appearance: { type: AppearanceSchema, default: () => ({ themeMode: 'system' }) },
@@ -84,6 +93,7 @@ const UserSettingsSchema = new Schema<IUserSettings>({
   privacy: { type: PrivacySchema, default: () => ({ profileVisibility: 'public' }) },
   profileCustomization: { type: ProfileCustomizationSchema },
   security: { type: SecuritySchema, default: () => ({ cloudSyncEnabled: false, encryptionEnabled: true, peerToPeerEnabled: true }) },
+  notifications: { type: NotificationSettingsSchema, default: () => ({ showMessagePreview: true }) },
 }, { timestamps: true, versionKey: false });
 
 export const UserSettings = mongoose.model<IUserSettings>('UserSettings', UserSettingsSchema);

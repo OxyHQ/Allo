@@ -23,7 +23,6 @@ import { OXY_BASE_URL } from '@/config';
 
 interface AppProvidersProps {
   children: React.ReactNode;
-  colorScheme: 'light' | 'dark' | null | undefined;
   queryClient: QueryClient;
 }
 
@@ -31,10 +30,12 @@ interface AppProvidersProps {
  * Wraps the app with all necessary providers
  * Separated from _layout.tsx for better testability
  * Memoized to prevent re-renders when props don't change
+ *
+ * Theme/colorScheme is owned by `<BloomThemeProvider>` higher in the tree
+ * (see `app/_layout.tsx`). Components read theme via `useTheme()`.
  */
 export const AppProviders = memo(function AppProviders({
   children,
-  colorScheme,
   queryClient,
 }: AppProvidersProps) {
   return (
