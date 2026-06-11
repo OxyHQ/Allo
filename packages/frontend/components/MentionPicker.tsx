@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import { useOxy } from "@oxyhq/services";
+import type { User } from "@oxyhq/core";
 import Avatar from "./Avatar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { UserListSkeleton } from "@/components/shared/Skeleton";
@@ -52,25 +53,30 @@ const alloPicker: React.FC<alloPickerProps> = ({
                 // Search for users via Oxy services
                 const searchResults = await oxyServices.searchProfiles(query, { limit: 10 });
 
-                const mappedUsers: alloUser[] = (searchResults || []).map((profile: any) => {
-                    // Handle name object or string
-                    let displayName = profile.username || profile.handle;
-                    if (typeof profile.name === 'string') {
-                        displayName = profile.name;
-                    } else if (profile.name?.full) {
-                        displayName = profile.name.full;
-                    } else if (profile.name?.first) {
-                        displayName = `${profile.name.first} ${profile.name.last || ''}`.trim();
-                    } else if (profile.displayName) {
-                        displayName = profile.displayName;
-                    }
+                const mappedUsers: alloUser[] = (searchResults?.data ?? []).map((profile: User) => {
+                    // Fields declared on User plus optional aliases reachable
+                    // through the interface's index signature (typed `unknown`).
+                    const asString = (value: unknown): string | undefined =>
+                        typeof value === "string" && value.length > 0 ? value : undefined;
+
+                    const username =
+                        asString(profile.username) ?? asString(profile.handle) ?? "";
+
+                    const name = profile.name;
+                    const displayName =
+                        asString(name?.full) ??
+                        (name?.first
+                            ? `${name.first} ${name.last ?? ""}`.trim()
+                            : undefined) ??
+                        asString(profile.displayName) ??
+                        username;
 
                     return {
-                        id: profile.id || profile._id,
-                        username: profile.username || profile.handle,
+                        id: asString(profile.id) ?? asString(profile._id) ?? "",
+                        username,
                         name: displayName,
-                        avatar: profile.avatar || profile.profilePicture,
-                        verified: profile.verified || false,
+                        avatar: asString(profile.avatar) ?? asString(profile.profilePicture),
+                        verified: profile.verified === true,
                     };
                 });
 

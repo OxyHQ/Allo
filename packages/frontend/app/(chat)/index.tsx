@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Link, useRouter, usePathname } from 'expo-router';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
     Easing,
@@ -910,8 +910,7 @@ export default function ConversationsList() {
 
         return (
             <ReanimatedSwipeable
-                // @ts-expect-error ReanimatedSwipeable expects RefObject but callback ref works at runtime
-                ref={(ref: any) => {
+                ref={(ref: SwipeableMethods | null) => {
                     swipeableRefs.current[item.id] = ref;
                 }}
                 enabled={swipeEnabled}

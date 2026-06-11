@@ -9,5 +9,8 @@ export function useColorScheme(): 'light' | 'dark' {
 	const pref = mySettings?.appearance?.themeMode ?? 'system';
 
 	if (pref === 'light' || pref === 'dark') return pref;
-	return (rnScheme ?? 'light');
+	// RN's ColorSchemeName can be 'light' | 'dark' | 'unspecified' (and
+	// null/undefined). Normalize anything that isn't an explicit 'dark' to
+	// 'light' to preserve the existing default.
+	return rnScheme === 'dark' ? 'dark' : 'light';
 }

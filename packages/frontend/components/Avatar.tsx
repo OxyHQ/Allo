@@ -58,7 +58,7 @@ const Avatar: React.FC<AvatarProps> = ({
         source={imageSource}
         onError={() => setErrored(true)}
         contentFit="cover"
-        style={[StyleSheet.absoluteFillObject, imageStyle]}
+        style={[StyleSheet.absoluteFill, imageStyle]}
         placeholder={DefaultAvatar}
         transition={200}
         cachePolicy="memory-disk"
@@ -69,7 +69,7 @@ const Avatar: React.FC<AvatarProps> = ({
         source={imageSource}
         onError={() => setErrored(true)}
         contentFit="cover"
-        style={[StyleSheet.absoluteFillObject, imageStyle]}
+        style={[StyleSheet.absoluteFill, imageStyle]}
         placeholder={DefaultAvatar}
         transition={200}
         cachePolicy="memory-disk"

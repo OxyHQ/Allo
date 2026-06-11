@@ -19,7 +19,10 @@ export function useColorScheme(): 'light' | 'dark' {
 
   if (hasHydrated) {
     if (pref === 'light' || pref === 'dark') return pref;
-    return (colorScheme ?? 'light');
+    // RN's ColorSchemeName can be 'light' | 'dark' | 'unspecified' (and
+    // null/undefined). Normalize anything that isn't an explicit 'dark' to
+    // 'light' to preserve the existing default.
+    return colorScheme === 'dark' ? 'dark' : 'light';
   }
 
   // During SSR/first render, default to light for consistent static HTML

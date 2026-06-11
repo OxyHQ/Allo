@@ -6,10 +6,6 @@
   "workspaces": [
     "packages/*"
   ],
-  "overrides": {
-    "@react-navigation/native": "7.2.4",
-    "@react-navigation/core": "7.17.4"
-  },
   "scripts": {
     "dev": "bun run dev --filter '*'",
     "dev:frontend": "bun run --filter @allo/frontend dev",
@@ -28,7 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "react-native-worklets": "0.5.1",
+    "react-native-worklets": "0.8.3",
     "typescript": "~5.9.2"
   },
   "engines": {
@@ -36,9 +32,9 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@oxyhq/bloom": "^0.3.8",
+    "@oxyhq/bloom": "^0.6.11",
     "@oxyhq/core": "1.11.13",
-    "@oxyhq/services": "6.9.46",
+    "@oxyhq/services": "6.10.7",
     "@react-native/js-polyfills": "^0.81.6",
     "react-native-css-interop": "^0.2.4",
     "react-native-worklets-core": "^1.6.3"
