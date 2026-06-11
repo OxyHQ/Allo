@@ -19,6 +19,21 @@ const backendClient = axios.create({
   timeout: 10000, // 10 second timeout
 });
 
+// This device's numeric Signal device id. Set once device keys are initialized
+// (see deviceKeysStore.initialize) and cleared on reset. Sent as `X-Device-Id`
+// on every backend request so the server can hydrate this device's per-device
+// message envelopes (encryption version 3).
+let currentDeviceId: number | null = null;
+
+/**
+ * Register (or clear) this device's numeric Signal device id so it is attached
+ * as the `X-Device-Id` header on every authenticated backend request. Pass null
+ * on logout / account switch.
+ */
+export function setApiDeviceId(deviceId: number | null): void {
+  currentDeviceId = deviceId;
+}
+
 // Add request interceptor to backend client to include auth token from Oxy
 backendClient.interceptors.request.use((config) => {
   try {
@@ -29,6 +44,11 @@ backendClient.interceptors.request.use((config) => {
     }
   } catch (error) {
     console.warn('[API] Could not get auth token for backend request:', error);
+  }
+  // Per-device envelope hydration: identify this device to the backend so v3
+  // messages are returned with this device's ciphertext.
+  if (currentDeviceId !== null) {
+    config.headers['X-Device-Id'] = String(currentDeviceId);
   }
   return config;
 });

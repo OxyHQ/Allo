@@ -10,8 +10,204 @@ import {
   removeMessageLocally,
   addToSyncQueue,
 } from '@/lib/offlineStorage';
-import { p2pManager } from '@/lib/p2pMessaging';
+import { p2pManager, type P2PMessageEnvelope } from '@/lib/p2pMessaging';
 import NetInfo from '@react-native-community/netinfo';
+import i18n from '@/lib/i18n';
+import {
+  ENCRYPTION_VERSION_ENVELOPES,
+  type MessageEnvelopeDTO,
+  type DeviceTarget,
+} from '@allo/shared-types';
+
+/** Placeholder shown when a legacy/undecryptable message can't be read. */
+const PLACEHOLDER_UNDECRYPTABLE = '[Mensaje no descifrable]';
+/** Placeholder shown when decryption of an otherwise-valid ciphertext failed. */
+const PLACEHOLDER_DECRYPT_FAILED = '[Encrypted - Decryption failed]';
+
+/** English fallback if i18n is not yet initialized (keeps UI from rendering empty). */
+const ENVELOPE_MISSING_FALLBACK = 'Sent before this device was linked';
+
+/** Resolve the localized "sent before this device was linked" placeholder. */
+function envelopeMissingText(): string {
+  const translated = i18n.t('messages.sentBeforeDeviceLinked');
+  // i18next returns the key (or undefined) when uninitialized / key missing.
+  return translated && translated !== 'messages.sentBeforeDeviceLinked'
+    ? translated
+    : ENVELOPE_MISSING_FALLBACK;
+}
+
+/** Server error code returned when our cached device list is out of date. */
+const STALE_DEVICE_LIST_ERROR = 'stale_device_list';
+
+/**
+ * Resolve the set of participant user ids (including self) for a conversation.
+ * Returns null when the conversation is unknown locally — the caller then has no
+ * basis for multi-device fan-out and must surface an error.
+ */
+function resolveParticipantUserIds(conversationId: string, senderId: string): string[] | null {
+  try {
+    const { useConversationsStore } = require('./conversationsStore');
+    const conversation = useConversationsStore.getState().conversationsById[conversationId];
+    if (!conversation) return null;
+    const ids = new Set<string>([senderId]);
+    for (const participant of conversation.participants || []) {
+      if (participant.id) ids.add(participant.id);
+    }
+    return Array.from(ids);
+  } catch (error) {
+    console.warn('[Messages] Failed to resolve conversation participants:', error);
+    return null;
+  }
+}
+
+/** True when the recipient's active device count makes the P2P path eligible. */
+async function isP2PEligible(
+  conversationId: string,
+  recipientUserId: string,
+  ownUserId: string
+): Promise<boolean> {
+  try {
+    const { useConversationsStore } = require('./conversationsStore');
+    const conversation = useConversationsStore.getState().conversationsById[conversationId];
+    if (!conversation || conversation.type !== 'direct') return false;
+
+    const deviceKeysStore = useDeviceKeysStore.getState();
+    const devicesByUser = await deviceKeysStore.getDevicesForUsers([ownUserId, recipientUserId]);
+    const ownDevices = devicesByUser.get(ownUserId)?.length || 0;
+    const recipientDevices = devicesByUser.get(recipientUserId)?.length || 0;
+    // P2P data channels are 1:1 — only safe when both sides have exactly one
+    // active device, otherwise other devices would silently miss the message.
+    return ownDevices === 1 && recipientDevices === 1;
+  } catch (error) {
+    console.warn('[Messages] P2P eligibility check failed:', error);
+    return false;
+  }
+}
+
+/** True when a thrown error carries the backend's stale-device-list signal. */
+function isStaleDeviceListError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const response = (error as { response?: { status?: number; data?: { error?: string } } }).response;
+  return response?.status === 409 && response?.data?.error === STALE_DEVICE_LIST_ERROR;
+}
+
+/**
+ * Build the data payload persisted to the offline sync queue for a send. For v3
+ * we persist the full envelope set so a replay POSTs the exact fan-out; for the
+ * deviceless plaintext fallback we persist the plaintext.
+ */
+function buildQueuedSendData(
+  conversationId: string,
+  senderDeviceId: number,
+  isEncrypted: boolean,
+  envelopes: MessageEnvelopeDTO[],
+  plaintext: string,
+  extraPayload: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    conversationId,
+    senderDeviceId,
+    ...(isEncrypted
+      ? { encryptionVersion: ENCRYPTION_VERSION_ENVELOPES, envelopes }
+      : { text: plaintext }),
+    ...extraPayload,
+  };
+}
+
+/** Outcome of preparing a message for multi-device fan-out. */
+interface EncryptionResult {
+  /** Per-device envelopes (v3). Empty when falling back to plaintext. */
+  envelopes: MessageEnvelopeDTO[];
+  /** Per-device failures tolerated during fan-out (own other devices). */
+  failures: DeviceTarget[];
+  /** True when no recipient device exists at all and we must send plaintext. */
+  plaintextFallback: boolean;
+}
+
+/**
+ * Encrypt `plaintext` into per-device envelopes for every participant device.
+ * Returns `plaintextFallback: true` only when the recipients are genuinely
+ * deviceless (no registered devices) so the caller can degrade to plaintext.
+ */
+async function encryptEnvelopes(
+  conversationId: string,
+  plaintext: string,
+  senderId: string
+): Promise<EncryptionResult> {
+  const participantUserIds = resolveParticipantUserIds(conversationId, senderId);
+  if (!participantUserIds) {
+    throw new Error('Conversation not found locally; cannot resolve recipients.');
+  }
+
+  const deviceKeysStore = useDeviceKeysStore.getState();
+  try {
+    const { envelopes, failures } = await deviceKeysStore.encryptForConversation(
+      plaintext,
+      participantUserIds,
+      senderId
+    );
+    if (envelopes.length === 0) {
+      // No recipient device produced an envelope. This only happens when every
+      // recipient is deviceless — fall back to plaintext (logged loudly).
+      console.warn(
+        '[Messages] No recipient devices for conversation; sending plaintext (less secure).',
+        { conversationId, participantUserIds }
+      );
+      return { envelopes: [], failures, plaintextFallback: true };
+    }
+    return { envelopes, failures, plaintextFallback: false };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown encryption error';
+    if (message.includes('No devices found') || message.includes('No preKeys')) {
+      console.warn(
+        '[Messages] Recipient has no registered devices; sending plaintext (less secure).',
+        { conversationId }
+      );
+      return { envelopes: [], failures: [], plaintextFallback: true };
+    }
+    throw error;
+  }
+}
+
+/**
+ * POST a v3 envelope message. On a `409 stale_device_list` the device cache is
+ * invalidated, the message is re-encrypted from scratch and the send is retried
+ * exactly once with the freshly-built envelope set (never appended).
+ */
+async function postEnvelopeMessage(
+  conversationId: string,
+  plaintext: string,
+  senderId: string,
+  senderDeviceId: number,
+  envelopes: MessageEnvelopeDTO[],
+  extraPayload: Record<string, unknown>
+): Promise<{ data: unknown }> {
+  const buildPayload = (envs: MessageEnvelopeDTO[]): Record<string, unknown> => ({
+    conversationId,
+    senderDeviceId,
+    encryptionVersion: ENCRYPTION_VERSION_ENVELOPES,
+    envelopes: envs,
+    ...extraPayload,
+  });
+
+  try {
+    return await api.post('/messages', buildPayload(envelopes));
+  } catch (error) {
+    if (!isStaleDeviceListError(error)) throw error;
+
+    // Stale device list: drop the cache for the participants and re-encrypt with
+    // the authoritative device set, then retry ONCE.
+    console.warn('[Messages] Stale device list; refreshing devices and retrying send once.');
+    const participantUserIds = resolveParticipantUserIds(conversationId, senderId) || [];
+    useDeviceKeysStore.getState().invalidateDeviceCache(participantUserIds);
+
+    const retry = await encryptEnvelopes(conversationId, plaintext, senderId);
+    if (retry.plaintextFallback || retry.envelopes.length === 0) {
+      throw new Error('Failed to re-encrypt message after device list refresh.');
+    }
+    return api.post('/messages', buildPayload(retry.envelopes));
+  }
+}
 
 /**
  * Messages Store with Signal Protocol Encryption
@@ -27,9 +223,52 @@ import NetInfo from '@react-native-community/netinfo';
 
 export interface MediaItem {
   id: string;
-  type: 'image' | 'video' | 'gif';
+  type: 'image' | 'video' | 'gif' | 'audio' | 'file';
   url?: string;
+  thumbnailUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
 }
+
+export interface LocationData {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  label?: string;
+}
+
+export interface ContactData {
+  name: string;
+  phones?: string[];
+  emails?: string[];
+  userId?: string;
+}
+
+export interface PollOption {
+  text: string;
+  votes: string[];
+}
+
+export interface PollData {
+  question: string;
+  options: PollOption[];
+  multi: boolean;
+  closed?: boolean;
+}
+
+export type AttachmentType =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'file'
+  | 'location'
+  | 'contact'
+  | 'poll'
+  | 'gif';
 
 export interface StickerItem {
   id: string;
@@ -62,6 +301,159 @@ export interface Message {
   encryptionVersion?: number;
   // Read receipt status
   readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
+  // Edit/forward metadata
+  editedAt?: Date;
+  forwardedFrom?: string;
+  // Structured attachment payload (public — not encrypted)
+  attachmentType?: AttachmentType;
+  location?: LocationData;
+  contact?: ContactData;
+  poll?: PollData;
+  // Local-only flag for "delete for me"
+  locallyDeleted?: boolean;
+}
+
+export interface AttachmentPayload {
+  attachmentType: AttachmentType;
+  text?: string;
+  media?: MediaItem[];
+  location?: LocationData;
+  contact?: ContactData;
+  poll?: PollData;
+  forwardedFrom?: string;
+}
+
+/** Raw message document as returned by the backend (already device-hydrated). */
+interface RawServerMessage {
+  _id?: string;
+  id?: string;
+  conversationId: string;
+  senderId: string;
+  senderDeviceId?: number;
+  text?: string;
+  ciphertext?: string | null;
+  encryptionVersion?: number;
+  /** v3: set by the backend when this device has no envelope for the message. */
+  envelopeMissing?: boolean;
+  fontSize?: number;
+  createdAt: string;
+  updatedAt?: string;
+  editedAt?: string;
+  messageType?: string;
+  media?: MediaItem[];
+  sticker?: StickerItem;
+  attachmentType?: AttachmentType;
+  location?: LocationData;
+  contact?: ContactData;
+  poll?: PollData;
+  forwardedFrom?: string;
+  replyTo?: string;
+  reactions?: Record<string, string[]>;
+  readBy?: Record<string, string>;
+  deliveredTo?: string[];
+}
+
+type ReadStatus = 'pending' | 'sent' | 'delivered' | 'read';
+
+/** Derive the sender-side read status for a message we authored. */
+function computeReadStatus(msg: RawServerMessage, currentUserId?: string): ReadStatus | undefined {
+  if (!currentUserId || msg.senderId !== currentUserId) return undefined;
+  if (msg.readBy && typeof msg.readBy === 'object') {
+    const recipientRead = Object.keys(msg.readBy).some((id) => id !== currentUserId);
+    if (recipientRead) return 'read';
+  }
+  if (Array.isArray(msg.deliveredTo)) {
+    const recipientDelivered = msg.deliveredTo.some((id) => id !== currentUserId);
+    return recipientDelivered ? 'delivered' : 'sent';
+  }
+  return 'sent';
+}
+
+/** Map the common (non-text) fields of a raw server message onto a Message. */
+function mapCommonMessageFields(msg: RawServerMessage, currentUserId?: string): Omit<Message, 'text' | 'isEncrypted'> {
+  return {
+    id: msg._id || msg.id || '',
+    senderId: msg.senderId,
+    senderDeviceId: msg.senderDeviceId,
+    timestamp: new Date(msg.createdAt),
+    isSent: msg.senderId === currentUserId,
+    conversationId: msg.conversationId,
+    fontSize: msg.fontSize,
+    readStatus: computeReadStatus(msg, currentUserId),
+    messageType: msg.messageType === 'ai' ? 'ai' : 'user',
+    media: msg.media,
+    sticker: msg.sticker,
+    attachmentType: msg.attachmentType,
+    location: msg.location,
+    contact: msg.contact,
+    poll: msg.poll,
+    forwardedFrom: msg.forwardedFrom,
+    editedAt: msg.editedAt ? new Date(msg.editedAt) : undefined,
+    replyTo: msg.replyTo,
+    reactions: msg.reactions,
+  };
+}
+
+/**
+ * Transform one raw server message into a local Message, decrypting when needed.
+ *
+ * Multi-device aware:
+ *  - v3 messages with a missing/null envelope (`envelopeMissing`) render a
+ *    placeholder and are NEVER decrypted (no retry loop — the key is gone).
+ *  - Own messages from another device WITH an envelope decrypt normally (the
+ *    sender's other device encrypted to us), and are marked `isSent`.
+ */
+async function transformServerMessage(
+  msg: RawServerMessage,
+  currentUserId: string | undefined,
+  decrypt: (ciphertext: string, senderUserId: string, senderDeviceId: number) => Promise<string>
+): Promise<Message | null> {
+  const isEnvelopeVersion = msg.encryptionVersion === ENCRYPTION_VERSION_ENVELOPES;
+
+  // v3 with no envelope for this device: show the placeholder, never decrypt.
+  if (isEnvelopeVersion && (msg.envelopeMissing || !msg.ciphertext)) {
+    return {
+      ...mapCommonMessageFields(msg, currentUserId),
+      text: envelopeMissingText(),
+      isEncrypted: false,
+    };
+  }
+
+  // No ciphertext at all → plaintext / structured attachment message.
+  if (!msg.ciphertext) {
+    return {
+      ...mapCommonMessageFields(msg, currentUserId),
+      text: msg.text || '',
+      isEncrypted: false,
+    };
+  }
+
+  // Encrypted message. For v3 own-other-device messages the sender encrypted an
+  // envelope TO us, so decryption with peer = (sender, senderDeviceId) works.
+  if (!msg.senderId || !msg.senderDeviceId) {
+    console.warn('[Messages] Encrypted server message missing sender identity:', msg._id || msg.id);
+    return null;
+  }
+
+  try {
+    const decryptedText = await decrypt(msg.ciphertext, msg.senderId, msg.senderDeviceId);
+    return {
+      ...mapCommonMessageFields(msg, currentUserId),
+      text: decryptedText,
+      isEncrypted: false,
+    };
+  } catch (error) {
+    console.error('[Messages] Error decrypting server message:', error);
+    const errMsg = error instanceof Error ? error.message : '';
+    const friendly = errMsg.includes(PLACEHOLDER_UNDECRYPTABLE)
+      ? PLACEHOLDER_UNDECRYPTABLE
+      : PLACEHOLDER_DECRYPT_FAILED;
+    return {
+      ...mapCommonMessageFields(msg, currentUserId),
+      text: friendly,
+      isEncrypted: true,
+    };
+  }
 }
 
 interface MessagesState {
@@ -99,12 +491,31 @@ interface MessagesState {
     recipientUserId: string,
     fontSize?: number
   ) => Promise<Message | null>;
-  
+  sendAttachmentMessage: (
+    conversationId: string,
+    payload: AttachmentPayload,
+    senderId: string,
+    recipientUserId: string
+  ) => Promise<Message | null>;
+  deleteMessageForScope: (
+    conversationId: string,
+    messageId: string,
+    scope: 'me' | 'everyone'
+  ) => Promise<boolean>;
+  voteInPoll: (
+    conversationId: string,
+    messageId: string,
+    optionIndexes: number[]
+  ) => Promise<boolean>;
+
   // Selectors
   getMessages: (conversationId: string) => Message[];
   getLatestMessage: (conversationId: string) => Message | undefined;
   isLoading: (conversationId: string) => boolean;
   getError: (conversationId: string) => string | null;
+
+  // Lifecycle
+  reset: () => void;
 }
 
 export const useMessagesStore = create<MessagesState>()(
@@ -310,39 +721,42 @@ export const useMessagesStore = create<MessagesState>()(
       }
 
       try {
-        // Always load from local storage first (offline-first)
-        const localMessages = await getMessagesLocally(conversationId);
-        
-        if (localMessages.length > 0) {
-          // Decrypt messages if needed
-          const deviceKeysStore = useDeviceKeysStore.getState();
-          const decryptedMessages = await Promise.all(
-            localMessages.map(async (msg) => {
-              // Skip decryption for messages sent by current user (already plaintext)
-              if (msg.senderId === currentUserId) {
-                return msg;
-              }
+        const deviceKeysStore = useDeviceKeysStore.getState();
+        const decrypt = deviceKeysStore.decryptMessageFromSender;
 
-              // Only decrypt if message is encrypted and has ciphertext
-              if (msg.isEncrypted && msg.ciphertext && msg.senderId && msg.senderDeviceId) {
-                try {
-                  const decryptedText = await deviceKeysStore.decryptMessageFromSender(
-                    msg.ciphertext,
-                    msg.senderId,
-                    msg.senderDeviceId
-                  );
-                  return { ...msg, text: decryptedText, isEncrypted: false };
-                } catch (error) {
-                  console.error('[Messages] Error decrypting message:', error);
-                  return { ...msg, text: '[Encrypted - Decryption failed]' };
-                }
+        // Always load from local storage first (offline-first). Decrypt only the
+        // local entries that are still encrypted — own messages and previously
+        // decrypted entries are kept verbatim (Double Ratchet keys are one-shot,
+        // so re-decrypting an already-decrypted ciphertext would fail).
+        const localMessages = await getMessagesLocally(conversationId);
+
+        const decryptedLocal = await Promise.all(
+          localMessages.map(async (msg) => {
+            if (msg.senderId === currentUserId) return msg;
+            if (msg.isEncrypted && msg.ciphertext && msg.senderId && msg.senderDeviceId) {
+              try {
+                const decryptedText = await decrypt(msg.ciphertext, msg.senderId, msg.senderDeviceId);
+                return { ...msg, text: decryptedText, isEncrypted: false };
+              } catch (error) {
+                console.error('[Messages] Error decrypting local message:', error);
+                const errMsg = error instanceof Error ? error.message : '';
+                const friendly = errMsg.includes(PLACEHOLDER_UNDECRYPTABLE)
+                  ? PLACEHOLDER_UNDECRYPTABLE
+                  : PLACEHOLDER_DECRYPT_FAILED;
+                return { ...msg, text: friendly };
               }
-              return msg;
-            })
-          );
-          
-          get().setMessages(conversationId, decryptedMessages);
+            }
+            return msg;
+          })
+        );
+
+        if (decryptedLocal.length > 0) {
+          get().setMessages(conversationId, decryptedLocal);
         }
+
+        // Index the (decrypted) local copies by id so we can both DEDUP server
+        // decryption and let local entries win the merge.
+        const localById = new Map<string, Message>(decryptedLocal.map((m) => [m.id, m]));
 
         // If cloud sync is enabled, fetch from server
         if (get().cloudSyncEnabled) {
@@ -350,124 +764,38 @@ export const useMessagesStore = create<MessagesState>()(
             const netInfo = await NetInfo.fetch();
             if (netInfo.isConnected) {
               const response = await api.get('/messages', { conversationId });
-              const serverMessages = response.data.messages || [];
-              
-              // Process server messages (encrypted or plaintext)
-              const deviceKeysStore = useDeviceKeysStore.getState();
+              const serverMessages: RawServerMessage[] = response.data.messages || [];
+
               const processedServerMessages = await Promise.all(
-                serverMessages.map(async (msg: any) => {
-                  // Handle plaintext messages (legacy or when encryption unavailable)
-                  if (msg.text && !msg.ciphertext) {
-                    // Determine read status for sent messages
-                    let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
-                    if (msg.senderId === currentUserId) {
-                      if (msg.readBy && typeof msg.readBy === 'object') {
-                        const readBy = msg.readBy as Record<string, Date>;
-                        const readByUserIds = Object.keys(readBy);
-                        const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
-                        readStatus = recipientRead ? 'read' : 
-                          (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
-                            ? 'delivered' : 'sent';
-                      } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
-                        const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
-                        readStatus = recipientDelivered ? 'delivered' : 'sent';
-                      } else {
-                        readStatus = 'sent';
-                      }
-                    }
-                    
-                    return {
-                      id: msg._id || msg.id,
-                      text: msg.text,
-                      senderId: msg.senderId,
-                      senderDeviceId: msg.senderDeviceId,
-                      timestamp: new Date(msg.createdAt),
-                      isSent: msg.senderId === currentUserId,
-                      conversationId: msg.conversationId,
-                      fontSize: msg.fontSize,
-                      isEncrypted: false,
-                      readStatus,
-                      messageType: msg.messageType || 'user',
-                    };
+                serverMessages.map(async (msg): Promise<Message | null> => {
+                  const id = msg._id || msg.id || '';
+                  // DEDUP-BEFORE-DECRYPT: if we already hold a successfully
+                  // decrypted copy, reuse it and never touch the ratchet again.
+                  const local = localById.get(id);
+                  if (local && !local.isEncrypted) {
+                    return null;
                   }
-
-                  // Handle encrypted messages
-                  if (msg.ciphertext && msg.senderId && msg.senderDeviceId) {
-                    // Skip decryption for messages sent by current user (already plaintext locally)
-                    if (msg.senderId === currentUserId) {
-                      // This shouldn't happen, but if it does, skip it
-                      return null;
-                    }
-
-                    try {
-                      const decryptedText = await deviceKeysStore.decryptMessageFromSender(
-                        msg.ciphertext,
-                        msg.senderId,
-                        msg.senderDeviceId
-                      );
-                      // Determine read status for sent messages
-                      let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
-                      if (msg.senderId === currentUserId) {
-                        if (msg.readBy && typeof msg.readBy === 'object') {
-                          const readBy = msg.readBy as Record<string, Date>;
-                          const readByUserIds = Object.keys(readBy);
-                          const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
-                          readStatus = recipientRead ? 'read' : 
-                            (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
-                              ? 'delivered' : 'sent';
-                        } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
-                          const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
-                          readStatus = recipientDelivered ? 'delivered' : 'sent';
-                        } else {
-                          readStatus = 'sent';
-                        }
-                      }
-                      
-                      return {
-                        id: msg._id || msg.id,
-                        text: decryptedText,
-                        senderId: msg.senderId,
-                        senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(msg.createdAt),
-                        isSent: msg.senderId === currentUserId,
-                        conversationId: msg.conversationId,
-                        fontSize: msg.fontSize,
-                        isEncrypted: false, // Mark as decrypted
-                        readStatus,
-                        messageType: msg.messageType || 'user',
-                      };
-                    } catch (error) {
-                      console.error('[Messages] Error decrypting server message:', error);
-                      // Return message with error indicator instead of null
-                      return {
-                        id: msg._id || msg.id,
-                        text: '[Encrypted - Decryption failed]',
-                        senderId: msg.senderId,
-                        senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(msg.createdAt),
-                        isSent: msg.senderId === currentUserId,
-                        conversationId: msg.conversationId,
-                        fontSize: msg.fontSize,
-                        isEncrypted: true, // Still encrypted
-                        messageType: msg.messageType || 'user',
-                      };
-                    }
-                  }
-
-                  // Message has neither text nor ciphertext - invalid
-                  console.warn('[Messages] Server message missing both text and ciphertext:', msg);
-                  return null;
+                  return transformServerMessage(msg, currentUserId, decrypt);
                 })
               );
-              
-              const validMessages = processedServerMessages.filter((msg): msg is Message => msg !== null);
-              
-              // Merge with local messages
-              const allMessages = [...localMessages, ...validMessages];
-              const uniqueMessages = Array.from(
-                new Map(allMessages.map(msg => [msg.id, msg])).values()
-              ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-              
+
+              const freshServerMessages = processedServerMessages.filter(
+                (msg): msg is Message => msg !== null
+              );
+
+              // Merge: local already-decrypted copies win; server supplies new
+              // messages and refreshes still-encrypted local entries.
+              const merged = new Map<string, Message>();
+              for (const msg of freshServerMessages) merged.set(msg.id, msg);
+              for (const msg of decryptedLocal) {
+                const existing = merged.get(msg.id);
+                if (!existing || !msg.isEncrypted) merged.set(msg.id, msg);
+              }
+
+              const uniqueMessages = Array.from(merged.values()).sort(
+                (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+              );
+
               get().setMessages(conversationId, uniqueMessages);
             }
           } catch (error) {
@@ -540,131 +868,130 @@ export const useMessagesStore = create<MessagesState>()(
           throw new Error(`Encryption not available.${errorDetails}`);
         }
 
-        // Encrypt message (or use plaintext fallback if recipient keys unavailable)
-        let ciphertext: string | undefined;
-        let isEncrypted = false;
-        try {
-          const updatedDeviceKeysStore = useDeviceKeysStore.getState();
-          ciphertext = await updatedDeviceKeysStore.encryptMessageForRecipient(text, recipientUserId);
-          isEncrypted = true;
-        } catch (error) {
-          console.warn('[Messages] Encryption failed, using plaintext fallback:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown encryption error';
-          
-          // If recipient has no devices registered, allow plaintext as fallback
-          if (errorMessage.includes('No devices found') || errorMessage.includes('No preKeys')) {
-            console.warn('[Messages] Recipient has no registered devices. Sending as plaintext (less secure).');
-            // Continue without encryption - will send as plaintext
-            isEncrypted = false;
-            ciphertext = undefined;
-          } else {
-            // For other encryption errors, still throw
-            throw new Error('Failed to encrypt message. Please try again.');
-          }
-        }
+        const plaintext = text.trim();
 
-        // Create message object with pending status (will update when sent)
+        // Encrypt one envelope per recipient device (multi-device fan-out). Falls
+        // back to plaintext only when the recipients are genuinely deviceless.
+        const { envelopes, plaintextFallback } = await encryptEnvelopes(
+          conversationId,
+          plaintext,
+          senderId
+        );
+        const isEncrypted = !plaintextFallback;
+
+        // Create message object with pending status (will update when sent).
+        // Locally we keep the plaintext for display; the ciphertext stays in the
+        // per-device envelopes (never persisted as a single blob for v3).
         const message: Message = {
           id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          text: text.trim(), // Store plaintext locally for display
+          text: plaintext,
           senderId,
           senderDeviceId: finalDeviceKeys.deviceId,
           timestamp: new Date(),
           isSent: true,
           conversationId,
           fontSize,
-          isEncrypted: isEncrypted,
-          readStatus: 'pending', // Pending while sending
-          ...(isEncrypted && ciphertext ? { ciphertext, encryptionVersion: 1 } : {}),
+          isEncrypted: false, // stored locally as decrypted plaintext
+          readStatus: 'pending',
+          ...(isEncrypted ? { encryptionVersion: ENCRYPTION_VERSION_ENVELOPES } : {}),
         };
 
         // Add to local storage immediately (offline-first)
         get().addMessage(message);
 
-        // Try to send via P2P first (if enabled and encrypted)
-        // Note: P2P only works with encrypted messages
+        // P2P fast path: only when both sides have exactly one active device and
+        // this is a direct conversation. Otherwise relay so every device receives
+        // its own envelope.
         const netInfo = await NetInfo.fetch();
-        if (netInfo.isConnected && isEncrypted && ciphertext) {
-          try {
-            const sentViaP2P = await p2pManager.sendMessage(
-              conversationId,
-              recipientUserId,
-              message,
-              ciphertext
-            );
-            
-            if (sentViaP2P) {
-              // Message sent via P2P - update status to 'sent'
-              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
-              return message;
+        if (netInfo.isConnected && isEncrypted) {
+          const p2pEligible = await isP2PEligible(conversationId, recipientUserId, senderId);
+          if (p2pEligible) {
+            try {
+              const soleEnvelope = envelopes.find((e) => e.recipientUserId === recipientUserId);
+              if (soleEnvelope) {
+                const p2pEnvelope: P2PMessageEnvelope = {
+                  type: 'msg',
+                  clientMessageId: message.id,
+                  conversationId,
+                  senderId,
+                  senderDeviceId: finalDeviceKeys.deviceId,
+                  timestamp: message.timestamp.toISOString(),
+                  messageType: 'text',
+                  fontSize,
+                  isEncrypted: true,
+                  ciphertext: soleEnvelope.ciphertext,
+                };
+                const sentViaP2P = p2pManager.sendMessage(recipientUserId, p2pEnvelope);
+                if (sentViaP2P) {
+                  get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
+                  return message;
+                }
+              }
+            } catch (error) {
+              console.warn('[Messages] P2P send failed, using server:', error);
             }
-          } catch (error) {
-            console.warn('[Messages] P2P send failed, using server:', error);
           }
         }
 
+        const baseServerData: Record<string, unknown> = {
+          messageType: 'text',
+          fontSize,
+        };
+
         // Fallback to server (if cloud sync enabled)
-        if (netInfo.isConnected) {
-          if (get().cloudSyncEnabled) {
-            try {
-              // Send encrypted or plaintext based on availability
-              const payload: any = {
+        if (netInfo.isConnected && get().cloudSyncEnabled) {
+          try {
+            if (isEncrypted) {
+              await postEnvelopeMessage(
+                conversationId,
+                plaintext,
+                senderId,
+                finalDeviceKeys.deviceId,
+                envelopes,
+                baseServerData
+              );
+            } else {
+              await api.post('/messages', {
                 conversationId,
                 senderDeviceId: finalDeviceKeys.deviceId,
-                messageType: 'text',
-                fontSize,
-              };
-              
-              if (isEncrypted && ciphertext) {
-                payload.ciphertext = ciphertext;
-                payload.encryptionVersion = 1;
-              } else {
-                // Send as plaintext when encryption unavailable
-                payload.text = text.trim();
-              }
-              
-              await api.post('/messages', payload);
-              
-              // Update message status to 'sent' after successful send
-              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
-            } catch (error) {
-              console.error('[Messages] Error sending to server:', error);
-              // Keep as 'pending' if send fails - will retry
-              // Add to sync queue for retry
-              await addToSyncQueue({
-                type: 'send_message',
-                conversationId,
-                data: {
-                  conversationId,
-                  senderDeviceId: finalDeviceKeys.deviceId,
-                  ...(isEncrypted && ciphertext 
-                    ? { ciphertext, encryptionVersion: 1 }
-                    : { text: text.trim() }
-                  ),
-                  messageType: 'text',
-                  fontSize,
-                },
+                text: plaintext,
+                ...baseServerData,
               });
             }
+            get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
+          } catch (error) {
+            console.error('[Messages] Error sending to server:', error);
+            // Keep as 'pending' if send fails — queue a directly-postable v3
+            // payload (the freshly-built envelope set) so a future replay sends
+            // exactly this fan-out rather than a stale single blob.
+            await addToSyncQueue({
+              type: 'send_message',
+              conversationId,
+              data: buildQueuedSendData(
+                conversationId,
+                finalDeviceKeys.deviceId,
+                isEncrypted,
+                envelopes,
+                plaintext,
+                baseServerData
+              ),
+            });
           }
         }
-        
+
         // If offline or cloud sync disabled, add to sync queue
         if (!netInfo.isConnected || !get().cloudSyncEnabled) {
-          // Offline or cloud sync disabled - add to sync queue
           await addToSyncQueue({
             type: 'send_message',
             conversationId,
-            data: {
+            data: buildQueuedSendData(
               conversationId,
-              senderDeviceId: finalDeviceKeys.deviceId,
-              ...(isEncrypted && ciphertext 
-                ? { ciphertext, encryptionVersion: 1 }
-                : { text: text.trim() }
-              ),
-              messageType: 'text',
-              fontSize,
-            },
+              finalDeviceKeys.deviceId,
+              isEncrypted,
+              envelopes,
+              plaintext,
+              baseServerData
+            ),
           });
         }
 
@@ -678,6 +1005,235 @@ export const useMessagesStore = create<MessagesState>()(
           },
         }));
         return null;
+      }
+    },
+
+    sendAttachmentMessage: async (conversationId, payload, senderId, recipientUserId) => {
+      try {
+        const deviceKeysStore = useDeviceKeysStore.getState();
+        if (!deviceKeysStore.deviceKeys && !deviceKeysStore.isInitialized && !deviceKeysStore.isLoading) {
+          try {
+            await deviceKeysStore.initialize();
+            await new Promise((r) => setTimeout(r, 100));
+          } catch (e) {
+            console.warn('[Messages] Attachment send: device keys init failed:', e);
+          }
+        }
+        const finalDeviceKeys = useDeviceKeysStore.getState().deviceKeys;
+        if (!finalDeviceKeys) {
+          throw new Error('Encryption not available. Please try again.');
+        }
+
+        const captionText = (payload.text || '').trim();
+
+        // Only the caption is encrypted. Media/structured payloads are public.
+        // A captioned message fans out one envelope per recipient device (v3);
+        // a caption-less attachment is sent without any ciphertext.
+        let envelopes: MessageEnvelopeDTO[] = [];
+        let isEncrypted = false;
+        if (captionText.length > 0) {
+          try {
+            const result = await encryptEnvelopes(conversationId, captionText, senderId);
+            if (!result.plaintextFallback && result.envelopes.length > 0) {
+              envelopes = result.envelopes;
+              isEncrypted = true;
+            }
+          } catch (error) {
+            console.warn('[Messages] Attachment caption encryption failed:', error);
+          }
+        }
+
+        const localMessage: Message = {
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          text: captionText,
+          senderId,
+          senderDeviceId: finalDeviceKeys.deviceId,
+          timestamp: new Date(),
+          isSent: true,
+          conversationId,
+          isEncrypted: false, // stored locally as decrypted plaintext caption
+          readStatus: 'pending',
+          attachmentType: payload.attachmentType,
+          media: payload.media,
+          location: payload.location,
+          contact: payload.contact,
+          poll: payload.poll,
+          forwardedFrom: payload.forwardedFrom,
+          ...(isEncrypted ? { encryptionVersion: ENCRYPTION_VERSION_ENVELOPES } : {}),
+        };
+
+        get().addMessage(localMessage);
+
+        const messageTypeMap: Record<string, string> = {
+          location: 'location',
+          contact: 'contact',
+          poll: 'poll',
+          file: 'file',
+          audio: 'audio',
+          image: 'media',
+          video: 'media',
+          gif: 'media',
+        };
+
+        // Public attachment metadata, shared by both the encrypted (v3) and
+        // plaintext send paths.
+        const attachmentMeta: Record<string, unknown> = {
+          messageType: messageTypeMap[payload.attachmentType] || 'media',
+          attachmentType: payload.attachmentType,
+          ...(payload.media ? { media: payload.media } : {}),
+          ...(payload.location ? { location: payload.location } : {}),
+          ...(payload.contact ? { contact: payload.contact } : {}),
+          ...(payload.poll ? { poll: payload.poll } : {}),
+          ...(payload.forwardedFrom ? { forwardedFrom: payload.forwardedFrom } : {}),
+        };
+
+        const handleServerResult = (responseBody: { data?: unknown } | unknown): Message => {
+          const body = responseBody as { data?: unknown } | undefined;
+          const serverMsg = (body?.data ?? body) as { _id?: string; id?: string; poll?: PollData } | undefined;
+          if (serverMsg && (serverMsg._id || serverMsg.id)) {
+            const newId = (serverMsg._id || serverMsg.id) as string;
+            get().updateMessage(conversationId, localMessage.id, {
+              id: newId,
+              readStatus: 'sent',
+              poll: serverMsg.poll || localMessage.poll,
+            });
+            set((state) => {
+              const idSet = new Set(state.messageIdsByConversation[conversationId] || []);
+              idSet.delete(localMessage.id);
+              idSet.add(newId);
+              state.messageIdsByConversation[conversationId] = idSet;
+            });
+            return { ...localMessage, id: newId, readStatus: 'sent' };
+          }
+          get().updateMessage(conversationId, localMessage.id, { readStatus: 'sent' });
+          return localMessage;
+        };
+
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected && get().cloudSyncEnabled) {
+          try {
+            let response: { data: unknown };
+            if (isEncrypted) {
+              response = await postEnvelopeMessage(
+                conversationId,
+                captionText,
+                senderId,
+                finalDeviceKeys.deviceId,
+                envelopes,
+                attachmentMeta
+              );
+            } else {
+              response = await api.post('/messages', {
+                conversationId,
+                senderDeviceId: finalDeviceKeys.deviceId,
+                ...attachmentMeta,
+                ...(captionText.length > 0 ? { text: captionText } : {}),
+              });
+            }
+            return handleServerResult(response.data);
+          } catch (error) {
+            console.error('[Messages] Error sending attachment to server:', error);
+            await addToSyncQueue({
+              type: 'send_message',
+              conversationId,
+              data: {
+                conversationId,
+                senderDeviceId: finalDeviceKeys.deviceId,
+                ...attachmentMeta,
+                ...(isEncrypted
+                  ? { encryptionVersion: ENCRYPTION_VERSION_ENVELOPES, envelopes }
+                  : captionText.length > 0
+                    ? { text: captionText }
+                    : {}),
+              },
+            });
+          }
+        } else {
+          await addToSyncQueue({
+            type: 'send_message',
+            conversationId,
+            data: {
+              conversationId,
+              senderDeviceId: finalDeviceKeys.deviceId,
+              ...attachmentMeta,
+              ...(isEncrypted
+                ? { encryptionVersion: ENCRYPTION_VERSION_ENVELOPES, envelopes }
+                : captionText.length > 0
+                  ? { text: captionText }
+                  : {}),
+            },
+          });
+        }
+
+        return localMessage;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to send attachment';
+        set((state) => {
+          state.errorByConversation[conversationId] = errorMessage;
+        });
+        return null;
+      }
+    },
+
+    deleteMessageForScope: async (conversationId, messageId, scope) => {
+      try {
+        if (scope === 'me') {
+          // Optimistically remove locally
+          get().removeMessage(conversationId, messageId);
+        } else {
+          // Mark as tombstone locally (replace content)
+          get().updateMessage(conversationId, messageId, {
+            text: '',
+            media: undefined,
+            attachmentType: undefined,
+            location: undefined,
+            contact: undefined,
+            poll: undefined,
+            locallyDeleted: true,
+          });
+        }
+
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          try {
+            await api.delete(`/messages/${messageId}?scope=${scope}`);
+            return true;
+          } catch (error) {
+            console.error('[Messages] Error deleting message:', error);
+            // Queue retry
+            await addToSyncQueue({
+              type: 'delete_message',
+              conversationId,
+              data: { messageId, scope },
+            });
+            return false;
+          }
+        }
+
+        await addToSyncQueue({
+          type: 'delete_message',
+          conversationId,
+          data: { messageId, scope },
+        });
+        return true;
+      } catch (error) {
+        console.error('[Messages] deleteMessageForScope error:', error);
+        return false;
+      }
+    },
+
+    voteInPoll: async (conversationId, messageId, optionIndexes) => {
+      try {
+        const response = await api.post(`/messages/${messageId}/poll/vote`, { optionIndexes });
+        const data = response.data?.data || response.data;
+        if (data?.poll) {
+          get().updateMessage(conversationId, messageId, { poll: data.poll });
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('[Messages] voteInPoll error:', error);
+        return false;
       }
     },
 
@@ -697,6 +1253,20 @@ export const useMessagesStore = create<MessagesState>()(
 
     getError: (conversationId) => {
       return get().errorByConversation[conversationId] || null;
+    },
+
+    // Lifecycle: clear all in-memory messages on logout / account switch.
+    // Persisted plaintext caches in AsyncStorage are wiped separately by
+    // `clearAllOfflineData()` (see `lib/auth/sessionCleanup.ts`).
+    reset: () => {
+      set((state) => {
+        state.messagesByConversation = {};
+        state.messageIdsByConversation = {};
+        state.loadingByConversation = {};
+        state.errorByConversation = {};
+        state.lastUpdatedByConversation = {};
+        state.cloudSyncEnabled = true;
+      });
     },
   }))
 );
