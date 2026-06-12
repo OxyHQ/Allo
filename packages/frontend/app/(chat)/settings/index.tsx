@@ -315,7 +315,7 @@ export default function SettingsScreen() {
                     <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
                         <TouchableOpacity
                             className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={() => showBottomSheet?.("AccountSettings")}
+                            onPress={() => showBottomSheet?.("ManageAccount")}
                         >
                             <View className={`w-10 h-10 rounded-full items-center justify-center mr-${SPACING.item.iconMargin}`} style={{ backgroundColor: theme.colors.primary }}>
                                 <IconComponent name="person" size={24} color={theme.colors.card} />

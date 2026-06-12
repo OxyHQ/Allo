@@ -7,10 +7,14 @@
     "packages/*"
   ],
   "overrides": {
-    "@oxyhq/core": "1.11.24"
+    "@oxyhq/core": "2.0.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@tanstack/query-core": "5.101.0"
   },
   "resolutions": {
-    "@oxyhq/core": "1.11.24"
+    "@oxyhq/core": "2.0.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@tanstack/query-core": "5.101.0"
   },
   "scripts": {
     "dev": "bun run dev --filter '*'",
@@ -39,9 +43,12 @@
   },
   "dependencies": {
     "@oxyhq/bloom": "^0.6.11",
-    "@oxyhq/core": "1.11.24",
-    "@oxyhq/services": "6.10.8",
+    "@oxyhq/core": "2.0.0",
+    "@oxyhq/services": "^8.0.0",
     "@react-native/js-polyfills": "^0.81.6",
+    "@tanstack/query-async-storage-persister": "^5.100.0",
+    "@tanstack/react-query": "^5.100.0",
+    "@tanstack/react-query-persist-client": "^5.100.0",
     "react-native-css-interop": "^0.2.4",
     "react-native-worklets-core": "^1.6.3"
   }

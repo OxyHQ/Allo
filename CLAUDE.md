@@ -71,4 +71,41 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 
 ## Dependencies
 
-- `@oxyhq/core` (1.11.23), `@oxyhq/services` (6.10.7), `@oxyhq/bloom` (0.6.11) — Oxy platform integration
+- `@oxyhq/core` (2.0.0), `@oxyhq/services` (^8.0.0), `@oxyhq/bloom` (0.6.11) — Oxy platform integration
+
+## CRITICAL — Dependency Gotchas
+
+**@oxyhq/core and @oxyhq/services must be pinned via root overrides AND resolutions.**
+`@oxyhq/services` declares `@oxyhq/core` as a peer (^2.0.0). Without an explicit override, Bun may
+hoist a satisfying-but-different core build inside the services package, causing type mismatches and
+runtime errors. The root `package.json` must carry both `overrides` and `resolutions` entries pointing
+to `2.0.0`. The frontend uses `^2.0.0`; the backend references `2.0.0` exactly.
+
+**`@react-native-community/netinfo` is now a peer of `@oxyhq/services@7` (no longer bundled).**
+Both root `overrides` and `resolutions` pin it to `^11.4.1` so the services side and the app share
+the same instance; the frontend declares it as a direct dependency.
+
+**Version history:**
+- `@oxyhq/core` 1.11.24 → 2.0.0 (2026-06-12): nominal public API (no `export *`); subpath exports
+  `@oxyhq/core/crypto` and `@oxyhq/core/shared` removed — import from the root only. `QuickAccount.user`
+  is now `User | null`. `verifyChallenge` plants tokens internally.
+- `@oxyhq/services` 6.10.8 → 7.0.0 (2026-06-12): requires peer `@oxyhq/core ^2.0.0`, `expo >=56`,
+  `react-native >=0.85`, `@react-native-community/netinfo ^11.4.1`. Removed bottom-sheet route names
+  `AccountOverview`/`AccountSettings`/`AccountCenter`/`AccountSwitcher` — replaced by the unified
+  `ManageAccount` surface.
+- `@oxyhq/services` 7.0.0 → 8.0.0 (2026-06-13): `@tanstack/*` moved to peerDependencies. Consumers
+  must declare `@tanstack/react-query`, `@tanstack/react-query-persist-client`, and
+  `@tanstack/query-async-storage-persister` (all `^5.100.0`) themselves. Root override
+  `@tanstack/query-core 5.101.0` remains compatible.
+
+**bun.lock regeneration checklist (MUST follow when bumping these deps):**
+1. Run `bun install` from the **monorepo root** (not inside a package) — a single install from root
+   is the only way to guarantee ALL workspace resolutions (including `@allo/backend/@allo/shared-types`)
+   are written correctly to `bun.lock`.
+2. Verify `bun install --frozen-lockfile` passes locally before pushing.
+   A partial/stale regeneration once dropped the `@allo/backend/@allo/shared-types` workspace resolution
+   line, which made CI's `bun install --frozen-lockfile` (deploy-frontends.yml, bun 1.3.11) fail and
+   would have blocked the allo.oxy.so redeploy.
+3. CI pins **bun 1.3.11**; local bun is **1.3.14**. Always regenerate `bun.lock` using bun 1.3.11
+   (or verify frozen-install passes under 1.3.11) to avoid format drift that fails CI.
+4. Commit the updated `bun.lock` together with `package.json` changes in the same commit.
