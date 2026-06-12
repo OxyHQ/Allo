@@ -2,8 +2,15 @@ import { dispatchSend, processOutboxOnce } from "../services/BridgeService";
 import { findOrCreateBridgedConversation } from "../services/BridgeInboundService";
 import Message from "../models/Message";
 import BridgeOutbox from "../models/BridgeOutbox";
-import { BRIDGE_OUTBOX_MAX_ATTEMPTS, computeBackoffMs } from "../config/bridge";
+import {
+  BRIDGE_OUTBOX_MAX_ATTEMPTS,
+  BRIDGE_OUTBOX_SWEEP_LIMIT,
+  BRIDGE_REQUEST_TIMEOUT_MS,
+  computeBackoffMs,
+} from "../config/bridge";
 import { installMockMessaging, type MockMessaging } from "./helpers/mockSocket";
+import { TEST_BRIDGE_SECRET } from "./helpers/bridgeFixtures";
+import { fetchWithTimeout } from "../utils/bridgeSigning";
 
 const OWNER = "owner-1";
 const EXTERNAL = "tg-out";
@@ -34,7 +41,7 @@ describe("BridgeService outbox", () => {
 
   beforeEach(() => {
     process.env.BRIDGE_ENABLED = "true";
-    process.env.BRIDGE_SHARED_SECRET = "s3cr3t";
+    process.env.BRIDGE_SHARED_SECRET = TEST_BRIDGE_SECRET;
     process.env.BRIDGE_SERVICE_URL = "http://bridge.test";
     mock = installMockMessaging();
   });
@@ -124,5 +131,80 @@ describe("BridgeService outbox", () => {
 
     outbox = await BridgeOutbox.findOne({ messageId: String(message._id) });
     expect(outbox?.status).toBe("sent");
+  });
+
+  it("processOutboxOnce processes at most BRIDGE_OUTBOX_SWEEP_LIMIT rows per pass", async () => {
+    // Finding 5 (bound): with more due rows than the limit, a single pass marks
+    // exactly the limit as sent and leaves the remainder pending for the next
+    // tick — proving `.limit(BRIDGE_OUTBOX_SWEEP_LIMIT)` is applied.
+    const fetchSpy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 200 }));
+
+    const overflow = 5;
+    const total = BRIDGE_OUTBOX_SWEEP_LIMIT + overflow;
+    const past = new Date(Date.now() - 1000);
+    const rows = Array.from({ length: total }, (_unused, i) => ({
+      messageId: `m-${i}`,
+      command: {
+        v: 1 as const,
+        type: "send" as const,
+        network: "telegram" as const,
+        ownerUserId: OWNER,
+        externalChatId: EXTERNAL,
+        messageId: `m-${i}`,
+        text: `n${i}`,
+      },
+      status: "pending" as const,
+      attempts: 0,
+      nextAttemptAt: past,
+    }));
+    await BridgeOutbox.insertMany(rows);
+
+    await processOutboxOnce();
+
+    const sent = await BridgeOutbox.countDocuments({ status: "sent" });
+    const pending = await BridgeOutbox.countDocuments({ status: "pending" });
+    expect(sent).toBe(BRIDGE_OUTBOX_SWEEP_LIMIT);
+    expect(pending).toBe(overflow);
+    expect(fetchSpy).toHaveBeenCalledTimes(BRIDGE_OUTBOX_SWEEP_LIMIT);
+  });
+
+  it("fetchWithTimeout aborts a hung request after the timeout (the wiring postCommand relies on)", async () => {
+    // Finding 5 (timeout): isolate the abort wiring with NO database involved so
+    // fake timers are deterministic (faking timers around mongoose operations is
+    // flaky). `postCommand`/`proxyToConnector` delegate to this exact helper, so
+    // proving the helper aborts proves the hung-connector path is bounded.
+    jest.useFakeTimers();
+    try {
+      let abortedReason: string | undefined;
+      jest.spyOn(globalThis, "fetch").mockImplementation(
+        (_input: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            if (!signal) return; // a real hang: never settles without a signal
+            signal.addEventListener("abort", () => {
+              abortedReason = "aborted";
+              reject(new DOMException("Aborted", "AbortError"));
+            });
+          })
+      );
+
+      const inflight = fetchWithTimeout(
+        "http://bridge.test/commands",
+        { method: "POST", body: "{}" },
+        BRIDGE_REQUEST_TIMEOUT_MS
+      );
+      // Attach the rejection assertion BEFORE advancing timers so the catch
+      // handler is registered when the abort fires (avoids an unhandled
+      // rejection surfacing from inside the fake-timer callback).
+      const assertion = expect(inflight).rejects.toMatchObject({ name: "AbortError" });
+      // Nothing has aborted yet; advancing past the timeout fires the controller.
+      await jest.advanceTimersByTimeAsync(BRIDGE_REQUEST_TIMEOUT_MS + 1);
+      await assertion;
+      expect(abortedReason).toBe("aborted");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

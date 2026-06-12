@@ -51,6 +51,30 @@ function envelopeMissingText(): string {
 /** Server error code returned when our cached device list is out of date. */
 const STALE_DEVICE_LIST_ERROR = 'stale_device_list';
 
+/** The native network. A conversation with no `network` is native Allo. */
+const NATIVE_NETWORK = 'allo';
+
+/**
+ * Resolve the network a conversation rides on (interop bridge, F3.x). Returns
+ * `'allo'` for native chats and when the conversation is unknown locally — the
+ * safe default that keeps the existing end-to-end-encrypted path.
+ */
+function resolveConversationNetwork(conversationId: string): string {
+  try {
+    const { useConversationsStore } = require('./conversationsStore');
+    const conversation = useConversationsStore.getState().conversationsById[conversationId];
+    return conversation?.network ?? NATIVE_NETWORK;
+  } catch (error) {
+    console.warn('[Messages] Failed to resolve conversation network:', error);
+    return NATIVE_NETWORK;
+  }
+}
+
+/** True when a conversation is bridged to an external network (not native Allo). */
+function isBridgedConversation(conversationId: string): boolean {
+  return resolveConversationNetwork(conversationId) !== NATIVE_NETWORK;
+}
+
 /**
  * Resolve the set of participant user ids (including self) for a conversation.
  * Returns null when the conversation is unknown locally — the caller then has no
@@ -253,6 +277,31 @@ async function postEnvelopeMessage(
   }
 }
 
+/** Generate a client-side optimistic message id. */
+function newLocalMessageId(): string {
+  return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Resolve this device's numeric Signal device id, initializing the device-keys
+ * store once if needed. The backend requires `senderDeviceId` on every
+ * `POST /messages` — including bridged plaintext sends — so even the bridge path
+ * needs it (it identifies the OWN device, not an encryption target).
+ */
+async function ensureOwnDeviceId(): Promise<number> {
+  const store = useDeviceKeysStore.getState();
+  if (store.deviceKeys) return store.deviceKeys.deviceId;
+  if (!store.isInitialized && !store.isLoading) {
+    await store.initialize();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const deviceId = useDeviceKeysStore.getState().deviceKeys?.deviceId;
+  if (deviceId === undefined) {
+    throw new Error('Device is not ready. Please try again in a moment.');
+  }
+  return deviceId;
+}
+
 /**
  * Messages Store with Signal Protocol Encryption
  *
@@ -261,6 +310,13 @@ async function postEnvelopeMessage(
  * - Offline-first storage (device-first)
  * - Optional cloud sync
  * - P2P messaging when available
+ *
+ * Interop bridge (F3.x): conversations whose `network !== 'allo'` take an
+ * EXPLICIT plaintext branch in `sendMessage`/`sendAttachmentMessage` — no Signal
+ * encryption, no envelopes, no P2P. Bridged networks are not end-to-end encrypted
+ * (the connector relays plaintext), so the message body is POSTed in the public
+ * `text`/`media` fields, exactly like the deviceless fallback but chosen up front
+ * and silently (no "less secure" warning — it's the expected mode for a bridge).
  *
  * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
@@ -604,6 +660,27 @@ interface MessagesState {
     senderId: string,
     recipientUserId: string
   ) => Promise<Message | null>;
+  /**
+   * Interop bridge (F3.x): send a PLAINTEXT text message to a bridged
+   * conversation. No Signal encryption, no envelopes, no P2P. Called internally
+   * by `sendMessage` when the conversation's network is not 'allo'.
+   */
+  sendBridgedMessage: (
+    conversationId: string,
+    text: string,
+    senderId: string,
+    fontSize?: number
+  ) => Promise<Message | null>;
+  /**
+   * Interop bridge (F3.x): send a PLAINTEXT attachment message to a bridged
+   * conversation (media uploaded as plaintext; no E2E body). Called internally by
+   * `sendAttachmentMessage` when the conversation's network is not 'allo'.
+   */
+  sendBridgedAttachmentMessage: (
+    conversationId: string,
+    payload: AttachmentPayload,
+    senderId: string
+  ) => Promise<Message | null>;
   deleteMessageForScope: (
     conversationId: string,
     messageId: string,
@@ -923,10 +1000,18 @@ export const useMessagesStore = create<MessagesState>()(
     },
 
     sendMessage: async (conversationId, text, senderId, recipientUserId, fontSize) => {
+      // Interop bridge (F3.x): a bridged conversation is NOT end-to-end encrypted.
+      // Take an explicit, silent plaintext branch — no Signal encryption, no
+      // envelopes, no P2P. The connector relays the plaintext to the external
+      // network; the backend dispatches it from the legacy plaintext path.
+      if (isBridgedConversation(conversationId)) {
+        return get().sendBridgedMessage(conversationId, text, senderId, fontSize);
+      }
+
       try {
         const deviceKeysStore = useDeviceKeysStore.getState();
         const deviceKeys = deviceKeysStore.deviceKeys;
-        
+
         if (!deviceKeys) {
           // Try to initialize device keys if not already initialized
           if (!deviceKeysStore.isInitialized && !deviceKeysStore.isLoading) {
@@ -1116,6 +1201,12 @@ export const useMessagesStore = create<MessagesState>()(
     },
 
     sendAttachmentMessage: async (conversationId, payload, senderId, recipientUserId) => {
+      // Interop bridge (F3.x): bridged conversations send attachments as plaintext
+      // (no E2E media body). Branch out explicitly before any encryption setup.
+      if (isBridgedConversation(conversationId)) {
+        return get().sendBridgedAttachmentMessage(conversationId, payload, senderId);
+      }
+
       try {
         const deviceKeysStore = useDeviceKeysStore.getState();
         if (!deviceKeysStore.deviceKeys && !deviceKeysStore.isInitialized && !deviceKeysStore.isLoading) {
@@ -1342,6 +1433,164 @@ export const useMessagesStore = create<MessagesState>()(
                   : {}),
             },
           });
+        }
+
+        return localMessage;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to send attachment';
+        set((state) => {
+          state.errorByConversation[conversationId] = errorMessage;
+        });
+        return null;
+      }
+    },
+
+    sendBridgedMessage: async (conversationId, text, senderId, fontSize) => {
+      // Interop bridge (F3.x): plaintext text send. No encryption, no envelopes,
+      // no P2P. The backend relays the plaintext to the external network.
+      try {
+        const plaintext = text.trim();
+        const senderDeviceId = await ensureOwnDeviceId();
+
+        const message: Message = {
+          id: newLocalMessageId(),
+          text: plaintext,
+          senderId,
+          senderDeviceId,
+          timestamp: new Date(),
+          isSent: true,
+          conversationId,
+          fontSize,
+          isEncrypted: false,
+          readStatus: 'pending',
+        };
+
+        get().addMessage(message);
+
+        const serverData: Record<string, unknown> = {
+          conversationId,
+          senderDeviceId,
+          text: plaintext,
+          messageType: 'text',
+          ...(fontSize !== undefined ? { fontSize } : {}),
+        };
+
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          try {
+            await api.post('/messages', serverData);
+            get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
+          } catch (error) {
+            console.error('[Messages] Error sending bridged message to server:', error);
+            await addToSyncQueue({ type: 'send_message', conversationId, data: serverData });
+          }
+        } else {
+          await addToSyncQueue({ type: 'send_message', conversationId, data: serverData });
+        }
+
+        return message;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+        set((state) => {
+          state.errorByConversation[conversationId] = errorMessage;
+        });
+        return null;
+      }
+    },
+
+    sendBridgedAttachmentMessage: async (conversationId, payload, senderId) => {
+      // Interop bridge (F3.x): plaintext attachment send. Media is uploaded as
+      // plaintext (no E2E media body); location/contact/poll travel as public
+      // metadata. No Signal encryption, no envelopes, no P2P.
+      try {
+        const senderDeviceId = await ensureOwnDeviceId();
+        const captionText = (payload.text || '').trim();
+        const mediaSources: OutgoingMediaSource[] = payload.media || [];
+        const hasMedia = mediaSources.length > 0;
+
+        const displayMedia: MediaItem[] = hasMedia
+          ? await preparePlaintextMedia(mediaSources, undefined)
+          : [];
+
+        const localMessage: Message = {
+          id: newLocalMessageId(),
+          text: captionText,
+          senderId,
+          senderDeviceId,
+          timestamp: new Date(),
+          isSent: true,
+          conversationId,
+          isEncrypted: false,
+          readStatus: 'pending',
+          attachmentType: payload.attachmentType,
+          media: hasMedia ? displayMedia : undefined,
+          location: payload.location,
+          contact: payload.contact,
+          poll: payload.poll,
+          forwardedFrom: payload.forwardedFrom,
+        };
+
+        get().addMessage(localMessage);
+
+        const messageTypeMap: Record<string, string> = {
+          location: 'location',
+          contact: 'contact',
+          poll: 'poll',
+          file: 'file',
+          audio: 'audio',
+          image: 'media',
+          video: 'media',
+          gif: 'media',
+        };
+
+        const attachmentMeta: Record<string, unknown> = {
+          conversationId,
+          senderDeviceId,
+          messageType: messageTypeMap[payload.attachmentType] || 'media',
+          attachmentType: payload.attachmentType,
+          ...(hasMedia && displayMedia.length > 0 ? { media: displayMedia } : {}),
+          ...(payload.location ? { location: payload.location } : {}),
+          ...(payload.contact ? { contact: payload.contact } : {}),
+          ...(payload.poll ? { poll: payload.poll } : {}),
+          ...(payload.forwardedFrom ? { forwardedFrom: payload.forwardedFrom } : {}),
+          ...(captionText.length > 0 ? { text: captionText } : {}),
+        };
+
+        const applyServerId = (responseBody: unknown): Message => {
+          const body = responseBody as { data?: unknown } | undefined;
+          const serverMsg = (body?.data ?? body) as
+            | { _id?: string; id?: string; poll?: PollData }
+            | undefined;
+          if (serverMsg && (serverMsg._id || serverMsg.id)) {
+            const newId = (serverMsg._id || serverMsg.id) as string;
+            get().updateMessage(conversationId, localMessage.id, {
+              id: newId,
+              readStatus: 'sent',
+              poll: serverMsg.poll || localMessage.poll,
+            });
+            set((state) => {
+              const idSet = new Set(state.messageIdsByConversation[conversationId] || []);
+              idSet.delete(localMessage.id);
+              idSet.add(newId);
+              state.messageIdsByConversation[conversationId] = idSet;
+            });
+            return { ...localMessage, id: newId, readStatus: 'sent' };
+          }
+          get().updateMessage(conversationId, localMessage.id, { readStatus: 'sent' });
+          return localMessage;
+        };
+
+        const netInfo = await NetInfo.fetch();
+        if (netInfo.isConnected) {
+          try {
+            const response = await api.post('/messages', attachmentMeta);
+            return applyServerId(response.data);
+          } catch (error) {
+            console.error('[Messages] Error sending bridged attachment to server:', error);
+            await addToSyncQueue({ type: 'send_message', conversationId, data: attachmentMeta });
+          }
+        } else {
+          await addToSyncQueue({ type: 'send_message', conversationId, data: attachmentMeta });
         }
 
         return localMessage;

@@ -30,6 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@/lib/sonner';
+import type { Network } from '@allo/shared-types';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -54,6 +55,9 @@ import { BottomSheetContext } from '@/context/BottomSheetContext';
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
 import { PresenceDot } from '@/components/conversation/PresenceDot';
+
+// Interop bridge (F3.x): network badge for bridged conversations.
+import { NetworkBadge } from '@/components/bridge/NetworkBadge';
 
 // Utils
 import {
@@ -84,6 +88,21 @@ export interface ConversationParticipant {
     avatar?: string;
 }
 
+/**
+ * A person on an EXTERNAL network (Telegram, etc.) who is part of a bridged
+ * conversation. Interop bridge (F3.x): mirrors the backend `ExternalParticipant`
+ * shape. External people are deliberately kept OUT of `participants[]` — they
+ * carry no Oxy user identity — so a bridged direct chat draws its name/avatar
+ * from `externalParticipants[0]` instead.
+ */
+export interface ExternalParticipant {
+    network: Network;
+    externalId: string;
+    displayName?: string;
+    username?: string;
+    avatar?: string;
+}
+
 export interface Conversation {
     id: string;
     type: ConversationType;
@@ -99,6 +118,12 @@ export interface Conversation {
     groupName?: string; // Custom group name (optional)
     groupAvatar?: string; // Custom group avatar (optional)
     participantCount?: number; // Number of participants (for groups)
+    // Interop bridge (F3.x): the network this conversation rides on. Native Allo
+    // chats are 'allo' (default); bridged chats report e.g. 'telegram'. Drives
+    // capability gating, the transparency banner, and the E2E-indicator gate.
+    network?: Network;
+    // Interop bridge (F3.x): external (non-Oxy) people in a bridged conversation.
+    externalParticipants?: ExternalParticipant[];
 }
 
 /**
@@ -590,6 +615,9 @@ export default function ConversationsList() {
         participantCountLabel: {
             marginLeft: 4,
         },
+        conversationNetworkBadge: {
+            marginLeft: 6,
+        },
     }), [theme]);
 
     /**
@@ -1032,6 +1060,10 @@ export default function ConversationsList() {
                                         ({participantCount})
                                     </ThemedText>
                                 )}
+                                {/* Interop bridge (F3.x): network pill (hidden for native Allo). */}
+                                <View style={styles.conversationNetworkBadge}>
+                                    <NetworkBadge network={item.network} size="sm" />
+                                </View>
                             </View>
                         </View>
                         <ThemedText

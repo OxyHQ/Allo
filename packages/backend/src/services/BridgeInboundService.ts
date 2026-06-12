@@ -4,7 +4,10 @@ import type { BridgeEvent, BridgeMediaRef, Network } from "@allo/shared-types";
 import Conversation, { type IConversation } from "../models/Conversation";
 import Message, { type IMessage, type MediaItem } from "../models/Message";
 import ExternalContact from "../models/ExternalContact";
-import LinkedAccount, { type LinkedAccountStatus } from "../models/LinkedAccount";
+import LinkedAccount, {
+  type LinkedAccountStatus,
+  type ILinkedAccount,
+} from "../models/LinkedAccount";
 import BridgeOutbox from "../models/BridgeOutbox";
 import { logger } from "../utils/logger";
 
@@ -163,6 +166,18 @@ async function handleInboundMessage(event: BridgeEvent): Promise<void> {
     return;
   }
 
+  // 0. Require an ACTIVE link for (owner, network). Without it, a spoofed or
+  // leftover event could materialize contacts/conversations/messages for an
+  // account the owner never actually linked (or has since unlinked). The
+  // connector should only emit `message` for live sessions; this is the
+  // server-side enforcement of that contract. `session_status` stays UNGATED —
+  // it is how an account BECOMES active in the first place.
+  const link = await LinkedAccount.findOne({ userId: ownerUserId, network, status: "active" });
+  if (!link) {
+    logger.warn("Inbound bridge message with no active linked account; skipping");
+    return;
+  }
+
   // 1. Upsert the external contact.
   await ExternalContact.findOneAndUpdate(
     { ownerUserId, network, externalId: senderExternalId },
@@ -303,6 +318,18 @@ async function handleInboundDelete(event: BridgeEvent): Promise<void> {
 /**
  * Handle a `send_result` event: correlate the Allo message we sent, record the
  * delivery outcome, update the outbox, and notify the conversation.
+ *
+ * Ownership is enforced WITHOUT a racy check-then-save:
+ *  1. Resolve the message's conversation and verify its bridge (owner + network)
+ *     matches the event — this authorizes the connector against the conversation.
+ *  2. Apply the delivery result as a SINGLE atomic `findOneAndUpdate` whose FILTER
+ *     re-asserts the message-level invariant (`external.network === event.network`).
+ *     If a concurrent change has since broken that invariant, the update matches
+ *     nothing and returns null, so we skip the outbox update and emit too.
+ *
+ * Dotted `$set` paths update fields in place, preserving the rest of the
+ * `external` subdoc (set by `dispatchSend`). The emit uses the document RETURNED
+ * by the update (`new: true`) so the payload reflects the persisted state.
  */
 async function handleSendResult(event: BridgeEvent): Promise<void> {
   const messageId = event.messageId ?? event.clientMessageId;
@@ -310,36 +337,85 @@ async function handleSendResult(event: BridgeEvent): Promise<void> {
     logger.warn("send_result without a correlatable message id; skipping");
     return;
   }
-  const message = await Message.findById(messageId);
-  if (!message) {
+
+  // Step 1: resolve the target message's conversation so we can authorize the
+  // connector against the conversation's bridge (owner + network). A connector
+  // for network A (or a different owner) must not be able to flip the delivery
+  // status of an unrelated message by guessing/replaying its id.
+  const target = await Message.findById(messageId).select("conversationId external");
+  if (!target) {
     logger.warn("send_result for unknown message; skipping");
+    return;
+  }
+  if (target.external?.network !== event.network) {
+    logger.warn("send_result network does not match the target message; skipping");
+    return;
+  }
+  const conversation = await Conversation.findById(target.conversationId);
+  if (
+    conversation?.bridge?.ownerUserId !== event.ownerUserId ||
+    conversation?.bridge?.network !== event.network
+  ) {
+    logger.warn("send_result owner/network does not match the message's conversation; skipping");
     return;
   }
 
   const status = event.status === "sent" ? "sent" : "failed";
-  // Preserve `external.network` (set by dispatchSend); only update the result.
-  const network = message.external?.network ?? event.network;
-  message.external = {
-    ...(message.external ?? { network }),
-    network,
-    bridgeStatus: status,
-    ...(event.externalMessageId ? { externalMessageId: event.externalMessageId } : {}),
-  };
-  await message.save();
+
+  // Step 2: atomic mutation. The filter re-asserts the message-level ownership
+  // invariant (`external.network`), so a concurrent change can't slip a write
+  // through. Dotted paths preserve the rest of the `external` subdoc; `new: true`
+  // returns the persisted document for the emit.
+  const updated = await Message.findOneAndUpdate(
+    { _id: messageId, "external.network": event.network },
+    {
+      $set: {
+        "external.network": event.network,
+        "external.bridgeStatus": status,
+        ...(event.externalMessageId ? { "external.externalMessageId": event.externalMessageId } : {}),
+      },
+    },
+    { new: true }
+  );
+  if (!updated) {
+    // The invariant failed under a race between step 1 and step 2 — skip cleanly.
+    logger.warn("send_result lost the ownership race; skipping update");
+    return;
+  }
 
   await BridgeOutbox.findOneAndUpdate(
-    { messageId: String(message._id) },
+    { messageId: String(updated._id) },
     { $set: { status } }
   );
 
-  emitToConversation(String(message.conversationId), "messageUpdated", message.toObject());
+  emitToConversation(String(updated.conversationId), "messageUpdated", updated.toObject());
 }
 
-/** Handle a `session_status` event: update the LinkedAccount status. */
+/**
+ * Handle a `session_status` event: update the LinkedAccount status, and when the
+ * event carries the user's external identity (`externalSelf`, populated once the
+ * session is active) persist it too.
+ *
+ * The `$set` is built conditionally: when `event.externalSelf` is ABSENT we only
+ * set `status`, so a later lifecycle event (e.g. `expired`) does NOT clobber the
+ * `externalSelf` captured by an earlier `active` event. The event's
+ * `BridgeExternalSelf` has no `avatarUrl`, so that schema field is left untouched.
+ */
 async function handleSessionStatus(event: BridgeEvent): Promise<void> {
+  const update: { status: LinkedAccountStatus; externalSelf?: ILinkedAccount["externalSelf"] } = {
+    status: mapSessionStatus(event.sessionStatus),
+  };
+  if (event.externalSelf) {
+    update.externalSelf = {
+      externalId: event.externalSelf.externalId,
+      username: event.externalSelf.username,
+      displayName: event.externalSelf.displayName,
+      phoneHint: event.externalSelf.phoneHint,
+    };
+  }
   await LinkedAccount.findOneAndUpdate(
     { userId: event.ownerUserId, network: event.network },
-    { $set: { status: mapSessionStatus(event.sessionStatus) } }
+    { $set: update }
   );
 }
 

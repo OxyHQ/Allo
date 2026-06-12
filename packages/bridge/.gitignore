@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage
+
+# Caches
+.npm
+.eslintcache
+tsconfig.tsbuildinfo

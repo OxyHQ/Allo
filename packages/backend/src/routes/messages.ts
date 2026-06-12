@@ -306,6 +306,20 @@ async function handleEnvelopeMessage(
   }
   const envelopes = body.envelopes as MessageEnvelopeDTO[];
 
+  // Bridged conversations are NOT end-to-end encrypted (they mirror an external
+  // network and use the legacy plaintext path). An encrypted v3 envelope to a
+  // bridged chat would be persisted but never delivered to the external network
+  // (`dispatchSend` only runs on the plaintext path) — silent data loss — and is
+  // nonsensical for a non-E2E chat. Reject BEFORE persisting so nothing is saved.
+  if (conversation.bridge && isBridgeEnabled()) {
+    return sendErrorResponse(
+      res,
+      400,
+      "Bad Request",
+      "Encrypted messages are not supported for bridged conversations"
+    );
+  }
+
   const participantIds = conversation.participants.map((p) => p.userId);
   const participantSet = new Set(participantIds);
 

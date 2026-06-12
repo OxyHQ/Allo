@@ -1,32 +1,31 @@
 import express from "express";
 import request from "supertest";
-import crypto from "crypto";
-import { bridgeAuth, captureRawBody } from "../middleware/bridgeAuth";
+import { captureRawBody } from "../middleware/bridgeAuth";
 import internalBridgeRouter from "../routes/internalBridge";
 import {
   BRIDGE_TIMESTAMP_HEADER,
   BRIDGE_SIGNATURE_HEADER,
   BRIDGE_TIMESTAMP_TOLERANCE_MS,
+  BRIDGE_EVENTS_PATH,
 } from "../config/bridge";
 import { installMockMessaging, type MockMessaging } from "./helpers/mockSocket";
+import {
+  TEST_BRIDGE_SECRET,
+  TEST_BRIDGE_SECRET_TOO_SHORT,
+  signEvents,
+} from "./helpers/bridgeFixtures";
 import Conversation from "../models/Conversation";
 import Message from "../models/Message";
+import LinkedAccount from "../models/LinkedAccount";
 
-const SECRET = "s3cr3t";
-
-function sign(timestamp: string, rawBody: string): string {
-  return crypto.createHmac("sha256", SECRET).update(`${timestamp}.${rawBody}`).digest("hex");
-}
-
-/** Mirror the REAL server mount: scoped raw-body json -> bridgeAuth -> router. */
+/**
+ * Mirror the REAL server mount: the scoped raw-body json parser runs first (so
+ * `/events` gets `req.rawBody`), then the router applies `bridgeAuth` PER ROUTE.
+ * The blanket `bridgeAuth` mount middleware was removed (Finding 1).
+ */
 function buildBridgeApp() {
   const app = express();
-  app.use(
-    "/internal/bridge",
-    express.json({ verify: captureRawBody }),
-    bridgeAuth,
-    internalBridgeRouter
-  );
+  app.use("/internal/bridge", express.json({ verify: captureRawBody }), internalBridgeRouter);
   return app;
 }
 
@@ -49,7 +48,7 @@ describe("bridgeAuth middleware (HMAC)", () => {
 
   beforeEach(() => {
     process.env.BRIDGE_ENABLED = "true";
-    process.env.BRIDGE_SHARED_SECRET = SECRET;
+    process.env.BRIDGE_SHARED_SECRET = TEST_BRIDGE_SECRET;
     process.env.BRIDGE_SERVICE_URL = "http://bridge.test";
     mock = installMockMessaging();
     jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
@@ -64,21 +63,23 @@ describe("bridgeAuth middleware (HMAC)", () => {
   });
 
   it("accepts a request with a fresh timestamp and correct signature (and runs the router)", async () => {
+    // Finding 3 gate: a 'message' event requires an ACTIVE linked account.
+    await LinkedAccount.create({ userId: "owner-1", network: "telegram", status: "active" });
     const app = buildBridgeApp();
     const rawBody = JSON.stringify(validMessageEvent);
     const ts = String(Date.now());
     const res = await request(app)
       .post("/internal/bridge/events")
       .set(BRIDGE_TIMESTAMP_HEADER, ts)
-      .set(BRIDGE_SIGNATURE_HEADER, sign(ts, rawBody))
+      .set(BRIDGE_SIGNATURE_HEADER, signEvents(ts, rawBody))
       .set("Content-Type", "application/json")
       .send(rawBody);
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ ok: true });
 
-    // Integration: rawBody + auth + DB all worked — the event was processed and
-    // persisted a bridged conversation and the plaintext message.
+    // Integration: rawBody + per-route auth + DB all worked end-to-end — the
+    // event was processed and persisted a bridged conversation + message.
     const conv = await Conversation.findOne({ "bridge.externalChatId": "tg-123" });
     expect(conv).not.toBeNull();
     const msg = await Message.findOne({ "external.externalMessageId": "tg-msg-1" });
@@ -97,6 +98,26 @@ describe("bridgeAuth middleware (HMAC)", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects a signature computed for a DIFFERENT path (cross-endpoint replay) with 401", async () => {
+    // Finding 2: a signature valid for /some/other/path must NOT authenticate a
+    // request to /internal/bridge/events, even with a fresh timestamp + matching
+    // body. The verifier binds the stable BRIDGE_EVENTS_PATH into the HMAC.
+    const app = buildBridgeApp();
+    const rawBody = JSON.stringify(validMessageEvent);
+    const ts = String(Date.now());
+    const sigForOtherPath = signEvents(ts, rawBody, "/internal/bridge/somewhere-else");
+    const res = await request(app)
+      .post("/internal/bridge/events")
+      .set(BRIDGE_TIMESTAMP_HEADER, ts)
+      .set(BRIDGE_SIGNATURE_HEADER, sigForOtherPath)
+      .set("Content-Type", "application/json")
+      .send(rawBody);
+    expect(res.status).toBe(401);
+
+    // Sanity: signing the CORRECT path with the same ts/body would authenticate.
+    expect(signEvents(ts, rawBody, BRIDGE_EVENTS_PATH)).not.toBe(sigForOtherPath);
+  });
+
   it("rejects a stale timestamp with 401", async () => {
     const app = buildBridgeApp();
     const rawBody = JSON.stringify(validMessageEvent);
@@ -104,7 +125,7 @@ describe("bridgeAuth middleware (HMAC)", () => {
     const res = await request(app)
       .post("/internal/bridge/events")
       .set(BRIDGE_TIMESTAMP_HEADER, staleTs)
-      .set(BRIDGE_SIGNATURE_HEADER, sign(staleTs, rawBody))
+      .set(BRIDGE_SIGNATURE_HEADER, signEvents(staleTs, rawBody))
       .set("Content-Type", "application/json")
       .send(rawBody);
     expect(res.status).toBe(401);
@@ -117,7 +138,7 @@ describe("bridgeAuth middleware (HMAC)", () => {
     const res = await request(app)
       .post("/internal/bridge/events")
       .set(BRIDGE_TIMESTAMP_HEADER, futureTs)
-      .set(BRIDGE_SIGNATURE_HEADER, sign(futureTs, rawBody))
+      .set(BRIDGE_SIGNATURE_HEADER, signEvents(futureTs, rawBody))
       .set("Content-Type", "application/json")
       .send(rawBody);
     expect(res.status).toBe(401);
@@ -127,6 +148,24 @@ describe("bridgeAuth middleware (HMAC)", () => {
     const app = buildBridgeApp();
     const res = await request(app).post("/internal/bridge/events").send(validMessageEvent);
     expect(res.status).toBe(401);
+  });
+
+  it("returns 500 'Bridge not configured' when the secret is too short", async () => {
+    // Finding 6: a present-but-short secret is coerced to undefined upstream, so
+    // even an otherwise-valid request hits the not-configured 500 path.
+    process.env.BRIDGE_SHARED_SECRET = TEST_BRIDGE_SECRET_TOO_SHORT;
+    const app = buildBridgeApp();
+    const rawBody = JSON.stringify(validMessageEvent);
+    const ts = String(Date.now());
+    const res = await request(app)
+      .post("/internal/bridge/events")
+      .set(BRIDGE_TIMESTAMP_HEADER, ts)
+      // Sign with the short secret so only the length guard can be the failure.
+      .set(BRIDGE_SIGNATURE_HEADER, signEvents(ts, rawBody, BRIDGE_EVENTS_PATH, "POST", TEST_BRIDGE_SECRET_TOO_SHORT))
+      .set("Content-Type", "application/json")
+      .send(rawBody);
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe("Bridge not configured");
   });
 });
 
@@ -140,7 +179,7 @@ describe("bridgeAuth middleware (flag OFF)", () => {
   it("returns 404 when BRIDGE_ENABLED is unset", async () => {
     delete process.env.BRIDGE_ENABLED;
     const app = express();
-    app.use("/internal/bridge", express.json({ verify: captureRawBody }), bridgeAuth, internalBridgeRouter);
+    app.use("/internal/bridge", express.json({ verify: captureRawBody }), internalBridgeRouter);
     const ts = String(Date.now());
     const res = await request(app)
       .post("/internal/bridge/events")

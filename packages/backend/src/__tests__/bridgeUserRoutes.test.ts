@@ -4,6 +4,7 @@ import bridgeRoutes from "../routes/bridge";
 import LinkedAccount from "../models/LinkedAccount";
 import ExternalContact from "../models/ExternalContact";
 import Conversation from "../models/Conversation";
+import { TEST_BRIDGE_SECRET } from "./helpers/bridgeFixtures";
 
 const OWNER = "owner-1";
 const TOKEN = `Bearer ${OWNER}`;
@@ -15,6 +16,13 @@ function makeApp() {
   });
 }
 
+/** Parse the JSON body that the proxy POSTed to the connector via a mocked fetch. */
+function proxiedBody(spy: jest.SpyInstance): Record<string, unknown> {
+  const lastCall = spy.mock.calls[spy.mock.calls.length - 1];
+  const init = lastCall[1] as { body?: string };
+  return JSON.parse(init.body ?? "{}") as Record<string, unknown>;
+}
+
 describe("User-facing bridge routes", () => {
   const prevEnabled = process.env.BRIDGE_ENABLED;
   const prevSecret = process.env.BRIDGE_SHARED_SECRET;
@@ -22,7 +30,7 @@ describe("User-facing bridge routes", () => {
 
   beforeEach(() => {
     process.env.BRIDGE_ENABLED = "true";
-    process.env.BRIDGE_SHARED_SECRET = "s3cr3t";
+    process.env.BRIDGE_SHARED_SECRET = TEST_BRIDGE_SECRET;
     process.env.BRIDGE_SERVICE_URL = "http://bridge.test";
   });
 
@@ -124,5 +132,110 @@ describe("User-facing bridge routes", () => {
       .set("Authorization", TOKEN)
       .send({});
     expect(res.status).toBe(400);
+  });
+
+  it("Fix 2: POST /accounts/:network/link forwards the client body (e.g. phoneNumber) to the connector", async () => {
+    const spy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ v: 1, status: "needs_code" }), { status: 200 }));
+
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link")
+      .set("Authorization", TOKEN)
+      .send({ phoneNumber: "+34123456789" });
+
+    expect(res.status).toBe(200);
+    const sent = proxiedBody(spy);
+    expect(sent.ownerUserId).toBe(OWNER);
+    expect(sent.phoneNumber).toBe("+34123456789");
+  });
+
+  it("Fix 2: a client CANNOT override ownerUserId in the link body", async () => {
+    const spy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ v: 1, status: "pending" }), { status: 200 }));
+
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link")
+      .set("Authorization", TOKEN)
+      .send({ ownerUserId: "attacker", phoneNumber: "+34123456789" });
+
+    expect(res.status).toBe(200);
+    const sent = proxiedBody(spy);
+    expect(sent.ownerUserId).toBe(OWNER); // authenticated id wins, not "attacker"
+    expect(sent.phoneNumber).toBe("+34123456789");
+  });
+
+  it("Fix 2: the connector's link response is relayed to the client verbatim", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ v: 1, status: "needs_code", loginUrl: "https://x/qr" }), {
+          status: 200,
+        })
+      );
+
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link")
+      .set("Authorization", TOKEN)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ v: 1, status: "needs_code", loginUrl: "https://x/qr" });
+  });
+
+  it("Fix 2: a non-object link body (array) is ignored; only ownerUserId is sent", async () => {
+    const spy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ v: 1, status: "pending" }), { status: 200 }));
+
+    // Express parses a JSON array body as an array; it must not corrupt the payload.
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link")
+      .set("Authorization", TOKEN)
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify(["not", "an", "object"]));
+
+    expect(res.status).toBe(200);
+    const sent = proxiedBody(spy);
+    expect(sent.ownerUserId).toBe(OWNER);
+    expect(Array.isArray(sent)).toBe(false);
+  });
+
+  it("Fix 2: POST /accounts/:network/link/code forwards the full body and keeps ownerUserId authoritative", async () => {
+    const spy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ v: 1, status: "needs_password" }), { status: 200 })
+      );
+
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link/code")
+      .set("Authorization", TOKEN)
+      .send({ code: "12345", phoneCodeHash: "abc", ownerUserId: "attacker" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ v: 1, status: "needs_password" });
+    const sent = proxiedBody(spy);
+    expect(sent.ownerUserId).toBe(OWNER);
+    expect(sent.code).toBe("12345");
+    expect(sent.phoneCodeHash).toBe("abc");
+  });
+
+  it("Fix 2: POST /accounts/:network/link/password forwards the full body and keeps ownerUserId authoritative", async () => {
+    const spy = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ v: 1, status: "active" }), { status: 200 }));
+
+    const res = await request(makeApp())
+      .post("/api/bridge/accounts/telegram/link/password")
+      .set("Authorization", TOKEN)
+      .send({ password: "s3cr3t", ownerUserId: "attacker" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ v: 1, status: "active" });
+    const sent = proxiedBody(spy);
+    expect(sent.ownerUserId).toBe(OWNER);
+    expect(sent.password).toBe("s3cr3t");
   });
 });

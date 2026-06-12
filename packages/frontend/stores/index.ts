@@ -11,8 +11,13 @@
  */
 
 // Chat-related stores
-export { useConversationsStore } from './conversationsStore';
-export type { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
+export { useConversationsStore, mapApiConversation } from './conversationsStore';
+export type {
+  Conversation,
+  ConversationParticipant,
+  ConversationType,
+  ExternalParticipant,
+} from '@/app/(chat)/index';
 
 export { useMessagesStore } from './messagesStore';
 export type { Message, MediaItem, StickerItem } from './messagesStore';

@@ -798,6 +798,29 @@ export default function SettingsScreen() {
 
                         <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
 
+                        {/* Connected accounts (interop bridge, F3.x) */}
+                        <TouchableOpacity
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
+                            onPress={() => router.push('/settings/connected-accounts')}
+                        >
+                            <View className="flex-row items-center flex-1">
+                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
+                                    <IconComponent name="git-network-outline" size={20} color={theme.colors.textSecondary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
+                                        {t('bridge.connectedAccounts.rowTitle')}
+                                    </Text>
+                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
+                                        {t('bridge.connectedAccounts.rowDescription')}
+                                    </Text>
+                                </View>
+                            </View>
+                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+                        </TouchableOpacity>
+
+                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
+
                         {/* Device Info */}
                         <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
                             <View className="flex-row items-center flex-1">

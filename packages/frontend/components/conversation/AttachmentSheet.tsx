@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Video as Compressor, Image as ImageCompressor } from 'react-native-compressor';
 import { useTranslation } from 'react-i18next';
+import type { NetworkCapabilities } from '@allo/shared-types';
 import { AttachmentMenu } from '@/components/messages/AttachmentMenu';
 import { ContactPicker } from './ContactPicker';
 import { LocationPicker } from './LocationPicker';
@@ -33,6 +34,12 @@ interface AttachmentSheetProps {
   onSendAttachment: (payload: AttachmentPayload) => void;
   openSubSheet: (content: React.ReactNode) => void;
   closeSheet: () => void;
+  /**
+   * Capabilities of the conversation's network (interop bridge, F3.x). Forwarded
+   * to the menu so unsupported entries (e.g. polls on Telegram) are hidden. Omit
+   * for native Allo chats.
+   */
+  capabilities?: NetworkCapabilities;
 }
 
 const inferMediaTypeFromMime = (mime?: string): MediaItem['type'] => {
@@ -47,6 +54,7 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
   onSendAttachment,
   openSubSheet,
   closeSheet,
+  capabilities,
 }) => {
   const { t } = useTranslation();
 
@@ -287,6 +295,7 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
       onSelectLocation={handleLocation}
       onSelectContact={handleContact}
       onSelectPoll={handlePoll}
+      capabilities={capabilities}
     />
   );
 };

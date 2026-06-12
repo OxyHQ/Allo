@@ -13,14 +13,22 @@ import {
   buildSafeStoredFilename,
   isAllowedMime,
 } from "../config/uploads";
+import { bridgeAuth, bridgeMediaAuth } from "../middleware/bridgeAuth";
 import * as BridgeInboundService from "../services/BridgeInboundService";
 
 /**
- * Internal bridge routes — consumed ONLY by the bridge connector service, behind
- * the `bridgeAuth` HMAC middleware (wired in server.ts). NOT under Oxy auth.
+ * Internal bridge routes — consumed ONLY by the bridge connector service. NOT
+ * under Oxy auth: the connector authenticates by HMAC signature, applied PER
+ * ROUTE here (not as a blanket mount middleware) because the two routes sign
+ * different canonical strings:
+ *   - `POST /events` (JSON) -> `bridgeAuth`: signs method+path+timestamp+body.
+ *   - `POST /media` (multipart) -> `bridgeMediaAuth`: signs method+path+timestamp
+ *     only (the multipart body is streamed into multer and never buffered for
+ *     HMAC). A blanket `bridgeAuth` mount would 400 every `/media` upload because
+ *     the raw body is never captured for multipart.
  *
- * Mounted at `/internal/bridge`. The connector pushes inbound network events to
- * `POST /events` and re-hosts external media via `POST /media`.
+ * Mounted at `/internal/bridge` in server.ts (with the scoped raw-body json
+ * parser ahead of it so `/events` still gets `req.rawBody`).
  */
 
 const router = Router();
@@ -149,7 +157,7 @@ function validateEventShape(body: unknown): string | null {
  * Well-formed events are handed to the inbound service, which swallows its own
  * processing errors, so this route returns 200 on any well-formed event.
  */
-router.post("/events", async (req: Request, res: Response) => {
+router.post("/events", bridgeAuth, async (req: Request, res: Response) => {
   const shapeError = validateEventShape(req.body);
   if (shapeError) {
     return sendErrorResponse(res, 400, "Bad Request", shapeError);
@@ -164,7 +172,7 @@ router.post("/events", async (req: Request, res: Response) => {
  * Re-host external media on Allo's domain so it can be referenced by URL in a
  * subsequent `message` event. Same response shape as POST /api/messages/upload.
  */
-router.post("/media", uploadSingleFile, (req: Request, res: Response) => {
+router.post("/media", bridgeMediaAuth, uploadSingleFile, (req: Request, res: Response) => {
   const file = req.file;
   if (!file) {
     return sendErrorResponse(res, 400, "Bad Request", "No file uploaded");

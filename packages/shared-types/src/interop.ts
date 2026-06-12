@@ -148,6 +148,75 @@ export const NETWORK_CAPABILITIES: Record<Network, NetworkCapabilities> = {
 /** Wire protocol version for bridge events/commands. */
 export const BRIDGE_PROTOCOL_VERSION = 1;
 
+// ---------------------------------------------------------------------------
+// Link-flow contract (SYNCHRONOUS proxy responses)
+// ---------------------------------------------------------------------------
+
+/**
+ * The status of a SINGLE synchronous link-flow step, as reported by the connector
+ * in its HTTP response to a link-flow proxy call
+ * (`POST /sessions/:network/link[/code|/password]`).
+ *
+ * This is the connector telling the client, in-band, what it needs NEXT to finish
+ * authenticating:
+ *  - `pending`        the login was started; the client should wait/poll (e.g. a
+ *                     QR code was issued and is awaiting a scan).
+ *  - `needs_code`     the connector needs a one-time login code (e.g. Telegram SMS).
+ *  - `needs_password` the connector needs a 2FA/cloud password.
+ *  - `active`         the session is fully authenticated and live.
+ *  - `error`          the step failed; see `BridgeLinkStepResult.error`.
+ *
+ * IMPORTANT — this is DISTINCT from {@link BridgeEvent.sessionStatus}. `BridgeLinkStatus`
+ * is the synchronous response status of a link-flow step (request/response, driven
+ * by the user actively linking). `sessionStatus` is the ASYNCHRONOUS session
+ * lifecycle the connector later PUSHES via a `session_status` `BridgeEvent`. They
+ * are intentionally different enums and must NOT be merged: e.g. `needs_code` /
+ * `needs_password` / `pending` only ever appear as a synchronous link step, while
+ * `expired` / `revoked` only ever arrive as an async lifecycle event.
+ */
+export type BridgeLinkStatus =
+  | "pending"
+  | "needs_code"
+  | "needs_password"
+  | "active"
+  | "error";
+
+/**
+ * The user's own identity ON the external network, as discovered by the connector
+ * once a session becomes active. Carried both by a synchronous link step
+ * ({@link BridgeLinkStepResult}) and the async {@link BridgeEvent} `session_status`.
+ *
+ * Intentionally has NO `avatarUrl`: the link/session-status flow does not carry an
+ * avatar. (The persisted `LinkedAccount.externalSelf` schema DOES allow an
+ * `avatarUrl`, but it is simply never populated from this wire type.)
+ */
+export interface BridgeExternalSelf {
+  /** The user's id on the external network. */
+  externalId: string;
+  username?: string;
+  displayName?: string;
+  /** A masked hint of the phone the account is tied to (e.g. `+34•••••12`). */
+  phoneHint?: string;
+}
+
+/**
+ * The connector's synchronous response to a link-flow proxy step
+ * (`POST /sessions/:network/link[/code|/password]`). The connector is the SOURCE
+ * OF TRUTH for link state — the Allo backend relays this body to the client
+ * verbatim (it does not reshape it).
+ */
+export interface BridgeLinkStepResult {
+  v: 1;
+  /** What the connector needs next (or that linking is done / failed). */
+  status: BridgeLinkStatus;
+  /** A URL the client should open/render to continue (e.g. a QR/login page). */
+  loginUrl?: string;
+  /** The user's external identity, populated once `status` is `active`. */
+  externalSelf?: BridgeExternalSelf;
+  /** Human-readable error when `status` is `error` (never carries secrets). */
+  error?: string;
+}
+
 /**
  * A reference to media carried by a bridge event/command. The bridge re-hosts
  * external media on Allo's `/uploads` domain (via `POST /internal/bridge/media`)
@@ -205,7 +274,30 @@ export interface BridgeEvent {
   error?: string;
 
   // --- session_status ---
+  /**
+   * The ASYNCHRONOUS session lifecycle the connector pushes for a linked account.
+   *
+   * These four values align 1:1 with the backend `LinkedAccountStatus` enum MINUS
+   * `pending_login`:
+   *   `active`  -> LinkedAccountStatus `"active"`
+   *   `expired` -> LinkedAccountStatus `"expired"`
+   *   `revoked` -> LinkedAccountStatus `"revoked"`
+   *   `error`   -> LinkedAccountStatus `"error"`
+   * `pending_login` is deliberately absent: "pending" is a LOCAL-ONLY state the
+   * backend sets when the user STARTS linking — the connector never reports it via
+   * an event. If a value is ever added here it MUST have a `LinkedAccountStatus`
+   * counterpart.
+   *
+   * This is DISTINCT from {@link BridgeLinkStatus} (the synchronous link-step
+   * response): the two enums are intentionally separate and must not be merged.
+   */
   sessionStatus?: "active" | "expired" | "revoked" | "error";
+  /**
+   * The user's own external identity, carried on a `session_status` event so the
+   * backend can persist it onto `LinkedAccount.externalSelf` once the session
+   * becomes active. (No `avatarUrl` — see {@link BridgeExternalSelf}.)
+   */
+  externalSelf?: BridgeExternalSelf;
 
   // --- contact upsert (carried on `message`) ---
   senderDisplayName?: string;

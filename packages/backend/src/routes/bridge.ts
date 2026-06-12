@@ -1,14 +1,23 @@
 import { Router, Response } from "express";
-import { isNetwork, type Network } from "@allo/shared-types";
+import { isNetwork, type Network, type BridgeLinkStepResult } from "@allo/shared-types";
 import { AuthRequest } from "../middleware/auth";
 import { getAuthenticatedUserId } from "../utils/auth";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
 import { logger } from "../utils/logger";
 import LinkedAccount from "../models/LinkedAccount";
 import ExternalContact from "../models/ExternalContact";
-import { getBridgeServiceUrl, BRIDGE_TIMESTAMP_HEADER, BRIDGE_SIGNATURE_HEADER } from "../config/bridge";
+import {
+  getBridgeServiceUrl,
+  BRIDGE_TIMESTAMP_HEADER,
+  BRIDGE_SIGNATURE_HEADER,
+  BRIDGE_REQUEST_TIMEOUT_MS,
+} from "../config/bridge";
 import { signBridgeRequest } from "../services/BridgeService";
+import { fetchWithTimeout } from "../utils/bridgeSigning";
 import { findOrCreateBridgedConversation } from "../services/BridgeInboundService";
+
+/** HTTP method used for every connector proxy call. */
+const CONNECTOR_METHOD = "POST";
 
 /**
  * User-facing bridge routes (`/api/bridge`, under Oxy auth, flag-gated in
@@ -40,16 +49,22 @@ async function proxyToConnector(relativePath: string, payload: unknown): Promise
   }
   const rawBody = JSON.stringify(payload);
   try {
-    const { timestamp, signature } = signBridgeRequest(rawBody);
-    const response = await fetch(`${baseUrl}${relativePath}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [BRIDGE_TIMESTAMP_HEADER]: timestamp,
-        [BRIDGE_SIGNATURE_HEADER]: signature,
+    // The connector verifies method + the path IT receives (`relativePath`) +
+    // timestamp + body, so we sign that exact tuple.
+    const { timestamp, signature } = signBridgeRequest(CONNECTOR_METHOD, relativePath, rawBody);
+    const response = await fetchWithTimeout(
+      `${baseUrl}${relativePath}`,
+      {
+        method: CONNECTOR_METHOD,
+        headers: {
+          "Content-Type": "application/json",
+          [BRIDGE_TIMESTAMP_HEADER]: timestamp,
+          [BRIDGE_SIGNATURE_HEADER]: signature,
+        },
+        body: rawBody,
       },
-      body: rawBody,
-    });
+      BRIDGE_REQUEST_TIMEOUT_MS
+    );
     let body: unknown = null;
     try {
       body = await response.json();
@@ -62,6 +77,36 @@ async function proxyToConnector(relativePath: string, payload: unknown): Promise
     logger.error(`Bridge proxy to ${relativePath} failed`, error);
     return { ok: false };
   }
+}
+
+/**
+ * Treat a request body as a plain field bag we can spread into a connector
+ * payload. Arrays and `null` (both `typeof === "object"`) are NOT plain objects
+ * and would corrupt the payload, so they collapse to an empty bag. The
+ * authenticated `ownerUserId` is always applied AFTER this spread, so a client
+ * can never override it (e.g. by sending `{"ownerUserId":"attacker"}`).
+ */
+function asClientFields(body: unknown): Record<string, unknown> {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return {};
+  }
+  return body as Record<string, unknown>;
+}
+
+/**
+ * Relay a connector link-step response to the HTTP client.
+ *
+ * The connector is the SOURCE OF TRUTH for link state, so on the normal path we
+ * relay its JSON object verbatim (no reshaping, no field stripping). The only
+ * guard is structural: a non-object connector body (null/array/primitive) is a
+ * contract violation we surface as a typed `error` step rather than leaking a
+ * malformed shape to the client.
+ */
+function asLinkStepResult(body: unknown): BridgeLinkStepResult {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return { v: 1, status: "error", error: "Bridge service returned a malformed response" };
+  }
+  return body as BridgeLinkStepResult;
 }
 
 /** Parse and validate the `:network` route param, or send a 400. */
@@ -92,7 +137,11 @@ router.get("/accounts", async (req: AuthRequest, res: Response) => {
 /**
  * POST /api/bridge/accounts/:network/link
  * Begin linking a network: mark the account pending and ask the connector to
- * start a login (returns e.g. a QR / login token to relay to the client).
+ * start a login. The client body is forwarded to the connector (e.g.
+ * `{ phoneNumber }` for phone login, or `{}` for QR login) so phone-based flows
+ * work; `ownerUserId` is always the authenticated user (applied AFTER the spread
+ * so a client cannot override it). The connector's `BridgeLinkStepResult` is
+ * relayed verbatim.
  */
 router.post("/accounts/:network/link", async (req: AuthRequest, res: Response) => {
   try {
@@ -106,11 +155,15 @@ router.post("/accounts/:network/link", async (req: AuthRequest, res: Response) =
       { upsert: true, new: true }
     );
 
-    const proxied = await proxyToConnector(`/sessions/${network}/link`, { ownerUserId: userId });
+    const proxied = await proxyToConnector(`/sessions/${network}/link`, {
+      ...asClientFields(req.body),
+      ownerUserId: userId,
+    });
     if (!proxied.ok) {
       return sendErrorResponse(res, 502, "Bad Gateway", "Bridge service unavailable");
     }
-    return sendSuccessResponse(res, 200, proxied.body);
+    const result: BridgeLinkStepResult = asLinkStepResult(proxied.body);
+    return sendSuccessResponse(res, 200, result);
   } catch (err) {
     logger.error("Failed to start account link", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to start link");
@@ -119,7 +172,10 @@ router.post("/accounts/:network/link", async (req: AuthRequest, res: Response) =
 
 /**
  * POST /api/bridge/accounts/:network/link/code
- * Submit a login code (e.g. Telegram SMS code) to the connector.
+ * Submit a login code (e.g. Telegram SMS code) to the connector. The full client
+ * body is forwarded so any extra fields the connector's code step needs (e.g. a
+ * phone-code hash) pass through; `ownerUserId` stays authoritative. Relays the
+ * connector's `BridgeLinkStepResult` verbatim.
  */
 router.post("/accounts/:network/link/code", async (req: AuthRequest, res: Response) => {
   try {
@@ -127,15 +183,15 @@ router.post("/accounts/:network/link/code", async (req: AuthRequest, res: Respon
     const network = parseNetworkParam(req, res);
     if (!network) return res;
 
-    const { code } = req.body as { code?: string };
     const proxied = await proxyToConnector(`/sessions/${network}/link/code`, {
+      ...asClientFields(req.body),
       ownerUserId: userId,
-      code,
     });
     if (!proxied.ok) {
       return sendErrorResponse(res, 502, "Bad Gateway", "Bridge service unavailable");
     }
-    return sendSuccessResponse(res, 200, proxied.body);
+    const result: BridgeLinkStepResult = asLinkStepResult(proxied.body);
+    return sendSuccessResponse(res, 200, result);
   } catch (err) {
     logger.error("Failed to submit link code", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to submit code");
@@ -144,7 +200,10 @@ router.post("/accounts/:network/link/code", async (req: AuthRequest, res: Respon
 
 /**
  * POST /api/bridge/accounts/:network/link/password
- * Submit a 2FA password (e.g. Telegram cloud password) to the connector.
+ * Submit a 2FA password (e.g. Telegram cloud password) to the connector. The full
+ * client body is forwarded (so any extra fields the connector's password step
+ * needs pass through); `ownerUserId` stays authoritative. Relays the connector's
+ * `BridgeLinkStepResult` verbatim.
  */
 router.post("/accounts/:network/link/password", async (req: AuthRequest, res: Response) => {
   try {
@@ -152,15 +211,15 @@ router.post("/accounts/:network/link/password", async (req: AuthRequest, res: Re
     const network = parseNetworkParam(req, res);
     if (!network) return res;
 
-    const { password } = req.body as { password?: string };
     const proxied = await proxyToConnector(`/sessions/${network}/link/password`, {
+      ...asClientFields(req.body),
       ownerUserId: userId,
-      password,
     });
     if (!proxied.ok) {
       return sendErrorResponse(res, 502, "Bad Gateway", "Bridge service unavailable");
     }
-    return sendSuccessResponse(res, 200, proxied.body);
+    const result: BridgeLinkStepResult = asLinkStepResult(proxied.body);
+    return sendSuccessResponse(res, 200, result);
   } catch (err) {
     logger.error("Failed to submit link password", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to submit password");

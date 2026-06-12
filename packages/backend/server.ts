@@ -38,7 +38,7 @@ import {
 // Middleware
 import { rateLimiter, bruteForceProtection } from "./src/middleware/security";
 import type { AuthRequest } from "./src/middleware/auth";
-import { bridgeAuth, captureRawBody } from "./src/middleware/bridgeAuth";
+import { captureRawBody } from "./src/middleware/bridgeAuth";
 import { isBridgeEnabled } from "./src/config/bridge";
 import { startOutboxSweeper } from "./src/services/BridgeService";
 
@@ -60,11 +60,14 @@ const app = express();
 export const oxy = oxyClient;
 
 // --- Interop bridge raw-body capture (F3.0, flag-gated) ---
-// The internal bridge route authenticates by HMAC over the EXACT request bytes,
+// The JSON `/events` route authenticates by HMAC over the EXACT request bytes,
 // so its body must be captured BEFORE the global `express.json()` consumes it.
 // We mount a path-scoped json parser with a `verify` hook for `/internal/bridge`
 // here; the global parser below then no-ops for that path (body already parsed).
-// The router itself (with `bridgeAuth`) is mounted later, after DB-connect.
+// This must run ahead of the router so per-route `bridgeAuth` sees `req.rawBody`.
+// (Multipart `/media` uploads carry no JSON body and use header-only signing.)
+// The router itself is mounted later, after DB-connect, with HMAC auth applied
+// per route inside it.
 if (isBridgeEnabled()) {
   app.use("/internal/bridge", express.json({ verify: captureRawBody }));
 }
@@ -503,11 +506,15 @@ if (isBridgeEnabled()) {
 }
 
 // Interop bridge INTERNAL routes (F3.0, flag-gated). Mounted here — after the
-// DB-connect middleware (so handlers have DB access) and with the raw body
-// already captured by the scoped parser above — behind the HMAC `bridgeAuth`.
-// NOT under Oxy auth (the connector authenticates by signature, not a user JWT).
+// DB-connect middleware (so handlers have DB access) and with the raw body for
+// JSON requests already captured by the scoped parser above. HMAC auth is
+// applied PER ROUTE inside the router (`bridgeAuth` for the JSON `/events`,
+// `bridgeMediaAuth` for the multipart `/media`) — NOT as a blanket mount
+// middleware, because the two routes sign different canonical strings and a
+// multipart upload never populates `req.rawBody`. NOT under Oxy auth (the
+// connector authenticates by signature, not a user JWT).
 if (isBridgeEnabled()) {
-  app.use("/internal/bridge", bridgeAuth, internalBridgeRouter);
+  app.use("/internal/bridge", internalBridgeRouter);
 }
 
 // Mount public and authenticated API routers

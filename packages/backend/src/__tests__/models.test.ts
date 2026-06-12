@@ -2,6 +2,7 @@ import Conversation from "../models/Conversation";
 import Message from "../models/Message";
 import Status from "../models/Status";
 import Call from "../models/Call";
+import { logger } from "../utils/logger";
 
 describe("Conversation model", () => {
   it("creates a direct conversation with two participants", async () => {
@@ -96,6 +97,32 @@ describe("Message model", () => {
         ]),
       ])
     );
+  });
+
+  it("Finding 8: a message with BOTH ciphertext and text still saves and warns via logger", async () => {
+    // The pre-save hook now routes the both-content warning through `logger.warn`
+    // (not console.warn). The warning is non-fatal — the message must still save.
+    const warnSpy = jest.spyOn(logger, "warn").mockImplementation(() => {});
+    try {
+      const message = await Message.create({
+        conversationId: "c1",
+        senderId: "a",
+        senderDeviceId: 1,
+        ciphertext: "AAAA",
+        text: "plaintext too",
+        encryptionVersion: 2,
+        deliveredTo: ["a"],
+      });
+
+      expect(message._id).toBeDefined();
+      expect(message.ciphertext).toBe("AAAA");
+      expect(message.text).toBe("plaintext too");
+      expect(warnSpy).toHaveBeenCalledWith(
+        "Message has both encrypted and plaintext content"
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 

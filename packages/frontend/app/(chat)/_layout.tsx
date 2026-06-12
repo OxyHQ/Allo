@@ -143,6 +143,7 @@ export default function ChatLayout() {
               <Stack.Screen name="settings/appearance" />
               <Stack.Screen name="settings/language" />
               <Stack.Screen name="settings/linked-devices" />
+              <Stack.Screen name="settings/connected-accounts" />
               <Stack.Screen name="settings/transfer-history" />
               <Stack.Screen name="settings/transfer-history-send" />
               <Stack.Screen name="settings/privacy" />
@@ -210,6 +211,7 @@ export default function ChatLayout() {
         <Stack.Screen name="settings/appearance" />
         <Stack.Screen name="settings/language" />
         <Stack.Screen name="settings/linked-devices" />
+        <Stack.Screen name="settings/connected-accounts" />
         <Stack.Screen name="settings/transfer-history" />
         <Stack.Screen name="settings/transfer-history-send" />
         <Stack.Screen name="settings/privacy" />

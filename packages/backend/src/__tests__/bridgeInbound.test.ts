@@ -10,6 +10,7 @@ import ExternalContact from "../models/ExternalContact";
 import LinkedAccount from "../models/LinkedAccount";
 import BridgeOutbox from "../models/BridgeOutbox";
 import { installMockMessaging, type MockMessaging } from "./helpers/mockSocket";
+import { TEST_BRIDGE_SECRET } from "./helpers/bridgeFixtures";
 
 const OWNER = "owner-1";
 const EXTERNAL = "tg-123";
@@ -36,11 +37,15 @@ describe("BridgeInboundService", () => {
   const prevSecret = process.env.BRIDGE_SHARED_SECRET;
   const prevUrl = process.env.BRIDGE_SERVICE_URL;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env.BRIDGE_ENABLED = "true";
-    process.env.BRIDGE_SHARED_SECRET = "s3cr3t";
+    process.env.BRIDGE_SHARED_SECRET = TEST_BRIDGE_SECRET;
     process.env.BRIDGE_SERVICE_URL = "http://bridge.test";
     mock = installMockMessaging();
+    // Finding 3 gate: inbound `message` events require an ACTIVE linked account.
+    // Seed one for the default owner so the existing creation tests still apply;
+    // tests that exercise the gate's negative path delete it explicitly.
+    await LinkedAccount.create({ userId: OWNER, network: "telegram", status: "active" });
   });
 
   afterEach(() => {
@@ -172,7 +177,12 @@ describe("BridgeInboundService", () => {
   });
 
   it("session_status updates the LinkedAccount status", async () => {
-    await LinkedAccount.create({ userId: OWNER, network: "telegram", status: "pending_login" });
+    // beforeEach seeded an active link; reset it to pending_login so we can
+    // observe session_status flipping it back to active (it is UNGATED).
+    await LinkedAccount.findOneAndUpdate(
+      { userId: OWNER, network: "telegram" },
+      { $set: { status: "pending_login" } }
+    );
 
     await handleEvent({
       v: 1,
@@ -185,6 +195,53 @@ describe("BridgeInboundService", () => {
 
     const account = await LinkedAccount.findOne({ userId: OWNER, network: "telegram" });
     expect(account?.status).toBe("active");
+  });
+
+  it("Fix 3: session_status with externalSelf persists the user's external identity", async () => {
+    await handleEvent({
+      v: 1,
+      type: "session_status",
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      sessionStatus: "active",
+      externalSelf: { externalId: "123", username: "me", displayName: "Me", phoneHint: "+34•••12" },
+    });
+
+    const account = await LinkedAccount.findOne({ userId: OWNER, network: "telegram" });
+    expect(account?.status).toBe("active");
+    expect(account?.externalSelf?.externalId).toBe("123");
+    expect(account?.externalSelf?.username).toBe("me");
+    expect(account?.externalSelf?.displayName).toBe("Me");
+    expect(account?.externalSelf?.phoneHint).toBe("+34•••12");
+  });
+
+  it("Fix 3: a later session_status WITHOUT externalSelf updates status but preserves externalSelf", async () => {
+    // First an active event captures externalSelf.
+    await handleEvent({
+      v: 1,
+      type: "session_status",
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      sessionStatus: "active",
+      externalSelf: { externalId: "123", username: "me" },
+    });
+
+    // Then an `expired` lifecycle event with NO externalSelf must not wipe it.
+    await handleEvent({
+      v: 1,
+      type: "session_status",
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      sessionStatus: "expired",
+    });
+
+    const account = await LinkedAccount.findOne({ userId: OWNER, network: "telegram" });
+    expect(account?.status).toBe("expired");
+    expect(account?.externalSelf?.externalId).toBe("123");
+    expect(account?.externalSelf?.username).toBe("me");
   });
 
   it("edit updates message text and emits messageUpdated", async () => {
@@ -222,5 +279,221 @@ describe("BridgeInboundService", () => {
     const deletes = mock.emitsOf("messageDeleted");
     expect(deletes.length).toBeGreaterThan(0);
     expect(deletes[0].payload).toMatchObject({ scope: "everyone" });
+  });
+
+  it("Finding 3: a 'message' event with NO active linked account materializes nothing", async () => {
+    // Remove the active link seeded in beforeEach: a spoofed/leftover event must
+    // not create a contact, conversation, or message.
+    await LinkedAccount.deleteMany({ userId: OWNER, network: "telegram" });
+
+    await handleEvent(messageEvent());
+
+    expect(await Conversation.countDocuments({})).toBe(0);
+    expect(await Message.countDocuments({})).toBe(0);
+    expect(await ExternalContact.countDocuments({})).toBe(0);
+  });
+
+  it("Finding 3: an EXPIRED/REVOKED link is not 'active' and is also rejected", async () => {
+    await LinkedAccount.findOneAndUpdate(
+      { userId: OWNER, network: "telegram" },
+      { $set: { status: "expired" } }
+    );
+
+    await handleEvent(messageEvent());
+
+    expect(await Message.countDocuments({})).toBe(0);
+    expect(await Conversation.countDocuments({})).toBe(0);
+  });
+
+  it("Finding 4: send_result whose network does not match the message is ignored", async () => {
+    // Seed an owner-sent message to a telegram bridged conversation.
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const conv = await findOrCreateBridgedConversation({
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      contact: { externalId: EXTERNAL },
+    });
+    const message = await Message.create({
+      conversationId: String(conv._id),
+      senderId: OWNER,
+      senderDeviceId: 1,
+      text: "outbound hi",
+      deliveredTo: [OWNER],
+      encryptionVersion: 1,
+    });
+    await dispatchSend(message, conv); // sets external.network = telegram, bridgeStatus queued
+
+    // A connector for a DIFFERENT network claims this message id.
+    await handleEvent({
+      v: 1,
+      type: "send_result",
+      network: "whatsapp",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      messageId: String(message._id),
+      status: "sent",
+    });
+
+    const after = await Message.findById(message._id);
+    // Unchanged: still the queued status set by dispatchSend, not flipped to sent.
+    expect(after?.external?.bridgeStatus).toBe("queued");
+    expect(after?.external?.network).toBe("telegram");
+  });
+
+  it("Finding 4: send_result whose ownerUserId does not match the conversation is ignored", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const conv = await findOrCreateBridgedConversation({
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      contact: { externalId: EXTERNAL },
+    });
+    const message = await Message.create({
+      conversationId: String(conv._id),
+      senderId: OWNER,
+      senderDeviceId: 1,
+      text: "outbound hi",
+      deliveredTo: [OWNER],
+      encryptionVersion: 1,
+    });
+    await dispatchSend(message, conv);
+
+    // Right network, WRONG owner.
+    await handleEvent({
+      v: 1,
+      type: "send_result",
+      network: "telegram",
+      ownerUserId: "someone-else",
+      externalChatId: EXTERNAL,
+      messageId: String(message._id),
+      status: "sent",
+    });
+
+    const after = await Message.findById(message._id);
+    expect(after?.external?.bridgeStatus).toBe("queued");
+  });
+
+  it("Finding 4: a matching send_result still updates the message as before", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const conv = await findOrCreateBridgedConversation({
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      contact: { externalId: EXTERNAL },
+    });
+    const message = await Message.create({
+      conversationId: String(conv._id),
+      senderId: OWNER,
+      senderDeviceId: 1,
+      text: "outbound hi",
+      deliveredTo: [OWNER],
+      encryptionVersion: 1,
+    });
+    await dispatchSend(message, conv);
+
+    await handleEvent({
+      v: 1,
+      type: "send_result",
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      messageId: String(message._id),
+      status: "sent",
+      externalMessageId: "tg-out-1",
+    });
+
+    const after = await Message.findById(message._id);
+    expect(after?.external?.bridgeStatus).toBe("sent");
+    expect(after?.external?.externalMessageId).toBe("tg-out-1");
+  });
+
+  it("Fix 4: a matching send_result atomically updates in place, preserves the subdoc, and emits the persisted state", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
+    const conv = await findOrCreateBridgedConversation({
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      contact: { externalId: EXTERNAL },
+    });
+    const message = await Message.create({
+      conversationId: String(conv._id),
+      senderId: OWNER,
+      senderDeviceId: 1,
+      text: "outbound hi",
+      deliveredTo: [OWNER],
+      encryptionVersion: 1,
+    });
+    await dispatchSend(message, conv);
+    mock.emits.length = 0; // clear emits from dispatch
+
+    await handleEvent({
+      v: 1,
+      type: "send_result",
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      messageId: String(message._id),
+      status: "sent",
+      externalMessageId: "tg-out-1",
+    });
+
+    const after = await Message.findById(message._id);
+    expect(after?.external?.bridgeStatus).toBe("sent");
+    expect(after?.external?.externalMessageId).toBe("tg-out-1");
+    // The subdoc is preserved, not replaced — network stays intact.
+    expect(after?.external?.network).toBe("telegram");
+
+    const outbox = await BridgeOutbox.findOne({ messageId: String(message._id) });
+    expect(outbox?.status).toBe("sent");
+
+    // The emit reflects the PERSISTED state (the document returned by the atomic
+    // update), so its payload carries the new bridgeStatus.
+    const updates = mock.emitsOf("messageUpdated");
+    const emitted = updates.find((e) => e.room === `conversation:${String(conv._id)}`);
+    expect(emitted).toBeDefined();
+    const payload = emitted?.payload as { external?: { bridgeStatus?: string } };
+    expect(payload.external?.bridgeStatus).toBe("sent");
+  });
+
+  it("Fix 4: a mismatched-network send_result performs NO mutation, NO outbox update, NO emit", async () => {
+    // Make the immediate dispatch fail (non-2xx) so the outbox stays `pending`,
+    // giving an unambiguous baseline to prove the mismatched event doesn't flip it.
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
+    const conv = await findOrCreateBridgedConversation({
+      network: "telegram",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      contact: { externalId: EXTERNAL },
+    });
+    const message = await Message.create({
+      conversationId: String(conv._id),
+      senderId: OWNER,
+      senderDeviceId: 1,
+      text: "outbound hi",
+      deliveredTo: [OWNER],
+      encryptionVersion: 1,
+    });
+    await dispatchSend(message, conv); // external.network = telegram, bridgeStatus = queued
+    mock.emits.length = 0;
+
+    await handleEvent({
+      v: 1,
+      type: "send_result",
+      network: "whatsapp",
+      ownerUserId: OWNER,
+      externalChatId: EXTERNAL,
+      messageId: String(message._id),
+      status: "sent",
+    });
+
+    const after = await Message.findById(message._id);
+    expect(after?.external?.bridgeStatus).toBe("queued");
+    expect(after?.external?.network).toBe("telegram");
+
+    // Outbox untouched (still pending) and no client notification went out.
+    const outbox = await BridgeOutbox.findOne({ messageId: String(message._id) });
+    expect(outbox?.status).toBe("pending");
+    expect(mock.emitsOf("messageUpdated").length).toBe(0);
   });
 });

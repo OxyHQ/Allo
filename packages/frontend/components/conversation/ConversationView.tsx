@@ -65,6 +65,17 @@ import { useConversationTheme } from '@/hooks/useConversationTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
+import {
+  useConversationCapabilities,
+  conversationNetwork,
+  isBridgedConversation,
+} from '@/hooks/useConversationCapabilities';
+import { useLinkedAccount } from '@/hooks/useBridge';
+
+// Interop bridge (F3.x) UI
+import { NetworkBadge } from '@/components/bridge/NetworkBadge';
+import { BridgeTransparencyBanner } from '@/components/bridge/BridgeTransparencyBanner';
+import { networkLabel } from '@/lib/bridge/networks';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -178,6 +189,23 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Use conversation-specific theme (falls back to global theme if no conversation theme set)
   const theme = useConversationTheme(conversation?.theme);
+
+  // Interop bridge (F3.x): resolve the conversation's network + capabilities.
+  // Native Allo chats resolve to the all-supported matrix, so nothing below
+  // changes behaviour for them. Bridged chats (e.g. Telegram) gate calls/polls,
+  // pin the transparency banner, hide the E2E indicator and disable the composer
+  // when the linked account is offline.
+  const isBridged = isBridgedConversation(conversation);
+  const network = conversationNetwork(conversation);
+  const capabilities = useConversationCapabilities(conversation);
+  // Only fetch linked-account state for bridged conversations — native chats
+  // never need it, so they make no bridge request.
+  const { isActive: isBridgeAccountActive, isLoading: isBridgeAccountLoading } =
+    useLinkedAccount(network, isBridged);
+  // A bridged conversation whose linked account isn't active can't send: the
+  // connector has no live session to relay through. Only block once we know the
+  // account is NOT active (avoid disabling during the initial accounts fetch).
+  const isBridgeComposerDisabled = isBridged && !isBridgeAccountLoading && !isBridgeAccountActive;
 
   // Initialize realtime messaging and typing indicator hooks
   const { sendTypingIndicator } = useRealtimeMessaging(conversationId);
@@ -482,6 +510,25 @@ export default function ConversationView({ conversationId: propConversationId }:
       color: theme.colors.text,
       marginTop: 4,
     },
+    composerDisabled: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      paddingBottom: Platform.OS === 'ios' ? 16 : 18,
+      backgroundColor: theme.colors.background,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+    },
+    composerDisabledText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
   }), [theme, messageTextSize, isSizeAdjusting, tempTextSize]);
 
   // Auto-scroll to bottom when new messages arrive
@@ -552,7 +599,10 @@ export default function ConversationView({ conversationId: propConversationId }:
       setMessageTextSize(sizeToUse);
     }
 
-    if (!recipientUserId || !currentUserId) {
+    // Bridged conversations have no Oxy recipient (the other party is external);
+    // the store's bridged branch ignores `recipientUserId`. Native chats still
+    // require a recipient for multi-device fan-out.
+    if (!currentUserId || (!recipientUserId && !isBridged)) {
       console.error('Cannot send message: missing recipient or current user ID');
       if (conversationId) {
         setInputText(conversationId, text);
@@ -562,7 +612,7 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     // Send message via store with custom font size if adjusted
     try {
-      const result = await sendMessage(conversationId, text, currentUserId, recipientUserId, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
+      const result = await sendMessage(conversationId, text, currentUserId, recipientUserId ?? '', sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
 
       if (!result) {
         // Message failed to send - check for error in store
@@ -610,7 +660,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, recipientUserId, currentUserId, sendTypingIndicator]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, recipientUserId, currentUserId, sendTypingIndicator, isBridged]);
 
   /**
    * Handle Enter key press to send message
@@ -642,7 +692,9 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const dispatchAttachmentPayload = useCallback(
     async (payload: AttachmentPayload) => {
-      if (!conversationId || !currentUserId || !recipientUserId) {
+      // Bridged conversations have no Oxy recipient; the store branches on the
+      // network and ignores `recipientUserId` for bridged sends.
+      if (!conversationId || !currentUserId || (!recipientUserId && !isBridged)) {
         toast.error(t('chat.uploadFailed'));
         return;
       }
@@ -651,7 +703,7 @@ export default function ConversationView({ conversationId: propConversationId }:
           conversationId,
           payload,
           currentUserId,
-          recipientUserId
+          recipientUserId ?? ''
         );
         if (!result) {
           toast.error(t('chat.uploadFailed'));
@@ -663,7 +715,7 @@ export default function ConversationView({ conversationId: propConversationId }:
         toast.error(t('chat.uploadFailed'));
       }
     },
-    [conversationId, currentUserId, recipientUserId, sendAttachmentMessage, t]
+    [conversationId, currentUserId, recipientUserId, sendAttachmentMessage, t, isBridged]
   );
 
   /**
@@ -685,10 +737,13 @@ export default function ConversationView({ conversationId: propConversationId }:
           bottomSheet.openBottomSheet(true);
         }}
         closeSheet={closeSheet}
+        // Interop bridge (F3.x): gate unsupported entries (e.g. polls on
+        // Telegram). Native chats pass the all-supported matrix → no change.
+        capabilities={capabilities}
       />
     );
     bottomSheet.openBottomSheet(true);
-  }, [bottomSheet, dispatchAttachmentPayload]);
+  }, [bottomSheet, dispatchAttachmentPayload, capabilities]);
 
   /**
    * Open the emoji picker in a bottom sheet and insert the selected emoji
@@ -1101,8 +1156,15 @@ export default function ConversationView({ conversationId: propConversationId }:
                   </HeaderIconButton>,
                 ] : [],
                 rightComponents: [
-                  // Voice + video call buttons (1:1 conversations only).
-                  !isGroup && recipientUserId ? (
+                  // Interop bridge (F3.x): network badge for bridged threads
+                  // (renders nothing for native Allo chats).
+                  isBridged ? (
+                    <NetworkBadge key="network-badge" network={network} size="md" />
+                  ) : null,
+                  // Voice + video call buttons (1:1 conversations only). Hidden
+                  // when the network can't carry calls (interop bridge, F3.x):
+                  // bridged networks like Telegram aren't wired for Allo calls.
+                  !isGroup && recipientUserId && capabilities.calls ? (
                     <HeaderIconButton
                       key="call-voice"
                       onPress={() => {
@@ -1120,7 +1182,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                       <IconAdapter name="call-outline" size={20} color={theme.colors.text} />
                     </HeaderIconButton>
                   ) : null,
-                  !isGroup && recipientUserId ? (
+                  !isGroup && recipientUserId && capabilities.calls ? (
                     <HeaderIconButton
                       key="call-video"
                       onPress={() => {
@@ -1185,6 +1247,10 @@ export default function ConversationView({ conversationId: propConversationId }:
               hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
             />
           </View>
+
+          {/* Interop bridge (F3.x): persistent, non-dismissable transparency
+              notice — bridged threads are NOT covered by Allo's E2E encryption. */}
+          {isBridged && <BridgeTransparencyBanner network={network} />}
 
           {/* Messages List */}
           {messageGroups.length > 0 ? (
@@ -1255,6 +1321,21 @@ export default function ConversationView({ conversationId: propConversationId }:
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
           >
+            {isBridgeComposerDisabled ? (
+              // Interop bridge (F3.x): the linked account is disconnected, so the
+              // connector has no live session to relay through — block sending and
+              // point the user to reconnect.
+              <View style={styles.composerDisabled} accessibilityRole="alert">
+                <IconAdapter
+                  name="alert-circle-outline"
+                  size={18}
+                  color={theme.colors.textSecondary}
+                />
+                <ThemedText style={styles.composerDisabledText}>
+                  {t('bridge.composerDisconnected', { network: networkLabel(network) })}
+                </ThemedText>
+              </View>
+            ) : (
             <View style={styles.inputContainer}>
               {/* Attach Button */}
               <TouchableOpacity
@@ -1321,6 +1402,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                 onRecordCancel={voiceRecorder.handleRecordCancel}
               />
             </View>
+            )}
           </KeyboardAvoidingView>
         </ThemedView>
       </ImageBackground>

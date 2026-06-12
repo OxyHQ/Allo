@@ -10,6 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/sonner';
 import LottieView from 'lottie-react-native';
 
@@ -23,13 +24,24 @@ import { EmptyState } from '@/components/shared/EmptyState';
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxyhq/services';
-import { useConversationsStore } from '@/stores';
+import { useConversationsStore, mapApiConversation } from '@/stores';
+
+// Interop bridge (F3.x)
+import { useLinkedAccount, useExternalContacts } from '@/hooks/useBridge';
+import { openBridgedConversation, type ExternalContact } from '@/lib/bridge/api';
+import { NETWORK_PRESENTATION } from '@/lib/bridge/networks';
 
 // Types
 import type { Conversation, ConversationType } from '@/app/(chat)/index';
 
 // Utils
 import { api } from '@/utils/api';
+
+/** The bridgeable network surfaced in the new-chat flow (Telegram first). */
+const TELEGRAM = 'telegram' as const;
+
+/** Which source tab the new-chat picker is showing. */
+type NewChatTab = 'allo' | 'telegram';
 
 interface User {
   id: string;
@@ -42,12 +54,42 @@ interface User {
 }
 
 /**
+ * A profile as returned by the Oxy SDK's `searchProfiles`. The `name` field may
+ * be a plain string or a structured object; the SDK is loosely typed, so we model
+ * the fields we actually read and narrow defensively.
+ */
+interface RawProfile {
+  id?: string;
+  _id?: string;
+  username?: string;
+  handle?: string;
+  avatar?: string;
+  profilePicture?: string;
+  name?: string | { first?: string; last?: string; full?: string };
+}
+
+/** `{ data: RawProfile[] }` envelope some SDK calls return instead of a raw array. */
+interface ProfileEnvelope {
+  data: RawProfile[];
+}
+
+/** Type guard: is `value` a `{ data: RawProfile[] }` envelope? */
+function isProfileEnvelope(value: unknown): value is ProfileEnvelope {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { data?: unknown }).data)
+  );
+}
+
+/**
  * New Chat Screen
  * Allows users to search for and start a new conversation
  */
 export default function NewChatScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { t } = useTranslation();
   const { oxyServices, user: currentUser } = useOxy();
   const addConversation = useConversationsStore((state) => state.addConversation);
   const conversations = useConversationsStore((state) => state.conversations);
@@ -57,6 +99,16 @@ export default function NewChatScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<NewChatTab>('allo');
+  const [openingContactId, setOpeningContactId] = useState<string | null>(null);
+
+  // Interop bridge (F3.x): when a Telegram account is active, offer a Telegram
+  // tab listing the user's external contacts to start a bridged chat.
+  const { isActive: isTelegramActive } = useLinkedAccount(TELEGRAM);
+  const { contacts: telegramContacts, isLoading: isLoadingTelegram } = useExternalContacts(
+    TELEGRAM,
+    isTelegramActive && activeTab === 'telegram'
+  );
 
   // Search for users using Oxy Services
   const searchUsers = useCallback(async (query: string) => {
@@ -67,24 +119,30 @@ export default function NewChatScreen() {
 
     setIsLoading(true);
     try {
-      const response = await oxyServices.searchProfiles(query, { limit: 20 });
-      const searchResults = Array.isArray(response) ? response : (response as any)?.data || [];
+      const response: unknown = await oxyServices.searchProfiles(query, { limit: 20 });
+      // The SDK returns either a raw array or a `{ data: [...] }` envelope.
+      const searchResults: RawProfile[] = Array.isArray(response)
+        ? (response as RawProfile[])
+        : isProfileEnvelope(response)
+          ? response.data
+          : [];
 
       // Map Oxy profile format to our User format
-      const mappedUsers: User[] = searchResults.map((profile: any) => {
-        // Extract name
+      const mappedUsers: User[] = searchResults.map((profile: RawProfile) => {
+        // Extract name (the SDK's `name` may be a string or a structured object).
         let firstName = 'Unknown';
         let lastName = '';
+        const name = profile.name;
 
-        if (profile.name?.first) {
-          firstName = profile.name.first;
-          lastName = profile.name.last || '';
-        } else if (profile.name?.full) {
-          const parts = profile.name.full.split(' ');
+        if (typeof name === 'string') {
+          const parts = name.split(' ');
           firstName = parts[0] || 'Unknown';
           lastName = parts.slice(1).join(' ') || '';
-        } else if (typeof profile.name === 'string') {
-          const parts = profile.name.split(' ');
+        } else if (name?.first) {
+          firstName = name.first;
+          lastName = name.last || '';
+        } else if (name?.full) {
+          const parts = name.full.split(' ');
           firstName = parts[0] || 'Unknown';
           lastName = parts.slice(1).join(' ') || '';
         } else {
@@ -92,8 +150,8 @@ export default function NewChatScreen() {
         }
 
         return {
-          id: profile.id || profile._id,
-          username: profile.username || profile.handle,
+          id: profile.id || profile._id || '',
+          username: profile.username || profile.handle || '',
           name: {
             first: firstName,
             last: lastName,
@@ -166,9 +224,8 @@ export default function NewChatScreen() {
       });
 
       if (existingConversation) {
-        // Navigate using user ID route for direct conversations
-        // Use unified /c/:id route for all conversations
-        router.replace(`/c/${existingConversation.id}` as any);
+        // Use the unified, typed /c/[id] route for all conversations.
+        router.replace({ pathname: '/c/[id]', params: { id: existingConversation.id } });
         return;
       }
 
@@ -205,8 +262,7 @@ export default function NewChatScreen() {
 
       addConversation(conversation);
 
-      console.log('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
-      router.replace(`/c/${conversation.id}` as any);
+      router.replace({ pathname: '/c/[id]', params: { id: conversation.id } });
     } catch (error: any) {
       console.error('[NewChat] Error opening conversation:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to open conversation';
@@ -266,13 +322,31 @@ export default function NewChatScreen() {
       setSelectedUserIds(new Set());
       setIsSelectionMode(false);
 
-      router.replace(`/c/${conversation.id}` as any);
+      router.replace({ pathname: '/c/[id]', params: { id: conversation.id } });
     } catch (error: any) {
       console.error('[NewChat] Error creating conversation:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create conversation';
       toast.error(errorMessage);
     }
   }, [selectedUserIds, addConversation, router]);
+
+  // Interop bridge (F3.x): open (or fetch) a bridged 1:1 with a Telegram contact,
+  // add it to the store, then navigate to it.
+  const openTelegramContact = useCallback(async (contact: ExternalContact) => {
+    if (openingContactId) return;
+    setOpeningContactId(contact.externalId);
+    try {
+      const raw = await openBridgedConversation(contact.network, contact.externalId);
+      const conversation = mapApiConversation(raw);
+      addConversation(conversation);
+      router.replace({ pathname: '/c/[id]', params: { id: conversation.id } });
+    } catch (error) {
+      console.error('[NewChat] Error opening Telegram conversation:', error);
+      toast.error(t('bridge.newChat.openError'));
+    } finally {
+      setOpeningContactId(null);
+    }
+  }, [openingContactId, addConversation, router, t]);
 
   const styles = StyleSheet.create({
     container: {
@@ -369,6 +443,58 @@ export default function NewChatScreen() {
     createButtonDisabled: {
       opacity: 0.5,
     },
+    tabBar: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      gap: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+    },
+    tab: {
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    tabActive: {
+      borderBottomColor: theme.colors.primary,
+    },
+    tabLabel: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    tabLabelActive: {
+      color: theme.colors.primary,
+    },
+    contactItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+    },
+    contactIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    notConnectedCta: {
+      marginTop: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: theme.colors.primary,
+    },
+    notConnectedCtaText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '600',
+    },
   });
 
   const renderUserItem = useCallback(({ item }: { item: User }) => {
@@ -378,14 +504,8 @@ export default function NewChatScreen() {
     return (
       <TouchableOpacity
         style={styles.userItem}
-        onPress={() => {
-          console.log('[NewChat] User item pressed:', item.username);
-          openConversation(item);
-        }}
-        onLongPress={() => {
-          console.log('[NewChat] User item long pressed:', item.username);
-          toggleUserSelection(item.id);
-        }}
+        onPress={() => openConversation(item)}
+        onLongPress={() => toggleUserSelection(item.id)}
         activeOpacity={0.7}
         delayLongPress={300}
       >
@@ -416,6 +536,42 @@ export default function NewChatScreen() {
     );
   }, [selectedUserIds, isSelectionMode, openConversation, toggleUserSelection, styles]);
 
+  // Interop bridge (F3.x): render one Telegram contact row.
+  const telegramPresentation = NETWORK_PRESENTATION[TELEGRAM];
+  const renderTelegramContact = useCallback(({ item }: { item: ExternalContact }) => {
+    const displayName = item.displayName || item.username || item.externalId;
+    const subtitle = item.username ? `@${item.username}` : (item.phoneHint || '');
+    const isOpening = openingContactId === item.externalId;
+
+    return (
+      <TouchableOpacity
+        style={styles.contactItem}
+        onPress={() => void openTelegramContact(item)}
+        disabled={isOpening}
+        activeOpacity={0.7}
+      >
+        {item.avatarUrl ? (
+          <Avatar size={48} source={{ uri: item.avatarUrl }} label={displayName.charAt(0).toUpperCase()} />
+        ) : (
+          <View style={[styles.contactIcon, { backgroundColor: `${telegramPresentation.color}1A` }]}>
+            <Ionicons name={telegramPresentation.icon} size={24} color={telegramPresentation.color} />
+          </View>
+        )}
+        <View style={styles.userInfo}>
+          <ThemedText style={styles.userName} numberOfLines={1}>
+            {displayName}
+          </ThemedText>
+          {subtitle.length > 0 && (
+            <ThemedText style={styles.userUsername} numberOfLines={1}>
+              {subtitle}
+            </ThemedText>
+          )}
+        </View>
+        {isOpening && <ActivityIndicator size="small" color={theme.colors.primary} />}
+      </TouchableOpacity>
+    );
+  }, [styles, openTelegramContact, openingContactId, telegramPresentation, theme.colors.primary]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ThemedView style={styles.container}>
@@ -426,71 +582,119 @@ export default function NewChatScreen() {
           }}
         />
 
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputWrapper}>
-            <Ionicons
-              name="search"
-              size={20}
-              color={theme.colors.textSecondary}
+        {/* Interop bridge (F3.x): source tabs appear only when Telegram is linked. */}
+        {isTelegramActive && (
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'allo' && styles.tabActive]}
+              onPress={() => setActiveTab('allo')}
+              activeOpacity={0.7}
+            >
+              <ThemedText style={[styles.tabLabel, activeTab === 'allo' && styles.tabLabelActive]}>
+                {t('bridge.newChat.alloTab')}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'telegram' && styles.tabActive]}
+              onPress={() => setActiveTab('telegram')}
+              activeOpacity={0.7}
+            >
+              <ThemedText style={[styles.tabLabel, activeTab === 'telegram' && styles.tabLabelActive]}>
+                {t('bridge.newChat.telegramTab')}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeTab === 'telegram' ? (
+          // Telegram contacts source.
+          isLoadingTelegram ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+            </View>
+          ) : telegramContacts.length > 0 ? (
+            <FlatList
+              style={styles.usersList}
+              data={telegramContacts}
+              renderItem={renderTelegramContact}
+              keyExtractor={(item) => item.externalId}
+              keyboardShouldPersistTaps="handled"
             />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search users..."
-              placeholderTextColor={theme.colors.textSecondary}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
+          ) : (
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title={t('bridge.newChat.noContacts')}
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  setSearchQuery('');
-                  setUsers([]);
-                }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
+          )
+        ) : (
+          <>
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputWrapper}>
                 <Ionicons
-                  name="close-circle"
+                  name="search"
                   size={20}
                   color={theme.colors.textSecondary}
                 />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search users..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={handleSearchChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSearchQuery('');
+                      setUsers([]);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color={theme.colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
 
-        {isLoading ? (
-          <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <ThemedText style={[styles.emptyStateText, { marginTop: 16 }]}>
-              Searching...
-            </ThemedText>
-          </View>
-        ) : users.length > 0 ? (
-          <FlatList
-            style={styles.usersList}
-            data={users}
-            renderItem={renderUserItem}
-            keyExtractor={(item) => item.id}
-            keyboardShouldPersistTaps="handled"
-          />
-        ) : searchQuery.length >= 2 ? (
-          <EmptyState
-            lottieSource={require('@/assets/lottie/welcome.json')}
-            title="No users found"
-          />
-        ) : (
-          <EmptyState
-            lottieSource={require('@/assets/lottie/welcome.json')}
-            title={searchQuery.length === 0
-              ? 'Search for users to start a conversation'
-              : 'Type at least 2 characters to search'}
-          />
+            {isLoading ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <ThemedText style={[styles.emptyStateText, { marginTop: 16 }]}>
+                  Searching...
+                </ThemedText>
+              </View>
+            ) : users.length > 0 ? (
+              <FlatList
+                style={styles.usersList}
+                data={users}
+                renderItem={renderUserItem}
+                keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+              />
+            ) : searchQuery.length >= 2 ? (
+              <EmptyState
+                lottieSource={require('@/assets/lottie/welcome.json')}
+                title="No users found"
+              />
+            ) : (
+              <EmptyState
+                lottieSource={require('@/assets/lottie/welcome.json')}
+                title={searchQuery.length === 0
+                  ? 'Search for users to start a conversation'
+                  : 'Type at least 2 characters to search'}
+              />
+            )}
+          </>
         )}
 
-        {isSelectionMode && selectedUserIds.size > 0 && (
+        {activeTab === 'allo' && isSelectionMode && selectedUserIds.size > 0 && (
           <TouchableOpacity
             style={[
               styles.createButton,

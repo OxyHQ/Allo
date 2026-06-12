@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { ENCRYPTION_VERSION_ENVELOPES } from "@allo/shared-types";
 import type { Network } from "@allo/shared-types";
+import { logger } from "../utils/logger";
 
 /**
  * Interop bridge (F3.0) metadata on a message.
@@ -306,7 +307,7 @@ MessageSchema.pre("save", function (next) {
   
   // If encryption is enabled, plaintext should not be stored
   if (this.ciphertext && this.text) {
-    console.warn("Warning: Message has both encrypted and plaintext content");
+    logger.warn("Message has both encrypted and plaintext content");
   }
   
   next();

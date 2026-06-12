@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
+import {
+  Conversation,
+  ConversationParticipant,
+  ConversationType,
+  ExternalParticipant,
+} from '@/app/(chat)/index';
+import { isNetwork } from '@allo/shared-types';
 import { api } from '@/utils/api';
 import { toast } from '@/lib/sonner';
 import { useUsersStore } from './usersStore';
@@ -155,6 +161,139 @@ const withArchiveFlag = (conversation: Conversation): Conversation => ({
   ...conversation,
   isArchived: conversation.isArchived ?? false,
 });
+
+/** The native network. A conversation with no `network` is native Allo. */
+const NATIVE_NETWORK = 'allo';
+
+/** Raw external participant shape as returned by the bridged conversation API. */
+interface RawExternalParticipant {
+  network?: unknown;
+  externalId?: unknown;
+  displayName?: unknown;
+  username?: unknown;
+  avatar?: unknown;
+}
+
+/**
+ * Map raw `externalParticipants` from the API into the typed frontend shape,
+ * dropping any entry that lacks a valid network / external id. Interop bridge
+ * (F3.x): external people never live in `participants[]`.
+ */
+function mapExternalParticipants(raw: unknown): ExternalParticipant[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const mapped: ExternalParticipant[] = [];
+  for (const entry of raw as RawExternalParticipant[]) {
+    if (!isNetwork(entry.network)) continue;
+    if (typeof entry.externalId !== 'string' || entry.externalId.length === 0) continue;
+    mapped.push({
+      network: entry.network,
+      externalId: entry.externalId,
+      displayName: typeof entry.displayName === 'string' ? entry.displayName : undefined,
+      username: typeof entry.username === 'string' ? entry.username : undefined,
+      avatar: typeof entry.avatar === 'string' ? entry.avatar : undefined,
+    });
+  }
+  return mapped.length > 0 ? mapped : undefined;
+}
+
+/**
+ * Resolve the network reported by a raw API conversation. Defaults to native
+ * Allo when the field is missing or unrecognised (older backends / native chats).
+ */
+function resolveNetwork(rawNetwork: unknown): Conversation['network'] {
+  return isNetwork(rawNetwork) ? rawNetwork : NATIVE_NETWORK;
+}
+
+/**
+ * For a BRIDGED DIRECT conversation, derive the display name/avatar from the
+ * first external participant (the external contact), since bridged people carry
+ * no Oxy identity and aren't in `participants[]`. Returns `null` for native or
+ * non-direct conversations so the caller keeps the normal Oxy-derived values.
+ */
+function bridgedDirectIdentity(
+  network: Conversation['network'],
+  type: ConversationType,
+  externalParticipants: ExternalParticipant[] | undefined
+): { name: string; avatar?: string } | null {
+  if (network === NATIVE_NETWORK || type !== 'direct') return null;
+  const contact = externalParticipants?.[0];
+  if (!contact) return null;
+  const name = contact.displayName || contact.username || '';
+  return { name, avatar: contact.avatar };
+}
+
+/** Raw participant shape as returned by the conversation/bridge APIs. */
+interface RawApiParticipant {
+  userId?: string;
+  name?: { first?: string; last?: string } | string;
+  username?: string;
+  avatar?: string;
+}
+
+/** Raw conversation shape the API returns (only the fields we read). */
+interface RawApiConversation {
+  _id?: string;
+  id?: string;
+  type?: ConversationType;
+  name?: string;
+  avatar?: string;
+  theme?: string;
+  network?: unknown;
+  createdAt?: string;
+  lastMessageAt?: string;
+  participants?: RawApiParticipant[];
+  externalParticipants?: unknown;
+}
+
+/**
+ * Map a raw API conversation document into a frontend {@link Conversation}.
+ * Used when a single conversation is created/opened (native or bridged) and we
+ * want the SAME mapping (network, external participants, bridged display
+ * identity) the list transform applies — without the list-only last-message
+ * enrichment. Exported so the new-chat flow can map a freshly-opened bridged
+ * conversation before adding it to the store.
+ */
+export function mapApiConversation(raw: RawApiConversation): Conversation {
+  const conversationType: ConversationType = raw.type || 'direct';
+  const participants: ConversationParticipant[] = (raw.participants || []).map((p) => ({
+    id: p.userId || '',
+    name: {
+      first:
+        (typeof p.name === 'object' ? p.name?.first : undefined) ||
+        (typeof p.name === 'string' ? p.name : undefined) ||
+        'Unknown',
+      last: (typeof p.name === 'object' ? p.name?.last : undefined) || '',
+    },
+    username: p.username,
+    avatar: p.avatar,
+  }));
+
+  const network = resolveNetwork(raw.network);
+  const externalParticipants = mapExternalParticipants(raw.externalParticipants);
+  const bridgedIdentity = bridgedDirectIdentity(network, conversationType, externalParticipants);
+  const defaultName = raw.name || (conversationType === 'group' ? 'Group Chat' : 'Direct Chat');
+
+  return {
+    id: raw._id || raw.id || '',
+    type: conversationType,
+    name: bridgedIdentity?.name || defaultName,
+    lastMessage: '',
+    timestamp: raw.lastMessageAt
+      ? new Date(raw.lastMessageAt).toISOString()
+      : raw.createdAt
+        ? new Date(raw.createdAt).toISOString()
+        : new Date().toISOString(),
+    unreadCount: 0,
+    avatar: bridgedIdentity ? bridgedIdentity.avatar : raw.avatar,
+    theme: raw.theme,
+    participants,
+    groupName: raw.name,
+    groupAvatar: raw.avatar,
+    participantCount: participants.length,
+    network,
+    externalParticipants,
+  };
+}
 
 type ConversationsInitialState = Pick<
   ConversationsState,
@@ -427,19 +566,31 @@ export const useConversationsStore = create<ConversationsState>()(
             undefined // currentUserId not available here, but function handles it gracefully
           );
 
+          // Interop bridge (F3.x): carry the network + external participants, and
+          // for a bridged DIRECT chat draw the name/avatar from the external
+          // contact (it has no Oxy participant to enrich from).
+          const conversationType: ConversationType = conv.type || 'direct';
+          const network = resolveNetwork(conv.network);
+          const externalParticipants = mapExternalParticipants(conv.externalParticipants);
+          const bridgedIdentity = bridgedDirectIdentity(network, conversationType, externalParticipants);
+
+          const defaultName = conv.name || (conv.type === 'group' ? 'Group Chat' : 'Direct Chat');
+
           return {
             id: conversationId,
-            type: conv.type || 'direct',
-            name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Direct Chat'),
+            type: conversationType,
+            name: bridgedIdentity?.name || defaultName,
             lastMessage: formattedLastMessage,
             timestamp: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : new Date().toISOString(),
             unreadCount: conv.unreadCounts ? Object.values(conv.unreadCounts).reduce((sum: number, count: any) => sum + (count || 0), 0) : 0,
-            avatar: conv.avatar,
+            avatar: bridgedIdentity ? bridgedIdentity.avatar : conv.avatar,
             theme: conv.theme, // Color theme ID
             participants,
             groupName: conv.name,
             groupAvatar: conv.avatar,
             participantCount: participants.length,
+            network,
+            externalParticipants,
           };
         });
 

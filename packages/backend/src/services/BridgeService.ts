@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import type { Namespace } from "socket.io";
 import type { BridgeCommand, BridgeMediaRef } from "@allo/shared-types";
 import Message, { type IMessage } from "../models/Message";
@@ -12,8 +11,17 @@ import {
   BRIDGE_SIGNATURE_HEADER,
   BRIDGE_OUTBOX_MAX_ATTEMPTS,
   BRIDGE_OUTBOX_SWEEP_INTERVAL_MS,
+  BRIDGE_OUTBOX_SWEEP_LIMIT,
+  BRIDGE_REQUEST_TIMEOUT_MS,
   computeBackoffMs,
 } from "../config/bridge";
+import { buildCanonicalString, hmacHex, fetchWithTimeout } from "../utils/bridgeSigning";
+
+/** Connector path that owner-originated commands are POSTed to. */
+const CONNECTOR_COMMANDS_PATH = "/commands";
+
+/** HTTP method used for every connector request. */
+const CONNECTOR_METHOD = "POST";
 
 /**
  * BridgeService — the OUTBOUND half of the interop seam (Allo -> external).
@@ -42,28 +50,34 @@ function getMessagingNamespace(): Namespace | null {
 }
 
 /**
- * Sign a raw request body for the connector. Canonical form matches
- * `bridgeAuth`: HMAC-SHA256(secret, `${timestamp}.${rawBody}`) as hex. Exported
- * so the user-facing bridge routes reuse the exact same signing.
+ * Sign a JSON request for the connector. Canonical form matches `bridgeAuth`'s
+ * verifier exactly (via the shared `buildCanonicalString`):
  *
- * @throws if `BRIDGE_SHARED_SECRET` is unset (callers wrap in try/catch).
+ *     HMAC-SHA256( secret, `${method}.${path}.${timestamp}.${rawBody}` )  -> hex
+ *
+ * `method`/`path` are the method and path the CONNECTOR (the receiver) sees, so
+ * its verifier reconstructs the identical string. Exported so the user-facing
+ * bridge routes reuse the exact same signing.
+ *
+ * @throws if `BRIDGE_SHARED_SECRET` is unset/too short (callers wrap in try/catch).
  */
-export function signBridgeRequest(rawBody: string): { timestamp: string; signature: string } {
+export function signBridgeRequest(
+  method: string,
+  path: string,
+  rawBody: string
+): { timestamp: string; signature: string } {
   const secret = getBridgeSharedSecret();
   if (!secret) {
     throw new Error("BRIDGE_SHARED_SECRET is not configured");
   }
   const timestamp = String(Date.now());
-  const signature = crypto
-    .createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
-    .digest("hex");
+  const signature = hmacHex(secret, buildCanonicalString(method, path, timestamp, rawBody));
   return { timestamp, signature };
 }
 
-/** Build the signed headers for a connector POST with the given JSON body. */
-function signedHeaders(rawBody: string): Record<string, string> {
-  const { timestamp, signature } = signBridgeRequest(rawBody);
+/** Build the signed headers for a connector POST to `path` with a JSON body. */
+function signedHeaders(path: string, rawBody: string): Record<string, string> {
+  const { timestamp, signature } = signBridgeRequest(CONNECTOR_METHOD, path, rawBody);
   return {
     "Content-Type": "application/json",
     [BRIDGE_TIMESTAMP_HEADER]: timestamp,
@@ -87,18 +101,25 @@ function toBridgeMedia(media: IMessage["media"]): BridgeMediaRef[] | undefined {
   }));
 }
 
-/** POST a BridgeCommand to the connector's `/commands` endpoint. */
+/**
+ * POST a BridgeCommand to the connector's `/commands` endpoint, signed and with
+ * a hard request timeout (a hung connector must not block the caller/sweeper).
+ */
 async function postCommand(command: BridgeCommand): Promise<Response> {
   const baseUrl = getBridgeServiceUrl();
   if (!baseUrl) {
     throw new Error("BRIDGE_SERVICE_URL is not configured");
   }
   const rawBody = JSON.stringify(command);
-  return fetch(`${baseUrl}/commands`, {
-    method: "POST",
-    headers: signedHeaders(rawBody),
-    body: rawBody,
-  });
+  return fetchWithTimeout(
+    `${baseUrl}${CONNECTOR_COMMANDS_PATH}`,
+    {
+      method: CONNECTOR_METHOD,
+      headers: signedHeaders(CONNECTOR_COMMANDS_PATH, rawBody),
+      body: rawBody,
+    },
+    BRIDGE_REQUEST_TIMEOUT_MS
+  );
 }
 
 /**
@@ -204,7 +225,11 @@ async function failOutbox(outbox: IBridgeOutbox): Promise<void> {
  */
 export async function processOutboxOnce(): Promise<void> {
   const now = new Date();
-  const due = await BridgeOutbox.find({ status: "pending", nextAttemptAt: { $lte: now } });
+  // Bound the pass so a large backlog can't load the entire pending set at once;
+  // the remainder is picked up by the next tick.
+  const due = await BridgeOutbox.find({ status: "pending", nextAttemptAt: { $lte: now } }).limit(
+    BRIDGE_OUTBOX_SWEEP_LIMIT
+  );
 
   for (const outbox of due) {
     try {
