@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "overrides": {
-    "@oxyhq/core": "1.11.23"
+    "@oxyhq/core": "1.11.24"
   },
   "resolutions": {
-    "@oxyhq/core": "1.11.23"
+    "@oxyhq/core": "1.11.24"
   },
   "scripts": {
     "dev": "bun run dev --filter '*'",
@@ -39,8 +39,8 @@
   },
   "dependencies": {
     "@oxyhq/bloom": "^0.6.11",
-    "@oxyhq/core": "1.11.13",
-    "@oxyhq/services": "6.10.7",
+    "@oxyhq/core": "1.11.24",
+    "@oxyhq/services": "6.10.8",
     "@react-native/js-polyfills": "^0.81.6",
     "react-native-css-interop": "^0.2.4",
     "react-native-worklets-core": "^1.6.3"
