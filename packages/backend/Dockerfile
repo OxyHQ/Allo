@@ -12,7 +12,7 @@
 FROM node:18-alpine
 
 # Pin Bun to the same version used in CI for reproducible installs.
-ENV BUN_VERSION=1.3.11
+ENV BUN_VERSION=1.3.14
 ENV BUN_INSTALL=/usr/local
 RUN apk add --no-cache bash curl unzip libstdc++ \
     && curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \

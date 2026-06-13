@@ -104,8 +104,9 @@ the same instance; the frontend declares it as a direct dependency.
    are written correctly to `bun.lock`.
 2. Verify `bun install --frozen-lockfile` passes locally before pushing.
    A partial/stale regeneration once dropped the `@allo/backend/@allo/shared-types` workspace resolution
-   line, which made CI's `bun install --frozen-lockfile` (deploy-frontends.yml, bun 1.3.11) fail and
+   line, which made CI's `bun install --frozen-lockfile` (deploy-frontends.yml) fail and
    would have blocked the allo.oxy.so redeploy.
-3. CI pins **bun 1.3.11**; local bun is **1.3.14**. Always regenerate `bun.lock` using bun 1.3.11
-   (or verify frozen-install passes under 1.3.11) to avoid format drift that fails CI.
+3. CI and the backend Dockerfile both pin **bun 1.3.14** (matches local). Keep `deploy-frontends.yml`
+   and `packages/backend/Dockerfile` aligned with your local bun when regenerating `bun.lock`
+   to avoid format drift that fails CI.
 4. Commit the updated `bun.lock` together with `package.json` changes in the same commit.
