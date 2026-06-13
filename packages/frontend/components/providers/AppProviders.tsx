@@ -23,7 +23,6 @@ import { OXY_BASE_URL } from '@/config';
 
 interface AppProvidersProps {
   children: React.ReactNode;
-  colorScheme: 'light' | 'dark' | null | undefined;
   queryClient: QueryClient;
 }
 
@@ -34,7 +33,6 @@ interface AppProvidersProps {
  */
 export const AppProviders = memo(function AppProviders({
   children,
-  colorScheme,
   queryClient,
 }: AppProvidersProps) {
   return (

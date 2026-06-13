@@ -22,7 +22,6 @@ import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 
 // Hooks
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxyhq/services';
@@ -196,8 +195,6 @@ export default function RootLayout() {
     }
   }, [appIsReady]);
 
-  const colorScheme = useColorScheme();
-
   const appContent = useMemo(() => {
     if (!appIsReady) {
       return (
@@ -209,7 +206,7 @@ export default function RootLayout() {
     }
 
     return (
-      <AppProviders colorScheme={colorScheme} queryClient={queryClient}>
+      <AppProviders queryClient={queryClient}>
         {Platform.OS !== 'web' && (
           <NotificationPermissionGate
             appIsReady={appIsReady}
@@ -224,7 +221,6 @@ export default function RootLayout() {
     appIsReady,
     splashState.startFade,
     splashState.initializationComplete,
-    colorScheme,
     isScreenNotMobile,
     handleSplashFadeComplete,
     queryClient,

@@ -32,9 +32,9 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@oxyhq/bloom": "^0.6.11",
-    "@oxyhq/core": "1.11.13",
-    "@oxyhq/services": "6.10.7",
+    "@oxyhq/bloom": "0.6.20",
+    "@oxyhq/core": "2.0.0",
+    "@oxyhq/services": "8.1.2",
     "@react-native/js-polyfills": "^0.81.6",
     "react-native-css-interop": "^0.2.4",
     "react-native-worklets-core": "^1.6.3"
