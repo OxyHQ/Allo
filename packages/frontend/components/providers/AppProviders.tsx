@@ -19,7 +19,7 @@ import { BottomSheetProvider } from '@/context/BottomSheetContext';
 import { HomeRefreshProvider } from '@/context/HomeRefreshContext';
 import { Toaster } from '@/lib/sonner';
 import i18n from '@/lib/i18n';
-import { OXY_BASE_URL } from '@/config';
+import { OXY_BASE_URL, OXY_CLIENT_ID } from '@/config';
 
 interface AppProvidersProps {
   children: React.ReactNode;
@@ -39,7 +39,7 @@ export const AppProviders = memo(function AppProviders({
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <OxyProvider baseURL={OXY_BASE_URL}>
+          <OxyProvider baseURL={OXY_BASE_URL} clientId={OXY_CLIENT_ID}>
             <I18nextProvider i18n={i18n}>
               <BottomSheetModalProvider>
                 <BottomSheetProvider>
