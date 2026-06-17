@@ -7,12 +7,12 @@
     "packages/*"
   ],
   "overrides": {
-    "@oxyhq/core": "^3.2.0",
+    "@oxyhq/core": "^3.4.1",
     "@react-native-community/netinfo": "^11.4.1",
     "@tanstack/query-core": "5.101.0"
   },
   "resolutions": {
-    "@oxyhq/core": "^3.2.0",
+    "@oxyhq/core": "^3.4.1",
     "@react-native-community/netinfo": "^11.4.1",
     "@tanstack/query-core": "5.101.0"
   },
@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@oxyhq/bloom": "^0.8.1",
-    "@oxyhq/core": "^3.2.0",
+    "@oxyhq/core": "^3.4.1",
     "@oxyhq/services": "^10.2.0",
     "@react-native/js-polyfills": "^0.81.6",
     "@tanstack/query-async-storage-persister": "^5.100.0",
