@@ -32,8 +32,8 @@ This guide explains how to deploy your Allo messaging app to DigitalOcean App Pl
    - **Name**: `backend`
    - **Type**: Web Service
    - **Source Directory**: `packages/backend`
-   - **Build Command**: `npm install && npm run build`
-   - **Run Command**: `npm run start`
+   - **Build Command**: `bun install && bun run build`
+   - **Run Command**: `bun run start`
    - **HTTP Port**: `8080`
    - **Instance Size**: Basic (512MB RAM, $5/month)
 
@@ -59,7 +59,7 @@ This guide explains how to deploy your Allo messaging app to DigitalOcean App Pl
    - **Type**: Static Site
    - **Name**: `frontend`
    - **Source Directory**: `packages/frontend`
-   - **Build Command**: `npm install && npm run build`
+   - **Build Command**: `bun install && bun run build`
    - **Output Directory**: `dist`
 
 2. Add frontend environment variables:
@@ -235,8 +235,8 @@ doctl apps logs <app-id> --type build
 
 Common issues:
 - **Missing dependencies**: Make sure all dependencies are in package.json
-- **Build command fails**: Test locally first: `npm run build`
-- **Workspace issues**: Ensure npm workspaces are properly configured
+- **Build command fails**: Test locally first: `bun run build`
+- **Workspace issues**: Ensure Bun workspaces are properly configured
 
 ### Runtime Errors
 

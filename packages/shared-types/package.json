@@ -10,7 +10,7 @@
         "clean": "rm -rf dist",
         "lint": "eslint src --ext .ts",
         "test": "echo \"No tests specified\" && exit 0",
-        "prepublishOnly": "npm run build"
+        "prepublishOnly": "bun run build"
     },
     "keywords": [
         "typescript",

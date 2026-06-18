@@ -71,15 +71,19 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 
 ## Dependencies
 
-- `@oxyhq/core` (2.0.0), `@oxyhq/services` (^8.0.0), `@oxyhq/bloom` (0.6.11) — Oxy platform integration
+- `@oxyhq/core` (^3.4.5), `@oxyhq/services` (^10.2.2), `@oxyhq/bloom` (^0.8.5) — Oxy platform integration
 
 ## CRITICAL — Dependency Gotchas
 
 **@oxyhq/core and @oxyhq/services must be pinned via root overrides AND resolutions.**
-`@oxyhq/services` declares `@oxyhq/core` as a peer (^2.0.0). Without an explicit override, Bun may
+`@oxyhq/services` declares `@oxyhq/core` as a peer. Without an explicit override, Bun may
 hoist a satisfying-but-different core build inside the services package, causing type mismatches and
 runtime errors. The root `package.json` must carry both `overrides` and `resolutions` entries pointing
-to `2.0.0`. The frontend uses `^2.0.0`; the backend references `2.0.0` exactly.
+to the current target (`^3.4.5` / `3.4.5`). The frontend/backend should use the same major/minor line.
+
+**Expo web SSO callback bootstrap:** `packages/frontend/app/+html.tsx` injects
+`getSsoCallbackBootstrapScript()` from `@oxyhq/core`. Do not add a local
+`/__oxy/sso-callback` route or copy SSO helper logic.
 
 **`@react-native-community/netinfo` is now a peer of `@oxyhq/services@7` (no longer bundled).**
 Both root `overrides` and `resolutions` pin it to `^11.4.1` so the services side and the app share

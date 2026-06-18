@@ -1,7 +1,12 @@
-import Conversation, { IConversation, ConversationType } from '../models/Conversation';
+import Conversation, { ConversationParticipant, ConversationType } from '../models/Conversation';
 import { oxy } from '../../server';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import {
+  enrichParticipantWithOxyUser,
+  EnrichedConversationParticipant,
+  getErrorStatus,
+} from '../utils/oxyUserDisplay';
 
 /**
  * Conversation Service Layer
@@ -34,12 +39,35 @@ interface PaginationOptions {
   offset?: number;
 }
 
+interface ConversationDto {
+  _id?: unknown;
+  type?: ConversationType;
+  participants: EnrichedConversationParticipant[];
+  name?: string;
+  description?: string;
+  avatar?: string;
+  theme?: string;
+  createdBy?: string;
+  lastMessageAt?: Date;
+  lastMessage?: {
+    text?: string;
+    senderId: string;
+    timestamp: Date;
+  };
+  unreadCounts?: Map<string, number> | Record<string, number>;
+  archivedBy?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export class ConversationService {
   /**
    * Enrich participants with Oxy user data
    * Optimized: Batch fetch all users at once (WhatsApp pattern)
    */
-  private static async enrichParticipants(participants: any[]): Promise<any[]> {
+  private static async enrichParticipants(
+    participants: ConversationParticipant[]
+  ): Promise<EnrichedConversationParticipant[]> {
     const userIds = Array.from(new Set(participants.map(p => p.userId).filter(Boolean)));
     if (userIds.length === 0) return participants;
 
@@ -47,8 +75,8 @@ export class ConversationService {
       // Batch fetch all users in parallel (WhatsApp-style efficiency)
       const userPromises = userIds.map(userId =>
         oxy.getUserById(userId)
-          .catch((error: any) => {
-            if (error?.status === 404) {
+          .catch((error: unknown) => {
+            if (getErrorStatus(error) === 404) {
               logger.debug(`Oxy user ${userId} not found`);
             } else {
               logger.error(`Error fetching Oxy user ${userId}:`, error);
@@ -61,41 +89,12 @@ export class ConversationService {
       const userMap = new Map(users.map((user, index) => [userIds[index], user]));
 
       // Enrich participants
-      return participants.map(participant => {
-        const oxyUser = userMap.get(participant.userId);
-        if (!oxyUser) {
-          return {
-            ...participant,
-            name: participant.name || { first: 'Unknown', last: '' },
-            username: participant.username,
-            avatar: participant.avatar,
-          };
-        }
-
-        // Extract name from Oxy user
-        let name = { first: '', last: '' };
-        if (typeof oxyUser.name === 'string') {
-          const parts = oxyUser.name.split(' ');
-          name = { first: parts[0] || '', last: parts.slice(1).join(' ') || '' };
-        } else if (oxyUser.name) {
-          name = {
-            first: oxyUser.name.first || '',
-            last: oxyUser.name.last || '',
-          };
-        } else {
-          name = { first: oxyUser.username || oxyUser.handle || 'Unknown', last: '' };
-        }
-
-        return {
-          ...participant,
-          name,
-          username: oxyUser.username || oxyUser.handle || participant.username,
-          avatar: oxyUser.avatar || participant.avatar,
-        };
-      });
+      return participants.map(participant =>
+        enrichParticipantWithOxyUser(participant, userMap.get(participant.userId))
+      );
     } catch (error) {
       logger.error('Error enriching participants:', error);
-      return participants; // Return unmodified on error
+      return participants;
     }
   }
 
@@ -105,7 +104,7 @@ export class ConversationService {
   static async getUserConversations(
     userId: string,
     options: PaginationOptions = {}
-  ): Promise<IConversation[]> {
+  ): Promise<ConversationDto[]> {
     const { limit = 50, offset = 0 } = options;
 
     try {
@@ -136,7 +135,7 @@ export class ConversationService {
         return {
           ...conv,
           participants: convEnrichedParticipants,
-        } as IConversation;
+        };
       });
     } catch (error) {
       logger.error('Error fetching user conversations:', error);
@@ -150,7 +149,7 @@ export class ConversationService {
   static async getConversationById(
     conversationId: string,
     userId: string
-  ): Promise<IConversation> {
+  ): Promise<ConversationDto> {
     try {
       const conversation = await Conversation.findOne({
         _id: conversationId,
@@ -169,7 +168,7 @@ export class ConversationService {
       return {
         ...conversation,
         participants: enrichedParticipants,
-      } as IConversation;
+      };
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error fetching conversation:', error);
@@ -180,7 +179,7 @@ export class ConversationService {
   /**
    * Create a new conversation
    */
-  static async createConversation(data: CreateConversationData): Promise<IConversation> {
+  static async createConversation(data: CreateConversationData): Promise<ConversationDto> {
     const { userId, type = 'direct', participantIds, name, description, avatar } = data;
 
     try {
@@ -208,7 +207,7 @@ export class ConversationService {
           .exec();
 
         if (existing) {
-          return existing as IConversation;
+          return existing;
         }
       }
 
@@ -236,7 +235,7 @@ export class ConversationService {
         participantCount: participants.length,
       });
 
-      return conversation.toObject() as IConversation;
+      return conversation.toObject();
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error creating conversation:', error);
@@ -251,7 +250,7 @@ export class ConversationService {
     conversationId: string,
     userId: string,
     updates: UpdateConversationData
-  ): Promise<IConversation> {
+  ): Promise<ConversationDto> {
     try {
       const conversation = await Conversation.findOne({
         _id: conversationId,
@@ -277,7 +276,7 @@ export class ConversationService {
         });
       }
 
-      return conversation.toObject() as IConversation;
+      return conversation.toObject();
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error updating conversation:', error);
@@ -291,7 +290,7 @@ export class ConversationService {
   static async archiveConversation(
     conversationId: string,
     userId: string
-  ): Promise<IConversation> {
+  ): Promise<ConversationDto> {
     try {
       const conversation = await Conversation.findOne({
         _id: conversationId,
@@ -309,7 +308,7 @@ export class ConversationService {
         logger.info('Archived conversation', { conversationId, userId });
       }
 
-      return conversation.toObject() as IConversation;
+      return conversation.toObject();
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error archiving conversation:', error);
@@ -320,7 +319,7 @@ export class ConversationService {
   /**
    * Mark conversation as read
    */
-  static async markAsRead(conversationId: string, userId: string): Promise<IConversation> {
+  static async markAsRead(conversationId: string, userId: string): Promise<ConversationDto> {
     try {
       const conversation = await Conversation.findOne({
         _id: conversationId,
@@ -341,7 +340,7 @@ export class ConversationService {
       conversation.unreadCounts.set(userId, 0);
       await conversation.save();
 
-      return conversation.toObject() as IConversation;
+      return conversation.toObject();
     } catch (error) {
       if (error instanceof AppError) throw error;
       logger.error('Error marking conversation as read:', error);

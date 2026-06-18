@@ -28,7 +28,7 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern, secu
 
 ### Prerequisites
 
-- Node.js 18+ and npm 8+
+- Node.js 18+ and Bun 1.3+
 - MongoDB instance
 - Git
 
@@ -41,10 +41,10 @@ git clone https://github.com/OxyHQ/Allo.git
 cd Allo
 
 # Install all dependencies
-npm run install:all
+bun install
 
 # Start backend development
-npm run dev:backend
+bun run dev:backend
 ```
 
 #### Option 2: From This Package Directory
@@ -53,10 +53,10 @@ npm run dev:backend
 cd packages/backend
 
 # Install dependencies
-npm install
+bun install
 
 # Start development server
-npm run dev
+bun run dev
 ```
 
 ### Environment Configuration
@@ -83,13 +83,13 @@ FRONTEND_URL=https://allo.earth
 
 #### Development Mode
 ```bash
-npm run dev
+bun run dev
 ```
 
 #### Production Mode
 ```bash
-npm run build
-npm start
+bun run build
+bun run start
 ```
 
 ### Database Setup
@@ -432,11 +432,11 @@ const socket = io('http://localhost:3000/messaging', {
 
 ## Development Scripts
 
-- `npm run dev` — Start development server with hot reload
-- `npm run build` — Build the project
-- `npm run start` — Start production server
-- `npm run lint` — Lint codebase
-- `npm run clean` — Clean build artifacts
+- `bun run dev` — Start development server with hot reload
+- `bun run build` — Build the project
+- `bun run start` — Start production server
+- `bun run lint` — Lint codebase
+- `bun run clean` — Clean build artifacts
 
 ## Monorepo Integration
 

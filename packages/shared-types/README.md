@@ -127,7 +127,7 @@ All user-related data is linked to Oxy users via `oxyUserId` fields:
 ### Installation
 
 ```bash
-npm install @allo/shared-types
+bun add @allo/shared-types
 ```
 
 ### Import Types
@@ -176,19 +176,19 @@ const profile: Profile = {
 ### Building
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Development Mode
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### Linting
 
 ```bash
-npm run lint
+bun run lint
 ```
 
 ## Contributing

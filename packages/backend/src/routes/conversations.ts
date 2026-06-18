@@ -6,6 +6,13 @@ import { getAuthenticatedUserId } from "../utils/auth";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { oxy } from "../../server";
 import { getIO } from "../utils/socket";
+import { logger } from "../utils/logger";
+import {
+  enrichParticipantWithOxyUser,
+  EnrichedConversationParticipant,
+  getErrorMessage,
+  isOxyUserNotFound,
+} from "../utils/oxyUserDisplay";
 
 const router = Router();
 
@@ -13,7 +20,9 @@ const router = Router();
  * Enrich conversation participants with Oxy user data (name, username, avatar)
  * This is like WhatsApp - backend processes names using Oxy for efficiency
  */
-async function enrichParticipantsWithOxyData(participants: any[]) {
+async function enrichParticipantsWithOxyData(
+  participants: Parameters<typeof enrichParticipantWithOxyUser>[0][]
+): Promise<EnrichedConversationParticipant[]> {
   const userIds = Array.from(new Set(participants.map(p => p.userId).filter(Boolean)));
   if (userIds.length === 0) return participants;
 
@@ -22,12 +31,12 @@ async function enrichParticipantsWithOxyData(participants: any[]) {
     try {
       const user = await oxy.getUserById(userId);
       return { userId, user };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle 404 errors gracefully (user might be deleted) - don't log as error
-      if (error?.status === 404 || error?.code === 'ERR_BAD_REQUEST') {
-        console.log(`[Conversations] Oxy user ${userId} not found (404) - using participant data`);
+      if (isOxyUserNotFound(error)) {
+        logger.debug(`[Conversations] Oxy user ${userId} not found - using participant data`);
       } else {
-        console.error(`[Conversations] Error fetching Oxy user ${userId}:`, error);
+        logger.error(`[Conversations] Error fetching Oxy user ${userId}:`, error);
       }
       return { userId, user: null };
     }
@@ -38,40 +47,7 @@ async function enrichParticipantsWithOxyData(participants: any[]) {
 
   // Enrich participants with Oxy data
   return participants.map((participant) => {
-    const oxyUser = userMap.get(participant.userId);
-    if (!oxyUser) {
-      return {
-        ...participant,
-        name: participant.name || { first: 'Unknown', last: '' },
-        username: participant.username || undefined,
-        avatar: participant.avatar || undefined,
-      };
-    }
-
-    // Extract name from Oxy user (can be string or object)
-    let name = participant.name || { first: '', last: '' };
-    if (typeof oxyUser.name === 'string') {
-      const parts = oxyUser.name.split(' ');
-      name = {
-        first: parts[0] || '',
-        last: parts.slice(1).join(' ') || '',
-      };
-    } else if (oxyUser.name) {
-      name = {
-        first: oxyUser.name.first || '',
-        last: oxyUser.name.last || '',
-      };
-    } else {
-      // Fallback to username if no name
-      name = { first: oxyUser.username || oxyUser.handle || 'Unknown', last: '' };
-    }
-
-    return {
-      ...participant,
-      name,
-      username: oxyUser.username || oxyUser.handle || participant.username,
-      avatar: oxyUser.avatar || participant.avatar,
-    };
+    return enrichParticipantWithOxyUser(participant, userMap.get(participant.userId));
   });
 }
 
@@ -111,7 +87,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, { conversations: enrichedConversations });
   } catch (err) {
-    console.error("[Conversations] Error fetching conversations:", err);
+    logger.error("[Conversations] Error fetching conversations:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch conversations");
   }
 });
@@ -148,7 +124,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, enrichedConversation);
   } catch (err) {
-    console.error("[Conversations] Error fetching conversation:", err);
+    logger.error("[Conversations] Error fetching conversation:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch conversation");
   }
 });
@@ -208,10 +184,11 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     });
 
     return sendSuccessResponse(res, 201, conversation);
-  } catch (err: any) {
-    console.error("[Conversations] Error creating conversation:", err);
-    if (err.message?.includes("must have exactly 2 participants")) {
-      return sendErrorResponse(res, 400, "Bad Request", err.message);
+  } catch (err) {
+    logger.error("[Conversations] Error creating conversation:", err);
+    const message = getErrorMessage(err);
+    if (message?.includes("must have exactly 2 participants")) {
+      return sendErrorResponse(res, 400, "Bad Request", message);
     }
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to create conversation");
   }
@@ -271,7 +248,7 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error updating conversation:", err);
+    logger.error("[Conversations] Error updating conversation:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to update conversation");
   }
 });
@@ -316,7 +293,7 @@ router.post("/:id/participants", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error adding participants:", err);
+    logger.error("[Conversations] Error adding participants:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to add participants");
   }
 });
@@ -358,7 +335,7 @@ router.delete("/:id/participants/:participantId", async (req: AuthRequest, res: 
     await conversation.save();
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error removing participant:", err);
+    logger.error("[Conversations] Error removing participant:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to remove participant");
   }
 });
@@ -388,7 +365,7 @@ router.post("/:id/archive", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error archiving conversation:", err);
+    logger.error("[Conversations] Error archiving conversation:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to archive conversation");
   }
 });
@@ -416,7 +393,7 @@ router.post("/:id/unarchive", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error unarchiving conversation:", err);
+    logger.error("[Conversations] Error unarchiving conversation:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to unarchive conversation");
   }
 });
@@ -451,10 +428,9 @@ router.post("/:id/mark-read", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, conversation);
   } catch (err) {
-    console.error("[Conversations] Error marking conversation as read:", err);
+    logger.error("[Conversations] Error marking conversation as read:", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to mark conversation as read");
   }
 });
 
 export default router;
-
