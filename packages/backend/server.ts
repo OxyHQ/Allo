@@ -5,6 +5,7 @@ import { connectToDatabase } from "./src/utils/database";
 import { Server as SocketIOServer, Socket, Namespace } from "socket.io";
 import dotenv from "dotenv";
 import { oxyClient } from "@oxyhq/core";
+import { createOxyRateLimit } from "@oxyhq/core/server";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -13,7 +14,6 @@ import messagesRoutes from "./src/routes/messages";
 import devicesRoutes from "./src/routes/devices";
 
 // Middleware
-import { rateLimiter, bruteForceProtection } from "./src/middleware/security";
 
 // --- Config ---
 dotenv.config();
@@ -247,31 +247,8 @@ app.set("io", io);
 app.set("messagingNamespace", messagingNamespace);
 (global as any).io = io;
 
-// --- Optional Auth Middleware ---
-// Tries to authenticate but doesn't fail if no token is provided
-const optionalAuth = (
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction
-) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return next();
-  }
-
-  const authMiddleware = oxy.auth();
-  authMiddleware(req, res, (err?: any) => {
-    if (err) {
-      console.log(
-        "Optional auth: Authentication failed, continuing as unauthenticated:",
-        err?.message || "Unknown error"
-      );
-      (req as any).user = undefined;
-    }
-    next();
-  });
-};
+// Resolve session and apply per-user rate limiting in one shared middleware.
+app.use(createOxyRateLimit(oxy));
 
 // --- API ROUTES ---
 // Public API routes (no authentication required)
@@ -336,4 +313,3 @@ if (require.main === module) {
 
 export { io, messagingNamespace };
 export default server;
-
