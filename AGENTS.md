@@ -71,7 +71,7 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 
 ## Dependencies
 
-- `@oxyhq/core` (^3.4.5), `@oxyhq/services` (^10.2.2), `@oxyhq/bloom` (^0.8.5) — Oxy platform integration
+- `@oxyhq/core` (^3.4.13), `@oxyhq/services` (^10.2.10), `@oxyhq/bloom` (^0.8.5) — Oxy platform integration
 
 ## CRITICAL — Dependency Gotchas
 
@@ -79,11 +79,21 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 `@oxyhq/services` declares `@oxyhq/core` as a peer. Without an explicit override, Bun may
 hoist a satisfying-but-different core build inside the services package, causing type mismatches and
 runtime errors. The root `package.json` must carry both `overrides` and `resolutions` entries pointing
-to the current target (`^3.4.5` / `3.4.5`). The frontend/backend should use the same major/minor line.
+to the current target (`^3.4.13` / `3.4.13`). The frontend/backend should use the same major/minor line.
 
 **Expo web SSO callback bootstrap:** `packages/frontend/app/+html.tsx` injects
 `getSsoCallbackBootstrapScript()` from `@oxyhq/core`. Do not add a local
-`/__oxy/sso-callback` route or copy SSO helper logic.
+`/__oxy/sso-callback` route or copy SSO helper logic. Frontend auth/session state
+belongs to `OxyProvider` with a registered `clientId`; SDK cold boot owns callback
+consumption, stored-session restore, FedCM/silent restore, and SSO bounce. App
+backend clients use `oxyServices.createLinkedClient({ baseURL })`, not local token
+providers, auth interceptors, manual `Authorization` plumbing, refresh retries, or
+session invalidation. Backend auth middleware comes from `@oxyhq/core/server`
+(`createOxyAuthMiddleware`, `createOptionalOxyAuth`, `createOxyRateLimit`,
+`requireOxyAuth`, `getRequiredOxyUserId`, `authSocket`); do not define local
+`AuthRequest`, `requireAuth`, `getUserId`, bearer parsers, or token-decoding
+middleware. Bearer-authenticated writes do not fetch app-local CSRF tokens; CSRF
+remains for ambient cookie credentials.
 
 **`@react-native-community/netinfo` is now a peer of `@oxyhq/services@7` (no longer bundled).**
 Both root `overrides` and `resolutions` pin it to `^11.4.1` so the services side and the app share

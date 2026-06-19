@@ -11,7 +11,7 @@ export interface ApiErrorResponse {
 /**
  * Standard API success response format
  */
-export interface ApiSuccessResponse<T = any> {
+export interface ApiSuccessResponse<T = unknown> {
   success?: boolean;
   message?: string;
   data?: T;
@@ -47,10 +47,9 @@ export function sendSuccessResponse<T>(
 /**
  * Validates required parameter
  */
-export function validateRequired(param: any, paramName: string): string | null {
+export function validateRequired(param: unknown, paramName: string): string | null {
   if (!param) {
     return `Missing ${paramName} parameter`;
   }
   return null;
 }
-

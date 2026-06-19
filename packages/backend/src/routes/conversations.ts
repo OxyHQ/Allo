@@ -1,8 +1,8 @@
 import { Router, Response } from "express";
 import Conversation from "../models/Conversation";
 import Message from "../models/Message";
-import { AuthRequest } from "../middleware/auth";
-import { getAuthenticatedUserId } from "../utils/auth";
+import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { oxy } from "../../server";
 import { getIO } from "../utils/socket";

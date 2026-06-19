@@ -13,6 +13,19 @@ export interface MediaItem {
   duration?: number; // For video/audio
 }
 
+export interface EncryptedMediaItem {
+  id: string;
+  type: "image" | "video" | "audio" | "file";
+  ciphertext: string;
+  thumbnailCiphertext?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
 export interface IMessage extends Document {
   conversationId: string;
   senderId: string; // Oxy user ID
@@ -20,18 +33,7 @@ export interface IMessage extends Document {
   
   // Encrypted content (Signal Protocol)
   ciphertext?: string; // Base64 encoded encrypted message
-  encryptedMedia?: Array<{
-    id: string;
-    type: "image" | "video" | "audio" | "file";
-    ciphertext: string; // Encrypted media data or URL
-    thumbnailCiphertext?: string; // Encrypted thumbnail
-    fileName?: string;
-    fileSize?: number;
-    mimeType?: string;
-    width?: number;
-    height?: number;
-    duration?: number;
-  }>;
+  encryptedMedia?: EncryptedMediaItem[];
   
   // Legacy plaintext fields (for backward compatibility during migration)
   // These should be empty if encryption is enabled
@@ -46,9 +48,9 @@ export interface IMessage extends Document {
   fontSize?: number; // Custom font size for this message
   editedAt?: Date;
   deletedAt?: Date;
-  readBy: Record<string, Date>; // userId -> read timestamp
+  readBy: Map<string, Date>; // userId -> read timestamp
   deliveredTo: string[]; // Array of user IDs who received the message
-  reactions?: Record<string, string[]>; // emoji -> array of userIds who reacted
+  reactions?: Map<string, string[]>; // emoji -> array of userIds who reacted
   createdAt: Date;
   updatedAt: Date;
 }
@@ -161,4 +163,3 @@ MessageSchema.pre("save", function (next) {
 
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
 export default Message;
-

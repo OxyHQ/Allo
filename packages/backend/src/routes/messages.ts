@@ -1,11 +1,209 @@
 import { Router, Response } from "express";
-import Message from "../models/Message";
+import type { FilterQuery } from "mongoose";
+import Message, { type EncryptedMediaItem, type IMessage, type MediaItem } from "../models/Message";
 import Conversation from "../models/Conversation";
-import { AuthRequest } from "../middleware/auth";
-import { getAuthenticatedUserId } from "../utils/auth";
+import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
+import { logger } from "../utils/logger";
 
 const router = Router();
+
+const DEFAULT_MESSAGE_LIMIT = 50;
+const MAX_MESSAGE_LIMIT = 100;
+const MESSAGE_CONTENT_ERROR = "Message must have either encrypted content or legacy plaintext";
+
+type RequestBody = Record<string, unknown>;
+type MediaKind = MediaItem["type"];
+type MessageKind = NonNullable<IMessage["messageType"]>;
+
+function isRecord(value: unknown): value is RequestBody {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getRequestBody(value: unknown): RequestBody {
+  return isRecord(value) ? value : {};
+}
+
+function getStringValue(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getOptionalString(value: unknown): string | undefined {
+  return getStringValue(value) ?? undefined;
+}
+
+function getOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function getPositiveInteger(value: unknown): number | null {
+  const parsed = getOptionalNumber(value);
+  if (parsed === undefined || parsed < 1 || !Number.isInteger(parsed)) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function getMessageLimit(value: unknown): number {
+  const parsed = getPositiveInteger(value);
+  if (parsed === null) {
+    return DEFAULT_MESSAGE_LIMIT;
+  }
+
+  return Math.min(parsed, MAX_MESSAGE_LIMIT);
+}
+
+function getOptionalDate(value: unknown): Date | null | undefined {
+  const rawValue = getStringValue(value);
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const parsed = new Date(rawValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isMediaKind(value: unknown): value is MediaKind {
+  return value === "image" || value === "video" || value === "audio" || value === "file";
+}
+
+function isMessageKind(value: unknown): value is MessageKind {
+  return value === "text" || value === "media" || value === "system";
+}
+
+function applyOptionalMediaFields<T extends MediaItem | EncryptedMediaItem>(
+  item: T,
+  source: RequestBody
+): T {
+  const thumbnailUrl = getOptionalString(source.thumbnailUrl);
+  const thumbnailCiphertext = getOptionalString(source.thumbnailCiphertext);
+  const fileName = getOptionalString(source.fileName);
+  const fileSize = getOptionalNumber(source.fileSize);
+  const mimeType = getOptionalString(source.mimeType);
+  const width = getOptionalNumber(source.width);
+  const height = getOptionalNumber(source.height);
+  const duration = getOptionalNumber(source.duration);
+
+  return {
+    ...item,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(thumbnailCiphertext ? { thumbnailCiphertext } : {}),
+    ...(fileName ? { fileName } : {}),
+    ...(fileSize !== undefined ? { fileSize } : {}),
+    ...(mimeType ? { mimeType } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(duration !== undefined ? { duration } : {}),
+  };
+}
+
+function parseMediaItem(value: unknown): MediaItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = getStringValue(value.id);
+  const url = getStringValue(value.url);
+
+  if (!id || !url || !isMediaKind(value.type)) {
+    return null;
+  }
+
+  return applyOptionalMediaFields(
+    {
+      id,
+      type: value.type,
+      url,
+    },
+    value
+  );
+}
+
+function parseEncryptedMediaItem(value: unknown): EncryptedMediaItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = getStringValue(value.id);
+  const ciphertext = getStringValue(value.ciphertext);
+
+  if (!id || !ciphertext || !isMediaKind(value.type)) {
+    return null;
+  }
+
+  return applyOptionalMediaFields(
+    {
+      id,
+      type: value.type,
+      ciphertext,
+    },
+    value
+  );
+}
+
+function parseItemArray<T>(
+  value: unknown,
+  parseItem: (item: unknown) => T | null
+): T[] | null | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const parsedItems: T[] = [];
+  for (const item of value) {
+    const parsedItem = parseItem(item);
+    if (!parsedItem) {
+      return null;
+    }
+    parsedItems.push(parsedItem);
+  }
+
+  return parsedItems;
+}
+
+function hasItems<T>(items: T[] | undefined): items is T[] {
+  return items !== undefined && items.length > 0;
+}
+
+function getMessageKind(value: unknown, encryptedMedia: EncryptedMediaItem[] | undefined): MessageKind {
+  if (isMessageKind(value)) {
+    return value;
+  }
+
+  return hasItems(encryptedMedia) ? "media" : "text";
+}
+
+function mapToRecord<T>(map: Map<string, T>): Record<string, T> {
+  const record: Record<string, T> = {};
+  map.forEach((value, key) => {
+    record[key] = value;
+  });
+  return record;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Messages API
@@ -20,11 +218,17 @@ const router = Router();
 router.get("/", async (req: AuthRequest, res: Response) => {
   try {
     const userId = getAuthenticatedUserId(req);
-    const { conversationId, limit = 50, before } = req.query;
+    const conversationId = getStringValue(req.query.conversationId);
+    const limit = getMessageLimit(req.query.limit);
+    const beforeDate = getOptionalDate(req.query.before);
 
-    const validationError = validateRequired(conversationId as string, "conversationId");
-    if (validationError) {
-      return sendErrorResponse(res, 400, "Bad Request", validationError);
+    const validationError = validateRequired(conversationId, "conversationId");
+    if (!conversationId) {
+      return sendErrorResponse(res, 400, "Bad Request", validationError ?? "Missing conversationId parameter");
+    }
+
+    if (beforeDate === null) {
+      return sendErrorResponse(res, 400, "Bad Request", "before must be a valid date");
     }
 
     // Verify user is a participant
@@ -38,18 +242,18 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     }
 
     // Build query
-    const query: any = {
-      conversationId: conversationId as string,
+    const query: FilterQuery<IMessage> = {
+      conversationId,
       deletedAt: { $exists: false },
     };
 
-    if (before) {
-      query.createdAt = { $lt: new Date(before as string) };
+    if (beforeDate) {
+      query.createdAt = { $lt: beforeDate };
     }
 
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
-      .limit(Number(limit))
+      .limit(limit)
       .lean();
 
     // Reverse to get chronological order
@@ -59,7 +263,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     // Client is responsible for decryption
     return sendSuccessResponse(res, 200, { messages });
   } catch (err) {
-    console.error("[Messages] Error fetching messages:", err);
+    logger.error("[Messages] Error fetching messages", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch messages");
   }
 });
@@ -91,7 +295,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, message);
   } catch (err) {
-    console.error("[Messages] Error fetching message:", err);
+    logger.error("[Messages] Error fetching message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch message");
   }
 });
@@ -103,28 +307,32 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
 router.post("/", async (req: AuthRequest, res: Response) => {
   try {
     const userId = getAuthenticatedUserId(req);
-    const {
-      conversationId,
-      senderDeviceId,
-      // Encrypted content
-      ciphertext,
-      encryptedMedia,
-      encryptionVersion,
-      messageType,
-      // Legacy plaintext (for backward compatibility)
-      text,
-      media,
-      replyTo,
-      fontSize,
-    } = req.body;
+    const body = getRequestBody(req.body);
+    const conversationId = getStringValue(body.conversationId);
+    const senderDeviceId = getPositiveInteger(body.senderDeviceId);
+    const ciphertext = getOptionalString(body.ciphertext);
+    const encryptedMedia = parseItemArray(body.encryptedMedia, parseEncryptedMediaItem);
+    const encryptionVersion = getOptionalNumber(body.encryptionVersion);
+    const text = getOptionalString(body.text);
+    const media = parseItemArray(body.media, parseMediaItem);
+    const replyTo = getOptionalString(body.replyTo);
+    const fontSize = getOptionalNumber(body.fontSize);
 
     const validationError = validateRequired(conversationId, "conversationId");
-    if (validationError) {
-      return sendErrorResponse(res, 400, "Bad Request", validationError);
+    if (!conversationId) {
+      return sendErrorResponse(res, 400, "Bad Request", validationError ?? "Missing conversationId parameter");
     }
 
-    if (!senderDeviceId) {
+    if (senderDeviceId === null) {
       return sendErrorResponse(res, 400, "Bad Request", "senderDeviceId is required");
+    }
+
+    if (encryptedMedia === null) {
+      return sendErrorResponse(res, 400, "Bad Request", "encryptedMedia must contain valid encrypted media items");
+    }
+
+    if (media === null) {
+      return sendErrorResponse(res, 400, "Bad Request", "media must contain valid media items");
     }
 
     // Verify user is a participant
@@ -138,23 +346,23 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     }
 
     // Check if message has encrypted content or legacy plaintext
-    const hasEncrypted = ciphertext || (encryptedMedia && encryptedMedia.length > 0);
-    const hasLegacy = text || (media && media.length > 0);
+    const hasEncrypted = Boolean(ciphertext) || hasItems(encryptedMedia);
+    const hasLegacy = Boolean(text) || hasItems(media);
 
     if (!hasEncrypted && !hasLegacy) {
-      return sendErrorResponse(res, 400, "Bad Request", "Message must have either encrypted content or legacy plaintext");
+      return sendErrorResponse(res, 400, "Bad Request", MESSAGE_CONTENT_ERROR);
     }
 
     // Create message (encrypted or plaintext)
     const message = await Message.create({
       conversationId,
       senderId: userId,
-      senderDeviceId: Number(senderDeviceId),
+      senderDeviceId,
       // Encrypted content
       ciphertext,
       encryptedMedia,
-      encryptionVersion: encryptionVersion || 1,
-      messageType: messageType || (encryptedMedia ? "media" : "text"),
+      encryptionVersion: encryptionVersion ?? 1,
+      messageType: getMessageKind(body.messageType, encryptedMedia),
       // Legacy plaintext (deprecated)
       text,
       media,
@@ -168,7 +376,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     // For encrypted messages, don't store plaintext preview
     const lastMessageText = ciphertext
       ? "[Encrypted]"
-      : text || (media && media.length > 0 ? `Sent ${media.length} media file(s)` : "");
+      : text || (hasItems(media) ? `Sent ${media.length} media file(s)` : "");
     conversation.lastMessage = {
       text: lastMessageText,
       senderId: userId,
@@ -176,12 +384,10 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     };
 
     // Increment unread counts for all participants except sender
-    // Mongoose Map types need to be accessed as Maps, not Records
-    const unreadCounts = (conversation as any).unreadCounts as Map<string, number>;
     conversation.participants.forEach((participant) => {
       if (participant.userId !== userId) {
-        const currentCount = unreadCounts.get(participant.userId) || 0;
-        unreadCounts.set(participant.userId, currentCount + 1);
+        const currentCount = conversation.unreadCounts.get(participant.userId) || 0;
+        conversation.unreadCounts.set(participant.userId, currentCount + 1);
       }
     });
 
@@ -189,32 +395,31 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
     // Emit real-time event to both conversation room AND all participant user rooms
     // This ensures users receive messages even when not viewing that conversation (like WhatsApp)
-    const io = (global as any).io;
-    if (io) {
-      const messagingNamespace = io.of("/messaging");
-      
+    const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
+    if (messagingNamespace) {
       // Convert message to plain object for socket emission
-      const messageData = message.toObject ? message.toObject() : message;
+      const messageData = message.toObject();
       
       // Emit to conversation room (for active viewers)
       messagingNamespace.to(`conversation:${conversationId}`).emit("newMessage", messageData);
-      console.log(`[Messages] Emitted newMessage to conversation:${conversationId}`);
+      logger.info(`[Messages] Emitted newMessage to conversation:${conversationId}`);
       
       // Also emit to all participant user rooms (so users receive messages globally)
       // This allows messages to appear in conversation list even when not viewing that conversation
       conversation.participants.forEach((participant) => {
         messagingNamespace.to(`user:${participant.userId}`).emit("newMessage", messageData);
-        console.log(`[Messages] Emitted newMessage to user:${participant.userId}`);
+        logger.info(`[Messages] Emitted newMessage to user:${participant.userId}`);
       });
     } else {
-      console.error('[Messages] Socket.IO not available - messages will not be sent via socket');
+      logger.error("[Messages] Socket.IO unavailable; realtime message emit skipped");
     }
 
     return sendSuccessResponse(res, 201, message);
-  } catch (err: any) {
-    console.error("[Messages] Error sending message:", err);
-    if (err.message?.includes("must have either text or media")) {
-      return sendErrorResponse(res, 400, "Bad Request", err.message);
+  } catch (err) {
+    logger.error("[Messages] Error sending message", err);
+    const errorMessage = getErrorMessage(err);
+    if (errorMessage.includes("must have either text or media") || errorMessage.includes(MESSAGE_CONTENT_ERROR)) {
+      return sendErrorResponse(res, 400, "Bad Request", errorMessage);
     }
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to send message");
   }
@@ -228,7 +433,8 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
-    const { text } = req.body;
+    const body = getRequestBody(req.body);
+    const text = getStringValue(body.text);
 
     if (!text) {
       return sendErrorResponse(res, 400, "Bad Request", "Text is required");
@@ -249,15 +455,14 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     await message.save();
 
     // Emit real-time event
-    const io = (global as any).io;
-    if (io) {
-      const messagingNamespace = io.of("/messaging");
+    const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
+    if (messagingNamespace) {
       messagingNamespace.to(`conversation:${message.conversationId}`).emit("messageUpdated", message);
     }
 
     return sendSuccessResponse(res, 200, message);
   } catch (err) {
-    console.error("[Messages] Error editing message:", err);
+    logger.error("[Messages] Error editing message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to edit message");
   }
 });
@@ -270,11 +475,12 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
   try {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
-    const { emoji } = req.body;
+    const body = getRequestBody(req.body);
+    const emoji = getStringValue(body.emoji);
 
     const validationError = validateRequired(emoji, "emoji");
-    if (validationError) {
-      return sendErrorResponse(res, 400, "Bad Request", validationError);
+    if (!emoji) {
+      return sendErrorResponse(res, 400, "Bad Request", validationError ?? "Missing emoji parameter");
     }
 
     const message = await Message.findById(id);
@@ -293,11 +499,10 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
     }
 
     // Initialize reactions if not exists
-    // Mongoose Map types need to be accessed as Maps, not Records
     if (!message.reactions) {
-      (message as any).reactions = new Map<string, string[]>();
+      message.reactions = new Map<string, string[]>();
     }
-    const reactions = (message as any).reactions as Map<string, string[]>;
+    const reactions = message.reactions;
 
     const currentReactions = reactions.get(emoji) || [];
     const hasReacted = currentReactions.includes(userId);
@@ -316,15 +521,11 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
     await message.save();
 
     // Convert Map to plain object for socket emission
-    const reactionsObj: Record<string, string[]> = {};
-    reactions.forEach((userIds: string[], emojiKey: string) => {
-      reactionsObj[emojiKey] = userIds;
-    });
+    const reactionsObj = mapToRecord(reactions);
 
     // Emit real-time event
-    const io = (global as any).io;
-    if (io) {
-      const messagingNamespace = io.of("/messaging");
+    const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
+    if (messagingNamespace) {
       messagingNamespace
         .to(`conversation:${message.conversationId}`)
         .emit("messageReactionUpdated", {
@@ -343,7 +544,7 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
       reactions: reactionsObj,
     });
   } catch (err) {
-    console.error("[Messages] Error updating reaction:", err);
+    logger.error("[Messages] Error updating reaction", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to update reaction");
   }
 });
@@ -371,15 +572,14 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
     await message.save();
 
     // Emit real-time event
-    const io = (global as any).io;
-    if (io) {
-      const messagingNamespace = io.of("/messaging");
+    const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
+    if (messagingNamespace) {
       messagingNamespace.to(`conversation:${message.conversationId}`).emit("messageDeleted", { id: message._id });
     }
 
     return sendSuccessResponse(res, 200, { id: message._id, deleted: true });
   } catch (err) {
-    console.error("[Messages] Error deleting message:", err);
+    logger.error("[Messages] Error deleting message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to delete message");
   }
 });
@@ -410,14 +610,12 @@ router.post("/:id/read", async (req: AuthRequest, res: Response) => {
     }
 
     // Mark as read
-    // Mongoose Map types need to be accessed as Maps, not Records
-    const readBy = (message as any).readBy as Map<string, Date>;
-    readBy.set(userId, new Date());
+    message.readBy.set(userId, new Date());
     await message.save();
 
     return sendSuccessResponse(res, 200, message);
   } catch (err) {
-    console.error("[Messages] Error marking message as read:", err);
+    logger.error("[Messages] Error marking message as read", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to mark message as read");
   }
 });
@@ -455,10 +653,9 @@ router.post("/:id/delivered", async (req: AuthRequest, res: Response) => {
 
     return sendSuccessResponse(res, 200, message);
   } catch (err) {
-    console.error("[Messages] Error marking message as delivered:", err);
+    logger.error("[Messages] Error marking message as delivered", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to mark message as delivered");
   }
 });
 
 export default router;
-

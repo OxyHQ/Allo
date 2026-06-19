@@ -1,5 +1,5 @@
 interface LoggerFunction {
-  (message: string, ...args: any[]): void;
+  (message: string, ...args: unknown[]): void;
 }
 
 interface Logger {
@@ -9,17 +9,17 @@ interface Logger {
   debug: LoggerFunction;
 }
 
-export const logger = {
-  info: (message: string, ...args: any[]) => {
-    console.log(`[INFO] ${message}`, ...args);
+export const logger: Logger = {
+  info: (message: string, ...args: unknown[]) => {
+    console.info(`[INFO] ${message}`, ...args);
   },
-  error: (message: string, error?: any) => {
+  error: (message: string, error?: unknown) => {
     console.error(`[ERROR] ${message}`, error || '');
   },
-  warn: (message: string, ...args: any[]) => {
+  warn: (message: string, ...args: unknown[]) => {
     console.warn(`[WARN] ${message}`, ...args);
   },
-  debug: (message: string, ...args: any[]) => {
+  debug: (message: string, ...args: unknown[]) => {
     if (process.env.NODE_ENV !== 'production') {
       console.debug(`[DEBUG] ${message}`, ...args);
     }

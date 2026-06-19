@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import type { OxyAuthRequest } from '@oxyhq/core/server';
 import { logger } from '../utils/logger';
 
 /**
@@ -28,6 +29,7 @@ export const requestLogger = (
   next: NextFunction
 ) => {
   const startTime = Date.now();
+  const userId = getRequestUserId(req);
 
   // Log request
   logger.info(`${req.method} ${req.path}`, {
@@ -35,12 +37,12 @@ export const requestLogger = (
     url: req.originalUrl,
     ip: req.ip,
     userAgent: req.get('user-agent'),
-    userId: (req as any).user?.id,
+    userId,
   });
 
   // Capture response
   const originalSend = res.send;
-  res.send = function (data: any) {
+  res.send = function (data: unknown) {
     const duration = Date.now() - startTime;
 
     const logData: RequestLog = {
@@ -50,7 +52,7 @@ export const requestLogger = (
       duration,
       ip: req.ip || '',
       userAgent: req.get('user-agent') || '',
-      userId: (req as any).user?.id,
+      userId,
     };
 
     // Log based on status code
@@ -86,7 +88,7 @@ export const requestLogger = (
 export function logDatabaseQuery(
   collection: string,
   method: string,
-  query: any,
+  query: unknown,
   duration?: number
 ) {
   const logData = {
@@ -109,7 +111,7 @@ export function logDatabaseQuery(
 export function logApiError(
   req: Request,
   error: Error,
-  additionalContext?: Record<string, any>
+  additionalContext?: Record<string, unknown>
 ) {
   logger.error('API Error', {
     error: {
@@ -127,16 +129,26 @@ export function logApiError(
       ip: req.ip,
       userAgent: req.get('user-agent'),
     },
-    user: (req as any).user?.id,
+    user: getRequestUserId(req),
     ...additionalContext,
   });
+}
+
+function getRequestUserId(req: Request): string | undefined {
+  const authReq = req as OxyAuthRequest;
+  return authReq.user?.id ?? authReq.userId ?? undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
  * Sanitize request body (remove sensitive fields)
  */
-function sanitizeBody(body: any): any {
+function sanitizeBody(body: unknown): Record<string, unknown> {
   if (!body) return {};
+  if (!isRecord(body)) return {};
 
   const sanitized = { ...body };
   const sensitiveFields = ['password', 'token', 'apiKey', 'secret', 'authorization'];
@@ -153,7 +165,7 @@ function sanitizeBody(body: any): any {
 /**
  * Sanitize request headers (remove sensitive values)
  */
-function sanitizeHeaders(headers: any): any {
+function sanitizeHeaders(headers: Request['headers']): Record<string, unknown> {
   const sanitized = { ...headers };
 
   if (sanitized.authorization) {

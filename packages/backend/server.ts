@@ -1,11 +1,15 @@
 // --- Imports ---
 import express from "express";
 import http from "http";
+import mongoose from "mongoose";
 import { connectToDatabase } from "./src/utils/database";
-import { Server as SocketIOServer, Socket, Namespace } from "socket.io";
+import { Server as SocketIOServer } from "socket.io";
+import type { DisconnectReason, Namespace } from "socket.io";
 import dotenv from "dotenv";
 import { oxyClient } from "@oxyhq/core";
-import { createOxyRateLimit } from "@oxyhq/core/server";
+import { createOxyAuthMiddleware, createOxyRateLimit } from "@oxyhq/core/server";
+import { logger } from "./src/utils/logger";
+import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -33,7 +37,7 @@ app.use(async (req, res, next) => {
     await connectToDatabase();
     next();
   } catch (error) {
-    console.error("MongoDB connection unavailable:", error);
+    logger.error("MongoDB connection unavailable", error);
     if (res.headersSent) {
       return;
     }
@@ -70,26 +74,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- Sockets ---
 const server = http.createServer(app);
-
-interface AuthenticatedSocket extends Socket {
-  user?: { id: string; [key: string]: any };
-}
-
-type DisconnectReason =
-  | "server disconnect"
-  | "client disconnect"
-  | "transport close"
-  | "transport error"
-  | "ping timeout"
-  | "parse error"
-  | "forced close"
-  | "forced server close"
-  | "server shutting down"
-  | "client namespace disconnect"
-  | "server namespace disconnect"
-  | "unknown transport";
 
 const SOCKET_CONFIG = {
   PING_TIMEOUT: 60000,
@@ -150,36 +135,19 @@ const io = new SocketIOServer(server, {
 const messagingNamespace = io.of("/messaging");
 
 // --- Socket Auth Middleware ---
-[messagingNamespace, io].forEach((namespaceOrServer: any) => {
-  if (namespaceOrServer && typeof namespaceOrServer.use === "function") {
-    namespaceOrServer.use((socket: AuthenticatedSocket, next: (err?: any) => void) => {
-      try {
-        const auth = socket.handshake?.auth as any;
-        const token = auth?.token || socket.handshake?.headers?.authorization?.replace("Bearer ", "");
-        
-        if (token) {
-          // Verify token with Oxy
-          // For now, accept userId from handshake auth
-          // TODO: Implement proper token verification with Oxy
-          const userId = auth?.userId || auth?.id || auth?.user?.id;
-          if (userId && typeof userId === "string") {
-            socket.user = { id: userId };
-          }
-        }
-      } catch (_) {
-        // ignore – will be handled by connection handlers if user missing
-      }
-      return next();
-    });
-  }
+const authenticateSocket = oxy.authSocket();
+[messagingNamespace, io].forEach((namespaceOrServer: Namespace | SocketIOServer) => {
+  namespaceOrServer.use((socket: AuthenticatedSocket, next: (err?: Error) => void) => {
+    void authenticateSocket(socket, next);
+  });
 });
 
 // Configure messaging namespace
 messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
-  console.log("Client connected to messaging namespace from ip:", socket.handshake.address);
+  logger.info("Client connected to messaging namespace", { ip: socket.handshake.address });
 
   if (!socket.user?.id) {
-    console.log("Unauthenticated client attempted to connect to messaging namespace");
+    logger.warn("Unauthenticated client attempted to connect to messaging namespace");
     socket.disconnect(true);
     return;
   }
@@ -187,24 +155,24 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
   const userId = socket.user.id;
   const userRoom = `user:${userId}`;
   socket.join(userRoom);
-  console.log(`Client ${socket.id} joined messaging room:`, userRoom);
+  logger.info(`Client ${socket.id} joined messaging room`, { room: userRoom });
 
   socket.on("error", (error: Error) => {
-    console.error("Messaging socket error:", error.message);
+    logger.error("Messaging socket error", error);
   });
 
   // Join conversation room
   socket.on("joinConversation", (conversationId: string) => {
     const room = `conversation:${conversationId}`;
     socket.join(room);
-    console.log(`Client ${socket.id} joined conversation room:`, room);
+    logger.info(`Client ${socket.id} joined conversation room`, { room });
   });
 
   // Leave conversation room
   socket.on("leaveConversation", (conversationId: string) => {
     const room = `conversation:${conversationId}`;
     socket.leave(room);
-    console.log(`Client ${socket.id} left conversation room:`, room);
+    logger.info(`Client ${socket.id} left conversation room`, { room });
   });
 
   // Handle typing indicators
@@ -221,31 +189,30 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
   });
 
   socket.on("disconnect", (reason: DisconnectReason) => {
-    console.log(`Client ${socket.id} disconnected from messaging namespace:`, reason);
+    logger.info(`Client ${socket.id} disconnected from messaging namespace`, { reason });
     socket.leave(userRoom);
   });
 });
 
 // Configure main namespace
 io.on("connection", (socket: AuthenticatedSocket) => {
-  console.log("Client connected from ip:", socket.handshake.address);
+  logger.info("Client connected", { ip: socket.handshake.address });
 
   socket.on("error", (error: Error) => {
-    console.error("Socket error:", error.message);
+    logger.error("Socket error", error);
     if (socket.connected) {
       socket.disconnect();
     }
   });
 
   socket.on("disconnect", (reason: DisconnectReason) => {
-    console.log("Client disconnected:", reason);
+    logger.info("Client disconnected", { reason });
   });
 });
 
 // --- Expose namespaces for use in routes ---
-app.set("io", io);
-app.set("messagingNamespace", messagingNamespace);
-(global as any).io = io;
+const realtimeServer: AlloRealtimeServer = { io, messagingNamespace };
+app.locals.realtime = realtimeServer;
 
 // Resolve session and apply per-user rate limiting in one shared middleware.
 app.use(createOxyRateLimit(oxy));
@@ -268,7 +235,7 @@ authenticatedApiRouter.use("/devices", devicesRoutes);
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
-app.use("/api", oxy.auth(), authenticatedApiRouter);
+app.use("/api", createOxyAuthMiddleware(oxy), authenticatedApiRouter);
 
 // --- Root API Welcome Route ---
 app.get("/", async (req, res) => {
@@ -276,12 +243,12 @@ app.get("/", async (req, res) => {
 });
 
 // --- MongoDB Connection ---
-const db = require("mongoose").connection;
+const db = mongoose.connection;
 db.on("error", (error: Error) => {
-  console.error("MongoDB connection error:", error);
+  logger.error("MongoDB connection error", error);
 });
 db.once("open", () => {
-  console.log("Connected to MongoDB successfully");
+  logger.info("Connected to MongoDB successfully");
   // Load models
   require("./src/models/Conversation");
   require("./src/models/Message");
@@ -299,10 +266,10 @@ const bootServer = async () => {
   try {
     await connectToDatabase();
     server.listen(PORT, () => {
-      console.log(`Allo backend server running on port ${PORT}`);
+      logger.info(`Allo backend server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to start server: unable to connect to MongoDB", error);
+    logger.error("Failed to start server: unable to connect to MongoDB", error);
     process.exit(1);
   }
 };

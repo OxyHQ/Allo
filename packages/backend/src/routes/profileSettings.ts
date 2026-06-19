@@ -3,10 +3,10 @@ import UserSettings from '../models/UserSettings';
 import UserBehavior from '../models/UserBehavior';
 import Block from '../models/Block';
 import Restrict from '../models/Restrict';
-import { AuthRequest, requireAuth } from '../middleware/auth';
+import { requireOxyAuth as requireAuth, type OxyAuthRequest as AuthRequest } from '@oxyhq/core/server';
 import { ensureUserSettings } from '../utils/userSettings';
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from '../utils/apiHelpers';
-import { getAuthenticatedUserId } from '../utils/auth';
+import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxyhq/core/server';
 
 const router = Router();
 
