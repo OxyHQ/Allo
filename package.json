@@ -44,7 +44,7 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@oxyhq/bloom": "^0.9.1",
+    "@oxyhq/bloom": "^0.11.0",
     "@oxyhq/core": "^3.7.1",
     "@oxyhq/services": "^10.3.3",
     "@react-native/js-polyfills": "^0.81.6",
