@@ -48,7 +48,9 @@ app.use(async (req, res, next) => {
 // CORS and security headers
 app.use((req, res, next) => {
   const allowedOrigins = [
-    process.env.FRONTEND_URL || "https://allo.earth",
+    process.env.FRONTEND_URL || "https://allo.you",
+    "https://allo.you",
+    "https://allo.oxy.so",
     "http://localhost:8081",
     "http://localhost:8082",
     "http://192.168.86.44:8081",
@@ -98,7 +100,9 @@ const io = new SocketIOServer(server, {
   connectTimeout: SOCKET_CONFIG.CONNECT_TIMEOUT,
   cors: {
     origin: [
-      process.env.FRONTEND_URL || "https://allo.earth",
+      process.env.FRONTEND_URL || "https://allo.you",
+      "https://allo.you",
+      "https://allo.oxy.so",
       "http://localhost:8081",
       "http://localhost:8082",
     ],
