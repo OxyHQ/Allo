@@ -5,7 +5,7 @@ export interface UserEntity {
   username?: string;
   name?: { full?: string; first?: string; last?: string } | string;
   handle?: string; // alias for username if needed
-  avatar?: string;
+  avatar?: string | null; // matches the canonical @oxyhq SDK `User.avatar` (nullable)
   verified?: boolean;
   bio?: string;
   createdAt?: string;

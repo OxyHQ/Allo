@@ -126,6 +126,9 @@ export function useProfileData(username?: string): {
       ...oxyProfile,
       id: oxyProfile.id || '',
       username: oxyProfile.username || '',
+      // Cached `UserEntity.avatar` is nullable (mirrors the SDK `User.avatar`);
+      // normalize `null` → `undefined` for the UI-facing `ProfileData` shape.
+      avatar: oxyProfile.avatar ?? undefined,
       design,
       privacy: privacySettings || undefined,
     };

@@ -18,6 +18,13 @@ for (const ext of ['woff2', 'woff']) {
   }
 }
 
-// Enable NativeWind CSS support for native platforms
-module.exports = withNativeWind(config, { input: './styles/global.css' });
+// Enable NativeWind (v5) CSS support. `inlineVariables: false` keeps CSS custom
+// properties as runtime variables (required so Bloom's `BloomColorScope` token
+// aliases resolve at runtime instead of being inlined at build time); `inlineRem`
+// pins the rem base to 16.
+module.exports = withNativeWind(config, {
+  input: './styles/global.css',
+  inlineRem: 16,
+  inlineVariables: false,
+});
 
