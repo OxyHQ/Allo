@@ -102,7 +102,9 @@ export default function UnifiedConversationRoute() {
       lastMessage: "",
       timestamp: new Date().toISOString(),
       unreadCount: 0,
-      avatar: targetUser?.avatar,
+      // Cached `UserEntity.avatar` is nullable (mirrors the SDK); the local
+      // Conversation shape uses `string | undefined`, so coerce `null` away.
+      avatar: targetUser?.avatar ?? undefined,
       participants: [
         {
           id: targetUserId,
@@ -111,7 +113,7 @@ export default function UnifiedConversationRoute() {
             last: displayName.split(" ").slice(1).join(" "),
           },
           username: targetUser?.username,
-          avatar: targetUser?.avatar,
+          avatar: targetUser?.avatar ?? undefined,
         },
       ],
       participantCount: 2,

@@ -1,8 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
     // NOTE: Update this to include the paths to all of your component files.
-    content: ['./app/**/*.{js,ts,tsx}', './components/**/*.{js,ts,tsx}'],
-    presets: [require("nativewind/preset")],
+    content: [
+      './app/**/*.{js,ts,tsx}',
+      './components/**/*.{js,ts,tsx}',
+      './lib/**/*.{js,ts,tsx}',
+      './hooks/**/*.{js,ts,tsx}',
+      './stores/**/*.{js,ts,tsx}',
+      './utils/**/*.{js,ts,tsx}',
+      '../../node_modules/@oxyhq/services/lib/**/*.{js,jsx}',
+      '../../node_modules/@oxyhq/bloom/lib/**/*.{js,jsx}',
+    ],
     theme: {
       extend: {
         colors: {
