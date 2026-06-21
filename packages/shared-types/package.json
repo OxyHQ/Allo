@@ -7,7 +7,7 @@
     "scripts": {
         "build": "tsc",
         "dev": "tsc --watch",
-        "clean": "rm -rf dist",
+        "clean": "rm -rf dist tsconfig.tsbuildinfo",
         "lint": "eslint src --ext .ts",
         "test": "echo \"No tests specified\" && exit 0",
         "prepublishOnly": "bun run build"

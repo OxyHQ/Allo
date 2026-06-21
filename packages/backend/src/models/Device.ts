@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import type { PreKey, SignedPreKey } from "@allo/shared-types";
 
 /**
  * Device model for Signal Protocol
@@ -8,15 +9,8 @@ export interface IDevice extends Document {
   userId: string; // Oxy user ID
   deviceId: number; // Device ID (1, 2, 3, etc.)
   identityKeyPublic: string; // Base64 encoded public identity key
-  signedPreKey: {
-    keyId: number;
-    publicKey: string; // Base64 encoded
-    signature: string; // Base64 encoded signature
-  };
-  preKeys: Array<{
-    keyId: number;
-    publicKey: string; // Base64 encoded
-  }>;
+  signedPreKey: SignedPreKey;
+  preKeys: PreKey[];
   registrationId: number; // Signal registration ID
   lastSeen: Date;
   createdAt: Date;

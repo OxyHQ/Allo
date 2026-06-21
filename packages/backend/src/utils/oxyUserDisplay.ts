@@ -1,16 +1,9 @@
 import type { User } from "@oxyhq/core";
-import type { ConversationParticipant } from "../models/Conversation";
-
-export interface ParticipantDisplayName {
-  first: string;
-  last: string;
-}
-
-export interface EnrichedConversationParticipant extends ConversationParticipant {
-  name?: ParticipantDisplayName;
-  username?: string;
-  avatar?: string;
-}
+import type {
+  ConversationParticipant,
+  EnrichedConversationParticipant,
+  ParticipantDisplayName,
+} from "@allo/shared-types";
 
 interface OxyUserErrorShape {
   status?: unknown;

@@ -1,10 +1,16 @@
-import Conversation, { ConversationParticipant, ConversationType } from '../models/Conversation';
+import type {
+  ConversationDto,
+  ConversationParticipant,
+  ConversationType,
+  EnrichedConversationParticipant,
+  PaginationOptions,
+} from '@allo/shared-types';
+import Conversation from '../models/Conversation';
 import { oxy } from '../../server';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import {
   enrichParticipantWithOxyUser,
-  EnrichedConversationParticipant,
   getErrorStatus,
 } from '../utils/oxyUserDisplay';
 
@@ -32,32 +38,6 @@ interface UpdateConversationData {
   name?: string;
   description?: string;
   avatar?: string;
-}
-
-interface PaginationOptions {
-  limit?: number;
-  offset?: number;
-}
-
-interface ConversationDto {
-  _id?: unknown;
-  type?: ConversationType;
-  participants: EnrichedConversationParticipant[];
-  name?: string;
-  description?: string;
-  avatar?: string;
-  theme?: string;
-  createdBy?: string;
-  lastMessageAt?: Date;
-  lastMessage?: {
-    text?: string;
-    senderId: string;
-    timestamp: Date;
-  };
-  unreadCounts?: Map<string, number> | Record<string, number>;
-  archivedBy?: string[];
-  createdAt?: Date;
-  updatedAt?: Date;
 }
 
 export class ConversationService {

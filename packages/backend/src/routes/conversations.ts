@@ -7,9 +7,9 @@ import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../uti
 import { oxy } from "../../server";
 import { getIO } from "../utils/socket";
 import { logger } from "../utils/logger";
+import type { ConversationDto, EnrichedConversationParticipant } from "@allo/shared-types";
 import {
   enrichParticipantWithOxyUser,
-  EnrichedConversationParticipant,
   getErrorMessage,
   isOxyUserNotFound,
 } from "../utils/oxyUserDisplay";
@@ -75,7 +75,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       .lean();
 
     // Enrich all participants with Oxy user data (like WhatsApp - efficient batch processing)
-    const enrichedConversations = await Promise.all(
+    const enrichedConversations: ConversationDto[] = await Promise.all(
       conversations.map(async (conv) => {
         const enrichedParticipants = await enrichParticipantsWithOxyData(conv.participants || []);
         return {

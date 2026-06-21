@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import type { ApiSuccessResponse, ConversationDto } from '@allo/shared-types';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
 import { useUsersStore } from './usersStore';
@@ -284,9 +285,10 @@ export const useConversationsStore = create<ConversationsState>()(
       const hasData = get().conversations.length > 0 || get().hasFetchedOnce;
       set({ isLoading: !hasData, error: null });
       try {
-        // Fetch conversations from API (backend already enriches with Oxy data)
-        const response = await api.get<{ conversations: any[] }>('/conversations');
-        const apiConversations = response.data.conversations || [];
+        // Fetch conversations from API (backend already enriches with Oxy data).
+        // The backend wraps the payload in the shared { data } envelope.
+        const response = await api.get<ApiSuccessResponse<{ conversations: ConversationDto[] }>>('/conversations');
+        const apiConversations = response.data.data?.conversations || [];
         
         const usersStore = useUsersStore.getState();
         

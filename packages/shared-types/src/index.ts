@@ -1,53 +1,20 @@
 /**
- * Shared Types for allo
- * 
- * This package contains TypeScript interfaces and types that are shared
- * between the frontend and backend applications to ensure type consistency.
+ * Shared types for Allo.
+ *
+ * TypeScript contracts shared between the Allo frontend and backend.
+ * These model the WIRE / transport layer — the HTTP response envelope
+ * and the serialized message / conversation / device DTOs — NOT the
+ * frontend's presentation-shaped store types.
  */
 
-// Common types and enums
-export * from './common';
+// API transport envelope + pagination
+export * from "./api";
 
-// Profile types
-export * from './profile';
+// Message DTOs (encrypted + legacy plaintext)
+export * from "./message";
 
-// Post types
-export * from './post';
+// Conversation + enriched participant DTOs
+export * from "./conversation";
 
-// Interaction types
-export * from './interaction';
-
-// Media types
-export * from './media';
-
-// Notification types
-export * from './notification';
-
-// List types
-export * from './list';
-
-// Analytics types
-export * from './analytics';
-
-// Feed types - use specific exports to avoid conflicts
-export { 
-  FeedUser, 
-  FeedEngagement, 
-  Post as UIPost, 
-  Reply, 
-  FeedRepost, 
-  FeedType, 
-  PostAction, 
-  FeedItem, 
-  FeedResponse, 
-  FeedRequest, 
-  FeedFilters, 
-  FeedStats, 
-  CreateReplyRequest, 
-  CreateRepostRequest, 
-  LikeRequest, 
-  UnlikeRequest 
-} from './feed';
-
-// Custom feeds (user-created timelines)
-export * from './customFeed';
+// Device / Signal Protocol key DTOs
+export * from "./device";

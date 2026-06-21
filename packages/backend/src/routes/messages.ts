@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import type { FilterQuery } from "mongoose";
-import Message, { type EncryptedMediaItem, type IMessage, type MediaItem } from "../models/Message";
+import type { EncryptedMediaItem, MediaItem } from "@allo/shared-types";
+import Message, { type IMessage } from "../models/Message";
 import Conversation from "../models/Conversation";
 import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
 import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";

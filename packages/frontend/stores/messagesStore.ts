@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
+import type { ApiSuccessResponse, MessageDto } from '@allo/shared-types';
 import { api } from '@/utils/api';
 import { useDeviceKeysStore } from './deviceKeysStore';
 import {
@@ -349,45 +350,50 @@ export const useMessagesStore = create<MessagesState>()(
           try {
             const netInfo = await NetInfo.fetch();
             if (netInfo.isConnected) {
-              const response = await api.get('/messages', { conversationId });
-              const serverMessages = response.data.messages || [];
+              const response = await api.get<ApiSuccessResponse<{ messages: MessageDto[] }>>('/messages', { conversationId });
+              const serverMessages = response.data.data?.messages || [];
               
               // Process server messages (encrypted or plaintext)
               const deviceKeysStore = useDeviceKeysStore.getState();
               const processedServerMessages = await Promise.all(
-                serverMessages.map(async (msg: any) => {
+                serverMessages.map(async (msg: MessageDto): Promise<Message | null> => {
+                  const messageId = String(msg._id);
+                  const deliveredTo = msg.deliveredTo ?? [];
+                  const readBy = msg.readBy ?? {};
+
+                  // Server messages always originate from a real user (not the AI assistant)
+                  const resolveReadStatus = (): 'pending' | 'sent' | 'delivered' | 'read' | undefined => {
+                    if (msg.senderId !== currentUserId) {
+                      return undefined;
+                    }
+                    const readByUserIds = Object.keys(readBy);
+                    if (readByUserIds.length > 0) {
+                      const recipientRead = readByUserIds.some((id) => id !== currentUserId);
+                      if (recipientRead) {
+                        return 'read';
+                      }
+                      return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
+                    }
+                    if (deliveredTo.length > 0) {
+                      return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
+                    }
+                    return 'sent';
+                  };
+
                   // Handle plaintext messages (legacy or when encryption unavailable)
                   if (msg.text && !msg.ciphertext) {
-                    // Determine read status for sent messages
-                    let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
-                    if (msg.senderId === currentUserId) {
-                      if (msg.readBy && typeof msg.readBy === 'object') {
-                        const readBy = msg.readBy as Record<string, Date>;
-                        const readByUserIds = Object.keys(readBy);
-                        const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
-                        readStatus = recipientRead ? 'read' : 
-                          (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
-                            ? 'delivered' : 'sent';
-                      } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
-                        const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
-                        readStatus = recipientDelivered ? 'delivered' : 'sent';
-                      } else {
-                        readStatus = 'sent';
-                      }
-                    }
-                    
                     return {
-                      id: msg._id || msg.id,
+                      id: messageId,
                       text: msg.text,
                       senderId: msg.senderId,
                       senderDeviceId: msg.senderDeviceId,
-                      timestamp: new Date(msg.createdAt),
+                      timestamp: new Date(String(msg.createdAt)),
                       isSent: msg.senderId === currentUserId,
                       conversationId: msg.conversationId,
                       fontSize: msg.fontSize,
                       isEncrypted: false,
-                      readStatus,
-                      messageType: msg.messageType || 'user',
+                      readStatus: resolveReadStatus(),
+                      messageType: 'user',
                     };
                   }
 
@@ -405,51 +411,33 @@ export const useMessagesStore = create<MessagesState>()(
                         msg.senderId,
                         msg.senderDeviceId
                       );
-                      // Determine read status for sent messages
-                      let readStatus: 'pending' | 'sent' | 'delivered' | 'read' | undefined = undefined;
-                      if (msg.senderId === currentUserId) {
-                        if (msg.readBy && typeof msg.readBy === 'object') {
-                          const readBy = msg.readBy as Record<string, Date>;
-                          const readByUserIds = Object.keys(readBy);
-                          const recipientRead = readByUserIds.some((id: string) => id !== currentUserId);
-                          readStatus = recipientRead ? 'read' : 
-                            (msg.deliveredTo && Array.isArray(msg.deliveredTo) && msg.deliveredTo.some((id: string) => id !== currentUserId)) 
-                              ? 'delivered' : 'sent';
-                        } else if (msg.deliveredTo && Array.isArray(msg.deliveredTo)) {
-                          const recipientDelivered = msg.deliveredTo.some((id: string) => id !== currentUserId);
-                          readStatus = recipientDelivered ? 'delivered' : 'sent';
-                        } else {
-                          readStatus = 'sent';
-                        }
-                      }
-                      
                       return {
-                        id: msg._id || msg.id,
+                        id: messageId,
                         text: decryptedText,
                         senderId: msg.senderId,
                         senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(msg.createdAt),
+                        timestamp: new Date(String(msg.createdAt)),
                         isSent: msg.senderId === currentUserId,
                         conversationId: msg.conversationId,
                         fontSize: msg.fontSize,
                         isEncrypted: false, // Mark as decrypted
-                        readStatus,
-                        messageType: msg.messageType || 'user',
+                        readStatus: resolveReadStatus(),
+                        messageType: 'user',
                       };
                     } catch (error) {
                       console.error('[Messages] Error decrypting server message:', error);
                       // Return message with error indicator instead of null
                       return {
-                        id: msg._id || msg.id,
+                        id: messageId,
                         text: '[Encrypted - Decryption failed]',
                         senderId: msg.senderId,
                         senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(msg.createdAt),
+                        timestamp: new Date(String(msg.createdAt)),
                         isSent: msg.senderId === currentUserId,
                         conversationId: msg.conversationId,
                         fontSize: msg.fontSize,
                         isEncrypted: true, // Still encrypted
-                        messageType: msg.messageType || 'user',
+                        messageType: 'user',
                       };
                     }
                   }

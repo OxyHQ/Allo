@@ -1,21 +1,5 @@
 import { Response } from 'express';
-
-/**
- * Standard API error response format
- */
-export interface ApiErrorResponse {
-  error: string;
-  message: string;
-}
-
-/**
- * Standard API success response format
- */
-export interface ApiSuccessResponse<T = unknown> {
-  success?: boolean;
-  message?: string;
-  data?: T;
-}
+import type { ApiSuccessResponse } from '@allo/shared-types';
 
 /**
  * Sends standardized error response

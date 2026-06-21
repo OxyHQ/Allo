@@ -1,13 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
-
-export type ConversationType = "direct" | "group";
-
-export interface ConversationParticipant {
-  userId: string; // Oxy user ID
-  role?: "admin" | "member";
-  joinedAt: Date;
-  lastReadAt?: Date;
-}
+import type { ConversationParticipant, ConversationType } from "@allo/shared-types";
 
 export interface IConversation extends Document {
   type: ConversationType;

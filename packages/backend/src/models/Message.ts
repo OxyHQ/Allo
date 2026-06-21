@@ -1,30 +1,9 @@
 import mongoose, { Schema, Document } from "mongoose";
-
-export interface MediaItem {
-  id: string;
-  type: "image" | "video" | "audio" | "file";
-  url: string;
-  thumbnailUrl?: string;
-  fileName?: string;
-  fileSize?: number;
-  mimeType?: string;
-  width?: number;
-  height?: number;
-  duration?: number; // For video/audio
-}
-
-export interface EncryptedMediaItem {
-  id: string;
-  type: "image" | "video" | "audio" | "file";
-  ciphertext: string;
-  thumbnailCiphertext?: string;
-  fileName?: string;
-  fileSize?: number;
-  mimeType?: string;
-  width?: number;
-  height?: number;
-  duration?: number;
-}
+import type {
+  EncryptedMediaItem,
+  MediaItem,
+  MessageKind,
+} from "@allo/shared-types";
 
 export interface IMessage extends Document {
   conversationId: string;
@@ -42,7 +21,7 @@ export interface IMessage extends Document {
   
   // Encryption metadata
   encryptionVersion?: number; // Signal Protocol version
-  messageType?: "text" | "media" | "system"; // Type of encrypted message
+  messageType?: MessageKind; // Type of encrypted message
   
   replyTo?: string; // Message ID this is replying to
   fontSize?: number; // Custom font size for this message
