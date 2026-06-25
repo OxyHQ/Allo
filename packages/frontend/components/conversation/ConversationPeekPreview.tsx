@@ -96,7 +96,7 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
   const getSenderName = useCallback((senderId: string): string | undefined => {
     if (!isGroup || !conversation?.participants) return undefined;
     const participant = conversation.participants.find((p) => p.id === senderId);
-    return participant?.name?.first || participant?.username;
+    return participant?.name?.displayName || participant?.username;
   }, [isGroup, conversation?.participants]);
 
   const getSenderAvatar = useCallback((senderId: string): string | undefined => {

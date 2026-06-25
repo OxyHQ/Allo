@@ -31,10 +31,10 @@ export function useSenderInfo(
     const senderUser = usersStore.getCachedById(senderId);
     if (senderUser) {
       if (typeof senderUser.name === 'string') {
-        return senderUser.name.split(' ')[0];
+        return senderUser.name;
       }
-      if (senderUser.name?.first) {
-        return senderUser.name.first;
+      if (senderUser.name?.displayName) {
+        return senderUser.name.displayName;
       }
       if (senderUser.username || senderUser.handle) {
         return senderUser.username || senderUser.handle;
@@ -43,16 +43,13 @@ export function useSenderInfo(
 
     // 2. If it's the current user, use current user data
     if (senderId === user?.id) {
-      if (typeof user.name === 'string') {
-        return (user.name as string).split(' ')[0];
-      }
-      return user.name?.first || user.username;
+      return user.name?.displayName || user.username;
     }
 
     // 3. Fallback to participant data
     const participant = conversation?.participants?.find(p => p.id === senderId);
-    if (participant?.name?.first) {
-      return participant.name.first;
+    if (participant?.name?.displayName) {
+      return participant.name.displayName;
     }
 
     // 4. Fallback to participant username or senderId

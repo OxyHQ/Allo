@@ -50,7 +50,8 @@ const Avatar: React.FC<AvatarProps> = ({
     ? (typeof source === 'string' ? { uri: source } : source)
     : DefaultAvatar;
 
-  const Container: any = onPress ? TouchableOpacity : View;
+  const Container: React.ComponentType<{ onPress?: () => void; children?: React.ReactNode }> =
+    onPress ? TouchableOpacity : View;
 
   const inner = source && !errored ? (
     useAnimated ? (

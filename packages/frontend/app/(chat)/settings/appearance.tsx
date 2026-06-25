@@ -23,7 +23,7 @@ import { LogoIcon } from '@/assets/logo';
 import { COLOR_THEMES } from '@/styles/colorThemes';
 import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 // App icon options (visual only for now)
 const APP_ICONS = [

@@ -8,7 +8,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 export default function ChatBackgroundScreen() {
   const theme = useTheme();

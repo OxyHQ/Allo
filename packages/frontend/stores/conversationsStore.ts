@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { ApiSuccessResponse, ConversationDto } from '@allo/shared-types';
+import type { ConversationDto } from '@allo/shared-types';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
 import { useUsersStore } from './usersStore';
@@ -37,16 +37,16 @@ function formatLastMessageForGroup(
   // Priority 1: Oxy user data from cache (most reliable)
   if (senderUser) {
     if (typeof senderUser.name === 'string') {
-      senderName = senderUser.name.split(' ')[0];
-    } else if (senderUser.name?.first) {
-      senderName = senderUser.name.first;
+      senderName = senderUser.name;
+    } else if (senderUser.name?.displayName) {
+      senderName = senderUser.name.displayName;
     } else if (senderUser.username || senderUser.handle) {
       senderName = senderUser.username || senderUser.handle;
     }
   }
   // Priority 2: Participant data (from backend enrichment)
-  else if (participant?.name?.first) {
-    senderName = participant.name.first;
+  else if (participant?.name?.displayName) {
+    senderName = participant.name.displayName;
   } else if (participant?.username) {
     senderName = participant.username;
   }
@@ -286,9 +286,10 @@ export const useConversationsStore = create<ConversationsState>()(
       set({ isLoading: !hasData, error: null });
       try {
         // Fetch conversations from API (backend already enriches with Oxy data).
-        // The backend wraps the payload in the shared { data } envelope.
-        const response = await api.get<ApiSuccessResponse<{ conversations: ConversationDto[] }>>('/conversations');
-        const apiConversations = response.data.data?.conversations || [];
+        // The linked client unwraps the backend's { data } envelope, so the
+        // payload arrives directly under response.data.
+        const response = await api.get<{ conversations: ConversationDto[] }>('/conversations');
+        const apiConversations = response.data?.conversations || [];
         
         const usersStore = useUsersStore.getState();
         
@@ -313,14 +314,18 @@ export const useConversationsStore = create<ConversationsState>()(
                 avatar: p.avatar,
               };
               
-              // Handle name format
+              // Handle name format — carry the backend's canonical displayName.
               if (typeof p.name === 'string') {
                 user.name = p.name;
-              } else if (p.name.first || p.name.last) {
+              } else if (p.name.displayName || p.name.first || p.name.last) {
                 user.name = {
+                  displayName:
+                    p.name.displayName ||
+                    `${p.name.first || ''} ${p.name.last || ''}`.trim() ||
+                    p.username ||
+                    'Unknown',
                   first: p.name.first || '',
                   last: p.name.last || '',
-                  full: `${p.name.first || ''} ${p.name.last || ''}`.trim() || undefined,
                 };
               }
               
@@ -371,7 +376,12 @@ export const useConversationsStore = create<ConversationsState>()(
           const participants: ConversationParticipant[] = (conv.participants || []).map((p: any) => ({
             id: p.userId,
             name: {
-              first: p.name?.first || p.name || 'Unknown',
+              displayName:
+                p.name?.displayName ||
+                (typeof p.name === 'string' ? p.name : '') ||
+                p.username ||
+                'Unknown',
+              first: p.name?.first || '',
               last: p.name?.last || '',
             },
             username: p.username,

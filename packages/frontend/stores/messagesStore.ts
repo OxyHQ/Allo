@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { ApiSuccessResponse, MessageDto } from '@allo/shared-types';
+import type { MessageDto } from '@allo/shared-types';
 import { api } from '@/utils/api';
 import { useDeviceKeysStore } from './deviceKeysStore';
 import {
@@ -153,14 +153,14 @@ export const useMessagesStore = create<MessagesState>()(
                 let senderName: string | undefined;
                 if (senderUser) {
                   if (typeof senderUser.name === 'string') {
-                    senderName = senderUser.name.split(' ')[0];
-                  } else if (senderUser.name?.first) {
-                    senderName = senderUser.name.first;
+                    senderName = senderUser.name;
+                  } else if (senderUser.name?.displayName) {
+                    senderName = senderUser.name.displayName;
                   } else if (senderUser.username || senderUser.handle) {
                     senderName = senderUser.username || senderUser.handle;
                   }
-                } else if (participant?.name?.first) {
-                  senderName = participant.name.first;
+                } else if (participant?.name?.displayName) {
+                  senderName = participant.name.displayName;
                 } else if (participant?.username) {
                   senderName = participant.username;
                 }
@@ -222,14 +222,14 @@ export const useMessagesStore = create<MessagesState>()(
               let senderName: string | undefined;
               if (senderUser) {
                 if (typeof senderUser.name === 'string') {
-                  senderName = senderUser.name.split(' ')[0];
-                } else if (senderUser.name?.first) {
-                  senderName = senderUser.name.first;
+                  senderName = senderUser.name;
+                } else if (senderUser.name?.displayName) {
+                  senderName = senderUser.name.displayName;
                 } else if (senderUser.username || senderUser.handle) {
                   senderName = senderUser.username || senderUser.handle;
                 }
-              } else if (participant?.name?.first) {
-                senderName = participant.name.first;
+              } else if (participant?.name?.displayName) {
+                senderName = participant.name.displayName;
               } else if (participant?.username) {
                 senderName = participant.username;
               }
@@ -350,8 +350,8 @@ export const useMessagesStore = create<MessagesState>()(
           try {
             const netInfo = await NetInfo.fetch();
             if (netInfo.isConnected) {
-              const response = await api.get<ApiSuccessResponse<{ messages: MessageDto[] }>>('/messages', { conversationId });
-              const serverMessages = response.data.data?.messages || [];
+              const response = await api.get<{ messages: MessageDto[] }>('/messages', { conversationId });
+              const serverMessages = response.data?.messages || [];
               
               // Process server messages (encrypted or plaintext)
               const deviceKeysStore = useDeviceKeysStore.getState();

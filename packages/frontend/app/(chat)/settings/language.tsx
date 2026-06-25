@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import { storeData, getData } from '@/utils/storage';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 const LANGUAGE_OPTIONS = [
     { code: 'en-US', name: 'English', nativeName: 'English', flag: '🇺🇸' },

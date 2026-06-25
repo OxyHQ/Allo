@@ -30,8 +30,7 @@ import { useMessagesStore } from '@/stores/messagesStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
-// Type assertion for Ionicons compatibility with React 19
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 export default function SettingsScreen() {
     const { t } = useTranslation();
@@ -326,7 +325,7 @@ export default function SettingsScreen() {
                                         {user
                                             ? typeof user.name === 'string'
                                                 ? user.name
-                                                : user.name?.full || user.name?.first || user.username
+                                                : user.name?.displayName || user.username
                                             : 'User'}
                                     </Text>
                                     <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{user?.username || 'Username'}</Text>
@@ -348,7 +347,7 @@ export default function SettingsScreen() {
                                         {user
                                             ? typeof user.name === 'string'
                                                 ? user.name
-                                                : user.name?.full || user.name?.first || user.username
+                                                : user.name?.displayName || user.username
                                             : 'User'}
                                     </Text>
                                     <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{user?.username || 'Username'}</Text>

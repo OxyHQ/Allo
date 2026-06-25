@@ -654,30 +654,17 @@ export default function ConversationView({ conversationId: propConversationId }:
 
 
   /**
-   * Get media URL from media ID
-   * Uses oxyServices to get the file download URL
-   * For mock data, uses placeholder images
+   * Resolve a media download URL from a media ID via the Oxy SDK. Returns an
+   * empty string on failure so the image renderer surfaces a real error state
+   * instead of a masking placeholder.
    */
   const getMediaUrl = useCallback((mediaId: string): string => {
     try {
-      // Check if this is a mock media ID (starts with 'img-')
-      // For mock data, use placeholder images that actually work
-      if (mediaId.startsWith('img-')) {
-        // Use picsum.photos for reliable placeholder images
-        const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-        const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        return `https://picsum.photos/seed/${hash}/400/300`;
-      }
-
-      // For real media IDs, use oxyServices to get the file download URL
-      // Use 'full' for full resolution images in messages
+      // Use 'full' for full resolution images in messages.
       return oxyServices.getFileDownloadUrl(mediaId, 'full');
     } catch (error) {
       console.error('Error getting media URL:', error);
-      // Fallback to placeholder if service fails
-      const seed = mediaId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-      const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return `https://picsum.photos/seed/${hash}/400/300`;
+      return '';
     }
   }, [oxyServices]);
   const selectedMessagePreview = useMemo(() => {
@@ -991,7 +978,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                   </HeaderIconButton>,
                 ] : [],
                 rightComponents: [
-                  isGroup && conversationMetadata.participants.length > 0 ? (
+                  isGroup && conversation && conversationMetadata.participants.length > 0 ? (
                     <TouchableOpacity
                       key="group-avatar"
                       onPress={handleHeaderPress}
@@ -999,7 +986,7 @@ export default function ConversationView({ conversationId: propConversationId }:
                       hitSlop={MESSAGING_CONSTANTS.AVATAR_HIT_SLOP}
                     >
                       <GroupAvatar
-                        participants={getOtherParticipants(conversation!, currentUserId)}
+                        participants={getOtherParticipants(conversation, currentUserId)}
                         size={MESSAGING_CONSTANTS.AVATAR_SIZE}
                         maxAvatars={2}
                       />

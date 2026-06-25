@@ -58,7 +58,7 @@ const ParticipantAvatar: React.FC<{
   size: number;
 }> = ({ participant, size }) => {
   const shape = useAvatarShape(participant.id);
-  const label = participant.name?.first?.charAt(0).toUpperCase() || '?';
+  const label = participant.name?.displayName?.charAt(0).toUpperCase() || '?';
   return (
     <Avatar
       size={size}

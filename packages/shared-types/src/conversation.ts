@@ -24,8 +24,14 @@ export interface ConversationParticipant {
 
 /**
  * Display name resolved from the participant's Oxy profile.
+ *
+ * `displayName` is the canonical, ready-to-render string composed by the Oxy
+ * API (`name.displayName`). Consumers render it directly; `first` / `last` are
+ * retained for callers that need the split parts but must NOT be used to
+ * recompose a display name.
  */
 export interface ParticipantDisplayName {
+  displayName: string;
   first: string;
   last: string;
 }

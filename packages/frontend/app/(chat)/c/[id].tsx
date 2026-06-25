@@ -87,13 +87,10 @@ export default function UnifiedConversationRoute() {
     const store = useConversationsStore.getState();
     if (store.conversationsById[optimisticId]) return;
 
-    const displayName = targetUser
-      ? (typeof targetUser.name === "string"
-          ? targetUser.name
-          : targetUser.name?.first
-            ? `${targetUser.name.first} ${targetUser.name?.last || ""}`.trim()
-            : targetUser.username || "Chat")
-      : "Chat";
+    const targetName =
+      targetUser && typeof targetUser.name !== "string" ? targetUser.name : undefined;
+    const displayName =
+      targetName?.displayName || targetUser?.username || "Chat";
 
     addConversation({
       id: optimisticId,
@@ -109,6 +106,7 @@ export default function UnifiedConversationRoute() {
         {
           id: targetUserId,
           name: {
+            displayName,
             first: displayName.split(" ")[0],
             last: displayName.split(" ").slice(1).join(" "),
           },
@@ -155,7 +153,8 @@ export default function UnifiedConversationRoute() {
           (p: any) => ({
             id: p.userId,
             name: {
-              first: p.name?.first || "Unknown",
+              displayName: p.name?.displayName || p.username || "Unknown",
+              first: p.name?.first || "",
               last: p.name?.last || "",
             },
             username: p.username,

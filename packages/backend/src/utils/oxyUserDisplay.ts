@@ -65,38 +65,25 @@ export function enrichParticipantWithOxyUser(
 function participantNameOrFallback(
   participant: ConversationParticipant & { name?: ParticipantDisplayName }
 ): ParticipantDisplayName {
-  return participant.name ?? { first: "Unknown", last: "" };
+  return participant.name ?? { displayName: "Unknown", first: "Unknown", last: "" };
 }
 
+/**
+ * Emit the participant display name straight from the Oxy API's canonical
+ * `name.displayName` (core 3.10 types it as required). `first` / `last` are
+ * passed through verbatim for callers that need the split parts; they are NOT
+ * recomposed into a display string here.
+ */
 function resolveDisplayName(oxyUser: User): ParticipantDisplayName {
   const name = oxyUser.name;
-  const fullName = trimToUndefined(name?.full);
-  const fallback = trimToUndefined(oxyUser.username) ?? "Unknown";
+  const displayName =
+    trimToUndefined(name?.displayName) ?? trimToUndefined(oxyUser.username) ?? "Unknown";
 
-  if (name?.first || name?.last) {
-    return {
-      first: trimToUndefined(name.first) ?? firstFromFullName(fullName) ?? fallback,
-      last: trimToUndefined(name.last) ?? lastFromFullName(fullName),
-    };
-  }
-
-  if (fullName) {
-    return {
-      first: firstFromFullName(fullName) ?? fallback,
-      last: lastFromFullName(fullName),
-    };
-  }
-
-  return { first: fallback, last: "" };
-}
-
-function firstFromFullName(fullName: string | undefined): string | undefined {
-  return fullName?.split(/\s+/)[0];
-}
-
-function lastFromFullName(fullName: string | undefined): string {
-  const [, ...rest] = fullName?.split(/\s+/) ?? [];
-  return rest.join(" ");
+  return {
+    displayName,
+    first: trimToUndefined(name?.first) ?? "",
+    last: trimToUndefined(name?.last) ?? "",
+  };
 }
 
 function trimToUndefined(value: string | undefined): string | undefined {

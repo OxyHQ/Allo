@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { Ionicons } from '@expo/vector-icons';
 import { EmptyState } from '@/components/shared/EmptyState';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 // Mock data - replace with actual data from your store/API
 interface Call {

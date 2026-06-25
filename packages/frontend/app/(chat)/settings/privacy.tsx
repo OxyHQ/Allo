@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
 import { authenticatedClient } from '@/utils/api';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 interface PrivacySettings {
     profileVisibility?: 'public' | 'private' | 'followers_only';

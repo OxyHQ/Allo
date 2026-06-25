@@ -69,6 +69,8 @@ export type ConversationType = 'direct' | 'group';
 export interface ConversationParticipant {
     id: string;
     name?: {
+        /** Canonical, ready-to-render display string from the Oxy API. */
+        displayName: string;
         first: string;
         last: string;
     };
@@ -934,7 +936,6 @@ export default function ConversationsList() {
     }, [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress]);
 
     // FlashList performance: stable references prevent re-renders
-    const ITEM_HEIGHT = 64;
     const keyExtractor = useCallback((item: Conversation) => item.id, []);
 
     return (
@@ -1058,8 +1059,6 @@ export default function ConversationsList() {
                         ListHeaderComponent={SearchBarHeader}
 
                         keyboardShouldPersistTaps="handled"
-                        // @ts-expect-error estimatedItemSize exists at runtime but not in this version's types
-                        estimatedItemSize={ITEM_HEIGHT}
                         refreshControl={
                             <RefreshControl
                                 refreshing={isRefreshing}

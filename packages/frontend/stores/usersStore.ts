@@ -3,7 +3,7 @@ import { create } from "zustand";
 export interface UserEntity {
   id: string;
   username?: string;
-  name?: { full?: string; first?: string; last?: string } | string;
+  name?: { displayName?: string; full?: string; first?: string; last?: string } | string;
   handle?: string; // alias for username if needed
   avatar?: string | null; // matches the canonical @oxyhq SDK `User.avatar` (nullable)
   verified?: boolean;

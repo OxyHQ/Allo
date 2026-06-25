@@ -69,15 +69,14 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       { threshold, rootMargin }
     );
 
-    const currentRef = containerRef.current;
+    // On React Native Web the View ref is a DOM Element at runtime.
+    const currentRef = containerRef.current as unknown as Element | null;
     if (currentRef) {
-      // @ts-ignore - React Native Web compatibility
       observer.observe(currentRef);
     }
 
     return () => {
       if (currentRef) {
-        // @ts-ignore
         observer.unobserve(currentRef);
       }
     };

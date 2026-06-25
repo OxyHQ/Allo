@@ -62,14 +62,10 @@ const alloPicker: React.FC<alloPickerProps> = ({
                     const username =
                         asString(profile.username) ?? asString(profile.handle) ?? "";
 
+                    // Render the API's canonical `name.displayName` directly;
+                    // do not recompose names from first/last/full.
                     const name = profile.name;
-                    const displayName =
-                        asString(name?.full) ??
-                        (name?.first
-                            ? `${name.first} ${name.last ?? ""}`.trim()
-                            : undefined) ??
-                        asString(profile.displayName) ??
-                        username;
+                    const displayName = asString(name?.displayName) ?? username;
 
                     return {
                         id: asString(profile.id) ?? asString(profile._id) ?? "",

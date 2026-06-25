@@ -7,7 +7,7 @@ import { Server as SocketIOServer } from "socket.io";
 import type { DisconnectReason, Namespace } from "socket.io";
 import dotenv from "dotenv";
 import { oxyClient } from "@oxyhq/core";
-import { createOxyAuthMiddleware, createOxyRateLimit } from "@oxyhq/core/server";
+import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxyhq/core/server";
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
 
@@ -21,6 +21,12 @@ import devicesRoutes from "./src/routes/devices";
 
 // --- Config ---
 dotenv.config();
+
+// Explicit localhost dev origins. The Oxy apex family (*.oxy.so — including
+// allo.oxy.so / api.allo.oxy.so) is allowed automatically by createOxyCors, so
+// only non-apex dev origins need to be listed here. Reused for both the Express
+// CORS middleware and the Socket.IO CORS allowlist.
+const APP_ORIGINS = ["http://localhost:8081", "http://localhost:8082"];
 
 const app = express();
 
@@ -45,34 +51,16 @@ app.use(async (req, res, next) => {
   }
 });
 
-// CORS and security headers
+// Strict CORS allowlist (Oxy apex family + explicit dev origins). Echoes back
+// the exact matched origin, never a credentialed wildcard, and answers OPTIONS
+// preflight with 204.
+app.use(createOxyCors({ appOrigins: APP_ORIGINS }));
+
+// No-store cache headers for all API responses (not CORS-related).
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    process.env.FRONTEND_URL || "https://allo.you",
-    "https://allo.you",
-    "https://allo.oxy.so",
-    "http://localhost:8081",
-    "http://localhost:8082",
-    "http://192.168.86.44:8081",
-  ];
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
-  }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
   next();
 });
 
@@ -99,13 +87,7 @@ const io = new SocketIOServer(server, {
   maxHttpBufferSize: SOCKET_CONFIG.MAX_BUFFER_SIZE,
   connectTimeout: SOCKET_CONFIG.CONNECT_TIMEOUT,
   cors: {
-    origin: [
-      process.env.FRONTEND_URL || "https://allo.you",
-      "https://allo.you",
-      "https://allo.oxy.so",
-      "http://localhost:8081",
-      "http://localhost:8082",
-    ],
+    origin: [...APP_ORIGINS, "https://allo.oxy.so"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
     allowedHeaders: [

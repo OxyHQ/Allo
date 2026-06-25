@@ -42,9 +42,9 @@ function computeDesign(
   }
 
   const customization = appearance?.profileCustomization;
-  const nameValue = typeof oxyProfile?.name === 'string' 
-    ? oxyProfile.name 
-    : oxyProfile?.name?.full;
+  const nameValue = typeof oxyProfile?.name === 'string'
+    ? oxyProfile.name
+    : oxyProfile?.name?.displayName;
 
   return {
     displayName: customization?.displayName || nameValue || oxyProfile?.username || '',

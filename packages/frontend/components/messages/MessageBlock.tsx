@@ -249,8 +249,10 @@ export const MessageBlock = memo<MessageBlockProps>(({
                 // Measure the media container position properly
                 const target = event.currentTarget;
                 if (target && 'measure' in target && typeof target.measure === 'function') {
-                  // @ts-ignore - measure exists on View but TypeScript doesn't know
-                  target.measure((x, y, width, height, pageX, pageY) => {
+                  const measurable = target as {
+                    measure(cb: (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => void): void;
+                  };
+                  measurable.measure((x, y, width, height, pageX, pageY) => {
                     onMediaLongPress(messageWithMedia, mediaId, index, {
                       x: pageX || event.nativeEvent.pageX,
                       y: pageY || event.nativeEvent.pageY,

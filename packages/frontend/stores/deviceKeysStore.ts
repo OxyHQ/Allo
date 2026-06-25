@@ -17,6 +17,29 @@ import {
 } from '@/lib/signalProtocol';
 import { api } from '@/utils/api';
 
+/** A registered device's public-key bundle as returned by the backend. */
+interface RecipientDevice {
+  deviceId: number;
+  identityKeyPublic: string;
+  signedPreKey: string;
+}
+
+interface DevicesResponse {
+  devices: RecipientDevice[];
+}
+
+interface PreKeysResponse {
+  preKeys: string[];
+}
+
+/** Resolved recipient key material used to encrypt a message. */
+interface RecipientKeys {
+  deviceId: number;
+  identityKeyPublic: string;
+  signedPreKey: string;
+  preKey: string;
+}
+
 interface DeviceKeysState {
   // Device keys
   deviceKeys: DeviceKeys | null;
@@ -27,7 +50,7 @@ interface DeviceKeysState {
   // Actions
   initialize: () => Promise<void>;
   registerDevice: () => Promise<boolean>;
-  getRecipientKeys: (userId: string) => Promise<any>;
+  getRecipientKeys: (userId: string) => Promise<RecipientKeys>;
   encryptMessageForRecipient: (message: string, recipientUserId: string) => Promise<string>;
   decryptMessageFromSender: (ciphertext: string, senderUserId: string, senderDeviceId: number) => Promise<string>;
 }
@@ -106,18 +129,18 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
     // Get recipient's public keys for encryption
     getRecipientKeys: async (userId: string) => {
       try {
-        const response = await api.get(`/devices/user/${userId}`);
+        const response = await api.get<DevicesResponse>(`/devices/user/${userId}`);
         const devices = response.data.devices || [];
-        
+
         if (devices.length === 0) {
           throw new Error('No devices found for user');
         }
 
         // Get the first device (or implement device selection logic)
         const device = devices[0];
-        
+
         // Get preKeys for this device
-        const preKeysResponse = await api.get(`/devices/user/${userId}/prekeys/${device.deviceId}`);
+        const preKeysResponse = await api.get<PreKeysResponse>(`/devices/user/${userId}/prekeys/${device.deviceId}`);
         const preKeys = preKeysResponse.data.preKeys || [];
         
         if (preKeys.length === 0) {
@@ -160,9 +183,9 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
     ) => {
       try {
         // Get sender's public key
-        const response = await api.get(`/devices/user/${senderUserId}`);
+        const response = await api.get<DevicesResponse>(`/devices/user/${senderUserId}`);
         const devices = response.data.devices || [];
-        const senderDevice = devices.find((d: any) => d.deviceId === senderDeviceId);
+        const senderDevice = devices.find((d) => d.deviceId === senderDeviceId);
         
         if (!senderDevice) {
           throw new Error('Sender device not found');

@@ -33,10 +33,7 @@ export default function ProfileCustomizationScreen() {
   }, [user?.avatar, oxyServices]);
 
   const displayName = useMemo(() => {
-    if (user?.name?.first) {
-      return `${user.name.first}${user.name.last ? ` ${user.name.last}` : ''}`;
-    }
-    return user?.username || 'You';
+    return user?.name?.displayName || user?.username || 'You';
   }, [user]);
 
   const handleAvatarShapeSelect = async (shape: AvatarShapeKey) => {

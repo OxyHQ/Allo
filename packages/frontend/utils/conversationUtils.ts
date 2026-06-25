@@ -7,20 +7,15 @@ import { useEffect } from 'react';
 const getUsersStore = () => useUsersStore.getState();
 
 /**
- * Get full name from participant (name.first + name.last)
- * Falls back to Oxy user data if participant data is incomplete
+ * Render the participant's canonical display name (Oxy `name.displayName`),
+ * falling back to username/id only when the enriched name is absent.
  */
 function getParticipantFullName(participant: ConversationParticipant, userId?: string): string {
-  const first = participant.name?.first;
-  const last = participant.name?.last;
-  if (first) {
-    return `${first}${last ? ` ${last}` : ''}`.trim();
-  }
-  return participant.username || userId || '';
+  return participant.name?.displayName || participant.username || userId || '';
 }
 
 /**
- * Hook to get participant full name using Oxy user data
+ * Hook to get the participant's canonical display name using Oxy user data.
  */
 export function useParticipantFullName(
   participant: ConversationParticipant | undefined
@@ -30,35 +25,27 @@ export function useParticipantFullName(
 
   if (!participant) return '';
 
-  // First try to get from usersStore (Oxy user data)
+  // Prefer the canonical display name from cached Oxy user data.
   if (user) {
     if (typeof user.name === 'string') {
       return user.name;
     }
-    if (user.name?.full) {
-      return user.name.full;
-    }
-    if (user.name?.first) {
-      const lastName = user.name.last ? ` ${user.name.last}` : '';
-      return `${user.name.first}${lastName}`.trim();
+    if (user.name?.displayName) {
+      return user.name.displayName;
     }
     if (user.username || user.handle) {
       return user.username || user.handle || '';
     }
   }
 
-  // Fallback to participant data
-  if (participant.name?.first) {
-    const lastName = participant.name.last ? ` ${participant.name.last}` : '';
-    return `${participant.name.first}${lastName}`.trim();
+  // Fallback to the participant's backend-enriched display name.
+  if (participant.name?.displayName) {
+    return participant.name.displayName;
   }
 
-  // If it's the current user, use current user data
+  // If it's the current user, render the API's canonical display name.
   if (participant.id === currentUser?.id) {
-    if (typeof currentUser.name === 'string') {
-      return currentUser.name;
-    }
-    return currentUser.name?.full || currentUser.name?.first || currentUser.username || '';
+    return currentUser.name?.displayName || currentUser.username || '';
   }
 
   return participant.username || participant.id || '';
@@ -88,32 +75,23 @@ export function generateGroupName(
 
   const usersStore = getUsersStore();
 
-  // Helper to get name from zustand cache or participant data
+  // Render the canonical display name from cache, falling back to enrichment.
   const getParticipantDisplayName = (p: ConversationParticipant): string => {
-    // Try zustand cache first (efficient)
     const cachedUser = usersStore.getCachedById(p.id);
     if (cachedUser) {
       if (typeof cachedUser.name === 'string') {
         return cachedUser.name;
       }
-      if (cachedUser.name?.full) {
-        return cachedUser.name.full;
-      }
-      if (cachedUser.name?.first) {
-        const lastName = cachedUser.name.last ? ` ${cachedUser.name.last}` : '';
-        return `${cachedUser.name.first}${lastName}`.trim();
+      if (cachedUser.name?.displayName) {
+        return cachedUser.name.displayName;
       }
       if (cachedUser.username || cachedUser.handle) {
         return cachedUser.username || cachedUser.handle || '';
       }
     }
-    
-    // Fallback to participant data (from backend enrichment)
-    if (p.name?.first) {
-      const lastName = p.name.last ? ` ${p.name.last}` : '';
-      return `${p.name.first}${lastName}`.trim();
-    }
-    return p.username || p.id || 'Unknown';
+
+    // Fallback to the participant's backend-enriched display name.
+    return p.name?.displayName || p.username || p.id || 'Unknown';
   };
 
   if (otherParticipants.length === 1) {
@@ -146,28 +124,23 @@ export function getConversationDisplayName(
     // For direct conversations, get name from zustand cache (backend already enriched with Oxy data)
     const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
     if (otherParticipant) {
-      // Try zustand cache first (efficient)
+      // Render the canonical display name from cache (backend already enriched).
       const cachedUser = useUsersStore.getState().getCachedById(otherParticipant.id);
       if (cachedUser) {
         if (typeof cachedUser.name === 'string') {
           return cachedUser.name;
         }
-        if (cachedUser.name?.full) {
-          return cachedUser.name.full;
-        }
-        if (cachedUser.name?.first) {
-          const lastName = cachedUser.name.last ? ` ${cachedUser.name.last}` : '';
-          return `${cachedUser.name.first}${lastName}`.trim();
+        if (cachedUser.name?.displayName) {
+          return cachedUser.name.displayName;
         }
         if (cachedUser.username || cachedUser.handle) {
           return cachedUser.username || cachedUser.handle || '';
         }
       }
-      
-      // Fallback to participant data (from backend enrichment)
-      if (otherParticipant.name?.first) {
-        const lastName = otherParticipant.name.last ? ` ${otherParticipant.name.last}` : '';
-        return `${otherParticipant.name.first}${lastName}`.trim();
+
+      // Fallback to the participant's backend-enriched display name.
+      if (otherParticipant.name?.displayName) {
+        return otherParticipant.name.displayName;
       }
       if (otherParticipant.username) {
         return otherParticipant.username;
@@ -244,10 +217,14 @@ export function getParticipantCount(
  * @param currentUserId Current user's ID
  * @returns Avatar URL or undefined
  */
+interface FileUrlResolver {
+  getFileDownloadUrl(fileId: string, variant?: string): string;
+}
+
 export function getConversationAvatar(
   conversation: Conversation,
   currentUserId?: string,
-  oxyServices?: any
+  oxyServices?: FileUrlResolver
 ): string | undefined {
   let avatar: string | undefined;
 
@@ -270,7 +247,7 @@ export function getConversationAvatar(
     try {
       return oxyServices.getFileDownloadUrl(avatar, 'thumb');
     } catch (e) {
-      // Ignore error and return original
+      console.warn('[conversationUtils] getConversationAvatar: failed to resolve file URL, returning original', e);
     }
   }
 
@@ -314,16 +291,14 @@ export function useContactInfo(conversation: Conversation | null, currentUserId?
     }
   }, [otherParticipant?.username, otherUserId, user, usersStore]);
 
-  // Use Oxy user data first, then fall back to participant data
+  // Render the canonical display name from Oxy user data, then fall back.
   let name: string | undefined;
-  
+
   if (user) {
     if (typeof user.name === 'string') {
       name = user.name;
-    } else if (user.name?.full) {
-      name = user.name.full;
-    } else if (user.name?.first) {
-      name = `${user.name.first}${user.name.last ? ` ${user.name.last}` : ''}`.trim();
+    } else if (user.name?.displayName) {
+      name = user.name.displayName;
     } else {
       name = user.username || user.handle;
     }
@@ -332,11 +307,7 @@ export function useContactInfo(conversation: Conversation | null, currentUserId?
   const username = user?.username || user?.handle || otherParticipant?.username;
 
   if (!name && otherParticipant) {
-    if (otherParticipant.name?.first) {
-      name = `${otherParticipant.name.first}${otherParticipant.name.last ? ` ${otherParticipant.name.last}` : ''}`.trim();
-    } else {
-      name = otherParticipant.username;
-    }
+    name = otherParticipant.name?.displayName || otherParticipant.username;
   }
 
   if (!name) {

@@ -56,28 +56,25 @@ export function useSenderName(
   const { user: currentUser } = useOxy();
   const user = useUserById(senderId);
 
-  // First try to get from participant data
+  // First try the participant's canonical display name (backend-enriched).
   const participant = conversation?.participants?.find(p => p.id === senderId);
-  if (participant?.name?.first) {
-    return participant.name.first;
+  if (participant?.name?.displayName) {
+    return participant.name.displayName;
   }
 
-  // If it's the current user, use current user data
-  if (senderId === currentUser?.id) {
-    if (typeof currentUser.name === 'string') {
-      return currentUser.name.split(' ')[0];
-    }
-    return currentUser.name?.first || currentUser.username;
+  // If it's the current user, render the API's canonical display name.
+  if (currentUser && senderId === currentUser.id) {
+    return currentUser.name?.displayName || currentUser.username;
   }
 
-  // Otherwise, use fetched user data from Oxy
+  // Otherwise, render the canonical display name from cached Oxy user data.
   if (!user) return undefined;
 
   if (typeof user.name === 'string') {
-    return user.name.split(' ')[0];
+    return user.name;
   }
 
-  return user.name?.first || user.username || user.handle;
+  return user.name?.displayName || user.username || user.handle;
 }
 
 /**
@@ -91,38 +88,25 @@ export function useSenderFullName(
   const { user: currentUser } = useOxy();
   const user = useUserById(senderId);
 
-  // First try to get from participant data
+  // First try the participant's canonical display name (backend-enriched).
   const participant = conversation?.participants?.find(p => p.id === senderId);
-  if (participant?.name?.first) {
-    const lastName = participant.name.last ? ` ${participant.name.last}` : '';
-    return `${participant.name.first}${lastName}`;
+  if (participant?.name?.displayName) {
+    return participant.name.displayName;
   }
 
-  // If it's the current user, use current user data
-  if (senderId === currentUser?.id) {
-    if (typeof currentUser.name === 'string') {
-      return currentUser.name;
-    }
-    return currentUser.name?.full || currentUser.name?.first || currentUser.username;
+  // If it's the current user, render the API's canonical display name.
+  if (currentUser && senderId === currentUser.id) {
+    return currentUser.name?.displayName || currentUser.username;
   }
 
-  // Otherwise, use fetched user data from Oxy
+  // Otherwise, render the canonical display name from cached Oxy user data.
   if (!user) return undefined;
 
   if (typeof user.name === 'string') {
     return user.name;
   }
 
-  if (user.name?.full) {
-    return user.name.full;
-  }
-
-  if (user.name?.first) {
-    const lastName = user.name.last ? ` ${user.name.last}` : '';
-    return `${user.name.first}${lastName}`;
-  }
-
-  return user.username || user.handle;
+  return user.name?.displayName || user.username || user.handle;
 }
 
 /**
@@ -134,6 +118,6 @@ export function getSenderNameFromParticipants(
   conversation: Conversation | null
 ): string | undefined {
   const participant = conversation?.participants?.find(p => p.id === senderId);
-  return participant?.name?.first;
+  return participant?.name?.displayName;
 }
 

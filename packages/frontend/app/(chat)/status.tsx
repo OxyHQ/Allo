@@ -26,7 +26,7 @@ import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { useTheme } from '@/hooks/useTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 
 interface StatusUpdate {
   id: string;

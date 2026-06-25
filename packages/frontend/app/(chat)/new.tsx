@@ -35,6 +35,8 @@ interface User {
   id: string;
   username: string;
   name: {
+    /** Canonical, ready-to-render display string from the Oxy API. */
+    displayName: string;
     first: string;
     last: string;
   };
@@ -70,33 +72,22 @@ export default function NewChatScreen() {
       const response = await oxyServices.searchProfiles(query, { limit: 20 });
       const searchResults = Array.isArray(response) ? response : (response as any)?.data || [];
 
-      // Map Oxy profile format to our User format
+      // Map Oxy profile format to our User format, rendering the API's
+      // canonical name.displayName directly.
       const mappedUsers: User[] = searchResults.map((profile: any) => {
-        // Extract name
-        let firstName = 'Unknown';
-        let lastName = '';
-
-        if (profile.name?.first) {
-          firstName = profile.name.first;
-          lastName = profile.name.last || '';
-        } else if (profile.name?.full) {
-          const parts = profile.name.full.split(' ');
-          firstName = parts[0] || 'Unknown';
-          lastName = parts.slice(1).join(' ') || '';
-        } else if (typeof profile.name === 'string') {
-          const parts = profile.name.split(' ');
-          firstName = parts[0] || 'Unknown';
-          lastName = parts.slice(1).join(' ') || '';
-        } else {
-          firstName = profile.username || profile.handle || 'Unknown';
-        }
+        const displayName =
+          (typeof profile.name === 'string' ? profile.name : profile.name?.displayName) ||
+          profile.username ||
+          profile.handle ||
+          'Unknown';
 
         return {
           id: profile.id || profile._id,
           username: profile.username || profile.handle,
           name: {
-            first: firstName,
-            last: lastName,
+            displayName,
+            first: profile.name?.first || '',
+            last: profile.name?.last || '',
           },
           avatar: profile.avatar || profile.profilePicture,
         };
@@ -182,7 +173,8 @@ export default function NewChatScreen() {
       const participants = (apiConversation.participants || []).map((p: any) => ({
         id: p.userId,
         name: {
-          first: p.name?.first || 'Unknown',
+          displayName: p.name?.displayName || p.username || 'Unknown',
+          first: p.name?.first || '',
           last: p.name?.last || '',
         },
         username: p.username,
@@ -238,7 +230,8 @@ export default function NewChatScreen() {
       const participants = (apiConversation.participants || []).map((p: any) => ({
         id: p.userId,
         name: {
-          first: p.name?.first || 'Unknown',
+          displayName: p.name?.displayName || p.username || 'Unknown',
+          first: p.name?.first || '',
           last: p.name?.last || '',
         },
         username: p.username,
@@ -373,7 +366,7 @@ export default function NewChatScreen() {
 
   const renderUserItem = useCallback(({ item }: { item: User }) => {
     const isSelected = selectedUserIds.has(item.id);
-    const fullName = `${item.name.first} ${item.name.last}`.trim();
+    const fullName = item.name.displayName;
 
     return (
       <TouchableOpacity
@@ -402,7 +395,7 @@ export default function NewChatScreen() {
         <Avatar
           size={48}
           source={item.avatar ? { uri: item.avatar } : undefined}
-          label={item.name.first.charAt(0).toUpperCase()}
+          label={item.name.displayName.charAt(0).toUpperCase()}
         />
         <View style={styles.userInfo}>
           <ThemedText style={styles.userName} numberOfLines={1}>

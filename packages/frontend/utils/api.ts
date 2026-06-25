@@ -1,6 +1,5 @@
 import { oxyClient } from '@oxyhq/core';
 import { Platform } from 'react-native';
-import axios from 'axios';
 import { API_URL } from '@/config';
 import { CircuitBreaker } from '@/lib/api/retryLogic';
 
@@ -9,29 +8,14 @@ const API_CONFIG = {
   baseURL: API_URL,
 };
 
-// IMPORTANT: Create dedicated client for local backend API (conversations, messages, etc.)
-// This is separate from oxyClient which is for Oxy-specific API calls
-const backendClient = axios.create({
-  baseURL: API_CONFIG.baseURL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000, // 10 second timeout
-});
-
-// Add request interceptor to backend client to include auth token from Oxy
-backendClient.interceptors.request.use((config) => {
-  try {
-    // Get token from Oxy client's TokenStore (not axios headers)
-    const token = oxyClient.getAccessToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  } catch (error) {
-    console.warn('[API] Could not get auth token for backend request:', error);
-  }
-  return config;
-});
+// Backend client for the local Allo backend (conversations, messages, devices, etc.).
+//
+// This is a linked client owned by the Oxy session: it keeps its bearer token in
+// lockstep with the canonical OxyServices session and delegates 401 refresh back
+// to that session. No manual Authorization plumbing, no app-local token provider.
+// Bearer-authenticated writes do not fetch an app-local CSRF token.
+const linkedBackend = oxyClient.createLinkedClient({ baseURL: API_CONFIG.baseURL });
+const backendClient = linkedBackend.client;
 
 // Keep oxyClient reference for Oxy-specific API calls (if needed)
 const authenticatedClient = oxyClient.getClient();
@@ -42,9 +26,9 @@ const apiCircuitBreaker = new CircuitBreaker(5, 60000, 30000);
 
 // Request deduplication cache - prevents duplicate simultaneous requests
 // WhatsApp/Telegram pattern: if same request is in flight, return same promise
-const pendingRequests = new Map<string, Promise<any>>();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
-function createRequestKey(method: string, endpoint: string, params?: any): string {
+function createRequestKey(method: string, endpoint: string, params?: Record<string, unknown>): string {
   return `${method}:${endpoint}:${JSON.stringify(params || {})}`;
 }
 
@@ -53,7 +37,7 @@ async function deduplicateRequest<T>(
   requestFn: () => Promise<T>
 ): Promise<T> {
   // Check if this exact request is already in flight
-  const pending = pendingRequests.get(key);
+  const pending = pendingRequests.get(key) as Promise<T> | undefined;
   if (pending) {
     return pending;
   }
@@ -68,63 +52,57 @@ async function deduplicateRequest<T>(
   return promise;
 }
 
-// Public API client (no authentication required)
-const publicClient = axios.create({
-  baseURL: API_CONFIG.baseURL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000, // 10 second timeout to prevent indefinite hangs
-});
-
-// API methods using backendClient for local backend (conversations, messages, etc.)
-// NOTE: This calls your local backend at http://localhost:3000/api, NOT the Oxy API
+// API methods using the linked backend client for the local Allo backend.
+//
+// The linked client unwraps the backend's `{ data }` success envelope, so each
+// call resolves to the payload directly. The wrapper re-exposes it under `data`
+// to keep an axios-like `{ data }` shape for callers.
 export const api = {
-  async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<{ data: T }> {
+  async get<T = unknown>(endpoint: string, params?: Record<string, unknown>): Promise<{ data: T }> {
     const key = createRequestKey('GET', endpoint, params);
-    const response = await deduplicateRequest(key, () =>
+    const data = await deduplicateRequest(key, () =>
       apiCircuitBreaker.execute(() =>
-        backendClient.get(endpoint, { params })
+        backendClient.get<T>(endpoint, { params })
       )
     );
-    return { data: response.data };
+    return { data };
   },
 
-  async post<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+  async post<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate POST requests as they may have side effects
-    const response = await apiCircuitBreaker.execute(() =>
-      backendClient.post(endpoint, body)
+    const data = await apiCircuitBreaker.execute(() =>
+      backendClient.post<T>(endpoint, body)
     );
-    return { data: response.data };
+    return { data };
   },
 
-  async put<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+  async put<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PUT requests as they may have side effects
-    const response = await apiCircuitBreaker.execute(() =>
-      backendClient.put(endpoint, body)
+    const data = await apiCircuitBreaker.execute(() =>
+      backendClient.put<T>(endpoint, body)
     );
-    return { data: response.data };
+    return { data };
   },
 
-  async delete<T = any>(endpoint: string): Promise<{ data: T }> {
+  async delete<T = unknown>(endpoint: string): Promise<{ data: T }> {
     // Don't deduplicate DELETE requests as they may have side effects
-    const response = await apiCircuitBreaker.execute(() =>
-      backendClient.delete(endpoint)
+    const data = await apiCircuitBreaker.execute(() =>
+      backendClient.delete<T>(endpoint)
     );
-    return { data: response.data };
+    return { data };
   },
 
-  async patch<T = any>(endpoint: string, body?: any): Promise<{ data: T }> {
+  async patch<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PATCH requests as they may have side effects
-    const response = await apiCircuitBreaker.execute(() =>
-      backendClient.patch(endpoint, body)
+    const data = await apiCircuitBreaker.execute(() =>
+      backendClient.patch<T>(endpoint, body)
     );
-    return { data: response.data };
+    return { data };
   },
 };
 
 export class ApiError extends Error {
-  constructor(message: string, public status?: number, public response?: any) {
+  constructor(message: string, public status?: number, public response?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -155,55 +133,4 @@ export function webAlert(
   }
 }
 
-export const healthApi = {
-  async checkHealth() {
-    const response = await api.get('/api/health');
-    return response.data;
-  },
-};
-
-// Profiles API - Telegram-style: Frontend calls backend, backend calls Oxy
-export const profilesApi = {
-  async getByUsername(username: string) {
-    const response = await api.get(`/api/profiles/username/${username}`);
-    return response.data;
-  },
-
-  async getById(id: string) {
-    const response = await api.get(`/api/profiles/${id}`);
-    return response.data;
-  },
-
-  async search(query: string, limit: number = 20) {
-    const response = await api.get('/api/profiles/search', { q: query, limit });
-    return response.data;
-  },
-
-  async getRecommendations() {
-    const response = await api.get('/api/profiles/recommendations');
-    return response.data;
-  },
-};
-
-// Files API - Telegram-style: Frontend calls backend, backend calls Oxy
-export const filesApi = {
-  async getFileUrl(fileId: string, size: 'thumb' | 'full' | string = 'full'): Promise<string> {
-    const response = await api.get(`/api/files/url/${fileId}`, { size });
-    return response.data.url;
-  },
-
-  async uploadFile(file: any, options?: any) {
-    const response = await api.post('/api/files/upload', { file, options });
-    return response.data;
-  },
-};
-
-// Public API methods (no authentication required)
-export const publicApi = {
-  async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<{ data: T }> {
-    const response = await publicClient.get(endpoint, { params });
-    return { data: response.data };
-  },
-};
-
-export { API_CONFIG, authenticatedClient, publicClient };
+export { authenticatedClient };

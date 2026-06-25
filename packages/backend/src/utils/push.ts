@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 import PushToken from '../models/PushToken';
 import { oxy } from '../../server';
+import { logger } from './logger';
 
 let firebaseInitialized = false;
 
@@ -9,20 +10,20 @@ function initFirebase() {
   const credsB64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   const projectId = process.env.FIREBASE_PROJECT_ID;
   if (!credsB64 || !projectId) {
-    console.warn('Push disabled: missing FIREBASE_SERVICE_ACCOUNT_BASE64 or FIREBASE_PROJECT_ID');
+    logger.warn('Push disabled: missing FIREBASE_SERVICE_ACCOUNT_BASE64 or FIREBASE_PROJECT_ID');
     return;
   }
   try {
     const json = Buffer.from(credsB64, 'base64').toString('utf-8');
-    const serviceAccount = JSON.parse(json);
+    const serviceAccount = JSON.parse(json) as admin.ServiceAccount;
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
       projectId,
-    } as any);
+    });
     firebaseInitialized = true;
-    console.log('Firebase Admin initialized for FCM');
+    logger.info('Firebase Admin initialized for FCM');
   } catch (e) {
-    console.error('Failed to initialize Firebase Admin:', e);
+    logger.error('Failed to initialize Firebase Admin', e);
   }
 }
 
@@ -31,13 +32,6 @@ export type PushPayload = {
   body: string;
   data?: Record<string, string>;
 };
-
-// Helper to safely create a concise single-line preview
-function buildPreview(text: string, limit: number = 200): string {
-  const trimmed = (text || '').replace(/\s+/g, ' ').trim();
-  if (!trimmed) return '';
-  return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
-}
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -77,7 +71,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
       if (resp.responses) {
         resp.responses.forEach((r, idx) => {
           if (!r.success) {
-            const code = (r.error as any)?.errorInfo?.code || r.error?.code;
+            const errorWithInfo = r.error as (admin.FirebaseError & { errorInfo?: { code?: string } }) | undefined;
+            const code = errorWithInfo?.errorInfo?.code || errorWithInfo?.code;
             if (code && (code.includes('registration-token-not-registered') || code.includes('invalid-argument'))) {
               const bad = tkChunk[idx];
               if (bad) toDisable.push(bad);
@@ -88,51 +83,47 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
     }
     if (toDisable.length) {
       await PushToken.updateMany({ token: { $in: toDisable } }, { enabled: false });
-      console.log('Disabled invalid push tokens:', toDisable.length);
+      logger.info('Disabled invalid push tokens:', toDisable.length);
     }
   } catch (e) {
-    console.error('Failed to send push:', e);
+    logger.error('Failed to send push', e);
   }
 }
 
-export async function formatPushForNotification(n: any) {
-  // Best-effort: hydrate actor for title/body
+/** Input accepted by {@link formatPushForNotification}. */
+export interface PushNotificationInput {
+  type?: string;
+  actorId?: string;
+  entityId?: string;
+  entityType?: string;
+  _id?: string;
+}
+
+export async function formatPushForNotification(n: PushNotificationInput): Promise<PushPayload> {
+  // Best-effort: hydrate actor for title/body. Render the API's canonical
+  // name.displayName directly.
   let actorName = 'Someone';
   try {
     if (n.actorId && n.actorId !== 'system') {
       const actor = await oxy.getUserById(n.actorId);
-      actorName = actor?.name?.full || actor?.username || actorName;
+      actorName = actor?.name?.displayName || actor?.username || actorName;
     } else if (n.actorId === 'system') {
       actorName = 'System';
     }
-  } catch {}
+  } catch (e) {
+    logger.warn('formatPushForNotification: failed to hydrate actor', e);
+  }
   const map: Record<string, { title: string; body: string }> = {
     message: { title: 'New message', body: `${actorName} sent you a message` },
     welcome: { title: 'Welcome to Allo', body: 'Thanks for joining!' },
   };
-  let f = map[n.type] || { title: 'Notification', body: 'You have a new notification' };
-  let preview: string | undefined;
-  // For message notifications, try to include a short preview in the push body
-  try {
-    if (n.type === 'message' && n.entityType === 'message' && n.entityId) {
-      // TODO: Load message preview if needed
-      // const message: any = await Message.findById(n.entityId, { text: 1 }).lean();
-      // if (message) {
-      //   const text: string = message?.text || '';
-      //   preview = buildPreview(text, 200);
-      //   if (preview) {
-      //     f = { title: 'New message', body: `${actorName}: ${preview}` };
-      //   }
-      // }
-    }
-  } catch {}
+  const f = map[n.type ?? ''] || { title: 'Notification', body: 'You have a new notification' };
   const data: Record<string, string> = {
     type: String(n.type || ''),
-    entityId: String((n as any).entityId || ''),
+    entityId: String(n.entityId || ''),
     entityType: String(n.entityType || ''),
     actorId: String(n.actorId || ''),
     notificationId: String(n._id || ''),
   };
-  if (preview) data.preview = preview;
   return { title: f.title, body: f.body, data };
 }

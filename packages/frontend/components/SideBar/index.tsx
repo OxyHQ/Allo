@@ -34,7 +34,7 @@ import { ROUTES, routeMatchers, isRouteActive } from "@/utils/routeUtils";
 // Types
 import type { NavigationItem } from "@/types/navigation";
 
-const IconComponent = Ionicons as any;
+const IconComponent = Ionicons;
 const WindowHeight = Dimensions.get('window').height;
 
 export function SideBar() {

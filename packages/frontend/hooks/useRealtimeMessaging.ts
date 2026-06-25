@@ -190,14 +190,14 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           
           if (senderUser) {
             if (typeof senderUser.name === 'string') {
-              senderName = senderUser.name.split(' ')[0];
-            } else if (senderUser.name?.first) {
-              senderName = senderUser.name.first;
+              senderName = senderUser.name;
+            } else if (senderUser.name?.displayName) {
+              senderName = senderUser.name.displayName;
             } else if (senderUser.username || senderUser.handle) {
               senderName = senderUser.username || senderUser.handle;
             }
-          } else if (participant?.name?.first) {
-            senderName = participant.name.first;
+          } else if (participant?.name?.displayName) {
+            senderName = participant.name.displayName;
           } else if (participant?.username) {
             senderName = participant.username;
           } else if (messageData.senderId === currentUserId) {

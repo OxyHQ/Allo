@@ -51,24 +51,24 @@ export const SEO: React.FC<SEOProps> = ({
   const { t } = useTranslation();
   
   // Generate full URL
-  const fullUrl = url || (Platform.OS === 'web' && typeof window !== 'undefined' 
+  const fullUrl = url || (Platform.OS === 'web' && typeof window !== 'undefined'
     ? `${window.location.origin}${pathname}`
-    : `https://allo.chat${pathname}`);
+    : `https://allo.oxy.so${pathname}`);
 
   // Use provided siteName or translated default
   const finalSiteName = siteName || t('seo.siteName', { defaultValue: defaultSEO.siteName });
   
   // Default title if not provided (translated)
-  const pageTitle = title || t('seo.defaultTitle', { defaultValue: `${finalSiteName} - Social Platform` });
-  
+  const pageTitle = title || t('seo.defaultTitle', { defaultValue: `${finalSiteName} - Private Messaging` });
+
   // Default description if not provided (translated)
-  const pageDescription = description || t('seo.defaultDescription', { 
-    defaultValue: `Join ${finalSiteName} and connect with people around the world.`,
+  const pageDescription = description || t('seo.defaultDescription', {
+    defaultValue: `Message privately with ${finalSiteName} and stay connected with the people who matter.`,
     siteName: finalSiteName
   });
 
   // Default image (you should add your logo/image)
-  const pageImage = image || 'https://allo.chat/og-image.png';
+  const pageImage = image || 'https://allo.oxy.so/og-image.png';
 
   // Only render on web
   if (Platform.OS !== 'web' || !Head) {
