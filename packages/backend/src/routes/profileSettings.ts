@@ -7,6 +7,7 @@ import { requireOxyAuth as requireAuth, type OxyAuthRequest as AuthRequest } fro
 import { ensureUserSettings } from '../utils/userSettings';
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from '../utils/apiHelpers';
 import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxyhq/core/server';
+import { isDuplicateKeyError } from '../utils/error';
 
 const router = Router();
 
@@ -63,18 +64,19 @@ router.put('/settings', async (req: AuthRequest, res: Response) => {
     const oxyUserId = getAuthenticatedUserId(req);
     const { appearance, profileHeaderImage, privacy, profileCustomization } = req.body || {};
 
-    const update: Record<string, any> = {};
-    
+    const update: Record<string, unknown> = {};
+
     if (appearance) {
-      update['appearance'] = {};
+      const appearanceUpdate: { themeMode?: string; primaryColor?: string } = {};
       if (appearance.themeMode && ['light', 'dark', 'system'].includes(appearance.themeMode)) {
-        update.appearance.themeMode = appearance.themeMode;
+        appearanceUpdate.themeMode = appearance.themeMode;
       }
       if (typeof appearance.primaryColor === 'string' && appearance.primaryColor.trim()) {
-        update.appearance.primaryColor = appearance.primaryColor.trim();
+        appearanceUpdate.primaryColor = appearance.primaryColor.trim();
       } else if (appearance.primaryColor === null) {
-        update.appearance.primaryColor = undefined;
+        appearanceUpdate.primaryColor = undefined;
       }
+      update['appearance'] = appearanceUpdate;
     }
     
     if (typeof profileHeaderImage === 'string') {
@@ -218,9 +220,9 @@ router.post('/blocks', async (req: AuthRequest, res: Response) => {
 
     await Block.create({ userId: oxyUserId, blockedId });
     return sendSuccessResponse(res, 201, { success: true }, 'User blocked successfully');
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[ProfileSettings] Error blocking user:', err);
-    if (err.code === 11000) {
+    if (isDuplicateKeyError(err)) {
       return sendSuccessResponse(res, 200, { success: true }, 'User already blocked');
     }
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to block user');
@@ -291,9 +293,9 @@ router.post('/restricts', async (req: AuthRequest, res: Response) => {
 
     await Restrict.create({ userId: oxyUserId, restrictedId });
     return sendSuccessResponse(res, 201, { success: true }, 'User restricted successfully');
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[ProfileSettings] Error restricting user:', err);
-    if (err.code === 11000) {
+    if (isDuplicateKeyError(err)) {
       return sendSuccessResponse(res, 200, { success: true }, 'User already restricted');
     }
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to restrict user');

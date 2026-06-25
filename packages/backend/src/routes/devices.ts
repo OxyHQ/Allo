@@ -3,6 +3,7 @@ import Device from "../models/Device";
 import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
 import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
+import { isDuplicateKeyError } from "../utils/error";
 
 const router = Router();
 
@@ -110,9 +111,9 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     });
 
     return sendSuccessResponse(res, 201, device);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[Devices] Error registering device:", err);
-    if (err.code === 11000) {
+    if (isDuplicateKeyError(err)) {
       return sendErrorResponse(res, 409, "Conflict", "Device already exists");
     }
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to register device");

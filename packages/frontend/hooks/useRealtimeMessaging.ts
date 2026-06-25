@@ -6,7 +6,38 @@ import { useMessagesStore } from '@/stores/messagesStore';
 import { useConversationsStore } from '@/stores/conversationsStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { useUsersStore } from '@/stores/usersStore';
-import type { Message } from '@/stores/messagesStore';
+import type { Message, StickerItem } from '@/stores/messagesStore';
+
+/**
+ * Message payload as delivered over the Socket.IO `newMessage`/`messageUpdated`
+ * channels. Mirrors the JSON-serialized message the backend emits (ids and
+ * dates arrive as strings on the wire).
+ */
+interface SocketMessagePayload {
+  _id?: string;
+  id?: string;
+  conversationId: string;
+  senderId: string;
+  senderDeviceId?: number;
+  text?: string;
+  ciphertext?: string;
+  fontSize?: number;
+  messageType?: 'user' | 'ai';
+  sticker?: StickerItem;
+  readBy?: Record<string, string | Date>;
+  deliveredTo?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Read the delegated `userId` planted on the socket's auth payload, if any. */
+function getSocketAuthUserId(socket: Socket | null): string | undefined {
+  const auth = socket?.auth;
+  if (auth && typeof auth === 'object' && typeof auth.userId === 'string') {
+    return auth.userId;
+  }
+  return undefined;
+}
 
 let messagingSocket: Socket | null = null;
 const typingUsers: Map<string, Set<string>> = new Map(); // conversationId -> Set of userIds
@@ -53,11 +84,11 @@ export const useRealtimeMessaging = (conversationId?: string) => {
 
     // Handle new messages - this listener is set once globally and receives ALL messages
     // Messages come from both conversation rooms and user rooms (backend emits to both)
-    messagingSocket.on('newMessage', async (messageData: any) => {
+    messagingSocket.on('newMessage', async (messageData: SocketMessagePayload) => {
       try {
         // Get current user ID dynamically from socket auth or useOxy store
         // This ensures we always have the correct user ID, even if it changes
-        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
 
         // Skip messages from current user - they're already added locally when sent
         // This prevents duplicates and "[Your message]" text
@@ -66,7 +97,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         }
 
         // O(1) dedup check via ID Set (WhatsApp/Telegram pattern)
-        const messageId = messageData._id || messageData.id;
+        const messageId = messageData._id || messageData.id || '';
         const idSet = useMessagesStore.getState().messageIdsByConversation[messageData.conversationId];
         if (idSet?.has(messageId)) {
           return;
@@ -138,11 +169,11 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         }
         
         const message: Message = {
-          id: messageData._id || messageData.id,
-          text: decryptedText,
+          id: messageId,
+          text: decryptedText ?? '',
           senderId: messageData.senderId,
           senderDeviceId: messageData.senderDeviceId,
-          timestamp: new Date(messageData.createdAt),
+          timestamp: new Date(messageData.createdAt ?? Date.now()),
           // Mark as sent only if we have a currentUserId AND it matches the sender
           // If currentUserId is undefined, mark as not sent (from other user)
           isSent: !!(currentUserId && messageData.senderId === currentUserId),
@@ -211,7 +242,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         
         updateConversation(messageData.conversationId, {
           lastMessage: formattedLastMessage || '',
-          timestamp: new Date(messageData.createdAt).toISOString(),
+          timestamp: new Date(messageData.createdAt ?? Date.now()).toISOString(),
           // Increment unread count if message is from another user
           // If currentUserId is undefined, treat as unread (from other user)
           unreadCount: !currentUserId || messageData.senderId !== currentUserId 
@@ -224,13 +255,13 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     });
 
     // Handle message updates (edits)
-    messagingSocket.on('messageUpdated', async (messageData: any) => {
+    messagingSocket.on('messageUpdated', async (messageData: SocketMessagePayload) => {
       try {
         // Handle plaintext messages (legacy or when encryption unavailable)
         let decryptedText = messageData.text;
 
         // Get current user ID dynamically
-        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
         
         // Only decrypt if message is encrypted and not sent by current user
         if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
@@ -249,9 +280,9 @@ export const useRealtimeMessaging = (conversationId?: string) => {
           }
         }
 
-        updateMessage(messageData.conversationId, messageData._id || messageData.id, {
+        updateMessage(messageData.conversationId, messageData._id || messageData.id || '', {
           text: decryptedText,
-          editedAt: new Date(messageData.updatedAt),
+          editedAt: new Date(messageData.updatedAt ?? Date.now()),
         });
       } catch (error) {
         console.error('[RealtimeMessaging] Error handling message update:', error);
@@ -279,7 +310,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     // Handle read receipts
     messagingSocket.on('messageRead', (data: { conversationId: string; userId: string; messageId: string }) => {
       try {
-        const currentUserId = (messagingSocket?.auth as any)?.userId || user?.id;
+        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
         // Update message status to 'read' if this is our message
         const existingMessages = useMessagesStore.getState().messagesByConversation[data.conversationId] || [];
         const message = existingMessages.find(msg => msg.id === data.messageId);

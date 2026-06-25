@@ -62,7 +62,7 @@ export const ZRawNotification = z
 export type TEmbeddedPost = z.infer<typeof ZEmbeddedPost>;
 export type TRawNotification = z.infer<typeof ZRawNotification>;
 
-export const validateNotifications = (items: any[]): TRawNotification[] => {
+export const validateNotifications = (items: unknown[]): TRawNotification[] => {
   if (!Array.isArray(items)) return [];
   const valid: TRawNotification[] = [];
   for (const it of items) {

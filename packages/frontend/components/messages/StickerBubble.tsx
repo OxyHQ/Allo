@@ -1,6 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import LottieView from 'lottie-react-native';
+import LottieView, { type LottieViewProps } from 'lottie-react-native';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { MessageMetadata } from './MessageMetadata';
 import type { StickerItem } from '@/stores';
@@ -56,8 +56,8 @@ export const StickerBubble = memo<StickerBubbleProps>(({
   const isAssetNumber = sourceType === 'number';
   const isRemoteUrl = sourceType === 'string' && (sticker.source as string).startsWith('http');
 
-  const lottieSource = isLottieObject
-    ? (sticker.source as object)
+  const lottieSource: LottieViewProps['source'] | number | null = isLottieObject
+    ? (sticker.source as LottieViewProps['source'])
     : isAssetNumber
       ? (sticker.source as number)
       : isRemoteUrl
@@ -71,7 +71,7 @@ export const StickerBubble = memo<StickerBubbleProps>(({
       {lottieSource ? (
         <View style={styles.lottie}>
           <LottieView
-            source={lottieSource as any}
+            source={lottieSource as LottieViewProps['source']}
             autoPlay
             loop
             style={styles.lottie}

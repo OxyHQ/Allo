@@ -58,7 +58,7 @@ class P2PManager {
 
     this.mainSocket.on('p2p_offer', async (data: {
       from: string;
-      offer: any;
+      offer: RTCSessionDescriptionInit;
       conversationId: string;
     }) => {
       // Handle WebRTC offer for P2P connection
@@ -67,7 +67,7 @@ class P2PManager {
 
     this.mainSocket.on('p2p_answer', async (data: {
       from: string;
-      answer: any;
+      answer: RTCSessionDescriptionInit;
       conversationId: string;
     }) => {
       // Handle WebRTC answer
@@ -76,7 +76,7 @@ class P2PManager {
 
     this.mainSocket.on('p2p_ice_candidate', async (data: {
       from: string;
-      candidate: any;
+      candidate: RTCIceCandidateInit;
       conversationId: string;
     }) => {
       // Handle ICE candidate
@@ -199,7 +199,7 @@ class P2PManager {
    */
   private async handleP2POffer(
     from: string,
-    offer: any,
+    offer: RTCSessionDescriptionInit,
     conversationId: string
   ): Promise<void> {
     // TODO: Implement WebRTC offer handling
@@ -211,7 +211,7 @@ class P2PManager {
    */
   private async handleP2PAnswer(
     from: string,
-    answer: any,
+    answer: RTCSessionDescriptionInit,
     conversationId: string
   ): Promise<void> {
     // TODO: Implement WebRTC answer handling
@@ -223,7 +223,7 @@ class P2PManager {
    */
   private async handleICECandidate(
     from: string,
-    candidate: any,
+    candidate: RTCIceCandidateInit,
     conversationId: string
   ): Promise<void> {
     // TODO: Implement ICE candidate handling

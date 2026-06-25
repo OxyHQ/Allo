@@ -125,7 +125,7 @@ export default function SettingsScreen() {
                 token: tokenInfo.token,
                 type: tokenInfo.type || (Platform.OS === 'ios' ? 'apns' : 'fcm'),
                 platform: Platform.OS,
-                locale: (Constants as any).locale || 'en-US',
+                locale: Intl.DateTimeFormat().resolvedOptions().locale || 'en-US',
             });
             return true;
         } catch (e) {
@@ -183,7 +183,7 @@ export default function SettingsScreen() {
                 themeMode: newThemeMode,
                 primaryColor: mySettings?.appearance?.primaryColor,
             },
-        } as any);
+        });
     }, [updateMySettings, mySettings?.appearance?.primaryColor]);
 
     // Get current language

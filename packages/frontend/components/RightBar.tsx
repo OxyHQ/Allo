@@ -1,7 +1,7 @@
 import { useOxy } from '@oxyhq/services';
 import { usePathname } from "expo-router";
 import React from 'react';
-import { StyleSheet, View, Platform } from "react-native";
+import { StyleSheet, View, Platform, type ViewStyle } from "react-native";
 import { useMediaQuery } from 'react-responsive';
 import { colors } from '../styles/colors';
 import { SearchBar } from './SearchBar';
@@ -31,8 +31,10 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         gap: 20,
         ...Platform.select({
+            // 'sticky' is a web-only CSS value supported by react-native-web at
+            // runtime but not present in React Native's ViewStyle position union.
             web: {
-                position: 'sticky' as any,
+                position: 'sticky' as unknown as ViewStyle['position'],
                 top: 50,
                 bottom: 20,
             },

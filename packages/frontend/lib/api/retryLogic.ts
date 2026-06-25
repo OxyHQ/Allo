@@ -5,13 +5,15 @@
  * Handles network failures gracefully, improves reliability
  */
 
+import { getHttpStatus, getErrorMessage } from '@/utils/errors';
+
 export interface RetryConfig {
   maxRetries?: number;
   initialDelayMs?: number;
   maxDelayMs?: number;
   backoffMultiplier?: number;
   retryableStatusCodes?: number[];
-  shouldRetry?: (error: any, attempt: number) => boolean;
+  shouldRetry?: (error: unknown, attempt: number) => boolean;
 }
 
 const DEFAULT_CONFIG: Required<RetryConfig> = {
@@ -40,15 +42,16 @@ function calculateDelay(attempt: number, config: Required<RetryConfig>): number 
 /**
  * Check if error is retryable
  */
-function isRetryableError(error: any, config: Required<RetryConfig>): boolean {
+function isRetryableError(error: unknown, config: Required<RetryConfig>): boolean {
+  const status = getHttpStatus(error);
+
   // Network errors (no response)
-  if (!error.response) {
+  if (status === undefined) {
     return true;
   }
 
   // Check status code
-  const status = error.response?.status;
-  if (status && config.retryableStatusCodes.includes(status)) {
+  if (config.retryableStatusCodes.includes(status)) {
     return true;
   }
 
@@ -81,7 +84,7 @@ export async function retryWithBackoff<T>(
   config: RetryConfig = {}
 ): Promise<T> {
   const fullConfig = { ...DEFAULT_CONFIG, ...config };
-  let lastError: any;
+  let lastError: unknown;
 
   for (let attempt = 0; attempt <= fullConfig.maxRetries; attempt++) {
     try {
@@ -110,8 +113,8 @@ export async function retryWithBackoff<T>(
       console.warn(
         `[Retry] Attempt ${attempt + 1}/${fullConfig.maxRetries} failed. Retrying in ${delay}ms...`,
         {
-          error: error.message || error,
-          status: error.response?.status,
+          error: getErrorMessage(error) ?? error,
+          status: getHttpStatus(error),
         }
       );
 
@@ -137,7 +140,7 @@ export async function retryWithBackoff<T>(
  *   { maxRetries: 3 }
  * );
  */
-export function withRetry<TArgs extends any[], TReturn>(
+export function withRetry<TArgs extends unknown[], TReturn>(
   fn: (...args: TArgs) => Promise<TReturn>,
   config: RetryConfig = {}
 ): (...args: TArgs) => Promise<TReturn> {
@@ -158,7 +161,7 @@ export function withRetry<TArgs extends any[], TReturn>(
 export async function batchRetry<T>(
   requests: (() => Promise<T>)[],
   config: RetryConfig = {}
-): Promise<Array<{ success: true; data: T } | { success: false; error: any }>> {
+): Promise<Array<{ success: true; data: T } | { success: false; error: unknown }>> {
   return Promise.all(
     requests.map(async (request) => {
       try {
@@ -207,10 +210,10 @@ export class CircuitBreaker {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Don't count auth errors (401/403) toward circuit breaker —
       // these are not transient service failures
-      const status = error?.response?.status;
+      const status = getHttpStatus(error);
       if (status === 401 || status === 403) {
         throw error;
       }

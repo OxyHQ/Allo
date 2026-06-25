@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
-import { StyleSheet, View, Text, ViewStyle, Platform, Vibration } from 'react-native';
-import { Link, usePathname } from 'expo-router';
+import { StyleSheet, View, Text, ViewStyle, Platform, Vibration, type PressableStateCallbackType } from 'react-native';
+import { Link, usePathname, type Href } from 'expo-router';
 import { Pressable } from 'react-native-web-hover';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { useHomeRefresh } from '@/context/HomeRefreshContext';
 
 // Utils
 import { ROUTES, routeMatchers, isRouteActive } from '@/utils/routeUtils';
+import { isAuthCancellation } from '@/utils/errors';
 
 // Types
 import type { NavigationItem } from '@/types/navigation';
@@ -35,7 +36,7 @@ export const BottomBar = () => {
     const { triggerHomeRefresh } = useHomeRefresh();
 
     const avatarUri = useMemo(() => {
-        return user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
+        return user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar, 'thumb') : undefined;
     }, [user?.avatar, oxyServices]);
 
     const handleHomePress = useCallback(() => {
@@ -173,13 +174,13 @@ export const BottomBar = () => {
                 return (
                     <Link
                         key={`${route}-${title}`}
-                        href={route as any}
+                        href={route as Href}
                         style={styles.tab}
                         asChild
                     >
                         <Pressable
                             onPress={onPress}
-                            style={({ pressed }: any) => [
+                            style={({ pressed }: PressableStateCallbackType) => [
                                 styles.tab,
                                 pressed && {
                                     backgroundColor: `${theme.colors.primary}10`,
@@ -195,7 +196,7 @@ export const BottomBar = () => {
             
             {/* Profile/Avatar button */}
             <Link
-                href={user?.username ? `/@${user.username}` as any : '#' as any}
+                href={user?.username ? `/@${user.username}` as Href : '#' as Href}
                 style={styles.tab}
                 asChild
             >
@@ -204,9 +205,9 @@ export const BottomBar = () => {
                         if (!isAuthenticated || !user?.username) {
                             try {
                                 await signIn();
-                            } catch (error: any) {
+                            } catch (error: unknown) {
                                 // Silently handle auth cancellation
-                                if (!error?.message?.includes('cancelled') && !error?.message?.includes('closed')) {
+                                if (!isAuthCancellation(error)) {
                                     console.error('Authentication error:', error);
                                 }
                             }
@@ -218,7 +219,7 @@ export const BottomBar = () => {
                             // Note: AccountCenter might need similar update if it exists in new API
                         }
                     }}
-                    style={({ pressed }: any) => [
+                    style={({ pressed }: PressableStateCallbackType) => [
                         styles.tab,
                         pressed && {
                             backgroundColor: `${theme.colors.primary}10`,

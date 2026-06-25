@@ -1,9 +1,23 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
-import { FlatList as RNFlatList, Platform } from 'react-native';
-import { LegendList as RL } from '@legendapp/list';
+import { FlatList as RNFlatList, Platform, type FlatListProps, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { LegendList as RL, type LegendListProps, type LegendListRef } from '@legendapp/list';
 import LayoutScrollContext from '@/context/LayoutScrollContext';
 
-const LegendList = (props: any, ref: any) => {
+type ScrollEvent = NativeSyntheticEvent<NativeScrollEvent>;
+
+/**
+ * Props accepted by the wrapper: LegendList's props plus the web-only
+ * `dataSet` / `onWheel` extras this component forwards.
+ */
+type LegendListWrapperProps<ItemT> = LegendListProps<ItemT> & {
+    dataSet?: Record<string, string>;
+    onWheel?: (event: WheelEvent) => void;
+};
+
+function LegendListInner<ItemT>(
+    props: LegendListWrapperProps<ItemT>,
+    ref: React.ForwardedRef<LegendListRef>
+) {
     const {
         refreshControl,
         scrollEnabled = true,
@@ -15,7 +29,7 @@ const LegendList = (props: any, ref: any) => {
     } = props || {};
 
     const layoutScroll = useContext(LayoutScrollContext);
-    const localRef = useRef<any>(null);
+    const localRef = useRef<LegendListRef | null>(null);
     const unregisterRef = useRef<(() => void) | null>(null);
 
     const clearRegistration = useCallback(() => {
@@ -25,7 +39,7 @@ const LegendList = (props: any, ref: any) => {
         }
     }, []);
 
-    const combinedRef = useCallback((node: any) => {
+    const combinedRef = useCallback((node: LegendListRef | null) => {
         localRef.current = node;
         if (typeof ref === 'function') {
             ref(node);
@@ -49,7 +63,7 @@ const LegendList = (props: any, ref: any) => {
 
     const handleScroll = layoutScroll?.handleScroll;
 
-    const mergedOnScroll = useCallback((event: any) => {
+    const mergedOnScroll = useCallback((event: ScrollEvent) => {
         if (scrollEnabled !== false && handleScroll) {
             handleScroll(event);
         }
@@ -58,7 +72,7 @@ const LegendList = (props: any, ref: any) => {
         }
     }, [handleScroll, propOnScroll, scrollEnabled]);
 
-    const handleWheelEvent = useCallback((event: any) => {
+    const handleWheelEvent = useCallback((event: WheelEvent) => {
         if (layoutScroll?.forwardWheelEvent) {
             layoutScroll.forwardWheelEvent(event);
         }
@@ -78,29 +92,25 @@ const LegendList = (props: any, ref: any) => {
     }, [dataSet]);
 
     if (RL) {
-        const defaults = {
+        const propsForRL: LegendListProps<ItemT> & Record<string, unknown> = {
             recycleItems: true,
             maintainVisibleContentPosition: false,
-        } as any;
-
-        const propsForRL = {
-            ...defaults,
             ...rest,
             refreshControl,
             scrollEnabled,
             onScroll: layoutScroll ? mergedOnScroll : propOnScroll,
             dataSet: datasetForWeb,
             onWheel: Platform.OS === 'web' ? handleWheelEvent : propOnWheel,
-        } as any;
+        };
 
         if (effectiveScrollEventThrottle != null) {
             propsForRL.scrollEventThrottle = effectiveScrollEventThrottle;
         }
 
-        return <RL ref={combinedRef} {...propsForRL} /> as any;
+        return <RL ref={combinedRef} {...propsForRL} />;
     }
 
-    const fallbackProps: any = {
+    const fallbackProps: Record<string, unknown> = {
         ...rest,
         refreshControl,
         scrollEnabled,
@@ -111,7 +121,13 @@ const LegendList = (props: any, ref: any) => {
     if (effectiveScrollEventThrottle != null) {
         fallbackProps.scrollEventThrottle = effectiveScrollEventThrottle;
     }
-    return <RNFlatList ref={combinedRef} {...fallbackProps} /> as any;
-};
+    // The wrapper bridges LegendList and FlatList prop shapes; the merged props
+    // are structurally a FlatList config at runtime.
+    return <RNFlatList {...(fallbackProps as unknown as FlatListProps<ItemT>)} />;
+}
 
-export default React.forwardRef(LegendList) as any;
+const LegendList = React.forwardRef(LegendListInner) as <ItemT>(
+    props: LegendListWrapperProps<ItemT> & { ref?: React.ForwardedRef<LegendListRef> }
+) => React.ReactElement;
+
+export default LegendList;

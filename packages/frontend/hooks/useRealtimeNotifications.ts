@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useOxy } from '@oxyhq/services';
 import { io, Socket } from 'socket.io-client';
 import { API_URL_SOCKET } from '../config';
@@ -9,7 +9,7 @@ let socket: Socket | null = null;
 let invalidationTimer: NodeJS.Timeout | null = null;
 
 // Batch invalidations to prevent 4x queries on rapid socket events
-const batchedInvalidateNotifications = (queryClient: any) => {
+const batchedInvalidateNotifications = (queryClient: QueryClient) => {
   if (invalidationTimer) {
     clearTimeout(invalidationTimer);
   }
@@ -48,7 +48,7 @@ export const useRealtimeNotifications = () => {
         console.log('Connected to notifications socket');
       });
 
-      socket.on('notification', (notification: any) => {
+      socket.on('notification', (notification: unknown) => {
         // Validate payload before acting
         const parsed = ZRawNotification.safeParse(notification);
         if (!parsed.success) {
@@ -61,7 +61,7 @@ export const useRealtimeNotifications = () => {
         batchedInvalidateNotifications(queryClient);
       });
 
-      socket.on('notificationUpdated', (notification: any) => {
+      socket.on('notificationUpdated', (notification: unknown) => {
         const parsed = ZRawNotification.safeParse(notification);
         if (!parsed.success) {
           console.warn('Dropped invalid socket notificationUpdated', parsed.error?.issues?.[0]);

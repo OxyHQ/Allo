@@ -146,7 +146,7 @@ export function ContactDetails({
   const updateConversation = useConversationsStore(state => state.updateConversation);
   const isGroup = conversationType === 'group';
   const otherParticipants = isGroup && participants
-    ? (getOtherParticipants({ participants, type: 'group' } as any, currentUserId) || [])
+    ? (getOtherParticipants({ participants }, currentUserId) || [])
     : [];
   const displayName = isGroup && groupName
     ? groupName
@@ -186,7 +186,7 @@ export function ContactDetails({
   const usersStore = useUsersStore();
 
   // For direct conversations, get the other participant's user data from Oxy
-  const otherParticipant = !isGroup && participants?.find(p => p.id !== currentUserId);
+  const otherParticipant = !isGroup ? participants?.find(p => p.id !== currentUserId) : undefined;
   const contactUser = useUserById(!isGroup && otherParticipant ? otherParticipant.id : undefined);
 
   // Ensure we fetch user data if missing

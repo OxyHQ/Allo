@@ -9,17 +9,44 @@ import { retryWithBackoff } from '@/lib/api/retryLogic';
  * Provides optimistic updates and seamless online/offline transitions
  */
 
-export interface QueuedOperation {
+/** Fields shared by every queued operation. */
+interface QueuedOperationBase {
   id: string;
-  type: 'send_message' | 'delete_message' | 'update_message' | 'add_reaction' | 'remove_reaction';
   conversationId: string;
-  data: any;
   attempts: number;
   createdAt: number;
   lastAttemptAt?: number;
   status: 'pending' | 'processing' | 'failed';
   error?: string;
 }
+
+/** Per-type payload carried on a queued operation. */
+type QueuedOperationData = {
+  send_message: Record<string, unknown>;
+  delete_message: { messageId: string };
+  update_message: { messageId: string; updates: Record<string, unknown> };
+  add_reaction: { messageId: string; emoji: string };
+  remove_reaction: { messageId: string; emoji: string };
+};
+
+export type QueuedOperationType = keyof QueuedOperationData;
+
+/**
+ * A queued offline operation. Discriminated on `type` so each variant's `data`
+ * shape is enforced.
+ */
+export type QueuedOperation = {
+  [K in QueuedOperationType]: QueuedOperationBase & { type: K; data: QueuedOperationData[K] };
+}[QueuedOperationType];
+
+/** Input accepted by `add()` — the queue manager fills in the runtime fields. */
+export type AddQueuedOperationInput = {
+  [K in QueuedOperationType]: {
+    type: K;
+    conversationId: string;
+    data: QueuedOperationData[K];
+  };
+}[QueuedOperationType];
 
 const QUEUE_STORAGE_KEY = '@allo/offline_queue';
 const MAX_QUEUE_SIZE = 1000;
@@ -72,16 +99,16 @@ class OfflineQueueManager {
   /**
    * Add operation to queue
    */
-  async add(operation: Omit<QueuedOperation, 'id' | 'attempts' | 'createdAt' | 'status'>): Promise<string> {
+  async add(operation: AddQueuedOperationInput): Promise<string> {
     const id = `${operation.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const queuedOp: QueuedOperation = {
+    const queuedOp = {
       ...operation,
       id,
       attempts: 0,
       createdAt: Date.now(),
-      status: 'pending',
-    };
+      status: 'pending' as const,
+    } as QueuedOperation;
 
     this.queue.push(queuedOp);
     await this.saveQueue();
@@ -233,8 +260,12 @@ class OfflineQueueManager {
         );
         break;
 
-      default:
-        throw new Error(`Unknown operation type: ${(operation as any).type}`);
+      default: {
+        const exhaustiveCheck: never = operation;
+        throw new Error(
+          `Unknown operation type: ${(exhaustiveCheck as QueuedOperation).type}`
+        );
+      }
     }
   }
 
@@ -285,7 +316,7 @@ class OfflineQueueManager {
 export const offlineQueueManager = new OfflineQueueManager();
 
 // Export convenience functions
-export const addToQueue = (operation: Omit<QueuedOperation, 'id' | 'attempts' | 'createdAt' | 'status'>) =>
+export const addToQueue = (operation: AddQueuedOperationInput) =>
   offlineQueueManager.add(operation);
 
 export const removeFromQueue = (id: string) =>

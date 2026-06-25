@@ -10,7 +10,7 @@ import {
   TextInputKeyPressEventData,
   ImageBackground,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -203,10 +203,10 @@ export default function ConversationView({ conversationId: propConversationId }:
   const sendMessage = useMessagesStore(state => state.sendMessage);
 
 
-  const flatListRef = useRef<any>(null);
+  const flatListRef = useRef<FlashListRef<FormattedMessageGroup> | null>(null);
   const inputRef = useRef<TextInput>(null);
   const lastFetchedConversationId = useRef<string | null>(null);
-  const typingTimeoutRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Message actions state
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
@@ -1030,7 +1030,7 @@ export default function ConversationView({ conversationId: propConversationId }:
           {messageGroups.length > 0 ? (
             <>
               <FlashList
-                ref={flatListRef as any}
+                ref={flatListRef}
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}

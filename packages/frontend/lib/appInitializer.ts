@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { oxyClient } from '@oxyhq/core';
+import type { User } from '@oxyhq/core';
 
 import { useAppearanceStore } from '@/stores/appearanceStore';
 import {
@@ -177,7 +178,7 @@ export class AppInitializer {
 async function initializeSignalProtocol(): Promise<void> {
   try {
     // Get current user - try multiple methods
-    let user: any = null;
+    let user: User | null = null;
     try {
       user = await oxyClient.getCurrentUser();
     } catch {
@@ -199,9 +200,9 @@ async function initializeSignalProtocol(): Promise<void> {
 
     // Load cloud sync setting from backend
     try {
-      const response = await oxyClient.getClient().get('/profile/settings/me');
+      const response = await oxyClient.getClient().get<{ data?: { security?: { cloudSyncEnabled?: boolean } } }>('/profile/settings/me');
       const settings = response.data;
-      const cloudSyncEnabled = settings.security?.cloudSyncEnabled || false;
+      const cloudSyncEnabled = settings?.security?.cloudSyncEnabled || false;
       useMessagesStore.getState().setCloudSyncEnabled(cloudSyncEnabled);
     } catch (error) {
       console.warn('[AppInitializer] Failed to load security settings:', error);

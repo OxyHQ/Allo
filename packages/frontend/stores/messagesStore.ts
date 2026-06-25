@@ -596,7 +596,15 @@ export const useMessagesStore = create<MessagesState>()(
           if (get().cloudSyncEnabled) {
             try {
               // Send encrypted or plaintext based on availability
-              const payload: any = {
+              const payload: {
+                conversationId: string;
+                senderDeviceId: number;
+                messageType: string;
+                fontSize?: number;
+                ciphertext?: string;
+                encryptionVersion?: number;
+                text?: string;
+              } = {
                 conversationId,
                 senderDeviceId: finalDeviceKeys.deviceId,
                 messageType: 'text',

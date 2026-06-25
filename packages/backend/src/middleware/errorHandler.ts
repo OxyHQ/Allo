@@ -1,5 +1,33 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { logger } from '../utils/logger';
+
+/** Narrow shape of a Mongoose ValidationError (only the fields we read). */
+interface MongooseValidationError {
+  errors: Record<string, { message: string }>;
+}
+
+/** Narrow shape of a Mongoose CastError (only the fields we read). */
+interface MongooseCastError {
+  path: string;
+  value: unknown;
+}
+
+/** Narrow shape of a MongoDB duplicate-key error (code 11000). */
+interface MongoDuplicateKeyError {
+  keyValue: Record<string, unknown>;
+}
+
+/** Narrow shape of an error that flows through the global error handler. */
+interface HandledError extends Error {
+  statusCode?: number;
+  status?: string;
+  isOperational?: boolean;
+  code?: number;
+  path?: string;
+  value?: unknown;
+  errors?: Record<string, { message: string }>;
+  keyValue?: Record<string, unknown>;
+}
 
 /**
  * Professional Error Handling Middleware
@@ -33,7 +61,9 @@ export class AppError extends Error {
  *   res.json(users);
  * }));
  */
-export const asyncHandler = (fn: Function) => {
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => unknown
+): RequestHandler => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -42,9 +72,9 @@ export const asyncHandler = (fn: Function) => {
 /**
  * Handle validation errors from express-validator
  */
-function handleValidationError(error: any): AppError {
+function handleValidationError(error: MongooseValidationError): AppError {
   const message = Object.values(error.errors)
-    .map((val: any) => val.message)
+    .map((val) => val.message)
     .join('. ');
   return new AppError(`Invalid input: ${message}`, 400);
 }
@@ -52,7 +82,7 @@ function handleValidationError(error: any): AppError {
 /**
  * Handle Mongoose cast errors (invalid MongoDB ObjectId)
  */
-function handleCastError(error: any): AppError {
+function handleCastError(error: MongooseCastError): AppError {
   const message = `Invalid ${error.path}: ${error.value}`;
   return new AppError(message, 400);
 }
@@ -60,7 +90,7 @@ function handleCastError(error: any): AppError {
 /**
  * Handle Mongoose duplicate key errors
  */
-function handleDuplicateKeyError(error: any): AppError {
+function handleDuplicateKeyError(error: MongoDuplicateKeyError): AppError {
   const field = Object.keys(error.keyValue)[0];
   const value = error.keyValue[field];
   const message = `Duplicate value for field ${field}: ${value}. Please use another value`;
@@ -155,7 +185,7 @@ function sendErrorProd(error: AppError, req: Request, res: Response) {
  * app.use(errorHandler);
  */
 export const errorHandler = (
-  err: any,
+  err: HandledError,
   req: Request,
   res: Response,
   next: NextFunction
@@ -164,15 +194,24 @@ export const errorHandler = (
   err.status = err.status || 'error';
 
   if (process.env.NODE_ENV === 'development') {
-    sendErrorDev(err, req, res);
+    sendErrorDev(err as AppError, req, res);
   } else if (process.env.NODE_ENV === 'production') {
-    let error = { ...err };
+    let error: AppError = Object.assign(
+      Object.create(AppError.prototype),
+      err
+    );
     error.message = err.message;
 
     // Handle specific error types
-    if (err.name === 'CastError') error = handleCastError(err);
-    if (err.code === 11000) error = handleDuplicateKeyError(err);
-    if (err.name === 'ValidationError') error = handleValidationError(err);
+    if (err.name === 'CastError') {
+      error = handleCastError(err as MongooseCastError);
+    }
+    if (err.code === 11000) {
+      error = handleDuplicateKeyError(err as MongoDuplicateKeyError);
+    }
+    if (err.name === 'ValidationError') {
+      error = handleValidationError(err as MongooseValidationError);
+    }
     if (err.name === 'JsonWebTokenError') error = handleJWTError();
     if (err.name === 'TokenExpiredError') error = handleJWTExpiredError();
 
@@ -223,12 +262,12 @@ export const validateRequest = (
   res: Response,
   next: NextFunction
 ) => {
-  const { validationResult } = require('express-validator');
+  const { validationResult } = require('express-validator') as typeof import('express-validator');
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
     const error = new AppError(
-      errors.array().map((e: any) => e.msg).join('. '),
+      errors.array().map((e) => e.msg).join('. '),
       400
     );
     return next(error);

@@ -1,3 +1,5 @@
+import type { ImageSourcePropType } from 'react-native';
+
 export interface ColorThemeVariant {
   // Message bubble colors
   bubbleSent: string;
@@ -9,7 +11,7 @@ export interface ColorThemeVariant {
   chatBackground: string;
 
   // Optional background image (can be local require() or URI)
-  chatBackgroundImage?: any;
+  chatBackgroundImage?: ImageSourcePropType;
   chatBackgroundImageOpacity?: number; // 0-1, defaults to 1
 
   // App backgrounds (optional overrides)

@@ -21,7 +21,7 @@ export interface MessageBlockProps {
   onMessagePress: (messageId: string) => void;
   onMessageLongPress?: (message: Message, position: { x: number; y: number; width?: number; height?: number }) => void;
   onMediaPress?: (mediaId: string, index: number) => void;
-  onMediaLongPress?: (message: Message, mediaId: string, index: number, event: any) => void;
+  onMediaLongPress?: (message: Message, mediaId: string, index: number, position: { x: number; y: number; width?: number; height?: number }) => void;
 }
 
 /**

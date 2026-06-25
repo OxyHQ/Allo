@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { OxySignInButton, useAuth } from '@oxyhq/services';
 import { Logo } from './Logo';
 import { colors } from '../styles/colors';
+import { isAuthCancellation } from '@/utils/errors';
 import { useTheme } from '@/hooks/useTheme';
 
 interface SignInPromptProps {
@@ -24,9 +25,9 @@ const SignInPrompt: React.FC<SignInPromptProps> = ({ onSignInPress }) => {
         } else {
             try {
                 await signIn();
-            } catch (error: any) {
+            } catch (error: unknown) {
                 // Handle authentication cancellation gracefully
-                if (error?.message?.includes('cancelled') || error?.message?.includes('closed')) {
+                if (isAuthCancellation(error)) {
                     console.log('Authentication cancelled by user');
                     return;
                 }

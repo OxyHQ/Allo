@@ -1,4 +1,10 @@
-import UserSettings from '../models/UserSettings';
+import UserSettings, { type IUserSettings } from '../models/UserSettings';
+
+/** Subset of UserSettings fields used to build a public profile design payload. */
+type PublicProfileSource = Pick<
+  IUserSettings,
+  'appearance' | 'profileHeaderImage' | 'profileCustomization'
+>;
 
 /**
  * Default profile customization settings
@@ -34,7 +40,10 @@ export async function ensureUserSettings(oxyUserId: string) {
 /**
  * Extracts public profile design data from UserSettings document
  */
-export function extractPublicProfileData(doc: any, userId: string) {
+export function extractPublicProfileData(
+  doc: Partial<PublicProfileSource> | null | undefined,
+  userId: string
+) {
   return {
     oxyUserId: userId,
     appearance: doc?.appearance?.primaryColor ? {

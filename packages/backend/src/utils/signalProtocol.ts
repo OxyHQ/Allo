@@ -11,7 +11,7 @@
  */
 export function validateEncryptedMessage(message: {
   ciphertext?: string;
-  encryptedMedia?: Array<any>;
+  encryptedMedia?: unknown[];
   encryptionVersion?: number;
   messageType?: string;
 }): boolean {
@@ -38,9 +38,9 @@ export function validateEncryptedMessage(message: {
  */
 export function isEncrypted(message: {
   ciphertext?: string;
-  encryptedMedia?: Array<any>;
+  encryptedMedia?: unknown[];
   text?: string;
-  media?: Array<any>;
+  media?: unknown[];
 }): boolean {
   return !!(message.ciphertext || (message.encryptedMedia && message.encryptedMedia.length > 0));
 }
@@ -50,9 +50,9 @@ export function isEncrypted(message: {
  */
 export function getMessagePreview(message: {
   ciphertext?: string;
-  encryptedMedia?: Array<any>;
+  encryptedMedia?: unknown[];
   text?: string;
-  media?: Array<any>;
+  media?: unknown[];
 }): string {
   if (isEncrypted(message)) {
     if (message.encryptedMedia && message.encryptedMedia.length > 0) {

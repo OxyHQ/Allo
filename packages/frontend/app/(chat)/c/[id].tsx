@@ -7,6 +7,30 @@ import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
 import { toast } from "@/lib/sonner";
 
+/** Participant shape returned by the backend conversations API. */
+interface ApiConversationParticipant {
+  userId: string;
+  username?: string;
+  avatar?: string;
+  name?: { displayName?: string; first?: string; last?: string };
+}
+
+/** Conversation shape returned by the backend conversations API. */
+interface ApiConversation {
+  _id?: string;
+  id?: string;
+  name?: string;
+  createdAt?: string;
+  avatar?: string;
+  participants?: ApiConversationParticipant[];
+}
+
+/**
+ * POST /conversations payload — the backend may return the conversation bare or
+ * wrapped under a nested `data` key, so both shapes are accepted.
+ */
+type CreateConversationPayload = ApiConversation & { data?: ApiConversation };
+
 /**
  * Unified route handler for ALL conversations: /c/:id
  *
@@ -54,7 +78,7 @@ export default function UnifiedConversationRoute() {
   const targetUserId = isUserId ? id : null;
 
   // Get user by ID (only if treating as userId)
-  const targetUser = useUserById(targetUserId);
+  const targetUser = useUserById(targetUserId ?? undefined);
 
   // Ensure user is loaded in store (only if treating as userId)
   useEffect(() => {
@@ -143,14 +167,14 @@ export default function UnifiedConversationRoute() {
 
     (async () => {
       try {
-        const response = await api.post<any>("/conversations", {
+        const response = await api.post<CreateConversationPayload>("/conversations", {
           type: "direct",
           participantIds: [targetUserId],
         });
 
-        const apiConversation = response.data.data || response.data;
+        const apiConversation: ApiConversation = response.data.data || response.data;
         const participants = (apiConversation.participants || []).map(
-          (p: any) => ({
+          (p) => ({
             id: p.userId,
             name: {
               displayName: p.name?.displayName || p.username || "Unknown",
@@ -163,11 +187,11 @@ export default function UnifiedConversationRoute() {
         );
 
         const conversation = {
-          id: apiConversation._id || apiConversation.id,
+          id: apiConversation._id || apiConversation.id || "",
           type: "direct" as const,
           name: apiConversation.name || "Direct Chat",
           lastMessage: "",
-          timestamp: new Date(apiConversation.createdAt).toISOString(),
+          timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
           unreadCount: 0,
           avatar: apiConversation.avatar,
           participants,
@@ -181,7 +205,7 @@ export default function UnifiedConversationRoute() {
           useConversationsStore.getState().removeConversation(optimisticId);
         }
         addConversation(conversation);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("[ConversationRoute] Error creating conversation:", error);
         toast.error("Failed to create conversation");
       }

@@ -12,7 +12,7 @@ import { colors as baseColors } from '@/styles/colors';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/hooks/useTheme';
@@ -92,7 +92,7 @@ export default function AppearanceSettingsScreen() {
           colorTheme: colorTheme.id,
           primaryColor: colorTheme.primaryColor,
         },
-      } as any);
+      });
     },
     [updateMySettings, selectedThemeMode]
   );
@@ -106,7 +106,7 @@ export default function AppearanceSettingsScreen() {
           colorTheme: selectedColorThemeId,
           primaryColor: selectedColorTheme.primaryColor,
         },
-      } as any);
+      });
     },
     [updateMySettings, selectedColorThemeId, selectedColorTheme]
   );
@@ -257,7 +257,7 @@ export default function AppearanceSettingsScreen() {
         >
           <TouchableOpacity
             className={`flex-row items-center justify-between ${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal}`}
-            onPress={() => router.push('/settings/chat-background' as any)}
+            onPress={() => router.push('/settings/chat-background' as Href)}
           >
             <Text className="text-base" style={{ color: theme.colors.text }}>
               Chat Background

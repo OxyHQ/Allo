@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, StyleSheet, View, TextStyle } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, View, TextStyle, type StyleProp, type ViewStyle } from 'react-native';
 import { VerifiedIcon } from '@/assets/icons/verified-icon';
 import { colors } from '../styles/colors';
 import { useTheme } from '@/hooks/useTheme';
@@ -11,8 +11,8 @@ interface Props {
     onPress?: () => void;
     variant?: 'default' | 'small';
     style?: {
-        name?: TextStyle;
-        container?: any;
+        name?: StyleProp<TextStyle>;
+        container?: StyleProp<ViewStyle>;
     };
 }
 

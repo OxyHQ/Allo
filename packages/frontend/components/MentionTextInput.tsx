@@ -6,6 +6,10 @@ import {
     TextInputProps,
     Platform,
     findNodeHandle,
+    type StyleProp,
+    type TextStyle,
+    type NativeSyntheticEvent,
+    type TextInputSelectionChangeEventData,
 } from "react-native";
 import { useTheme } from "@/hooks/useTheme";
 import alloPicker, { alloUser } from "./alloPicker";
@@ -23,7 +27,7 @@ interface alloTextInputProps extends Omit<TextInputProps, "onChangeText" | "valu
     placeholder?: string;
     maxLength?: number;
     multiline?: boolean;
-    style?: any;
+    style?: StyleProp<TextStyle>;
 }
 
 const alloTextInput: React.FC<alloTextInputProps> = ({
@@ -117,7 +121,7 @@ const alloTextInput: React.FC<alloTextInputProps> = ({
     }, [cursorPosition, onChangeText, allos, convertToStorageFormat]);
 
     // Handle selection change to track cursor position
-    const handleSelectionChange = useCallback((event: any) => {
+    const handleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
         setCursorPosition(event.nativeEvent.selection.start);
     }, []);
 

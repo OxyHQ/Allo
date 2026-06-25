@@ -171,7 +171,7 @@ export function getConversationDisplayName(
  * @returns Array of participants excluding current user
  */
 export function getOtherParticipants(
-  conversation: Conversation,
+  conversation: Pick<Conversation, 'participants'>,
   currentUserId?: string
 ): ConversationParticipant[] {
   if (!conversation.participants) {

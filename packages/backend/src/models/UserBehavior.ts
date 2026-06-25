@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IUserBehavior extends Document {
   oxyUserId: string; // Oxy user ID
-  preferences: Record<string, any>; // User preferences and behavior data
+  preferences: Record<string, unknown>; // User preferences and behavior data
   createdAt: Date;
   updatedAt: Date;
 }

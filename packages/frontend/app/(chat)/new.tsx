@@ -24,6 +24,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxyhq/services';
 import { useConversationsStore } from '@/stores';
+import type { User as OxyUser } from '@oxyhq/core';
+import type { Href } from 'expo-router';
+import { getErrorMessage } from '@/utils/errors';
 
 // Types
 import type { Conversation, ConversationType } from '@/app/(chat)/index';
@@ -42,6 +45,31 @@ interface User {
   };
   avatar?: string;
 }
+
+/** Participant shape returned by the backend conversations API. */
+interface ApiConversationParticipant {
+  userId: string;
+  username?: string;
+  avatar?: string;
+  name?: { displayName?: string; first?: string; last?: string };
+}
+
+/** Conversation shape returned by the backend conversations API. */
+interface ApiConversation {
+  _id?: string;
+  id?: string;
+  type?: ConversationType;
+  name?: string;
+  createdAt?: string;
+  avatar?: string;
+  participants?: ApiConversationParticipant[];
+}
+
+/**
+ * POST /conversations payload — the backend may return the conversation bare or
+ * wrapped under a nested `data` key, so both shapes are accepted.
+ */
+type CreateConversationPayload = ApiConversation & { data?: ApiConversation };
 
 /**
  * New Chat Screen
@@ -70,26 +98,27 @@ export default function NewChatScreen() {
     setIsLoading(true);
     try {
       const response = await oxyServices.searchProfiles(query, { limit: 20 });
-      const searchResults = Array.isArray(response) ? response : (response as any)?.data || [];
+      const searchResults: OxyUser[] = Array.isArray(response) ? response : response?.data || [];
 
       // Map Oxy profile format to our User format, rendering the API's
       // canonical name.displayName directly.
-      const mappedUsers: User[] = searchResults.map((profile: any) => {
+      const mappedUsers: User[] = searchResults.map((profile) => {
+        const handle = typeof profile.handle === 'string' ? profile.handle : undefined;
         const displayName =
-          (typeof profile.name === 'string' ? profile.name : profile.name?.displayName) ||
+          profile.name?.displayName ||
           profile.username ||
-          profile.handle ||
+          handle ||
           'Unknown';
 
         return {
-          id: profile.id || profile._id,
-          username: profile.username || profile.handle,
+          id: profile.id || String(profile._id ?? ''),
+          username: profile.username || handle || '',
           name: {
             displayName,
             first: profile.name?.first || '',
             last: profile.name?.last || '',
           },
-          avatar: profile.avatar || profile.profilePicture,
+          avatar: profile.avatar ?? undefined,
         };
       });
 
@@ -159,18 +188,18 @@ export default function NewChatScreen() {
       if (existingConversation) {
         // Navigate using user ID route for direct conversations
         // Use unified /c/:id route for all conversations
-        router.replace(`/c/${existingConversation.id}` as any);
+        router.replace(`/c/${existingConversation.id}` as Href);
         return;
       }
 
       // Create new conversation
-      const response = await api.post<any>('/conversations', {
+      const response = await api.post<CreateConversationPayload>('/conversations', {
         type: 'direct',
         participantIds: [user.id],
       });
 
-      const apiConversation = response.data.data || response.data;
-      const participants = (apiConversation.participants || []).map((p: any) => ({
+      const apiConversation: ApiConversation = response.data.data || response.data;
+      const participants = (apiConversation.participants || []).map((p) => ({
         id: p.userId,
         name: {
           displayName: p.name?.displayName || p.username || 'Unknown',
@@ -182,11 +211,11 @@ export default function NewChatScreen() {
       }));
 
       const conversation: Conversation = {
-        id: apiConversation._id || apiConversation.id,
+        id: apiConversation._id || apiConversation.id || '',
         type: 'direct' as ConversationType,
         name: apiConversation.name || 'Direct Chat',
         lastMessage: '',
-        timestamp: new Date(apiConversation.createdAt).toISOString(),
+        timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
         unreadCount: 0,
         avatar: apiConversation.avatar,
         participants,
@@ -198,10 +227,10 @@ export default function NewChatScreen() {
       addConversation(conversation);
 
       console.log('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
-      router.replace(`/c/${conversation.id}` as any);
-    } catch (error: any) {
+      router.replace(`/c/${conversation.id}` as Href);
+    } catch (error: unknown) {
       console.error('[NewChat] Error opening conversation:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to open conversation';
+      const errorMessage = getErrorMessage(error) || 'Failed to open conversation';
       toast.error(errorMessage);
     }
   }, [isSelectionMode, toggleUserSelection, router, conversations, currentUser?.id, addConversation]);
@@ -218,16 +247,16 @@ export default function NewChatScreen() {
       const type = participantIds.length === 1 ? 'direct' : 'group';
 
       // Create conversation via API
-      const response = await api.post<any>('/conversations', {
+      const response = await api.post<CreateConversationPayload>('/conversations', {
         type,
         participantIds,
       });
 
       // API returns { data: conversation }, so response.data is { data: conversation }
-      const apiConversation = response.data.data || response.data;
+      const apiConversation: ApiConversation = response.data.data || response.data;
 
       // Transform to frontend format
-      const participants = (apiConversation.participants || []).map((p: any) => ({
+      const participants = (apiConversation.participants || []).map((p) => ({
         id: p.userId,
         name: {
           displayName: p.name?.displayName || p.username || 'Unknown',
@@ -239,11 +268,11 @@ export default function NewChatScreen() {
       }));
 
       const conversation = {
-        id: apiConversation._id || apiConversation.id,
+        id: apiConversation._id || apiConversation.id || '',
         type: apiConversation.type || 'direct',
         name: apiConversation.name || (type === 'group' ? 'Group Chat' : 'Direct Chat'),
         lastMessage: '',
-        timestamp: new Date(apiConversation.createdAt).toISOString(),
+        timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
         unreadCount: 0,
         avatar: apiConversation.avatar,
         participants,
@@ -259,10 +288,10 @@ export default function NewChatScreen() {
       setSelectedUserIds(new Set());
       setIsSelectionMode(false);
 
-      router.replace(`/c/${conversation.id}` as any);
-    } catch (error: any) {
+      router.replace(`/c/${conversation.id}` as Href);
+    } catch (error: unknown) {
       console.error('[NewChat] Error creating conversation:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create conversation';
+      const errorMessage = getErrorMessage(error) || 'Failed to create conversation';
       toast.error(errorMessage);
     }
   }, [selectedUserIds, addConversation, router]);

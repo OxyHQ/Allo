@@ -14,7 +14,7 @@ import { InteractionManager } from 'react-native';
  *
  * Use for: Search input, form validation, API calls triggered by typing
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: never[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -66,7 +66,7 @@ export function useDebounce<T>(value: T, delay: number): T {
  *
  * Use for: Scroll handlers, resize handlers, animation frames
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: never[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -168,7 +168,7 @@ export function useMemoDebug<T>(
  * Stable callback that doesn't change between renders
  * Prevents unnecessary re-renders of child components
  */
-export function useStableCallback<T extends (...args: any[]) => any>(
+export function useStableCallback<T extends (...args: never[]) => unknown>(
   callback: T
 ): T {
   const callbackRef = useRef(callback);
@@ -178,7 +178,7 @@ export function useStableCallback<T extends (...args: any[]) => any>(
   });
 
   return useCallback(
-    ((...args: any[]) => callbackRef.current(...args)) as T,
+    ((...args: Parameters<T>) => callbackRef.current(...args)) as T,
     []
   );
 }
@@ -202,7 +202,7 @@ export const FLATLIST_OPTIMIZATIONS = {
   updateCellsBatchingPeriod: 50,
 
   // Better key extractor performance
-  keyExtractor: (item: any, index: number) => item.id?.toString() || index.toString(),
+  keyExtractor: (item: { id?: string | number }, index: number) => item.id?.toString() || index.toString(),
 
   // Render optimization
   getItemLayout: undefined, // Provide if all items have same height
@@ -219,7 +219,7 @@ export const FLATLIST_OPTIMIZATIONS = {
  * />
  */
 export function getItemLayout(itemHeight: number) {
-  return (data: any, index: number) => ({
+  return (_data: ArrayLike<unknown> | null | undefined, index: number) => ({
     length: itemHeight,
     offset: itemHeight * index,
     index,
@@ -241,7 +241,7 @@ export function memoWithProps<P>(
  * Shallow comparison for React.memo
  * Faster than deep comparison
  */
-export function shallowEqual(objA: any, objB: any): boolean {
+export function shallowEqual(objA: unknown, objB: unknown): boolean {
   if (Object.is(objA, objB)) {
     return true;
   }
@@ -255,8 +255,10 @@ export function shallowEqual(objA: any, objB: any): boolean {
     return false;
   }
 
-  const keysA = Object.keys(objA);
-  const keysB = Object.keys(objB);
+  const recordA = objA as Record<string, unknown>;
+  const recordB = objB as Record<string, unknown>;
+  const keysA = Object.keys(recordA);
+  const keysB = Object.keys(recordB);
 
   if (keysA.length !== keysB.length) {
     return false;
@@ -264,8 +266,8 @@ export function shallowEqual(objA: any, objB: any): boolean {
 
   for (let i = 0; i < keysA.length; i++) {
     if (
-      !Object.prototype.hasOwnProperty.call(objB, keysA[i]) ||
-      !Object.is(objA[keysA[i]], objB[keysA[i]])
+      !Object.prototype.hasOwnProperty.call(recordB, keysA[i]) ||
+      !Object.is(recordA[keysA[i]], recordB[keysA[i]])
     ) {
       return false;
     }
@@ -290,7 +292,7 @@ export function useRAF(callback: () => void, deps: React.DependencyList): void {
  * Load content only when visible
  */
 export function useIntersection(
-  ref: React.RefObject<any>,
+  ref: React.RefObject<Element | null>,
   options?: IntersectionObserverInit
 ): boolean {
   const [isIntersecting, setIsIntersecting] = React.useState(false);

@@ -7,12 +7,12 @@ export interface Draft {
   id: string;
   postContent: string;
   mediaIds: string[];
-  pollOptions: any[];
+  pollOptions: string[];
   article?: {
     title?: string;
     body?: string;
   };
-  threadItems: any[];
+  threadItems: unknown[];
   createdAt: number;
   updatedAt: number;
 }

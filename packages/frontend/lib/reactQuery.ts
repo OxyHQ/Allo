@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import { getHttpStatus } from '@/utils/errors';
 
 /**
  * React Query client configuration
@@ -15,9 +16,10 @@ export const queryClient = new QueryClient({
       gcTime: 1000 * 60 * 10,
 
       // Smart retry: retry network errors, don't retry 4xx client errors
-      retry: (failureCount, error: any) => {
+      retry: (failureCount, error) => {
         // Don't retry on 4xx errors (client errors like 404, 401)
-        if (error?.response?.status && error.response.status >= 400 && error.response.status < 500) {
+        const status = getHttpStatus(error);
+        if (status && status >= 400 && status < 500) {
           return false;
         }
         // Retry up to 2 times for network errors and 5xx errors
@@ -38,8 +40,9 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       // Retry mutations once for network errors
-      retry: (failureCount, error: any) => {
-        if (error?.response?.status && error.response.status >= 400 && error.response.status < 500) {
+      retry: (failureCount, error) => {
+        const status = getHttpStatus(error);
+        if (status && status >= 400 && status < 500) {
           return false;
         }
         return failureCount < 1;

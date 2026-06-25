@@ -23,7 +23,7 @@ import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { MessageBlock } from '@/components/messages/MessageBlock';
 import { DaySeparator } from '@/components/messages/DaySeparator';
-import { useMessagesStore } from '@/stores/messagesStore';
+import { useMessagesStore, type Message } from '@/stores/messagesStore';
 import type { Conversation } from '@/app/(chat)/index';
 import {
   getConversationDisplayName,
@@ -40,7 +40,7 @@ const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 const MAX_PREVIEW_MESSAGES = 6;
 
 // Stable empty array to prevent Zustand selector from creating new references each render
-const EMPTY_MESSAGES: any[] = [];
+const EMPTY_MESSAGES: Message[] = [];
 
 // No-op handlers for read-only preview
 const NOOP = () => {};

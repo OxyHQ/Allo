@@ -7,6 +7,9 @@ import {
   Modal,
   Platform,
   useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
+  type ImageStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Image as RNImage } from 'react-native';
@@ -34,8 +37,8 @@ const AnimatedImage = Animated.createAnimatedComponent(Image);
 interface ZoomableAvatarProps {
   source?: ImageSourcePropType | string | undefined | null;
   size?: number;
-  style?: any;
-  imageStyle?: any;
+  style?: StyleProp<ViewStyle>;
+  imageStyle?: StyleProp<ImageStyle>;
 }
 
 export const ZoomableAvatar: React.FC<ZoomableAvatarProps> = ({

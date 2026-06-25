@@ -27,6 +27,14 @@ import { useTheme } from "@/hooks/useTheme";
 import { useOxy, useAuth } from "@oxyhq/services";
 import { useMyAvatarShape } from "@/hooks/useAvatarShape";
 
+import { isAuthCancellation } from "@/utils/errors";
+
+/** Hover handlers supported by react-native-web-hover's Pressable on web. */
+interface HoverHandlers {
+    onHoverIn?: () => void;
+    onHoverOut?: () => void;
+}
+
 // Utils
 import { confirmDialog } from "@/utils/alerts";
 import { ROUTES, routeMatchers, isRouteActive } from "@/utils/routeUtils";
@@ -150,7 +158,7 @@ export function SideBar() {
     if (isSideBarVisible) {
         return (
             <Pressable
-                {...({ onHoverIn: handleHoverIn, onHoverOut: handleHoverOut } as any)}
+                {...({ onHoverIn: handleHoverIn, onHoverOut: handleHoverOut } satisfies HoverHandlers)}
                 style={[
                     styles.container,
                     { backgroundColor: theme.colors.background },
@@ -215,9 +223,9 @@ export function SideBar() {
                                 onPress={async () => {
                                     try {
                                         await signIn();
-                                    } catch (error: any) {
+                                    } catch (error: unknown) {
                                         // Silently handle auth cancellation
-                                        if (!error?.message?.includes('cancelled') && !error?.message?.includes('closed')) {
+                                        if (!isAuthCancellation(error)) {
                                             console.error('Authentication error:', error);
                                         }
                                     }
@@ -238,9 +246,9 @@ const styles = StyleSheet.create({
         padding: 12,
         ...(Platform.select({
             web: {
-                position: 'sticky' as any,
+                position: 'sticky',
                 overflow: 'hidden',
-                height: '100vh' as any,
+                height: '100vh',
                 cursor: 'initial',
             },
             default: {

@@ -27,7 +27,7 @@ export class UserPreferenceService {
   /**
    * Placeholder method - not implemented
    */
-  async getUserPreferences(userId: string): Promise<any> {
+  async getUserPreferences(userId: string): Promise<Record<string, unknown>> {
     // Not implemented - this is a stub
     console.warn('[UserPreferenceService] getUserPreferences called but service is not implemented');
     return {};

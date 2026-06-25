@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import { authenticatedClient } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getHttpStatus } from '@/utils/errors';
 
 const PRIVACY_SETTINGS_CACHE_KEY = '@allo_privacy_settings';
+
+/** Shape of the profile-settings endpoint response we read. */
+interface ProfileSettingsResponse {
+    data?: { privacy?: PrivacySettings };
+}
 
 export interface PrivacySettings {
     profileVisibility?: 'public' | 'private' | 'followers_only';
@@ -34,16 +40,16 @@ export function usePrivacySettings(userId?: string | null): PrivacySettings | nu
 
         const loadSettings = async () => {
             try {
-                const response = await authenticatedClient.get(`/profile/settings/${userId}`);
+                const response = await authenticatedClient.get<ProfileSettingsResponse>(`/profile/settings/${userId}`);
                 if (response.data?.privacy) {
                     setSettings(response.data.privacy);
                 } else {
                     // Default to public if no settings exist
                     setSettings({ profileVisibility: 'public', hideLikeCounts: false, hideShareCounts: false, hideReplyCounts: false, hideSaveCounts: false });
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 // If 404, user might not have settings yet - use defaults
-                if (error?.response?.status === 404) {
+                if (getHttpStatus(error) === 404) {
                     setSettings({ profileVisibility: 'public', hideLikeCounts: false, hideShareCounts: false, hideReplyCounts: false, hideSaveCounts: false });
                 } else {
                     console.debug('Could not load privacy settings:', error);
@@ -101,7 +107,7 @@ export function useCurrentUserPrivacySettings(): PrivacySettings | null {
 
             // Then fetch fresh data from API
             try {
-                const response = await authenticatedClient.get('/profile/settings/me');
+                const response = await authenticatedClient.get<ProfileSettingsResponse>('/profile/settings/me');
                 if (response.data?.privacy) {
                     const freshSettings = response.data.privacy;
                     cachedPrivacySettings = freshSettings;
@@ -122,8 +128,8 @@ export function useCurrentUserPrivacySettings(): PrivacySettings | null {
                         console.debug('Failed to cache default privacy settings:', cacheErr);
                     }
                 }
-            } catch (error: any) {
-                if (error?.response?.status === 404) {
+            } catch (error: unknown) {
+                if (getHttpStatus(error) === 404) {
                     const defaultSettings = { profileVisibility: 'public' as const, hideLikeCounts: false, hideShareCounts: false, hideReplyCounts: false, hideSaveCounts: false };
                     cachedPrivacySettings = defaultSettings;
                     setSettings(defaultSettings);

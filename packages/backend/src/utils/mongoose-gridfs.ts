@@ -1,10 +1,16 @@
 import mongoose from 'mongoose';
 import multer from 'multer';
-import { GridFSBucket } from 'mongodb';
-import { Request } from 'express';
+import { GridFSBucket, type GridFSFile, type Filter } from 'mongodb';
 import { Readable } from 'stream';
 
 let bucket: GridFSBucket;
+
+/** Options accepted when writing a file to GridFS. */
+interface WriteFileOptions {
+  contentType?: string;
+  filename?: string;
+  metadata?: Record<string, unknown>;
+}
 
 // Initialize GridFSBucket
 const initGridFS = () => {
@@ -27,7 +33,7 @@ const upload = multer({
 }).array('files', 5);
 
 // Helper function to write file to GridFS
-const writeFile = async (fileBuffer: Buffer, options: any) => {
+const writeFile = async (fileBuffer: Buffer, options: WriteFileOptions) => {
   const bucket = initGridFS();
   if (!bucket) throw new Error('GridFS not initialized');
 
@@ -80,7 +86,7 @@ const deleteFile = async (id: string) => {
 };
 
 // Helper function to find files
-const findFiles = async (query: any) => {
+const findFiles = async (query: Filter<GridFSFile>) => {
   const bucket = initGridFS();
   if (!bucket) throw new Error('GridFS not initialized');
 

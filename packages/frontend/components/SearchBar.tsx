@@ -7,9 +7,9 @@ import { colors } from '../styles/colors'
 import { useTheme } from '@/hooks/useTheme'
 import { Search } from '@/assets/icons/search-icon'
 
-const debounce = (func: Function, wait: number) => {
-    let timeout: NodeJS.Timeout;
-    return function executedFunction(...args: any[]) {
+const debounce = <T extends (...args: never[]) => unknown>(func: T, wait: number) => {
+    let timeout: ReturnType<typeof setTimeout>;
+    return function executedFunction(...args: Parameters<T>) {
         const later = () => {
             clearTimeout(timeout);
             func(...args);

@@ -9,7 +9,7 @@ import { useCallback, useMemo, useRef } from 'react';
  * Debounce hook for expensive operations
  * Prevents function calls until delay has passed since last call
  */
-export function useDebounce<T extends (...args: any[]) => any>(
+export function useDebounce<T extends (...args: never[]) => unknown>(
   callback: T,
   delay: number
 ): T {
@@ -32,7 +32,7 @@ export function useDebounce<T extends (...args: any[]) => any>(
  * Throttle hook for frequent events
  * Limits function calls to once per delay period
  */
-export function useThrottle<T extends (...args: any[]) => any>(
+export function useThrottle<T extends (...args: never[]) => unknown>(
   callback: T,
   delay: number
 ): T {
@@ -62,7 +62,7 @@ export function useStableRef<T>(value: T, deps: React.DependencyList): T {
  * Memoized callback that only changes when dependencies change
  * Similar to useCallback but with better type inference
  */
-export function useStableCallback<T extends (...args: any[]) => any>(
+export function useStableCallback<T extends (...args: never[]) => unknown>(
   callback: T,
   deps: React.DependencyList
 ): T {

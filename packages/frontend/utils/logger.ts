@@ -1,5 +1,5 @@
 interface LoggerFunction {
-  (message: string, ...args: any[]): void;
+  (message: string, ...args: unknown[]): void;
 }
 
 interface Logger {
@@ -13,18 +13,18 @@ const PREFIX = '[Session]';
 
 const createLogger = (): Logger => {
   return {
-    info: (message: string, ...args: any[]) => {
+    info: (message: string, ...args: unknown[]) => {
       if (process.env.NODE_ENV !== 'production') {
         console.log(`${PREFIX} [INFO] ${message}`, ...args);
       }
     },
-    warn: (message: string, ...args: any[]) => {
+    warn: (message: string, ...args: unknown[]) => {
       console.warn(`${PREFIX} [WARN] ${message}`, ...args);
     },
-    error: (message: string, ...args: any[]) => {
+    error: (message: string, ...args: unknown[]) => {
       console.error(`${PREFIX} [ERROR] ${message}`, ...args);
     },
-    debug: (message: string, ...args: any[]) => {
+    debug: (message: string, ...args: unknown[]) => {
       if (process.env.NODE_ENV !== 'production') {
         console.debug(`${PREFIX} [DEBUG] ${message}`, ...args);
       }

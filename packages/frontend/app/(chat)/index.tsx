@@ -9,7 +9,7 @@ import {
     RefreshControl,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Link, useRouter, usePathname } from 'expo-router';
+import { Link, useRouter, usePathname, type Href } from 'expo-router';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -597,7 +597,7 @@ export default function ConversationsList() {
         const conv = peekConversation;
         setPeekConversation(null);
         // Use unified /c/:id route for all conversations
-        router.push(`/c/${conv.id}` as any);
+        router.push(`/c/${conv.id}` as Href);
     }, [peekConversation, router]);
 
     /**
@@ -609,7 +609,7 @@ export default function ConversationsList() {
             return;
         }
         // Use unified /c/:id route for all conversations
-        router.push(`/c/${conversationId}` as any);
+        router.push(`/c/${conversationId}` as Href);
     }, [isSelectionMode, toggleConversationSelection, router]);
 
     /**
@@ -953,7 +953,7 @@ export default function ConversationsList() {
                                 <TouchableOpacity
                                     style={styles.headerIconButton}
                                     onPress={() => {
-                                        router.push('/new' as any);
+                                        router.push('/new' as Href);
                                     }}
                                     accessibilityLabel="New Chat"
                                     accessibilityRole="button"

@@ -31,6 +31,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { colors } from '@/styles/colors';
 import { BottomSheetContext } from '@/context/BottomSheetContext';
 import { MicPermissionSheet } from './MicPermissionSheet';
+import { getErrorMessage } from '@/utils/errors';
 
 const BUTTON_SIZE = 40;
 const ANIMATION_DURATION = 200;
@@ -309,10 +310,10 @@ export const MicSendButton: React.FC<MicSendButtonProps> = ({
             // Start recording
             audioRecorder.record();
             onRecordStart?.();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to start recording:', error);
             // Check if error is permission-related
-            const errorMessage = error?.message || error?.toString() || '';
+            const errorMessage = getErrorMessage(error) || String(error ?? '');
             if (errorMessage.toLowerCase().includes('permission') ||
                 errorMessage.toLowerCase().includes('denied') ||
                 errorMessage.toLowerCase().includes('microphone')) {

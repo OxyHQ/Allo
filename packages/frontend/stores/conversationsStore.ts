@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { ConversationDto } from '@allo/shared-types';
+import type { ConversationDto, EnrichedConversationParticipant } from '@allo/shared-types';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
-import { useUsersStore } from './usersStore';
+import { useUsersStore, type UserEntity } from './usersStore';
 import {
   getConversationsLocally,
   storeConversationsLocally,
@@ -11,9 +11,25 @@ import {
 } from '@/lib/offlineStorage';
 
 /**
+ * Sum a conversation's per-user unread counts. The backend serializes
+ * `unreadCounts` as a JSON object but types it as `Map | Record` to match its
+ * lean/`toObject()` shapes, so both are handled.
+ */
+function sumUnreadCounts(
+  unreadCounts: ConversationDto['unreadCounts']
+): number {
+  if (!unreadCounts) return 0;
+  const values =
+    unreadCounts instanceof Map
+      ? Array.from(unreadCounts.values())
+      : Object.values(unreadCounts);
+  return values.reduce((sum, count) => sum + (count || 0), 0);
+}
+
+/**
  * Format last message with sender name for group conversations
  * Example: "Albert: Hello" for groups, just "Hello" for direct chats
- * 
+ *
  * Professional WhatsApp-style formatting - efficient and clean
  */
 function formatLastMessageForGroup(
@@ -295,29 +311,27 @@ export const useConversationsStore = create<ConversationsState>()(
         
         // Collect all unique user IDs for batch caching (WhatsApp-style efficiency)
         const userIds = new Set<string>();
-        apiConversations.forEach((conv: any) => {
-          (conv.participants || []).forEach((p: any) => {
+        apiConversations.forEach((conv) => {
+          (conv.participants || []).forEach((p) => {
             if (p.userId) userIds.add(p.userId);
           });
         });
 
         // Batch pre-cache user data in zustand (like WhatsApp - efficient prefetching)
         // Backend already enriched with Oxy data, so we just cache it
-        const usersToCache: any[] = [];
-        apiConversations.forEach((conv: any) => {
-          (conv.participants || []).forEach((p: any) => {
+        const usersToCache: Array<Partial<UserEntity> & { id: string }> = [];
+        apiConversations.forEach((conv) => {
+          (conv.participants || []).forEach((p) => {
             if (p.userId && p.name) {
               // Convert backend format to frontend format
-              const user: any = {
+              const user: Partial<UserEntity> & { id: string } = {
                 id: p.userId,
                 username: p.username,
                 avatar: p.avatar,
               };
-              
+
               // Handle name format — carry the backend's canonical displayName.
-              if (typeof p.name === 'string') {
-                user.name = p.name;
-              } else if (p.name.displayName || p.name.first || p.name.last) {
+              if (p.name.displayName || p.name.first || p.name.last) {
                 user.name = {
                   displayName:
                     p.name.displayName ||
@@ -328,7 +342,7 @@ export const useConversationsStore = create<ConversationsState>()(
                   last: p.name.last || '',
                 };
               }
-              
+
               usersToCache.push(user);
             }
           });
@@ -341,8 +355,8 @@ export const useConversationsStore = create<ConversationsState>()(
 
         // Batch check local storage for decrypted messages (efficient - parallel reads)
         const encryptedConversationIds = apiConversations
-          .filter((conv: any) => conv.lastMessage?.text === '[Encrypted]')
-          .map((conv: any) => conv._id || conv.id);
+          .filter((conv) => conv.lastMessage?.text === '[Encrypted]')
+          .map((conv) => String(conv._id ?? ''));
         
         // Parallel fetch last messages from local storage for encrypted conversations
         const localMessagePromises = encryptedConversationIds.map(async (id: string) => {
@@ -371,14 +385,13 @@ export const useConversationsStore = create<ConversationsState>()(
         );
 
         // Transform API response to frontend Conversation format
-        const conversations: Conversation[] = apiConversations.map((conv: any) => {
+        const conversations: Conversation[] = apiConversations.map((conv) => {
           // Map participants from API format to frontend format
-          const participants: ConversationParticipant[] = (conv.participants || []).map((p: any) => ({
+          const participants: ConversationParticipant[] = (conv.participants || []).map((p) => ({
             id: p.userId,
             name: {
               displayName:
                 p.name?.displayName ||
-                (typeof p.name === 'string' ? p.name : '') ||
                 p.username ||
                 'Unknown',
               first: p.name?.first || '',
@@ -388,7 +401,7 @@ export const useConversationsStore = create<ConversationsState>()(
             avatar: p.avatar,
           }));
 
-          const conversationId = conv._id || conv.id;
+          const conversationId = String(conv._id ?? '');
           
           // Get last message: prefer store (O(1)), then local storage, then API
           let lastMessageText = conv.lastMessage?.text || '';
@@ -423,7 +436,7 @@ export const useConversationsStore = create<ConversationsState>()(
             name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Direct Chat'),
             lastMessage: formattedLastMessage,
             timestamp: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : new Date().toISOString(),
-            unreadCount: conv.unreadCounts ? Object.values(conv.unreadCounts).reduce((sum: number, count: any) => sum + (count || 0), 0) : 0,
+            unreadCount: sumUnreadCounts(conv.unreadCounts),
             avatar: conv.avatar,
             theme: conv.theme, // Color theme ID
             participants,

@@ -1,4 +1,5 @@
 declare module "@/assets/images/*" {
-  const value: any;
+  import type { ImageSourcePropType } from "react-native";
+  const value: ImageSourcePropType;
   export default value;
 }

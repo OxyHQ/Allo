@@ -18,7 +18,7 @@ export interface OptimisticUpdate<T> {
  * Optimistic Update Manager
  * Tracks pending optimistic updates and handles rollback
  */
-export class OptimisticUpdateManager<T = any> {
+export class OptimisticUpdateManager<T = unknown> {
   private updates = new Map<string, OptimisticUpdate<T>>();
   private listeners = new Set<(updates: Map<string, OptimisticUpdate<T>>) => void>();
 
@@ -199,7 +199,7 @@ export async function batchOptimisticUpdates<T>(
   manager: OptimisticUpdateManager<T>,
   operations: Array<{
     update: Omit<OptimisticUpdate<T>, 'createdAt' | 'status'>;
-    fn: () => Promise<any>;
+    fn: () => Promise<unknown>;
   }>
 ): Promise<void> {
   const updateIds = operations.map(op => manager.add(op.update));

@@ -3,6 +3,9 @@
  * High-performance debouncing for expensive operations
  */
 
+/** Constraint for any callable that can be debounced/throttled. */
+type AnyFunction = (...args: never[]) => unknown;
+
 /**
  * Creates a debounced function that delays invoking func until after wait milliseconds
  * have elapsed since the last time the debounced function was invoked.
@@ -22,21 +25,21 @@
  * debouncedSearch('hello'); // Will only execute after 300ms of no calls
  * debouncedSearch.cancel(); // Cancel pending execution
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends AnyFunction>(
   func: T,
   wait: number,
   options: { leading?: boolean; trailing?: boolean } = { trailing: true }
 ): T & { cancel: () => void; flush: () => void } {
-  let timeoutId: NodeJS.Timeout | null = null;
-  let lastArgs: any[] | null = null;
-  let lastThis: any = null;
-  let result: any;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: Parameters<T> | null = null;
+  let lastThis: unknown = null;
+  let result: ReturnType<T> | undefined;
 
   const { leading = false, trailing = true } = options;
 
   function invokeFunc() {
     if (lastArgs && lastThis) {
-      result = func.apply(lastThis, lastArgs);
+      result = func.apply(lastThis, lastArgs) as ReturnType<T>;
       lastArgs = null;
       lastThis = null;
     }
@@ -59,7 +62,7 @@ export function debounce<T extends (...args: any[]) => any>(
     return result;
   }
 
-  function debounced(this: any, ...args: any[]) {
+  function debounced(this: unknown, ...args: Parameters<T>) {
     lastArgs = args;
     lastThis = this;
 
@@ -84,7 +87,7 @@ export function debounce<T extends (...args: any[]) => any>(
   debounced.cancel = cancel;
   debounced.flush = flush;
 
-  return debounced as T & { cancel: () => void; flush: () => void };
+  return debounced as unknown as T & { cancel: () => void; flush: () => void };
 }
 
 /**
@@ -101,14 +104,14 @@ export function debounce<T extends (...args: any[]) => any>(
  *
  * window.addEventListener('scroll', throttledScroll);
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends AnyFunction>(
   func: T,
   wait: number
 ): T & { cancel: () => void } {
-  let timeoutId: NodeJS.Timeout | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let lastRan: number = 0;
-  let lastArgs: any[] | null = null;
-  let lastThis: any = null;
+  let lastArgs: Parameters<T> | null = null;
+  let lastThis: unknown = null;
 
   function cancel() {
     if (timeoutId !== null) {
@@ -117,7 +120,7 @@ export function throttle<T extends (...args: any[]) => any>(
     }
   }
 
-  function throttled(this: any, ...args: any[]) {
+  function throttled(this: unknown, ...args: Parameters<T>) {
     const now = Date.now();
     lastArgs = args;
     lastThis = this;
@@ -141,7 +144,7 @@ export function throttle<T extends (...args: any[]) => any>(
 
   throttled.cancel = cancel;
 
-  return throttled as T & { cancel: () => void };
+  return throttled as unknown as T & { cancel: () => void };
 }
 
 /**
@@ -156,12 +159,12 @@ export function throttle<T extends (...args: any[]) => any>(
  *   updateUI();
  * });
  */
-export function rafDebounce<T extends (...args: any[]) => any>(
+export function rafDebounce<T extends AnyFunction>(
   func: T
 ): T & { cancel: () => void } {
   let rafId: number | null = null;
-  let lastArgs: any[] | null = null;
-  let lastThis: any = null;
+  let lastArgs: Parameters<T> | null = null;
+  let lastThis: unknown = null;
 
   function cancel() {
     if (rafId !== null) {
@@ -172,7 +175,7 @@ export function rafDebounce<T extends (...args: any[]) => any>(
     lastThis = null;
   }
 
-  function debounced(this: any, ...args: any[]) {
+  function debounced(this: unknown, ...args: Parameters<T>) {
     lastArgs = args;
     lastThis = this;
 
@@ -192,5 +195,5 @@ export function rafDebounce<T extends (...args: any[]) => any>(
 
   debounced.cancel = cancel;
 
-  return debounced as T & { cancel: () => void };
+  return debounced as unknown as T & { cancel: () => void };
 }

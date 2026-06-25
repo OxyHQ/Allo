@@ -1,26 +1,39 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { Animated, Platform } from 'react-native';
 
-type ScrollEvent = {
-    nativeEvent?: {
-        contentOffset?: { x?: number; y?: number } | number;
-        target?: { scrollTop?: number };
-        [key: string]: any;
-    };
-    target?: { scrollTop?: number };
-    [key: string]: any;
+/** DOM-ish node carried on web scroll/wheel events (has scrollTop / closest). */
+type ScrollTargetNode = {
+    scrollTop?: number;
+    closest?: (selector: string) => HTMLElement | null;
+};
+
+/** Offset/target payload shared by the native event and (flattened) web event. */
+type ScrollEventPayload = {
+    contentOffset?: { x?: number; y?: number } | number;
+    target?: ScrollTargetNode;
+};
+
+type ScrollEvent = ScrollEventPayload & {
+    nativeEvent?: ScrollEventPayload;
 };
 
 type WheelLikeEvent = {
     deltaY?: number;
     preventDefault?: () => void;
-    target?: any;
+    target?: EventTarget | null;
     nativeEvent?: {
         deltaY?: number;
         preventDefault?: () => void;
-        target?: any;
+        target?: EventTarget | null;
     };
 };
+
+/** Narrow an unknown event target to a DOM node exposing `closest`. */
+function asClosestCapable(target: EventTarget | null | undefined): ScrollTargetNode | null {
+    return target && typeof (target as ScrollTargetNode).closest === 'function'
+        ? (target as ScrollTargetNode)
+        : null;
+}
 
 type ScrollableRef = {
     scrollToOffset?: (params: { offset: number; animated?: boolean }) => void;
@@ -39,7 +52,7 @@ type LayoutScrollContextValue = {
      * Factory that returns an Animated.event handler bound to the shared scrollY.
      * Consumers can provide an optional listener to run side effects alongside the shared update.
      */
-    createAnimatedScrollHandler: (listener?: (event: ScrollEvent) => void) => (...args: any[]) => void;
+    createAnimatedScrollHandler: (listener?: (event: ScrollEvent) => void) => (...args: unknown[]) => void;
     /**
      * Direct setter for components that need to programmatically adjust the global scroll position.
      */
@@ -99,9 +112,9 @@ export function LayoutScrollProvider({
         setScrollY(offset);
         // Optimize web DOM queries - only check if we don't have a registered element
         if (Platform.OS === 'web' && !scrollElementRef.current) {
-            const target = (event?.nativeEvent as any)?.target ?? (event as any)?.target;
+            const target = event?.nativeEvent?.target ?? event?.target;
             if (target && typeof target.closest === 'function') {
-                const owner = target.closest('[data-layoutscroll="true"]') as HTMLElement | null;
+                const owner = target.closest('[data-layoutscroll="true"]');
                 if (owner) {
                     scrollElementRef.current = owner;
                 }
@@ -119,7 +132,7 @@ export function LayoutScrollProvider({
                 [{ nativeEvent: { contentOffset: { y: scrollY } } }],
                 {
                     useNativeDriver: false, // Required for scroll position
-                    listener: (event: any) => {
+                    listener: (event: ScrollEvent) => {
                         const now = Date.now();
                         // Always update scrollY state (required for animations)
                         handleScroll(event);
@@ -165,8 +178,8 @@ export function LayoutScrollProvider({
                 ? event.nativeEvent?.deltaY
                 : 0;
         if (deltaY === 0) return;
-        const target = (event.nativeEvent?.target ?? event.target) as HTMLElement | null;
-        if (target && scrollElementRef.current && typeof target.closest === 'function') {
+        const target = asClosestCapable(event.nativeEvent?.target ?? event.target);
+        if (target && scrollElementRef.current && target.closest) {
             const owner = target.closest('[data-layoutscroll="true"]');
             if (owner && owner === scrollElementRef.current) {
                 // Let the scrollable itself handle native wheel events.

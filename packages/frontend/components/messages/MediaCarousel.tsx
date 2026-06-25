@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions, ScrollView, type GestureResponderEvent } from 'react-native';
 import { Image } from 'expo-image';
 import type { MediaItem } from '@/stores';
 import { useTheme } from '@/hooks/useTheme';
@@ -10,7 +10,7 @@ export interface MediaCarouselProps {
   isAiMessage?: boolean;
   getMediaUrl: (mediaId: string) => string;
   onMediaPress?: (mediaId: string, index: number) => void;
-  onMediaLongPress?: (mediaId: string, index: number, event: any) => void;
+  onMediaLongPress?: (mediaId: string, index: number, event: GestureResponderEvent) => void;
 }
 
 // Use hook inside component instead of module-level Dimensions.get (handles rotation)
@@ -48,7 +48,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
     }
   }, [onMediaPress]);
 
-  const handleMediaLongPress = useCallback((mediaId: string, index: number, event: any) => {
+  const handleMediaLongPress = useCallback((mediaId: string, index: number, event: GestureResponderEvent) => {
     if (onMediaLongPress) {
       onMediaLongPress(mediaId, index, event);
     }

@@ -6,6 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message } from '@/stores/messagesStore';
+import type { Conversation } from '@/app/(chat)/index';
 
 const MESSAGES_PREFIX = 'messages_';
 const CONVERSATIONS_PREFIX = 'conversations_';
@@ -16,7 +17,7 @@ export interface SyncQueueItem {
   id: string;
   type: 'send_message' | 'update_message' | 'delete_message';
   conversationId: string;
-  data: any;
+  data: unknown;
   timestamp: number;
   retries: number;
 }
@@ -25,7 +26,7 @@ export interface SyncQueueItem {
  * Store conversations list locally (offline-first like WhatsApp/Telegram)
  * Called after every successful API fetch to keep cache fresh
  */
-export async function storeConversationsLocally(conversations: any[]): Promise<void> {
+export async function storeConversationsLocally(conversations: Conversation[]): Promise<void> {
   try {
     await AsyncStorage.setItem(CONVERSATIONS_LIST_KEY, JSON.stringify(conversations));
   } catch (error) {
@@ -37,11 +38,11 @@ export async function storeConversationsLocally(conversations: any[]): Promise<v
  * Get cached conversations list from local storage
  * Returns instantly on cold start before API responds
  */
-export async function getConversationsLocally(): Promise<any[]> {
+export async function getConversationsLocally(): Promise<Conversation[]> {
   try {
     const data = await AsyncStorage.getItem(CONVERSATIONS_LIST_KEY);
     if (!data) return [];
-    return JSON.parse(data);
+    return JSON.parse(data) as Conversation[];
   } catch (error) {
     console.error('[OfflineStorage] Error getting conversations:', error);
     return [];
@@ -72,9 +73,10 @@ export async function getMessagesLocally(conversationId: string): Promise<Messag
     const data = await AsyncStorage.getItem(key);
     if (!data) return [];
     
-    const messages = JSON.parse(data);
+    // Stored as Message[] but JSON round-trips Date fields to strings.
+    const messages = JSON.parse(data) as Array<Omit<Message, 'timestamp'> & { timestamp: string }>;
     // Convert timestamp strings back to Date objects
-    return messages.map((msg: any) => ({
+    return messages.map((msg) => ({
       ...msg,
       timestamp: new Date(msg.timestamp),
     }));

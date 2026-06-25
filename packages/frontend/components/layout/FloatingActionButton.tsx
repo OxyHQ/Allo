@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { StyleSheet, TouchableOpacity, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, SharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/hooks/useTheme';
@@ -14,7 +14,7 @@ interface FloatingActionButtonProps {
     iconSize?: number;
     animatedTranslateY?: SharedValue<number>;
     animatedOpacity?: SharedValue<number>;
-    style?: any;
+    style?: StyleProp<ViewStyle>;
     bottomOffset?: number; // Optional custom bottom offset (overrides auto-detection)
 }
 
@@ -33,26 +33,21 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
     const isScreenNotMobile = useIsScreenNotMobile();
     const keyboardVisible = useKeyboardVisibility();
 
+    // Flatten the incoming style (object or array) into a single ViewStyle.
+    const flattenedStyle = StyleSheet.flatten(style) ?? {};
+
     // Check if custom style includes position
-    const hasCustomPosition = style && typeof style === 'object' && ('position' in style);
-    
+    const hasCustomPosition = 'position' in flattenedStyle;
+
     // Extract positioning styles (position, bottom, right, left, top, zIndex)
-    const extractPositionStyles = (styleObj: any) => {
-        if (!styleObj || typeof styleObj !== 'object') return {};
-        // Handle both object and array of styles
-        const styles = Array.isArray(styleObj) ? styleObj : [styleObj];
-        const merged = Object.assign({}, ...styles.filter(s => s && typeof s === 'object'));
-        const { position, bottom, right, left, top, zIndex } = merged;
+    const extractPositionStyles = (styleObj: ViewStyle): ViewStyle => {
+        const { position, bottom, right, left, top, zIndex } = styleObj;
         return { position, bottom, right, left, top, zIndex };
     };
 
     // Extract non-positioning styles (everything except position-related)
-    const extractNonPositionStyles = (styleObj: any) => {
-        if (!styleObj || typeof styleObj !== 'object') return {};
-        // Handle both object and array of styles
-        const styles = Array.isArray(styleObj) ? styleObj : [styleObj];
-        const merged = Object.assign({}, ...styles.filter(s => s && typeof s === 'object'));
-        const { position, bottom, right, left, top, zIndex, ...rest } = merged;
+    const extractNonPositionStyles = (styleObj: ViewStyle): ViewStyle => {
+        const { position, bottom, right, left, top, zIndex, ...rest } = styleObj;
         return rest;
     };
 
@@ -75,18 +70,18 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
         ? bottomOffset 
         : bottomBarHeight + insets.bottom + marginFromBottom;
     
-    const positionStyles = hasCustomPosition 
-        ? extractPositionStyles(style)
-        : { 
-            position: 'absolute' as const, 
-            bottom: defaultBottom, 
-            right: 24, 
+    const positionStyles: ViewStyle = hasCustomPosition
+        ? extractPositionStyles(flattenedStyle)
+        : {
+            position: 'absolute' as const,
+            bottom: defaultBottom,
+            right: 24,
             zIndex: 10000 // Higher than bottom bar's zIndex: 1000
           };
 
     // Base FAB styles (visual only, no positioning)
     const baseFabStyle = styles.fabBase;
-    const nonPositionStyles = hasCustomPosition ? extractNonPositionStyles(style) : {};
+    const nonPositionStyles: ViewStyle = hasCustomPosition ? extractNonPositionStyles(flattenedStyle) : {};
 
     // Create style without shadows when animating opacity to prevent artifacts
     const fabStyle = animatedOpacity 

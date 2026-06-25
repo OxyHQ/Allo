@@ -1,8 +1,15 @@
 import React from 'react';
-import { View, Text, Platform } from 'react-native';
+import { View, Text, Platform, type ViewStyle, type TextStyle } from 'react-native';
 import { Pressable } from 'react-native-web-hover';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
+
+/** Press + hover handlers forwarded to react-native-web-hover's Pressable. */
+interface PressableHoverHandlers {
+    onPress?: () => void;
+    onHoverIn?: () => void;
+    onHoverOut?: () => void;
+}
 
 export function SideBarItem({
     isActive,
@@ -29,14 +36,14 @@ export function SideBarItem({
             {...({
                 onPress: () => {
                     if (onPress) return onPress();
-                    if (href) router.push(href);
+                    if (href) router.push(href as Href);
                 },
                 onHoverIn: () => {
                     setIsHovered(true);
                     onHoverExpand?.();
                 },
                 onHoverOut: () => setIsHovered(false),
-            } as any)}
+            } satisfies PressableHoverHandlers)}
             style={({ pressed }) => [
                 {
                     flexDirection: 'row',
@@ -56,12 +63,12 @@ export function SideBarItem({
                             : isActive
                                 ? `${theme.colors.primary}15`
                                 : 'transparent',
-                    ...(Platform.select({
+                    ...Platform.select({
                         web: {
                             transition: 'all 200ms cubic-bezier(0.2, 0, 0, 1)',
                             willChange: 'background-color, border-color, transform',
-                        },
-                    }) as any),
+                        } as ViewStyle,
+                    }),
                     ...Platform.select({
                         web: {
                             cursor: 'pointer',
@@ -91,13 +98,13 @@ export function SideBarItem({
                             fontSize: 15,
                             fontWeight: isActive ? '600' : '500',
                             color: isActive || isHovered ? theme.colors.primary : theme.colors.text,
-                            ...(Platform.select({
+                            ...Platform.select({
                                 web: {
                                     transition: 'color 200ms cubic-bezier(0.2, 0, 0, 1)',
                                     fontFamily: 'Phudu',
                                     whiteSpace: 'nowrap',
-                                },
-                            }) as any),
+                                } as TextStyle,
+                            }),
                         }}
                     >
                         {text}
