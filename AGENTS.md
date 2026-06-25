@@ -69,9 +69,19 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 - **Never** hardcode colors. Always use `theme.colors.*`. The static palette
   in `styles/colors.ts` is reserved for SVG icon defaults only.
 
+## Oxy SDK Conventions
+
+- **Versions**: `@oxyhq/core ^3.10.0`, `@oxyhq/services ^11.0.0`, `@oxyhq/bloom ^0.19.1`, `@oxyhq/contracts ^0.2.1` (transitive via core). `@oxyhq/services ^11.0.0` is a packaging-only major — deps moved to peerDependencies; app must declare `@tanstack/react-query`, `@tanstack/react-query-persist-client`, `@tanstack/query-async-storage-persister` (all `^5.100.0`) in its own `dependencies`.
+- **Media**: avatars/images resolve ONLY through `oxyServices.getFileDownloadUrl(id, variant)` + bloom's variant-aware `<Avatar source={fileId} variant="thumb">`. Never hardcode `cloud.oxy.so` or `/media/` URLs.
+- **Display names**: render `name.displayName` directly (core 3.10 fixes the type under node resolution). No local name fallbacks.
+- **Backend auth**: `@oxyhq/core/server` only — `createOxyAuthMiddleware`/`getRequiredOxyUserId`/`authSocket`. No local `requireAuth`, bearer parsers, or token-decoding middleware.
+- **CORS**: backend uses `createOxyCors` from `@oxyhq/core/server`. No hand-rolled CORS middleware.
+- **Canonical backend domain**: `api.allo.oxy.so`. Do not use `allo.you` or `allo.chat` as backend targets.
+- **Backend client**: `oxyServices.createLinkedClient({ baseURL })` — no local token providers, auth interceptors, manual `Authorization` headers, refresh retries, or session invalidation.
+
 ## Dependencies
 
-- `@oxyhq/core` (^3.4.13), `@oxyhq/services` (^10.2.10), `@oxyhq/bloom` (^0.8.5) — Oxy platform integration
+- `@oxyhq/core ^3.10.0`, `@oxyhq/services ^11.0.0`, `@oxyhq/bloom ^0.19.1` — Oxy platform integration
 
 ## CRITICAL — Dependency Gotchas
 
@@ -79,7 +89,7 @@ system used by Mention, Clarity, Homiio, and other Oxy apps.
 `@oxyhq/services` declares `@oxyhq/core` as a peer. Without an explicit override, Bun may
 hoist a satisfying-but-different core build inside the services package, causing type mismatches and
 runtime errors. The root `package.json` must carry both `overrides` and `resolutions` entries pointing
-to the current target (`^3.4.13` / `3.4.13`). The frontend/backend should use the same major/minor line.
+to the current target (`^3.10.0`). The frontend/backend should use the same major/minor line.
 
 **Expo web SSO callback bootstrap:** `packages/frontend/app/+html.tsx` injects
 `getSsoCallbackBootstrapScript()` from `@oxyhq/core`. Do not add a local
@@ -99,18 +109,12 @@ remains for ambient cookie credentials.
 Both root `overrides` and `resolutions` pin it to `^11.4.1` so the services side and the app share
 the same instance; the frontend declares it as a direct dependency.
 
-**Version history:**
-- `@oxyhq/core` 1.11.24 → 2.0.0 (2026-06-12): nominal public API (no `export *`); subpath exports
-  `@oxyhq/core/crypto` and `@oxyhq/core/shared` removed — import from the root only. `QuickAccount.user`
-  is now `User | null`. `verifyChallenge` plants tokens internally.
-- `@oxyhq/services` 6.10.8 → 7.0.0 (2026-06-12): requires peer `@oxyhq/core ^2.0.0`, `expo >=56`,
-  `react-native >=0.85`, `@react-native-community/netinfo ^11.4.1`. Removed bottom-sheet route names
-  `AccountOverview`/`AccountSettings`/`AccountCenter`/`AccountSwitcher` — replaced by the unified
-  `ManageAccount` surface.
-- `@oxyhq/services` 7.0.0 → 8.0.0 (2026-06-13): `@tanstack/*` moved to peerDependencies. Consumers
-  must declare `@tanstack/react-query`, `@tanstack/react-query-persist-client`, and
-  `@tanstack/query-async-storage-persister` (all `^5.100.0`) themselves. Root override
-  `@tanstack/query-core 5.101.0` remains compatible.
+**Version history (abbreviated):**
+- `@oxyhq/services` 8.0.0: `@tanstack/*` moved to peerDependencies. Consumers must declare `@tanstack/react-query`, `@tanstack/react-query-persist-client`, and `@tanstack/query-async-storage-persister` (all `^5.100.0`) themselves.
+- `@oxyhq/services` 10.0.0: `appName` prop removed from `OxyProvider` — use `clientId`.
+- `@oxyhq/services` 11.0.0: packaging-only major — deps moved to peerDependencies. Public API unchanged. Current target.
+- `@oxyhq/core` 3.10.0: current target. `name.displayName` type corrected under node resolution.
+- `@oxyhq/bloom` 0.19.1: variant-aware media — `ImageResolver` + `<Avatar source={fileId} variant="thumb">`. Current target.
 
 **bun.lock regeneration checklist (MUST follow when bumping these deps):**
 1. Run `bun install` from the **monorepo root** (not inside a package) — a single install from root
