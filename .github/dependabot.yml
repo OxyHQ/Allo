@@ -1,0 +1,15 @@
+# Dependabot configuration for Allo.
+#
+# This repo uses Bun (bun.lock) and tracks NO package-lock.json anywhere.
+# Dependabot's npm/npm_and_yarn updater does NOT support bun.lock — it can only
+# emit invalid package-lock.json PRs that are out of sync with the real tree.
+# JavaScript dependency bumps are therefore handled natively with `bun update`
+# (and root `overrides`/`resolutions`), never by Dependabot.
+#
+# Only the github-actions ecosystem (which Dependabot fully supports) is enabled.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
