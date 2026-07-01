@@ -10,7 +10,6 @@ import { Pressable } from "react-native-web-hover";
 import { usePathname, useRouter } from "expo-router";
 import { useMediaQuery } from "react-responsive";
 import { useTranslation } from "react-i18next";
-import { Ionicons } from "@expo/vector-icons";
 
 // Components
 import { SideBarItem } from "./SideBarItem";
@@ -24,10 +23,8 @@ import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
 
 // Hooks
 import { useTheme } from "@/hooks/useTheme";
-import { useOxy, useAuth } from "@oxyhq/services";
+import { useOxy, useAuth, ProfileButton } from "@oxyhq/services";
 import { useMyAvatarShape } from "@/hooks/useAvatarShape";
-
-import { isAuthCancellation } from "@/utils/errors";
 
 /** Hover handlers supported by react-native-web-hover's Pressable on web. */
 interface HoverHandlers {
@@ -36,41 +33,30 @@ interface HoverHandlers {
 }
 
 // Utils
-import { confirmDialog } from "@/utils/alerts";
 import { ROUTES, routeMatchers, isRouteActive } from "@/utils/routeUtils";
 
 // Types
 import type { NavigationItem } from "@/types/navigation";
 
-const IconComponent = Ionicons;
 const WindowHeight = Dimensions.get('window').height;
 
 export function SideBar() {
     const { t } = useTranslation();
     const router = useRouter();
-    const { isAuthenticated: _isAuthenticated, user, logout, oxyServices } = useOxy();
+    const { user, oxyServices } = useOxy();
     const { signIn } = useAuth();
     const theme = useTheme();
 
     const avatarUri = user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
     const myAvatarShape = useMyAvatarShape();
 
-    const handleSignOut = async () => {
-        const confirmed = await confirmDialog({
-            title: t('settings.signOut'),
-            message: t('settings.signOutMessage'),
-            okText: t('settings.signOut'),
-            cancelText: t('common.cancel'),
-            destructive: true,
-        });
-        if (!confirmed) return;
-        try {
-            await logout();
-            router.replace('/');
-        } catch (error) {
-            console.error('Logout failed:', error);
-        }
-    };
+    const handleManageAccount = useCallback(() => router.push(ROUTES.SETTINGS), [router]);
+    const handleOpenProfile = useCallback(() => {
+        if (user?.username) router.push(`/@${user.username}`);
+    }, [router, user?.username]);
+    const handleAddAccount = useCallback(() => {
+        void signIn();
+    }, [signIn]);
 
     const pathname = usePathname();
     const isSideBarVisible = useMediaQuery({ minWidth: 500 });
@@ -204,34 +190,12 @@ export function SideBar() {
                     </View>
 
                     <View style={styles.footer}>
-                        {user && user.id ? (
-                            <SideBarItem
-                                isActive={false}
-                                icon={<IconComponent name="log-out-outline" size={20} color={theme.colors.text} />}
-                                text={t('settings.signOut')}
-                                isExpanded={isExpanded}
-                                onHoverExpand={handleHoverIn}
-                                onPress={handleSignOut}
-                            />
-                        ) : (
-                            <SideBarItem
-                                isActive={false}
-                                icon={<IconComponent name="log-in-outline" size={20} color={theme.colors.text} />}
-                                text={t('Sign In')}
-                                isExpanded={isExpanded}
-                                onHoverExpand={handleHoverIn}
-                                onPress={async () => {
-                                    try {
-                                        await signIn();
-                                    } catch (error: unknown) {
-                                        // Silently handle auth cancellation
-                                        if (!isAuthCancellation(error)) {
-                                            console.error('Authentication error:', error);
-                                        }
-                                    }
-                                }}
-                            />
-                        )}
+                        <ProfileButton
+                            expanded={isExpanded}
+                            onNavigateManage={handleManageAccount}
+                            onNavigateProfile={handleOpenProfile}
+                            onAddAccount={handleAddAccount}
+                        />
                     </View>
                 </View>
             </Pressable>
