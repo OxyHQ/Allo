@@ -1,6 +1,7 @@
 const pkg = require('./package.json')
 const fs = require('fs')
 const path = require('path')
+const { oxySplashScreenPlugin } = require('@oxyhq/expo-splash/config')
 
 module.exports = function(_config) {
 
@@ -127,15 +128,16 @@ return {
         plugins: (() => {
             const base = [
                 "expo-router",
-                [
-                    "expo-splash-screen",
-                    {
-                        image: "./assets/images/splash-icon.png",
-                        imageWidth: 200,
-                        resizeMode: "contain",
-                        backgroundColor: "#ffffff"
-                    }
-                ],
+                // Oxy-standard native splash: Allo's own paper-plane logo centered on
+                // the shared dark brand background (#0B0B0F), with the Oxy "from Oxy"
+                // bottom branding added by the "@oxyhq/expo-splash" string plugin below.
+                // The branding string MUST stay immediately after the splash tuple.
+                oxySplashScreenPlugin({
+                    image: './assets/images/splash-logo.png',
+                    imageWidth: 176,
+                    backgroundColor: '#0B0B0F'
+                }),
+                "@oxyhq/expo-splash",
                 [
                     "expo-camera",
                     {
@@ -194,9 +196,12 @@ return {
                 "expo-web-browser",
             ];
 
-            // Only include expo-notifications for native builds (android/ios)
+            // Only include expo-notifications for native builds (android/ios).
+            // Insert at index 3 (after 'expo-router', the splash tuple, and the
+            // "@oxyhq/expo-splash" branding string) so the splash tuple and its
+            // branding string stay contiguous at indices 1 and 2.
             if (PLATFORM !== 'web') {
-                base.splice(2, 0, [
+                base.splice(3, 0, [
                     "expo-notifications",
                     {
                         color: "#ffffff"

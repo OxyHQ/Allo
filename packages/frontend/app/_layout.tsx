@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 
 import NetInfo from '@react-native-community/netinfo';
 import { BloomThemeProvider } from '@oxyhq/bloom';
+import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxyhq/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
@@ -37,10 +38,20 @@ import { loadFontsWithFallback } from '@/utils/fontLoader';
 // Styles
 import '../styles/global.css';
 
+// NATIVE ONLY: hold the OS splash so it stays visible until the app has finished
+// loading fonts + running init, then hide it in `RootLayout` once `appIsReady`
+// flips. This makes the native OS splash the SINGLE splash on native (Allo's
+// paper-plane logo centered on #0B0B0F + the Oxy branding pinned to the bottom,
+// configured via `@oxyhq/expo-splash` in app.config.js). The custom
+// `AppSplashScreen` React overlay is gated to web only. The helper is a no-op on
+// web internally, so no Platform guard is needed here.
+preventNativeSplashAutoHide();
+
 // Types
 interface SplashState {
   initializationComplete: boolean;
   startFade: boolean;
+  fadeComplete: boolean;
 }
 
 interface MainLayoutProps {
@@ -111,10 +122,17 @@ export default function RootLayout() {
   const [splashState, setSplashState] = useState<SplashState>({
     initializationComplete: false,
     startFade: false,
+    fadeComplete: false,
   });
 
   const isScreenNotMobile = useIsScreenNotMobile();
   const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
+
+  // NATIVE ONLY: once the app is ready to render real UI, hide the held OS splash.
+  // Because the OS splash stayed up until this exact moment, there is no blank gap
+  // between it and the first real frame. No-op on web (the OS splash was never
+  // held there; the custom overlay handles the transition).
+  useHideNativeSplashWhenReady(appIsReady);
 
   // Inter is now provided by @oxyhq/bloom via <BloomThemeProvider fonts>.
   // Phudu is Allo-specific (used in SideBar headings) so we still load it here.
@@ -122,8 +140,12 @@ export default function RootLayout() {
     'Phudu': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
   });
 
+  // WEB ONLY: the custom <AppSplashScreen> calls this when its fade-out finishes.
+  // Native never renders the custom splash, so this never fires there — which is
+  // why native readiness must NOT depend on `fadeComplete` (see the readiness
+  // gate below).
   const handleSplashFadeComplete = useCallback(() => {
-    setAppIsReady(true);
+    setSplashState((prev) => ({ ...prev, fadeComplete: true }));
   }, []);
 
   const initializeApp = useCallback(async () => {
@@ -189,6 +211,25 @@ export default function RootLayout() {
     }
   }, [splashState.initializationComplete, splashState.startFade]);
 
+  // Readiness gate.
+  // - WEB keeps the fade-gated flow: the custom <AppSplashScreen> renders, starts
+  //   fading when init completes, and its `onFadeComplete` sets `fadeComplete`.
+  //   So web readiness = init complete AND the custom splash has finished fading.
+  // - NATIVE renders NO custom splash (the held OS splash covers the screen), so
+  //   `onFadeComplete` never fires and readiness must NOT depend on `fadeComplete`
+  //   — otherwise the held OS splash would hang forever. Native readiness = init
+  //   complete only.
+  useEffect(() => {
+    if (appIsReady) return;
+    const ready =
+      Platform.OS === 'web'
+        ? splashState.initializationComplete && splashState.fadeComplete
+        : splashState.initializationComplete;
+    if (ready) {
+      setAppIsReady(true);
+    }
+  }, [appIsReady, splashState.initializationComplete, splashState.fadeComplete]);
+
   useEffect(() => {
     if (appIsReady) {
       AppInitializer.initializeDeferred();
@@ -197,12 +238,15 @@ export default function RootLayout() {
 
   const appContent = useMemo(() => {
     if (!appIsReady) {
-      return (
+      // WEB: the custom splash covers font-load + init and fades out; its
+      // `onFadeComplete` gates `appIsReady`. NATIVE renders null — the held OS
+      // splash is on top, so nothing underneath needs to paint.
+      return Platform.OS === 'web' ? (
         <AppSplashScreen
           startFade={splashState.startFade}
           onFadeComplete={handleSplashFadeComplete}
         />
-      );
+      ) : null;
     }
 
     return (
@@ -227,7 +271,12 @@ export default function RootLayout() {
   ]);
 
   return (
-    <BloomThemeProvider fonts onFontsLoading={<AppSplashScreen />}>
+    <BloomThemeProvider
+      fonts
+      // WEB shows the custom splash while fonts load; NATIVE shows nothing here
+      // because the held OS splash is already covering the screen.
+      onFontsLoading={Platform.OS === 'web' ? <AppSplashScreen /> : null}
+    >
       <ThemedView style={{ flex: 1 }}>
         {appContent}
       </ThemedView>
