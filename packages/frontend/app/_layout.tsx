@@ -1,13 +1,17 @@
+// Guarantees globalThis.crypto.getRandomValues (expo-crypto-backed on RN) is
+// installed before any crypto runs — @noble's randomBytes in lib/signalProtocol.ts needs it.
+import '@oxyhq/core';
 // Required polyfill for @oxyhq/services - must be imported first
 import 'react-native-url-polyfill/auto';
 // Import Reanimated early to ensure proper initialization before other modules
 import 'react-native-reanimated';
+// Enable immer's MapSet plugin before any zustand/immer store produces a Set draft
+import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
 import { BloomThemeProvider } from '@oxyhq/bloom';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxyhq/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
-import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
@@ -33,13 +37,12 @@ import { routeMatchers } from '@/utils/routeUtils';
 // Services & Utils
 import { AppInitializer } from '@/lib/appInitializer';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
-import { loadFontsWithFallback } from '@/utils/fontLoader';
 
 // Styles
 import '../styles/global.css';
 
 // NATIVE ONLY: hold the OS splash so it stays visible until the app has finished
-// loading fonts + running init, then hide it in `RootLayout` once `appIsReady`
+// running init, then hide it in `RootLayout` once `appIsReady`
 // flips. This makes the native OS splash the SINGLE splash on native (Allo's
 // paper-plane logo centered on #0B0B0F + the Oxy branding pinned to the bottom,
 // configured via `@oxyhq/expo-splash` in app.config.js). The custom
@@ -134,12 +137,6 @@ export default function RootLayout() {
   // held there; the custom overlay handles the transition).
   useHideNativeSplashWhenReady(appIsReady);
 
-  // Inter is now provided by @oxyhq/bloom via <BloomThemeProvider fonts>.
-  // Phudu is Allo-specific (used in SideBar headings) so we still load it here.
-  const [fontsLoaded, fontError] = useFonts({
-    'Phudu': require('@/assets/fonts/Phudu-VariableFont_wght.ttf'),
-  });
-
   // WEB ONLY: the custom <AppSplashScreen> calls this when its fade-out finishes.
   // Native never renders the custom splash, so this never fires there — which is
   // why native readiness must NOT depend on `fadeComplete` (see the readiness
@@ -149,21 +146,14 @@ export default function RootLayout() {
   }, []);
 
   const initializeApp = useCallback(async () => {
-    if (fontError) {
-      console.warn('Font loading failed, using system fonts:', fontError);
-    } else if (!fontsLoaded) {
-      console.log('Fonts still loading, continuing with system fonts temporarily...');
-    }
+    const result = await AppInitializer.initializeApp();
 
-    const result = await AppInitializer.initializeApp(fontsLoaded || false);
-
-    if (result.success) {
-      setSplashState((prev) => ({ ...prev, initializationComplete: true }));
-    } else {
+    if (!result.success) {
       console.error('App initialization failed:', result.error);
-      setSplashState((prev) => ({ ...prev, initializationComplete: true }));
     }
-  }, [fontsLoaded, fontError]);
+
+    setSplashState((prev) => ({ ...prev, initializationComplete: true }));
+  }, []);
 
 
   useEffect(() => {
@@ -197,13 +187,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (splashState.initializationComplete) return;
-
-    loadFontsWithFallback(fontsLoaded, fontError).then(() => {
-      if (!splashState.initializationComplete) {
-        initializeApp();
-      }
-    });
-  }, [fontsLoaded, fontError, initializeApp, splashState.initializationComplete]);
+    initializeApp();
+  }, [initializeApp, splashState.initializationComplete]);
 
   useEffect(() => {
     if (splashState.initializationComplete && !splashState.startFade) {

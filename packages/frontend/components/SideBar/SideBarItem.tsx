@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Platform, type ViewStyle, type TextStyle } from 'react-native';
 import { Pressable } from 'react-native-web-hover';
 import { useRouter, type Href } from 'expo-router';
+import { fontFamilies } from '@oxyhq/bloom/fonts';
 import { useTheme } from '@/hooks/useTheme';
 
 /** Press + hover handlers forwarded to react-native-web-hover's Pressable. */
@@ -101,7 +102,7 @@ export function SideBarItem({
                             ...Platform.select({
                                 web: {
                                     transition: 'color 200ms cubic-bezier(0.2, 0, 0, 1)',
-                                    fontFamily: 'Phudu',
+                                    fontFamily: fontFamilies.display,
                                     whiteSpace: 'nowrap',
                                 } as TextStyle,
                             }),
