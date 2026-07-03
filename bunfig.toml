@@ -1,0 +1,9 @@
+[install]
+# Hoisted layout (npm-style). Bun >=1.3 defaults to the isolated linker in
+# workspaces, which keeps per-package nested copies in node_modules/.bun and
+# exposes them via symlinks. Metro + expo autolinking expect single hoisted
+# instances; and react-native-css's lightningcss-loader resolves lightningcss
+# from @expo/metro-config's dir — under the isolated layout that picks a nested,
+# incompatible lightningcss (Specifier deserialize crash). Hoisting keeps one
+# flat tree that resolves identically in dev, CI, and the native dev client.
+linker = "hoisted"
