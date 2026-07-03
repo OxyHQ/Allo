@@ -99,16 +99,7 @@ export class AppInitializer {
    * Only blocks on critical-path work (user + appearance).
    * Heavy tasks (Signal Protocol, notifications) are deferred.
    */
-  static async initializeApp(
-    fontsLoaded: boolean
-  ): Promise<InitializationResult> {
-    if (!fontsLoaded) {
-      return {
-        success: false,
-        error: new Error('Fonts not loaded'),
-      };
-    }
-
+  static async initializeApp(): Promise<InitializationResult> {
     try {
       // Hard timeout: app MUST launch within 2s regardless of network.
       // WhatsApp/Telegram never block startup on API calls.

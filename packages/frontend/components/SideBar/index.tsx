@@ -242,7 +242,6 @@ const styles = StyleSheet.create({
     heroTagline: {
         fontSize: 20,
         fontWeight: 'bold',
-        fontFamily: 'Phudu',
         flexWrap: 'wrap',
         textAlign: 'left',
         maxWidth: 200,
@@ -264,7 +263,6 @@ const styles = StyleSheet.create({
     signUpButtonText: {
         fontSize: 13,
         fontWeight: "bold",
-        fontFamily: "Phudu",
     },
     signInButton: {
         justifyContent: "center",
@@ -276,7 +274,6 @@ const styles = StyleSheet.create({
     signInButtonText: {
         fontSize: 13,
         fontWeight: "bold",
-        fontFamily: "Phudu",
     },
     navigationSection: {
         flex: 1,
@@ -306,7 +303,6 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         textAlign: 'center',
         margin: 0,
-        fontFamily: 'Phudu',
     },
     footer: {
         flexDirection: 'column',
