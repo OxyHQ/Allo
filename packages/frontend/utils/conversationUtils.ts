@@ -1,10 +1,32 @@
 import { Conversation, ConversationType, ConversationParticipant } from '@/app/(chat)/index';
-import { useUserById, useUsersStore } from '@/stores/usersStore';
+import { useUserById, useUsersStore, type UserEntity } from '@/stores/usersStore';
 import { useOxy } from '@oxyhq/services';
 import { useEffect } from 'react';
 
-// Import useUsersStore for direct access in non-hook functions
-const getUsersStore = () => useUsersStore.getState();
+/**
+ * Resolves a cached Oxy user by id. Callers pass a resolver derived from a
+ * reactive store subscription (see {@link useConversationDisplayName}) so display
+ * names recompute when the user cache is enriched — the pure helpers below never
+ * reach into `useUsersStore.getState()` themselves.
+ */
+type UserResolver = (id: string) => UserEntity | undefined;
+
+/**
+ * Render a cached user's canonical display name, falling back to
+ * username/handle when the enriched name is absent.
+ */
+function displayNameFromCachedUser(cachedUser: UserEntity): string | undefined {
+  if (typeof cachedUser.name === 'string') {
+    return cachedUser.name;
+  }
+  if (cachedUser.name?.displayName) {
+    return cachedUser.name.displayName;
+  }
+  if (cachedUser.username || cachedUser.handle) {
+    return cachedUser.username || cachedUser.handle || '';
+  }
+  return undefined;
+}
 
 /**
  * Render the participant's canonical display name (Oxy `name.displayName`),
@@ -61,7 +83,8 @@ export function useParticipantFullName(
  */
 export function generateGroupName(
   participants: ConversationParticipant[],
-  currentUserId?: string,
+  currentUserId: string | undefined,
+  getUser: UserResolver,
   maxNames: number = 2
 ): string {
   // Filter out current user if provided
@@ -73,21 +96,12 @@ export function generateGroupName(
     return '';
   }
 
-  const usersStore = getUsersStore();
-
-  // Render the canonical display name from cache, falling back to enrichment.
+  // Render the canonical display name from the resolved cache, falling back to enrichment.
   const getParticipantDisplayName = (p: ConversationParticipant): string => {
-    const cachedUser = usersStore.getCachedById(p.id);
-    if (cachedUser) {
-      if (typeof cachedUser.name === 'string') {
-        return cachedUser.name;
-      }
-      if (cachedUser.name?.displayName) {
-        return cachedUser.name.displayName;
-      }
-      if (cachedUser.username || cachedUser.handle) {
-        return cachedUser.username || cachedUser.handle || '';
-      }
+    const cachedUser = getUser(p.id);
+    const cachedName = cachedUser ? displayNameFromCachedUser(cachedUser) : undefined;
+    if (cachedName) {
+      return cachedName;
     }
 
     // Fallback to the participant's backend-enriched display name.
@@ -118,24 +132,18 @@ export function generateGroupName(
  */
 export function getConversationDisplayName(
   conversation: Conversation,
-  currentUserId?: string
+  currentUserId: string | undefined,
+  getUser: UserResolver
 ): string {
   if (conversation.type === 'direct') {
-    // For direct conversations, get name from zustand cache (backend already enriched with Oxy data)
+    // For direct conversations, resolve the other participant's Oxy user.
     const otherParticipant = conversation.participants?.find(p => p.id !== currentUserId);
     if (otherParticipant) {
-      // Render the canonical display name from cache (backend already enriched).
-      const cachedUser = useUsersStore.getState().getCachedById(otherParticipant.id);
-      if (cachedUser) {
-        if (typeof cachedUser.name === 'string') {
-          return cachedUser.name;
-        }
-        if (cachedUser.name?.displayName) {
-          return cachedUser.name.displayName;
-        }
-        if (cachedUser.username || cachedUser.handle) {
-          return cachedUser.username || cachedUser.handle || '';
-        }
+      // Render the canonical display name from the resolved cache.
+      const cachedUser = getUser(otherParticipant.id);
+      const cachedName = cachedUser ? displayNameFromCachedUser(cachedUser) : undefined;
+      if (cachedName) {
+        return cachedName;
       }
 
       // Fallback to the participant's backend-enriched display name.
@@ -146,7 +154,7 @@ export function getConversationDisplayName(
         return otherParticipant.username;
       }
     }
-    
+
     // Return conversation name as-is (fallback if no participant data)
     return conversation.name || '';
   }
@@ -156,12 +164,41 @@ export function getConversationDisplayName(
     return conversation.groupName;
   }
 
-  // Otherwise generate from participants (using zustand cache)
+  // Otherwise generate from participants (using the resolved cache)
   if (conversation.participants && conversation.participants.length > 0) {
-    return generateGroupName(conversation.participants, currentUserId);
+    return generateGroupName(conversation.participants, currentUserId, getUser);
   }
 
   return conversation.name || '';
+}
+
+/**
+ * Reactive display name for a conversation.
+ *
+ * Subscribes to the users store via a Zustand selector that returns a primitive
+ * string, so the name recomputes whenever the participant user cache is enriched
+ * (e.g. after `useRealtimeMessaging` writes fetched users into the store). Because
+ * the value flows out of a live store subscription (`useSyncExternalStore` under
+ * the hood) rather than a one-shot `getState()` read in render, the React Compiler
+ * treats it as reactive state and can never freeze it on a stale first value.
+ *
+ * The selector reads only the participant ids this conversation needs, so an
+ * unrelated user landing in the cache produces the same string and skips a
+ * re-render (Zustand's default `Object.is` equality on the primitive result).
+ */
+export function useConversationDisplayName(
+  conversation: Conversation | null | undefined,
+  currentUserId?: string
+): string {
+  return useUsersStore((state) =>
+    conversation
+      ? getConversationDisplayName(
+          conversation,
+          currentUserId,
+          (id) => state.usersById[id]?.data
+        )
+      : ''
+  );
 }
 
 /**

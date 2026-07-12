@@ -7,6 +7,8 @@ import {
     TextInput,
     useWindowDimensions,
     RefreshControl,
+    type ViewStyle,
+    type TextStyle,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Link, useRouter, usePathname, type Href } from 'expo-router';
@@ -50,7 +52,7 @@ import { ConversationPeekPreview } from '@/components/conversation/ConversationP
 // Utils
 import { colors } from '@/styles/colors';
 import {
-    getConversationDisplayName,
+    useConversationDisplayName,
     getConversationAvatar,
     getOtherParticipants,
     getParticipantCount,
@@ -120,6 +122,215 @@ function ShapedConversationAvatar({
         />
     );
 }
+
+/** Subset of the conversation-list stylesheet consumed by a single row. */
+interface ConversationRowStyles {
+    conversationItem: ViewStyle;
+    conversationItemSelected: ViewStyle;
+    conversationItemMultiSelected: ViewStyle;
+    avatarContainer: ViewStyle;
+    selectionOverlay: ViewStyle;
+    selectionOverlaySelected: ViewStyle;
+    selectionOverlayUnselected: ViewStyle;
+    conversationContent: ViewStyle;
+    conversationHeader: ViewStyle;
+    conversationNameContainer: ViewStyle;
+    conversationNameRow: ViewStyle;
+    conversationName: TextStyle;
+    conversationTimestamp: TextStyle;
+    participantCountLabel: TextStyle;
+    conversationTimestampUnread: TextStyle;
+    conversationBottomRow: ViewStyle;
+    conversationMessage: TextStyle;
+    unreadBadge: ViewStyle;
+    unreadText: TextStyle;
+}
+
+interface ConversationRowProps {
+    item: Conversation;
+    currentUserId?: string;
+    oxyServices: ReturnType<typeof useOxy>['oxyServices'];
+    isActive: boolean;
+    isSelected: boolean;
+    isSelectionMode: boolean;
+    leftSwipeAction: SwipeActionType;
+    rightSwipeAction: SwipeActionType;
+    styles: ConversationRowStyles;
+    onPress: (conversationId: string) => void;
+    onLongPress: (conversationId: string) => void;
+    onAvatarLongPress: (conversation: Conversation) => void;
+    renderSwipeAction: (
+        action: SwipeActionType,
+        direction: 'left' | 'right',
+    ) => (
+        progress: SharedValue<number>,
+        translation: SharedValue<number>,
+        methods: SwipeableMethods,
+    ) => React.ReactNode;
+    onSwipeAction: (direction: 'left' | 'right', conversation: Conversation) => void;
+    registerSwipeableRef: (id: string, ref: SwipeableMethods | null) => void;
+}
+
+/**
+ * A single conversation-list row.
+ *
+ * Its own component so it can SUBSCRIBE to its participants' Oxy user data via
+ * `useConversationDisplayName`. When the user cache is enriched later (e.g. by
+ * `useRealtimeMessaging`), the store subscription re-renders exactly this row with
+ * the real display name — no out-of-band `getState()` read that the React Compiler
+ * could freeze on a stale first value.
+ */
+const ConversationRow = React.memo(function ConversationRow({
+    item,
+    currentUserId,
+    oxyServices,
+    isActive,
+    isSelected,
+    isSelectionMode,
+    leftSwipeAction,
+    rightSwipeAction,
+    styles,
+    onPress,
+    onLongPress,
+    onAvatarLongPress,
+    renderSwipeAction,
+    onSwipeAction,
+    registerSwipeableRef,
+}: ConversationRowProps) {
+    const isGroup = isGroupConversation(item);
+    // Reactive: subscribes to this conversation's participant user cache.
+    const displayName = useConversationDisplayName(item, currentUserId);
+    const avatar = getConversationAvatar(item, currentUserId, oxyServices);
+    const otherParticipants = getOtherParticipants(item, currentUserId);
+    const participantCount = getParticipantCount(item, currentUserId);
+    const leftEnabled = leftSwipeAction !== 'none';
+    const rightEnabled = rightSwipeAction !== 'none';
+    const swipeEnabled = !isSelectionMode && (leftEnabled || rightEnabled);
+
+    const wrapperStyles = [
+        styles.conversationItem,
+        !isSelectionMode && isActive && styles.conversationItemSelected,
+        isSelected && styles.conversationItemMultiSelected,
+    ];
+
+    const rowContent = (
+        <TouchableOpacity
+            activeOpacity={0.7}
+            onLongPress={() => onLongPress(item.id)}
+            onPress={() => onPress(item.id)}
+            style={wrapperStyles}
+        >
+            <TouchableOpacity
+                activeOpacity={0.7}
+                onLongPress={() => onAvatarLongPress(item)}
+                delayLongPress={300}
+                style={styles.avatarContainer}
+            >
+                {isSelectionMode && (
+                    <Animated.View
+                        layout={LinearTransition.springify().damping(20)}
+                        style={[
+                            styles.selectionOverlay,
+                            isSelected
+                                ? styles.selectionOverlaySelected
+                                : styles.selectionOverlayUnselected,
+                        ]}
+                    >
+                        {isSelected && (
+                            <Animated.View
+                                entering={FadeIn.duration(150)}
+                                exiting={FadeOut.duration(120)}
+                            >
+                                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                            </Animated.View>
+                        )}
+                    </Animated.View>
+                )}
+                {isGroup && otherParticipants.length > 0 ? (
+                    <GroupAvatar
+                        participants={otherParticipants}
+                        size={44}
+                        maxAvatars={6}
+                    />
+                ) : (
+                    <ShapedConversationAvatar
+                        userId={otherParticipants[0]?.id}
+                        avatar={avatar}
+                        displayName={displayName}
+                        size={44}
+                    />
+                )}
+            </TouchableOpacity>
+            <View style={styles.conversationContent}>
+                <View style={styles.conversationHeader}>
+                    <View style={styles.conversationNameContainer}>
+                        <View style={styles.conversationNameRow}>
+                            <ThemedText style={styles.conversationName} numberOfLines={1}>
+                                {displayName}
+                            </ThemedText>
+                            {isGroup && participantCount > 0 && (
+                                <ThemedText
+                                    style={[
+                                        styles.conversationTimestamp,
+                                        styles.participantCountLabel,
+                                    ]}
+                                    numberOfLines={1}
+                                >
+                                    ({participantCount})
+                                </ThemedText>
+                            )}
+                        </View>
+                    </View>
+                    <ThemedText
+                        style={[
+                            styles.conversationTimestamp,
+                            item.unreadCount > 0 && styles.conversationTimestampUnread,
+                        ]}
+                        numberOfLines={1}
+                    >
+                        {formatConversationTimestamp(item.timestamp)}
+                    </ThemedText>
+                </View>
+                <View style={styles.conversationBottomRow}>
+                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                        {item.lastMessage}
+                    </ThemedText>
+                    {item.unreadCount > 0 && (
+                        <View style={styles.unreadBadge}>
+                            <Text style={styles.unreadText}>
+                                {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+
+    return (
+        <ReanimatedSwipeable
+            ref={(ref: SwipeableMethods | null) => {
+                registerSwipeableRef(item.id, ref);
+            }}
+            enabled={swipeEnabled}
+            renderLeftActions={
+                leftEnabled ? renderSwipeAction(leftSwipeAction, 'left') : undefined
+            }
+            renderRightActions={
+                rightEnabled ? renderSwipeAction(rightSwipeAction, 'right') : undefined
+            }
+            overshootLeft={true}
+            overshootRight={true}
+            onSwipeableOpen={(direction) => {
+                if (direction === 'left' || direction === 'right') {
+                    onSwipeAction(direction, item);
+                }
+            }}
+        >
+            {rowContent}
+        </ReanimatedSwipeable>
+    );
+});
 
 /**
  * Swipe action rendered inside ReanimatedSwipeable.
@@ -704,6 +915,13 @@ export default function ConversationsList() {
     }, []);
 
     /**
+     * Register/clear a swipeable row's imperative handle.
+     */
+    const registerSwipeableRef = useCallback((id: string, ref: SwipeableMethods | null) => {
+        swipeableRefs.current[id] = ref;
+    }, []);
+
+    /**
      * Render swipe action with animated width that fills space
      */
     const renderSwipeAction = useCallback((action: SwipeActionType, direction: 'left' | 'right') => {
@@ -798,142 +1016,25 @@ export default function ConversationsList() {
     /**
      * Render individual conversation item (useCallback for FlatList stability)
      */
-    const renderConversationItem = useCallback(({ item }: { item: Conversation }) => {
-        const isActiveConversation = selectedId === item.id;
-        const isItemSelected = selectedConversationIds.has(item.id);
-        const isGroup = isGroupConversation(item);
-        const displayName = getConversationDisplayName(item, currentUserId);
-        const avatar = getConversationAvatar(item, currentUserId, oxyServices);
-        const otherParticipants = getOtherParticipants(item, currentUserId);
-        const participantCount = getParticipantCount(item, currentUserId);
-        const leftEnabled = leftSwipeAction !== 'none';
-        const rightEnabled = rightSwipeAction !== 'none';
-        const swipeEnabled = !isSelectionMode && (leftEnabled || rightEnabled);
-
-        const wrapperStyles = [
-            styles.conversationItem,
-            !isSelectionMode && isActiveConversation && styles.conversationItemSelected,
-            isItemSelected && styles.conversationItemMultiSelected,
-        ];
-
-        const rowContent = (
-            <TouchableOpacity
-                activeOpacity={0.7}
-                onLongPress={() => handleConversationLongPress(item.id)}
-                onPress={() => handleConversationPress(item.id)}
-                style={wrapperStyles}
-            >
-                <TouchableOpacity
-                    activeOpacity={0.7}
-                    onLongPress={() => handleAvatarLongPress(item)}
-                    delayLongPress={300}
-                    style={styles.avatarContainer}
-                >
-                    {isSelectionMode && (
-                        <Animated.View
-                            layout={LinearTransition.springify().damping(20)}
-                            style={[
-                                styles.selectionOverlay,
-                                isItemSelected
-                                    ? styles.selectionOverlaySelected
-                                    : styles.selectionOverlayUnselected,
-                            ]}
-                        >
-                            {isItemSelected && (
-                                <Animated.View
-                                    entering={FadeIn.duration(150)}
-                                    exiting={FadeOut.duration(120)}
-                                >
-                                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                                </Animated.View>
-                            )}
-                        </Animated.View>
-                    )}
-                    {isGroup && otherParticipants.length > 0 ? (
-                        <GroupAvatar
-                            participants={otherParticipants}
-                            size={44}
-                            maxAvatars={6}
-                        />
-                    ) : (
-                        <ShapedConversationAvatar
-                            userId={otherParticipants[0]?.id}
-                            avatar={avatar}
-                            displayName={displayName}
-                            size={44}
-                        />
-                    )}
-                </TouchableOpacity>
-                <View style={styles.conversationContent}>
-                    <View style={styles.conversationHeader}>
-                        <View style={styles.conversationNameContainer}>
-                            <View style={styles.conversationNameRow}>
-                                <ThemedText style={styles.conversationName} numberOfLines={1}>
-                                    {displayName}
-                                </ThemedText>
-                                {isGroup && participantCount > 0 && (
-                                    <ThemedText
-                                        style={[
-                                            styles.conversationTimestamp,
-                                            styles.participantCountLabel,
-                                        ]}
-                                        numberOfLines={1}
-                                    >
-                                        ({participantCount})
-                                    </ThemedText>
-                                )}
-                            </View>
-                        </View>
-                        <ThemedText
-                            style={[
-                                styles.conversationTimestamp,
-                                item.unreadCount > 0 && styles.conversationTimestampUnread,
-                            ]}
-                            numberOfLines={1}
-                        >
-                            {formatConversationTimestamp(item.timestamp)}
-                        </ThemedText>
-                    </View>
-                    <View style={styles.conversationBottomRow}>
-                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                            {item.lastMessage}
-                        </ThemedText>
-                        {item.unreadCount > 0 && (
-                            <View style={styles.unreadBadge}>
-                                <Text style={styles.unreadText}>
-                                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                </View>
-            </TouchableOpacity>
-        );
-
-        return (
-            <ReanimatedSwipeable
-                ref={(ref: SwipeableMethods | null) => {
-                    swipeableRefs.current[item.id] = ref;
-                }}
-                enabled={swipeEnabled}
-                renderLeftActions={
-                    leftEnabled ? renderSwipeAction(leftSwipeAction, 'left') : undefined
-                }
-                renderRightActions={
-                    rightEnabled ? renderSwipeAction(rightSwipeAction, 'right') : undefined
-                }
-                overshootLeft={true}
-                overshootRight={true}
-                onSwipeableOpen={(direction) => {
-                    if (direction === 'left' || direction === 'right') {
-                        handleSwipeAction(direction, item);
-                    }
-                }}
-            >
-                {rowContent}
-            </ReanimatedSwipeable>
-        );
-    }, [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress]);
+    const renderConversationItem = useCallback(({ item }: { item: Conversation }) => (
+        <ConversationRow
+            item={item}
+            currentUserId={currentUserId}
+            oxyServices={oxyServices}
+            isActive={selectedId === item.id}
+            isSelected={selectedConversationIds.has(item.id)}
+            isSelectionMode={isSelectionMode}
+            leftSwipeAction={leftSwipeAction}
+            rightSwipeAction={rightSwipeAction}
+            styles={styles}
+            onPress={handleConversationPress}
+            onLongPress={handleConversationLongPress}
+            onAvatarLongPress={handleAvatarLongPress}
+            renderSwipeAction={renderSwipeAction}
+            onSwipeAction={handleSwipeAction}
+            registerSwipeableRef={registerSwipeableRef}
+        />
+    ), [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress, registerSwipeableRef]);
 
     // FlashList performance: stable references prevent re-renders
     const keyExtractor = useCallback((item: Conversation) => item.id, []);

@@ -58,8 +58,6 @@ import { BottomSheetContext } from '@/context/BottomSheetContext';
 // Utils
 import { colors } from '@/styles/colors';
 import {
-  getConversationDisplayName,
-  getConversationAvatar,
   getOtherParticipants,
   isGroupConversation,
   useContactInfo,

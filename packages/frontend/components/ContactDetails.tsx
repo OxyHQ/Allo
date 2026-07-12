@@ -23,7 +23,7 @@ import { api } from '@/utils/api';
 import { useOxy } from '@oxyhq/services';
 
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
-import { getConversationDisplayName, getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
+import { getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
 
