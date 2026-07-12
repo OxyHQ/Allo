@@ -21,6 +21,16 @@ module.exports = function(_config) {
   const IS_PRODUCTION = process.env.EXPO_PUBLIC_ENV === 'production'
   const IS_DEV = !IS_TESTFLIGHT || !IS_PRODUCTION
 
+  // App variant — lets a development build sit next to the production app on the
+  // SAME device by giving it a distinct applicationId/bundleId + name. Build the
+  // dev variant with `APP_VARIANT=development`; production is the default. The URL
+  // scheme is intentionally shared so deep-link plumbing keeps working — Android
+  // just shows an app chooser when both are installed.
+  const IS_DEV_VARIANT = process.env.APP_VARIANT === 'development'
+  const ANDROID_ID = IS_DEV_VARIANT ? 'com.allo.app.dev' : 'com.allo.app'
+  const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios'
+  const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo'
+
   // Check if google-services.json exists
   const googleServicesPath = path.resolve(__dirname, '../../google-services.json')
   const hasGoogleServices = fs.existsSync(googleServicesPath)
@@ -28,7 +38,7 @@ module.exports = function(_config) {
 
 return {
     expo: {
-        name: "Allo",
+        name: APP_NAME,
         slug: "allo",
         version: VERSION,
       orientation: 'portrait',
@@ -42,7 +52,7 @@ return {
       },
       ios: {
         supportsTablet: true,
-        bundleIdentifier: 'com.allo.ios',
+        bundleIdentifier: IOS_ID,
       },
         android: {
             adaptiveIcon: {
@@ -55,7 +65,7 @@ return {
                 "android.permission.RECORD_AUDIO"
             ],
             // Must match google-services.json package_name
-            package: "com.allo.app",
+            package: ANDROID_ID,
             // Point to your google-services.json for FCM (only if file exists)
             ...(hasGoogleServices && { googleServicesFile: "../../google-services.json" }),
             intentFilters: [
@@ -170,9 +180,12 @@ return {
                         deploymentTarget: '16.4',
                       },
                       android: {
-                        compileSdkVersion: 35,
+                        // compileSdk 36 is required by androidx.camera 1.6.0
+                        // (pulled in by expo-camera); compileSdk can be bumped
+                        // independently of targetSdk, which stays at 35.
+                        compileSdkVersion: 36,
                         targetSdkVersion: 35,
-                        buildToolsVersion: '35.0.0',
+                        buildToolsVersion: '36.0.0',
                         enableProguardInReleaseBuilds: true,
                         enableShrinkResourcesInReleaseBuilds: true,
                         useLegacyPackaging: false
@@ -180,6 +193,11 @@ return {
                     },
                 ],
                 "expo-web-browser",
+                // Android sharedUserId for cross-app authentication — lets the
+                // Oxy apps signed with the SAME release key share a signing-scoped
+                // UID ("so.oxy.shared") so "Sign in with Oxy" reuses the device
+                // session across installed Oxy apps.
+                './plugins/withSharedUserId',
             ];
 
             // Only include expo-notifications for native builds (android/ios).

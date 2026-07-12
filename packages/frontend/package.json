@@ -30,6 +30,12 @@
       "exclude": [
         "typescript"
       ]
+    },
+    "autolinking": {
+      "exclude": [
+        "react-native-sqlite-storage",
+        "expo-blob"
+      ]
     }
   },
   "dependencies": {
