@@ -130,7 +130,7 @@ const authenticateSocket = oxy.authSocket();
 
 // Configure messaging namespace
 messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
-  logger.info("Client connected to messaging namespace", { ip: socket.handshake.address });
+  logger.info("Client connected to messaging namespace");
 
   if (!socket.user?.id) {
     logger.warn("Unauthenticated client attempted to connect to messaging namespace");
@@ -182,7 +182,7 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
 
 // Configure main namespace
 io.on("connection", (socket: AuthenticatedSocket) => {
-  logger.info("Client connected", { ip: socket.handshake.address });
+  logger.info("Client connected");
 
   socket.on("error", (error: Error) => {
     logger.error("Socket error", error);
