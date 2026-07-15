@@ -19,6 +19,8 @@ const getSocketUrl = () => {
 };
 import { encryptMessage, decryptMessage, getDeviceKeys } from './signalProtocol';
 import { Message } from '@/stores/messagesStore';
+import { logger } from '@/utils/logger';
+import { oxyClient } from '@oxyhq/core';
 
 export interface P2PConnection {
   userId: string;
@@ -34,7 +36,7 @@ class P2PManager {
   /**
    * Initialize P2P manager
    */
-  async initialize(userId: string, token: string): Promise<void> {
+  async initialize(userId: string): Promise<void> {
     // Check if P2P is enabled in settings
     // TODO: Load from user settings
     this.isEnabled = true;
@@ -43,17 +45,18 @@ class P2PManager {
       return;
     }
 
-    // Connect to main signaling server
+    // Connect to main signaling server. Auth is a callback so every
+    // (re)connection attempt re-reads a fresh access token from the Oxy SDK,
+    // never a stale one captured at first connect.
     this.mainSocket = io(getSocketUrl(), {
-      auth: {
-        token,
-        userId,
+      auth: (cb) => {
+        cb({ token: oxyClient.getAccessToken() ?? undefined, userId });
       },
       transports: ['websocket'],
     });
 
     this.mainSocket.on('connect', () => {
-      console.log('[P2P] Connected to signaling server');
+      logger.debug('[P2P] Connected to signaling server');
     });
 
     this.mainSocket.on('p2p_offer', async (data: {
@@ -203,7 +206,7 @@ class P2PManager {
     conversationId: string
   ): Promise<void> {
     // TODO: Implement WebRTC offer handling
-    console.log('[P2P] Received offer from:', from);
+    logger.debug('[P2P] Received offer from:', from);
   }
 
   /**
@@ -215,7 +218,7 @@ class P2PManager {
     conversationId: string
   ): Promise<void> {
     // TODO: Implement WebRTC answer handling
-    console.log('[P2P] Received answer from:', from);
+    logger.debug('[P2P] Received answer from:', from);
   }
 
   /**
@@ -227,7 +230,7 @@ class P2PManager {
     conversationId: string
   ): Promise<void> {
     // TODO: Implement ICE candidate handling
-    console.log('[P2P] Received ICE candidate from:', from);
+    logger.debug('[P2P] Received ICE candidate from:', from);
   }
 
   /**

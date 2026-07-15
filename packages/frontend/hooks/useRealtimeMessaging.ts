@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useOxy } from '@oxyhq/services';
+import { oxyClient } from '@oxyhq/core';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/config';
 import { useMessagesStore } from '@/stores/messagesStore';
@@ -28,15 +29,6 @@ interface SocketMessagePayload {
   deliveredTo?: string[];
   createdAt?: string;
   updatedAt?: string;
-}
-
-/** Read the delegated `userId` planted on the socket's auth payload, if any. */
-function getSocketAuthUserId(socket: Socket | null): string | undefined {
-  const auth = socket?.auth;
-  if (auth && typeof auth === 'object' && typeof auth.userId === 'string') {
-    return auth.userId;
-  }
-  return undefined;
 }
 
 let messagingSocket: Socket | null = null;
@@ -88,7 +80,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
       try {
         // Get current user ID dynamically from socket auth or useOxy store
         // This ensures we always have the correct user ID, even if it changes
-        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
+        const currentUserId = user?.id;
 
         // Skip messages from current user - they're already added locally when sent
         // This prevents duplicates and "[Your message]" text
@@ -261,7 +253,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
         let decryptedText = messageData.text;
 
         // Get current user ID dynamically
-        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
+        const currentUserId = user?.id;
         
         // Only decrypt if message is encrypted and not sent by current user
         if (messageData.ciphertext && messageData.senderId && messageData.senderDeviceId) {
@@ -310,7 +302,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     // Handle read receipts
     messagingSocket.on('messageRead', (data: { conversationId: string; userId: string; messageId: string }) => {
       try {
-        const currentUserId = getSocketAuthUserId(messagingSocket) || user?.id;
+        const currentUserId = user?.id;
         // Update message status to 'read' if this is our message
         const existingMessages = useMessagesStore.getState().messagesByConversation[data.conversationId] || [];
         const message = existingMessages.find(msg => msg.id === data.messageId);
@@ -346,7 +338,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     });
 
     // Mark this socket instance as having listeners set up
-    listenersInitializedSocketId = messagingSocket.id;
+    listenersInitializedSocketId = messagingSocket.id ?? null;
   }, [user?.id, addMessage, updateMessage, removeMessage, updateConversation, deviceKeysStore]);
 
   const connectSocket = useCallback(() => {
@@ -366,18 +358,17 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     }
 
     try {
-      // Get token from Oxy services - this will be handled by the authenticated client
-      // For now, we'll get it from the auth header if available
-      const token = user?.id ? 'token' : null; // TODO: Get actual token from Oxy
-      
       // Get socket URL - remove /api suffix if present, use HTTP/WS protocol
       let socketUrl = API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
       socketUrl = socketUrl.replace('/api', '').replace('https://', 'wss://').replace('http://', 'ws://');
-      
+
       messagingSocket = io(`${socketUrl}/messaging`, {
-        auth: {
-          token,
-          userId: user.id,
+        // Provide auth as a callback so every (re)connection attempt re-reads a
+        // fresh access token from the Oxy SDK (minted from the device secret),
+        // never one captured at first connect. The backend's `oxy.authSocket()`
+        // validates it and derives `socket.user.id` server-side.
+        auth: (cb) => {
+          cb({ token: oxyClient.getAccessToken() ?? undefined });
         },
         transports: ['websocket'], // Only WebSocket, no polling fallback
         path: '/socket.io',

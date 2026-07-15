@@ -10,6 +10,7 @@ import { oxyClient } from "@oxyhq/core";
 import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxyhq/core/server";
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
+import Conversation from "./src/models/Conversation";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -147,11 +148,35 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
     logger.error("Messaging socket error", error);
   });
 
-  // Join conversation room
-  socket.on("joinConversation", (conversationId: string) => {
-    const room = `conversation:${conversationId}`;
-    socket.join(room);
-    logger.info(`Client ${socket.id} joined conversation room`, { room });
+  // Join conversation room — only after verifying the authenticated user is a
+  // participant. The conversation id is client-supplied, so we never trust it to
+  // scope a room without an ownership check (these rooms carry message ciphertext,
+  // edits, reactions, deletions and typing indicators).
+  socket.on("joinConversation", async (conversationId: string) => {
+    if (typeof conversationId !== "string" || !mongoose.isValidObjectId(conversationId)) {
+      return;
+    }
+
+    try {
+      const isParticipant = await Conversation.exists({
+        _id: conversationId,
+        "participants.userId": userId,
+      });
+
+      if (!isParticipant) {
+        logger.warn(`Client ${socket.id} denied joinConversation (not a participant)`, {
+          conversationId,
+          userId,
+        });
+        return;
+      }
+
+      const room = `conversation:${conversationId}`;
+      socket.join(room);
+      logger.info(`Client ${socket.id} joined conversation room`, { room });
+    } catch (error) {
+      logger.error("Failed to authorize joinConversation", error);
+    }
   });
 
   // Leave conversation room

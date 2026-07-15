@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { oxyClient } from '@oxyhq/core';
+import { logger } from '@/utils/logger';
 import type { User } from '@oxyhq/core';
 
 import { useAppearanceStore } from '@/stores/appearanceStore';
@@ -70,7 +71,7 @@ async function fetchCurrentUser(): Promise<void> {
     await oxyClient.getCurrentUser();
   } catch (error) {
     // User might not be authenticated yet, which is fine
-    console.log('User not authenticated during init');
+    logger.info('User not authenticated during init');
   }
 }
 
@@ -125,7 +126,9 @@ export class AppInitializer {
       // Always succeed - never block the user from using the app
       try {
         await SplashScreen.hideAsync();
-      } catch (_) {}
+      } catch (error) {
+        console.warn('Failed to hide native splash screen:', error);
+      }
       return { success: true };
     }
   }
@@ -174,12 +177,12 @@ async function initializeSignalProtocol(): Promise<void> {
       user = await oxyClient.getCurrentUser();
     } catch {
       // If getCurrentUser fails, user might not be authenticated yet
-      console.log('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
+      logger.info('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
       return;
     }
 
     if (!user?.id) {
-      console.log('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
+      logger.info('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
       return;
     }
 
@@ -199,12 +202,10 @@ async function initializeSignalProtocol(): Promise<void> {
       console.warn('[AppInitializer] Failed to load security settings:', error);
     }
 
-    // Initialize P2P manager
-    // Get token from Oxy client's TokenStore
-    const token = oxyClient.getAccessToken();
-
-    if (token) {
-      await p2pManager.initialize(user.id, token);
+    // Initialize P2P manager. It re-mints its own access token on each
+    // (re)connection, so we only gate on having a session token here.
+    if (oxyClient.getAccessToken()) {
+      await p2pManager.initialize(user.id);
     }
   } catch (error) {
     console.error('[AppInitializer] Error initializing Signal Protocol:', error);
