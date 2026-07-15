@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, type ServiceAccount, type FirebaseError } from 'firebase-admin/app';
+import { getMessaging, type MulticastMessage } from 'firebase-admin/messaging';
 import PushToken from '../models/PushToken';
 import { oxy } from '../../server';
 import { logger } from './logger';
@@ -15,9 +16,9 @@ function initFirebase() {
   }
   try {
     const json = Buffer.from(credsB64, 'base64').toString('utf-8');
-    const serviceAccount = JSON.parse(json) as admin.ServiceAccount;
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    const serviceAccount = JSON.parse(json) as ServiceAccount;
+    initializeApp({
+      credential: cert(serviceAccount),
       projectId,
     });
     firebaseInitialized = true;
@@ -51,7 +52,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
     const tokenChunks = chunk(fcmTokens, 500); // FCM limit per multicast
     const toDisable: string[] = [];
     for (const tkChunk of tokenChunks) {
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         tokens: tkChunk,
         notification: {
           title: payload.title,
@@ -66,12 +67,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
           payload: { aps: { sound: 'default' } },
         },
       };
-      const resp = await admin.messaging().sendEachForMulticast(message);
+      const resp = await getMessaging().sendEachForMulticast(message);
       // Cleanup invalid tokens in this chunk
       if (resp.responses) {
         resp.responses.forEach((r, idx) => {
           if (!r.success) {
-            const errorWithInfo = r.error as (admin.FirebaseError & { errorInfo?: { code?: string } }) | undefined;
+            const errorWithInfo = r.error as (FirebaseError & { errorInfo?: { code?: string } }) | undefined;
             const code = errorWithInfo?.errorInfo?.code || errorWithInfo?.code;
             if (code && (code.includes('registration-token-not-registered') || code.includes('invalid-argument'))) {
               const bad = tkChunk[idx];

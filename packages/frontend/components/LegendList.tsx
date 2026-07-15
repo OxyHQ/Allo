@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { FlatList as RNFlatList, Platform, type FlatListProps, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { LegendList as RL, type LegendListProps, type LegendListRef } from '@legendapp/list';
+import { LegendList as RL, type LegendListProps, type LegendListRef } from '@legendapp/list/react-native';
 import LayoutScrollContext from '@/context/LayoutScrollContext';
 
 type ScrollEvent = NativeSyntheticEvent<NativeScrollEvent>;

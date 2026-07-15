@@ -76,11 +76,10 @@ ConversationSchema.index({ createdBy: 1, lastMessageAt: -1 });
 ConversationSchema.index({ type: 1, lastMessageAt: -1 });
 
 // Ensure direct conversations have exactly 2 participants
-ConversationSchema.pre("save", function (next) {
+ConversationSchema.pre("save", function () {
   if (this.type === "direct" && this.participants.length !== 2) {
-    return next(new Error("Direct conversations must have exactly 2 participants"));
+    throw new Error("Direct conversations must have exactly 2 participants");
   }
-  next();
 });
 
 export const Conversation = mongoose.model<IConversation>("Conversation", ConversationSchema);

@@ -41,9 +41,9 @@ const writeFile = async (fileBuffer: Buffer, options: WriteFileOptions) => {
   const safeFilename = `file-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
   const uploadStream = bucket.openUploadStream(safeFilename, {
-    contentType: options.contentType || 'application/octet-stream',
     metadata: {
       ...options.metadata,
+      contentType: options.contentType || 'application/octet-stream', // driver v6 stores content type in metadata
       originalFilename: options.filename, // Store the original user-provided filename
       sanitizedFilename: safeFilename,    // Store the safe internal filename
       uploadDate: new Date()
