@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Conversation } from '@/app/(chat)/index';
 import { useOxy } from '@oxyhq/services';
 import {
-  getConversationDisplayName,
+  useConversationDisplayName,
   getConversationAvatar,
   getGroupInfo,
   useContactInfo,
@@ -23,10 +23,11 @@ export function useConversationMetadata(
   const contactInfo = useContactInfo(conversation ?? null, currentUserId);
   const groupInfo = getGroupInfo(conversation ?? null);
 
+  // Reactive base name: recomputes when the participant user cache is enriched.
+  const baseDisplayName = useConversationDisplayName(conversation, currentUserId);
+
   return useMemo(() => {
-    let displayName = conversation
-      ? getConversationDisplayName(conversation, currentUserId)
-      : '';
+    let displayName = baseDisplayName;
 
     // Prefer contact name from Oxy data for direct chats
     if (!isGroup && contactInfo?.name) {
@@ -36,7 +37,7 @@ export function useConversationMetadata(
     const avatar = conversation
       ? getConversationAvatar(conversation, currentUserId, oxyServices)
       : undefined;
-    
+
     const participants = isGroup && conversation ? (conversation.participants || []) : [];
 
     return {
@@ -51,5 +52,5 @@ export function useConversationMetadata(
       isOnline: contactInfo?.isOnline || false,
       isGroup,
     };
-  }, [conversation, isGroup, contactInfo, groupInfo, currentUserId]);
+  }, [conversation, isGroup, contactInfo, groupInfo, currentUserId, baseDisplayName, oxyServices]);
 }

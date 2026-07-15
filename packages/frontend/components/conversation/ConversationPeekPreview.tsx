@@ -26,7 +26,7 @@ import { DaySeparator } from '@/components/messages/DaySeparator';
 import { useMessagesStore, type Message } from '@/stores/messagesStore';
 import type { Conversation } from '@/app/(chat)/index';
 import {
-  getConversationDisplayName,
+  useConversationDisplayName,
   getOtherParticipants,
   isGroupConversation,
 } from '@/utils/conversationUtils';
@@ -89,7 +89,8 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
   }, [messages]);
 
   const isGroup = conversation ? isGroupConversation(conversation) : false;
-  const displayName = conversation ? getConversationDisplayName(conversation, currentUserId) : '';
+  // Reactive: re-renders when this conversation's participant user cache is enriched.
+  const displayName = useConversationDisplayName(conversation, currentUserId);
   const otherParticipants = conversation ? getOtherParticipants(conversation, currentUserId) : [];
 
   // Sender info callbacks (same pattern as ConversationView via useSenderInfo)
