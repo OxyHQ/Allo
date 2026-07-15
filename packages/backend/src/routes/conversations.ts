@@ -7,7 +7,7 @@ import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../uti
 import { oxy } from "../../server";
 import { getIO } from "../utils/socket";
 import { logger } from "../utils/logger";
-import type { ConversationDto, EnrichedConversationParticipant } from "@allo/shared-types";
+import type { ConversationDto, ConversationParticipantRole, EnrichedConversationParticipant } from "@allo/shared-types";
 import {
   enrichParticipantWithOxyUser,
   getErrorMessage,
@@ -169,7 +169,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
     const participants = allParticipants.map((pid) => ({
       userId: pid,
-      role: pid === userId ? "admin" : "member",
+      role: (pid === userId ? "admin" : "member") as ConversationParticipantRole,
       joinedAt: new Date(),
     }));
 

@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import type { FilterQuery } from "mongoose";
+import type { QueryFilter } from "mongoose";
 import type { EncryptedMediaItem, MediaItem } from "@allo/shared-types";
 import Message, { type IMessage } from "../models/Message";
 import Conversation from "../models/Conversation";
@@ -243,7 +243,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     }
 
     // Build query
-    const query: FilterQuery<IMessage> = {
+    const query: QueryFilter<IMessage> = {
       conversationId,
       deletedAt: { $exists: false },
     };

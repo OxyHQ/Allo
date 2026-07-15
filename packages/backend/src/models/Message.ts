@@ -124,20 +124,18 @@ MessageSchema.index({ senderId: 1, createdAt: -1 });
 MessageSchema.index({ conversationId: 1, deletedAt: 1, createdAt: -1 });
 
 // Validation: message must have either encrypted content or legacy plaintext
-MessageSchema.pre("save", function (next) {
+MessageSchema.pre("save", function () {
   const hasEncryptedContent = this.ciphertext || (this.encryptedMedia && this.encryptedMedia.length > 0);
   const hasLegacyContent = this.text || (this.media && this.media.length > 0);
-  
+
   if (!hasEncryptedContent && !hasLegacyContent) {
-    return next(new Error("Message must have either encrypted content or legacy plaintext"));
+    throw new Error("Message must have either encrypted content or legacy plaintext");
   }
-  
+
   // If encryption is enabled, plaintext should not be stored
   if (this.ciphertext && this.text) {
     console.warn("Warning: Message has both encrypted and plaintext content");
   }
-  
-  next();
 });
 
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
