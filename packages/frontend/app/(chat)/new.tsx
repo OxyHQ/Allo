@@ -27,6 +27,7 @@ import { useConversationsStore } from '@/stores';
 import type { User as OxyUser } from '@oxyhq/core';
 import type { Href } from 'expo-router';
 import { getErrorMessage } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 // Types
 import type { Conversation, ConversationType } from '@/app/(chat)/index';
@@ -226,7 +227,7 @@ export default function NewChatScreen() {
 
       addConversation(conversation);
 
-      console.log('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
+      logger.debug('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
       router.replace(`/c/${conversation.id}` as Href);
     } catch (error: unknown) {
       console.error('[NewChat] Error opening conversation:', error);
@@ -401,11 +402,9 @@ export default function NewChatScreen() {
       <TouchableOpacity
         style={styles.userItem}
         onPress={() => {
-          console.log('[NewChat] User item pressed:', item.username);
           openConversation(item);
         }}
         onLongPress={() => {
-          console.log('[NewChat] User item long pressed:', item.username);
           toggleUserSelection(item.id);
         }}
         activeOpacity={0.7}

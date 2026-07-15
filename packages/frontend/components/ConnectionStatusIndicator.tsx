@@ -10,7 +10,7 @@ import { useTheme } from '@/hooks/useTheme';
  * Displays "Connecting...", "Offline", or nothing when online
  */
 
-export function ConnectionStatusIndicator(): JSX.Element | null {
+export function ConnectionStatusIndicator(): React.JSX.Element | null {
   const theme = useTheme();
   const status = useConnectionStatusStore((state) => state.status);
   const [slideAnim] = React.useState(new Animated.Value(-50));

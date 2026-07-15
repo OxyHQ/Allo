@@ -28,7 +28,6 @@ const SignInPrompt: React.FC<SignInPromptProps> = ({ onSignInPress }) => {
             } catch (error: unknown) {
                 // Handle authentication cancellation gracefully
                 if (isAuthCancellation(error)) {
-                    console.log('Authentication cancelled by user');
                     return;
                 }
                 // Log other errors

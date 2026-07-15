@@ -55,9 +55,6 @@ class ErrorBoundaryBase extends Component<Props, State> {
 
         // Call custom error handler (for analytics, Sentry, etc.)
         this.props.onError?.(error, errorInfo);
-
-        // TODO: Send to error tracking service
-        // logErrorToService({ error, errorInfo, userAgent: navigator.userAgent });
     }
 
     private handleRetry = () => {
@@ -133,8 +130,10 @@ class ErrorBoundaryBase extends Component<Props, State> {
     }
 }
 
-// Wrap the component with translation HOC
-const ErrorBoundary = withTranslation()(ErrorBoundaryBase);
+// Wrap the component with translation HOC. Annotate the result so the emitted
+// type does not reference react-i18next's internal helper types (TS2742): the
+// HOC injects `t`, leaving the caller-facing props.
+const ErrorBoundary: React.ComponentType<Omit<Props, 't'>> = withTranslation()(ErrorBoundaryBase);
 
 /**
  * Smaller error boundary for specific features
@@ -146,7 +145,7 @@ export function FeatureErrorBoundary({
 }: {
     children: ReactNode;
     featureName: string;
-}): JSX.Element {
+}): React.JSX.Element {
     const Wrapper = ({ children: wrappedChildren }: { children: ReactNode }) => (
         <ErrorBoundaryBase
             t={(key: string) => key}

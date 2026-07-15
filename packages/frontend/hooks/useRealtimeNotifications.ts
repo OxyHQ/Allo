@@ -4,6 +4,7 @@ import { useOxy } from '@oxyhq/services';
 import { io, Socket } from 'socket.io-client';
 import { API_URL_SOCKET } from '../config';
 import { ZRawNotification } from '../types/validation';
+import { logger } from '@/utils/logger';
 
 let socket: Socket | null = null;
 let invalidationTimer: NodeJS.Timeout | null = null;
@@ -45,7 +46,7 @@ export const useRealtimeNotifications = () => {
       });
 
       socket.on('connect', () => {
-        console.log('Connected to notifications socket');
+        logger.debug('Connected to notifications socket');
       });
 
       socket.on('notification', (notification: unknown) => {
@@ -55,7 +56,7 @@ export const useRealtimeNotifications = () => {
           console.warn('Dropped invalid socket notification', parsed.error?.issues?.[0]);
           return;
         }
-        console.log('New notification received:', parsed.data);
+        logger.debug('New notification received:', parsed.data);
 
         // Batch invalidations to prevent 4x queries
         batchedInvalidateNotifications(queryClient);
@@ -67,22 +68,22 @@ export const useRealtimeNotifications = () => {
           console.warn('Dropped invalid socket notificationUpdated', parsed.error?.issues?.[0]);
           return;
         }
-        console.log('Notification updated:', parsed.data);
+        logger.debug('Notification updated:', parsed.data);
         batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('notificationDeleted', (notificationId: string) => {
-        console.log('Notification deleted:', notificationId);
+        logger.debug('Notification deleted:', notificationId);
         batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('allNotificationsRead', () => {
-        console.log('All notifications marked as read');
+        logger.debug('All notifications marked as read');
         batchedInvalidateNotifications(queryClient);
       });
 
       socket.on('disconnect', () => {
-        console.log('Disconnected from notifications socket');
+        logger.debug('Disconnected from notifications socket');
       });
 
       socket.on('connect_error', (error) => {

@@ -6,6 +6,8 @@
 /**
  * Request Animation Frame wrapper for smooth animations
  */
+import { logger } from '@/utils/logger';
+
 export function raf(callback: () => void): number {
   if (typeof requestAnimationFrame !== 'undefined') {
     return requestAnimationFrame(callback);
@@ -46,7 +48,7 @@ export const perfLog = isProduction
       const start = performance.now();
       fn();
       const end = performance.now();
-      console.log(`[Perf] ${label}: ${(end - start).toFixed(2)}ms`);
+      logger.debug(`[Perf] ${label}: ${(end - start).toFixed(2)}ms`);
     };
 
 /**

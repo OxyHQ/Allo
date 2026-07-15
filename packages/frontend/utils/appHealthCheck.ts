@@ -24,7 +24,7 @@ export async function runHealthCheck(): Promise<HealthCheckResult> {
 
   // 1. Check Performance API
   try {
-    if (typeof performance !== 'undefined' && performance.now) {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
       checks.push({
         name: 'Performance API',
         status: 'pass',
@@ -94,7 +94,7 @@ export async function runHealthCheck(): Promise<HealthCheckResult> {
       }
 
       // Check for addEventListener (typing indicators)
-      if (window.addEventListener) {
+      if (typeof window.addEventListener === 'function') {
         checks.push({
           name: 'Event Listeners (Web)',
           status: 'pass',

@@ -58,8 +58,6 @@ import { BottomSheetContext } from '@/context/BottomSheetContext';
 // Utils
 import { colors } from '@/styles/colors';
 import {
-  getConversationDisplayName,
-  getConversationAvatar,
   getOtherParticipants,
   isGroupConversation,
   useContactInfo,
@@ -150,7 +148,7 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Check if it's a username route (starts with @)
   const isUsernameRoute = conversationIdOrUsername?.startsWith('@');
-  const username = isUsernameRoute ? conversationIdOrUsername.substring(1) : undefined;
+  const username = isUsernameRoute ? conversationIdOrUsername?.substring(1) : undefined;
 
   // For username routes, we'll resolve to conversation ID in useEffect
   // For now, use the ID directly if it's not a username
@@ -601,27 +599,21 @@ export default function ConversationView({ conversationId: propConversationId }:
         onClose={() => bottomSheet.openBottomSheet(false)}
         onSelectPhoto={() => {
           // TODO: Implement photo picker
-          console.log('Photo selected');
         }}
         onSelectDocument={() => {
           // TODO: Implement document picker
-          console.log('Document selected');
         }}
         onSelectLocation={() => {
           // TODO: Implement location picker
-          console.log('Location selected');
         }}
         onSelectCamera={() => {
           // TODO: Implement camera
-          console.log('Camera selected');
         }}
         onSelectContact={() => {
           // TODO: Implement contact picker
-          console.log('Contact selected');
         }}
         onSelectPoll={() => {
           // TODO: Implement poll creator
-          console.log('Poll selected');
         }}
       />
     );
@@ -634,7 +626,6 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const handleEmoji = useCallback(() => {
     // Placeholder for emoji picker functionality
-    console.log('Emoji pressed');
   }, []);
 
   // Use the new hook for sender info
@@ -731,7 +722,6 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const handleMediaPress = useCallback((mediaId: string, index: number) => {
     // TODO: Implement media viewer
-    console.log('Media pressed:', mediaId, index);
   }, []);
 
   /**
@@ -804,7 +794,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleForward = useCallback((message: Message) => {
     resetSelectionState({ preserveMessage: true });
     // TODO: Implement forward functionality
-    console.log('Forward message:', message.id);
   }, [resetSelectionState]);
 
   /**
@@ -813,17 +802,12 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleCopy = useCallback(async (message: Message) => {
     resetSelectionState({ preserveMessage: true });
     try {
-      // Try React Native Clipboard first
-      const { default: Clipboard } = await import('@react-native-clipboard/clipboard');
-      await Clipboard.setString(message.text || '');
+      const Clipboard = await import('expo-clipboard');
+      await Clipboard.setStringAsync(message.text || '');
       const { toast } = await import('@/lib/sonner');
       toast.success('Message copied to clipboard');
     } catch (error) {
-      // Fallback for web
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(message.text || '');
-      }
-      console.log('Copy message:', message.text);
+      console.error('[Conversation] Failed to copy message to clipboard:', error);
     }
   }, [resetSelectionState]);
 
@@ -833,7 +817,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleDelete = useCallback((message: Message) => {
     resetSelectionState({ preserveMessage: true });
     // TODO: Implement delete functionality
-    console.log('Delete message:', message.id);
   }, [resetSelectionState]);
 
   /**
@@ -1034,7 +1017,6 @@ export default function ConversationView({ conversationId: propConversationId }:
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}
-                estimatedItemSize={80}
               />
               {/* Typing Indicator */}
               {typingUserIds.length > 0 && (
@@ -1146,14 +1128,11 @@ export default function ConversationView({ conversationId: propConversationId }:
                 panY={panY}
                 scale={scale}
                 onRecordStart={() => {
-                  console.log('Recording started');
                 }}
                 onRecordEnd={(uri, duration) => {
-                  console.log('Recording ended:', uri, duration);
                   // TODO: Send audio message
                 }}
                 onRecordCancel={() => {
-                  console.log('Recording cancelled');
                 }}
               />
             </View>

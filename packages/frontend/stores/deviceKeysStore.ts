@@ -16,6 +16,7 @@ import {
   decryptMessage,
 } from '@/lib/signalProtocol';
 import { api } from '@/utils/api';
+import { logger } from '@/utils/logger';
 
 /** A registered device's public-key bundle as returned by the backend. */
 interface RecipientDevice {
@@ -66,9 +67,9 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
     initialize: async () => {
       set({ isLoading: true, error: null });
       try {
-        console.log('[DeviceKeys] Starting initialization...');
+        logger.info('[DeviceKeys] Starting initialization...');
         const keys = await initializeDeviceKeys();
-        console.log('[DeviceKeys] Keys generated successfully:', {
+        logger.info('[DeviceKeys] Keys generated successfully:', {
           deviceId: keys.deviceId,
           hasIdentityKey: !!keys.identityKeyPublic,
           preKeysCount: keys.preKeys.length,
@@ -77,12 +78,12 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
         set({ deviceKeys: keys, isInitialized: true, isLoading: false });
         
         // Auto-register device with backend
-        console.log('[DeviceKeys] Registering device with backend...');
+        logger.info('[DeviceKeys] Registering device with backend...');
         const registered = await get().registerDevice();
         if (!registered) {
           console.warn('[DeviceKeys] Device registration failed, but keys are initialized');
         } else {
-          console.log('[DeviceKeys] Device registered successfully');
+          logger.info('[DeviceKeys] Device registered successfully');
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to initialize device keys';

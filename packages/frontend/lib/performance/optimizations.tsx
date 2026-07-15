@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
+import { logger } from '@/utils/logger';
 
 /**
  * Performance Optimization Utilities
@@ -139,23 +140,24 @@ export function useMemoDebug<T>(
   deps: React.DependencyList,
   debugName?: string
 ): T {
-  const prevDeps = useRef<React.DependencyList>();
+  const prevDeps = useRef<React.DependencyList | undefined>(undefined);
 
   const value = useMemo(() => {
     if (__DEV__ && debugName) {
-      console.log(`[Memo] Computing ${debugName}`);
+      logger.debug(`[Memo] Computing ${debugName}`);
     }
     return factory();
   }, deps);
 
   useEffect(() => {
-    if (__DEV__ && debugName && prevDeps.current) {
+    const prev = prevDeps.current;
+    if (__DEV__ && debugName && prev) {
       const changedDeps = deps
-        .map((dep, i) => (dep !== prevDeps.current![i] ? i : -1))
+        .map((dep, i) => (dep !== prev[i] ? i : -1))
         .filter((i) => i !== -1);
 
       if (changedDeps.length > 0) {
-        console.log(`[Memo] ${debugName} recomputed due to deps:`, changedDeps);
+        logger.debug(`[Memo] ${debugName} recomputed due to deps:`, changedDeps);
       }
     }
     prevDeps.current = deps;

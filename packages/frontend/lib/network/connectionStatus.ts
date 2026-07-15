@@ -1,5 +1,6 @@
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { create } from 'zustand';
+import { logger } from '@/utils/logger';
 
 /**
  * Connection Status Manager
@@ -86,13 +87,13 @@ export function startConnectionMonitoring(): () => void {
     return unsubscribe;
   }
 
-  console.log('[Connection] Starting connection monitoring');
+  logger.info('[Connection] Starting connection monitoring');
 
   // Subscribe to NetInfo changes
   unsubscribe = NetInfo.addEventListener((state) => {
     const store = useConnectionStatusStore.getState();
 
-    console.log('[Connection] Network state changed:', {
+    logger.info('[Connection] Network state changed:', {
       isConnected: state.isConnected,
       type: state.type,
       isInternetReachable: state.isInternetReachable,
@@ -115,7 +116,7 @@ export function startConnectionMonitoring(): () => void {
 
   return () => {
     if (unsubscribe) {
-      console.log('[Connection] Stopping connection monitoring');
+      logger.info('[Connection] Stopping connection monitoring');
       unsubscribe();
       unsubscribe = null;
     }
@@ -172,16 +173,13 @@ export async function waitForConnection(timeoutMs: number = 30000): Promise<bool
       resolve(false);
     }, timeoutMs);
 
-    const unsubscribeStore = useConnectionStatusStore.subscribe(
-      (state) => state.isConnected,
-      (isConnected) => {
-        if (isConnected) {
-          clearTimeout(timeout);
-          unsubscribeStore();
-          resolve(true);
-        }
+    const unsubscribeStore = useConnectionStatusStore.subscribe((state) => {
+      if (state.isConnected) {
+        clearTimeout(timeout);
+        unsubscribeStore();
+        resolve(true);
       }
-    );
+    });
   });
 }
 

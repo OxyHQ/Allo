@@ -17,8 +17,10 @@ const API_CONFIG = {
 const linkedBackend = oxyClient.createLinkedClient({ baseURL: API_CONFIG.baseURL });
 const backendClient = linkedBackend.client;
 
-// Keep oxyClient reference for Oxy-specific API calls (if needed)
-const authenticatedClient = oxyClient.getClient();
+// Keep oxyClient reference for Oxy-specific API calls (if needed).
+// Annotate with the client's own return type: `HttpService` is not re-exported
+// from the package root, so an inferred type would reference an internal path.
+const authenticatedClient: ReturnType<typeof oxyClient.getClient> = oxyClient.getClient();
 
 // Circuit breaker to prevent cascading failures
 // Opens after 5 consecutive failures, stays open for 30 seconds

@@ -38,7 +38,7 @@ export function getConversationId(
   // Check for @username in segments
   const atIndex = segments?.findIndex(s => s?.startsWith('@'));
   if (atIndex !== undefined && atIndex !== -1) {
-    const username = segments[atIndex]?.substring(1);
+    const username = segments?.[atIndex]?.substring(1);
     if (username) return `@${username}`;
   }
   

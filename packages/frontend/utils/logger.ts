@@ -9,7 +9,7 @@ interface Logger {
   debug: LoggerFunction;
 }
 
-const PREFIX = '[Session]';
+const PREFIX = '[Allo]';
 
 const createLogger = (): Logger => {
   return {

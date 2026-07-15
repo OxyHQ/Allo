@@ -74,7 +74,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
 
   // Create refs map for each message bubble using useState
   const [bubbleRefsMap] = useState(() => {
-    const map = new Map<string, React.RefObject<View>>();
+    const map = new Map<string, React.RefObject<View | null>>();
     messages.forEach(msg => {
       map.set(msg.id, React.createRef<View>());
     });

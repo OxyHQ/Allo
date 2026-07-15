@@ -3,6 +3,8 @@
  * Lightweight performance tracking for production
  */
 
+import { logger } from '@/utils/logger';
+
 interface PerformanceMark {
   name: string;
   startTime: number;
@@ -55,7 +57,7 @@ class PerformanceMonitor {
       if (threshold && duration > threshold) {
         console.warn(`[Performance] ${name} took ${duration.toFixed(2)}ms (threshold: ${threshold}ms)`);
       } else {
-        console.log(`[Performance] ${name} took ${duration.toFixed(2)}ms`);
+        logger.debug(`[Performance] ${name} took ${duration.toFixed(2)}ms`);
       }
     }
   }
@@ -147,7 +149,7 @@ export function trackLongTask(callback: () => void, taskName: string): void {
 export function logMemoryUsage(): void {
   if (typeof process !== 'undefined' && process.memoryUsage) {
     const usage = process.memoryUsage();
-    console.log('[Performance] Memory usage:', {
+    logger.debug('[Performance] Memory usage:', {
       rss: `${(usage.rss / 1024 / 1024).toFixed(2)} MB`,
       heapUsed: `${(usage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
       heapTotal: `${(usage.heapTotal / 1024 / 1024).toFixed(2)} MB`,

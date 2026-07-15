@@ -39,9 +39,9 @@ export default function PrivacySettingsScreen() {
 
     const loadPrivacySettings = async () => {
         try {
-            const response = await authenticatedClient.get('/profile/settings/me');
+            const response = await authenticatedClient.get<{ data?: { privacy?: PrivacySettings } }>('/profile/settings/me');
             const settings = response.data;
-            setPrivacySettings(settings.privacy || { profileVisibility: 'public' });
+            setPrivacySettings(settings?.privacy || { profileVisibility: 'public' });
             setLoading(false);
         } catch (error) {
             console.error('Error loading privacy settings:', error);

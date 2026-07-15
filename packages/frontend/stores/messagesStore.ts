@@ -12,6 +12,7 @@ import {
   addToSyncQueue,
 } from '@/lib/offlineStorage';
 import { p2pManager } from '@/lib/p2pMessaging';
+import { logger } from '@/utils/logger';
 import NetInfo from '@react-native-community/netinfo';
 
 /**
@@ -63,6 +64,8 @@ export interface Message {
   encryptionVersion?: number;
   // Read receipt status
   readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
+  // Server timestamp set when the message has been edited
+  editedAt?: Date;
 }
 
 interface MessagesState {
@@ -83,7 +86,7 @@ interface MessagesState {
   
   // Actions
   setMessages: (conversationId: string, messages: Message[]) => void;
-  addMessage: (message: Message) => void;
+  addMessage: (message: Message) => Promise<void>;
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   removeMessage: (conversationId: string, messageId: string) => void;
   clearMessages: (conversationId: string) => void;
@@ -137,8 +140,8 @@ export const useMessagesStore = create<MessagesState>()(
         if (lastMessage.text && !lastMessage.isEncrypted && lastMessage.text !== '[Encrypted]') {
           // Use require for synchronous access (faster than async import)
           try {
-            const { useConversationsStore } = require('./conversationsStore');
-            const { useUsersStore } = require('./usersStore');
+            const { useConversationsStore } = require('./conversationsStore') as typeof import('./conversationsStore');
+            const { useUsersStore } = require('./usersStore') as typeof import('./usersStore');
             const conversationsStore = useConversationsStore.getState();
             const conversation = conversationsStore.conversationsById[conversationId];
             
@@ -206,8 +209,8 @@ export const useMessagesStore = create<MessagesState>()(
       // Update conversation's lastMessage if this is a decrypted message (synchronous, efficient)
       if (message.text && !message.isEncrypted && message.text !== '[Encrypted]') {
         try {
-          const { useConversationsStore } = require('./conversationsStore');
-          const { useUsersStore } = require('./usersStore');
+          const { useConversationsStore } = require('./conversationsStore') as typeof import('./conversationsStore');
+          const { useUsersStore } = require('./usersStore') as typeof import('./usersStore');
           const conversationsStore = useConversationsStore.getState();
           const conversation = conversationsStore.conversationsById[message.conversationId];
           
@@ -290,6 +293,32 @@ export const useMessagesStore = create<MessagesState>()(
 
     setCloudSyncEnabled: (enabled) => {
       set({ cloudSyncEnabled: enabled });
+    },
+
+    addReaction: async (conversationId, messageId, emoji) => {
+      // POST /messages/:id/reactions toggles the caller's reaction and returns
+      // the authoritative reaction map, which we write back to local state.
+      const response = await api.post<{ reactions?: Record<string, string[]> }>(
+        `/messages/${messageId}/reactions`,
+        { emoji }
+      );
+      const reactions = response.data?.reactions;
+      if (reactions) {
+        set((state) => {
+          const message = state.messagesByConversation[conversationId]?.find(
+            (m) => m.id === messageId
+          );
+          if (message) {
+            message.reactions = reactions;
+          }
+        });
+      }
+    },
+
+    // Same toggle endpoint as addReaction; ConversationView only invokes this
+    // when the user has already reacted, so the toggle removes the reaction.
+    removeReaction: async (conversationId, messageId, emoji) => {
+      await get().addReaction(conversationId, messageId, emoji);
     },
 
     // Async actions
@@ -484,7 +513,7 @@ export const useMessagesStore = create<MessagesState>()(
           // Try to initialize device keys if not already initialized
           if (!deviceKeysStore.isInitialized && !deviceKeysStore.isLoading) {
             try {
-              console.log('[Messages] Initializing device keys...');
+              logger.debug('[Messages] Initializing device keys...');
               await deviceKeysStore.initialize();
               
               // Wait a bit for state to update
@@ -492,7 +521,7 @@ export const useMessagesStore = create<MessagesState>()(
               
               // Re-check device keys after initialization
               const updatedStore = useDeviceKeysStore.getState();
-              console.log('[Messages] Device keys after init:', {
+              logger.debug('[Messages] Device keys after init:', {
                 hasKeys: !!updatedStore.deviceKeys,
                 isInitialized: updatedStore.isInitialized,
                 isLoading: updatedStore.isLoading,

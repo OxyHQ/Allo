@@ -466,7 +466,6 @@ export const useConversationsStore = create<ConversationsState>()(
     refreshConversations: async () => {
       set({ isRefreshing: true, error: null });
       try {
-        // TODO: Replace with actual API call
         await get().fetchConversations();
         set({ isRefreshing: false });
       } catch (error) {

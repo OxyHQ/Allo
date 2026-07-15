@@ -5,6 +5,8 @@
  * Provides seamless UX with automatic rollback on failure
  */
 
+import { logger } from '@/utils/logger';
+
 export interface OptimisticUpdate<T> {
   id: string;
   type: string;
@@ -43,7 +45,7 @@ export class OptimisticUpdateManager<T = unknown> {
     this.updates.set(update.id, fullUpdate);
     this.notifyListeners();
 
-    console.log(`[Optimistic] Added update ${update.id} (${update.type})`);
+    logger.debug(`[Optimistic] Added update ${update.id} (${update.type})`);
 
     return update.id;
   }
@@ -61,7 +63,7 @@ export class OptimisticUpdateManager<T = unknown> {
         this.notifyListeners();
       }, 1000);
 
-      console.log(`[Optimistic] Confirmed update ${id}`);
+      logger.debug(`[Optimistic] Confirmed update ${id}`);
       this.notifyListeners();
     }
   }
@@ -75,7 +77,7 @@ export class OptimisticUpdateManager<T = unknown> {
       update.status = 'failed';
 
       if (rollback && update.rollback) {
-        console.log(`[Optimistic] Rolling back update ${id}`);
+        logger.debug(`[Optimistic] Rolling back update ${id}`);
         update.rollback();
       }
 
@@ -85,7 +87,7 @@ export class OptimisticUpdateManager<T = unknown> {
         this.notifyListeners();
       }, 2000);
 
-      console.log(`[Optimistic] Failed update ${id}`);
+      logger.debug(`[Optimistic] Failed update ${id}`);
       this.notifyListeners();
     }
   }
@@ -116,7 +118,7 @@ export class OptimisticUpdateManager<T = unknown> {
    */
   isPending(id: string): boolean {
     const update = this.updates.get(id);
-    return update?.status === 'pending' ?? false;
+    return update?.status === 'pending';
   }
 
   /**

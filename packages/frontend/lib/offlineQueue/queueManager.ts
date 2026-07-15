@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConnectionStatusStore } from '@/lib/network/connectionStatus';
 import { retryWithBackoff } from '@/lib/api/retryLogic';
+import { logger } from '@/utils/logger';
 
 /**
  * Offline Queue Manager
@@ -70,7 +71,7 @@ class OfflineQueueManager {
       const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
       if (stored) {
         this.queue = JSON.parse(stored);
-        console.log(`[Queue] Loaded ${this.queue.length} operations from storage`);
+        logger.info(`[Queue] Loaded ${this.queue.length} operations from storage`);
         this.notifyListeners();
       }
     } catch (error) {
@@ -113,7 +114,7 @@ class OfflineQueueManager {
     this.queue.push(queuedOp);
     await this.saveQueue();
 
-    console.log(`[Queue] Added operation ${id} (${operation.type}) to queue`);
+    logger.info(`[Queue] Added operation ${id} (${operation.type}) to queue`);
 
     // Try to process immediately if online
     this.processQueue();
@@ -129,7 +130,7 @@ class OfflineQueueManager {
     if (index !== -1) {
       this.queue.splice(index, 1);
       await this.saveQueue();
-      console.log(`[Queue] Removed operation ${id} from queue`);
+      logger.info(`[Queue] Removed operation ${id} from queue`);
     }
   }
 
@@ -160,7 +161,7 @@ class OfflineQueueManager {
   async clear(): Promise<void> {
     this.queue = [];
     await this.saveQueue();
-    console.log('[Queue] Cleared all operations');
+    logger.info('[Queue] Cleared all operations');
   }
 
   /**
@@ -180,7 +181,7 @@ class OfflineQueueManager {
     }
 
     this.isProcessing = true;
-    console.log(`[Queue] Processing ${this.queue.length} operations...`);
+    logger.info(`[Queue] Processing ${this.queue.length} operations...`);
 
     const operationsToProcess = this.queue.filter(
       op => op.status !== 'processing' && op.attempts < MAX_ATTEMPTS
@@ -199,7 +200,7 @@ class OfflineQueueManager {
 
         // Success - remove from queue
         await this.remove(operation.id);
-        console.log(`[Queue] Successfully processed operation ${operation.id}`);
+        logger.info(`[Queue] Successfully processed operation ${operation.id}`);
       } catch (error) {
         console.error(`[Queue] Error processing operation ${operation.id}:`, error);
 
@@ -217,7 +218,7 @@ class OfflineQueueManager {
     }
 
     this.isProcessing = false;
-    console.log(`[Queue] Processing complete. ${this.queue.length} operations remaining.`);
+    logger.info(`[Queue] Processing complete. ${this.queue.length} operations remaining.`);
   }
 
   /**
@@ -275,15 +276,12 @@ class OfflineQueueManager {
    */
   private startAutoProcess(): void {
     // Process queue when connection changes to online
-    useConnectionStatusStore.subscribe(
-      (state) => state.status,
-      (status) => {
-        if (status === 'online') {
-          console.log('[Queue] Connection restored, processing queue...');
-          this.processQueue();
-        }
+    useConnectionStatusStore.subscribe((state, prevState) => {
+      if (state.status === 'online' && prevState.status !== 'online') {
+        logger.info('[Queue] Connection restored, processing queue...');
+        this.processQueue();
       }
-    );
+    });
 
     // Also process periodically (every 30 seconds) if online
     setInterval(() => {

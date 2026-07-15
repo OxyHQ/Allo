@@ -1,7 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
-import { StyleSheet, View, Text, ViewStyle, Platform, Vibration, type PressableStateCallbackType } from 'react-native';
+import { StyleSheet, View, Text, ViewStyle, Platform, Vibration, Pressable } from 'react-native';
 import { Link, usePathname, type Href } from 'expo-router';
-import { Pressable } from 'react-native-web-hover';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -180,7 +179,7 @@ export const BottomBar = () => {
                     >
                         <Pressable
                             onPress={onPress}
-                            style={({ pressed }: PressableStateCallbackType) => [
+                            style={({ pressed }) => [
                                 styles.tab,
                                 pressed && {
                                     backgroundColor: `${theme.colors.primary}10`,
@@ -219,7 +218,7 @@ export const BottomBar = () => {
                             // Note: AccountCenter might need similar update if it exists in new API
                         }
                     }}
-                    style={({ pressed }: PressableStateCallbackType) => [
+                    style={({ pressed }) => [
                         styles.tab,
                         pressed && {
                             backgroundColor: `${theme.colors.primary}10`,
