@@ -17,8 +17,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.15",
     "@allo/shared-types": "file:../shared-types",
-    "@oxyhq/contracts": "^0.15.0",
-    "@oxyhq/core": "^12.4.1",
+    "@oxyhq/contracts": "^0.17.0",
+    "@oxyhq/core": "^12.10.2",
     "@types/multer": "^2.2.0",
     "ai": "^7.0.28",
     "bcryptjs": "^3.0.3",
