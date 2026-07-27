@@ -15,6 +15,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
+import { toast } from '@oxyhq/bloom/toast';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -518,7 +519,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       if (!result) {
         // Message failed to send - check for error in store
         const error = useMessagesStore.getState().getError(conversationId);
-        const { toast } = await import('@/lib/sonner');
         toast.error(error || 'Failed to send message. Please try again.');
 
         // Restore text on error
@@ -534,7 +534,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
-      const { toast } = await import('@/lib/sonner');
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
       toast.error(errorMessage);
 
@@ -767,7 +766,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       }
     } catch (error) {
       console.error('[Conversation] Error toggling reaction:', error);
-      const { toast } = await import('@/lib/sonner');
       toast.error('Failed to update reaction');
     } finally {
       resetSelectionState();
@@ -804,7 +802,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     try {
       const Clipboard = await import('expo-clipboard');
       await Clipboard.setStringAsync(message.text || '');
-      const { toast } = await import('@/lib/sonner');
       toast.success('Message copied to clipboard');
     } catch (error) {
       console.error('[Conversation] Failed to copy message to clipboard:', error);

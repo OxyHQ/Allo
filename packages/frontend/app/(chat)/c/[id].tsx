@@ -5,7 +5,7 @@ import { useConversationsStore } from "@/stores";
 import { useOxy } from "@oxyhq/services";
 import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
-import { toast } from "@/lib/sonner";
+import { toast } from "@oxyhq/bloom/toast";
 
 /** Participant shape returned by the backend conversations API. */
 interface ApiConversationParticipant {

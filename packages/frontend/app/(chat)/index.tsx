@@ -27,7 +27,7 @@ import Animated, {
     type SharedValue,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { toast } from '@/lib/sonner';
+import { toast } from '@oxyhq/bloom/toast';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
