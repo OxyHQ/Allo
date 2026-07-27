@@ -9,7 +9,7 @@ import 'react-native-reanimated';
 import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
-import { BloomThemeProvider } from '@oxyhq/bloom';
+import { BloomProvider } from '@oxyhq/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxyhq/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack, usePathname } from "expo-router";
@@ -256,7 +256,11 @@ export default function RootLayout() {
   ]);
 
   return (
-    <BloomThemeProvider
+    // The single Bloom root: theme + haptics + scroll restoration + tab-bar
+    // minimize progress. `imageResolver` is NOT passed here — Allo's resolver
+    // needs `useOxy()`, so it stays as its own provider under OxyProvider (see
+    // AppProviders); a nested ImageResolverProvider is what the app reads.
+    <BloomProvider
       fonts
       // WEB shows the custom splash while fonts load; NATIVE shows nothing here
       // because the held OS splash is already covering the screen.
@@ -265,6 +269,6 @@ export default function RootLayout() {
       <ThemedView style={{ flex: 1 }}>
         {appContent}
       </ThemedView>
-    </BloomThemeProvider>
+    </BloomProvider>
   );
 }
