@@ -35,7 +35,6 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { OfflineBanner } from '@/components/shared/OfflineBanner';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -1146,8 +1145,6 @@ export default function ConversationsList() {
                         </Animated.View>
                     )}
                 </Animated.View>
-
-                <OfflineBanner />
 
                 {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
                     <ConversationsSkeleton theme={theme} />

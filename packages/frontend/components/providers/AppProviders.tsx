@@ -14,6 +14,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { StatusBar } from 'expo-status-bar';
 import { OxyProvider, useOxy } from '@oxyhq/services';
 import { ImageResolverProvider, type ImageResolver } from '@oxyhq/bloom/image-resolver';
+import { ConnectionStatusToasts } from '@oxyhq/bloom/connection-status';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { BottomSheetProvider } from '@/context/BottomSheetContext';
@@ -71,6 +72,7 @@ export const AppProviders = memo(function AppProviders({
                       <ErrorBoundary>
                         <HomeRefreshProvider>
                           {children}
+                          <ConnectionStatusToasts />
                           <StatusBar style="auto" />
                         </HomeRefreshProvider>
                       </ErrorBoundary>
