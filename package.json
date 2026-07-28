@@ -8,7 +8,7 @@
   ],
   "overrides": {
     "@isaacs/brace-expansion": "^5.0.1",
-    "@oxyhq/bloom": "^0.66.0",
+    "@oxyhq/bloom": "^0.67.0",
     "@oxyhq/core": "^12.10.4",
     "@oxyhq/contracts": "^0.17.0",
     "@oxyhq/services": "^22.12.3",
@@ -19,7 +19,7 @@
   },
   "resolutions": {
     "@isaacs/brace-expansion": "^5.0.1",
-    "@oxyhq/bloom": "^0.66.0",
+    "@oxyhq/bloom": "^0.67.0",
     "@oxyhq/core": "^12.10.4",
     "@oxyhq/contracts": "^0.17.0",
     "@oxyhq/services": "^22.12.3",
@@ -54,7 +54,7 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@oxyhq/bloom": "^0.66.0",
+    "@oxyhq/bloom": "^0.67.0",
     "@oxyhq/contracts": "^0.17.0",
     "@oxyhq/core": "^12.10.4",
     "@oxyhq/services": "^22.12.3",
