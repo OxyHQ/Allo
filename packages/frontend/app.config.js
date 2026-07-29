@@ -198,6 +198,11 @@ return {
                 // UID ("so.oxy.shared") so "Sign in with Oxy" reuses the device
                 // session across installed Oxy apps.
                 './plugins/withSharedUserId',
+                // Reader side of the shared-identity native module (ships in
+                // @oxyhq/services): request the signature permission + <queries>
+                // so cold boot can silently read the Commons-hosted shared
+                // identity (silent "Sign in with Oxy").
+                '@oxyhq/services/plugins/withSharedIdentityReader',
             ];
 
             // Only include expo-notifications for native builds (android/ios).
