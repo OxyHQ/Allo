@@ -1,3 +1,4 @@
+import { WebhookEventEnvelopeSchema } from "@oxyhq/crowdsource-contracts";
 import { createHmac } from "crypto";
 import express from "express";
 import request from "supertest";
@@ -69,6 +70,35 @@ function appWith(mode: ParserMode): express.Express {
 }
 
 /**
+ * Fail where the fixture is BUILT, not somewhere downstream.
+ *
+ * `WebhookEventEnvelopeSchema` belongs to `@oxyhq/crowdsource-contracts`, not to
+ * this repository, so a fixture written to match "what an event looks like" is a
+ * guess that stops being true the moment the contract adds a required field.
+ * When that happens these tests do not fail — the SDK refuses the envelope at
+ * the schema step with a 400, and a test asserting "the late mount was refused"
+ * keeps passing for entirely the wrong reason while proving nothing about the
+ * guard it was written for.
+ *
+ * Not hypothetical: the first draft of this fixture omitted `createdAt`,
+ * `organizationId` and `applicationId`, and two other Oxy integrations hit the
+ * same class of thing the same day with different hand-built fixtures. So the
+ * fixture is checked against the contract's own schema, once, here — a drift
+ * then reads as "the fixture is not an envelope" rather than as a mount bug.
+ */
+function assertValidEnvelope(candidate: Record<string, unknown>): Record<string, unknown> {
+  const parsed = WebhookEventEnvelopeSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new Error(
+      `Test fixture is not a valid webhook envelope — the contract has moved. Issues:\n${parsed.error.issues
+        .map((issue) => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("\n")}`,
+    );
+  }
+  return candidate;
+}
+
+/**
  * A correctly signed, schema-valid delivery, so a request can get all the way to
  * a handler.
  *
@@ -79,14 +109,14 @@ function appWith(mode: ParserMode): express.Express {
  * wrong reason. The vacuity guard below caught exactly that.
  */
 function signedDelivery(secret: string) {
-  const body = {
+  const body = assertValidEnvelope({
     id: "evt_signed_1",
     type: "case.created",
     createdAt: new Date().toISOString(),
     organizationId: "org_1",
     applicationId: "app_1",
     data: { caseId: "case_1" },
-  };
+  });
   const raw = JSON.stringify(body);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signature = createHmac("sha256", secret)
