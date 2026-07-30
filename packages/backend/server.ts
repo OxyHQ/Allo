@@ -17,6 +17,9 @@ import profileSettingsRoutes from "./src/routes/profileSettings";
 import conversationsRoutes from "./src/routes/conversations";
 import messagesRoutes from "./src/routes/messages";
 import devicesRoutes from "./src/routes/devices";
+import reportsRoutes from "./src/routes/reports";
+import { createCrowdSourceWebhookRoutes } from "./src/routes/crowdSourceWebhook";
+import { startModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
 
 // Middleware
 
@@ -35,6 +38,25 @@ const app = express();
 export const oxy = oxyClient;
 
 // --- Middleware ---
+
+/**
+ * MUST stay ahead of `express.json` below.
+ *
+ * A CrowdSource webhook signature covers the bytes that arrived, and once a JSON
+ * parser has consumed the stream those bytes no longer exist.
+ * `@oxyhq/crowdsource-express` reads the raw stream itself and REFUSES if
+ * something upstream already consumed it, rather than verifying a signature over a
+ * re-serialisation — so mounting this after the parser does not silently verify
+ * the wrong bytes, it fails every delivery. The route adds its own assertion on top
+ * of that (see `assertRawBody`), which names the mount order as the cause instead
+ * of leaving a signature mismatch to be misread as a bad secret.
+ *
+ * It also sits ahead of the per-user rate limiter further down, deliberately: the
+ * HMAC is the authentication (§10.8), and a 429 to CrowdSource would put a
+ * moderation decision back on a retry schedule for no reason.
+ */
+app.use("/webhooks", createCrowdSourceWebhookRoutes());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -243,6 +265,7 @@ authenticatedApiRouter.use("/profile", profileSettingsRoutes);
 authenticatedApiRouter.use("/conversations", conversationsRoutes);
 authenticatedApiRouter.use("/messages", messagesRoutes);
 authenticatedApiRouter.use("/devices", devicesRoutes);
+authenticatedApiRouter.use("/reports", reportsRoutes);
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
@@ -269,6 +292,9 @@ db.once("open", () => {
   require("./src/models/Restrict");
   require("./src/models/UserBehavior");
   require("./src/models/Device");
+  require("./src/models/Report");
+  require("./src/models/ModerationOutbox");
+  require("./src/models/ModerationEvent");
 });
 
 // --- Server Listen ---
@@ -276,6 +302,10 @@ const PORT = process.env.PORT || 3000;
 const bootServer = async () => {
   try {
     await connectToDatabase();
+    // Started after the database is reachable: the dispatcher's first act is a
+    // claim query, and a drain against a disconnected Mongo would only log noise.
+    // A no-op unless CROWDSOURCE_ENABLED=true.
+    startModerationOutboxDispatcher();
     server.listen(PORT, () => {
       logger.info(`Allo backend server running on port ${PORT}`);
     });

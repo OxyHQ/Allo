@@ -1,0 +1,196 @@
+import { Router, Response } from "express";
+import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
+import Report, {
+  isReportedType,
+  ReportCategory,
+  ReportedType,
+  type LeanReport,
+} from "../models/Report";
+import {
+  createReport,
+  DuplicateReportError,
+} from "../services/moderation/ReportIntakeService";
+import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
+import { logger } from "../utils/logger";
+
+const router = Router();
+
+const MAX_CATEGORIES = 6;
+const MAX_DETAILS_LENGTH = 500;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCategories(value: unknown): ReportCategory[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CATEGORIES) {
+    return null;
+  }
+  const allowed = new Set<string>(Object.values(ReportCategory));
+  const parsed: ReportCategory[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !allowed.has(entry)) return null;
+    const category = entry as ReportCategory;
+    if (!parsed.includes(category)) parsed.push(category);
+  }
+  return parsed;
+}
+
+/**
+ * `POST /api/reports` — take a report.
+ *
+ * A 201 means the report is durably recorded, and — when its type is deliverable —
+ * that the promise to deliver it committed in the same transaction. It never means
+ * CrowdSource has seen anything.
+ *
+ * ## Every reported type is accepted here, including the ones that never leave
+ *
+ * A reported `message` is stored and never delivered, because Allo's server cannot
+ * read a message (see `services/moderation/subjects/registry.ts`). That is not a
+ * reason to refuse the report: refusing would tell a user being harassed that their
+ * report is invalid, when what is actually true is that strangers cannot be shown
+ * the evidence. The response deliberately does NOT distinguish the two cases —
+ * `delivered` is not echoed back — because a reporter learning which reports leave
+ * the deployment learns which reports can be made to disappear.
+ */
+router.post("/", async (req: AuthRequest, res: Response) => {
+  const body: unknown = req.body;
+  if (!isRecord(body)) {
+    return sendErrorResponse(res, 400, "Bad Request", "A JSON object body is required");
+  }
+
+  const reportedType: unknown = body.reportedType;
+  if (typeof reportedType !== "string" || !isReportedType(reportedType)) {
+    return sendErrorResponse(
+      res,
+      400,
+      "Bad Request",
+      `reportedType must be one of: ${Object.values(ReportedType).join(", ")}`,
+    );
+  }
+
+  const reportedId = body.reportedId;
+  if (typeof reportedId !== "string" || reportedId.trim().length === 0) {
+    return sendErrorResponse(res, 400, "Bad Request", "reportedId is required");
+  }
+
+  const categories = parseCategories(body.categories);
+  if (!categories) {
+    return sendErrorResponse(
+      res,
+      400,
+      "Bad Request",
+      `categories must be a non-empty array of at most ${MAX_CATEGORIES} values from: ${Object.values(ReportCategory).join(", ")}`,
+    );
+  }
+
+  const rawDetails: unknown = body.details;
+  if (rawDetails !== undefined && typeof rawDetails !== "string") {
+    return sendErrorResponse(res, 400, "Bad Request", "details must be a string");
+  }
+  const details =
+    typeof rawDetails === "string"
+      ? rawDetails.trim().slice(0, MAX_DETAILS_LENGTH)
+      : undefined;
+
+  try {
+    const reporter = getAuthenticatedUserId(req);
+
+    /**
+     * A reporter cannot report themselves. Not a correctness guard so much as a
+     * refusal to open a case whose subject and reporter are the same principal —
+     * §7.3's dedup key would be well-formed and a jury would be asked a question
+     * with no adversary.
+     */
+    if (reportedType === ReportedType.USER && reportedId.trim() === reporter) {
+      return sendErrorResponse(res, 400, "Bad Request", "You cannot report yourself");
+    }
+
+    const { report } = await createReport({
+      reporter,
+      reportedType,
+      reportedId,
+      categories,
+      ...(details ? { details } : {}),
+    });
+
+    return sendSuccessResponse(
+      res,
+      201,
+      { id: report._id.toString(), createdAt: report.createdAt },
+      "Report received",
+    );
+  } catch (error) {
+    /**
+     * A duplicate is answered 200, not 409. Re-reporting the same account is a
+     * user repeating themselves, not an error they can act on, and the report they
+     * already filed is genuinely on file.
+     */
+    if (error instanceof DuplicateReportError) {
+      return sendSuccessResponse(
+        res,
+        200,
+        { id: error.existing._id.toString(), createdAt: error.existing.createdAt },
+        "You have already reported this",
+      );
+    }
+
+    /**
+     * The reported id is deliberately absent from this log line. It identifies an
+     * account someone reported, and an operational log is not the place to
+     * accumulate a list of who has been accused of what.
+     */
+    logger.error("[Reports] Failed to create report", error);
+    return sendErrorResponse(
+      res,
+      500,
+      "Internal Server Error",
+      "Failed to record report",
+    );
+  }
+});
+
+/**
+ * `GET /api/reports/mine` — the reports this user filed.
+ *
+ * Scoped to the authenticated reporter with no override, so there is no parameter
+ * through which one user could read another's reports. The projection omits
+ * `localStatus`, `localStatusReason` and every CrowdSource identifier: those are
+ * operational state, and exposing them would tell a reporter which reports left
+ * the deployment.
+ */
+router.get("/mine", async (req: AuthRequest, res: Response) => {
+  try {
+    const reporter = getAuthenticatedUserId(req);
+    const reports = await Report.find({ reporter })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .select("_id reportedType reportedId categories details status createdAt")
+      .lean<LeanReport[]>();
+
+    return sendSuccessResponse(
+      res,
+      200,
+      reports.map((report) => ({
+        id: report._id.toString(),
+        reportedType: report.reportedType,
+        reportedId: report.reportedId,
+        categories: report.categories,
+        details: report.details,
+        status: report.status,
+        createdAt: report.createdAt,
+      })),
+    );
+  } catch (error) {
+    logger.error("[Reports] Failed to list reports", error);
+    return sendErrorResponse(
+      res,
+      500,
+      "Internal Server Error",
+      "Failed to load reports",
+    );
+  }
+});
+
+export default router;
