@@ -1,3 +1,4 @@
+import { DecisionSchema } from "@oxyhq/crowdsource-contracts";
 import mongoose from "mongoose";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,9 +47,13 @@ const REPORT_ID = new mongoose.Types.ObjectId();
  * fixture that skipped them would make every test here pass through the parse
  * failure branch instead of the one it claims to test — which is exactly what the
  * first draft of this file did.
+ *
+ * `assertValidDecision` below is why that cannot happen again silently. See its
+ * comment: a fixture for a schema this repository does not own must be checked
+ * against the schema, not against what the shape looks like.
  */
 function decision(overrides: Record<string, unknown> = {}) {
-  return {
+  return assertValidDecision({
     id: "dec_1",
     caseId: CASE_ID,
     revision: 2,
@@ -81,7 +86,40 @@ function decision(overrides: Record<string, unknown> = {}) {
     },
     publishedAt: new Date().toISOString(),
     ...overrides,
-  };
+  });
+}
+
+/**
+ * Fail where the fixture is BUILT, not somewhere downstream.
+ *
+ * `DecisionSchema` belongs to `@oxyhq/crowdsource-contracts`, not to this
+ * repository, so a fixture written to match "what a decision looks like" is a
+ * guess that stops being true the moment the contract adds a required field or
+ * another cross-field invariant. When that happens the tests do not fail — they
+ * quietly start running the parse-failure branch of the worker instead of the
+ * branch each one claims to exercise, and they keep passing while testing
+ * nothing. That is not hypothetical: it is what the first draft of this file
+ * did, and two other Oxy integrations hit the same thing on the same day with
+ * different hand-built fixtures.
+ *
+ * So the fixture is validated against the contract's own schema, once, here.
+ * A drift then surfaces as "the fixture is not a Decision" — which names the
+ * cause — rather than as a distant assertion failing for a reason that reads
+ * like a bug in the worker.
+ *
+ * Deliberately NOT applied to the deliberately-invalid payloads: the "retries a
+ * decision it cannot parse" test passes its own object and must stay unchecked.
+ */
+function assertValidDecision(candidate: Record<string, unknown>): Record<string, unknown> {
+  const parsed = DecisionSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new Error(
+      `Test fixture is not a valid Decision — the contract has moved. Issues:\n${parsed.error.issues
+        .map((issue) => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("\n")}`,
+    );
+  }
+  return candidate;
 }
 
 function event(decisionPayload: unknown): ModerationOutboxEvent {

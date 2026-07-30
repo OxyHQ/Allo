@@ -1,3 +1,4 @@
+import { WebhookEventEnvelopeSchema } from "@oxyhq/crowdsource-contracts";
 import { createHmac } from "crypto";
 import express from "express";
 import request from "supertest";
@@ -32,6 +33,7 @@ vi.mock("../../services/moderation/ModerationInboundService", () => ({
 
 import { resetCrowdSourceConfigForTests } from "../../config/crowdsource";
 import { createCrowdSourceWebhookRoutes } from "../../routes/crowdSourceWebhook";
+import { logger } from "../../utils/logger";
 
 const SECRET = "a-test-webhook-secret-long-enough";
 
@@ -69,6 +71,35 @@ function appWith(mode: ParserMode): express.Express {
 }
 
 /**
+ * Fail where the fixture is BUILT, not somewhere downstream.
+ *
+ * `WebhookEventEnvelopeSchema` belongs to `@oxyhq/crowdsource-contracts`, not to
+ * this repository, so a fixture written to match "what an event looks like" is a
+ * guess that stops being true the moment the contract adds a required field.
+ * When that happens these tests do not fail — the SDK refuses the envelope at
+ * the schema step with a 400, and a test asserting "the late mount was refused"
+ * keeps passing for entirely the wrong reason while proving nothing about the
+ * guard it was written for.
+ *
+ * Not hypothetical: the first draft of this fixture omitted `createdAt`,
+ * `organizationId` and `applicationId`, and two other Oxy integrations hit the
+ * same class of thing the same day with different hand-built fixtures. So the
+ * fixture is checked against the contract's own schema, once, here — a drift
+ * then reads as "the fixture is not an envelope" rather than as a mount bug.
+ */
+function assertValidEnvelope(candidate: Record<string, unknown>): Record<string, unknown> {
+  const parsed = WebhookEventEnvelopeSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new Error(
+      `Test fixture is not a valid webhook envelope — the contract has moved. Issues:\n${parsed.error.issues
+        .map((issue) => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("\n")}`,
+    );
+  }
+  return candidate;
+}
+
+/**
  * A correctly signed, schema-valid delivery, so a request can get all the way to
  * a handler.
  *
@@ -79,14 +110,14 @@ function appWith(mode: ParserMode): express.Express {
  * wrong reason. The vacuity guard below caught exactly that.
  */
 function signedDelivery(secret: string) {
-  const body = {
+  const body = assertValidEnvelope({
     id: "evt_signed_1",
     type: "case.created",
     createdAt: new Date().toISOString(),
     organizationId: "org_1",
     applicationId: "app_1",
     data: { caseId: "case_1" },
-  };
+  });
   const raw = JSON.stringify(body);
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const signature = createHmac("sha256", secret)
@@ -230,5 +261,220 @@ describe("crowdsource webhook mount order", () => {
       .send({ id: "evt_1", type: "case.decided" });
 
     expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("refuses a tampered body with signature_mismatch, not merely with a 4xx", async () => {
+    /**
+     * Until this existed, EVERY test in this file turned on the mount and none on
+     * the cryptography — all of them would have passed with the signature check
+     * deleted. (`alia-syra` found the same hole in Syra and prompted the audit;
+     * Allo had it too.) The three `status >= 400` assertions above are satisfied
+     * by the SCHEMA rejecting a malformed payload, which happens before any
+     * signature is compared, so none of them was evidence about verification.
+     *
+     * This one signs a valid envelope and then alters a byte of the body, so the
+     * envelope still parses and the ONLY thing wrong is the signature. Paired
+     * with "accepts that same signed delivery", the two bracket the check: a
+     * good signature is accepted, a bad one over otherwise-valid bytes is not.
+     *
+     * The rejection reason is asserted specifically rather than as "some 4xx".
+     * `alia-syra` expected `invalid_signature` and the SDK actually emits
+     * `signature_mismatch` — a wrong guess fails loudly and gets corrected, while
+     * a vague assertion passes for the wrong reason forever. The value is read
+     * from what the code emits, not from what it ought to be called.
+     *
+     * Observed through the route's own `onRejected` → logger, not through a
+     * test-only parameter on the route factory: a seam built for the test is a
+     * different path that merely happens to agree with the shipping one.
+     */
+    const { raw, headers } = signedDelivery(SECRET);
+    const tamperedRaw = raw.replace('"caseId":"case_1"', '"caseId":"case_2"');
+    expect(tamperedRaw).not.toBe(raw);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(tamperedRaw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[CrowdSource] webhook delivery refused",
+      { rejection: "signature_mismatch" },
+    );
+  });
+});
+
+/**
+ * Secret rotation (§10.8) — the one path that is only ever reached during the
+ * event it exists for.
+ *
+ * `CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS` was plumbed config → route → middleware
+ * and exercised by NOTHING. That is the worst shape a piece of production code
+ * can have: it runs for the first time in the middle of a rotation somebody
+ * scheduled, and if it is wired wrong the symptom is every decision signed with
+ * the old key being dropped silently, on a timetable, while everything else
+ * looks healthy. (`noted-moovo` found the same gap in Moovo and passed it on.)
+ *
+ * Three tests, and the third is what makes the first mean anything: "accepts the
+ * previous secret" is otherwise satisfiable by accepting ANYTHING — which is
+ * precisely the failure a rotation window invites, since the natural sloppy
+ * implementation is to stop checking.
+ */
+describe("crowdsource webhook secret rotation", () => {
+  const PREVIOUS_SECRET = "the-retiring-webhook-secret-x";
+  const UNRELATED_SECRET = "a-secret-nobody-configured-yy";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetCrowdSourceConfigForTests();
+    process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
+    process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS = PREVIOUS_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+    resetCrowdSourceConfigForTests();
+  });
+
+  it("accepts a delivery signed with the PREVIOUS secret", async () => {
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+
+  it("still accepts a delivery signed with the CURRENT secret", async () => {
+    /**
+     * A rotation that accepted only the old key would be just as broken as one
+     * that accepted only the new key, and in the same silent way — so both
+     * directions are asserted rather than assuming the current one is unaffected.
+     */
+    const { raw, headers } = signedDelivery(SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+
+  it("still refuses a delivery signed with an unrelated secret", async () => {
+    /**
+     * The vacuity guard for the two above. Without it, a middleware that had
+     * stopped verifying entirely — the exact thing a badly implemented rotation
+     * window does — would satisfy both of them perfectly.
+     */
+    const { raw, headers } = signedDelivery(UNRELATED_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+  });
+
+  it("refuses the previous secret once it is no longer configured", async () => {
+    /**
+     * The end of the rotation. A previous secret that keeps working after it is
+     * unset is a credential that cannot actually be retired, which makes the
+     * rotation ceremonial.
+     */
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+    resetCrowdSourceConfigForTests();
+
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+  });
+
+  it("supplies the previous secret from ALLO's config, not the SDK's env fallback", async () => {
+    /**
+     * The four tests above do not test what they appear to test, and this one
+     * exists because deleting Allo's plumbing entirely left all of them green.
+     *
+     * `configuredSecrets` in `@oxyhq/crowdsource-express` is
+     * `options.previousSecret ?? process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`,
+     * evaluated PER REQUEST. So with the env var set, the SDK finds the secret on
+     * its own whether or not the route passed it — and every rotation assertion
+     * is satisfied by the SDK's fallback rather than by Allo's code.
+     *
+     * The discriminator is the ORDER of two events. Allo's `crowdSourceConfig()`
+     * memoises at first call, and `createCrowdSourceWebhookRoutes()` reads it once
+     * at construction; the SDK re-reads `process.env` on every request. So:
+     * build the router WITH the env var set, then UNSET it, then deliver. Only a
+     * value Allo captured and passed explicitly can still be there.
+     *
+     * This matters beyond tidiness: Allo's config is where the secret is
+     * length-validated. A deployment relying on the SDK's raw `process.env` read
+     * would silently accept a two-character previous secret that the config layer
+     * would have rejected at boot.
+     */
+    process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS = PREVIOUS_SECRET;
+    resetCrowdSourceConfigForTests();
+
+    // Built while configured — Allo captures the value here.
+    const app = appWith("none");
+
+    // Now remove the SDK's fallback source entirely.
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+    const response = await request(app)
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+
+  it("supplies the ACTIVE secret from Allo's config too, not the SDK's env fallback", async () => {
+    /**
+     * The same gap, for the other secret — and the one that is easiest to assume
+     * is already covered. (`noted-moovo` stated the limit honestly for Moovo
+     * rather than letting their table read as stronger than it was; Allo had it
+     * too.)
+     *
+     * "The active secret is exercised by every other test in the file, so a
+     * broken pass-through would fail loudly" is a tempting argument and it is
+     * WRONG here: `configuredSecrets` falls back to
+     * `process.env.CROWDSOURCE_WEBHOOK_SECRET` for the active secret exactly as
+     * it does for the previous one, and every other test in this file sets that
+     * variable. So all of them would keep passing with Allo's `secret` pass-through
+     * deleted, proving only that the SDK verifies signatures — never that Allo
+     * hands it the right key.
+     *
+     * Same discriminator as above: capture at construction, then remove the
+     * environment the SDK would otherwise read.
+     */
+    process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
+    resetCrowdSourceConfigForTests();
+
+    const app = appWith("none");
+
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+
+    const { raw, headers } = signedDelivery(SECRET);
+    const response = await request(app)
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
   });
 });
