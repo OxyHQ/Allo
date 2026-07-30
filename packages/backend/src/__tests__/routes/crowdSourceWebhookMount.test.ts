@@ -441,4 +441,40 @@ describe("crowdsource webhook secret rotation", () => {
 
     expect(response.status).toBeLessThan(300);
   });
+
+  it("supplies the ACTIVE secret from Allo's config too, not the SDK's env fallback", async () => {
+    /**
+     * The same gap, for the other secret — and the one that is easiest to assume
+     * is already covered. (`noted-moovo` stated the limit honestly for Moovo
+     * rather than letting their table read as stronger than it was; Allo had it
+     * too.)
+     *
+     * "The active secret is exercised by every other test in the file, so a
+     * broken pass-through would fail loudly" is a tempting argument and it is
+     * WRONG here: `configuredSecrets` falls back to
+     * `process.env.CROWDSOURCE_WEBHOOK_SECRET` for the active secret exactly as
+     * it does for the previous one, and every other test in this file sets that
+     * variable. So all of them would keep passing with Allo's `secret` pass-through
+     * deleted, proving only that the SDK verifies signatures — never that Allo
+     * hands it the right key.
+     *
+     * Same discriminator as above: capture at construction, then remove the
+     * environment the SDK would otherwise read.
+     */
+    process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
+    resetCrowdSourceConfigForTests();
+
+    const app = appWith("none");
+
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+
+    const { raw, headers } = signedDelivery(SECRET);
+    const response = await request(app)
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
 });
