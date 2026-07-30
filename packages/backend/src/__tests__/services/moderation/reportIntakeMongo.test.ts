@@ -229,6 +229,57 @@ describe("report intake against a real replica set", () => {
     expect(stored?.attempts).toBe(3);
   });
 
+  it("a repeated enqueue writes NOTHING — not even updatedAt", async () => {
+    /**
+     * Stronger than "the fields I care about survived", and the difference is
+     * operational rather than tidy.
+     *
+     * Omitting `createdAt`/`updatedAt` from `$setOnInsert` fixes the update-
+     * conflict, but leaves Mongoose adding `updatedAt` to `$set` on every upsert
+     * — so a no-op enqueue still TOUCHES the row. A transaction retry, a
+     * duplicate concurrent submission or a reconciliation re-derivation would
+     * then take a write lock on a row the dispatcher may be claiming, and the
+     * intake transaction aborts. Measured: with Mongoose timestamping the no-op,
+     * that race aborts; with `timestamps: false`, it commits.
+     *
+     * `updatedAt` is the only field that would move, so it is the one to assert
+     * on. A `deepEqual` of the whole document would pass just as well against a
+     * write that happened to produce identical values.
+     */
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await enqueueModerationOutboxEvent(
+          { eventId: "evt-noop", kind: "report.submit", payload: { reportId: "r1" } },
+          session,
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    const before = await ModerationOutbox.findById("evt-noop").lean();
+    expect(before?.updatedAt).toBeInstanceOf(Date);
+    // A real interval, so an unchanged timestamp cannot be same-millisecond luck.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const second = await mongoose.startSession();
+    try {
+      await second.withTransaction(async () => {
+        await enqueueModerationOutboxEvent(
+          { eventId: "evt-noop", kind: "report.submit", payload: { reportId: "r1" } },
+          second,
+        );
+      });
+    } finally {
+      await second.endSession();
+    }
+
+    const after = await ModerationOutbox.findById("evt-noop").lean();
+    expect(after?.updatedAt?.getTime()).toBe(before?.updatedAt?.getTime());
+    expect(after?.createdAt?.getTime()).toBe(before?.createdAt?.getTime());
+  });
+
   it("refuses to enqueue outside a transaction, against a real session", async () => {
     /**
      * The guard tested with a genuine `startSession()` — the exact object that
