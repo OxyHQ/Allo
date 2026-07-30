@@ -1,37 +1,18 @@
 /**
  * Global test setup for the backend package.
  *
- * Keeps unit tests free of a live MongoDB or Oxy API. Mongoose itself stays REAL
- * — schemas, `Types.ObjectId` and model construction are used by the code under
- * test — and only the connection is stubbed, so nothing opens a socket to
- * localhost:27017 and stalls for the server-selection timeout.
+ * Mongoose is deliberately NOT mocked. An earlier version of this file replaced
+ * `connect`/`disconnect` with stubs to keep unit tests off the network, and the
+ * cost of that convenience was a bug that made `POST /reports` fail for EVERY
+ * report ever submitted while the whole suite stayed green — a mocked
+ * `updateOne` accepts any update document, including one Mongo rejects outright.
  *
- * The singleton is proxied rather than cloned: `Schema`, `model` and `Types` are
- * prototype members a spread would drop.
+ * Nothing opens a connection merely by importing: `utils/database.ts` exports a
+ * function nobody calls at module scope. The moderation tests either mock the
+ * MODEL (unit) or connect to the replica set from `vitest.globalSetup.ts`
+ * explicitly (integration).
  */
 import { vi } from "vitest";
-
-vi.mock("mongoose", async () => {
-  const actual = await vi.importActual<typeof import("mongoose")>("mongoose");
-
-  const connect = vi.fn().mockResolvedValue(undefined);
-  const disconnect = vi.fn().mockResolvedValue(undefined);
-
-  const mongooseSingleton = new Proxy(actual.default, {
-    get(target, property) {
-      if (property === "connect") return connect;
-      if (property === "disconnect") return disconnect;
-      return Reflect.get(target, property, target);
-    },
-  });
-
-  return {
-    ...actual,
-    default: mongooseSingleton,
-    connect,
-    disconnect,
-  };
-});
 
 // Suppress log output; assertions that care about logging spy on it explicitly.
 vi.mock("../utils/logger", () => ({

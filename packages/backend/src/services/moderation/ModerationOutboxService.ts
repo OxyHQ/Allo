@@ -123,8 +123,24 @@ export async function enqueueModerationOutboxEvent(
         attempts: 0,
         availableAt: now,
         expiresAt: new Date(now.getTime() + MODERATION_OUTBOX_RETENTION_SECONDS * 1_000),
-        createdAt: now,
-        updatedAt: now,
+        /**
+         * `createdAt` and `updatedAt` are deliberately ABSENT.
+         *
+         * The schema declares `{ timestamps: true }`, so Mongoose writes both
+         * paths itself on an upsert — `updatedAt` into `$set` and both into
+         * `$setOnInsert`. Naming them here too puts `updatedAt` in two operators
+         * of one update document, and Mongo rejects the WHOLE write:
+         * `Updating the path 'updatedAt' would create a conflict at 'updatedAt'`.
+         *
+         * The consequence is not a missing outbox row. This runs inside
+         * `createReport`'s transaction, so the abort takes the `Report` with it —
+         * `POST /reports` fails for EVERY report, from the first one. Verified
+         * against a real replica set on mongoose 9.7.4: report rows 0, outbox
+         * rows 0.
+         *
+         * `claim`'s `sort: { createdAt: 1 }` still works, because `timestamps`
+         * sets `createdAt` on insert.
+         */
       },
     },
     { upsert: true, session },

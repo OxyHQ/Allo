@@ -30,15 +30,37 @@ import type { ModerationSubjectProvider } from "./types";
  * COULD produce that snapshot is a design in which the encryption promise is
  * already false, and the moderation queue would be the reason it became false.
  *
- * There is a tempting loophole, and it is worth naming so nobody re-derives it as
- * a feature. `Message.text` still exists as a deprecated migration field, and the
- * client falls back to plaintext when a recipient has no registered device
- * (`packages/frontend/stores/messagesStore.ts`). A `message` provider reading that
- * field would technically work — and its coverage would be exactly inverted: it
- * could only ever show a jury the messages that were NOT encrypted. Moderation
- * would function solely in the app's least-protected corner, and the deprecated
- * plaintext path would acquire a permanent reason to stay alive. The absence of a
- * provider is what keeps that path deletable.
+ * ### The loophole, named so nobody re-derives it as a feature
+ *
+ * Someone reading `models/Message.ts` will see a `text` field sitting right there
+ * and wonder why nobody wired `message` up. This is the answer.
+ *
+ * `Message.text` still exists, commented "legacy plaintext, deprecated, for
+ * migration only" — but it is LIVE, not vestigial: `POST /api/messages` still
+ * accepts and stores it (`routes/messages.ts`), and the client silently falls back
+ * to plaintext when a recipient has no registered device or no preKeys
+ * (`packages/frontend/stores/messagesStore.ts`, the `catch` around
+ * `encryptMessageForRecipient`).
+ *
+ * So a `message` provider reading that field would technically WORK. It must still
+ * not exist, for two reasons:
+ *
+ * 1. **Its coverage would be exactly INVERTED.** It could only ever show a jury the
+ *    messages that were *not* encrypted — i.e. precisely those sent to users with
+ *    no registered device. Moderation would function solely in the app's
+ *    least-protected corner, and be blind everywhere the product's promise holds.
+ * 2. **It would make the plaintext path load-bearing.** The moment moderation
+ *    depended on `Message.text`, the deprecated fallback would acquire a permanent
+ *    reason to stay alive — deleting it would "break moderation". A design that
+ *    quietly weakens end-to-end encryption to feed a moderation queue is the
+ *    failure this whole file exists to avoid, and it would have arrived by
+ *    OMISSION rather than by anyone deciding to weaken anything.
+ *
+ * The absence of a provider is what keeps that path deletable. (The plaintext
+ * fallback is itself a live security issue — a silent downgrade in a product whose
+ * promise is end-to-end encryption — and is being fixed as its own change. It is
+ * deliberately untouched here: a moderation PR is the wrong place to alter the
+ * encryption path.)
  *
  * ## Why `conversation` has no provider either
  *
@@ -50,6 +72,35 @@ import type { ModerationSubjectProvider } from "./types";
  * sending it to a randomly drawn jury would disclose private group content and,
  * worse, the existence and membership of a private group to people outside it.
  * "Public metadata" is a category Allo does not have.
+ *
+ * ## Why a reporter's own consent does not unlock `message` either
+ *
+ * The obvious next idea: a reporter is a participant, so they hold the plaintext
+ * client-side and could attach an excerpt they consent to disclose. It is a real
+ * pattern and it is not implemented, for three reasons that have to be answered
+ * TOGETHER — the first two are policy, the third is a missing primitive:
+ *
+ * 1. **The other party did not consent.** A conversation excerpt is by definition
+ *    somebody else's words as well. One participant cannot consent on behalf of
+ *    the other, and a two-party conversation has no excerpt that discloses only
+ *    the reporter's half.
+ * 2. **§5.6 would be pinning something unverifiable.** The snapshot hash would
+ *    cover a client-supplied blob the server cannot check against anything,
+ *    because the server never had the plaintext. The identity binding proof would
+ *    attest that the reporter SENT it — not that it was ever SAID. A reporter
+ *    could fabricate an excerpt wholesale and the case would look every bit as
+ *    well-formed as a true one.
+ * 3. **Making (2) false needs cryptography Allo does not have.** The primitive is
+ *    sender-attributable franking (a per-message tag the recipient can prove the
+ *    sender produced, without the server reading the message). That is a change to
+ *    the messaging protocol, not to this module. Shipping a weaker version —
+ *    signing the excerpt with the reporter's key, say — produces evidence that
+ *    LOOKS binding and is not, which is worse than having none, because a jury
+ *    cannot tell the difference.
+ *
+ * So this stays a product-and-protocol decision. If it is ever taken, it belongs
+ * in a change that adds franking first; a provider added here without it would
+ * silently convert reason (2) into a case nobody can audit.
  *
  * ## What is left, and why it is enough to be worth doing
  *
