@@ -9,22 +9,7 @@ import {
   storeConversationsLocally,
   getMessagesLocally,
 } from '@/lib/offlineStorage';
-
-/**
- * Sum a conversation's per-user unread counts. The backend serializes
- * `unreadCounts` as a JSON object but types it as `Map | Record` to match its
- * lean/`toObject()` shapes, so both are handled.
- */
-function sumUnreadCounts(
-  unreadCounts: ConversationDto['unreadCounts']
-): number {
-  if (!unreadCounts) return 0;
-  const values =
-    unreadCounts instanceof Map
-      ? Array.from(unreadCounts.values())
-      : Object.values(unreadCounts);
-  return values.reduce((sum, count) => sum + (count || 0), 0);
-}
+import { viewerUnreadCount } from '@/lib/unreadCount';
 
 /**
  * Format last message with sender name for group conversations
@@ -154,8 +139,8 @@ interface ConversationsState {
 
   // Async actions
   loadCachedConversations: () => Promise<void>;
-  fetchConversations: () => Promise<void>;
-  refreshConversations: () => Promise<void>;
+  fetchConversations: (currentUserId: string) => Promise<void>;
+  refreshConversations: (currentUserId: string) => Promise<void>;
   markAsRead: (id: string) => void;
 
   // Selectors (computed values)
@@ -296,7 +281,7 @@ export const useConversationsStore = create<ConversationsState>()(
     },
 
     // Async actions
-    fetchConversations: async () => {
+    fetchConversations: async (currentUserId) => {
       // Only show loading skeleton if we have NO data at all (first launch, no cache)
       const hasData = get().conversations.length > 0 || get().hasFetchedOnce;
       set({ isLoading: !hasData, error: null });
@@ -427,7 +412,7 @@ export const useConversationsStore = create<ConversationsState>()(
             lastMessageText,
             lastMessageSenderId,
             { type: conv.type || 'direct', participants },
-            undefined // currentUserId not available here, but function handles it gracefully
+            currentUserId
           );
 
           return {
@@ -436,7 +421,7 @@ export const useConversationsStore = create<ConversationsState>()(
             name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Direct Chat'),
             lastMessage: formattedLastMessage,
             timestamp: conv.lastMessageAt ? new Date(conv.lastMessageAt).toISOString() : new Date().toISOString(),
-            unreadCount: sumUnreadCounts(conv.unreadCounts),
+            unreadCount: viewerUnreadCount(conv.unreadCounts, currentUserId),
             avatar: conv.avatar,
             theme: conv.theme, // Color theme ID
             participants,
@@ -463,10 +448,10 @@ export const useConversationsStore = create<ConversationsState>()(
       }
     },
 
-    refreshConversations: async () => {
+    refreshConversations: async (currentUserId) => {
       set({ isRefreshing: true, error: null });
       try {
-        await get().fetchConversations();
+        await get().fetchConversations(currentUserId);
         set({ isRefreshing: false });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to refresh conversations';

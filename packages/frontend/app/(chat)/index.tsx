@@ -464,13 +464,31 @@ export default function ConversationsList() {
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
 
+    // Get current user ID and oxy services
+    const { user, oxyServices } = useOxy();
+    const currentUserId = user?.id;
+
     // Offline-first: load cached conversations instantly, then fetch from API in parallel
-    // Cache shows data immediately; API fetch updates in the background
+    // Cache shows data immediately; API fetch updates in the background.
+    //
+    // The fetch waits for the viewer's id because every conversation's unread
+    // badge is that viewer's own entry in a per-participant map. Restoring an
+    // Oxy session can take seconds, so `currentUserId` is a dependency rather
+    // than a read taken once: fetching before it lands would paint a list of
+    // zeroes over the cache and never recover.
     useEffect(() => {
-        // Fire both immediately — cache resolves fast, API runs in background
         loadCachedConversations();
-        fetchConversations();
-    }, [loadCachedConversations, fetchConversations]);
+        if (currentUserId) {
+            fetchConversations(currentUserId);
+        }
+    }, [loadCachedConversations, fetchConversations, currentUserId]);
+
+    // Pull-to-refresh, for the same reason, is a no-op until the viewer is known.
+    const handleRefresh = useCallback(() => {
+        if (currentUserId) {
+            refreshConversations(currentUserId);
+        }
+    }, [refreshConversations, currentUserId]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -506,10 +524,6 @@ export default function ConversationsList() {
         const chatMatch = pathname?.match(/\/(chat)\/([^/]+)$/);
         return cMatch?.[1] || chatMatch?.[2] || null;
     }, [pathname]);
-
-    // Get current user ID and oxy services
-    const { user, oxyServices } = useOxy();
-    const currentUserId = user?.id;
 
     // Multi-selection state
     const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(() => new Set());
@@ -1160,7 +1174,7 @@ export default function ConversationsList() {
                         refreshControl={
                             <RefreshControl
                                 refreshing={isRefreshing}
-                                onRefresh={refreshConversations}
+                                onRefresh={handleRefresh}
                                 tintColor={theme.colors.primary}
                                 colors={[theme.colors.primary]}
                             />
