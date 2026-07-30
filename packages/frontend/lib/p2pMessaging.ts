@@ -12,9 +12,9 @@ import { SOCKET_URL } from '@/config';
 // Note: SOCKET_URL might not be defined, use fallback
 const getSocketUrl = () => {
   try {
-    return SOCKET_URL || process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000';
+    return SOCKET_URL || process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:4140';
   } catch {
-    return 'http://localhost:3000';
+    return 'http://localhost:4140';
   }
 };
 import { encryptMessage, decryptMessage, getDeviceKeys } from './signalProtocol';

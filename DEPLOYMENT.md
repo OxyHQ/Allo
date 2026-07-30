@@ -168,7 +168,7 @@ Your frontend should use the environment variable for API URL:
 
 ```typescript
 // In packages/frontend
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4140';
 ```
 
 ### WebSocket/Socket.IO Configuration
