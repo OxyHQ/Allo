@@ -33,6 +33,7 @@ vi.mock("../../services/moderation/ModerationInboundService", () => ({
 
 import { resetCrowdSourceConfigForTests } from "../../config/crowdsource";
 import { createCrowdSourceWebhookRoutes } from "../../routes/crowdSourceWebhook";
+import { logger } from "../../utils/logger";
 
 const SECRET = "a-test-webhook-secret-long-enough";
 
@@ -260,5 +261,46 @@ describe("crowdsource webhook mount order", () => {
       .send({ id: "evt_1", type: "case.decided" });
 
     expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("refuses a tampered body with signature_mismatch, not merely with a 4xx", async () => {
+    /**
+     * Until this existed, EVERY test in this file turned on the mount and none on
+     * the cryptography — all of them would have passed with the signature check
+     * deleted. (`alia-syra` found the same hole in Syra and prompted the audit;
+     * Allo had it too.) The three `status >= 400` assertions above are satisfied
+     * by the SCHEMA rejecting a malformed payload, which happens before any
+     * signature is compared, so none of them was evidence about verification.
+     *
+     * This one signs a valid envelope and then alters a byte of the body, so the
+     * envelope still parses and the ONLY thing wrong is the signature. Paired
+     * with "accepts that same signed delivery", the two bracket the check: a
+     * good signature is accepted, a bad one over otherwise-valid bytes is not.
+     *
+     * The rejection reason is asserted specifically rather than as "some 4xx".
+     * `alia-syra` expected `invalid_signature` and the SDK actually emits
+     * `signature_mismatch` — a wrong guess fails loudly and gets corrected, while
+     * a vague assertion passes for the wrong reason forever. The value is read
+     * from what the code emits, not from what it ought to be called.
+     *
+     * Observed through the route's own `onRejected` → logger, not through a
+     * test-only parameter on the route factory: a seam built for the test is a
+     * different path that merely happens to agree with the shipping one.
+     */
+    const { raw, headers } = signedDelivery(SECRET);
+    const tamperedRaw = raw.replace('"caseId":"case_1"', '"caseId":"case_2"');
+    expect(tamperedRaw).not.toBe(raw);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(tamperedRaw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[CrowdSource] webhook delivery refused",
+      { rejection: "signature_mismatch" },
+    );
   });
 });
