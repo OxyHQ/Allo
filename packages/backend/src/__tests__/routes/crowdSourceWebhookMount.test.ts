@@ -304,3 +304,141 @@ describe("crowdsource webhook mount order", () => {
     );
   });
 });
+
+/**
+ * Secret rotation (§10.8) — the one path that is only ever reached during the
+ * event it exists for.
+ *
+ * `CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS` was plumbed config → route → middleware
+ * and exercised by NOTHING. That is the worst shape a piece of production code
+ * can have: it runs for the first time in the middle of a rotation somebody
+ * scheduled, and if it is wired wrong the symptom is every decision signed with
+ * the old key being dropped silently, on a timetable, while everything else
+ * looks healthy. (`noted-moovo` found the same gap in Moovo and passed it on.)
+ *
+ * Three tests, and the third is what makes the first mean anything: "accepts the
+ * previous secret" is otherwise satisfiable by accepting ANYTHING — which is
+ * precisely the failure a rotation window invites, since the natural sloppy
+ * implementation is to stop checking.
+ */
+describe("crowdsource webhook secret rotation", () => {
+  const PREVIOUS_SECRET = "the-retiring-webhook-secret-x";
+  const UNRELATED_SECRET = "a-secret-nobody-configured-yy";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetCrowdSourceConfigForTests();
+    process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
+    process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS = PREVIOUS_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+    resetCrowdSourceConfigForTests();
+  });
+
+  it("accepts a delivery signed with the PREVIOUS secret", async () => {
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+
+  it("still accepts a delivery signed with the CURRENT secret", async () => {
+    /**
+     * A rotation that accepted only the old key would be just as broken as one
+     * that accepted only the new key, and in the same silent way — so both
+     * directions are asserted rather than assuming the current one is unaffected.
+     */
+    const { raw, headers } = signedDelivery(SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+
+  it("still refuses a delivery signed with an unrelated secret", async () => {
+    /**
+     * The vacuity guard for the two above. Without it, a middleware that had
+     * stopped verifying entirely — the exact thing a badly implemented rotation
+     * window does — would satisfy both of them perfectly.
+     */
+    const { raw, headers } = signedDelivery(UNRELATED_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+  });
+
+  it("refuses the previous secret once it is no longer configured", async () => {
+    /**
+     * The end of the rotation. A previous secret that keeps working after it is
+     * unset is a credential that cannot actually be retired, which makes the
+     * rotation ceremonial.
+     */
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+    resetCrowdSourceConfigForTests();
+
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+
+    const response = await request(appWith("none"))
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+  });
+
+  it("supplies the previous secret from ALLO's config, not the SDK's env fallback", async () => {
+    /**
+     * The four tests above do not test what they appear to test, and this one
+     * exists because deleting Allo's plumbing entirely left all of them green.
+     *
+     * `configuredSecrets` in `@oxyhq/crowdsource-express` is
+     * `options.previousSecret ?? process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`,
+     * evaluated PER REQUEST. So with the env var set, the SDK finds the secret on
+     * its own whether or not the route passed it — and every rotation assertion
+     * is satisfied by the SDK's fallback rather than by Allo's code.
+     *
+     * The discriminator is the ORDER of two events. Allo's `crowdSourceConfig()`
+     * memoises at first call, and `createCrowdSourceWebhookRoutes()` reads it once
+     * at construction; the SDK re-reads `process.env` on every request. So:
+     * build the router WITH the env var set, then UNSET it, then deliver. Only a
+     * value Allo captured and passed explicitly can still be there.
+     *
+     * This matters beyond tidiness: Allo's config is where the secret is
+     * length-validated. A deployment relying on the SDK's raw `process.env` read
+     * would silently accept a two-character previous secret that the config layer
+     * would have rejected at boot.
+     */
+    process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS = PREVIOUS_SECRET;
+    resetCrowdSourceConfigForTests();
+
+    // Built while configured — Allo captures the value here.
+    const app = appWith("none");
+
+    // Now remove the SDK's fallback source entirely.
+    delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
+
+    const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
+    const response = await request(app)
+      .post("/webhooks/crowdsource")
+      .set(headers)
+      .send(raw);
+
+    expect(response.status).toBeLessThan(300);
+  });
+});
