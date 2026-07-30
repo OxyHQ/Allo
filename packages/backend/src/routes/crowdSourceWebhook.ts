@@ -58,10 +58,32 @@ function stringField(source: unknown, key: string): string | undefined {
  *
  * `express.json()` sets `req.body` on every request it handles — to `{}` when
  * there is nothing to parse — so an undefined `req.body` is precisely the
- * assertion that no parser has touched this request. Mounted inside the route
- * rather than asserted in a test, because the thing being protected is the MOUNT
- * ORDER in `server.ts`, and a future edit that moves this router below
- * `express.json()` would break it in a way no unit test of this file could see.
+ * assertion that NO PARSER RAN. That is a deliberately different claim from "the
+ * signature failed to verify", and the difference is the whole reason this guard
+ * exists rather than relying on the SDK's own refusal.
+ *
+ * ## The SDK's protection is conditional on middleware this file does not own
+ *
+ * `readRawBody` in `@oxyhq/crowdsource-express` resolves the signed bytes in a
+ * fixed order: a Buffer on `req.rawBody` FIRST, then a Buffer `req.body`, then a
+ * throw if `req.body` is anything else, and only then the request stream. So the
+ * failure mode of a late mount is decided entirely by how `express.json()` was
+ * configured somewhere else in the app:
+ *
+ * - **Plain `express.json()`** — what `server.ts` uses today. `req.rawBody` is
+ *   never set and `req.body` is a parsed object, so the SDK throws. LOUD.
+ * - **`express.json({ verify })` keeping the raw bytes** — the SDK takes that
+ *   Buffer and verifies against parser-supplied bytes. The late mount SUCCEEDS,
+ *   answers 200, and records the decision. SILENT. (Measured, not assumed:
+ *   removing this guard and running the `verify-buffer` case in
+ *   `crowdSourceWebhookMount.test.ts` returns exactly 200. Alia's backend has
+ *   this configuration.)
+ *
+ * Allo is in the loud configuration today by accident of unrelated middleware,
+ * and a commit that never mentions moderation could move it to the silent one.
+ * Hence the assertion is on `req.body` being undefined — true in BOTH
+ * configurations — and hence it lives in the route rather than in a test, because
+ * what it protects is the mount order in `server.ts`.
  *
  * 500 rather than 4xx: this is Allo misassembled, not a bad request. Answering
  * non-2xx also keeps the delivery on CrowdSource's retry schedule, so decisions
