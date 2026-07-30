@@ -1,24 +1,28 @@
-// Base URLs
 // Base URLs (prod first → env → fallback)
+// Local dev ports are assigned per app across the Oxy ecosystem so two apps can
+// run side by side: Allo owns backend 4140 / Metro 8140. Production is unaffected
+// (ECS injects PORT explicitly).
 export const API_URL =
   process.env.NODE_ENV === 'production'
     ? 'https://api.allo.oxy.so/api'
-    : (process.env.API_URL ?? 'http://localhost:3000/api');
+    : (process.env.API_URL ?? 'http://localhost:4140/api');
 export const SOCKET_URL =
   process.env.NODE_ENV === "production"
     ? "wss://api.allo.oxy.so"
-    : (process.env.API_URL_SOCKET ?? "ws://localhost:3000");
+    : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
 
 export const API_URL_SOCKET =
   process.env.NODE_ENV === "production"
     ? "wss://api.allo.oxy.so"
-    : (process.env.API_URL_SOCKET ?? "ws://localhost:3000");
+    : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
 
-export const API_URL_SOCKET_CHAT = process.env.API_URL_SOCKET_CHAT || 'http://localhost:4000';
-export const API_OXY_CHAT = process.env.API_OXY_CHAT || 'http://localhost:4000';
+export const API_URL_SOCKET_CHAT = process.env.API_URL_SOCKET_CHAT || 'http://localhost:4140';
+export const API_OXY_CHAT = process.env.API_OXY_CHAT || 'http://localhost:4140';
+// Oxy is ALWAYS the production identity provider — deliberately no dev branch.
+// Oxy owns the account, and a build pointing identity at a local port nothing is
+// listening on does not fail loudly: it renders a signed-out app.
 export const OXY_BASE_URL =
-  process.env.EXPO_PUBLIC_OXY_BASE_URL ||
-  (process.env.NODE_ENV === 'production' ? 'https://api.oxy.so' : 'http://localhost:3001');
+  process.env.EXPO_PUBLIC_OXY_BASE_URL || 'https://api.oxy.so';
 
 export const OXY_CLIENT_ID =
   process.env.EXPO_PUBLIC_OXY_CLIENT_ID ||

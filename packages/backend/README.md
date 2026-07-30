@@ -350,7 +350,7 @@ Connect to the `/messaging` namespace:
 ```javascript
 import { io } from 'socket.io-client';
 
-const socket = io('http://localhost:3000/messaging', {
+const socket = io('http://localhost:4140/messaging', {
   auth: {
     token: 'your_oxy_token',
     userId: 'your_user_id'

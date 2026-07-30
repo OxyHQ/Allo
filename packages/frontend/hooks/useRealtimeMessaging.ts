@@ -359,7 +359,7 @@ export const useRealtimeMessaging = (conversationId?: string) => {
 
     try {
       // Get socket URL - remove /api suffix if present, use HTTP/WS protocol
-      let socketUrl = API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+      let socketUrl = API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4140';
       socketUrl = socketUrl.replace('/api', '').replace('https://', 'wss://').replace('http://', 'ws://');
 
       messagingSocket = io(`${socketUrl}/messaging`, {

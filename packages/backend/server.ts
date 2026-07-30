@@ -30,7 +30,7 @@ dotenv.config();
 // allo.oxy.so / api.allo.oxy.so) is allowed automatically by createOxyCors, so
 // only non-apex dev origins need to be listed here. Reused for both the Express
 // CORS middleware and the Socket.IO CORS allowlist.
-const APP_ORIGINS = ["http://localhost:8081", "http://localhost:8082"];
+const APP_ORIGINS = ["http://localhost:8140", "http://localhost:8141"];
 
 const app = express();
 
@@ -298,7 +298,10 @@ db.once("open", () => {
 });
 
 // --- Server Listen ---
-const PORT = process.env.PORT || 3000;
+// Local dev default only — ECS injects PORT explicitly (oxy-infra
+// terraform-uswest2/app-allo.tf sets it to 8080). 4140 is Allo's slot in the
+// per-app port map so several Oxy backends can run side by side.
+const PORT = process.env.PORT || 4140;
 const bootServer = async () => {
   try {
     await connectToDatabase();
