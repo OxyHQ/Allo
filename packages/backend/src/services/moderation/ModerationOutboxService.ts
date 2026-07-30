@@ -124,26 +124,44 @@ export async function enqueueModerationOutboxEvent(
         availableAt: now,
         expiresAt: new Date(now.getTime() + MODERATION_OUTBOX_RETENTION_SECONDS * 1_000),
         /**
-         * `createdAt` and `updatedAt` are deliberately ABSENT.
+         * Written HERE, with Mongoose's own timestamping switched off below.
          *
-         * The schema declares `{ timestamps: true }`, so Mongoose writes both
-         * paths itself on an upsert — `updatedAt` into `$set` and both into
-         * `$setOnInsert`. Naming them here too puts `updatedAt` in two operators
-         * of one update document, and Mongo rejects the WHOLE write:
-         * `Updating the path 'updatedAt' would create a conflict at 'updatedAt'`.
+         * Two things have to be true at once, and only this combination gets
+         * both.
          *
-         * The consequence is not a missing outbox row. This runs inside
-         * `createReport`'s transaction, so the abort takes the `Report` with it —
-         * `POST /reports` fails for EVERY report, from the first one. Verified
-         * against a real replica set on mongoose 9.7.4: report rows 0, outbox
-         * rows 0.
+         * **The write must not conflict.** The schema declares
+         * `{ timestamps: true }`, so on an upsert Mongoose writes `updatedAt`
+         * into `$set` and both paths into `$setOnInsert` itself. Naming them here
+         * as well puts `updatedAt` in two operators of one update document, and
+         * Mongo rejects the WHOLE write — `Updating the path 'updatedAt' would
+         * create a conflict at 'updatedAt'`. Inside `createReport`'s transaction
+         * that abort takes the `Report` with it, so `POST /reports` fails for
+         * every report, from the first one.
          *
-         * `claim`'s `sort: { createdAt: 1 }` still works, because `timestamps`
-         * sets `createdAt` on insert.
+         * **And a repeated enqueue must write NOTHING.** Simply omitting these
+         * two fields fixes the conflict but leaves Mongoose adding `updatedAt` to
+         * `$set` — so re-enqueueing an event that already exists still touches the
+         * row, even though `$setOnInsert` matches nothing. That is not cosmetic:
+         * a transaction retry, a duplicate concurrent submission or a
+         * reconciliation re-derivation would then take a write lock on a row the
+         * dispatcher may be claiming concurrently. Measured on mongoose 9.7.4
+         * against a real replica set: with Mongoose timestamping the no-op
+         * enqueue, an intake transaction racing a dispatcher claim ABORTS; with
+         * `timestamps: false`, it commits.
+         *
+         * So the fields are set explicitly on insert and Mongoose is told to keep
+         * out. `claim`'s `sort: { createdAt: 1 }` is satisfied by the value above.
          */
+        createdAt: now,
+        updatedAt: now,
       },
     },
-    { upsert: true, session },
+    /**
+     * `timestamps: false` applies to THIS call only; every other write in this
+     * file sets `updatedAt` inside its own `$set`, where Mongoose merging into
+     * the same operator is harmless.
+     */
+    { upsert: true, session, timestamps: false },
   );
   return input.eventId;
 }
