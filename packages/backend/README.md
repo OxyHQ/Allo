@@ -6,15 +6,15 @@
 
 ## Overview
 
-This is the **backend package** of the **Allo** monorepo. Allo is a modern, secure chat application with **Signal Protocol encryption**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
+This is the **backend package** of the **Allo** monorepo. Allo is a modern chat application with **end-to-end encrypted direct messages**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
 
 ### Key Features
 
-- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages
+- 🔐 **End-to-End Encryption** - Direct messages are encrypted client-side (static ECDH P-256 + AES-256-GCM) before reaching the server; see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model and known gaps
 - 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
 - ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Device Key Management** - Signal Protocol device keys and key exchange
-- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
+- 🔑 **Device Key Management** - Device public key bundles and key exchange
+- ⚠️ **Plaintext Fallback** - The client falls back to sending plaintext when it can't encrypt a message; the server stores whatever it's given
 
 ## Tech Stack
 
@@ -69,15 +69,31 @@ MONGODB_URI=your_mongodb_connection_string
 
 # Authentication
 # WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
+# Read by @oxyhq/core (OxyServices.ts), not by this package directly.
+# Defaults to https://api.oxy.so when unset.
 OXY_API_URL=https://api.oxy.so
 
 # Server Configuration
-PORT=3000
+# 4140 is Allo's slot in the per-app local port map; ECS injects PORT=8080.
+PORT=4140
 NODE_ENV=development
 
-# Frontend URL (for CORS)
-FRONTEND_URL=https://allo.earth
+# Push notifications (optional; push is skipped when unset)
+FIREBASE_PROJECT_ID=your_firebase_project_id
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
+
+# CrowdSource moderation (optional; the webhook route is not mounted when unset)
+CROWDSOURCE_ENABLED=false
+CROWDSOURCE_ENFORCEMENT_MODE=shadow
+CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 ```
+
+There is no `FRONTEND_URL`: the CORS allowlist is not read from the environment.
+`createOxyCors` admits the Oxy apex family (`*.oxy.so`) automatically, and the
+extra development origins are the literal list at the top of `server.ts`.
+
+`FRONTEND_URL` and `JWT_SECRET` appear in older deployment docs but are read
+neither by this package nor by `@oxyhq/core`. Setting them changes nothing.
 
 ### Running the API
 
@@ -95,6 +111,37 @@ bun run start
 ### Database Setup
 
 The API uses MongoDB with Mongoose. Make sure your MongoDB instance is running and accessible.
+
+## Deployment
+
+The backend runs on **AWS ECS**, and that is the only deployment there is. The
+whole pipeline is [`.github/workflows/deploy-aws.yml`](../../.github/workflows/deploy-aws.yml);
+nothing is deployed by hand.
+
+- **Trigger** — every push to `main` that touches something other than Markdown
+  or `docs/`, plus manual `workflow_dispatch`.
+- **Image** — `packages/backend/Dockerfile`, built for `linux/arm64` on an ARM
+  runner because the ECS tasks run on Graviton. Pushed to ECR as
+  `oxy/allo`, tagged with both the commit SHA and `latest`.
+- **Release** — a rolling `update-service` on the `oxy-cluster` ECS cluster,
+  followed by a wait for the service to stabilise. If the service does not exist
+  yet the image still lands in ECR and the deploy step is skipped, so a first
+  push does not fail the workflow.
+- **Port** — the container listens on the `PORT` that ECS injects (8080; set in
+  oxy-infra's `terraform-uswest2/app-allo.tf`). The `4140` in `server.ts` is the
+  local fallback only.
+- **Public URL** — `api.allo.oxy.so`.
+
+### Credentials
+
+AWS access uses **GitHub OIDC** — the workflow assumes `oxy-github-deploy` and
+no long-lived keys are stored anywhere.
+
+Runtime configuration is **GitHub Secrets as the source of truth**. Each deploy
+copies them into SSM Parameter Store as `SecureString`, at `/oxy/allo/<NAME>`
+for this app and `/oxy/_shared/<NAME>` for the values shared across Oxy apps
+(`REDIS_URL`, the LiveKit pair, ...). Editing a parameter directly in SSM is
+therefore pointless: the next deploy overwrites it. Change the GitHub secret.
 
 ## API Endpoints
 
@@ -162,7 +209,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 
 ### Messages
 
-**Important**: All messages are encrypted using Signal Protocol. The backend stores only encrypted ciphertext. Decryption happens on the client side.
+**Important**: Direct messages are end-to-end encrypted client-side (static ECDH P-256 + AES-256-GCM) when the client is able to encrypt them, and the backend stores that ciphertext as-is — it never has the keys to decrypt it. When encryption isn't possible (e.g. the recipient has no registered device), the client falls back to plaintext and the backend stores that too. See [docs/encryption.mdx](../../docs/encryption.mdx) for the full model.
 
 #### GET /api/messages
 - Get messages for a conversation
@@ -229,7 +276,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 #### POST /api/messages/:id/delivered
 - Mark a message as delivered
 
-### Device Management (Signal Protocol)
+### Device Management (key registration)
 
 #### GET /api/devices
 - Get all devices for the authenticated user
@@ -240,7 +287,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 - Returns: `Device`
 
 #### POST /api/devices
-- Register a new device with Signal Protocol keys
+- Register a new device with its public key bundle
 - Body:
 ```json
 {
@@ -310,8 +357,8 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
   },
   "security": {
     "cloudSyncEnabled": false, // Device-first by default
-    "encryptionEnabled": true, // Signal Protocol encryption
-    "peerToPeerEnabled": true // Enable P2P when possible
+    "encryptionEnabled": true, // Encryption on/off
+    "peerToPeerEnabled": true // Stored but not enforced — P2P isn't functional yet, see docs/encryption.mdx
   }
 }
 ```
@@ -451,35 +498,35 @@ This package is part of the Allo monorepo and integrates with:
 
 ## Security & Encryption
 
-### Signal Protocol
+### End-to-End Encryption
 
-Allo uses **Signal Protocol** for end-to-end encryption:
+Direct messages are encrypted client-side with a static Diffie-Hellman scheme (see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model; the frontend module is named `signalProtocol.ts` for historical reasons but does not implement the Signal Protocol):
 
-- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys
-- **Key Exchange**: Devices exchange public keys through the backend
-- **Encrypted Storage**: Backend stores only encrypted ciphertext, never plaintext
-- **Forward Secrecy**: Each message uses a unique encryption key
-- **Device Management**: Users can manage multiple devices, each with separate keys
+- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys. Only the identity key is used for encryption — the pre-keys are generated and stored but not consumed by any encrypt/decrypt path.
+- **Key Exchange**: Devices exchange public keys through the backend.
+- **Storage**: The backend stores whatever the client sends — encrypted ciphertext when the client was able to encrypt, plaintext when it falls back because it couldn't (e.g. the recipient has no registered device).
+- **No Forward Secrecy**: The same static shared secret encrypts every message between a pair of identity keys; there is no per-message or per-session key.
+- **Device Management**: Users can register multiple devices, each with separate keys, but a recipient's non-primary devices generally cannot decrypt messages sent to them (see [docs/encryption.mdx](../../docs/encryption.mdx)).
 
 ### Device-First Architecture
 
 - **Local Storage**: Messages are stored locally on the device first
 - **Optional Cloud Sync**: Users can enable cloud backup in settings (disabled by default)
 - **Privacy**: When cloud sync is disabled, messages are only stored on devices
-- **P2P Support**: Peer-to-peer messaging when both users are online (if enabled)
+- **P2P**: Peer-to-peer messaging is scaffolded (`lib/p2pMessaging.ts`) but not yet functional — every message currently goes through the server relay
 
 ### Message Encryption Flow
 
-1. Client encrypts message using Signal Protocol with recipient's device keys
-2. Client sends encrypted ciphertext to backend
-3. Backend stores encrypted message (never sees plaintext)
-4. Backend delivers encrypted message to recipient devices
-5. Recipient devices decrypt message locally
+1. Client attempts to encrypt the message with the recipient's identity key (static ECDH + AES-256-GCM); if that fails, it falls back to plaintext
+2. Client sends the resulting ciphertext (or plaintext) to the backend
+3. Backend stores the message as received — it never has the keys to decrypt a ciphertext payload
+4. Backend delivers the message to recipient devices
+5. Recipient devices decrypt locally when the payload is encrypted
 
 ## Notes
 
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Real-time**: Socket.IO is used for real-time message delivery and updates.
-- **Encryption**: All messages are encrypted using Signal Protocol. Backend never sees plaintext.
+- **Encryption**: Direct messages are end-to-end encrypted when the client can encrypt them; the backend never sees the keys needed to decrypt ciphertext, but see [docs/encryption.mdx](../../docs/encryption.mdx) for the plaintext fallback and other gaps (no forward secrecy, broken group encryption, non-functional multi-device and P2P).
 - **Device-First**: Messages stored locally by default. Cloud sync is optional.

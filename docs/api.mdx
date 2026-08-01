@@ -77,7 +77,7 @@ Mark the conversation read for the calling user — updates `unreadCounts[userId
 
 ## Messages
 
-All messages are end-to-end encrypted. The server stores only ciphertext and metadata — it cannot read the body.
+Messages are end-to-end encrypted when the client is able to encrypt them (see [Encryption](./encryption) for the current gaps). If encryption isn't possible — most commonly because the recipient has no registered device — the client falls back to sending plaintext, and the server stores whatever it's given (`text` or `ciphertext`). The server never has the keys to decrypt a `ciphertext` field itself.
 
 ### `GET /api/messages`
 
@@ -137,7 +137,7 @@ Soft-delete (sender only). Sets `deletedAt`; clients render a tombstone in place
 
 Receipts. Updates `readBy[userId] = now` / appends to `deliveredTo`. Emits `messageUpdated` over Socket.IO.
 
-## Devices (Signal Protocol)
+## Devices (key registration)
 
 ### `GET /api/devices`
 
@@ -176,7 +176,7 @@ List another user's devices — **public keys only**. Used by senders to bootstr
 
 ### `GET /api/devices/user/:userId/prekeys/:deviceId`
 
-Pull a batch of one-time pre-keys for a target device. The server consumes them atomically so two senders never get the same one. Returns `{ preKeys: PreKey[] }`. When a device runs low, the client uploads a fresh batch via `POST /api/devices`.
+Returns the target device's stored one-time pre-keys as-is (`{ preKeys: PreKey[] }`). The server does not delete or mark pre-keys as consumed after they're fetched. Note that the current client encryption path (see [Encryption](./encryption)) doesn't use pre-keys at all — it encrypts directly against the recipient's `identityKeyPublic` — so this endpoint isn't exercised for key agreement today.
 
 ## Profile settings
 

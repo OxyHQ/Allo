@@ -17,17 +17,15 @@
 
 ## About
 
-**Allo** is a secure, universal chat platform designed for mobile and web with **Signal Protocol encryption**, **device-first architecture**, and **peer-to-peer messaging**. It features end-to-end encrypted messaging, offline support, and a clean, modern UI. Built with Expo, React Native, and a Node.js backend in a modern monorepo structure, it supports file-based routing, multi-language support, and a modern UI.
+**Allo** is a chat platform for mobile and web with **end-to-end encrypted direct messages** and a **device-first architecture**. It features offline support and a clean, modern UI. Built with Expo, React Native, and a Node.js backend in a modern monorepo structure, it supports file-based routing, multi-language support, and a modern UI.
 
 ### Key Security Features
 
-- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages (even more secure than Signal)
+- 🔐 **End-to-End Encryption** - Direct messages are encrypted client-side with static ECDH (P-256) between identity keys + AES-256-GCM. There is no KDF and no forward secrecy — see [Encryption](./docs/encryption.mdx) for what that means and for known gaps (group chats, multi-device, plaintext fallback)
 - 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
 - ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Automatic Key Management** - Signal Protocol device keys generated and managed automatically
-- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
-- 🔒 **Forward Secrecy** - Each message uses a unique encryption key
-- 🌐 **Peer-to-Peer** - Direct device-to-device messaging when both users are online
+- 🔑 **Automatic Key Management** - Device keys generated and registered with the backend automatically
+- ⚠️ **Plaintext Fallback** - If encryption isn't possible (e.g. the recipient has no registered device), the message is sent unencrypted rather than blocked
 
 ## Project Structure
 
@@ -50,9 +48,9 @@ This is a **monorepo** using Bun workspaces with the following structure:
 │   │   ├── hooks/       # Custom React hooks
 │   │   ├── interfaces/  # TypeScript interfaces
 │   │   ├── lib/         # Library code
-│   │   │   ├── signalProtocol.ts  # Signal Protocol encryption
+│   │   │   ├── signalProtocol.ts  # End-to-end encryption (static ECDH + AES-256-GCM)
 │   │   │   ├── offlineStorage.ts  # Offline message storage
-│   │   │   ├── p2pMessaging.ts     # Peer-to-peer messaging
+│   │   │   ├── p2pMessaging.ts     # Peer-to-peer scaffolding (not functional)
 │   │   │   └── ...
 │   │   ├── locales/     # i18n translation files
 │   │   ├── scripts/     # Utility scripts
@@ -69,7 +67,7 @@ This is a **monorepo** using Bun workspaces with the following structure:
 │   │   │   ├── models/      # MongoDB models
 │   │   │   │   ├── Conversation.ts  # Chat conversations
 │   │   │   │   ├── Message.ts       # Encrypted messages
-│   │   │   │   ├── Device.ts         # Signal Protocol device keys
+│   │   │   │   ├── Device.ts         # Device public key bundles
 │   │   │   │   └── ...
 │   │   │   ├── routes/      # API routes
 │   │   │   │   ├── conversations.ts # Conversation endpoints
@@ -180,21 +178,16 @@ bun run dev:backend
 
 All project documentation is available in the [`docs/`](./docs/) folder:
 
-- [Allo System Overview](./docs/allo_SYSTEM_README.md) - Legacy system overview
-- [Allo Format Specification](./docs/allo_FORMAT_FINAL.md) - Legacy format summary
-- [Allo Implementation](./docs/allo_IMPLEMENTATION_COMPLETE.md) - Legacy implementation details
-- [Notifications System](./docs/allo_NOTIFICATIONS.md) - Notification system documentation
-- [Visual Guide](./docs/allo_VISUAL_GUIDE.md) - Visual design guide
-- [Theming Guide](./docs/THEMING_REFACTOR_SUMMARY.md) - Complete theming system documentation
-- [Theme Quick Reference](./docs/THEME_QUICK_REFERENCE.md) - Quick reference for developers
-- [Theming Troubleshooting](./docs/THEMING_TROUBLESHOOTING.md) - Common theming issues and solutions
-- [Performance Optimizations](./docs/PERFORMANCE_OPTIMIZATIONS.md) - Performance best practices
-- [Vercel Deployment](./docs/VERCEL_DEPLOYMENT.md) - Deployment guide for Vercel
-- [Code Cleanup Summary](./docs/CODE_CLEANUP_SUMMARY.md) - Code cleanup documentation
+- [Overview](./docs/index.mdx) - What Allo is and how the pieces fit together
+- [Architecture](./docs/architecture.mdx) - Packages, data flow, and real-time transport
+- [Encryption](./docs/encryption.mdx) - Signal Protocol, device keys, key exchange
+- [API Reference](./docs/api.mdx) - REST and Socket.IO surface
+- [Matrix Migration: Data Model](./docs/matrix/data-model.md) - Design notes for the Matrix migration
+- [Matrix Migration: Bridges](./docs/matrix/bridges.md) - Bridge topology and its constraints
 
 ### API Documentation
 
-The Allo API is a secure backend service built with Express.js and TypeScript, providing encrypted messaging functionality, device key management, authentication, and real-time communications. All messages are encrypted using Signal Protocol - the server never sees plaintext.
+The Allo API is a backend service built with Express.js and TypeScript, providing messaging functionality, device key management, authentication, and real-time communications. Direct messages that the client can encrypt arrive as opaque ciphertext (static ECDH + AES-256-GCM); the server never has the keys to read them. See [Encryption](./docs/encryption.mdx) for the full model, including the plaintext fallback and other known gaps.
 
 For detailed API information, see:
 - [Backend README](packages/backend/README.md) - Complete API documentation
@@ -202,11 +195,11 @@ For detailed API information, see:
 
 ### Security Documentation
 
-- **Signal Protocol**: End-to-end encryption using ECDH + AES-GCM
+- **End-to-End Encryption**: Static ECDH (P-256) between identity keys + AES-256-GCM, no forward secrecy — see [Encryption](./docs/encryption.mdx) for the full model and known gaps (group chats, multi-device, P2P, media)
 - **Device-First**: Messages stored locally, cloud sync is optional
-- **P2P Messaging**: Direct device-to-device when available
 - **Key Exchange**: Automatic device key registration and exchange
 - **Offline Support**: Full functionality without internet connection
+- **Peer-to-Peer**: Scaffolded (`lib/p2pMessaging.ts`) but not yet functional — every message currently goes through the server relay
 
 ## Contributing
 

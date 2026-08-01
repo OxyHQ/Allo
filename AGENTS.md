@@ -30,9 +30,9 @@ packages/
 
 ## Key Features
 
-- **E2E Encryption**: Signal Protocol (`lib/signalProtocol.ts`) — X3DH + Double Ratchet (X25519, Ed25519, ChaCha20-Poly1305)
+- **E2E Encryption**: `lib/signalProtocol.ts` — static ECDH (P-256) between identity keys, no KDF, AES-256-GCM. Not the Signal Protocol despite the filename: no forward secrecy, prekeys generated but unused, groups/multi-device/P2P/media broken or unimplemented. See `docs/encryption.mdx`.
 - **Offline-first**: Queue + sync (`lib/offlineQueue/`, `lib/offlineStorage.ts`, `lib/optimistic/`)
-- **Real-time**: Socket.io for messaging, WebRTC for calls and P2P data channels
+- **Real-time**: Socket.io for messaging. WebRTC is scaffolded only — `lib/p2pMessaging.ts` never establishes a connection, and the calls screen renders mock data.
 - **i18n**: i18next with locales
 
 ## Theming

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "matrix-web-spike",
+    "slug": "matrix-web-spike",
+    "version": "1.0.0",
+    "platforms": ["web"],
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}
