@@ -65,7 +65,33 @@ const BACKFILL_EVENTS = 30;
 
 class CheckFailure extends Error {}
 
+/**
+ * Los errores de uniffi llevan el detalle en `inner`, no en `message`. Un
+ * `ClientError.Generic` se imprime como "ClientError.Generic" y se pierden
+ * `msg` y `details` — que es exactamente lo que hace falta para diagnosticar.
+ * Los de la API de Matrix traen además `code` (`M_LIMIT_EXCEEDED`,
+ * `M_FORBIDDEN`...), que suele decir el problema por sí solo.
+ */
 function describeError(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'inner' in error) {
+    const { inner, tag } = error as { inner?: unknown; tag?: unknown };
+    if (typeof inner === 'object' && inner !== null) {
+      const fields = inner as Record<string, unknown>;
+      const parts: string[] = [];
+      if (typeof tag === 'string') {
+        parts.push(tag);
+      }
+      for (const key of ['code', 'kind', 'msg', 'details'] as const) {
+        const value = fields[key];
+        if (value !== undefined && value !== null && String(value) !== '') {
+          parts.push(`${key}=${String(value)}`);
+        }
+      }
+      if (parts.length > 0) {
+        return parts.join(' · ');
+      }
+    }
+  }
   if (error instanceof Error) {
     return error.message || error.name;
   }
@@ -197,6 +223,16 @@ async function requireDecrypted(
 
 interface LoginOptions {
   /**
+   * Identificador de la corrida. El store se cuelga de él para que cada
+   * ejecución empiece con un dispositivo limpio.
+   *
+   * Sin esto el store persiste entre corridas Y entre reinstalaciones —vive en
+   * el directorio privado de la app, que sobrevive a una actualización—, así
+   * que la segunda vez el store ya tiene sesión y `login()` falla. Un test que
+   * depende de que no quede basura de la corrida anterior no sirve de test.
+   */
+  runId: string;
+  /**
    * Subcarpeta del store. Dos etiquetas distintas son dos dispositivos
    * distintos, cada uno con sus propias claves.
    */
@@ -231,8 +267,9 @@ async function loginClient(config: SpikeConfig, options: LoginOptions, log: LogF
   }
 
   if (config.usePersistentStore) {
-    const dataDir = new File(Paths.document, `${options.storeLabel}/data`).parentDirectory;
-    const cacheDir = new File(Paths.cache, `${options.storeLabel}/cache`).parentDirectory;
+    const scope = `${options.runId}/${options.storeLabel}`;
+    const dataDir = new File(Paths.document, `${scope}/data`).parentDirectory;
+    const cacheDir = new File(Paths.cache, `${scope}/cache`).parentDirectory;
     dataDir.create({ intermediates: true, idempotent: true });
     cacheDir.create({ intermediates: true, idempotent: true });
     // El SDK Rust espera rutas de sistema de ficheros, no URIs `file://`.
@@ -393,7 +430,7 @@ export async function runPhaseA(
   });
 
   await check('C2', 'Login contra el homeserver', async () => {
-    client = await loginClient(config, { storeLabel: 'device-a', coldDevice: false }, log);
+    client = await loginClient(config, { runId, storeLabel: 'device-a', coldDevice: false }, log);
     const session = client.session();
     return `Sesión como ${session.userId}, deviceId ${session.deviceId}`;
   });
@@ -539,7 +576,7 @@ export async function runPhaseA(
       log('    · segundo login del mismo usuario como dispositivo frío');
       const coldClient = await loginClient(
         config,
-        { storeLabel: 'device-cold', coldDevice: true },
+        { runId, storeLabel: 'device-cold', coldDevice: true },
         log
       );
       const coldSession = coldClient.session();
