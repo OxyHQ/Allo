@@ -670,7 +670,7 @@ destino: alimenta `setPusher` en vez de un POST al backend de Allo.
 
 **Qué aparece nuevo en infraestructura:** **Sygnal**. Es un servicio más que
 desplegar, con las credenciales de FCM y APNs. Fase 1 tiene que contemplarlo; hoy
-no está en `DEPLOYMENT.md` porque no existía.
+no está en `.github/workflows/deploy-aws.yml` porque no existía.
 
 **Silenciar una conversación:** `setRoomNotificationMode(roomId, mode)`
 [B] `FFI:26095`. Es la traducción directa de "mute" y está disponible.

@@ -151,7 +151,7 @@ Each authenticated socket auto-joins `user:<userId>`. The client then sends `joi
 
 | Target | Command | Output |
 |--------|---------|--------|
-| Web | `bun run build:frontend` then `bun run --filter @allo/frontend build-web:prod` | `packages/frontend/dist/` (deployed to Vercel — see `vercel.json`) |
+| Web | `bun run build:frontend` | `packages/frontend/dist/`, published to Cloudflare Pages (project `allo-frontend`) by `.github/workflows/deploy-frontends.yml` |
 | iOS | `eas build --platform ios` in `packages/frontend/` | EAS-managed `.ipa` |
 | Android | `eas build --platform android` in `packages/frontend/` | EAS-managed `.aab` |
-| Backend | `bun run build:backend` | `packages/backend/dist/`. Containerized via the included `Dockerfile`; also deployable to DigitalOcean (`.do/` app spec) or Vercel functions (`packages/backend/vercel.json`). |
+| Backend | `bun run build:backend` | `packages/backend/dist/`. Shipped as a `linux/arm64` image built from `packages/backend/Dockerfile`, pushed to ECR and rolled out on AWS ECS by `.github/workflows/deploy-aws.yml` — see [the backend README](https://github.com/OxyHQ/Allo/blob/main/packages/backend/README.md#deployment). |

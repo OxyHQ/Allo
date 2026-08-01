@@ -69,15 +69,27 @@ MONGODB_URI=your_mongodb_connection_string
 
 # Authentication
 # WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
+# Read by @oxyhq/core, not by this package directly.
 OXY_API_URL=https://api.oxy.so
 
 # Server Configuration
-PORT=3000
+# 4140 is Allo's slot in the per-app local port map; ECS injects PORT=8080.
+PORT=4140
 NODE_ENV=development
 
-# Frontend URL (for CORS)
-FRONTEND_URL=https://allo.earth
+# Push notifications (optional; push is skipped when unset)
+FIREBASE_PROJECT_ID=your_firebase_project_id
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
+
+# CrowdSource moderation (optional; the webhook route is not mounted when unset)
+CROWDSOURCE_ENABLED=false
+CROWDSOURCE_ENFORCEMENT_MODE=shadow
+CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 ```
+
+There is no `FRONTEND_URL`: the CORS allowlist is not read from the environment.
+`createOxyCors` admits the Oxy apex family (`*.oxy.so`) automatically, and the
+extra development origins are the literal list at the top of `server.ts`.
 
 ### Running the API
 
@@ -95,6 +107,37 @@ bun run start
 ### Database Setup
 
 The API uses MongoDB with Mongoose. Make sure your MongoDB instance is running and accessible.
+
+## Deployment
+
+The backend runs on **AWS ECS**, and that is the only deployment there is. The
+whole pipeline is [`.github/workflows/deploy-aws.yml`](../../.github/workflows/deploy-aws.yml);
+nothing is deployed by hand.
+
+- **Trigger** — every push to `main` that touches something other than Markdown
+  or `docs/`, plus manual `workflow_dispatch`.
+- **Image** — `packages/backend/Dockerfile`, built for `linux/arm64` on an ARM
+  runner because the ECS tasks run on Graviton. Pushed to ECR as
+  `oxy/allo`, tagged with both the commit SHA and `latest`.
+- **Release** — a rolling `update-service` on the `oxy-cluster` ECS cluster,
+  followed by a wait for the service to stabilise. If the service does not exist
+  yet the image still lands in ECR and the deploy step is skipped, so a first
+  push does not fail the workflow.
+- **Port** — the container listens on the `PORT` that ECS injects (8080; set in
+  oxy-infra's `terraform-uswest2/app-allo.tf`). The `4140` in `server.ts` is the
+  local fallback only.
+- **Public URL** — `api.allo.oxy.so`.
+
+### Credentials
+
+AWS access uses **GitHub OIDC** — the workflow assumes `oxy-github-deploy` and
+no long-lived keys are stored anywhere.
+
+Runtime configuration is **GitHub Secrets as the source of truth**. Each deploy
+copies them into SSM Parameter Store as `SecureString`, at `/oxy/allo/<NAME>`
+for this app and `/oxy/_shared/<NAME>` for the values shared across Oxy apps
+(`REDIS_URL`, the LiveKit pair, ...). Editing a parameter directly in SSM is
+therefore pointless: the next deploy overwrites it. Change the GitHub secret.
 
 ## API Endpoints
 
