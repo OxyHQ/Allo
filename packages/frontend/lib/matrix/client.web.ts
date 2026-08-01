@@ -15,10 +15,21 @@ import type { AlloChatClientFactory } from '@/lib/matrix/types';
  * the spike in `spikes/matrix-web` loads and instantiates it from a production
  * export, and gets an encrypted round trip and a key-backup recovery out of it.
  *
- * So what is missing here is the work, not the answer. Until it is written the
- * factory throws rather than returning a client that quietly does nothing,
- * because a stub is how a platform ends up shipping with its messaging silently
- * broken.
+ * Two things whoever writes this should not assume are settled, because the same
+ * spike says they are not:
+ *
+ * - **OIDC is only half proven on web.** Discovery and building the authorization
+ *   URL work; no login was ever completed, so neither dynamic client registration
+ *   nor the code exchange has been exercised. That is exactly the half this port's
+ *   `AlloOidcLoginRequest` depends on, and Allo has no other way in.
+ * - **Two tabs remain a hazard.** The spike could not reproduce the corruption the
+ *   `matrix-js-sdk` documentation warns about, but it could not rule it out
+ *   either: the warning describes a race, and minutes of testing do not force
+ *   one. A lock across tabs still has to be budgeted for.
+ *
+ * Until then the factory throws rather than returning a client that quietly does
+ * nothing, because a stub is how a platform ends up shipping with its messaging
+ * silently broken.
  */
 export const createAlloChatClient: AlloChatClientFactory = () => {
   throw new MatrixPlatformUnsupportedError(
