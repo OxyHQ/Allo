@@ -12,6 +12,7 @@ import {
 import type {
   EventTimelineItem,
   RoomInfo,
+  Session,
   TimelineItemContent,
 } from '@unomed/react-native-matrix-sdk';
 
@@ -22,6 +23,7 @@ import type {
   AlloRoomMembership,
   AlloRoomSummary,
   AlloSendState,
+  AlloSession,
   AlloSyncState,
   AlloTimelineItem,
 } from '@/lib/matrix/types';
@@ -65,6 +67,28 @@ export function toEncryptionState(state: EncryptionState): AlloEncryptionState {
 
 export function toSyncState(state: SyncServiceState): AlloSyncState {
   return SYNC_STATES[state];
+}
+
+/** The fields of the SDK's session the port carries. */
+export type SessionFields = Pick<
+  Session,
+  'userId' | 'deviceId' | 'homeserverUrl' | 'accessToken' | 'refreshToken' | 'oidcData'
+>;
+
+/**
+ * `oidcData` becomes the port's opaque `authData`. Under MAS it is not optional
+ * detail: it holds what the SDK needs to refresh the tokens, so a session stored
+ * without it restores into a client that cannot renew itself.
+ */
+export function toAlloSession(session: SessionFields): AlloSession {
+  return {
+    userId: session.userId,
+    deviceId: session.deviceId,
+    homeserverUrl: session.homeserverUrl,
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    authData: session.oidcData,
+  };
 }
 
 /** The fields of `RoomInfo` the conversation list reads. */

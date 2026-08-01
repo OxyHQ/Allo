@@ -110,19 +110,79 @@ export interface AlloTimelineItem {
   readonly content: AlloEventContent;
 }
 
-/** Password login. The only flow this port covers today. */
-export interface AlloPasswordCredentials {
-  readonly username: string;
-  readonly password: string;
-  /** Shown to the user in their device list on other clients. */
-  readonly initialDeviceName?: string;
+/**
+ * Who Allo says it is to the authorization server.
+ *
+ * This is a property of the app, not of a login attempt, so it is given once when
+ * the client is built.
+ */
+export interface AlloOidcClientMetadata {
+  /** Shown to the user on the authorization server's consent screen. */
+  readonly clientName: string;
+  /** Where the authorization server sends the user back. Allo's deep link. */
+  readonly redirectUri: string;
+  /** A page describing the app, shown alongside its name. */
+  readonly clientUri: string;
+  readonly logoUri?: string;
+  readonly tosUri?: string;
+  readonly policyUri?: string;
+  /**
+   * Client ids agreed in advance, keyed by homeserver or issuer URL, for servers
+   * that do not register clients dynamically.
+   */
+  readonly staticRegistrations?: ReadonlyMap<string, string>;
+}
+
+/** What the authorization server is asked to show the user. */
+export type AlloOidcPrompt = 'create' | 'login' | 'consent';
+
+export interface AlloOidcLoginOptions {
+  readonly prompt?: AlloOidcPrompt;
+  /**
+   * An identifier to pre-fill. Its format is the upstream provider's, not
+   * Matrix's — for MAS with no upstream provider it is the one MSC4198 defines.
+   */
+  readonly loginHint?: string;
+  /**
+   * Reuse a device id from an earlier session. Only correct if this device still
+   * holds that session's encryption keys; otherwise it takes over the identity of
+   * a device whose keys are gone and the history it could read goes with them.
+   */
+  readonly deviceId?: string;
+}
+
+/**
+ * An authorization in flight.
+ *
+ * Login is three steps and this type refuses to pretend otherwise: the app asks
+ * for a URL, hands it to a browser it does not control, and comes back with
+ * whatever the browser was redirected to. The middle step is not the port's, and
+ * hiding all three behind one call that looked synchronous would be a lie about
+ * where the app has to hand over control.
+ *
+ * Exactly one of {@link complete} and {@link abort} settles it; calling either
+ * afterwards throws.
+ */
+export interface AlloOidcLoginRequest {
+  /** The URL to open in the browser. */
+  readonly authorizationUrl: string;
+  /** Finishes the login with the URL the browser was redirected back to. */
+  complete(callbackUrl: string): Promise<AlloSession>;
+  /** Abandons the attempt and releases what the server is holding for it. */
+  abort(): Promise<void>;
 }
 
 /**
  * A logged-in session, in the form it has to be persisted to be restored later.
  *
- * `accessToken` and `refreshToken` are credentials: they must never be logged,
- * sent to Allo's backend, or written anywhere but the device keychain.
+ * `accessToken`, `refreshToken` and `authData` are credentials: they must never
+ * be logged, never sent to Allo's backend, and never written anywhere but the
+ * device keychain.
+ *
+ * A warning that matters more under OIDC than it did under a password: **these
+ * tokens rotate**. The SDK refreshes them on its own, and this port does not yet
+ * report when it does, so a session stored once and never refreshed goes stale
+ * and stops restoring. Persisting sessions needs that gap closed first.
  */
 export interface AlloSession {
   readonly userId: string;
@@ -130,6 +190,13 @@ export interface AlloSession {
   readonly homeserverUrl: string;
   readonly accessToken: string;
   readonly refreshToken: string | undefined;
+  /**
+   * State the implementation cannot restore a session without, and that only it
+   * can read. Store it and hand it back unchanged; never parse it, and never move
+   * it between platforms — what the native client writes here means nothing to
+   * the web one.
+   */
+  readonly authData: string | undefined;
 }
 
 /**
@@ -145,6 +212,7 @@ export type AlloClientStore =
 export interface AlloChatClientConfig {
   readonly homeserverUrl: string;
   readonly store: AlloClientStore;
+  readonly oidc: AlloOidcClientMetadata;
 }
 
 /**
@@ -185,13 +253,21 @@ export interface AlloTimelineHandle {
  * Ordering rules that the implementations share, because they come from the
  * protocol and not from either SDK:
  *
- * - {@link logIn} or {@link restoreSession} must happen before {@link startSync}.
+ * - a login must finish, or a session be restored, before {@link startSync}.
  * - {@link startSync} must happen before {@link observeRooms} or
  *   {@link openTimeline}: both are views over the sync loop's state, and there is
  *   nothing to view before it runs.
+ *
+ * There is no password login and there will not be one. Allo's homeserver issues
+ * sessions through Matrix Authentication Service with Oxy upstream, so the user
+ * never has a Matrix password to give.
  */
 export interface AlloChatClient {
-  logIn(credentials: AlloPasswordCredentials): Promise<AlloSession>;
+  /**
+   * Starts an authorization. See {@link AlloOidcLoginRequest} for the two steps
+   * that follow.
+   */
+  beginOidcLogin(options?: AlloOidcLoginOptions): Promise<AlloOidcLoginRequest>;
   /** Reinstates a session persisted from a previous run. */
   restoreSession(session: AlloSession): Promise<void>;
   /** The current session. Throws if nobody has logged in. */

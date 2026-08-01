@@ -2,6 +2,7 @@ import {
   ClientBuilder,
   LogLevel,
   MessageType,
+  OidcPrompt,
   RoomListEntriesDynamicFilterKind,
   SlidingSyncVersion,
   SlidingSyncVersionBuilder,
@@ -10,6 +11,7 @@ import {
 } from '@unomed/react-native-matrix-sdk';
 import type {
   ClientLike,
+  OidcConfiguration,
   RoomLike,
   RoomListEntriesListener,
   RoomListEntriesUpdate,
@@ -28,8 +30,11 @@ import type {
   AlloChatClientConfig,
   AlloChatClientFactory,
   AlloEncryptionState,
+  AlloOidcClientMetadata,
+  AlloOidcLoginOptions,
+  AlloOidcLoginRequest,
+  AlloOidcPrompt,
   AlloPaginationOutcome,
-  AlloPasswordCredentials,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -41,9 +46,10 @@ import type {
 import { logger } from '@/utils/logger';
 
 import { applyListUpdate } from './native/listDiff';
+import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
-import { toEncryptionState, toSyncState } from './native/translate';
+import { toAlloSession, toEncryptionState, toSyncState } from './native/translate';
 
 /**
  * The native implementation of the Allo chat port, over
@@ -92,7 +98,10 @@ function ensurePlatformInitialized(): void {
 
 export const createAlloChatClient: AlloChatClientFactory = async (config) => {
   ensurePlatformInitialized();
-  return new NativeAlloChatClient(await buildClient(config));
+  return new NativeAlloChatClient(
+    await buildClient(config),
+    toOidcConfiguration(config.oidc),
+  );
 };
 
 async function buildClient(config: AlloChatClientConfig): Promise<ClientLike> {
@@ -113,8 +122,32 @@ async function buildClient(config: AlloChatClientConfig): Promise<ClientLike> {
   return withStore.build();
 }
 
+/**
+ * Allo asks for no prompt by default: the authorization server decides whether to
+ * show a login screen or reuse the session the user already has with Oxy, which
+ * is the point of putting Oxy upstream in the first place.
+ */
+const OIDC_PROMPTS: Record<AlloOidcPrompt, () => OidcPrompt> = {
+  create: () => new OidcPrompt.Create(),
+  login: () => new OidcPrompt.Login(),
+  consent: () => new OidcPrompt.Consent(),
+};
+
+function toOidcConfiguration(metadata: AlloOidcClientMetadata): OidcConfiguration {
+  return {
+    clientName: metadata.clientName,
+    redirectUri: metadata.redirectUri,
+    clientUri: metadata.clientUri,
+    logoUri: metadata.logoUri,
+    tosUri: metadata.tosUri,
+    policyUri: metadata.policyUri,
+    staticRegistrations: new Map(metadata.staticRegistrations ?? []),
+  };
+}
+
 class NativeAlloChatClient implements AlloChatClient {
   readonly #client: ClientLike;
+  readonly #oidc: OidcConfiguration;
   readonly #syncStateListeners = new Set<(state: AlloSyncState) => void>();
   readonly #roomLists = new Set<NativeRoomListHandle>();
   readonly #timelines = new Set<NativeTimelineHandle>();
@@ -123,18 +156,22 @@ class NativeAlloChatClient implements AlloChatClient {
   #syncStateHandle: TaskHandleLike | undefined;
   #syncState: AlloSyncState = 'idle';
 
-  constructor(client: ClientLike) {
+  constructor(client: ClientLike, oidc: OidcConfiguration) {
     this.#client = client;
+    this.#oidc = oidc;
   }
 
-  async logIn(credentials: AlloPasswordCredentials): Promise<AlloSession> {
-    await this.#client.login(
-      credentials.username,
-      credentials.password,
-      credentials.initialDeviceName,
+  async beginOidcLogin(options: AlloOidcLoginOptions = {}): Promise<AlloOidcLoginRequest> {
+    const authorizationData = await this.#client.urlForOidc(
+      this.#oidc,
+      options.prompt === undefined ? undefined : OIDC_PROMPTS[options.prompt](),
+      options.loginHint,
+      options.deviceId,
+      // The scopes for API access and for the device id are always requested by
+      // the SDK; Allo asks for nothing on top of them.
       undefined,
     );
-    return this.session();
+    return new NativeOidcLoginRequest(this.#client, authorizationData);
   }
 
   async restoreSession(session: AlloSession): Promise<void> {
@@ -413,28 +450,11 @@ class NativeTimelineHandle implements AlloTimelineHandle {
   }
 }
 
-function toAlloSession(session: Session): AlloSession {
-  return {
-    userId: session.userId,
-    deviceId: session.deviceId,
-    homeserverUrl: session.homeserverUrl,
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-  };
-}
-
 /**
- * The SDK's session carries two fields the port does not.
- *
- * `oidcData` is left out because `matrix-js-sdk` has no equivalent and this port
- * only logs in with a password. A session obtained through OIDC must not be round
- * tripped through {@link AlloSession}: it would lose what its token refresh
- * depends on.
- *
- * `slidingSyncVersion` is restored as `Native` rather than carried, because
- * `Native` is the only value a working Allo session can have: the client is built
- * with `DiscoverNative`, and a homeserver that does not serve native sliding sync
- * fails at `build()` long before there is a session to restore.
+ * `slidingSyncVersion` is restored as `Native` rather than carried in the port,
+ * because `Native` is the only value a working Allo session can have: the client
+ * is built with `DiscoverNative`, and a homeserver that does not serve native
+ * sliding sync fails at `build()` long before there is a session to restore.
  */
 function toSdkSession(session: AlloSession): Session {
   return {
@@ -443,7 +463,7 @@ function toSdkSession(session: AlloSession): Session {
     homeserverUrl: session.homeserverUrl,
     accessToken: session.accessToken,
     refreshToken: session.refreshToken,
-    oidcData: undefined,
+    oidcData: session.authData,
     slidingSyncVersion: SlidingSyncVersion.Native,
   };
 }

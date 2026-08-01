@@ -15,6 +15,7 @@ import {
 import type { EventTimelineItem, TimelineItemContent as SdkTimelineItemContent } from '@unomed/react-native-matrix-sdk';
 
 import {
+  toAlloSession,
   toEncryptionState,
   toRoomSummary,
   toSyncState,
@@ -84,6 +85,45 @@ describe('toEncryptionState', () => {
     expect(toEncryptionState(EncryptionState.Unknown)).toBe('unknown');
     expect(toEncryptionState(EncryptionState.NotEncrypted)).toBe('unencrypted');
     expect(toEncryptionState(EncryptionState.Encrypted)).toBe('encrypted');
+  });
+});
+
+describe('toAlloSession', () => {
+  it('carries the SDK’s OIDC blob through as the port’s opaque auth data', () => {
+    // Under MAS this is not optional detail: it holds what the SDK refreshes the
+    // tokens with, so a session stored without it restores into a client that
+    // cannot renew itself and stops working when the access token expires.
+    expect(
+      toAlloSession({
+        userId: '@alice:allo.oxy.so',
+        deviceId: 'DEVICE1',
+        homeserverUrl: 'https://matrix.allo.oxy.so',
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        oidcData: '{"issuer":"https://account.allo.oxy.so/"}',
+      }),
+    ).toEqual({
+      userId: '@alice:allo.oxy.so',
+      deviceId: 'DEVICE1',
+      homeserverUrl: 'https://matrix.allo.oxy.so',
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      authData: '{"issuer":"https://account.allo.oxy.so/"}',
+    });
+  });
+
+  it('keeps the optional credentials absent rather than inventing them', () => {
+    const session = toAlloSession({
+      userId: '@alice:allo.oxy.so',
+      deviceId: 'DEVICE1',
+      homeserverUrl: 'https://matrix.allo.oxy.so',
+      accessToken: 'access',
+      refreshToken: undefined,
+      oidcData: undefined,
+    });
+
+    expect(session.refreshToken).toBeUndefined();
+    expect(session.authData).toBeUndefined();
   });
 });
 

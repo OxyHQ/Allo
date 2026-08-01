@@ -38,6 +38,22 @@ export class MatrixSyncNotStartedError extends MatrixPortError {
 }
 
 /**
+ * An authorization that has already been completed or abandoned was used again.
+ *
+ * Worth its own type because the two ways it happens are ordinary: a redirect
+ * that fires twice, and a user who closes the browser on an attempt the app then
+ * tries to finish.
+ */
+export class MatrixOidcLoginSettledError extends MatrixPortError {
+  constructor(attempted: string) {
+    super(
+      `Cannot ${attempted} an OIDC login that has already been completed or ` +
+        'aborted. Start a new one with beginOidcLogin().',
+    );
+  }
+}
+
+/**
  * A room id the client does not know.
  *
  * Distinct from "the room does not exist": a room the viewer has been invited to
