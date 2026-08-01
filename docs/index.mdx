@@ -6,7 +6,7 @@ order: 0
 
 # Allo
 
-A modern, cross-platform chat app built with Expo, React Native, and a Node.js / Express backend. Every message is end-to-end encrypted with Signal-style ECDH + AES-GCM, stored on the device first, and only relayed through the server as opaque ciphertext.
+A modern, cross-platform chat app built with Expo, React Native, and a Node.js / Express backend. Direct messages are end-to-end encrypted with static ECDH (P-256) + AES-256-GCM, stored on the device first, and relayed through the server as opaque ciphertext when cloud sync is on.
 
 <Badge variant="success">App</Badge> <Badge>iOS / Android / Web</Badge>
 
@@ -47,10 +47,11 @@ Build order matters: `shared-types` -> `backend` + `frontend` (in parallel).
 
 ## Threat model
 
-- **What the server sees:** ciphertext, message size, sender/recipient envelope (conversation id, sender Oxy user id, sender device id), timing, and the optional encrypted media descriptors.
-- **What the server cannot see:** message bodies, media bytes, thumbnails, reactions, or anything else encrypted by Signal Protocol.
+- **What the server sees:** ciphertext (when encryption succeeds), message size, sender/recipient envelope (conversation id, sender Oxy user id, sender device id), and timing.
+- **What the server cannot see, for successfully encrypted messages:** message bodies. There is currently no working encrypted-media path — see [Encryption](./encryption).
 - **What a stolen device cannot do:** read messages without the OS-level credential that gates `expo-secure-store` (Face ID / fingerprint / passcode). Private keys live in SecureStore on iOS / Android and never leave the device.
 - **Recovery:** there is no server-side reset. Messages stored only on-device are gone if the device is lost without cloud sync enabled.
+- **Important caveats:** encryption has no forward secrecy (a leaked identity key decrypts that pair's entire message history), group conversations with more than two participants aren't correctly encrypted for every member, a second device belonging to the same user generally cannot decrypt messages sent to that user, and the client falls back to sending plaintext when it can't encrypt rather than blocking the send. See [Encryption](./encryption) for the full picture.
 
 Cloud sync is **opt-in** per user in `Settings -> Security & Encryption`. Until they enable it, the server's `Message` collection is the only off-device copy — and even that is ciphertext.
 
@@ -111,25 +112,25 @@ Then in the Expo CLI, press `w` for web, `i` for iOS simulator, or `a` for Andro
 
 Allo treats the device as the source of truth. When a user sends a message:
 
-1. The client encrypts the plaintext locally using its Signal Protocol device keys.
+1. The client encrypts the plaintext locally using its device keys (or falls back to plaintext if it can't — see [Encryption](./encryption)).
 2. The ciphertext is written to AsyncStorage via `lib/offlineStorage.ts` and added to the conversation's Zustand `messagesStore`.
 3. The encrypted payload is POSTed to `/api/messages`. If the network is unavailable, the mutation sits in the offline queue (`lib/offlineQueue/`) and replays on reconnect.
 4. The recipient's device pulls or receives the ciphertext, decrypts locally, and renders.
 
 The UI never blocks on the network — sent messages appear immediately and reconcile when the server responds.
 
-### Signal Protocol device keys
+### Device keys
 
-Each install generates its own Signal-style key bundle on first launch (`lib/signalProtocol.ts`, `stores/deviceKeysStore.ts`):
+Each install generates its own key bundle on first launch (`lib/signalProtocol.ts`, `stores/deviceKeysStore.ts`). The module is named `signalProtocol.ts` for historical reasons, but it does not implement the Signal Protocol — there's no X3DH, no Double Ratchet, and no per-session key derivation:
 
-- **Identity key pair** — ECDH P-256, long-lived.
-- **Signed pre-key** — ECDH P-256, signed by the identity key with ECDSA over SHA-256.
-- **One-time pre-keys** — 100 ECDH P-256 key pairs, replenished as they are consumed.
+- **Identity key pair** — P-256, long-lived. The only key pair actually used to derive an encryption key.
+- **Signed pre-key** — P-256, signed by the identity key with ECDSA over SHA-256. Generated and uploaded, but not used by any encrypt/decrypt path, and its signature is never verified.
+- **One-time pre-keys** — 100 P-256 key pairs, uploaded to the backend but never consumed during encryption.
 - **Registration id** — random 31-bit integer, persisted in `expo-secure-store`.
 
-Public keys are published to `POST /api/devices`. Private keys never leave the device. Encryption is ECDH derive-bits to a shared secret, then AES-GCM with a fresh 96-bit IV per message.
+Public keys are published to `POST /api/devices`. Private keys never leave the device. Encryption derives a static ECDH shared secret between the sender's and recipient's identity keys (no KDF, so the key never changes for a given pair), then AES-256-GCM with a fresh 96-bit IV per message.
 
-See [Encryption](./encryption) for the full key model and choreography.
+See [Encryption](./encryption) for the full picture, including what isn't implemented yet (forward secrecy, multi-device, correct group encryption, P2P, encrypted media).
 
 ### Conversations and messages
 
@@ -151,9 +152,9 @@ The backend exposes a `/messaging` namespace (`server.ts`). The client authentic
 
 `joinConversation` / `leaveConversation` events scope subscriptions when the active thread changes. Typing indicators are broadcast to peers in the conversation room except the sender.
 
-### Peer-to-peer fallback
+### Peer-to-peer (not yet functional)
 
-When both ends are online, `lib/p2pMessaging.ts` opens a WebRTC data channel (signaled through Socket.IO) and sends the same ciphertext directly device-to-device, skipping the server hop. If P2P fails or one side is offline, the client falls back to the REST relay. P2P payloads are still Signal-encrypted — losing the P2P channel never downgrades the security boundary.
+`lib/p2pMessaging.ts` scaffolds a WebRTC data channel signaled over Socket.IO, but the connection-establishment path is a stub: it always reports failure, and the offer/answer/ICE-candidate handlers are unimplemented. Every message today goes through the REST relay when cloud sync is enabled.
 
 ### Routing
 
@@ -176,5 +177,5 @@ Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a detai
 ## Documentation map
 
 - [Architecture](./architecture) — package layout, dependency graph, build order
-- [Encryption](./encryption) — Signal Protocol key bundle, ECDH derivation, AES-GCM framing
+- [Encryption](./encryption) — key bundle, static ECDH derivation, AES-GCM framing, and known gaps
 - [API](./api) — backend REST and Socket.IO surface
