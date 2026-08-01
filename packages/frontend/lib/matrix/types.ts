@@ -147,6 +147,13 @@ export interface AlloOidcLoginOptions {
    * Reuse a device id from an earlier session. Only correct if this device still
    * holds that session's encryption keys; otherwise it takes over the identity of
    * a device whose keys are gone and the history it could read goes with them.
+   *
+   * Under OIDC the device id belongs to the client, not the server — it is
+   * carried in the requested scope — and it is what an installation's identity
+   * and its encryption keys hang off. Left unset, a new one is minted, which
+   * makes this a fresh Matrix device with no history it can read. Keeping the
+   * same one across launches is therefore a matter of persisting the session,
+   * which see: {@link AlloSession}.
    */
   readonly deviceId?: string;
 }

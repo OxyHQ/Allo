@@ -15,6 +15,17 @@ import type { AlloChatClientFactory } from '@/lib/matrix/types';
  * the spike in `spikes/matrix-web` loads and instantiates it from a production
  * export, and gets an encrypted round trip and a key-backup recovery out of it.
  *
+ * One constraint that is not a caveat but a requirement, because getting it wrong
+ * fails in a way that sends you looking in the wrong place: **`initAsync(url)`
+ * must be called explicitly**, before anything that reaches `initRustCrypto()`.
+ * The package's default loader resolves the `.wasm` through `import.meta.url`,
+ * which under Expo's web export points at a path that is not there — and the SPA
+ * fallback in `packages/frontend/public/_redirects` answers it with `index.html`
+ * rather than a 404, so what surfaces is a WebAssembly MIME type error and not a
+ * missing file. `spikes/matrix-web/RESULTS.md` has that and four more
+ * restrictions, including the three ordered calls that stand in for the native
+ * binding's single `recover()`.
+ *
  * Two things whoever writes this should not assume are settled, because the same
  * spike says they are not:
  *
