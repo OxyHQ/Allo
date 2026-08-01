@@ -13,6 +13,7 @@ import { File, Paths } from 'expo-file-system';
 import {
   BackupDownloadStrategy,
   ClientBuilder,
+  EncryptionState,
   LogLevel,
   MsgLikeKind_Tags,
   RoomPreset,
@@ -415,11 +416,32 @@ export async function runPhaseA(
       invite: peer ? [peer] : undefined,
     });
     const room = await waitForRoom(client, roomId, log);
-    if (!(await room.isEncrypted())) {
+
+    // NO usar `isEncrypted()` aquí. `EncryptionState` tiene tres valores, y el
+    // tercero es `Unknown` — según el propio SDK, "the `/sync` did not provide
+    // all data needed to decide". Recién creada la sala ese es el caso normal:
+    // el evento `m.room.encryption` todavía no ha llegado por sliding sync.
+    // `isEncrypted()` colapsa `Unknown` en `false`, así que no distingue "la
+    // sala no está cifrada" de "aún no lo sé" y produce un falso negativo que
+    // se lee como que el cifrado de Matrix no funciona.
+    //
+    // `latestEncryptionState()` consulta al servidor cuando el estado local es
+    // desconocido, que es exactamente lo que hace falta aquí.
+    const encryptionState = await room.latestEncryptionState();
+    if (encryptionState === EncryptionState.NotEncrypted) {
       throw new CheckFailure(
-        `La sala ${roomId} se creó pero el SDK no la considera cifrada.`
+        `La sala ${roomId} se creó SIN cifrado pese a pedirlo con ` +
+          '`isEncrypted: true`. Esto sí es un fallo real.'
       );
     }
+    if (encryptionState !== EncryptionState.Encrypted) {
+      throw new CheckFailure(
+        `INCONCLUSA: el estado de cifrado de ${roomId} sigue siendo desconocido ` +
+          'después de consultar al servidor. No es que la sala esté sin cifrar: ' +
+          'es que no se ha podido determinar. Suele ser sync lento; repite.'
+      );
+    }
+
     timeline = await room.timeline();
     return peer
       ? `Sala cifrada ${roomId}, con ${peer} invitado`
