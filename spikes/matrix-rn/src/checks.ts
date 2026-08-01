@@ -1,8 +1,7 @@
 /**
  * Fase 0 — comprobaciones kill-switch de matrix-rust-sdk sobre Expo/RN.
  *
- * El spike corre en dos fases, porque una parte no se puede automatizar desde
- * el móvil: hay que abrir Element Web en un navegador y mirar qué pasa.
+ * Dos fases, porque una parte no se puede automatizar desde el móvil:
  *
  *   Fase A (automática, sólo el móvil):  C1..C6 y C8.
  *   Fase B (asistida, móvil + navegador): C7.
@@ -12,6 +11,7 @@
  */
 import { File, Paths } from 'expo-file-system';
 import {
+  BackupDownloadStrategy,
   ClientBuilder,
   LogLevel,
   MsgLikeKind_Tags,
@@ -51,8 +51,16 @@ export type LogFn = (line: string) => void;
 const TIMELINE_TIMEOUT_MS = 60_000;
 /** Espera máxima a que el sync inicial reporte estado. */
 const SYNC_TIMEOUT_MS = 90_000;
+/**
+ * Ventana del control negativo de C7. Aquí no esperamos un evento concreto:
+ * dejamos correr el reloj entero para poder afirmar que algo NO pasó, así que
+ * conviene que sea generosa pero no eterna.
+ */
+const NEGATIVE_WINDOW_MS = 45_000;
 /** Espera máxima en Fase B: incluye el tiempo humano de ir al navegador. */
 const PEER_TIMEOUT_MS = 600_000;
+/** Cuántos eventos pedimos hacia atrás para que el dispositivo frío vea historial. */
+const BACKFILL_EVENTS = 30;
 
 class CheckFailure extends Error {}
 
@@ -84,14 +92,14 @@ function itemsFromDiff(diff: TimelineDiff): TimelineItemLike[] {
 }
 
 /**
- * Cuerpo del mensaje si el item es un mensaje descifrado, `'<UTD>'` si el SDK
- * no pudo descifrarlo, `undefined` para cualquier otra cosa.
+ * Clasifica un item del timeline.
  *
- * Distinguir descifrado de UnableToDecrypt es el punto de la comprobación: un
- * evento que llega pero no descifra significa que el E2EE está roto, no que
- * el transporte falló.
+ * Un evento que no se puede descifrar **no lleva texto**: su contenido es
+ * `UnableToDecrypt { msg: EncryptedMessage }`. Por eso no se puede "buscar el
+ * mensaje X sin descifrar": lo único que se puede afirmar es que hay eventos
+ * ilegibles y que el texto que esperábamos no aparece.
  */
-function messageBodyOf(item: TimelineItemLike): string | undefined {
+function classifyItem(item: TimelineItemLike): 'utd' | { body: string } | undefined {
   const event = item.asEvent();
   if (!event) {
     return undefined;
@@ -102,23 +110,37 @@ function messageBodyOf(item: TimelineItemLike): string | undefined {
   }
   const kind = content.inner.content.kind;
   if (kind.tag === MsgLikeKind_Tags.Message) {
-    return kind.inner.content.body;
+    return { body: kind.inner.content.body };
   }
   if (kind.tag === MsgLikeKind_Tags.UnableToDecrypt) {
-    return '<UTD>';
+    return 'utd';
   }
   return undefined;
 }
 
-/** Espera a que `body` aparezca descifrado en el timeline. */
-async function waitForDecryptedBody(
+/**
+ * Qué se llegó a ver en el timeline respecto a un texto concreto.
+ *
+ * - `decrypted`: apareció el texto, legible.
+ * - `utd-only`: llegaron eventos cifrados que no se pudieron descifrar, y el
+ *   texto no apareció. Es el resultado que esperamos en un control negativo.
+ * - `absent`: no llegó ni una cosa ni la otra. No permite concluir nada.
+ */
+type Observation = 'decrypted' | 'utd-only' | 'absent';
+
+/**
+ * Observa el timeline durante `timeoutMs`. Corta en cuanto ve el texto
+ * descifrado; si no, agota la ventana y reporta qué llegó a ver.
+ */
+async function observeBody(
   timeline: TimelineLike,
   body: string,
   timeoutMs: number,
   log: LogFn
-): Promise<void> {
-  let resolveOnce: (value: Error | undefined) => void = () => {};
-  const outcome = new Promise<Error | undefined>((resolve) => {
+): Promise<Observation> {
+  let utdSeen = false;
+  let resolveOnce: (value: Observation) => void = () => {};
+  const outcome = new Promise<Observation>((resolve) => {
     resolveOnce = resolve;
   });
 
@@ -126,18 +148,11 @@ async function waitForDecryptedBody(
     onUpdate: (diffs) => {
       for (const diff of diffs) {
         for (const item of itemsFromDiff(diff)) {
-          const seen = messageBodyOf(item);
-          if (seen === body) {
-            resolveOnce(undefined);
-            return;
-          }
-          if (seen === '<UTD>') {
-            resolveOnce(
-              new Error(
-                'Llegó un evento al timeline pero el SDK no pudo descifrarlo ' +
-                  '(UnableToDecrypt). El transporte funciona; el reparto de claves no.'
-              )
-            );
+          const classified = classifyItem(item);
+          if (classified === 'utd') {
+            utdSeen = true;
+          } else if (classified && classified.body === body) {
+            resolveOnce('decrypted');
             return;
           }
         }
@@ -145,35 +160,78 @@ async function waitForDecryptedBody(
     },
   });
 
-  const timeout = setTimeout(() => {
-    resolveOnce(
-      new Error(`No apareció descifrado en el timeline en ${timeoutMs / 1000}s.`)
-    );
-  }, timeoutMs);
+  const timeout = setTimeout(() => resolveOnce(utdSeen ? 'utd-only' : 'absent'), timeoutMs);
 
   try {
-    const failure = await outcome;
-    if (failure) {
-      throw new CheckFailure(failure.message);
-    }
-    log('    · observado descifrado en el timeline');
+    const observation = await outcome;
+    log(`    · observación del timeline: ${observation}`);
+    return observation;
   } finally {
     clearTimeout(timeout);
     handle.cancel();
   }
 }
 
-/** Construye y autentica el cliente del móvil. */
-async function loginClient(config: SpikeConfig, log: LogFn) {
+/** Espera a que `body` aparezca descifrado, o falla explicando qué se vio. */
+async function requireDecrypted(
+  timeline: TimelineLike,
+  body: string,
+  timeoutMs: number,
+  log: LogFn
+): Promise<void> {
+  const observation = await observeBody(timeline, body, timeoutMs, log);
+  if (observation === 'decrypted') {
+    return;
+  }
+  if (observation === 'utd-only') {
+    throw new CheckFailure(
+      'Llegaron eventos al timeline pero el SDK no pudo descifrarlos ' +
+        '(UnableToDecrypt). El transporte funciona; el descifrado no.'
+    );
+  }
+  throw new CheckFailure(
+    `No llegó nada al timeline en ${timeoutMs / 1000}s: ni el mensaje ni eventos cifrados.`
+  );
+}
+
+interface LoginOptions {
+  /**
+   * Subcarpeta del store. Dos etiquetas distintas son dos dispositivos
+   * distintos, cada uno con sus propias claves.
+   */
+  storeLabel: string;
+  /**
+   * Un "dispositivo frío" simula un móvil recién estrenado: no arranca
+   * cross-signing ni backups, y sólo baja claves del backup cuando recibe la
+   * clave de recuperación.
+   *
+   * NO quitar `backupDownloadStrategy(OneShot)`: el valor por defecto del SDK
+   * es `Manual`, que no descarga ninguna clave nunca. Con el defecto, C7
+   * fallaría siempre después de `recover()` y parecería que el backup está
+   * roto cuando lo que está mal es la configuración del cliente.
+   *
+   * `autoEnableCrossSigning(false)` mantiene el dispositivo sin verificar, que
+   * es lo que cierra la vía del `m.secret.send` y hace que el control negativo
+   * signifique algo.
+   */
+  coldDevice: boolean;
+}
+
+/** Construye y autentica un cliente. */
+async function loginClient(config: SpikeConfig, options: LoginOptions, log: LogFn) {
   let builder = new ClientBuilder()
     .homeserverUrl(config.homeserverUrl.trim())
     .slidingSyncVersionBuilder(SlidingSyncVersionBuilder.DiscoverNative)
-    .autoEnableCrossSigning(true)
-    .autoEnableBackups(true);
+    .autoEnableCrossSigning(!options.coldDevice)
+    .autoEnableBackups(!options.coldDevice);
+
+  if (options.coldDevice) {
+    builder = builder.backupDownloadStrategy(BackupDownloadStrategy.OneShot);
+  }
 
   if (config.usePersistentStore) {
-    const dataDir = new File(Paths.document, 'matrix/data').parentDirectory;
-    const cacheDir = new File(Paths.cache, 'matrix/cache').parentDirectory;
+    const dataDir = new File(Paths.document, `${options.storeLabel}/data`).parentDirectory;
+    const cacheDir = new File(Paths.cache, `${options.storeLabel}/cache`).parentDirectory;
     dataDir.create({ intermediates: true, idempotent: true });
     cacheDir.create({ intermediates: true, idempotent: true });
     // El SDK Rust espera rutas de sistema de ficheros, no URIs `file://`.
@@ -190,7 +248,7 @@ async function loginClient(config: SpikeConfig, log: LogFn) {
   await client.login(
     config.username.trim(),
     config.password,
-    'Allo Matrix Spike',
+    `Allo Matrix Spike (${options.storeLabel})`,
     undefined
   );
   return client;
@@ -230,11 +288,21 @@ async function startSync(client: ClientLike, log: LogFn) {
   return syncService;
 }
 
+/** La sala tarda un poco en aparecer en el room list tras el primer sync. */
+async function waitForRoom(client: ClientLike, roomId: string, log: LogFn) {
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const room = client.getRoom(roomId);
+    if (room) {
+      return room;
+    }
+    log(`    · esperando a que ${roomId} aparezca en el room list…`);
+    await delay(2_000);
+  }
+  throw new CheckFailure(`La sala ${roomId} no apareció en el room list.`);
+}
+
 /**
  * Sesión viva entre la Fase A y la Fase B.
- *
- * `recoveryKey`, `roomId` y `sentBodies` son exactamente lo que el operador
- * necesita llevarse al navegador para cerrar C6 y C7.
  */
 export interface SpikeSession {
   results: CheckResult[];
@@ -245,11 +313,11 @@ export interface SpikeSession {
   roomId?: string;
   /** Mensajes que la Fase A dejó en la sala, para buscarlos en Element Web. */
   sentBodies: string[];
-  /** Texto exacto a enviar desde Element Web para cerrar C7. */
+  /** Texto exacto a enviar desde Element Web para cerrar C8. */
   pingToken: string;
   /** Fase B: espera el mensaje enviado desde Element Web. */
   waitForPeerMessage(log: LogFn): Promise<CheckResult>;
-  /** Cierra el sync. */
+  /** Cierra los syncs. */
   dispose(log: LogFn): Promise<void>;
 }
 
@@ -262,6 +330,7 @@ export async function runPhaseA(
 
   let client: ClientLike | undefined;
   let sync: SyncServiceLike | undefined;
+  let coldSync: SyncServiceLike | undefined;
   let timeline: TimelineLike | undefined;
   let recoveryKey: string | undefined;
   let roomId: string | undefined;
@@ -323,7 +392,7 @@ export async function runPhaseA(
   });
 
   await check('C2', 'Login contra el homeserver', async () => {
-    client = await loginClient(config, log);
+    client = await loginClient(config, { storeLabel: 'device-a', coldDevice: false }, log);
     const session = client.session();
     return `Sesión como ${session.userId}, deviceId ${session.deviceId}`;
   });
@@ -345,12 +414,7 @@ export async function runPhaseA(
       preset: RoomPreset.PrivateChat,
       invite: peer ? [peer] : undefined,
     });
-    // La sala tarda un instante en aparecer en el room list tras crearse.
-    await delay(2_000);
-    const room = client.getRoom(roomId);
-    if (!room) {
-      throw new CheckFailure(`La sala ${roomId} no apareció en el room list.`);
-    }
+    const room = await waitForRoom(client, roomId, log);
     if (!(await room.isEncrypted())) {
       throw new CheckFailure(
         `La sala ${roomId} se creó pero el SDK no la considera cifrada.`
@@ -364,15 +428,10 @@ export async function runPhaseA(
 
   await check(
     'C5',
-    'Ida y vuelta de un mensaje E2EE en el propio timeline',
+    'Ida y vuelta de un mensaje E2EE en el propio dispositivo',
     async () => {
       if (!timeline) throw new CheckFailure('No hay timeline.');
-      const observed = waitForDecryptedBody(
-        timeline,
-        historyBody,
-        TIMELINE_TIMEOUT_MS,
-        log
-      );
+      const observed = requireDecrypted(timeline, historyBody, TIMELINE_TIMEOUT_MS, log);
       await timeline.send(messageEventContentFromMarkdown(historyBody));
       await observed;
       sentBodies.push(historyBody);
@@ -380,10 +439,8 @@ export async function runPhaseA(
     }
   );
 
-  // C8 va antes que C6 a propósito: la recuperación tiene que respaldar las
-  // claves de un historial que ya existe, si no C6 no demuestra nada.
   await check(
-    'C8',
+    'C6',
     'Adjuntos cifrados (UploadSource.Data y UploadSource.File)',
     async () => {
       if (!timeline) throw new CheckFailure('No hay timeline.');
@@ -427,40 +484,86 @@ export async function runPhaseA(
     }
   );
 
+  // C7 es la propiedad que sostiene el nivel de "chats normales": cambiar de
+  // móvil y recuperar el historial con la clave de recuperación, sin que el
+  // dispositivo viejo intervenga.
+  //
+  // El control negativo (paso 3) es lo que impide que la comprobación sea
+  // vacua: si el dispositivo frío ya descifra ANTES de recuperar, las claves
+  // llegaron por otra vía y la corrida no demuestra que el backup sirva.
   await check(
-    'C6',
-    'Cross-signing y key backup: se genera clave de recuperación',
+    'C7',
+    'Key backup: un dispositivo nuevo descifra historial anterior con la clave de recuperación',
     async () => {
       if (!client) throw new CheckFailure('No hay cliente.');
-      const encryption = client.encryption();
+      if (!roomId) throw new CheckFailure('No hay sala.');
 
+      const encryption = client.encryption();
       log('    · habilitando recuperación y esperando a que suban las claves');
+      // El `true` espera a que el backup termine de subir. Sin él estaríamos
+      // midiendo una carrera en vez de una propiedad.
       recoveryKey = await encryption.enableRecovery(true, undefined, {
-        onUpdate: (progress) =>
-          log(`    · progreso de recuperación: ${String(progress)}`),
+        onUpdate: (progress) => log(`    · progreso: ${String(progress)}`),
       });
       if (!recoveryKey) {
-        throw new CheckFailure(
-          'enableRecovery() no devolvió clave de recuperación.'
-        );
+        throw new CheckFailure('enableRecovery() no devolvió clave de recuperación.');
       }
-
-      // Sin backup en el servidor, un dispositivo nuevo no puede recuperar el
-      // historial por mucha clave que tenga. Comprobarlo es la mitad de C6.
-      const existsOnServer = await encryption.backupExistsOnServer();
-      if (!existsOnServer) {
+      if (!(await encryption.backupExistsOnServer())) {
         throw new CheckFailure(
           'La recuperación dice estar habilitada pero el servidor no tiene backup.'
         );
       }
 
-      const verification = encryption.verificationState();
-      const recovery = encryption.recoveryState();
-      const backup = encryption.backupState();
+      log('    · segundo login del mismo usuario como dispositivo frío');
+      const coldClient = await loginClient(
+        config,
+        { storeLabel: 'device-cold', coldDevice: true },
+        log
+      );
+      const coldSession = coldClient.session();
+      if (coldSession.deviceId === client.session().deviceId) {
+        throw new CheckFailure(
+          'El segundo login reutilizó el mismo deviceId; no es un dispositivo nuevo.'
+        );
+      }
+      coldSync = await startSync(coldClient, log);
+
+      const coldRoom = await waitForRoom(coldClient, roomId, log);
+      const coldTimeline = await coldRoom.timeline();
+      await coldTimeline.paginateBackwards(BACKFILL_EVENTS);
+
+      log('    · control negativo: el dispositivo frío NO debería poder leer todavía');
+      const before = await observeBody(
+        coldTimeline,
+        historyBody,
+        NEGATIVE_WINDOW_MS,
+        log
+      );
+      if (before === 'decrypted') {
+        throw new CheckFailure(
+          'INCONCLUSA: el dispositivo frío descifró el historial ANTES de recuperar. ' +
+            'Las claves llegaron por otra vía (reenvío o secretos compartidos), así que ' +
+            'esta corrida no demuestra que el key backup funcione.'
+        );
+      }
+      if (before === 'absent') {
+        throw new CheckFailure(
+          'INCONCLUSA: al dispositivo frío no le llegó ningún evento de la sala, ' +
+            'ni siquiera cifrado. Sin ese punto de partida el control negativo no ' +
+            'significa nada. Puede ser sync lento o poca paginación.'
+        );
+      }
+
+      log('    · recuperando con la clave y esperando a que baje el backup');
+      await coldClient.encryption().recover(recoveryKey);
+
+      await requireDecrypted(coldTimeline, historyBody, TIMELINE_TIMEOUT_MS, log);
+
+      const coldRecoveryState = coldClient.encryption().recoveryState();
       return (
-        'Clave de recuperación generada y backup presente en el servidor. ' +
-        `verificationState=${String(verification)} ` +
-        `recoveryState=${String(recovery)} backupState=${String(backup)}`
+        'El dispositivo frío no podía leer el historial, y tras recuperar con la ' +
+        `clave sí lo descifra. recoveryState=${String(coldRecoveryState)}, ` +
+        `deviceId nuevo ${coldSession.deviceId}`
       );
     }
   );
@@ -476,8 +579,8 @@ export async function runPhaseA(
     pingToken,
 
     async waitForPeerMessage(peerLog: LogFn): Promise<CheckResult> {
-      const id = 'C7';
-      const title = 'Ida y vuelta E2EE con un segundo dispositivo (Element Web)';
+      const id = 'C8';
+      const title = 'Ida y vuelta E2EE con un segundo dispositivo vivo (Element Web)';
       const startedAt = Date.now();
 
       if (!timeline) {
@@ -493,11 +596,11 @@ export async function runPhaseA(
       peerLog(`▶ ${id} — ${title}`);
       peerLog(`  Esperando "${pingToken}" desde Element Web…`);
       try {
-        await waitForDecryptedBody(timeline, pingToken, PEER_TIMEOUT_MS, peerLog);
+        await requireDecrypted(timeline, pingToken, PEER_TIMEOUT_MS, peerLog);
         const durationMs = Date.now() - startedAt;
         const detail =
-          'El mensaje enviado desde Element Web llegó al móvil y se descifró. ' +
-          'El reparto de claves de sala entre dispositivos funciona.';
+          'El mensaje escrito en Element Web llegó al móvil y se descifró. ' +
+          'El reparto de claves entre dispositivos vivos funciona.';
         peerLog(`  ✅ ${detail} (${durationMs} ms)`);
         return { id, title, status: 'pass', detail, durationMs };
       } catch (error) {
@@ -509,11 +612,16 @@ export async function runPhaseA(
     },
 
     async dispose(disposeLog: LogFn): Promise<void> {
-      if (!sync) return;
-      try {
-        await sync.stop();
-      } catch (error) {
-        disposeLog(`  ⚠️  no se pudo parar el sync: ${describeError(error)}`);
+      for (const [label, service] of [
+        ['principal', sync],
+        ['frío', coldSync],
+      ] as const) {
+        if (!service) continue;
+        try {
+          await service.stop();
+        } catch (error) {
+          disposeLog(`  ⚠️  no se pudo parar el sync ${label}: ${describeError(error)}`);
+        }
       }
     },
   };

@@ -69,22 +69,12 @@ recuperación**, el nombre de una **sala**, un **mensaje** y un **PING**.
 6. Vuelve al móvil y pulsa **Fase B · esperar el PING**.
 7. Espera a que salga ✅ o ❌.
 
-### Comprobación extra (opcional pero útil)
-
-Abre una **ventana de incógnito** y entra en Element con la misma cuenta, pero
-esta vez **sáltate la verificación** y no metas la clave de recuperación.
-Entra en la misma sala. Los mensajes **no** se deberían poder leer.
-
-Si se leen sin haber metido la clave, avisa: significa que el historial no está
-protegido como creemos.
-
 ---
 
 ## 5. Qué mandar de vuelta
 
 - El log completo del móvil (se selecciona y se copia).
-- Si el mensaje del paso 4.4 se leía o no.
-- Si en la comprobación extra los mensajes se leían o no.
+- Si el mensaje del paso 4.4 se leía o no en el navegador.
 
 ---
 
@@ -97,9 +87,15 @@ protegido como creemos.
 | **C3** | Que funciona el sistema de sincronización moderno. | El servidor no lo soporta. |
 | **C4** | Que se puede crear una sala cifrada. | El cifrado no se activa al crear salas. |
 | **C5** | Que un mensaje se cifra, se envía y se vuelve a leer. | El cifrado no funciona de ida y vuelta. |
-| **C6** | Que se genera la clave de recuperación y hay copia de seguridad en el servidor. | Sin esto, cambiar de móvil pierde todo el historial. |
-| **C7** | Que un mensaje escrito en el ordenador llega al móvil y se lee. | Los dispositivos no se pasan las claves entre ellos. |
-| **C8** | Que se pueden enviar ficheros en una sala cifrada. | Esta suele fallar en iPhone; en Android es la primera vez que se prueba. |
+| **C6** | Que se pueden enviar ficheros en una sala cifrada. | Esta falla en iPhone (bug conocido); en Android es la primera vez que se prueba. |
+| **C7** | Que un móvil **recién estrenado** recupera y lee mensajes anteriores usando sólo la clave de recuperación. | Cambiar de móvil perdería todo el historial. |
+| **C8** | Que un mensaje escrito en el ordenador llega al móvil y se lee. | Los dispositivos no se pasan las claves entre ellos. |
+
+Sobre C7: la app hace ella sola la prueba completa. Abre una segunda sesión
+"en frío", comprueba primero que **no** puede leer el historial, mete la clave
+de recuperación, y comprueba que entonces **sí**. Si el resultado dice
+«INCONCLUSA», no es que falle: es que la prueba no pudo demostrar nada en esa
+corrida y hay que repetirla.
 
 ---
 

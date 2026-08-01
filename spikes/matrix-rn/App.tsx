@@ -175,12 +175,14 @@ export default function App() {
             </Text>
 
             <Text style={styles.steps}>
-              1. Abre app.element.io en el ordenador e inicia sesión.{'\n'}
+              1. Abre app.element.io en el ordenador e inicia sesión con la misma
+              cuenta.{'\n'}
               2. Cuando pida verificar, elige verificar con clave de recuperación y
               pega la clave de arriba.{'\n'}
-              3. Entra en la sala y comprueba que el mensaje de arriba se lee. Si
-              sale «no se puede descifrar», C6 ha fallado.{'\n'}
-              4. Envía el texto PING de arriba en esa sala.{'\n'}
+              3. Entra en la sala y comprueba que el mensaje de arriba se lee. Esto
+              confirma con un cliente ajeno que lo que escribe el móvil es legible
+              desde fuera.{'\n'}
+              4. Envía el texto PING de arriba en esa sala, exactamente igual.{'\n'}
               5. Vuelve aquí y pulsa el botón.
             </Text>
 
