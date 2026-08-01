@@ -5,9 +5,7 @@ import {
   NativeOidcLoginRequest,
   type OidcLoginClient,
 } from '@/lib/matrix/native/oidcLogin';
-import type { SessionFields } from '@/lib/matrix/native/translate';
-
-jest.mock('@unomed/react-native-matrix-sdk');
+import type { SessionFields } from '@/lib/matrix/native/session';
 
 /**
  * An authorization in flight.

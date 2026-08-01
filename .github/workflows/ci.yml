@@ -88,9 +88,17 @@ jobs:
       - name: Typecheck frontend
         run: bun run typecheck:frontend
 
-      # El frontend tenía script `test` y nadie lo ejecutaba, así que sus tests
-      # estaban verdes sólo en la máquina de quien los lanzara a mano — el mismo
-      # estado que tener cero. La capa de Matrix se estrena con cobertura que
-      # CORRE; cobertura que no corre no es cobertura.
+      # The frontend had a `test` script that nothing ran, so its tests were green
+      # only on the machine of whoever launched them by hand — the same state as
+      # having none. Coverage that does not run is not coverage.
+      #
+      # `bun run --filter`, and not `bun test`: they are different runners and only
+      # one of them works here. The script is jest under the jest-expo preset,
+      # which is what strips the Flow types off React Native's entrypoint and
+      # resolves the `__mocks__` stand-in for the Matrix binding — a package whose
+      # entry calls into a native module no test process can load. Bun's own runner
+      # does neither, so `bun test` parses `react-native/index.js` raw and dies on
+      # `import typeof`. Everything except the four suites that need the binding's
+      # enum values at runtime does run under both.
       - name: Test frontend
         run: bun run --filter @allo/frontend test

@@ -49,7 +49,8 @@ import { applyListUpdate } from './native/listDiff';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
-import { toAlloSession, toEncryptionState, toSyncState } from './native/translate';
+import { toAlloSession } from './native/session';
+import { toEncryptionState, toSyncState } from './native/translate';
 
 /**
  * The native implementation of the Allo chat port, over

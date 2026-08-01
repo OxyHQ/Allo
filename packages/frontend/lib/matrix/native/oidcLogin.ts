@@ -3,7 +3,7 @@ import type { OAuthAuthorizationDataLike } from '@unomed/react-native-matrix-sdk
 import { MatrixOidcLoginSettledError } from '@/lib/matrix/errors';
 import type { AlloOidcLoginRequest, AlloSession } from '@/lib/matrix/types';
 
-import { toAlloSession, type SessionFields } from './translate';
+import { toAlloSession, type SessionFields } from './session';
 
 /**
  * What an in-flight authorization needs of the client, rather than the whole
