@@ -18,25 +18,23 @@
 
 ## About
 
-This is the **frontend package** of the **Allo** monorepo. **Allo** is a secure, universal chat platform designed for mobile and web with **Signal Protocol encryption**, **device-first architecture**, and **peer-to-peer messaging**. It features end-to-end encrypted messaging, offline support, and a clean UI. Built with Expo and React Native, it supports file-based routing, multi-language support, and a modern UI.
+This is the **frontend package** of the **Allo** monorepo. **Allo** is a chat platform for mobile and web with **end-to-end encrypted direct messages** and a **device-first architecture**. It features offline support and a clean UI. Built with Expo and React Native, it supports file-based routing, multi-language support, and a modern UI.
 
 This package contains the complete React Native application that runs on Android, iOS, and Web platforms.
 
 ## Features
 
 ### Security & Encryption
-- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages
+- 🔐 **End-to-End Encryption** - Direct messages encrypted client-side with static ECDH (P-256) between identity keys + AES-256-GCM
 - 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
 - ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Device Key Management** - Automatic Signal Protocol key generation and exchange
-- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
-- 🔒 **Forward Secrecy** - Each message uses a unique encryption key
+- 🔑 **Device Key Management** - Automatic key generation and exchange on first launch
+- ⚠️ **No Forward Secrecy** - The same key encrypts every message between a pair of identity keys; compromising either private key decrypts that pair's entire message history, past and future
+- ⚠️ **Plaintext Fallback** - If encryption fails or the recipient has no registered device, the message is sent unencrypted rather than blocked
 
 ### Messaging
-- Real-time encrypted messaging
+- Real-time messaging, encrypted for direct conversations
 - Offline support with local storage
-- Peer-to-peer messaging when both users are online
-- Media attachments (images, videos, files)
 - Message reactions and replies
 - Read receipts and delivery status
 
@@ -57,7 +55,7 @@ This package contains the complete React Native application that runs on Android
 - Expo Router (file-based routing)
 - Custom SVG icons
 - Expo Notifications, Secure Store, Camera, Video, Image Picker
-- **Signal Protocol** - End-to-end encryption (ECDH + AES-GCM)
+- **Static ECDH (P-256) + AES-256-GCM** - End-to-end encryption for direct messages (see [Encryption](../../docs/encryption.mdx) for what this does and doesn't provide)
 - **AsyncStorage** - Offline-first message storage
 - **Socket.IO** - Real-time messaging and P2P signaling
 
@@ -73,7 +71,7 @@ This package contains the complete React Native application that runs on Android
 ├── hooks/              # Custom React hooks
 ├── interfaces/         # TypeScript interfaces
 ├── lib/                # Library code
-│   ├── signalProtocol.ts  # Signal Protocol encryption/decryption
+│   ├── signalProtocol.ts  # End-to-end encryption/decryption (static ECDH + AES-256-GCM)
 │   ├── offlineStorage.ts  # Offline message storage
 │   ├── p2pMessaging.ts    # Peer-to-peer messaging
 │   └── ...
@@ -176,15 +174,24 @@ This package is part of the Allo monorepo and integrates with:
 
 ## Security & Encryption
 
-### Signal Protocol Implementation
+### End-to-End Encryption Implementation
 
-Allo uses **Signal Protocol** for end-to-end encryption:
+`lib/signalProtocol.ts` implements static Diffie-Hellman, not the Signal Protocol despite the filename (kept for historical reasons / to orient readers already familiar with the code). See [docs/encryption.mdx](../../docs/encryption.mdx) for the full picture; summary:
 
-- **Device Keys**: Each device automatically generates identity keys, signed pre-keys, and one-time pre-keys on first launch
-- **Key Exchange**: Devices exchange public keys through the backend API
-- **Encryption**: Messages are encrypted using ECDH key exchange + AES-GCM encryption
-- **Decryption**: Messages are decrypted locally on the recipient's device
-- **Forward Secrecy**: Each message uses a unique encryption key derived from the session
+- **Device Keys**: Each device generates an identity key pair, a signed pre-key, and 100 one-time pre-keys on first launch and uploads the public halves to the backend. Only the identity key pair is actually used for encryption — the signed pre-key and one-time pre-keys are generated, stored, and published, but no encrypt/decrypt path reads them.
+- **Key Exchange**: Devices publish and fetch public identity keys through the backend API.
+- **Encryption**: `deriveSharedSecret` computes the ECDH shared point between the sender's and recipient's identity keys and uses the raw X coordinate directly as the AES-256 key — there is no KDF. The same pair of identity keys always produces the same encryption key.
+- **Decryption**: Messages are decrypted locally on the recipient's device using the same static shared secret.
+- **No Forward Secrecy**: The encryption key for a pair of users never changes; only the IV is unique per message. If either party's identity private key is ever compromised, every past and future message between that pair can be decrypted.
+- **Signatures Unused**: The signed pre-key's ECDSA signature is generated and stored, but `verifySignature` is never called on any send or receive path — nothing actually checks it.
+
+### Known Limitations
+
+- **Group chats**: When sending in a group conversation, the app encrypts the message for only the first other participant returned by the conversation's participant list. Every other participant sees a decryption-failure placeholder.
+- **Multi-device**: `getRecipientKeys` (`stores/deviceKeysStore.ts`) always picks the recipient's first registered device (`devices[0]`, sorted by device id) rather than the device the recipient is actually using. A second device the same user owns generally cannot decrypt messages sent to them.
+- **Plaintext fallback**: If encryption fails, or the recipient has no registered devices, the message is sent as plaintext instead of being blocked (`stores/messagesStore.ts`).
+- **Peer-to-peer**: Not implemented. `lib/p2pMessaging.ts`'s `establishP2PConnection` always returns `false` (a placeholder), and the WebRTC offer/answer/ICE-candidate handlers are unimplemented stubs. Every message currently goes through the server relay.
+- **Media attachments**: Not implemented. The attachment menu's photo, document, camera, location, contact, and poll handlers are all no-ops (`components/conversation/ConversationView.tsx`), and there is no upload endpoint on the backend.
 
 ### Device-First Architecture
 
@@ -193,21 +200,13 @@ Allo uses **Signal Protocol** for end-to-end encryption:
 - **Offline Support**: App works completely offline, messages sync when online
 - **Privacy**: When cloud sync is disabled, messages never leave the device
 
-### Peer-to-Peer Messaging
-
-- **P2P Support**: Direct device-to-device messaging when both users are online
-- **Automatic Fallback**: Falls back to server relay if P2P is unavailable
-- **WebRTC Signaling**: Uses Socket.IO for P2P connection establishment
-- **Encrypted P2P**: All P2P messages are still encrypted with Signal Protocol
-
 ### Message Flow
 
-1. User types message → Encrypted locally with Signal Protocol
+1. User types message → encrypted locally (static ECDH + AES-256-GCM), or sent as plaintext if encryption fails
 2. Message stored locally in AsyncStorage (offline-first)
-3. If P2P available → Send directly to recipient device
-4. If P2P unavailable → Send to server (if cloud sync enabled)
-5. Recipient receives encrypted message → Decrypts locally
-6. Message displayed in conversation
+3. Message POSTed to the server (if cloud sync is enabled), which relays it to the recipient — there is no working P2P path yet
+4. Recipient receives the message → decrypts locally if it was encrypted
+5. Message displayed in conversation
 
 ### Security Settings
 
@@ -215,7 +214,7 @@ Access security settings via: **Settings → Security & Encryption**
 
 - **Cloud Sync Toggle**: Enable/disable cloud backup
 - **Encryption Status**: View encryption initialization status
-- **Device ID**: View your device's Signal Protocol device ID
+- **Device ID**: View your device's registered device ID
 
 ## Push Notifications (Expo + FCM)
 

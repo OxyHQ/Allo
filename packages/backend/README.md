@@ -6,15 +6,15 @@
 
 ## Overview
 
-This is the **backend package** of the **Allo** monorepo. Allo is a modern, secure chat application with **Signal Protocol encryption**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
+This is the **backend package** of the **Allo** monorepo. Allo is a modern chat application with **end-to-end encrypted direct messages**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
 
 ### Key Features
 
-- 🔐 **Signal Protocol Encryption** - End-to-end encryption for all messages
+- 🔐 **End-to-End Encryption** - Direct messages are encrypted client-side (static ECDH P-256 + AES-256-GCM) before reaching the server; see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model and known gaps
 - 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
 - ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Device Key Management** - Signal Protocol device keys and key exchange
-- 🚫 **No Plaintext Storage** - Server never sees unencrypted message content
+- 🔑 **Device Key Management** - Device public key bundles and key exchange
+- ⚠️ **Plaintext Fallback** - The client falls back to sending plaintext when it can't encrypt a message; the server stores whatever it's given
 
 ## Tech Stack
 
@@ -67,17 +67,12 @@ Create a `.env` file in this package directory with the following variables:
 # Database
 MONGODB_URI=your_mongodb_connection_string
 
-# Authentication
-# WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
-OXY_API_URL=https://api.oxy.so
-
 # Server Configuration
-PORT=3000
+PORT=4140
 NODE_ENV=development
-
-# Frontend URL (for CORS)
-FRONTEND_URL=https://allo.earth
 ```
+
+Authentication is handled entirely by `@oxyhq/core`'s Oxy auth middleware and CORS by `createOxyCors` with a built-in allowlist (see `server.ts`) — `OXY_API_URL`, `FRONTEND_URL`, and `JWT_SECRET` are not read anywhere in this package's code, despite appearing in some deployment docs. Don't rely on setting them to change auth or CORS behavior.
 
 ### Running the API
 
@@ -162,7 +157,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 
 ### Messages
 
-**Important**: All messages are encrypted using Signal Protocol. The backend stores only encrypted ciphertext. Decryption happens on the client side.
+**Important**: Direct messages are end-to-end encrypted client-side (static ECDH P-256 + AES-256-GCM) when the client is able to encrypt them, and the backend stores that ciphertext as-is — it never has the keys to decrypt it. When encryption isn't possible (e.g. the recipient has no registered device), the client falls back to plaintext and the backend stores that too. See [docs/encryption.mdx](../../docs/encryption.mdx) for the full model.
 
 #### GET /api/messages
 - Get messages for a conversation
@@ -229,7 +224,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 #### POST /api/messages/:id/delivered
 - Mark a message as delivered
 
-### Device Management (Signal Protocol)
+### Device Management (key registration)
 
 #### GET /api/devices
 - Get all devices for the authenticated user
@@ -240,7 +235,7 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 - Returns: `Device`
 
 #### POST /api/devices
-- Register a new device with Signal Protocol keys
+- Register a new device with its public key bundle
 - Body:
 ```json
 {
@@ -310,8 +305,8 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
   },
   "security": {
     "cloudSyncEnabled": false, // Device-first by default
-    "encryptionEnabled": true, // Signal Protocol encryption
-    "peerToPeerEnabled": true // Enable P2P when possible
+    "encryptionEnabled": true, // Encryption on/off
+    "peerToPeerEnabled": true // Stored but not enforced — P2P isn't functional yet, see docs/encryption.mdx
   }
 }
 ```
@@ -451,35 +446,35 @@ This package is part of the Allo monorepo and integrates with:
 
 ## Security & Encryption
 
-### Signal Protocol
+### End-to-End Encryption
 
-Allo uses **Signal Protocol** for end-to-end encryption:
+Direct messages are encrypted client-side with a static Diffie-Hellman scheme (see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model; the frontend module is named `signalProtocol.ts` for historical reasons but does not implement the Signal Protocol):
 
-- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys
-- **Key Exchange**: Devices exchange public keys through the backend
-- **Encrypted Storage**: Backend stores only encrypted ciphertext, never plaintext
-- **Forward Secrecy**: Each message uses a unique encryption key
-- **Device Management**: Users can manage multiple devices, each with separate keys
+- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys. Only the identity key is used for encryption — the pre-keys are generated and stored but not consumed by any encrypt/decrypt path.
+- **Key Exchange**: Devices exchange public keys through the backend.
+- **Storage**: The backend stores whatever the client sends — encrypted ciphertext when the client was able to encrypt, plaintext when it falls back because it couldn't (e.g. the recipient has no registered device).
+- **No Forward Secrecy**: The same static shared secret encrypts every message between a pair of identity keys; there is no per-message or per-session key.
+- **Device Management**: Users can register multiple devices, each with separate keys, but a recipient's non-primary devices generally cannot decrypt messages sent to them (see [docs/encryption.mdx](../../docs/encryption.mdx)).
 
 ### Device-First Architecture
 
 - **Local Storage**: Messages are stored locally on the device first
 - **Optional Cloud Sync**: Users can enable cloud backup in settings (disabled by default)
 - **Privacy**: When cloud sync is disabled, messages are only stored on devices
-- **P2P Support**: Peer-to-peer messaging when both users are online (if enabled)
+- **P2P**: Peer-to-peer messaging is scaffolded (`lib/p2pMessaging.ts`) but not yet functional — every message currently goes through the server relay
 
 ### Message Encryption Flow
 
-1. Client encrypts message using Signal Protocol with recipient's device keys
-2. Client sends encrypted ciphertext to backend
-3. Backend stores encrypted message (never sees plaintext)
-4. Backend delivers encrypted message to recipient devices
-5. Recipient devices decrypt message locally
+1. Client attempts to encrypt the message with the recipient's identity key (static ECDH + AES-256-GCM); if that fails, it falls back to plaintext
+2. Client sends the resulting ciphertext (or plaintext) to the backend
+3. Backend stores the message as received — it never has the keys to decrypt a ciphertext payload
+4. Backend delivers the message to recipient devices
+5. Recipient devices decrypt locally when the payload is encrypted
 
 ## Notes
 
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Real-time**: Socket.IO is used for real-time message delivery and updates.
-- **Encryption**: All messages are encrypted using Signal Protocol. Backend never sees plaintext.
+- **Encryption**: Direct messages are end-to-end encrypted when the client can encrypt them; the backend never sees the keys needed to decrypt ciphertext, but see [docs/encryption.mdx](../../docs/encryption.mdx) for the plaintext fallback and other gaps (no forward secrecy, broken group encryption, non-functional multi-device and P2P).
 - **Device-First**: Messages stored locally by default. Cloud sync is optional.

@@ -107,7 +107,7 @@ src/
 |-------|---------------|
 | `Conversation` | `direct` or `group`, participants[], unreadCounts, lastMessage, archivedBy |
 | `Message` | Ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo |
-| `Device` | Signal Protocol public key bundle per `(userId, deviceId)` — unique index |
+| `Device` | Public key bundle (identity key, signed pre-key, one-time pre-keys) per `(userId, deviceId)` — unique index |
 | `UserSettings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
 | `Block` / `Restrict` | Per-user block + restrict lists |
 | `PushToken` | Expo / FCM tokens for push delivery |

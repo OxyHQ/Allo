@@ -16,7 +16,7 @@ src/
 ├── api.ts           # HTTP response envelope + pagination
 ├── message.ts       # Message DTOs (encrypted + legacy plaintext media)
 ├── conversation.ts  # Conversation + Oxy-enriched participant DTOs
-├── device.ts        # Device / Signal Protocol pre-key DTOs
+├── device.ts        # Device key bundle / pre-key DTOs
 └── index.ts         # Re-exports every module
 ```
 
@@ -37,7 +37,7 @@ Mirrors the `Message` model as served by `routes/messages.ts`.
 - **`MessageDto`** — serialized message. Mongoose `Map` fields (`readBy`,
   `reactions`) are typed as `Record<string, …>` because they serialize to plain
   JSON objects on the wire.
-- **`EncryptedMediaItem`** — media descriptor on the Signal Protocol path.
+- **`EncryptedMediaItem`** — media descriptor on the encrypted-message path. The type exists in the schema, but no client code currently produces one — see [docs/encryption.mdx](../../docs/encryption.mdx).
 - **`MediaItem`** — plaintext media descriptor, retained for the legacy
   pre-encryption path only.
 - **`MediaKind`** / **`MessageKind`** — `"image" | "video" | "audio" | "file"`
