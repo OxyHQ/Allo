@@ -117,9 +117,12 @@ bunx tsc --noEmit    # debe salir limpio
 
 Dos cosas que hay que saber:
 
-- **Fija la arquitectura a `arm64-v8a`.** El módulo sólo trae `.so` para
-  `arm64-v8a` y `armeabi-v7a`; con `x86`/`x86_64` el APK se instala pero
-  revienta al abrir. Por lo mismo, **el emulador x86_64 no sirve**.
+- **Las ABIs ya están fijadas** por `plugins/withMatrixSdkAbis.js`, que pone
+  `reactNativeArchitectures=armeabi-v7a,arm64-v8a` — exactamente las dos para
+  las que el módulo trae `libmatrix_sdk_ffi.so`. Con `x86`/`x86_64` el APK se
+  instala pero revienta al abrir con `UnsatisfiedLinkError`, que no falla en el
+  build sino en el dispositivo. Por lo mismo, **el emulador x86_64 no sirve**:
+  hace falta hardware ARM o un emulador arm64.
 - **Hace falta el NDK de Android.** Los `.so` de Rust vienen precompilados,
   pero el pegamento C++ entre JavaScript y Rust (7 ficheros, incluido uno de
   2,5 MB generado) se compila en cada build. Con EAS Build esto pasa en la
