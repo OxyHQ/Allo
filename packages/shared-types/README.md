@@ -1,206 +1,102 @@
 # @allo/shared-types
 
-Shared TypeScript types for the allo social network platform. This package contains all the interfaces, enums, and types that are shared between the frontend and backend applications to ensure type consistency.
+TypeScript contracts shared between the Allo frontend (`@allo/frontend`) and
+backend (`@allo/backend`).
 
-## Overview
-
-allo is a Twitter-like social network where users can create posts (instead of tweets), interact with content, and build communities. This package provides comprehensive type definitions for all core functionality.
-
-## Architecture
-
-The platform uses **Oxy** for user authentication and user data management. All user-related data is linked to Oxy users via `oxyUserId` fields.
+This package models the **wire / transport layer** only: the HTTP response
+envelope and the serialized DTOs the backend returns. It deliberately does
+*not* contain the frontend's presentation-shaped store types, nor mongoose
+schema types — the models import the primitives from here and layer their own
+document types on top.
 
 ## Package Structure
 
 ```
 src/
-├── common.ts          # Common utility types and enums
-├── profile.ts         # Profile-related types
-├── post.ts           # Post (tweet) types
-├── interaction.ts    # User interaction types (likes, reposts, etc.)
-├── feed.ts          # Feed and timeline types
-├── media.ts         # Media content types
-├── notification.ts  # Notification system types
-├── list.ts          # User list types
-├── analytics.ts     # Analytics and metrics types
-└── index.ts         # Main export file
+├── api.ts           # HTTP response envelope + pagination
+├── message.ts       # Message DTOs (encrypted + legacy plaintext media)
+├── conversation.ts  # Conversation + Oxy-enriched participant DTOs
+├── device.ts        # Device / Signal Protocol pre-key DTOs
+└── index.ts         # Re-exports every module
 ```
 
 ## Core Types
 
-### Profile Types (`profile.ts`)
+### API transport (`api.ts`)
 
-- **Profile**: Main profile interface linked to Oxy users
-- **ProfileType**: Personal, Business, Creator, Verified
-- **ProfileVisibility**: Public, Private, Followers Only
-- **PersonalInfo**: Bio, display name, username, avatar, etc.
-- **ProfileSettings**: Notification and privacy settings
+Mirrors `packages/backend/src/utils/apiHelpers.ts`.
 
-### Post Types (`post.ts`)
+- **`ApiSuccessResponse<T>`** — success envelope; payload lives under `data`.
+- **`ApiErrorResponse`** — `{ error, message }` shape emitted on failure.
+- **`PaginationOptions`** — offset-based `{ limit, offset }` for list endpoints.
 
-- **Post**: Main post interface (equivalent to tweets)
-- **PostType**: Text, Image, Video, Poll, Repost, Quote
-- **PostContent**: Text, images, videos, polls, location
-- **PostVisibility**: Public, Followers Only, Private
-- **PollData**: Poll questions, options, and voting data
+### Messages (`message.ts`)
 
-### Interaction Types (`interaction.ts`)
+Mirrors the `Message` model as served by `routes/messages.ts`.
 
-- **Interaction**: Generic interaction interface
-- **Like**: Post/comment likes
-- **Repost**: Repost and quote functionality
-- **Comment**: Nested comment system
-- **Follow**: User following relationships
-- **Block/Mute**: User blocking and muting
-- **Bookmark**: Post bookmarking
-- **Report**: Content reporting system
+- **`MessageDto`** — serialized message. Mongoose `Map` fields (`readBy`,
+  `reactions`) are typed as `Record<string, …>` because they serialize to plain
+  JSON objects on the wire.
+- **`EncryptedMediaItem`** — media descriptor on the Signal Protocol path.
+- **`MediaItem`** — plaintext media descriptor, retained for the legacy
+  pre-encryption path only.
+- **`MediaKind`** / **`MessageKind`** — `"image" | "video" | "audio" | "file"`
+  and `"text" | "media" | "system"`.
 
-### Feed Types (`feed.ts`)
+### Conversations (`conversation.ts`)
 
-- **Feed**: Generic feed interface
-- **FeedType**: Home, Explore, Trending, User Profile, etc.
-- **FeedAlgorithm**: Chronological, Relevance, Engagement, Personalized
-- **TimelineFeed**: Home timeline feeds
-- **ExploreFeed**: Discovery and trending feeds
-- **SearchFeed**: Search results feeds
+Mirrors the `Conversation` model plus the enrichment done by
+`utils/oxyUserDisplay.ts` for `GET /api/conversations`.
 
-### Media Types (`media.ts`)
+- **`ConversationDto`** — serialized conversation with enriched participants.
+- **`ConversationParticipant`** — raw participant as stored on the document.
+- **`EnrichedConversationParticipant`** — participant plus Oxy profile data
+  (name, username, avatar).
+- **`ParticipantDisplayName`** — `displayName` is canonical and composed by the
+  Oxy API; `first` / `last` must never be used to recompose it.
+- **`ConversationType`** / **`ConversationParticipantRole`**.
 
-- **Media**: Generic media interface
-- **MediaType**: Image, Video, Audio, GIF, Document
-- **ImageMedia**: Image-specific metadata and EXIF data
-- **VideoMedia**: Video metadata, codecs, dimensions
-- **AudioMedia**: Audio metadata and properties
-- **MediaProcessingJob**: Media processing and optimization
+### Devices (`device.ts`)
 
-### Notification Types (`notification.ts`)
+Mirrors the `Device` model as exchanged by `routes/devices.ts`. All key
+material is Base64 encoded.
 
-- **Notification**: Generic notification interface
-- **NotificationType**: Like, Repost, Comment, Follow, allo, etc.
-- **NotificationPriority**: Low, Normal, High, Urgent
-- **NotificationPreferences**: User notification settings
-- **Specific notification types**: LikeNotification, FollowNotification, etc.
-
-### List Types (`list.ts`)
-
-- **List**: User-created lists (like Twitter lists)
-- **ListVisibility**: Public, Private
-- **ListType**: User, Topic, Curated
-- **ListMember**: List membership
-- **ListSubscriber**: List following
-
-### Analytics Types (`analytics.ts`)
-
-- **AnalyticsData**: Generic analytics data points
-- **UserAnalytics**: User-specific metrics and insights
-- **PostAnalytics**: Post performance metrics
-- **AudienceAnalytics**: Follower demographics and behavior
-- **PlatformAnalytics**: Platform-wide statistics
-
-## Key Features
-
-### Oxy Integration
-All user-related data is linked to Oxy users via `oxyUserId` fields:
-- Profiles are linked to Oxy users
-- Posts are authored by Oxy users
-- Interactions are performed by Oxy users
-- Notifications are sent to Oxy users
-
-### Comprehensive Social Features
-- **Posts**: Text, images, videos, polls, location sharing
-- **Interactions**: Likes, reposts, comments, follows, blocks, mutes
-- **Feeds**: Multiple feed types with different algorithms
-- **Media**: Rich media support with processing
-- **Notifications**: Comprehensive notification system
-- **Lists**: User-curated lists for organizing follows
-- **Analytics**: Detailed metrics and insights
-
-### Production Ready
-- **Type Safety**: Full TypeScript support with strict typing
-- **Extensible**: Easy to extend with new features
-- **Consistent**: Shared between frontend and backend
-- **Documented**: Comprehensive JSDoc comments
-- **Maintained**: Regular updates and improvements
+- **`DeviceDto`** — full device record, including one-time pre-keys.
+- **`PublicDeviceBundle`** — bundle returned for key exchange
+  (`GET /api/devices/user/:userId`); excludes one-time pre-keys.
+- **`SignedPreKey`** / **`PreKey`**.
 
 ## Usage
 
-### Installation
-
-```bash
-bun add @allo/shared-types
-```
-
-### Import Types
+The package is a workspace dependency — no install step beyond the root
+`bun install`. Import types directly from the package root:
 
 ```typescript
-import { 
-  Post, 
-  Profile, 
-  InteractionType, 
-  FeedType,
-  NotificationType 
-} from '@allo/shared-types';
-```
-
-### Example Usage
-
-```typescript
-// Create a new post
-const newPost: CreatePostRequest = {
-  content: {
-    text: "Hello allo!",
-    images: ["image1.jpg", "image2.jpg"]
-  },
-  visibility: PostVisibility.PUBLIC,
-  hashtags: ["allo", "social"]
-};
-
-// User profile with Oxy integration
-const profile: Profile = {
-  id: "profile123",
-  oxyUserId: "oxy_user_456",
-  profileType: ProfileType.PERSONAL,
-  isPrimary: true,
-  isActive: true,
-  personalInfo: {
-    username: "johndoe",
-    displayName: "John Doe",
-    bio: "Software developer"
-  },
-  // ... other fields
-};
+import type { ConversationDto, MessageDto, PublicDeviceBundle } from "@allo/shared-types";
 ```
 
 ## Development
 
-### Building
-
 ```bash
-bun run build
-```
-
-### Development Mode
-
-```bash
-bun run dev
-```
-
-### Linting
-
-```bash
+bun run build   # tsc → dist/
+bun run dev     # tsc --watch
 bun run lint
+bun run clean
 ```
+
+The backend and frontend consume `dist/`, so `shared-types` builds first in the
+root `bun run build` chain.
 
 ## Contributing
 
-When adding new types:
+When adding types:
 
-1. Follow the existing naming conventions
-2. Use `oxyUserId` for user references
-3. Add comprehensive JSDoc comments
-4. Update this README if adding new major features
-5. Ensure all types are exported from `index.ts`
+1. Only add what crosses the frontend/backend boundary. Types used by a single
+   package belong in that package.
+2. Document which model / route the DTO mirrors, so drift is easy to spot.
+3. Model mongoose `Map` fields as `Record<string, …>` — that is their JSON shape.
+4. Export the module from `index.ts`.
 
 ## License
 
-UNLICENSED - Private package for allo platform 
+UNLICENSED — private package for Allo.
