@@ -87,3 +87,10 @@ jobs:
       # strictly more than this job does.
       - name: Typecheck frontend
         run: bun run typecheck:frontend
+
+      # El frontend tenía script `test` y nadie lo ejecutaba, así que sus tests
+      # estaban verdes sólo en la máquina de quien los lanzara a mano — el mismo
+      # estado que tener cero. La capa de Matrix se estrena con cobertura que
+      # CORRE; cobertura que no corre no es cobertura.
+      - name: Test frontend
+        run: bun run --filter @allo/frontend test
