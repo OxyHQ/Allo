@@ -3,8 +3,13 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-native",
-    "composite": true,
-    "noEmit": false,
+    // No "composite"/"noEmit": false here. Both existed only so the root config
+    // could list this package as a project reference; a referenced project must
+    // be composite, and composite forbids noEmit — which meant this config
+    // overrode Expo's "noEmit": true and a plain `tsc -p` would have written a
+    // .js next to every .tsx in the app. The root no longer references the
+    // frontend (nothing imports it), so it inherits Expo's noEmit and can only
+    // typecheck.
     "paths": {
       "@/*": [
         "./*"

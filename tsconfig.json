@@ -1,39 +1,31 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ES2020",
-    "lib": [
-      "ES2020"
-    ],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
-  },
+  // Solution-style config: it owns no files of its own and exists only to point
+  // at the real projects, so `tsc --build` from the repo root builds them in
+  // dependency order.
+  //
+  // "files": [] is load-bearing, not decoration. Without "files" or "include",
+  // TypeScript falls back to including "**/*" — which pulled every source file
+  // in the monorepo into THIS program. Those same files already belong to the
+  // referenced projects, so each one was expected to be read from that project's
+  // declaration output instead of from source; nothing had emitted any, and the
+  // result was 240 TS6305 "output file has not been built from source file"
+  // errors on a clean checkout. Not a stale build: a config that claimed
+  // ownership of files it does not own.
+  "files": [],
+
+  // Only the dependency that exists is modelled. The backend imports
+  // @allo/shared-types and so must see its declarations; nothing imports the
+  // frontend, which is a leaf app. Referencing it here would also mean
+  // `tsc --build` emitting .js next to every .tsx in packages/frontend, since a
+  // referenced project has to be composite and composite forbids noEmit. The
+  // frontend is typechecked on its own instead — see the "typecheck" scripts in
+  // package.json.
   "references": [
     {
       "path": "./packages/shared-types"
     },
     {
       "path": "./packages/backend"
-    },
-    {
-      "path": "./packages/frontend"
     }
-  ],
-  "exclude": [
-    "node_modules",
-    "**/node_modules",
-    "**/dist",
-    "**/build",
-    "**/.expo"
   ]
 }
