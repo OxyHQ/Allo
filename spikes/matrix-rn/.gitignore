@@ -1,0 +1,10 @@
+# El spike instala ~1,2 GB de binarios nativos. Nada de eso se commitea.
+# `bun.lock` sí se commitea: el spike existe para probar una combinación
+# concreta de versiones, así que tiene que ser reproducible.
+node_modules/
+.expo/
+dist/
+
+# Proyectos nativos generados por `expo prebuild`.
+android/
+ios/
