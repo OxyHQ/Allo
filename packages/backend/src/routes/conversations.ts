@@ -1,11 +1,10 @@
 import { Router, Response } from "express";
 import Conversation from "../models/Conversation";
 import Message from "../models/Message";
-import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
+import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
 import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { oxy } from "../../server";
-import { getIO } from "../utils/socket";
 import { logger } from "../utils/logger";
 import type { ConversationDto, ConversationParticipantRole, EnrichedConversationParticipant } from "@allo/shared-types";
 import {
@@ -230,19 +229,24 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
 
     await conversation.save();
 
-    // Emit socket event to all conversation participants when theme changes
+    // Emit socket event to all conversation participants when theme changes.
+    // The messaging namespace is the one clients connect to (see
+    // hooks/useRealtimeMessaging.ts) — emitting on the root Socket.IO server
+    // would reach nobody.
     if (themeChanged) {
-      const io = getIO();
-      if (io) {
+      const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
+      if (messagingNamespace) {
         // Emit to all participants except the user who made the change
         conversation.participants.forEach((participant) => {
           if (participant.userId !== userId) {
-            io.to(`user:${participant.userId}`).emit('conversationThemeUpdated', {
+            messagingNamespace.to(`user:${participant.userId}`).emit("conversationThemeUpdated", {
               conversationId: conversation._id,
               theme: conversation.theme,
             });
           }
         });
+      } else {
+        logger.error("[Conversations] Socket.IO unavailable; theme update emit skipped");
       }
     }
 
