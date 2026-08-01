@@ -12,10 +12,15 @@ export interface SpikeConfig {
   username: string;
   password: string;
   /**
-   * Usuario B, opcional. Si se rellena, el harness ejecuta además la
-   * comprobación de ida y vuelta entre dos dispositivos (C9), que es la única
-   * que demuestra de verdad el reparto de claves de sala. Si se deja vacío,
-   * C9 se marca como `skipped` en vez de fingir que pasó.
+   * MXID de una segunda cuenta, opcional. Si se rellena, la sala cifrada la
+   * invita y C7 mide el reparto de claves entre **usuarios distintos**.
+   *
+   * Si se deja vacío, C7 se hace con una segunda sesión de la misma cuenta en
+   * Element Web: sigue midiendo el reparto entre dispositivos y ahorra
+   * registrar otra cuenta en matrix.org (que pide email y captcha).
+   *
+   * `passwordB` no lo usa la app — quien inicia sesión con esa cuenta es el
+   * navegador. Está aquí sólo para que el operador lo tenga a mano.
    */
   usernameB: string;
   passwordB: string;
@@ -27,8 +32,10 @@ export interface SpikeConfig {
   usePersistentStore: boolean;
 }
 
-export const EMPTY_CONFIG: SpikeConfig = {
-  homeserverUrl: '',
+export const DEFAULT_CONFIG: SpikeConfig = {
+  // matrix.org anuncia `org.matrix.simplified_msc3575 = true`, así que sirve
+  // sin desplegar nada. El homeserver propio es Fase 1.
+  homeserverUrl: 'https://matrix.org',
   username: '',
   password: '',
   usernameB: '',
@@ -43,11 +50,11 @@ export function validateConfig(config: SpikeConfig): string | undefined {
   if (!/^https?:\/\//.test(config.homeserverUrl.trim())) {
     return 'La URL del homeserver debe empezar por http:// o https://.';
   }
-  if (!config.username.trim() || !config.password) {
-    return 'Faltan las credenciales del usuario A.';
+  if (!config.username.trim()) {
+    return 'Falta el usuario.';
   }
-  if (Boolean(config.usernameB.trim()) !== Boolean(config.passwordB)) {
-    return 'El usuario B necesita usuario y contraseña, o ninguno de los dos.';
+  if (!config.password) {
+    return 'Falta la contraseña.';
   }
   return undefined;
 }

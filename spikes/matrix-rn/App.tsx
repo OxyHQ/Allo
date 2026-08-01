@@ -10,10 +10,10 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { EMPTY_CONFIG, validateConfig, type SpikeConfig } from './src/config';
-import { runSpike, type CheckResult } from './src/checks';
+import { DEFAULT_CONFIG, validateConfig, type SpikeConfig } from './src/config';
+import { runPhaseA, type CheckResult, type SpikeSession } from './src/checks';
 
-type Phase = 'idle' | 'running' | 'done';
+type Phase = 'idle' | 'runningA' | 'readyForB' | 'waitingB' | 'done';
 
 const STATUS_COLOR: Record<CheckResult['status'], string> = {
   pass: '#137333',
@@ -22,46 +22,72 @@ const STATUS_COLOR: Record<CheckResult['status'], string> = {
 };
 
 export default function App() {
-  const [config, setConfig] = useState<SpikeConfig>(EMPTY_CONFIG);
+  const [config, setConfig] = useState<SpikeConfig>(DEFAULT_CONFIG);
   const [phase, setPhase] = useState<Phase>('idle');
   const [lines, setLines] = useState<string[]>([]);
   const [results, setResults] = useState<CheckResult[]>([]);
+  const [session, setSession] = useState<SpikeSession | undefined>(undefined);
   const [configError, setConfigError] = useState<string | undefined>(undefined);
 
   const set = <K extends keyof SpikeConfig>(key: K, value: SpikeConfig[K]) =>
     setConfig((previous) => ({ ...previous, [key]: value }));
 
-  const onRun = async () => {
+  // El log se acumula fuera del estado de React para que cada línea no
+  // dispare un render con un array a medio construir.
+  const appendLine = (collected: string[], line: string) => {
+    collected.push(line);
+    setLines([...collected]);
+  };
+
+  const onRunPhaseA = async () => {
     const error = validateConfig(config);
     setConfigError(error);
     if (error) {
       return;
     }
 
-    setPhase('running');
+    setPhase('runningA');
     setLines([]);
     setResults([]);
+    setSession(undefined);
 
     const collected: string[] = [];
-    const log = (line: string) => {
-      collected.push(line);
-      setLines([...collected]);
-    };
+    const log = (line: string) => appendLine(collected, line);
 
     try {
-      const run = await runSpike(config, log);
-      setResults(run.results);
-      log(run.failed ? '— Spike FALLIDO —' : '— Spike COMPLETO, sin fallos —');
+      const created = await runPhaseA(config, log);
+      setSession(created);
+      setResults(created.results);
+      if (created.failed) {
+        log('— Fase A FALLIDA. No sigas a la Fase B: arregla esto primero. —');
+        setPhase('done');
+      } else {
+        log('— Fase A completa. Sigue las instrucciones de abajo. —');
+        setPhase('readyForB');
+      }
     } catch (error) {
-      // runSpike ya captura por comprobación; esto sólo cubre un fallo del
-      // propio runner, que también hay que ver en pantalla.
-      log(`💥 El runner se cayó: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
+      log(
+        `💥 El runner se cayó: ${error instanceof Error ? error.message : String(error)}`
+      );
       setPhase('done');
     }
   };
 
-  const busy = phase === 'running';
+  const onWaitForPeer = async () => {
+    if (!session) return;
+    setPhase('waitingB');
+
+    const collected = [...lines];
+    const log = (line: string) => appendLine(collected, line);
+
+    const result = await session.waitForPeerMessage(log);
+    setResults((previous) => [...previous, result]);
+    await session.dispose(log);
+    log('— Spike terminado. Copia todo este log. —');
+    setPhase('done');
+  };
+
+  const busy = phase === 'runningA' || phase === 'waitingB';
 
   return (
     <View style={styles.root}>
@@ -69,47 +95,36 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Allo · spike matrix-rust-sdk</Text>
         <Text style={styles.subtitle}>
-          Fase 0. Ejecutar en dispositivo físico, no en simulador: el bug de adjuntos
-          que estamos comprobando sólo se reproduce en hardware real.
+          Fase 0. Rellena los datos, pulsa Fase A, y luego sigue las instrucciones
+          que aparecerán para terminar en el navegador.
         </Text>
 
         <Field
           label="Homeserver"
           value={config.homeserverUrl}
           onChange={(value) => set('homeserverUrl', value)}
-          placeholder="https://matrix.example.org"
           disabled={busy}
-          autoCapitalize="none"
         />
         <Field
-          label="Usuario A"
+          label="Usuario"
           value={config.username}
           onChange={(value) => set('username', value)}
           placeholder="alice"
           disabled={busy}
-          autoCapitalize="none"
         />
         <Field
-          label="Contraseña A"
+          label="Contraseña"
           value={config.password}
           onChange={(value) => set('password', value)}
           disabled={busy}
           secure
         />
         <Field
-          label="Usuario B (opcional, habilita C9)"
+          label="MXID de la segunda cuenta (opcional)"
           value={config.usernameB}
           onChange={(value) => set('usernameB', value)}
-          placeholder="@bob:example.org"
+          placeholder="@bob:matrix.org"
           disabled={busy}
-          autoCapitalize="none"
-        />
-        <Field
-          label="Contraseña B"
-          value={config.passwordB}
-          onChange={(value) => set('passwordB', value)}
-          disabled={busy}
-          secure
         />
 
         <View style={styles.switchRow}>
@@ -124,27 +139,83 @@ export default function App() {
         {configError ? <Text style={styles.error}>{configError}</Text> : null}
 
         <Pressable
-          style={[styles.button, busy && styles.buttonDisabled]}
-          onPress={onRun}
-          disabled={busy}
+          style={[styles.button, (busy || phase !== 'idle') && styles.buttonDisabled]}
+          onPress={onRunPhaseA}
+          disabled={busy || phase !== 'idle'}
         >
-          {busy ? (
+          {phase === 'runningA' ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.buttonText}>Ejecutar spike</Text>
+            <Text style={styles.buttonText}>Fase A · ejecutar en el móvil</Text>
           )}
         </Pressable>
+
+        {session && !session.failed ? (
+          <View style={styles.handoff}>
+            <Text style={styles.sectionTitle}>Fase B · ahora en el navegador</Text>
+
+            <Text style={styles.handoffLabel}>Clave de recuperación</Text>
+            <Text style={styles.mono} selectable>
+              {session.recoveryKey ?? '(no generada)'}
+            </Text>
+
+            <Text style={styles.handoffLabel}>Sala</Text>
+            <Text style={styles.mono} selectable>
+              {session.roomId ?? '(sin sala)'}
+            </Text>
+
+            <Text style={styles.handoffLabel}>Mensaje que debe verse descifrado</Text>
+            <Text style={styles.mono} selectable>
+              {session.sentBodies.join('\n') || '(ninguno)'}
+            </Text>
+
+            <Text style={styles.handoffLabel}>Escribe esto EXACTO en Element Web</Text>
+            <Text style={styles.mono} selectable>
+              {session.pingToken}
+            </Text>
+
+            <Text style={styles.steps}>
+              1. Abre app.element.io en el ordenador e inicia sesión.{'\n'}
+              2. Cuando pida verificar, elige verificar con clave de recuperación y
+              pega la clave de arriba.{'\n'}
+              3. Entra en la sala y comprueba que el mensaje de arriba se lee. Si
+              sale «no se puede descifrar», C6 ha fallado.{'\n'}
+              4. Envía el texto PING de arriba en esa sala.{'\n'}
+              5. Vuelve aquí y pulsa el botón.
+            </Text>
+
+            <Pressable
+              style={[styles.button, phase !== 'readyForB' && styles.buttonDisabled]}
+              onPress={onWaitForPeer}
+              disabled={phase !== 'readyForB'}
+            >
+              {phase === 'waitingB' ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Fase B · esperar el PING</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
 
         {results.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Resultado</Text>
             {results.map((result) => (
               <View key={result.id} style={styles.result}>
-                <Text style={[styles.resultTitle, { color: STATUS_COLOR[result.status] }]}>
-                  {result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⏭️'}{' '}
+                <Text
+                  style={[styles.resultTitle, { color: STATUS_COLOR[result.status] }]}
+                >
+                  {result.status === 'pass'
+                    ? '✅'
+                    : result.status === 'fail'
+                      ? '❌'
+                      : '⏭️'}{' '}
                   {result.id} — {result.title}
                 </Text>
-                <Text style={styles.resultDetail}>{result.detail}</Text>
+                <Text style={styles.resultDetail} selectable>
+                  {result.detail}
+                </Text>
               </View>
             ))}
           </View>
@@ -170,18 +241,9 @@ interface FieldProps {
   placeholder?: string;
   disabled?: boolean;
   secure?: boolean;
-  autoCapitalize?: 'none' | 'sentences';
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  secure,
-  autoCapitalize,
-}: FieldProps) {
+function Field({ label, value, onChange, placeholder, disabled, secure }: FieldProps) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -192,7 +254,7 @@ function Field({
         placeholder={placeholder}
         editable={!disabled}
         secureTextEntry={secure}
-        autoCapitalize={autoCapitalize ?? 'none'}
+        autoCapitalize="none"
         autoCorrect={false}
       />
     </View>
@@ -232,6 +294,25 @@ const styles = StyleSheet.create({
   error: { color: '#c5221f', fontSize: 13 },
   section: { marginTop: 20, gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700' },
+  handoff: {
+    marginTop: 20,
+    gap: 6,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: '#fef7e0',
+    borderWidth: 1,
+    borderColor: '#f9ab00',
+  },
+  handoffLabel: { fontSize: 12, fontWeight: '700', color: '#3c4043', marginTop: 6 },
+  mono: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#202124',
+    backgroundColor: '#ffffff',
+    padding: 8,
+    borderRadius: 6,
+  },
+  steps: { fontSize: 13, color: '#3c4043', marginTop: 10, lineHeight: 19 },
   result: { gap: 2 },
   resultTitle: { fontSize: 14, fontWeight: '600' },
   resultDetail: { fontSize: 13, color: '#3c4043' },

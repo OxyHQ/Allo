@@ -4,6 +4,17 @@
     "appVersionSource": "local"
   },
   "build": {
+    "standalone": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "channel": "spike",
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
     "device": {
       "developmentClient": true,
       "distribution": "internal",
