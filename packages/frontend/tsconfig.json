@@ -3,6 +3,17 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-native",
+    // Metro resolves a platform variant before the plain file — `foo.native.ts`
+    // on iOS/Android, `foo.web.ts` on web — and TypeScript does not, so without
+    // this an import of a module that only exists as platform variants does not
+    // resolve at all. Preferring `.native` makes `tsc` check the variant the app
+    // actually ships on its primary platforms; the `.web` files are still
+    // typechecked as members of the program, and they conform to the same
+    // contract because each one annotates its exports with it.
+    "moduleSuffixes": [
+      ".native",
+      ""
+    ],
     // No "composite"/"noEmit": false here. Both existed only so the root config
     // could list this package as a project reference; a referenced project must
     // be composite, and composite forbids noEmit — which meant this config
