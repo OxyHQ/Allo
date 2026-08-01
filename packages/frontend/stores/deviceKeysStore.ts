@@ -7,10 +7,9 @@
  */
 
 import { create } from 'zustand';
+import type { DeviceDto, PreKey, PublicDeviceBundle, SignedPreKey } from '@allo/shared-types';
 import {
   initializeDeviceKeys,
-  getDeviceKeys,
-  storeDeviceKeys,
   DeviceKeys,
   encryptMessage,
   decryptMessage,
@@ -18,27 +17,27 @@ import {
 import { api } from '@/utils/api';
 import { logger } from '@/utils/logger';
 
-/** A registered device's public-key bundle as returned by the backend. */
-interface RecipientDevice {
-  deviceId: number;
-  identityKeyPublic: string;
-  signedPreKey: string;
-}
+/** Body accepted by `POST /api/devices` — the public half of the device keys. */
+type DeviceRegistrationBody = Required<
+  Pick<DeviceDto, 'deviceId' | 'identityKeyPublic' | 'signedPreKey' | 'preKeys' | 'registrationId'>
+>;
 
+/** Payload of `GET /api/devices/user/:userId`. */
 interface DevicesResponse {
-  devices: RecipientDevice[];
+  devices: PublicDeviceBundle[];
 }
 
+/** Payload of `GET /api/devices/user/:userId/prekeys/:deviceId`. */
 interface PreKeysResponse {
-  preKeys: string[];
+  preKeys: PreKey[];
 }
 
 /** Resolved recipient key material used to encrypt a message. */
 interface RecipientKeys {
   deviceId: number;
   identityKeyPublic: string;
-  signedPreKey: string;
-  preKey: string;
+  signedPreKey: SignedPreKey;
+  preKey: PreKey;
 }
 
 interface DeviceKeysState {
@@ -103,7 +102,7 @@ export const useDeviceKeysStore = create<DeviceKeysState>((set, get) => ({
         }
 
         // Get public keys for registration
-        const publicKeys = {
+        const publicKeys: DeviceRegistrationBody = {
           deviceId: keys.deviceId,
           identityKeyPublic: keys.identityKeyPublic,
           signedPreKey: {
