@@ -13,6 +13,7 @@ import { useOxy } from '@oxyhq/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
+import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
 
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
   try {
@@ -114,11 +115,18 @@ export default function ChatLayout() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.leftPane}>
-          {isSettingsRoute && ChatSettings ? (
-            <ChatSettings />
-          ) : (
-            <ConversationsList />
-          )}
+          {/* Cada panel lleva su propia frontera de error. Sin esto, un fallo de
+              render en cualquiera de ellos sube hasta la frontera raíz y
+              sustituye la aplicación entera por una pantalla de disculpa —
+              incluida la lista de conversaciones, que probablemente estaba
+              perfectamente. */}
+          <FeatureErrorBoundary featureName="Chats">
+            {isSettingsRoute && ChatSettings ? (
+              <ChatSettings />
+            ) : (
+              <ConversationsList />
+            )}
+          </FeatureErrorBoundary>
         </View>
 
         <View style={[

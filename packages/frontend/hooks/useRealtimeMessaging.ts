@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useOxy } from '@oxyhq/services';
 import { oxyClient } from '@oxyhq/core';
 import { io, Socket } from 'socket.io-client';
-import { API_URL } from '@/config';
+import { SOCKET_URL } from '@/config';
 import { useMessagesStore } from '@/stores/messagesStore';
 import { useConversationsStore } from '@/stores/conversationsStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
@@ -358,11 +358,21 @@ export const useRealtimeMessaging = (conversationId?: string) => {
     }
 
     try {
-      // Get socket URL - remove /api suffix if present, use HTTP/WS protocol
-      let socketUrl = API_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4140';
-      socketUrl = socketUrl.replace('/api', '').replace('https://', 'wss://').replace('http://', 'ws://');
-
-      messagingSocket = io(`${socketUrl}/messaging`, {
+      // `SOCKET_URL` comes from config already built for this purpose. It used
+      // to be derived here from `API_URL` with
+      //
+      //     API_URL.replace('/api', '').replace('https://', 'wss://')
+      //
+      // which is silently wrong for every host that starts with `api.`:
+      // `replace` takes the FIRST match, and in `https://api.allo.you/api` that
+      // is the `/api` inside `//api...`, not the path suffix. The result was
+      // `https:/.allo.you/api`, which socket.io then parsed with `https` as the
+      // hostname — hence `wss://https/socket.io/` in production.
+      //
+      // It worked in development only because `http://localhost:4140/api` has
+      // no earlier `/api` to hit, so the bug was invisible exactly where anyone
+      // would have caught it.
+      messagingSocket = io(`${SOCKET_URL}/messaging`, {
         // Provide auth as a callback so every (re)connection attempt re-reads a
         // fresh access token from the Oxy SDK (minted from the device secret),
         // never one captured at first connect. The backend's `oxy.authSocket()`
