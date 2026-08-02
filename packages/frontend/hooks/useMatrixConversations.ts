@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 import type { Conversation } from '@/app/(chat)/index';
+import { useBridgeGhostNamespaces } from '@/hooks/useBridges';
 import { useEphemeralPolicies } from '@/hooks/useEphemeralPolicy';
 import { useMatrixEventLabels } from '@/hooks/useMatrixEventLabels';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
@@ -43,14 +44,22 @@ export function useMatrixConversations(): readonly Conversation[] | undefined {
   // gone. See `docs/matrix/ephemeral.md` §4.
   const policies = useEphemeralPolicies();
 
+  // Which appservice ghost namespaces exist for THIS user, so a row can say which
+  // remote network carries it and — the part that matters — never claim to be
+  // end-to-end when a bridge is reading it. Empty until the linked accounts have
+  // loaded, which `roomOrigin.ts` treats as "nothing is known to be bridged".
+  const namespaces = useBridgeGhostNamespaces();
+
   // Derived during render, as a mapping of the snapshot should be. An Effect that
   // mirrored this into state would render one frame of the previous list every
   // time a message arrived.
   return useMemo(
     () =>
       enabled
-        ? rooms.map((room) => toConversation(room, labels, policies.has(room.roomId)))
+        ? rooms.map((room) =>
+            toConversation(room, labels, policies.has(room.roomId), namespaces),
+          )
         : undefined,
-    [rooms, labels, policies],
+    [rooms, labels, policies, namespaces],
   );
 }

@@ -172,6 +172,19 @@ router.get("/networks", async (req: AuthRequest, res: Response) => {
         return {
           id: network.id,
           displayName: network.displayName,
+          /**
+           * Whether this network's anti-fraud makes a shared datacentre egress
+           * unacceptable (§8) — and therefore, from the app's side, whether
+           * linking it puts the user's remote account at risk of being banned.
+           *
+           * It is the same property under both readings, which is why the app is
+           * given this one rather than a second "banRisk" field that could drift
+           * from it. A network only reaches this catalogue with a proxy provider
+           * configured (§9.2 rule 2, enforced at boot), so `true` here means "the
+           * egress is per-user AND the remote network bans unofficial clients" —
+           * exactly the pair the user has to weigh before deciding.
+           */
+          requiresProxy: network.requiresProxy,
           capabilities: network.capabilities,
           loginFlows: flows.map((flow) => ({
             id: flow.id,

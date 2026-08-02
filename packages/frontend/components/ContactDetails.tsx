@@ -50,7 +50,8 @@ function ParticipantItem({
       if (participant.username) {
         usersStore.ensureByUsername(participant.username, (u: string) => oxyServices.getProfileByUsername(u));
       } else if (participant.id) {
-        usersStore.ensureById(participant.id, (id: string) => oxyServices.getProfileByUsername(id));
+        // By id, so `getUserById`. The by-username endpoint 404s on an account id.
+        usersStore.ensureById(participant.id, (id: string) => oxyServices.getUserById(id));
       }
     }
   }, [participant.username, participant.id, participantUser, usersStore, oxyServices]);
@@ -195,7 +196,8 @@ export function ContactDetails({
       if (otherParticipant.username) {
         usersStore.ensureByUsername(otherParticipant.username, (u) => oxyServices.getProfileByUsername(u));
       } else if (otherParticipant.id) {
-        usersStore.ensureById(otherParticipant.id, (id) => oxyServices.getProfileByUsername(id));
+        // By id, so `getUserById`. The by-username endpoint 404s on an account id.
+        usersStore.ensureById(otherParticipant.id, (id) => oxyServices.getUserById(id));
       }
     }
   }, [isGroup, otherParticipant, contactUser, usersStore, oxyServices]);
