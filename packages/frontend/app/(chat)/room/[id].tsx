@@ -8,14 +8,21 @@ import { toast } from '@oxyhq/bloom/toast';
 
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';
+import { EphemeralSection } from '@/components/matrix/EphemeralSection';
 import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useEphemeralPolicy } from '@/hooks/useEphemeralPolicy';
 import { useMatrixRuntime } from '@/hooks/useMatrixRuntime';
 import { useTheme } from '@/hooks/useTheme';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
+import { ephemeralPolicies } from '@/lib/chat/ephemeralPolicies';
 import { roomAdminSource, type RoomAdminSnapshot } from '@/lib/chat/roomAdmin';
-import type { AlloRoomMember } from '@/lib/matrix/types';
+import type {
+  AlloEphemeralPolicy,
+  AlloIdentityTrust,
+  AlloRoomMember,
+} from '@/lib/matrix/types';
 import { confirmDialog } from '@/utils/alerts';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -74,10 +81,39 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
   const source = useMemo(() => roomAdminSource(roomId), [roomId]);
   const snapshot = useSyncExternalStore(source.subscribe, source.getSnapshot, emptySnapshot);
   const [isLeaving, setIsLeaving] = useState(false);
+  const policy = useEphemeralPolicy(roomId);
 
   const styles = useStyles();
   const details = snapshot.details;
   const rights = details?.rights;
+
+  /**
+   * How far each person's identity is trusted here, by user id.
+   *
+   * A map derived during render rather than a lookup per row: the member list
+   * and the trust list are the same people, and a row that searched the second
+   * one would be a scan per member per redraw.
+   */
+  const trustByUserId = useMemo(() => {
+    const byUserId = new Map<string, AlloIdentityTrust>();
+    for (const member of snapshot.trust?.members ?? []) {
+      byUserId.set(member.userId, member.trust);
+    }
+    return byUserId;
+  }, [snapshot.trust]);
+
+  const nameOf = useCallback(
+    (userId: string) =>
+      details?.members.find((member) => member.userId === userId)?.displayName ?? userId,
+    [details],
+  );
+
+  const setPolicy = useCallback(
+    async (next: AlloEphemeralPolicy | undefined) => {
+      await ephemeralPolicies.setPolicy(roomId, next);
+    },
+    [roomId],
+  );
 
   const leave = useCallback(async () => {
     if (isLeaving) {
@@ -139,7 +175,15 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
       data={details.members}
       keyExtractor={(member) => member.userId}
       renderItem={({ item }) => (
-        <MemberRow member={item} isViewer={item.userId === runtime.userId} />
+        <MemberRow
+          member={item}
+          isViewer={item.userId === runtime.userId}
+          trust={trustByUserId.get(item.userId)}
+          // The identity of the people in a conversation only decides anything
+          // when the conversation is ephemeral, and a badge on every member of
+          // every group would be a word the user has no use for.
+          showTrust={policy !== undefined}
+        />
       )}
       ListHeaderComponent={
         <View>
@@ -152,6 +196,12 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
             isDirect={details.isDirect}
             canRename={rights?.canRename === true}
             onRename={source.rename}
+          />
+          <EphemeralSection
+            policy={policy}
+            trust={snapshot.trust}
+            nameOf={nameOf}
+            onChange={setPolicy}
           />
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
@@ -320,9 +370,13 @@ function AddPeopleRow({
 function MemberRow({
   member,
   isViewer,
+  trust,
+  showTrust,
 }: {
   readonly member: AlloRoomMember;
   readonly isViewer: boolean;
+  readonly trust: AlloIdentityTrust | undefined;
+  readonly showTrust: boolean;
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
@@ -338,14 +392,48 @@ function MemberRow({
         <ThemedText style={styles.rowDetail} numberOfLines={1}>
           {member.membership === 'invited' ? t('Invited') : member.userId}
         </ThemedText>
+        {showTrust && <TrustLine trust={trust} />}
       </View>
     </View>
+  );
+}
+
+/**
+ * What this device knows about one person's identity, in words that do not
+ * overstate it.
+ *
+ * In particular there is no "verified" here for the ordinary case, and there
+ * must not be: Allo cannot yet verify anybody's identity — there is no emoji
+ * comparison and no QR code — so what it has is a key it saw once and has kept
+ * seeing. "Recognised on this device" is that, exactly.
+ */
+function TrustLine({ trust }: { readonly trust: AlloIdentityTrust | undefined }) {
+  const { t } = useTranslation();
+  const styles = useStyles();
+
+  if (trust === undefined) {
+    return null;
+  }
+
+  const wording: Record<AlloIdentityTrust, { readonly text: string; readonly isAlarm: boolean }> = {
+    verified: { text: t('Identity verified by you'), isAlarm: false },
+    pinned: { text: t('Recognised on this device'), isAlarm: false },
+    changed: { text: t('Their identity has changed'), isAlarm: true },
+    unknown: { text: t('No identity published yet'), isAlarm: true },
+  };
+  const { text, isAlarm } = wording[trust];
+
+  return (
+    <ThemedText style={[styles.rowDetail, isAlarm && styles.rowAlarm]} numberOfLines={1}>
+      {text}
+    </ThemedText>
   );
 }
 
 /** `useSyncExternalStore` compares snapshots by identity, so this is one object. */
 const EMPTY_SNAPSHOT: RoomAdminSnapshot = {
   details: undefined,
+  trust: undefined,
   isLoading: false,
   error: undefined,
 };
@@ -419,6 +507,9 @@ function useStyles() {
           fontSize: 13,
           color: theme.colors.textSecondary,
           marginTop: 2,
+        },
+        rowAlarm: {
+          color: theme.colors.error,
         },
         addIcon: {
           width: 40,

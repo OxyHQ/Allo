@@ -36,6 +36,13 @@ import type {
 } from '@unomed/react-native-matrix-sdk';
 
 import { soleDirectInvitee } from '@/lib/matrix/directMessage';
+import { EphemeralSendGuard } from '@/lib/matrix/ephemeral/guard';
+import {
+  EPHEMERAL_POLICIES_EVENT_TYPE,
+  encodeEphemeralPolicies,
+  parseEphemeralPoliciesDocument,
+  withEphemeralPolicy,
+} from '@/lib/matrix/ephemeral/policy';
 import { MatrixRoomNotFoundError, MatrixSyncNotStartedError } from '@/lib/matrix/errors';
 // Named in full rather than as `@/lib/matrix/store`: this half of the port is
 // the native one and its store is the native one, and saying so leaves no
@@ -49,6 +56,7 @@ import type {
   AlloClientStore,
   AlloCreateRoomRequest,
   AlloEncryptionState,
+  AlloEphemeralPolicy,
   AlloMediaFile,
   AlloMediaRef,
   AlloOidcClientMetadata,
@@ -63,6 +71,7 @@ import type {
   AlloRoomDetails,
   AlloRoomListHandle,
   AlloRoomSummary,
+  AlloRoomTrust,
   AlloSession,
   AlloSyncState,
   AlloTimelineHandle,
@@ -81,11 +90,12 @@ import {
 } from './native/media';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { describeEnableRecoveryProgress, toRecoveryState } from './native/recovery';
-import { readRoomDetails } from './native/roomDetails';
+import { readRoomDetails, readRoomMembers } from './native/roomDetails';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
 import { NativeSessionDelegate, toAlloSession } from './native/session';
 import { toEncryptionState, toSyncState } from './native/translate';
+import { toIdentityTrust, toOwnDeviceTrust } from './native/trust';
 
 /**
  * The native implementation of the Allo chat port, over
@@ -231,6 +241,16 @@ class NativeAlloChatClient implements AlloChatClient {
   readonly #syncStateListeners = new Set<(state: AlloSyncState) => void>();
   readonly #roomLists = new Set<NativeRoomListHandle>();
   readonly #timelines = new Set<NativeTimelineHandle>();
+  /**
+   * The check every send into an ephemeral conversation goes through.
+   *
+   * Built here, and handed to each timeline, so that no caller of this port can
+   * reach a send without it. See `lib/matrix/ephemeral/guard.ts`.
+   */
+  readonly #ephemeral = new EphemeralSendGuard({
+    policies: () => this.ephemeralPolicies(),
+    trust: (roomId) => this.roomTrust(roomId),
+  });
 
   #sync: SyncServiceLike | undefined;
   #syncStateHandle: TaskHandleLike | undefined;
@@ -484,6 +504,65 @@ class NativeAlloChatClient implements AlloChatClient {
     await this.#encryption().recover(passphrase);
   }
 
+  /**
+   * The account's ephemeral conversations.
+   *
+   * `Client.accountData` reads the local account data store that sync fills, so
+   * this is not a request and is cheap enough to ask before every send — which
+   * is what {@link EphemeralSendGuard} does. The binding hands the content over
+   * as JSON text, which is where `parseEphemeralPoliciesDocument` comes in.
+   */
+  async ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>> {
+    return parseEphemeralPoliciesDocument(
+      await this.#client.accountData(EPHEMERAL_POLICIES_EVENT_TYPE),
+    );
+  }
+
+  async setEphemeralPolicy(
+    roomId: string,
+    policy: AlloEphemeralPolicy | undefined,
+  ): Promise<void> {
+    // Read, change, write. Account data has no partial update, so the read is
+    // not an optimisation: writing only the room being changed would delete
+    // every other conversation's policy.
+    const next = withEphemeralPolicy(await this.ephemeralPolicies(), roomId, policy);
+    await this.#client.setAccountData(
+      EPHEMERAL_POLICIES_EVENT_TYPE,
+      JSON.stringify(encodeEphemeralPolicies(next)),
+    );
+  }
+
+  /**
+   * What this device knows about the identity of everybody in a room.
+   *
+   * `waitForE2eeInitializationTasks` first, for the same reason
+   * {@link recoveryState} waits: the crypto stack starts in the background, and
+   * asking before it has finished answers `Unknown` for this device and finds no
+   * identity for anybody — which reads as "nobody can be trusted" and would
+   * refuse a send that is about to become fine.
+   *
+   * The identities are read in parallel and with `fallbackToServer` on. Members
+   * of an encrypted room are tracked, so this is normally a store read each;
+   * where it is not, "I have not looked" and "they have published nothing" are
+   * different answers, and only the second one should stop a message.
+   */
+  async roomTrust(roomId: string): Promise<AlloRoomTrust> {
+    const room = this.#requireRoom(roomId, "Reading a conversation's trust");
+    const encryption = this.#encryption();
+    await encryption.waitForE2eeInitializationTasks();
+
+    const members = await readRoomMembers(room);
+    return {
+      ownDevice: toOwnDeviceTrust(encryption.verificationState()),
+      members: await Promise.all(
+        members.map(async (member) => ({
+          userId: member.userId,
+          trust: toIdentityTrust(await encryption.userIdentity(member.userId, true)),
+        })),
+      ),
+    };
+  }
+
   async openTimeline(
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
@@ -496,7 +575,9 @@ class NativeAlloChatClient implements AlloChatClient {
     const handle = new NativeTimelineHandle(
       timeline,
       room,
+      roomId,
       this.#client.userId(),
+      this.#ephemeral,
       onChange,
       () => {
         this.#timelines.delete(handle);
@@ -734,7 +815,9 @@ class NativeRoomListHandle implements AlloRoomListHandle {
 class NativeTimelineHandle implements AlloTimelineHandle {
   readonly #timeline: TimelineLike;
   readonly #room: RoomLike;
+  readonly #roomId: string;
   readonly #viewerUserId: string;
+  readonly #ephemeral: EphemeralSendGuard;
   readonly #onChange: (items: readonly AlloTimelineItem[]) => void;
   readonly #onClose: () => void;
   readonly #rows: TimelineItemLike[] = [];
@@ -749,13 +832,17 @@ class NativeTimelineHandle implements AlloTimelineHandle {
   constructor(
     timeline: TimelineLike,
     room: RoomLike,
+    roomId: string,
     viewerUserId: string,
+    ephemeral: EphemeralSendGuard,
     onChange: (items: readonly AlloTimelineItem[]) => void,
     onClose: () => void,
   ) {
     this.#timeline = timeline;
     this.#room = room;
+    this.#roomId = roomId;
     this.#viewerUserId = viewerUserId;
+    this.#ephemeral = ephemeral;
     this.#onChange = onChange;
     this.#onClose = onClose;
   }
@@ -787,6 +874,7 @@ class NativeTimelineHandle implements AlloTimelineHandle {
   }
 
   async sendText(body: string): Promise<void> {
+    await this.#ephemeral.requireSendable(this.#roomId);
     // `messageEventContentNew` and not `messageEventContentFromMarkdown`: what the
     // user typed is text. Running it through a markdown parser would turn their
     // asterisks into formatting they did not ask for.
@@ -806,6 +894,7 @@ class NativeTimelineHandle implements AlloTimelineHandle {
    * closed. See `docs/matrix/ui-wiring.md` §7.
    */
   async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
+    await this.#ephemeral.requireSendable(this.#roomId);
     const parameters = toUploadParameters(attachment);
     const thumbnailSource = toThumbnailSource(attachment.thumbnail);
     const thumbnailInfo = toThumbnailInfo(attachment.thumbnail);
@@ -858,12 +947,17 @@ class NativeTimelineHandle implements AlloTimelineHandle {
   }
 
   async toggleReaction(eventId: string, key: string): Promise<void> {
+    // Guarded like a message, because half of what this call does *is* a
+    // message: adding a reaction sends an `m.annotation`, which in an encrypted
+    // room is encrypted with the room key like everything else.
+    await this.#ephemeral.requireSendable(this.#roomId);
     // One call for both directions: the binding looks up whether this account
     // already annotated the event and either sends or redacts accordingly.
     await this.#timeline.toggleReaction(toEventOrTransactionId(eventId), key);
   }
 
   async edit(eventId: string, body: string): Promise<void> {
+    await this.#ephemeral.requireSendable(this.#roomId);
     await this.#timeline.edit(
       toEventOrTransactionId(eventId),
       // Text for the same reason `sendText` is text: an edit is the user typing

@@ -435,6 +435,23 @@ Con eso, tener salas secretas y normales en la misma app deja tres salidas:
 secretos mientras la estrategia efectiva sea `AllDevices`; sería una casilla que
 no hace nada.
 
+> **Resuelto de otra manera en la Fase 3.** No se eligió ninguna de las tres. La
+> (2) rompe los chats normales de verdad —con `OnlyTrustedDevices` no se puede
+> escribir a alguien que instaló Allo esta mañana, y con `IdentityBasedStrategy`
+> tampoco a quien aún no haya publicado identidad—, así que la estrategia efectiva
+> **sigue siendo `AllDevices`** y la comprobación se hace en el puerto, antes del
+> envío: una conversación efímera se niega a enviar si la identidad de alguien de
+> la sala no es conocida aquí o ha cambiado. Como no sale nada, tampoco se
+> comparte ninguna clave — el reparto ocurre al cifrar. Y como la última frase de
+> arriba pide, la interfaz no dice "verificación obligatoria": dice "reconocida en
+> este dispositivo", que es lo que se comprueba. Detalle en `ephemeral.md` §5, y
+> lo que sigue sin cubrirse en su hueco 2.
+>
+> `matrix-js-sdk` sí tiene un override por sala —`Room.setBlacklistUnverifiedDevices`,
+> que llega a `CollectStrategy::deviceBasedStrategy`— y el binding nativo no. No
+> se usa: sería una diferencia de comportamiento entre plataformas que el puerto
+> no puede expresar.
+
 #### (b) Claves sólo en los dispositivos presentes al enviar — esto es gratis
 
 Es el comportamiento por defecto de Megolm: la sesión se comparte con los
@@ -508,6 +525,25 @@ Qué se construye, entonces:
 - Sin copia local persistente.
 - La marca sigue siendo el evento de estado `so.oxy.allo.room_class`, ahora con
   `{"class": "ephemeral"}`.
+
+> **Construido, y con dos desviaciones.** El nivel existe desde la Fase 3 y su
+> documento es `ephemeral.md`; lo que sigue en esta sección es el razonamiento
+> que llevó hasta él, no lo que corre.
+>
+> 1. **La marca no es un evento de estado**, porque el binding nativo no sabe
+>    leer ni escribir uno propio: `StateEventType` es un enum cerrado de tipos
+>    del spec, `RoomInfo` no lleva estado en crudo y `Room.sendRaw` manda eventos
+>    message-like. Vive en el account data global de la cuenta,
+>    `so.oxy.allo.ephemeral_rooms`, y por tanto **no llega a las demás personas
+>    de la sala** — que es el hueco 1 de `ephemeral.md` y la mayor limitación del
+>    nivel.
+> 2. **No hay rotación agresiva de sesiones Megolm.** `Room.discardRoomKey()`
+>    existe en el binding y `forceDiscardSession` en web, pero rotar por nuestra
+>    cuenta no compra nada aquí: lo que protege el contenido es que deje de
+>    existir, no que la clave que lo abría envejezca. Lo que sí se construyó
+>    encima es una tercera pieza que esta lista no tenía: la negativa a enviar
+>    cuando no se puede dar cuenta de quién está en la sala (§5.2a y
+>    `ephemeral.md` §5).
 
 Qué **no** se promete, y debe decirse en la UI con estas palabras y no con otras:
 es una garantía de interfaz, no criptográfica. Un cliente modificado del otro
@@ -862,11 +898,19 @@ Oxy no cambie: el corte limpio corta las conversaciones, no las cuentas.
 Por orden de riesgo para el proyecto:
 
 1. ~~**Los chats secretos no salen de la configuración**~~ — **resuelto el
-   2026-08-02** (§5.2). El segundo nivel pasa a definirse por cuánto dura el
-   contenido y no por dónde están las claves: se llama **efímero**, se construye
-   con redacción en servidor y rotación agresiva, y no exige parchear el SDK.
-2. **`OnlyTrustedDevices` es por cliente, no por sala** (§5.2a). Mismo tipo de
-   problema, mismo tipo de solución.
+   2026-08-02** (§5.2) y **construido en la Fase 3**. El segundo nivel pasa a
+   definirse por cuánto dura el contenido y no por dónde están las claves: se
+   llama **efímero**, se construye con redacción en servidor, y no exige parchear
+   el SDK. Lo que corre, y sus nueve huecos, están en `ephemeral.md`; los dos que
+   más duelen son que **la marca no llega a las demás personas** —el binding
+   nativo no tiene eventos de estado propios— y que **nada redacta con la app
+   cerrada**.
+2. ~~**`OnlyTrustedDevices` es por cliente, no por sala**~~ (§5.2a) — sigue
+   siendo cierto y **ya no bloquea**: la comprobación se hace en el puerto antes
+   de enviar, con la estrategia de reparto en `AllDevices`. Lo que sigue abierto
+   es lo que eso no cubre: la clave de sala llega a dispositivos que su dueño no
+   ha firmado (`ephemeral.md`, hueco 2). Cerrarlo de verdad es un
+   `EncryptionSettings` por sala en `matrix-rust-sdk`.
 3. **Reenvío de claves y compartición de historial al invitar**: no he podido
    verificar el comportamiento por defecto del SDK, y de él depende que (b) de
    §5.2 sea cierto. **Es lo primero que debería medir la Fase 2**, con un control

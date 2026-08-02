@@ -14,6 +14,7 @@ import { useOxy } from '@oxyhq/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
+import { useEphemeralSweep } from '@/hooks/useEphemeralSweep';
 import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
 
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
@@ -37,6 +38,13 @@ export default function ChatLayout() {
   const conversations = useConversationsStore(state => state.conversations);
 
   useRealtimeMessaging(undefined);
+
+  // Subscribing is what keeps this device taking its own expired messages off
+  // the homeserver, for every ephemeral conversation and not only the one on
+  // screen. Called here because this layout is mounted for as long as the chat
+  // part of the app is; the value is the conversations currently on a timer,
+  // which nothing draws yet. See `lib/chat/ephemeralSweep.ts`.
+  useEphemeralSweep();
 
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');

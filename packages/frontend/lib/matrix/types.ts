@@ -230,6 +230,22 @@ export type AlloEventContent =
   | { readonly kind: 'media'; readonly media: AlloMediaContent }
   | { readonly kind: 'undecryptable' }
   | { readonly kind: 'redacted' }
+  /**
+   * Past the lifetime an ephemeral conversation gives its messages, and not
+   * redacted yet.
+   *
+   * Distinct from `redacted`, which is a fact about the homeserver: this one is
+   * a fact about this device's clock, and it is the *weaker* of the two. It
+   * means "this device will not draw this any more"; the event's content is
+   * still on the homeserver until whoever sent it redacts it, and their client
+   * only does that while it is running. See `docs/matrix/ephemeral.md`.
+   *
+   * Neither implementation of this port ever produces it. It is put on a row by
+   * `lib/matrix/ephemeral/expiry.ts`, from the row's own timestamp and the
+   * conversation's policy, which is why it is here rather than in a view model:
+   * whatever draws a timeline has to know it may see it.
+   */
+  | { readonly kind: 'expired' }
   /** An event Allo does not draw yet. `description` names the kind, for logs. */
   | { readonly kind: 'unsupported'; readonly description: string };
 
@@ -562,6 +578,103 @@ export type AlloRecoveryState =
   | 'unknown';
 
 /* ---------------------------------------------------------------------------
+ * Ephemeral conversations
+ *
+ * Allo's third chat tier. It was specified as "secret" — a room whose keys never
+ * leave the devices present — and that room cannot be built on Matrix: the key
+ * backup is per account and takes no room id, and any other Matrix client signed
+ * into the same account uploads the keys regardless of what Allo does. So the
+ * tier was redefined around the one thing the protocol *can* be made to do: if
+ * the content stops existing, holding the key is worth nothing. See
+ * `docs/matrix/ephemeral.md` for what that buys and — at greater length — what
+ * it does not.
+ *
+ * Two mechanisms, and they are of very different strengths, which is why they
+ * are separate types below:
+ *
+ * - {@link AlloEphemeralPolicy} — a lifetime after which this device redacts its
+ *   own messages and stops drawing everyone else's. Redaction is real and
+ *   server-side; the hiding is cooperative and a modified client defeats it.
+ * - {@link AlloRoomTrust} — what this device knows about the cryptographic
+ *   identity of everyone in the room. An ephemeral conversation refuses to send
+ *   when it is not satisfied, and *that* refusal is enforced: nothing leaves the
+ *   device, so no room key is shared for it either.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * How long a message lives in an ephemeral conversation.
+ *
+ * A record with one field rather than a bare number, because a policy is a
+ * document written into account data and read back from a server: giving it a
+ * name makes the place where it is validated obvious, and leaves room for a
+ * second field without changing every signature.
+ *
+ * **The policy is this account's, not the room's.** Nothing in Matrix that both
+ * halves of this port can reach carries it to the other participants — the
+ * native binding has no API for a custom room state event, and `StateEventType`
+ * is a closed enum of spec'd types — so it is stored in the viewer's own global
+ * account data. It therefore reaches the viewer's other devices and nobody
+ * else's. Consequences, all of them, in `docs/matrix/ephemeral.md` §3.
+ */
+export interface AlloEphemeralPolicy {
+  /** Milliseconds from a message being sent to it expiring. Always positive. */
+  readonly lifetimeMs: number;
+}
+
+/**
+ * What this device knows about somebody's cross-signing identity.
+ *
+ * Four values, and the distance between the first two is the whole reason this
+ * is not a boolean. `verified` is a signature this account made after checking
+ * the other person out of band; `pinned` is trust on first use and nothing more.
+ * Allo has no interactive verification flow yet, so in practice nobody is ever
+ * `verified` today — which is stated here rather than hidden, because a UI that
+ * said "verified" about `pinned` would be describing a check nobody performed.
+ */
+export type AlloIdentityTrust =
+  /** This account has signed their master key. */
+  | 'verified'
+  /** Their identity is known here and has not changed since it was first seen. */
+  | 'pinned'
+  /**
+   * Their identity was verified before and is not the same one now.
+   *
+   * The state that has to stop a send: it is what a homeserver substituting a
+   * different identity looks like from here.
+   */
+  | 'changed'
+  /**
+   * No cross-signing identity at all: they have never published one, or this
+   * device has not been able to fetch it.
+   */
+  | 'unknown';
+
+/** Somebody in a room, and how far their identity is trusted here. */
+export interface AlloMemberTrust {
+  readonly userId: string;
+  readonly trust: AlloIdentityTrust;
+}
+
+/**
+ * The cryptographic standing of a room, for the tier that depends on it.
+ *
+ * `ownDevice` is about *this* device and not about the account: a device that
+ * has not taken the cross-signing keys out of 4S cannot be trusted by anybody
+ * else, so a conversation that promises the participants are checked cannot
+ * start from one.
+ *
+ * A snapshot and not a subscription, for the same reason {@link
+ * AlloChatClient.roomDetails} is one: both SDKs answer this cheaply and neither
+ * offers one stream shaped the same way. It is read before a send, and by the
+ * screen that shows who is in the room.
+ */
+export interface AlloRoomTrust {
+  readonly ownDevice: 'verified' | 'unverified' | 'unknown';
+  /** Everyone in the room, the viewer included, in the order the room lists them. */
+  readonly members: readonly AlloMemberTrust[];
+}
+
+/* ---------------------------------------------------------------------------
  * Push notifications
  *
  * On Matrix the **homeserver owns the pusher registry**. A device registers
@@ -701,6 +814,16 @@ export interface AlloRoomListHandle {
  * still on its way out has no event id, and nothing here can act on one; see
  * `MatrixEventNotSentError` in `errors.ts` for why both platforms refuse rather
  * than one of them trying.
+ *
+ * **The four operations that put a new encrypted event in the room — {@link
+ * sendText}, {@link sendAttachment}, {@link edit} and {@link toggleReaction} —
+ * refuse in an ephemeral conversation whose participants this device cannot
+ * vouch for.** They reject with `MatrixEphemeralUntrustedError` and nothing
+ * leaves the device, which is also what stops the room key being shared for
+ * them. {@link redact} is deliberately not among them: it is what removes
+ * content, and a rule that blocked it would keep content alive to protect it.
+ * Read receipts and typing notices are not among them either — neither carries
+ * anything of the conversation, and neither is encrypted.
  */
 export interface AlloTimelineHandle {
   /** The current items, oldest first. The array is replaced, never mutated. */
@@ -1055,6 +1178,46 @@ export interface AlloChatClient {
    * Only correct in state `incomplete`.
    */
   recoverWithPassphrase(passphrase: string): Promise<void>;
+
+  /**
+   * The conversations this account treats as ephemeral, and for how long.
+   *
+   * Read from the account's own global account data, which sync keeps in the
+   * client's local store — so this is a local read and is cheap enough to do
+   * before a send. A room with no entry is an ordinary conversation.
+   *
+   * See {@link AlloEphemeralPolicy} for why this is per account rather than per
+   * room, and what that costs.
+   */
+  ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>>;
+
+  /**
+   * Makes a conversation ephemeral, changes how long its messages live, or
+   * makes it ordinary again with `undefined`.
+   *
+   * Read-modify-write over one account data event, so two devices changing
+   * different rooms at the same instant can lose one of the two changes. That
+   * is the same race `docs/matrix/data-model.md` §4.3 describes for an archived
+   * list, and it is accepted for the same reason: the alternative is one account
+   * data event per room, which is a per-room key the homeserver would see the
+   * name of anyway.
+   *
+   * **Turning it off does not bring anything back.** What has already been
+   * redacted is gone from the homeserver for everyone, and no client can undo a
+   * redaction.
+   */
+  setEphemeralPolicy(roomId: string, policy: AlloEphemeralPolicy | undefined): Promise<void>;
+
+  /**
+   * What this device knows about the identity of everyone in a room.
+   *
+   * The check an ephemeral conversation refuses to send without. It is read
+   * from the crypto store — the identities of people in an encrypted room are
+   * tracked there — and falls back to asking the homeserver for somebody it has
+   * never seen, because "I have not looked" and "they have published nothing"
+   * are different answers and only the second one should stop a message.
+   */
+  roomTrust(roomId: string): Promise<AlloRoomTrust>;
 
   /**
    * Tells the homeserver to notify this device.

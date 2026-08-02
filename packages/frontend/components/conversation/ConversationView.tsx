@@ -36,6 +36,8 @@ import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
 import { MicSendButton } from '@/components/messages/MicSendButton';
 import { AttachmentViewer } from '@/components/media/AttachmentViewer';
+import { EphemeralBanner } from '@/components/matrix/EphemeralBanner';
+import { useEphemeralRefusalMessage } from '@/components/matrix/ephemeralRefusal';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
@@ -55,6 +57,7 @@ import { useConversationTheme } from '@/hooks/useConversationTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
+import { useEphemeralPolicy } from '@/hooks/useEphemeralPolicy';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -187,6 +190,14 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Get conversation data early so we can use its theme
   const conversation = useConversation(conversationId);
+
+  // Whether this conversation's messages disappear, and after how long. Answers
+  // `undefined` on the Express backend, which has no such thing.
+  const ephemeralPolicy = useEphemeralPolicy(conversationId);
+  // An ephemeral conversation refuses to send when it cannot account for who is
+  // in it. That is a rule and not a fault, so it is said in the reader's own
+  // language rather than passed through as the port's English.
+  const ephemeralRefusalMessage = useEphemeralRefusalMessage();
 
   // Use conversation-specific theme (falls back to global theme if no conversation theme set)
   const theme = useConversationTheme(conversation?.theme);
@@ -637,7 +648,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       } catch (error) {
         console.error('Error sending message:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
-        toast.error(errorMessage);
+        toast.error(ephemeralRefusalMessage(error) ?? errorMessage);
         setInputText(conversationId, text);
         return;
       }
@@ -730,7 +741,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline, notifyTyping, editingMessageId, setEditing]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline, notifyTyping, editingMessageId, setEditing, ephemeralRefusalMessage]);
 
   /**
    * Handle Enter key press to send message
@@ -785,7 +796,8 @@ export default function ConversationView({ conversationId: propConversationId }:
       } catch (error) {
         console.error('Error sending attachment:', error);
         toast.error(
-          error instanceof Error ? error.message : 'The attachment could not be sent.'
+          ephemeralRefusalMessage(error) ??
+            (error instanceof Error ? error.message : 'The attachment could not be sent.')
         );
         return;
       }
@@ -793,7 +805,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [matrixTimeline]);
+  }, [matrixTimeline, ephemeralRefusalMessage]);
 
   /**
    * Picks from the photo library, or takes a picture, and sends what comes back.
@@ -1363,6 +1375,11 @@ export default function ConversationView({ conversationId: propConversationId }:
               hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
             />
           </View>
+
+          {/* Under the header and above everything else, so that it is on screen
+              whenever the conversation is — including the empty one, which is
+              exactly when somebody is about to write the first message into it. */}
+          {ephemeralPolicy !== undefined && <EphemeralBanner policy={ephemeralPolicy} />}
 
           {/* Messages List */}
           {messageGroups.length > 0 ? (

@@ -8,14 +8,16 @@ import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
 import type { MatrixPushRegistration } from '@/lib/chat/pushRegistration';
 import type {
   AlloChatClient,
-  AlloMediaFile,
   AlloChatClientConfig,
   AlloClientStore,
   AlloEncryptionState,
+  AlloEphemeralPolicy,
+  AlloMediaFile,
   AlloOidcLoginRequest,
   AlloRecoveryState,
   AlloRoomDetails,
   AlloRoomListHandle,
+  AlloRoomTrust,
   AlloSession,
   AlloSyncState,
   AlloTimelineHandle,
@@ -271,6 +273,19 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async renameRoom(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  /** No conversation in these tests is ephemeral unless a case says so. */
+  async ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>> {
+    return new Map();
+  }
+
+  async setEphemeralPolicy(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async roomTrust(): Promise<AlloRoomTrust> {
     throw new Error('not used by these tests');
   }
 

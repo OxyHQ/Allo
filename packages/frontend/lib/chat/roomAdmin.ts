@@ -1,4 +1,4 @@
-import type { AlloRoomDetails, AlloUnsubscribe } from '@/lib/matrix/types';
+import type { AlloRoomDetails, AlloRoomTrust, AlloUnsubscribe } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
 import { matrixServerNameOf, matrixUserIdFor } from './matrixIdentity';
@@ -36,6 +36,17 @@ import {
 export interface RoomAdminSnapshot {
   /** What the room is, or `undefined` before the first read has finished. */
   readonly details: AlloRoomDetails | undefined;
+  /**
+   * What this device knows about the identity of everybody in it.
+   *
+   * Read beside {@link details} and reported separately, because it can fail on
+   * its own: the crypto stack starts in the background, and a member list that
+   * refused to draw because an identity could not be looked up would take a
+   * working screen away over something that is nobody's fault and resolves
+   * itself. `undefined` therefore means "not known here", and the screen says
+   * so rather than drawing everybody as untrusted.
+   */
+  readonly trust: AlloRoomTrust | undefined;
   readonly isLoading: boolean;
   /**
    * Why the last read failed, in words a screen can show.
@@ -64,6 +75,7 @@ export interface InviteOutcome {
 
 const EMPTY: RoomAdminSnapshot = {
   details: undefined,
+  trust: undefined,
   isLoading: false,
   error: undefined,
 };
@@ -192,6 +204,36 @@ export class RoomAdminSource {
       if (generation === this.#generation) {
         this.#publish({ isLoading: false, error: describe(error) });
       }
+      return;
+    }
+    await this.#readTrust(generation);
+  }
+
+  /**
+   * Reads what this device knows about the members' identities.
+   *
+   * After the members and not with them, and allowed to fail on its own: the
+   * screen's job is to show who is in the conversation, and a crypto stack that
+   * is still starting must not take that away. What it costs when it fails is a
+   * line saying the identities are not known here — see
+   * {@link RoomAdminSnapshot.trust}.
+   */
+  async #readTrust(generation: number): Promise<void> {
+    try {
+      const trust = await this.#runtime
+        .client("Reading a conversation's trust")
+        .roomTrust(this.#roomId);
+      if (generation === this.#generation) {
+        this.#publish({ trust });
+      }
+    } catch (error) {
+      logger.error(
+        `[chat] the identities of the people in ${this.#roomId} could not be read`,
+        error,
+      );
+      if (generation === this.#generation) {
+        this.#publish({ trust: undefined });
+      }
     }
   }
 
@@ -224,6 +266,7 @@ export class RoomAdminSource {
     const next: RoomAdminSnapshot = { ...this.#snapshot, ...patch };
     if (
       next.details === this.#snapshot.details &&
+      next.trust === this.#snapshot.trust &&
       next.isLoading === this.#snapshot.isLoading &&
       next.error === this.#snapshot.error
     ) {

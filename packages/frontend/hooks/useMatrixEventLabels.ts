@@ -38,6 +38,10 @@ export function useMatrixEventLabels(): UnreadableEventLabels {
     return {
       undecryptable: t('This message cannot be read on this device.'),
       redacted: t('This message was deleted.'),
+      // Not "deleted": at this point the content has only stopped being drawn
+      // here. Whether it is also gone from the homeserver depends on whoever
+      // sent it having had Allo running at the deadline.
+      expired: t('This message is no longer shown here.'),
       unsupported: (description) =>
         t('Allo cannot show this yet ({{kind}}).', { kind: description }),
       mediaPreview: (kind) => mediaPreviews[kind],

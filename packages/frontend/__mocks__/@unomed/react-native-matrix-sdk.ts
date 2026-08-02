@@ -71,6 +71,12 @@ export enum RecoveryState {
   Incomplete = 3,
 }
 
+export enum VerificationState {
+  Unknown = 0,
+  Verified = 1,
+  Unverified = 2,
+}
+
 export enum RoomPreset {
   PrivateChat = 0,
   PublicChat = 1,
