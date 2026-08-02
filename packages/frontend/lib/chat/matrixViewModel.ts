@@ -37,6 +37,16 @@ export interface UnreadableEventLabels {
   readonly undecryptable: string;
   /** It was removed, by its sender or by a moderator. */
   readonly redacted: string;
+  /**
+   * Its conversation is ephemeral and it is past its lifetime, so this device
+   * has stopped drawing it.
+   *
+   * A different sentence from {@link redacted} because it is a different — and
+   * weaker — fact: the content is gone from *here*, and whether it is gone from
+   * the homeserver depends on its sender's client having been running. Saying
+   * "deleted" would promise the stronger one. See `docs/matrix/ephemeral.md`.
+   */
+  readonly expired: string;
   /** Allo does not draw this kind of event yet. Given the kind's name. */
   readonly unsupported: (description: string) => string;
   /**
@@ -71,10 +81,15 @@ export interface UnreadableEventLabels {
  * be an encrypted timeline event (`docs/matrix/data-model.md` §4.1) and no code
  * writes or reads one yet, so every Matrix conversation falls back to the app's
  * theme.
+ *
+ * `isEphemeral` is an argument and not something read from the summary, because
+ * it is not a fact about the room: it is an entry in this account's own account
+ * data. See `docs/matrix/ephemeral.md` §3.
  */
 export function toConversation(
   summary: AlloRoomSummary,
   labels: UnreadableEventLabels,
+  isEphemeral: boolean,
 ): Conversation {
   const latest = summary.latestMessage;
   return {
@@ -93,6 +108,11 @@ export function toConversation(
     // conversation yet: there is nothing to read in it and accepting comes first.
     // What to do about that is the screen's decision, not this mapping's.
     isInvitation: summary.membership === 'invited',
+    // Not read from the room, and it could not be: what makes a conversation
+    // ephemeral is an entry in *this account's* account data, so the caller
+    // holds the answer and this mapping is told. See
+    // `lib/matrix/ephemeral/policy.ts` for why it is not room state.
+    isEphemeral,
   };
 }
 
@@ -260,6 +280,8 @@ function bodyOf(content: AlloEventContent, labels: UnreadableEventLabels): strin
       return labels.undecryptable;
     case 'redacted':
       return labels.redacted;
+    case 'expired':
+      return labels.expired;
     case 'unsupported':
       return labels.unsupported(content.description);
   }

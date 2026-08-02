@@ -83,7 +83,16 @@ lib/chat/
   invitations.ts         aceptar o rechazar una invitación
   roomAdmin.ts           una sala por pantalla: quién está, invitar, renombrar, salir
   pushRegistration.ts    decirle al homeserver que avise a este móvil, y que pare
+  ephemeralPolicies.ts   qué conversaciones desaparecen, y en cuánto tiempo
+  ephemeralSweep.ts      quitar del homeserver los mensajes propios ya vencidos
 lib/matrix/
+  ephemeral/policy.ts    dónde se apunta que una conversación es efímera
+  ephemeral/expiry.ts    la aritmética del plazo
+  ephemeral/trust.ts     por qué una conversación efímera se niega a enviar
+  ephemeral/guard.ts     la comprobación por la que pasa cada envío
+  native/trust.ts        identidad → confianza, en el binding
+  web/trust.ts           lo mismo en el navegador
+  web/accountData.ts     el account data de Allo, declarado a matrix-js-sdk
   directMessage.ts       cuándo crear una conversación es reutilizar una
   roomCreation.ts        qué es toda sala que Allo crea, antes de cada SDK
   roomMembers.ts         en qué orden se cuenta quién está en una sala
@@ -98,6 +107,8 @@ lib/matrix/
   web/attachments.ts     cifrar o negarse, y el contenido del evento
   web/mediaTransfer.ts   fetch, la máquina de cripto y los object URL
 hooks/
+  useEphemeralPolicy.ts     → AlloEphemeralPolicy | undefined
+  useEphemeralSweep.ts      suscribirse es lo que pone en marcha el barrido
   useMatrixRuntime.ts       useSyncExternalStore sobre el runtime
   useMatrixConversations.ts → Conversation[] | undefined
   useMatrixTimeline.ts      → { messages, loadOlder, send, … } | undefined
@@ -107,6 +118,8 @@ hooks/
 components/matrix/
   MatrixSignInGate.tsx      pinta a sus hijos salvo que falte sesión
   MatrixInvitationCard.tsx  una invitación, y las dos respuestas que admite
+  EphemeralSection.tsx      el interruptor, el plazo, y lo que sí y lo que no
+  EphemeralBanner.tsx       la franja bajo la cabecera de la conversación
 app/(chat)/
   room/[id].tsx             administrar una sala (sólo Matrix; ver §10)
 ```
@@ -240,6 +253,14 @@ encenderlo.
 - **Un documento se abre**, en la app que el sistema tenga para él.
 - **Un vídeo grabado en Allo va con su miniatura**, sacada del primer fotograma
   en iOS y Android. En web sigue yendo sin ella. Ver §9.4.
+- **Conversaciones efímeras**, el tercer nivel de chat: los mensajes dejan de
+  dibujarse aquí al vencer su plazo y los propios se redactan en el homeserver,
+  y una conversación efímera se niega a enviar si no puede dar cuenta de la
+  identidad de quien está en ella. Se enciende desde la pantalla de
+  administración, se ve en la fila de la lista y en una franja bajo la cabecera,
+  y **la interfaz dice lo que no puede hacer** en el mismo sitio donde se
+  enciende. Todo — incluidos nueve huecos, empezando por que a la otra persona
+  no se le avisa — en `ephemeral.md`.
 
 ## 5. Qué no llega, y por qué
 

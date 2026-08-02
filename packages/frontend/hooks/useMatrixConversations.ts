@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 import type { Conversation } from '@/app/(chat)/index';
+import { useEphemeralPolicies } from '@/hooks/useEphemeralPolicy';
 import { useMatrixEventLabels } from '@/hooks/useMatrixEventLabels';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { toConversation } from '@/lib/chat/matrixViewModel';
@@ -37,12 +38,19 @@ export function useMatrixConversations(): readonly Conversation[] | undefined {
   // whose last message is a photograph says "Photo": an empty preview reads as a
   // conversation nobody has written in.
   const labels = useMatrixEventLabels();
+  // A row of an ephemeral conversation says so, because the difference is not
+  // visible from anything else in it: the messages look the same until they are
+  // gone. See `docs/matrix/ephemeral.md` §4.
+  const policies = useEphemeralPolicies();
 
   // Derived during render, as a mapping of the snapshot should be. An Effect that
   // mirrored this into state would render one frame of the previous list every
   // time a message arrived.
   return useMemo(
-    () => (enabled ? rooms.map((room) => toConversation(room, labels)) : undefined),
-    [rooms, labels],
+    () =>
+      enabled
+        ? rooms.map((room) => toConversation(room, labels, policies.has(room.roomId)))
+        : undefined,
+    [rooms, labels, policies],
   );
 }

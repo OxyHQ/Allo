@@ -1,3 +1,5 @@
+import type { AlloEphemeralRefusal } from '@/lib/matrix/ephemeral/trust';
+
 /**
  * Errors the chat port raises on its own account.
  *
@@ -225,6 +227,40 @@ export class MatrixMediaEncryptionUnknownError extends MatrixPortError {
 export class MatrixMediaUnreadableError extends MatrixPortError {
   constructor(reason: string) {
     super(`This attachment cannot be read: ${reason}`);
+  }
+}
+
+/**
+ * A message was about to go into an ephemeral conversation whose participants
+ * this device cannot account for.
+ *
+ * The one refusal in this port that is a security control rather than a guard
+ * against a bug. An ephemeral conversation's promise is that its content stops
+ * existing; that promise is worth nothing if the content goes to a device
+ * nobody can attribute to anybody, because that device keeps whatever it
+ * decrypted and no redaction reaches it. So the send does not happen, and
+ * because it does not happen the Megolm session is never created and never
+ * shared either — key sharing is part of encrypting in both SDKs.
+ *
+ * {@link refusal} travels with the error rather than only in the message: the
+ * screen has to say *which* of the two problems it is, in the reader's own
+ * language, and naming people means naming them rather than reformatting an
+ * English sentence.
+ */
+export class MatrixEphemeralUntrustedError extends MatrixPortError {
+  readonly roomId: string;
+  readonly refusal: AlloEphemeralRefusal;
+
+  constructor(roomId: string, refusal: AlloEphemeralRefusal) {
+    super(
+      refusal.kind === 'own-device-unverified'
+        ? `Allo will not send into the ephemeral conversation ${roomId} from a ` +
+            'device that has not been verified with the account recovery key.'
+        : `Allo will not send into the ephemeral conversation ${roomId}: it ` +
+            `cannot account for the identity of ${refusal.userIds.join(', ')}.`,
+    );
+    this.roomId = roomId;
+    this.refusal = refusal;
   }
 }
 

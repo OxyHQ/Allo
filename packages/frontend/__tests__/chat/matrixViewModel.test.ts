@@ -16,6 +16,7 @@ import { formatConversationTimestamp } from '@/utils/dateUtils';
 const LABELS: UnreadableEventLabels = {
   undecryptable: 'cannot be read on this device',
   redacted: 'was deleted',
+  expired: 'no longer shown here',
   unsupported: (description) => `cannot show this yet (${description})`,
   mediaPreview: (kind) => `a ${kind}`,
 };
@@ -63,7 +64,7 @@ function event(overrides: Partial<AlloTimelineItem> = {}): AlloTimelineItem {
 
 describe('toConversation', () => {
   it('carries the room across as a direct conversation', () => {
-    const conversation = toConversation(room({ unreadCount: 3, avatarUrl: 'mxc://a' }), LABELS);
+    const conversation = toConversation(room({ unreadCount: 3, avatarUrl: 'mxc://a' }), LABELS, false);
 
     expect(conversation).toMatchObject({
       id: '!room:allo.you',
@@ -75,19 +76,20 @@ describe('toConversation', () => {
   });
 
   it('calls a room that is not a direct message a group', () => {
-    expect(toConversation(room({ isDirect: false }), LABELS).type).toBe('group');
+    expect(toConversation(room({ isDirect: false }), LABELS, false).type).toBe('group');
   });
 
   it('falls back to the room id while the name has not synced', () => {
     // A blank row is worse than an ugly one: the user can still tell two
     // unnamed conversations apart by their ids, and cannot tell two blanks apart.
-    expect(toConversation(room({ displayName: undefined }), LABELS).name).toBe('!room:allo.you');
+    expect(toConversation(room({ displayName: undefined }), LABELS, false).name).toBe('!room:allo.you');
   });
 
   it('shows the last message and the time it was sent', () => {
     const conversation = toConversation(
       room({ latestMessage: preview({ sentAt: 1_700_000_000_000 }) }),
       LABELS,
+      false,
     );
 
     expect(conversation.lastMessage).toBe('see you there');
@@ -100,14 +102,14 @@ describe('toConversation', () => {
     // time would put "now" beside every conversation in the app — including one
     // nobody has touched in a year. An empty string is what the formatter
     // renders as nothing.
-    const conversation = toConversation(room({ latestMessage: undefined }), LABELS);
+    const conversation = toConversation(room({ latestMessage: undefined }), LABELS, false);
 
     expect(conversation.timestamp).toBe('');
     expect(formatConversationTimestamp(conversation.timestamp)).toBe('');
   });
 
   it('leaves the preview empty when there is no message, rather than inventing one', () => {
-    expect(toConversation(room({ latestMessage: undefined }), LABELS).lastMessage).toBe('');
+    expect(toConversation(room({ latestMessage: undefined }), LABELS, false).lastMessage).toBe('');
   });
 
   it('says so when the last message cannot be read on this device', () => {
@@ -116,6 +118,7 @@ describe('toConversation', () => {
     const conversation = toConversation(
       room({ latestMessage: preview({ content: { kind: 'undecryptable' } }) }),
       LABELS,
+      false,
     );
 
     expect(conversation.lastMessage).toBe('cannot be read on this device');
@@ -129,6 +132,7 @@ describe('toConversation', () => {
         latestMessage: preview({ content: { kind: 'undecryptable' }, sentAt: 1_600_000_000_000 }),
       }),
       LABELS,
+      false,
     );
 
     expect(new Date(conversation.timestamp).getTime()).toBe(1_600_000_000_000);
@@ -136,8 +140,11 @@ describe('toConversation', () => {
 
   it('says so when the last message was deleted, and when it cannot be drawn', () => {
     expect(
-      toConversation(room({ latestMessage: preview({ content: { kind: 'redacted' } }) }), LABELS)
-        .lastMessage,
+      toConversation(
+        room({ latestMessage: preview({ content: { kind: 'redacted' } }) }),
+        LABELS,
+        false,
+      ).lastMessage,
     ).toBe('was deleted');
     expect(
       toConversation(
@@ -145,6 +152,7 @@ describe('toConversation', () => {
           latestMessage: preview({ content: { kind: 'unsupported', description: 'm.image' } }),
         }),
         LABELS,
+        false,
       ).lastMessage,
     ).toBe('cannot show this yet (m.image)');
   });
@@ -154,17 +162,28 @@ describe('toConversation', () => {
     // conversation is everything the viewer has not left. It is not a
     // conversation yet — there is nothing to read in it until it is accepted —
     // and the screen cannot tell unless this says so.
-    expect(toConversation(room({ membership: 'invited' }), LABELS).isInvitation).toBe(true);
+    expect(toConversation(room({ membership: 'invited' }), LABELS, false).isInvitation).toBe(true);
   });
 
   it('does not mark a conversation the viewer has joined as an invitation', () => {
-    expect(toConversation(room({ membership: 'joined' }), LABELS).isInvitation).toBe(false);
+    expect(toConversation(room({ membership: 'joined' }), LABELS, false).isInvitation).toBe(false);
+  });
+
+  it('marks a conversation whose messages disappear', () => {
+    // An ephemeral conversation is identical to an ordinary one until its
+    // messages start vanishing, which is after the moment anybody could have
+    // decided differently. The row has to say so.
+    expect(toConversation(room(), LABELS, true).isEphemeral).toBe(true);
+  });
+
+  it('does not mark an ordinary conversation', () => {
+    expect(toConversation(room(), LABELS, false).isEphemeral).toBe(false);
   });
 
   it('leaves the conversation theme unset', () => {
     // Themes are to travel as an encrypted timeline event and nothing writes one
     // yet, so a Matrix conversation uses the app's theme.
-    expect(toConversation(room(), LABELS).theme).toBeUndefined();
+    expect(toConversation(room(), LABELS, false).theme).toBeUndefined();
   });
 });
 
@@ -222,6 +241,23 @@ describe('toMessage', () => {
     // Not the same fact as an undecryptable one: there is nothing to read, not
     // something unreadable.
     expect(message.isEncrypted).toBe(false);
+  });
+
+  it('says an expired message is no longer shown, and not that it was deleted', () => {
+    // Two different facts, and the weaker one must not borrow the stronger one's
+    // words. "Deleted" says the homeserver no longer has it; "no longer shown
+    // here" says only that this device has stopped drawing it, which is all that
+    // is true until whoever sent it redacts it.
+    const message = toMessage(
+      event({ content: { kind: 'expired' } }),
+      '!room:allo.you',
+      LABELS,
+    );
+
+    expect(message.text).toBe('no longer shown here');
+    expect(message.text).not.toBe('was deleted');
+    expect(message.media).toBeUndefined();
+    expect(message.attachment).toBeUndefined();
   });
 
   it('names the kind of event it cannot draw', () => {
@@ -519,6 +555,7 @@ describe('an attachment, as a conversation row', () => {
         }),
       }),
       LABELS,
+      false,
     );
   }
 

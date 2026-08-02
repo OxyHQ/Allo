@@ -1,3 +1,4 @@
+import type { EphemeralPoliciesLike } from '@/lib/chat/ephemeralPolicies';
 import {
   IDLE_RUNTIME_STATE,
   type MatrixRuntimeLike,
@@ -8,13 +9,15 @@ import { MatrixRoomNotFoundError } from '@/lib/matrix/errors';
 import type {
   AlloChatClient,
   AlloEncryptionState,
+  AlloEphemeralPolicy,
   AlloMediaFile,
   AlloOidcLoginRequest,
   AlloOutgoingAttachment,
+  AlloPaginationOutcome,
   AlloRecoveryState,
   AlloRoomDetails,
-  AlloPaginationOutcome,
   AlloRoomListHandle,
+  AlloRoomTrust,
   AlloSession,
   AlloSyncState,
   AlloTimelineHandle,
@@ -263,6 +266,19 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  /** No conversation in these tests is ephemeral unless a case says so. */
+  async ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>> {
+    return new Map();
+  }
+
+  async setEphemeralPolicy(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async roomTrust(): Promise<AlloRoomTrust> {
+    throw new Error('not used by these tests');
+  }
+
   async roomEncryption(): Promise<AlloEncryptionState> {
     throw new Error('not used by these tests');
   }
@@ -321,12 +337,52 @@ class FakeRuntime implements MatrixRuntimeLike {
   }
 }
 
+/**
+ * The account's ephemeral conversations, as a source a test can change.
+ *
+ * Empty unless a case says otherwise, so every test that is not about
+ * disappearing messages sees a timeline the port reported verbatim.
+ */
+class FakePolicies implements EphemeralPoliciesLike {
+  #policies: ReadonlyMap<string, AlloEphemeralPolicy> = new Map();
+  readonly #listeners = new Set<() => void>();
+
+  subscribe(listener: () => void): AlloUnsubscribe {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  getSnapshot(): ReadonlyMap<string, AlloEphemeralPolicy> {
+    return this.#policies;
+  }
+
+  set(roomId: string, policy: AlloEphemeralPolicy | undefined): void {
+    const next = new Map(this.#policies);
+    if (policy === undefined) {
+      next.delete(roomId);
+    } else {
+      next.set(roomId, policy);
+    }
+    this.#policies = next;
+    for (const listener of this.#listeners) {
+      listener();
+    }
+  }
+}
+
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-function readyTimeline(): { runtime: FakeRuntime; source: TimelineSource } {
+function readyTimeline(): {
+  runtime: FakeRuntime;
+  policies: FakePolicies;
+  source: TimelineSource;
+} {
   const runtime = new FakeRuntime();
+  const policies = new FakePolicies();
   runtime.become('ready');
-  return { runtime, source: new TimelineSource(runtime, ROOM, () => {}) };
+  return { runtime, policies, source: new TimelineSource(runtime, policies, ROOM, () => {}) };
 }
 
 describe('TimelineSource opening', () => {
@@ -827,6 +883,169 @@ describe('TimelineSource typing', () => {
     await source.sendTypingNotice(false);
 
     expect(runtime.chatClient.timelines[0].typingNotices).toEqual([true, false]);
+  });
+});
+
+describe('TimelineSource in an ephemeral conversation', () => {
+  const LIFETIME_MS = 3_600_000;
+  const POLICY: AlloEphemeralPolicy = { lifetimeMs: LIFETIME_MS };
+  const NOW = 1_700_000_000_000;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** A message sent `ageMs` ago, as the port would report it. */
+  const aged = (key: string, ageMs: number): AlloTimelineItem =>
+    event(key, { sentAt: NOW - ageMs });
+
+  it('reports the rows exactly as the port gave them in an ordinary conversation', async () => {
+    const { runtime, source } = readyTimeline();
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const rows = [aged('old', LIFETIME_MS * 2)];
+    runtime.chatClient.timelines[0].publish(rows);
+
+    expect(source.getSnapshot().items).toBe(rows);
+  });
+
+  it('stops showing a message once its time is up', async () => {
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    runtime.chatClient.timelines[0].publish([aged('old', LIFETIME_MS + 1)]);
+
+    expect(source.getSnapshot().items[0].content).toEqual({ kind: 'expired' });
+  });
+
+  it('leaves a message that still has time', async () => {
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    runtime.chatClient.timelines[0].publish([aged('fresh', 1000)]);
+
+    expect(source.getSnapshot().items[0].content).toMatchObject({ kind: 'text' });
+  });
+
+  it('stops showing it while the reader is looking at it', async () => {
+    // The timer is the point. Without it a message would stay on screen until
+    // something else happened to redraw the conversation, which in a quiet chat
+    // is never.
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('fresh', LIFETIME_MS - 1000)]);
+    expect(source.getSnapshot().items[0].content).toMatchObject({ kind: 'text' });
+
+    jest.advanceTimersByTime(1000);
+
+    expect(source.getSnapshot().items[0].content).toEqual({ kind: 'expired' });
+  });
+
+  it('tells its watchers when a message expires', async () => {
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    let notifications = 0;
+    source.subscribe(() => {
+      notifications += 1;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('fresh', LIFETIME_MS - 1000)]);
+    const before = notifications;
+
+    jest.advanceTimersByTime(1000);
+
+    expect(notifications).toBeGreaterThan(before);
+  });
+
+  it('schedules nothing for an ordinary conversation', async () => {
+    // An expiry timer per open conversation, for a feature nobody turned on,
+    // would redraw every chat in the app against a clock.
+    const { runtime, source } = readyTimeline();
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    runtime.chatClient.timelines[0].publish([aged('fresh', 1000)]);
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('starts hiding messages the moment a conversation becomes ephemeral', async () => {
+    const { runtime, policies, source } = readyTimeline();
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('old', LIFETIME_MS + 1)]);
+    expect(source.getSnapshot().items[0].content).toMatchObject({ kind: 'text' });
+
+    policies.set(ROOM, POLICY);
+
+    expect(source.getSnapshot().items[0].content).toEqual({ kind: 'expired' });
+  });
+
+  it('shows them again if it stops being ephemeral before they are redacted', async () => {
+    // Hiding is this device's own decision and it is reversible; the redaction
+    // is not. Keeping a row hidden after the timer was taken off would be this
+    // device pretending a message is gone when it is still on the homeserver.
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('old', LIFETIME_MS + 1)]);
+    expect(source.getSnapshot().items[0].content).toEqual({ kind: 'expired' });
+
+    policies.set(ROOM, undefined);
+
+    expect(source.getSnapshot().items[0].content).toMatchObject({ kind: 'text' });
+  });
+
+  it('keeps addressing a hidden row by the key the UI draws it with', async () => {
+    // Masking replaces the content and nothing else, which is what lets a
+    // redaction still name the row afterwards.
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('mine', LIFETIME_MS + 1)]);
+
+    await source.redact('mine');
+
+    expect(runtime.chatClient.timelines[0].redacted).toEqual([
+      { eventId: '$mine', reason: undefined },
+    ]);
+  });
+
+  it('stops its timer when the session goes away', async () => {
+    const { runtime, policies, source } = readyTimeline();
+    policies.set(ROOM, POLICY);
+    source.subscribe(() => {});
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.chatClient.timelines[0].publish([aged('fresh', 1000)]);
+    expect(jest.getTimerCount()).toBeGreaterThan(0);
+
+    runtime.become('signed-out');
+
+    expect(jest.getTimerCount()).toBe(0);
   });
 });
 

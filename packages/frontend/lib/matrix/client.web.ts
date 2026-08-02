@@ -54,6 +54,13 @@ import {
 // rule to trust. The platform-resolved name is for the code above the split,
 // which must not care.
 import { soleDirectInvitee } from '@/lib/matrix/directMessage';
+import { EphemeralSendGuard } from '@/lib/matrix/ephemeral/guard';
+import {
+  EPHEMERAL_POLICIES_EVENT_TYPE,
+  encodeEphemeralPolicies,
+  parseEphemeralPolicies,
+  withEphemeralPolicy,
+} from '@/lib/matrix/ephemeral/policy';
 import {
   ROOM_ENCRYPTION_STATE_KEY,
   roomPresetFor,
@@ -67,6 +74,7 @@ import type {
   AlloChatClientFactory,
   AlloCreateRoomRequest,
   AlloEncryptionState,
+  AlloEphemeralPolicy,
   AlloMediaFile,
   AlloMediaRef,
   AlloReaction,
@@ -80,6 +88,7 @@ import type {
   AlloRoomDetails,
   AlloRoomListHandle,
   AlloRoomSummary,
+  AlloRoomTrust,
   AlloSession,
   AlloSyncState,
   AlloTimelineHandle,
@@ -96,6 +105,10 @@ import {
   toAttachmentContent,
   type OutgoingThumbnailSource,
 } from './web/attachments';
+// Side-effect only: it declares Allo's own account data events to
+// `matrix-js-sdk`, which is what type-checks the two calls in
+// `ephemeralPolicies` and `setEphemeralPolicy`. See the file for why.
+import './web/accountData';
 import { Coalescer } from './web/coalesce';
 import { toCreateRoomOptions } from './web/createRoom';
 import { CryptoWasmLoader } from './web/cryptoWasm';
@@ -111,7 +124,7 @@ import {
   type OidcGrant,
 } from './web/oidcLogin';
 import { planKeyBackup, toRecoveryState } from './web/recovery';
-import { readRoomDetails } from './web/roomDetails';
+import { readRoomDetails, readRoomMembers } from './web/roomDetails';
 import {
   directRoomIds,
   directRoomsWith,
@@ -122,6 +135,7 @@ import {
 } from './web/roomList';
 import { createSecretStorageKeyCallback } from './web/secretStorage';
 import { decodeAuthData, encodeAuthData } from './web/session';
+import { toIdentityTrust, toOwnDeviceTrust } from './web/trust';
 import {
   isTimelineRow,
   toEncryptionState,
@@ -238,6 +252,16 @@ class WebAlloChatClient implements AlloChatClient {
   readonly #sessionListeners = new Set<(session: AlloSession) => void>();
   readonly #roomLists = new Set<WebRoomListHandle>();
   readonly #timelines = new Set<WebTimelineHandle>();
+  /**
+   * The check every send into an ephemeral conversation goes through.
+   *
+   * Built here, and handed to each timeline, so that no caller of this port can
+   * reach a send without it. See `lib/matrix/ephemeral/guard.ts`.
+   */
+  readonly #ephemeral = new EphemeralSendGuard({
+    policies: () => this.ephemeralPolicies(),
+    trust: (roomId) => this.roomTrust(roomId),
+  });
 
   #client: MatrixClient | undefined;
   #session: AlloSession | undefined;
@@ -703,6 +727,68 @@ class WebAlloChatClient implements AlloChatClient {
     );
   }
 
+  /**
+   * The account's ephemeral conversations.
+   *
+   * `getAccountData` reads the client's own store, which sync fills, so this is
+   * not a request and is cheap enough to ask before every send — which is what
+   * {@link EphemeralSendGuard} does.
+   */
+  async ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>> {
+    const client = this.#requireClient('Reading the ephemeral conversations');
+    return parseEphemeralPolicies(
+      client.getAccountData(EPHEMERAL_POLICIES_EVENT_TYPE)?.getContent(),
+    );
+  }
+
+  async setEphemeralPolicy(
+    roomId: string,
+    policy: AlloEphemeralPolicy | undefined,
+  ): Promise<void> {
+    const client = this.#requireClient('Changing an ephemeral conversation');
+    // Read, change, write. Account data has no partial update, so the read is
+    // not an optimisation: writing only the room being changed would delete
+    // every other conversation's policy.
+    const next = withEphemeralPolicy(await this.ephemeralPolicies(), roomId, policy);
+    await client.setAccountData(EPHEMERAL_POLICIES_EVENT_TYPE, encodeEphemeralPolicies(next));
+  }
+
+  /**
+   * What this device knows about the identity of everybody in a room.
+   *
+   * The devices are downloaded first, and that is not a warm-up:
+   * `getUserVerificationStatus` answers from the crypto store, and somebody this
+   * browser has never fetched keys for comes back as "not known" — which the
+   * port would report as `unknown` and the guard would refuse a send over.
+   * `getUserDeviceInfo(..., true)` is this half's equivalent of the native
+   * binding's `fallbackToServer`.
+   */
+  async roomTrust(roomId: string): Promise<AlloRoomTrust> {
+    const operation = "Reading a conversation's trust";
+    const client = this.#requireSyncing(operation);
+    const crypto = this.#requireCrypto(operation);
+    const room = this.#requireRoom(roomId, operation);
+
+    await room.loadMembersIfNeeded();
+    const members = readRoomMembers(room);
+    await crypto.getUserDeviceInfo(
+      members.map((member) => member.userId),
+      true,
+    );
+
+    return {
+      ownDevice: toOwnDeviceTrust(
+        await crypto.getUserVerificationStatus(client.getSafeUserId()),
+      ),
+      members: await Promise.all(
+        members.map(async (member) => ({
+          userId: member.userId,
+          trust: toIdentityTrust(await crypto.getUserVerificationStatus(member.userId)),
+        })),
+      ),
+    };
+  }
+
   async openTimeline(
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
@@ -717,6 +803,7 @@ class WebAlloChatClient implements AlloChatClient {
       // question, and an attachment is exactly the case where the difference
       // matters: see `sendAttachment`.
       () => this.roomEncryption(room.roomId),
+      this.#ephemeral,
       onChange,
       () => {
         this.#timelines.delete(handle);
@@ -1206,6 +1293,7 @@ class WebTimelineHandle implements AlloTimelineHandle {
   readonly #client: MatrixClient;
   readonly #room: Room;
   readonly #roomEncryption: () => Promise<AlloEncryptionState>;
+  readonly #ephemeral: EphemeralSendGuard;
   readonly #onChange: (items: readonly AlloTimelineItem[]) => void;
   readonly #onClose: () => void;
   readonly #coalescer: Coalescer;
@@ -1219,12 +1307,14 @@ class WebTimelineHandle implements AlloTimelineHandle {
     client: MatrixClient,
     room: Room,
     roomEncryption: () => Promise<AlloEncryptionState>,
+    ephemeral: EphemeralSendGuard,
     onChange: (items: readonly AlloTimelineItem[]) => void,
     onClose: () => void,
   ) {
     this.#client = client;
     this.#room = room;
     this.#roomEncryption = roomEncryption;
+    this.#ephemeral = ephemeral;
     this.#onChange = onChange;
     this.#onClose = onClose;
     this.#coalescer = new Coalescer(() => {
@@ -1265,6 +1355,7 @@ class WebTimelineHandle implements AlloTimelineHandle {
   }
 
   async sendText(body: string): Promise<void> {
+    await this.#ephemeral.requireSendable(this.#room.roomId);
     // Sent as text, verbatim. Running it through a markdown parser would turn the
     // user's asterisks into formatting they did not ask for.
     await this.#client.sendMessage(this.#room.roomId, { msgtype: MsgType.Text, body });
@@ -1288,6 +1379,9 @@ class WebTimelineHandle implements AlloTimelineHandle {
    * clear, which leaks the picture almost as well as the picture would.
    */
   async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
+    // Before a byte is read, let alone uploaded: an attachment refused after the
+    // upload would leave the blob on the homeserver with nothing pointing at it.
+    await this.#ephemeral.requireSendable(this.#room.roomId);
     const encryption = await this.#roomEncryption();
     const deps = { upload: this.#upload, encrypt: encryptAttachment };
 
@@ -1374,6 +1468,10 @@ class WebTimelineHandle implements AlloTimelineHandle {
    * any local state.
    */
   async toggleReaction(eventId: string, key: string): Promise<void> {
+    // Guarded like a message, because half of what this call does *is* a
+    // message: adding a reaction sends an `m.annotation`, which in an encrypted
+    // room is encrypted with the room key like everything else.
+    await this.#ephemeral.requireSendable(this.#room.roomId);
     const existing = this.#viewerReaction(eventId, key);
     if (existing !== undefined) {
       await this.#client.redactEvent(this.#room.roomId, existing);
@@ -1385,6 +1483,7 @@ class WebTimelineHandle implements AlloTimelineHandle {
   }
 
   async edit(eventId: string, body: string): Promise<void> {
+    await this.#ephemeral.requireSendable(this.#room.roomId);
     await this.#client.sendMessage(this.#room.roomId, {
       msgtype: MsgType.Text,
       body: `${EDIT_FALLBACK_PREFIX}${body}`,

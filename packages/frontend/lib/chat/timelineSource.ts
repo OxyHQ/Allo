@@ -1,5 +1,10 @@
+import {
+  maskExpiredItems,
+  msUntilNextEphemeralChange,
+} from '@/lib/matrix/ephemeral/expiry';
 import { MatrixEventNotSentError } from '@/lib/matrix/errors';
 import type {
+  AlloEphemeralPolicy,
   AlloOutgoingAttachment,
   AlloPaginationOutcome,
   AlloTimelineHandle,
@@ -8,6 +13,7 @@ import type {
 } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
+import { ephemeralPolicies, type EphemeralPoliciesLike } from './ephemeralPolicies';
 import { matrixRuntime, type MatrixRuntimeLike } from './matrixRuntime';
 
 /**
@@ -98,22 +104,42 @@ export class TimelineAbandonedError extends Error {
 
 export class TimelineSource {
   readonly #runtime: MatrixRuntimeLike;
+  readonly #policies: EphemeralPoliciesLike;
   readonly #roomId: string;
   readonly #listeners = new Set<() => void>();
   readonly #onIdle: () => void;
 
   #snapshot: TimelineSnapshot = CLOSED;
+  /**
+   * The rows exactly as the port reported them.
+   *
+   * Kept beside the snapshot because in an ephemeral conversation the snapshot
+   * is not what the port said: it is what the port said, aged against the clock.
+   * Recomputing that on every tick needs the original, and the original is also
+   * what {@link items} would have to go back to if the conversation stopped
+   * being ephemeral.
+   */
+  #rawItems: readonly AlloTimelineItem[] = NO_ITEMS;
   #handle: AlloTimelineHandle | undefined;
   #opening: Promise<AlloTimelineHandle> | undefined;
   #watchingRuntime: AlloUnsubscribe | undefined;
+  #watchingPolicies: AlloUnsubscribe | undefined;
   #watchingTyping: AlloUnsubscribe | undefined;
+  /** Fires at the next moment a row in this conversation expires. */
+  #expiry: ReturnType<typeof setTimeout> | undefined;
   /** The last event id a read receipt was sent for. See {@link markRead}. */
   #receipted: string | undefined;
   /** See `roomListSource.ts`: invalidates callbacks from a superseded handle. */
   #generation = 0;
 
-  constructor(runtime: MatrixRuntimeLike, roomId: string, onIdle: () => void) {
+  constructor(
+    runtime: MatrixRuntimeLike,
+    policies: EphemeralPoliciesLike,
+    roomId: string,
+    onIdle: () => void,
+  ) {
     this.#runtime = runtime;
+    this.#policies = policies;
     this.#roomId = roomId;
     this.#onIdle = onIdle;
   }
@@ -122,6 +148,9 @@ export class TimelineSource {
     this.#listeners.add(listener);
     if (this.#watchingRuntime === undefined) {
       this.#watchingRuntime = this.#runtime.subscribe(this.#onRuntimeChanged);
+      // A conversation that becomes ephemeral — or stops being one — while it is
+      // on screen has to be redrawn, and the deadline of every row in it moves.
+      this.#watchingPolicies = this.#policies.subscribe(this.#onPoliciesChanged);
       this.#onRuntimeChanged();
     }
     return () => {
@@ -310,6 +339,9 @@ export class TimelineSource {
 
   #open(): Promise<AlloTimelineHandle> {
     const generation = this.#generation;
+    // Reset alongside the snapshot: `#publishItems` skips an array it has
+    // already seen, and a reopened timeline can hand back the very same one.
+    this.#rawItems = NO_ITEMS;
     this.#publish(OPENING);
     const opening = this.#runtime
       .client('Opening a conversation')
@@ -367,12 +399,14 @@ export class TimelineSource {
     this.#opening = undefined;
     this.#watchingTyping?.();
     this.#watchingTyping = undefined;
+    this.#clearExpiry();
     // The receipt belongs to the handle that sent it. A session that came back
     // has to be free to say again what it said before it went away.
     this.#receipted = undefined;
     const handle = this.#handle;
     this.#handle = undefined;
     handle?.close();
+    this.#rawItems = NO_ITEMS;
     this.#snapshot = CLOSED;
     this.#emit();
   }
@@ -381,15 +415,74 @@ export class TimelineSource {
     this.#drop();
     this.#watchingRuntime?.();
     this.#watchingRuntime = undefined;
+    this.#watchingPolicies?.();
+    this.#watchingPolicies = undefined;
     this.#onIdle();
   }
 
   #publishItems(generation: number, items: readonly AlloTimelineItem[]): void {
-    if (generation !== this.#generation || items === this.#snapshot.items) {
+    if (generation !== this.#generation || items === this.#rawItems) {
       return;
     }
-    this.#snapshot = { ...this.#snapshot, items };
-    this.#emit();
+    this.#rawItems = items;
+    this.#publishAged();
+  }
+
+  /**
+   * The conversation became ephemeral, stopped being ephemeral, or changed how
+   * long its messages live.
+   */
+  readonly #onPoliciesChanged = (): void => {
+    this.#publishAged();
+  };
+
+  /**
+   * A row has reached its deadline.
+   *
+   * The timer is what makes an ephemeral conversation stop showing a message
+   * while the reader is looking at it, rather than the next time something else
+   * happens to redraw the screen.
+   */
+  readonly #onExpiry = (): void => {
+    this.#expiry = undefined;
+    this.#publishAged();
+  };
+
+  /**
+   * Publishes the rows as they are *now*, and arranges to do it again when the
+   * next one expires.
+   *
+   * An ordinary conversation costs a map lookup and nothing else: no copy of the
+   * rows, no timer. The two are one function because they have to agree — a
+   * snapshot without a timer would stop ageing, and a timer without a snapshot
+   * would fire against rows nobody replaced.
+   */
+  #publishAged(): void {
+    this.#clearExpiry();
+    const policy = this.#policies.getSnapshot().get(this.#roomId);
+    if (policy === undefined) {
+      this.#publish({ items: this.#rawItems });
+      return;
+    }
+
+    const now = Date.now();
+    this.#publish({ items: maskExpiredItems(this.#rawItems, policy, now) });
+    this.#scheduleExpiry(policy, now);
+  }
+
+  #scheduleExpiry(policy: AlloEphemeralPolicy, now: number): void {
+    const delay = msUntilNextEphemeralChange(this.#rawItems, policy, now);
+    if (delay === undefined) {
+      return;
+    }
+    this.#expiry = setTimeout(this.#onExpiry, delay);
+  }
+
+  #clearExpiry(): void {
+    if (this.#expiry !== undefined) {
+      clearTimeout(this.#expiry);
+      this.#expiry = undefined;
+    }
   }
 
   #publish(patch: Partial<TimelineSnapshot>): void {
@@ -428,7 +521,7 @@ export function timelineSource(roomId: string): TimelineSource {
   if (existing !== undefined) {
     return existing;
   }
-  const source = new TimelineSource(matrixRuntime, roomId, () => {
+  const source = new TimelineSource(matrixRuntime, ephemeralPolicies, roomId, () => {
     // Removed only if it is still the registered one: a component that
     // resubscribed in the same tick has already put a new source here.
     if (sources.get(roomId) === source) {

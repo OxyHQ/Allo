@@ -100,6 +100,16 @@ export interface Conversation {
      * Only the Matrix backend produces this: the Express API has no invitations.
      */
     isInvitation?: boolean;
+    /**
+     * This account has put the conversation's messages on a timer: they stop
+     * being drawn here after their lifetime, and the ones this device sent are
+     * removed from the homeserver.
+     *
+     * Only the Matrix backend produces this, and it is a fact about *this
+     * account* rather than about the conversation — the other people in it are
+     * not told. See `docs/matrix/ephemeral.md`.
+     */
+    isEphemeral?: boolean;
     theme?: string; // Color theme ID (shared with all participants)
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
@@ -154,6 +164,7 @@ interface ConversationRowStyles {
     conversationBottomRow: ViewStyle;
     conversationMessage: TextStyle;
     invitationLabel: TextStyle;
+    ephemeralMark: TextStyle;
     unreadBadge: ViewStyle;
     unreadText: TextStyle;
 }
@@ -305,6 +316,18 @@ const ConversationRow = React.memo(function ConversationRow({
                     </ThemedText>
                 </View>
                 <View style={styles.conversationBottomRow}>
+                    {/* An ephemeral conversation looks exactly like an ordinary one
+                        until its messages start disappearing, which is the moment it
+                        is too late to notice. The marker is beside the preview and
+                        not instead of it: what was said still belongs in the row. */}
+                    {item.isEphemeral && !item.isInvitation && (
+                        <Ionicons
+                            name="timer-outline"
+                            size={14}
+                            color={styles.ephemeralMark.color}
+                            accessibilityLabel={t('Messages in this conversation disappear')}
+                        />
+                    )}
                     {item.isInvitation ? (
                         <ThemedText style={styles.invitationLabel} numberOfLines={1}>
                             {t('Invitation · tap to answer')}
@@ -751,6 +774,13 @@ export default function ConversationsList() {
             color: theme.colors.primary,
             flex: 1,
             marginRight: 8,
+        },
+        // A style whose only job is to carry a colour to an icon, because an
+        // Ionicon takes one as a prop and not from a stylesheet. Read from the
+        // theme like every other colour in the app.
+        ephemeralMark: {
+            color: theme.colors.textSecondary,
+            marginRight: 4,
         },
         unreadBadge: {
             backgroundColor: colors.primaryColor,

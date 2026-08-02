@@ -85,6 +85,20 @@ export async function readRoomDetails(room: RoomDetailsEntry): Promise<AlloRoomD
   };
 }
 
+/**
+ * Just who is in the room, without the two reads a details screen also needs.
+ *
+ * Its own entry point because `roomTrust` is asked before every send into an
+ * ephemeral conversation, and the power levels and the `m.direct` lookup that
+ * {@link readRoomDetails} pays for are two round trips that answer a question
+ * nobody is asking there.
+ */
+export async function readRoomMembers(
+  room: Pick<RoomDetailsEntry, 'members'>,
+): Promise<readonly AlloRoomMember[]> {
+  return orderRoomMembers(collectMembers(await room.members()));
+}
+
 export function toRights(authority: RoomAuthority): AlloRoomRights {
   return {
     canInvite: authority.canOwnUserInvite(),

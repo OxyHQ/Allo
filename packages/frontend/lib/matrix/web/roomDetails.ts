@@ -64,6 +64,19 @@ export function readRoomDetails(
   };
 }
 
+/**
+ * Just who is in the room, without the permissions a details screen also needs.
+ *
+ * The counterpart of the native half's function of the same name, and there for
+ * the same reason: `roomTrust` runs before every send into an ephemeral
+ * conversation and has no use for power levels.
+ */
+export function readRoomMembers(
+  room: Pick<WebRoomDetailsSource, 'getMembers'>,
+): readonly AlloRoomMember[] {
+  return orderRoomMembers(toMembers(room.getMembers()));
+}
+
 export function toRights(
   room: WebRoomDetailsSource,
   state: WebRoomState,

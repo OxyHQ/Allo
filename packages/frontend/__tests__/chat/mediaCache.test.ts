@@ -2,11 +2,13 @@ import { IDLE_RUNTIME_STATE, type MatrixRuntimeLike, type MatrixRuntimeState } f
 import { MatrixMediaCache } from '@/lib/chat/mediaCache';
 import type {
   AlloChatClient,
+  AlloEphemeralPolicy,
   AlloMediaFile,
   AlloOidcLoginRequest,
   AlloRecoveryState,
   AlloRoomDetails,
   AlloRoomListHandle,
+  AlloRoomTrust,
   AlloSession,
   AlloTimelineHandle,
   AlloUnsubscribe,
@@ -128,6 +130,19 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async renameRoom(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  /** No conversation in these tests is ephemeral unless a case says so. */
+  async ephemeralPolicies(): Promise<ReadonlyMap<string, AlloEphemeralPolicy>> {
+    return new Map();
+  }
+
+  async setEphemeralPolicy(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async roomTrust(): Promise<AlloRoomTrust> {
     throw new Error('not used by these tests');
   }
 
