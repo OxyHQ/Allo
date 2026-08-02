@@ -21,7 +21,9 @@
     "@oxyhq/crowdsource-express": "0.3.0",
     "dotenv": "^17.4.2",
     "express": "^4.22.2",
+    "express-rate-limit": "^8.0.0",
     "firebase-admin": "^14.1.0",
+    "helmet": "^8.0.0",
     "mongoose": "^9.7.4",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3"
