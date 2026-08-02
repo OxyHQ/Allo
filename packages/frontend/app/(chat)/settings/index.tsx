@@ -18,6 +18,7 @@ import { confirmDialog, alertDialog } from "@/utils/alerts";
 import { getData, storeData } from "@/utils/storage";
 // (already imported above)
 import { hasNotificationPermission, requestNotificationPermissions, getDevicePushToken } from "@/utils/notifications";
+import { signOutOfMatrix } from "@/hooks/useMatrixRuntime";
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
 import { useAppearanceStore } from "@/stores/appearanceStore";
@@ -255,7 +256,10 @@ export default function SettingsScreen() {
             destructive: true,
         });
         if (!confirmed) return;
-        // For now, just navigate back - the actual sign out would depend on your auth system
+        // Ends the Matrix session — on the homeserver, and everywhere it was kept
+        // on this device. Does nothing in a build talking to the Allo API, where
+        // the account is Oxy's and signing out of it is not this screen's to do.
+        await signOutOfMatrix();
         router.replace('/');
     };
 

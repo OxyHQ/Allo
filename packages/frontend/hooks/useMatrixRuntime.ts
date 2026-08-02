@@ -42,3 +42,23 @@ export function signInToMatrix(): void {
   // reads, so there is nothing for a caller to catch.
   void matrixRuntime.signIn();
 }
+
+/**
+ * Ends the session: on the homeserver, and everywhere it was kept on this
+ * device.
+ *
+ * Awaitable, unlike {@link signInToMatrix}, because a caller usually has
+ * something to do afterwards — navigating away from screens that were drawing a
+ * conversation the app no longer has. It does not reject: the runtime reports
+ * what went wrong through the state this module's hook reads, the same way a
+ * sign-in does.
+ *
+ * With the backend set to `allo-api` this resolves without doing anything, which
+ * is what lets a screen call it unconditionally.
+ */
+export async function signOutOfMatrix(): Promise<void> {
+  if (!enabled) {
+    return;
+  }
+  await matrixRuntime.signOut();
+}
