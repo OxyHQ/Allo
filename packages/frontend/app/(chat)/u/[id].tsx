@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 
 /**
  * Legacy route handler for /u/:id
@@ -11,14 +10,10 @@ import { useLocalSearchParams, useRouter, type Href } from "expo-router";
  */
 export default function LegacyUserConversationRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (id) {
-      // Redirect to unified conversation route
-      router.replace(`/c/${id}` as Href);
-    }
-  }, [id, router]);
+  if (!id) {
+    return null;
+  }
 
-  return null;
+  return <Redirect href={`/c/${id}`} />;
 }

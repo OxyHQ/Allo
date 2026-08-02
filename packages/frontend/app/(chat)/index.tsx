@@ -4,7 +4,6 @@ import {
     View,
     Text,
     TouchableOpacity,
-    TextInput,
     useWindowDimensions,
     RefreshControl,
     type ViewStyle,
@@ -30,7 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@oxyhq/bloom/toast';
 
 // Components
-import { Skeleton } from '@oxyhq/bloom';
+import { Search, Skeleton } from '@oxyhq/bloom';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
@@ -619,21 +618,6 @@ export default function ConversationsList() {
             paddingBottom: 8,
             backgroundColor: theme.colors.background,
         },
-        searchInputWrapper: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: theme.colors.backgroundSecondary || '#f0f2f5',
-            borderRadius: 20,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            height: 40,
-        },
-        searchInput: {
-            flex: 1,
-            fontSize: 15,
-            color: theme.colors.text,
-            marginLeft: 8,
-        },
         selectionHeaderContent: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -1026,40 +1010,15 @@ export default function ConversationsList() {
 
         return (
             <View style={styles.searchBarContainer}>
-                <View style={styles.searchInputWrapper}>
-                    <Ionicons
-                        name="search"
-                        size={20}
-                        color={theme.colors.textSecondary}
-                    />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Ask Oxy AI or Search"
-                        placeholderTextColor={theme.colors.textSecondary}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        accessibilityLabel="Search input"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
-                    {searchQuery.length > 0 && (
-                        <TouchableOpacity
-                            onPress={() => setSearchQuery('')}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            accessibilityLabel="Clear search"
-                        >
-                            <Ionicons
-                                name="close-circle"
-                                size={20}
-                                color={theme.colors.textSecondary}
-                            />
-                        </TouchableOpacity>
-                    )}
-                </View>
+                <Search
+                    label="Ask Oxy AI or Search"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    onClearText={() => setSearchQuery('')}
+                />
             </View>
         );
-    }, [isSelectionMode, searchQuery, theme.colors.textSecondary, styles.searchBarContainer, styles.searchInputWrapper, styles.searchInput]);
+    }, [isSelectionMode, searchQuery, styles.searchBarContainer]);
 
     /**
      * Render individual conversation item (useCallback for FlatList stability)
