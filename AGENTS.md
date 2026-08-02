@@ -73,15 +73,28 @@ are its own modules and `__tests__/matrix/`, which run against
 `__mocks__/@unomed/react-native-matrix-sdk.ts`. Do not read the presence of this
 directory as Allo being a Matrix client.
 
-Two spikes back the decisions, and they are committed unevenly:
+Two spikes back the decisions. Both live outside the workspaces, so a root
+`bun install` does not touch them and they do not affect the main `bun.lock`.
 
-- `spikes/matrix-web/` — complete, with `README.md` and `RESULTS.md`.
-  `matrix-js-sdk@42` + `@matrix-org/matrix-sdk-crypto-wasm@18` under a
-  production `expo export --platform web`, validated in a browser.
-- `spikes/matrix-rn/` — **only `android/` is committed.** There is no README, no
-  `package.json` and no JS/TS source in the repo, so the run that validated the
-  native binding on a physical Android device is not reproducible from what is
-  checked in.
+- `spikes/matrix-web/` — `matrix-js-sdk@42` +
+  `@matrix-org/matrix-sdk-crypto-wasm@18` under a production
+  `expo export --platform web`, driven headlessly in a browser. `README.md` to
+  run it, `RESULTS.md` for what it proved and — as importantly — what it did
+  not: OIDC is only half proven, and the two-tab hazard could not be ruled out.
+- `spikes/matrix-rn/` — `@unomed/react-native-matrix-sdk` on a physical Android
+  device, checks C1–C8 (native binding starts, login, sliding sync, encrypted
+  room, message round trip, file upload, history recovery on a cold device,
+  cross-device key sharing). `README.md` has the operator instructions and what
+  each check means. Its results are not recorded in the repo the way
+  `matrix-web`'s are. The generated `android/` project is deliberately not
+  committed — run `expo prebuild`.
+
+  Two constraints that fail on the device rather than in the build: the ABIs are
+  pinned to `armeabi-v7a,arm64-v8a` by `plugins/withMatrixSdkAbis.js` because
+  those are the only ones shipping `libmatrix_sdk_ffi.so`, so an **x86_64
+  emulator will not work** — you need ARM hardware or an arm64 emulator. And the
+  build needs the Android NDK for the C++ glue, which is why `eas.json`'s
+  `standalone` profile exists.
 
 ## Key Features
 

@@ -241,8 +241,11 @@ by any root script.
   production Expo web export. Has its own [README](./spikes/matrix-web/README.md)
   and a [RESULTS.md](./spikes/matrix-web/RESULTS.md) recording what it proved and
   what it did not.
-- `spikes/matrix-rn/` — only the generated `android/` project is committed. Its
-  JS side is not in the repo, so it cannot be run from a fresh checkout.
+- `spikes/matrix-rn/` — `@unomed/react-native-matrix-sdk` on a physical Android
+  device. Its [README](./spikes/matrix-rn/README.md) covers how to run the C1–C8
+  checks and how to read them. Needs ARM hardware: the native library ships only
+  `armeabi-v7a` and `arm64-v8a`, so an x86_64 emulator installs and then crashes.
+  The generated `android/` project is not committed — run `expo prebuild`.
 
 ### API Documentation
 
