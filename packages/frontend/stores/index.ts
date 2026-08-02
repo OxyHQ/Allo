@@ -15,7 +15,13 @@ export { useConversationsStore } from './conversationsStore';
 export type { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 
 export { useMessagesStore } from './messagesStore';
-export type { Message, MediaItem, StickerItem } from './messagesStore';
+export type {
+  Message,
+  MediaItem,
+  MessageAttachment,
+  MessageAttachmentKind,
+  StickerItem,
+} from './messagesStore';
 
 export { useChatUIStore } from './chatUIStore';
 export { useMessagePreferencesStore } from './messagePreferencesStore';

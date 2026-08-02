@@ -17,7 +17,6 @@ const LABELS: UnreadableEventLabels = {
   undecryptable: 'cannot be read on this device',
   redacted: 'was deleted',
   unsupported: (description) => `cannot show this yet (${description})`,
-  attachment: (filename) => `attachment ${filename}`,
   mediaPreview: (kind) => `a ${kind}`,
 };
 
@@ -373,13 +372,38 @@ describe('an attachment, as a message', () => {
     // A bubble is 250pt wide and the original is a phone camera's full
     // resolution. In an encrypted room the sender's thumbnail is the only
     // smaller copy that exists: a homeserver cannot resize what it cannot read.
-    expect(messageWith().media).toEqual([{ id: 'ref:thumb', type: 'image' }]);
+    expect(messageWith().media).toEqual([
+      {
+        id: 'ref:thumb',
+        type: 'image',
+        fullSizeId: 'ref:full',
+        filename: 'holiday.jpg',
+      },
+    ]);
+  });
+
+  it('keeps the original beside the thumbnail, or the viewer has nothing to open', () => {
+    // The whole reason `fullSizeId` exists. The bubble draws the small copy and
+    // the ref for the big one is otherwise gone by the time anything can ask —
+    // which is exactly why tapping an attachment used to do nothing.
+    expect(messageWith().media?.[0].fullSizeId).toBe('ref:full');
   });
 
   it('falls back to the original when the sender made no thumbnail', () => {
     expect(messageWith({ thumbnail: undefined }).media).toEqual([
-      { id: 'ref:full', type: 'image' },
+      {
+        id: 'ref:full',
+        type: 'image',
+        fullSizeId: undefined,
+        filename: 'holiday.jpg',
+      },
     ]);
+  });
+
+  it('claims no larger copy when the row is already drawing the original', () => {
+    // Set unconditionally, `fullSizeId` would send the viewer to download bytes
+    // it already has.
+    expect(messageWith({ thumbnail: undefined }).media?.[0].fullSizeId).toBeUndefined();
   });
 
   it('carries the port media ref as the id, because that is what resolves it', () => {
@@ -400,7 +424,12 @@ describe('an attachment, as a message', () => {
 
   it('draws a video as a video', () => {
     expect(messageWith({ kind: 'video' }).media).toEqual([
-      { id: 'ref:thumb', type: 'video' },
+      {
+        id: 'ref:thumb',
+        type: 'video',
+        fullSizeId: 'ref:full',
+        filename: 'holiday.jpg',
+      },
     ]);
   });
 
@@ -412,9 +441,53 @@ describe('an attachment, as a message', () => {
       const message = messageWith({ kind, filename: 'voice.m4a', thumbnail: undefined });
 
       expect(message.media).toBeUndefined();
-      expect(message.text).toBe('attachment voice.m4a');
     },
   );
+
+  it.each(['audio', 'voice', 'file'] as const)(
+    'hands a %s to the player or the file row instead, with what it needs',
+    (kind) => {
+      const message = messageWith({
+        kind,
+        filename: 'voice.m4a',
+        thumbnail: undefined,
+        durationMs: 7_400,
+        size: 68_000,
+      });
+
+      expect(message.attachment).toEqual({
+        kind,
+        source: 'ref:full',
+        filename: 'voice.m4a',
+        size: 68_000,
+        durationMs: 7_400,
+      });
+    },
+  );
+
+  it('points an attachment at the original and never at the thumbnail', () => {
+    // Unlike the carousel. There is no smaller version of a recording, and
+    // playing a thumbnail of one plays nothing.
+    const message = messageWith({ kind: 'voice', thumbnail: 'ref:thumb' });
+
+    expect(message.attachment?.source).toBe('ref:full');
+  });
+
+  it.each(['image', 'video'] as const)(
+    'gives no attachment for a %s, which the carousel already draws',
+    (kind) => {
+      // The two are exclusive by construction. A message carrying both would
+      // draw the same file twice, once as a picture and once as a file row.
+      expect(messageWith({ kind }).attachment).toBeUndefined();
+    },
+  );
+
+  it('says nothing in the bubble for a voice note either', () => {
+    // The player is the bubble, exactly as the picture is. Before the player
+    // existed this said "Attachment: voice.m4a", which was the app admitting it
+    // could not show the thing.
+    expect(messageWith({ kind: 'voice', filename: 'voice.m4a' }).text).toBe('');
+  });
 
   it('lets a caption speak for an attachment it cannot draw either', () => {
     const message = messageWith({ kind: 'file', caption: 'the contract' });

@@ -5,7 +5,12 @@ import type {
   AlloRoomSummary,
   AlloTimelineItem,
 } from '@/lib/matrix/types';
-import type { MediaItem, Message } from '@/stores/messagesStore';
+import type {
+  MediaItem,
+  Message,
+  MessageAttachment,
+  MessageAttachmentKind,
+} from '@/stores/messagesStore';
 
 /**
  * The port's view model, translated into the one Allo's chat components draw.
@@ -34,15 +39,6 @@ export interface UnreadableEventLabels {
   readonly redacted: string;
   /** Allo does not draw this kind of event yet. Given the kind's name. */
   readonly unsupported: (description: string) => string;
-  /**
-   * An attachment in a **bubble** that has no picture to draw and no caption: a
-   * voice note, an audio file, a document.
-   *
-   * Given the sender's filename, because that is the only thing about it worth
-   * reading. A picture and a video never use this — the bubble *is* the
-   * picture, and a filename printed under it is noise.
-   */
-  readonly attachment: (filename: string) => string;
   /**
    * An attachment in a **conversation row** that has no caption.
    *
@@ -122,6 +118,7 @@ export function toMessage(
     conversationId: roomId,
     messageType: 'user',
     media: item.content.kind === 'media' ? toMediaItems(item.content.media) : undefined,
+    attachment: item.content.kind === 'media' ? toAttachment(item.content.media) : undefined,
     isEncrypted: item.content.kind === 'undecryptable',
     isEdited: item.content.kind === 'text' && item.content.isEdited,
     reactions: toReactions(item),
@@ -147,22 +144,74 @@ export function toMessage(
  * A bubble is 250pt wide and the original is a phone camera's full-resolution
  * photograph; on an encrypted room the sender's thumbnail is the only smaller
  * copy that exists, because a homeserver cannot resize what it cannot read.
+ *
+ * `fullSizeId` is how the original survives that choice. The viewer opens on it,
+ * and without it the ref would be gone by the time anything could ask: the
+ * bubble would be the only copy the app ever had, which is why tapping one used
+ * to do nothing.
  */
 function toMediaItems(media: AlloMediaContent): MediaItem[] | undefined {
   const type = CAROUSEL_TYPE_BY_KIND[media.kind];
   if (type === undefined) {
     return undefined;
   }
-  return [{ id: media.thumbnail ?? media.source, type }];
+  return [
+    {
+      id: media.thumbnail ?? media.source,
+      type,
+      // Only when the two differ. Set unconditionally it would say "this row is
+      // drawing a smaller copy" about a row that is drawing the original, and
+      // the viewer would show a second download of bytes it already has.
+      fullSizeId: media.thumbnail === undefined ? undefined : media.source,
+      filename: media.filename,
+    },
+  ];
 }
+
+/**
+ * An attachment with no picture in it, or `undefined` for one the carousel
+ * draws.
+ *
+ * The two are exclusive by construction: a kind is either in
+ * {@link CAROUSEL_TYPE_BY_KIND} or it is here, never both, so no message ever
+ * carries `media` and `attachment` at once.
+ */
+function toAttachment(media: AlloMediaContent): MessageAttachment | undefined {
+  const kind = ATTACHMENT_KIND[media.kind];
+  if (kind === undefined) {
+    return undefined;
+  }
+  return {
+    kind,
+    source: media.source,
+    filename: media.filename,
+    size: media.size,
+    durationMs: media.durationMs,
+  };
+}
+
+/**
+ * The three kinds that are drawn as a player or a file row.
+ *
+ * The complement of {@link CAROUSEL_TYPE_BY_KIND} over `AlloMediaKind`, and
+ * written as a keyed record for the same reason: a sixth kind added to the port
+ * is a compile error in one of these two tables rather than an attachment that
+ * silently draws as nothing.
+ */
+const ATTACHMENT_KIND: Readonly<Partial<Record<AlloMediaContent['kind'], MessageAttachmentKind>>> =
+  {
+    audio: 'audio',
+    voice: 'voice',
+    file: 'file',
+  };
 
 /**
  * Which attachments the carousel can draw, and as what.
  *
  * Audio, voice notes and documents are absent because `MediaCarousel` renders
  * nothing for them — it draws images and a still frame for videos — and giving
- * it one would produce an empty bubble. They are drawn as a line of text
- * instead; see {@link UnreadableEventLabels.attachment}.
+ * it one would produce an empty bubble. They travel as {@link toAttachment}
+ * instead, and are drawn by a player or a file row.
  */
 const CAROUSEL_TYPE_BY_KIND: Readonly<Partial<Record<AlloMediaContent['kind'], MediaItem['type']>>> =
   {
@@ -203,14 +252,10 @@ function bodyOf(content: AlloEventContent, labels: UnreadableEventLabels): strin
     case 'text':
       return content.body;
     case 'media':
-      return (
-        captionOf(content.media) ??
-        // A picture says nothing: the bubble is the picture. Anything the
-        // carousel cannot draw has to say something, or it is an empty bubble.
-        (CAROUSEL_TYPE_BY_KIND[content.media.kind] === undefined
-          ? labels.attachment(content.media.filename)
-          : '')
-      );
+      // An attachment says nothing of its own: the bubble *is* the picture, the
+      // player or the file row, and every kind now has one of the three. Only a
+      // caption is prose, and only a caption gets a bubble.
+      return captionOf(content.media) ?? '';
     case 'undecryptable':
       return labels.undecryptable;
     case 'redacted':

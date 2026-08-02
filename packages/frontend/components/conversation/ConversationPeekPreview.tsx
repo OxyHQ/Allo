@@ -111,6 +111,16 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
     return `media://${mediaId}`;
   }, []);
 
+  /**
+   * A peek shows what a conversation looks like; it does not fetch anything.
+   *
+   * `''` — the same answer the real resolvers give while a file has not
+   * arrived — so a voice note in the peek draws its player with no length and a
+   * document draws its row, and neither starts a download for a preview the user
+   * is holding a finger on.
+   */
+  const getAttachmentUrl = useCallback((): string => '', []);
+
   // Animate in/out
   useEffect(() => {
     if (visible) {
@@ -309,6 +319,7 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
                     getSenderName={getSenderName}
                     getSenderAvatar={getSenderAvatar}
                     getMediaUrl={getMediaUrl}
+                    getAttachmentUrl={getAttachmentUrl}
                     onMessagePress={NOOP}
                   />
                 </View>

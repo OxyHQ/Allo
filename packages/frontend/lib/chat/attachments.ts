@@ -1,8 +1,11 @@
+import * as DocumentPicker from 'expo-document-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import { createVideoPlayer } from 'expo-video';
 
 import type { AlloOutgoingAttachment, AlloOutgoingThumbnail } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
+import { mimetypeFromFilename } from '@/utils/mimetypes';
 
 /**
  * Choosing something to send, and describing it well enough that the person
@@ -21,9 +24,10 @@ import { logger } from '@/utils/logger';
 /**
  * How wide a thumbnail is made.
  *
- * A bubble draws media 250pt across, so 1024 covers it at 3× with room for the
- * viewer that does not exist yet, and costs perhaps 80 KB. Smaller would show
- * visibly soft photographs on a modern phone; larger stops being a thumbnail.
+ * A bubble draws media 250pt across, so 1024 covers it at 3× and costs perhaps
+ * 80 KB. Smaller would show visibly soft photographs on a modern phone; larger
+ * stops being a thumbnail. It is also what the full-screen viewer shows while
+ * the original downloads, which is the other reason not to go below it.
  */
 const THUMBNAIL_WIDTH = 1024;
 
@@ -63,6 +67,43 @@ export async function pickMediaAttachments(): Promise<PickedAttachments> {
     return [];
   }
   return describeAll(result.assets);
+}
+
+/**
+ * Opens the document picker and describes what came back.
+ *
+ * `copyToCacheDirectory` is left on, and it is not an optimisation: on Android a
+ * picked document arrives as a `content://` URI owned by whichever app provided
+ * it, and that URI is not a path the Matrix SDK — which reads files through
+ * Rust, on another thread, some time later — can open. The copy the picker makes
+ * is in Allo's own cache directory and is a file both halves of the port can
+ * read.
+ *
+ * A document has no thumbnail. An `m.file` may carry one and Allo makes none:
+ * rendering the first page of a PDF is a document engine, and the row draws an
+ * icon and a filename either way.
+ */
+export async function pickDocumentAttachments(): Promise<PickedAttachments> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: '*/*',
+    multiple: true,
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled) {
+    return [];
+  }
+  return result.assets.map(describeDocument);
+}
+
+function describeDocument(asset: DocumentPicker.DocumentPickerAsset): AlloOutgoingAttachment {
+  const filename = asset.name !== '' ? asset.name : fallbackFilename(asset.uri, false, 'document');
+  return {
+    kind: 'file',
+    filename,
+    mimetype: asset.mimeType ?? mimetypeFromFilename(filename) ?? UNKNOWN_MIMETYPE,
+    uri: asset.uri,
+    size: asset.size,
+  };
 }
 
 /** Opens the camera and describes the photograph or video it produced. */
@@ -111,18 +152,12 @@ async function describe(
     // `duration` is milliseconds on an `ImagePickerAsset`, and `null` for a
     // still. The port's field is milliseconds too, so nothing is converted.
     durationMs: asset.duration ?? undefined,
-    thumbnail: isVideo ? undefined : await renderThumbnail(asset),
+    thumbnail: isVideo ? await renderVideoThumbnail(asset) : await renderThumbnail(asset),
   };
 }
 
 /**
  * A small copy of a picture, or `undefined` when one could not be made.
- *
- * **Only for stills.** A video's first frame needs a decoder Allo does not have
- * — `expo-image-manipulator` reads images — so a video goes without, and the
- * timeline draws the placeholder the carousel already has for one. A video from
- * another client usually arrives with a thumbnail its sender made, and that one
- * is drawn.
  *
  * A failure here is not a failure to send. The attachment goes anyway; what is
  * lost is that receivers download the whole picture to draw the row.
@@ -135,8 +170,70 @@ async function renderThumbnail(
     // the same picture would double what the sender pays to send it.
     return undefined;
   }
+  return saveThumbnail(asset.uri, 'a picture');
+}
+
+/**
+ * The first frame of a video, as a thumbnail — and `undefined` where that is
+ * not possible.
+ *
+ * **No new dependency.** `expo-image-manipulator` reads images and not frames,
+ * which is why videos used to go without one; `expo-video` — already a
+ * dependency, already a config plugin in `app.config.js`, and already the thing
+ * that plays them back — will decode a frame out of a file on iOS and Android
+ * through `generateThumbnailsAsync`, and its result is a `SharedRef<'image'>`,
+ * which is exactly what `ImageManipulator.manipulate` takes. So one decode and
+ * the resize that already existed produce the JPEG the port wants, with no
+ * native module Allo did not already ship.
+ *
+ * **Web still goes without.** `generateThumbnailsAsync` throws there — the
+ * browser player has no frame extraction — and doing it by hand means a hidden
+ * `<video>`, a `<canvas>` and a seek that resolves differently in every browser.
+ * The failure lands in the `catch` below and the video is sent with no
+ * thumbnail, which is what happened on every platform before this.
+ *
+ * `SEEK_TO_FIRST_FRAME` is zero seconds: some encoders put a black or fade-in
+ * frame at exactly 0, but seeking further in costs a decode of everything up to
+ * it and picks a frame the person who shot it did not choose either.
+ */
+async function renderVideoThumbnail(
+  asset: ImagePicker.ImagePickerAsset,
+): Promise<AlloOutgoingThumbnail | undefined> {
+  const player = createVideoPlayer(asset.uri);
   try {
-    const rendered = await ImageManipulator.manipulate(asset.uri)
+    const [frame] = await player.generateThumbnailsAsync(SEEK_TO_FIRST_FRAME, {
+      maxWidth: THUMBNAIL_WIDTH,
+    });
+    if (frame === undefined) {
+      return undefined;
+    }
+    return await saveThumbnail(frame, 'a video frame');
+  } catch (error) {
+    logger.warn('[chat] a video thumbnail could not be taken; sending without one', error);
+    return undefined;
+  } finally {
+    // A player holds a decoder and, on Android, a surface. One left behind for
+    // every video ever sent is a leak the user experiences as the app slowing
+    // down after a while of sending holiday clips.
+    player.release();
+  }
+}
+
+const SEEK_TO_FIRST_FRAME = 0;
+
+/**
+ * Resizes and writes a thumbnail, from either a file or a decoded frame.
+ *
+ * `ImageManipulator.manipulate` takes a URI **or** a native image reference,
+ * which is what lets one function serve a photograph from the library and a
+ * frame `expo-video` just decoded.
+ */
+async function saveThumbnail(
+  source: Parameters<typeof ImageManipulator.manipulate>[0],
+  description: string,
+): Promise<AlloOutgoingThumbnail | undefined> {
+  try {
+    const rendered = await ImageManipulator.manipulate(source)
       .resize({ width: THUMBNAIL_WIDTH })
       .renderAsync();
     const saved = await rendered.saveAsync({
@@ -150,7 +247,10 @@ async function renderThumbnail(
       height: saved.height,
     };
   } catch (error) {
-    logger.warn('[chat] a thumbnail could not be rendered; sending without one', error);
+    logger.warn(
+      `[chat] a thumbnail could not be rendered from ${description}; sending without one`,
+      error,
+    );
     return undefined;
   }
 }
@@ -193,36 +293,20 @@ function fallbackFilename(uri: string, isVideo: boolean, prefix = 'attachment'):
 }
 
 /**
- * MIME types by extension, for the pickers that do not report one.
+ * What Matrix calls bytes nobody could name.
  *
- * Deliberately short. A type that is not in here is sent as
- * `application/octet-stream`, which every client handles as "a file"; guessing
- * wrong is worse, because a receiver that trusts `image/jpeg` and finds a
- * QuickTime movie draws a broken image instead of offering a download.
+ * Every client treats it as "a file" and offers a download, which is the honest
+ * outcome. Guessing is worse: a receiver told `image/jpeg` about a QuickTime
+ * movie draws a broken image instead.
  */
-const MIMETYPE_BY_EXTENSION: Readonly<Partial<Record<string, string>>> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  heic: 'image/heic',
-  heif: 'image/heif',
-  mp4: 'video/mp4',
-  mov: 'video/quicktime',
-  webm: 'video/webm',
-  m4a: 'audio/mp4',
-  mp3: 'audio/mpeg',
-  aac: 'audio/aac',
-  ogg: 'audio/ogg',
-  wav: 'audio/wav',
-};
+const UNKNOWN_MIMETYPE = 'application/octet-stream';
 
+/**
+ * A MIME type for a picker that did not report one.
+ *
+ * The table lives in `utils/mimetypes.ts` because the viewer's share sheet needs
+ * the same answers from the same filenames, and two tables would drift.
+ */
 function mimetypeFromName(filename: string, isVideo: boolean): string {
-  const dot = filename.lastIndexOf('.');
-  const extension = dot > 0 ? filename.slice(dot + 1).toLowerCase() : '';
-  return (
-    MIMETYPE_BY_EXTENSION[extension] ??
-    (isVideo ? 'video/mp4' : 'application/octet-stream')
-  );
+  return mimetypeFromFilename(filename) ?? (isVideo ? 'video/mp4' : UNKNOWN_MIMETYPE);
 }

@@ -5,6 +5,8 @@ import { MessageBubble } from './MessageBubble';
 import { StickerBubble } from './StickerBubble';
 import { MediaCarousel } from './MediaCarousel';
 import { MessageAvatar } from './MessageAvatar';
+import { VoiceNoteBubble } from './VoiceNoteBubble';
+import { FileBubble } from './FileBubble';
 import type { MediaItem, Message } from '@/stores';
 import { MessageGroup } from '@/utils/messageGrouping';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -21,10 +23,24 @@ export interface MessageBlockProps {
    * rendition variant is MIME-specific — see `mediaVariantForKind`.
    */
   getMediaUrl: (mediaId: string, kind: MediaItem['type']) => string;
+  /**
+   * Resolve an attachment that is not a picture — a voice note, an audio file,
+   * a document — to a local URI, or `''` while there is not one yet.
+   *
+   * Separate from `getMediaUrl` because it takes no kind: `MediaItem['type']`
+   * has no name for any of these, and the Oxy rendition variant that argument
+   * chooses does not apply to them.
+   */
+  getAttachmentUrl: (source: string) => string;
   visibleTimestampId?: string | null;
   onMessagePress: (messageId: string) => void;
   onMessageLongPress?: (message: Message, position: { x: number; y: number; width?: number; height?: number }) => void;
-  onMediaPress?: (mediaId: string, index: number) => void;
+  /**
+   * A tap on a picture or a video. Carries the message as well as the media,
+   * because a block flattens several messages' attachments into one carousel
+   * and the viewer opens on a page identified by both.
+   */
+  onMediaPress?: (message: Message, mediaId: string, index: number) => void;
   onMediaLongPress?: (message: Message, mediaId: string, index: number, position: { x: number; y: number; width?: number; height?: number }) => void;
 }
 
@@ -59,6 +75,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
   getSenderName,
   getSenderAvatar,
   getMediaUrl,
+  getAttachmentUrl,
   visibleTimestampId,
   onMessagePress,
   onMessageLongPress,
@@ -176,6 +193,31 @@ export const MessageBlock = memo<MessageBlockProps>(({
     onMessagePress(messageId);
   }, [onMessagePress]);
 
+  /**
+   * Which message in this block owns a media item.
+   *
+   * A block draws one carousel for several messages, so the carousel only knows
+   * the media id. Both the tap and the long press need the message: the viewer
+   * opens on a page identified by the pair, and the actions menu acts on the
+   * message.
+   */
+  const messageWithMedia = useCallback(
+    (mediaId: string): Message | undefined =>
+      messages.find((message) => message.media?.some((item) => item.id === mediaId)),
+    [messages],
+  );
+
+  const handleMediaPress = useCallback(
+    (mediaId: string, index: number) => {
+      const owner = messageWithMedia(mediaId);
+      if (owner === undefined || onMediaPress === undefined) {
+        return;
+      }
+      onMediaPress(owner, mediaId, index);
+    },
+    [messageWithMedia, onMediaPress],
+  );
+
   // Create a single callback factory for long press that doesn't use hooks
   const createBubbleLongPressHandler = useCallback((message: Message) => {
     return (event: GestureResponderEvent) => {
@@ -243,13 +285,11 @@ export const MessageBlock = memo<MessageBlockProps>(({
             media={allMedia}
             isAiMessage={isAiGroup}
             getMediaUrl={getMediaUrl}
-            onMediaPress={onMediaPress}
+            onMediaPress={handleMediaPress}
             onMediaLongPress={(mediaId, index, event) => {
               // Find the message that contains this media item
-              const messageWithMedia = messages.find(msg =>
-                msg.media?.some(m => m.id === mediaId)
-              );
-              if (messageWithMedia && onMediaLongPress) {
+              const owner = messageWithMedia(mediaId);
+              if (owner && onMediaLongPress) {
                 // Measure the media container position properly
                 const target = event.currentTarget;
                 if (target && 'measure' in target && typeof target.measure === 'function') {
@@ -257,7 +297,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
                     measure(cb: (x: number, y: number, width: number, height: number, pageX: number, pageY: number) => void): void;
                   };
                   measurable.measure((x, y, width, height, pageX, pageY) => {
-                    onMediaLongPress(messageWithMedia, mediaId, index, {
+                    onMediaLongPress(owner, mediaId, index, {
                       x: pageX || event.nativeEvent.pageX,
                       y: pageY || event.nativeEvent.pageY,
                       width: width || 200,
@@ -267,7 +307,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
                 } else {
                   // Fallback to event position
                   const { pageX, pageY } = event.nativeEvent;
-                  onMediaLongPress(messageWithMedia, mediaId, index, {
+                  onMediaLongPress(owner, mediaId, index, {
                     x: pageX,
                     y: pageY,
                     width: 200,
@@ -278,6 +318,31 @@ export const MessageBlock = memo<MessageBlockProps>(({
             }}
           />
         )}
+
+        {/* Attachments the carousel cannot draw: a voice note or an audio file
+            becomes a player, a document becomes a row that opens it. Each is
+            its own bubble and carries its own timestamp, because there is no
+            text bubble beside it to carry one — an attachment with no caption
+            produces no text at all. */}
+        {messages.map((message) => {
+          const attachment = message.attachment;
+          if (attachment === undefined) {
+            return null;
+          }
+          const shared = {
+            attachment,
+            isSent: message.isSent,
+            timestamp: message.timestamp,
+            showTimestamp: message.messageType !== 'ai',
+            readStatus: message.readStatus,
+            resolveUrl: getAttachmentUrl,
+          };
+          return attachment.kind === 'file' ? (
+            <FileBubble key={`attachment-${message.id}`} {...shared} />
+          ) : (
+            <VoiceNoteBubble key={`attachment-${message.id}`} {...shared} />
+          );
+        })}
 
         {/* Stickers (Lottie animations — no bubble, standalone) */}
         {hasSticker && messages.map((message) =>

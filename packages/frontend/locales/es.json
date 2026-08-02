@@ -559,5 +559,21 @@
   "This message was deleted.": "Este mensaje se ha borrado.",
   "Allo cannot show this yet ({{kind}}).": "Allo todavía no puede mostrar esto ({{kind}}).",
   "Your Oxy recovery phrase opens your Allo history": "Tu frase de recuperación de Oxy abre tu historial de Allo",
-  "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.": "Allo abre tu copia de seguridad de mensajes cifrados con una clave derivada de tu frase de recuperación de Oxy. Por eso un dispositivo nuevo puede leer tus conversaciones antiguas nada más iniciar sesión, y por eso cualquiera que tenga esa frase también puede leerlas, incluidos los mensajes enviados antes de que la consiguiera. Guárdala con el mismo cuidado con el que guardarías las propias conversaciones."
+  "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.": "Allo abre tu copia de seguridad de mensajes cifrados con una clave derivada de tu frase de recuperación de Oxy. Por eso un dispositivo nuevo puede leer tus conversaciones antiguas nada más iniciar sesión, y por eso cualquiera que tenga esa frase también puede leerlas, incluidos los mensajes enviados antes de que la consiguiera. Guárdala con el mismo cuidado con el que guardarías las propias conversaciones.",
+  "Close": "Cerrar",
+  "Share": "Compartir",
+  "{{position}} of {{total}}": "{{position}} de {{total}}",
+  "Attachment": "Adjunto",
+  "attachment": "adjunto",
+  "Preview while the full picture downloads": "Vista previa mientras se descarga la foto completa",
+  "Video thumbnail": "Miniatura del vídeo",
+  "This attachment is still downloading.": "Este adjunto todavía se está descargando.",
+  "Sharing is not available on this device.": "Compartir no está disponible en este dispositivo.",
+  "The attachment could not be shared.": "No se ha podido compartir el adjunto.",
+  "Play": "Reproducir",
+  "Pause": "Pausar",
+  "Playback position": "Posición de reproducción",
+  "Open {{name}}": "Abrir {{name}}",
+  "Opening files is not available on this device.": "Abrir archivos no está disponible en este dispositivo.",
+  "The file could not be opened.": "No se ha podido abrir el archivo."
 }
