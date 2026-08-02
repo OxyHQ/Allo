@@ -11,7 +11,7 @@ no sobre el dev server: era justo ahí donde el diseño temía que rompiera.
 | 3. Ida y vuelta E2EE | **PASS** | El servidor solo ve `m.room.encrypted`, 491 bytes de contenido |
 | 4a. 4S desde passphrase | **PASS** | `algorithm=m.pbkdf2`, `iterations=500000` — los parámetros que el diseño predijo |
 | 4b. Recuperación en dispositivo nuevo | **PASS** | Importa las claves, descifra un mensaje anterior a su alta, y `ownDeviceCrossSigningVerified=true` |
-| OIDC / MSC2965 | **PARCIAL** | Descubrimiento correcto y URL de autorización bien construida (PKCE S256, scope `urn:matrix:client:api:*`). **No se completó ningún login**: ni registro dinámico de cliente ni canje del código. Prueba que `matrix-js-sdk` sabe descubrir y construir, no que sepa autenticar |
+| OIDC / MSC2965 | **PARCIAL** | Descubrimiento correcto y URL de autorización bien construida (PKCE S256, scope `urn:matrix:client:api:*`). **No se completó ningún login**: ni registro dinámico de cliente ni canje del código. Prueba que `matrix-js-sdk` sabe descubrir y construir, no que sepa autenticar. **Actualización 2026-08-02:** el registro dinámico sí se ejercitó después, contra `account.matrix.org/oauth2/registration`, con la forma de payload de `client.web.ts:922` — `HTTP 201` y `client_id` devuelto. Sigue sin probarse el canje del código, que necesita a una persona consintiendo en un navegador. Ver `docs/matrix/interim-homeserver.md` |
 | Multi-pestaña | **SIN CONCLUIR** | No conseguí reproducir el fallo. Ver abajo: no es un PASS |
 
 ## Multi-pestaña: por qué no es un PASS
