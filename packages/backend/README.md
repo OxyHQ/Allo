@@ -78,7 +78,9 @@ OXY_API_URL=https://api.oxy.so
 PORT=4140
 NODE_ENV=development
 
-# Push notifications (optional; push is skipped when unset)
+# Push notifications (optional). Without these, utils/push.ts logs that push is
+# disabled and returns. Setting them is still not enough to make push work —
+# see the note at the end of this file.
 FIREBASE_PROJECT_ID=your_firebase_project_id
 FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
 
