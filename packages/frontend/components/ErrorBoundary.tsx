@@ -1,5 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { ErrorBoundary as BloomErrorBoundary } from '@oxyhq/bloom/error-boundary';
+import type { ErrorBoundaryFallbackContext } from '@oxyhq/bloom/error-boundary';
 import { colors } from '@/styles/colors';
 import { withTranslation } from 'react-i18next';
 
@@ -8,6 +10,11 @@ import { withTranslation } from 'react-i18next';
  *
  * WhatsApp/Telegram-level: Graceful error handling prevents full app crashes
  * Shows user-friendly error UI and allows recovery
+ *
+ * The catching machinery (getDerivedStateFromError, componentDidCatch, the
+ * retry reset) lives in @oxyhq/bloom/error-boundary. What stays here is only
+ * what is Allo's: the wording, the translations and the look of the two
+ * fallbacks below.
  */
 
 interface Props {
@@ -18,90 +25,64 @@ interface Props {
     showDetails?: boolean; // Show error details in development
 }
 
-interface State {
-    hasError: boolean;
-    error: Error | null;
-    errorInfo: ErrorInfo | null;
-    errorCount: number; // Track consecutive errors
-}
+function ErrorBoundaryBase({ children, fallback, t, onError, showDetails }: Props) {
+    // Counts errors caught by this boundary instance, for the crash log only.
+    // Bloom's fallback context exposes `retryCount` (retries, not errors); the
+    // two differ by one and the log has always reported errors.
+    const errorCountRef = useRef(0);
 
-class ErrorBoundaryBase extends Component<Props, State> {
-    public state: State = {
-        hasError: false,
-        error: null,
-        errorInfo: null,
-        errorCount: 0,
-    };
+    const handleError = useCallback(
+        (error: Error, errorInfo: ErrorInfo) => {
+            errorCountRef.current += 1;
 
-    static getDerivedStateFromError(error: Error): Partial<State> {
-        return { hasError: true };
-    }
+            // Enhanced error logging
+            console.error('[ErrorBoundary] Caught error:', {
+                error: error.toString(),
+                stack: error.stack,
+                componentStack: errorInfo.componentStack,
+                errorCount: errorCountRef.current,
+            });
 
-    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        // Enhanced error logging
-        console.error('[ErrorBoundary] Caught error:', {
-            error: error.toString(),
-            stack: error.stack,
-            componentStack: errorInfo.componentStack,
-            errorCount: this.state.errorCount + 1,
-        });
+            // Call custom error handler (for analytics, Sentry, etc.)
+            onError?.(error, errorInfo);
+        },
+        [onError]
+    );
 
-        // Update state with error details
-        this.setState(prev => ({
-            error,
-            errorInfo,
-            errorCount: prev.errorCount + 1,
-        }));
+    const renderFallback = useCallback(
+        ({ error, errorInfo, retry, retryCount }: ErrorBoundaryFallbackContext) => {
+            // Full app reload for persistent errors
+            const handleReload = () => {
+                if (typeof window !== 'undefined') {
+                    window.location.reload();
+                }
+            };
 
-        // Call custom error handler (for analytics, Sentry, etc.)
-        this.props.onError?.(error, errorInfo);
-    }
-
-    private handleRetry = () => {
-        this.setState({
-            hasError: false,
-            error: null,
-            errorInfo: null,
-            // Keep error count to detect repeated crashes
-        });
-    };
-
-    private handleReload = () => {
-        // Full app reload for persistent errors
-        if (typeof window !== 'undefined') {
-            window.location.reload();
-        }
-    };
-
-    render() {
-        if (this.state.hasError) {
-            if (this.props.fallback) {
-                return this.props.fallback;
-            }
-
-            // Show reload option if error occurred multiple times
-            const showReload = this.state.errorCount > 2;
+            // Show reload option if the error keeps coming back. Reaching the
+            // third error requires two retries, so this is the same threshold
+            // the previous `errorCount > 2` check used.
+            const showReload = retryCount >= 2;
 
             return (
                 <View style={styles.container}>
                     <Text style={styles.emoji}>😕</Text>
-                    <Text style={styles.title}>{this.props.t("error.boundary.title")}</Text>
+                    <Text style={styles.title}>{t('error.boundary.title')}</Text>
                     <Text style={styles.message}>
-                        {this.props.t("error.boundary.message")}
+                        {t('error.boundary.message')}
                     </Text>
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity
                             style={styles.retryButton}
-                            onPress={this.handleRetry}
+                            onPress={retry}
                         >
-                            <Text style={styles.retryText}>{this.props.t("error.boundary.retry")}</Text>
+                            <Text style={styles.retryText}>{t('error.boundary.retry')}</Text>
                         </TouchableOpacity>
 
                         {showReload && (
                             <TouchableOpacity
                                 style={[styles.retryButton, styles.reloadButton]}
-                                onPress={this.handleReload}
+                                onPress={handleReload}
                             >
                                 <Text style={[styles.retryText, styles.reloadText]}>Reload App</Text>
                             </TouchableOpacity>
@@ -109,25 +90,33 @@ class ErrorBoundaryBase extends Component<Props, State> {
                     </View>
 
                     {/* Show error details in development */}
-                    {(__DEV__ || this.props.showDetails) && this.state.error && (
+                    {(__DEV__ || showDetails) && (
                         <ScrollView style={styles.errorDetails}>
                             <Text style={styles.errorDetailsTitle}>Error Details:</Text>
                             <Text style={styles.errorDetailsText}>
-                                {this.state.error.toString()}
+                                {error.toString()}
                             </Text>
-                            {this.state.errorInfo && (
+                            {errorInfo && (
                                 <Text style={styles.errorDetailsText}>
-                                    {this.state.errorInfo.componentStack}
+                                    {errorInfo.componentStack}
                                 </Text>
                             )}
                         </ScrollView>
                     )}
                 </View>
             );
-        }
+        },
+        [t, showDetails]
+    );
 
-        return this.props.children;
-    }
+    return (
+        <BloomErrorBoundary
+            fallback={fallback ?? renderFallback}
+            onError={handleError}
+        >
+            {children}
+        </BloomErrorBoundary>
+    );
 }
 
 // Wrap the component with translation HOC. Annotate the result so the emitted
@@ -157,11 +146,9 @@ export function FeatureErrorBoundary({
     // this function body. A component type created during render is a NEW type
     // on every render, so React unmounts and remounts the entire subtree each
     // time — which for a conversation panel means losing scroll position, focus
-    // and any in-flight state, continuously. That is why this helper was safe to
-    // export and unsafe to use, and why nothing used it.
+    // and any in-flight state, continuously.
     return (
-        <ErrorBoundaryBase
-            t={identityTranslate}
+        <BloomErrorBoundary
             fallback={
                 <View style={styles.featureError}>
                     <Text style={styles.featureErrorText}>
@@ -177,13 +164,8 @@ export function FeatureErrorBoundary({
             }}
         >
             {children}
-        </ErrorBoundaryBase>
+        </BloomErrorBoundary>
     );
-}
-
-/** Stable identity so the prop does not change on every render. */
-function identityTranslate(key: string): string {
-    return key;
 }
 
 const styles = StyleSheet.create({
