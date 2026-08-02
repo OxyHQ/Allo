@@ -34,6 +34,7 @@ const CLOSED_TIMELINE: TimelineSnapshot = {
   isOpening: false,
   isPaginating: false,
   reachedStart: false,
+  typingUserIds: [],
 };
 const closedTimeline = (): TimelineSnapshot => CLOSED_TIMELINE;
 
@@ -46,9 +47,30 @@ export interface MatrixTimeline {
   readonly isPaginating: boolean;
   /** The first message of the conversation is on screen; stop asking for more. */
   readonly reachedStart: boolean;
+  /** Matrix user ids of everyone else typing here, right now. */
+  readonly typingUserIds: readonly string[];
   /** Asks the homeserver for older messages. Safe to call on every scroll. */
   readonly loadOlder: () => void;
   readonly send: (body: string) => Promise<void>;
+  /** Adds the viewer's reaction to a message, or takes it away. */
+  readonly toggleReaction: (messageId: string, emoji: string) => Promise<void>;
+  /** Replaces the body of a message the viewer sent. */
+  readonly edit: (messageId: string, body: string) => Promise<void>;
+  /**
+   * Removes a message's content.
+   *
+   * The row stays and starts drawing itself as deleted, because that is what a
+   * Matrix redaction does — see `AlloTimelineHandle.redact`.
+   */
+  readonly deleteMessage: (messageId: string) => Promise<void>;
+  /**
+   * Tells the homeserver everything up to the newest message has been read.
+   *
+   * Cheap and idempotent: an event already receipted is not sent again.
+   */
+  readonly markRead: () => void;
+  /** Says whether the viewer is typing here. */
+  readonly setTyping: (isTyping: boolean) => void;
 }
 
 export function useMatrixTimeline(
@@ -108,6 +130,67 @@ export function useMatrixTimeline(
     [source],
   );
 
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string): Promise<void> => {
+      if (source === undefined) {
+        return;
+      }
+      await source.toggleReaction(messageId, emoji);
+    },
+    [source],
+  );
+
+  const edit = useCallback(
+    async (messageId: string, body: string): Promise<void> => {
+      if (source === undefined) {
+        return;
+      }
+      await source.edit(messageId, body);
+    },
+    [source],
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string): Promise<void> => {
+      if (source === undefined) {
+        return;
+      }
+      // No reason is sent. Allo has nowhere to ask for one, and a reason is
+      // visible to the whole room — inventing "Deleted by the user" would put
+      // words in the sender's mouth on every other client.
+      await source.redact(messageId);
+    },
+    [source],
+  );
+
+  const markRead = useCallback(() => {
+    if (source === undefined) {
+      return;
+    }
+    // Deliberately not awaited and its failures not shown: a read receipt is
+    // something the reader neither asked for nor can act on. It is logged
+    // because a receipt that never goes out leaves the *sender's* bubble one
+    // tick short, and that is a real bug with no other symptom.
+    source.markRead().catch((error: unknown) => {
+      logger.error('[chat] a read receipt could not be sent', error);
+    });
+  }, [source]);
+
+  const setTyping = useCallback(
+    (isTyping: boolean) => {
+      if (source === undefined) {
+        return;
+      }
+      // Not awaited either. A typing notice is only worth anything while it is
+      // still true, so there is nothing useful to do about one that failed —
+      // and the composer must not wait on the network between keystrokes.
+      source.sendTypingNotice(isTyping).catch((error: unknown) => {
+        logger.error('[chat] a typing notice could not be sent', error);
+      });
+    },
+    [source],
+  );
+
   return useMemo(
     () =>
       source === undefined
@@ -117,9 +200,26 @@ export function useMatrixTimeline(
             isLoading: snapshot.isOpening,
             isPaginating: snapshot.isPaginating,
             reachedStart: snapshot.reachedStart,
+            typingUserIds: snapshot.typingUserIds,
             loadOlder,
             send,
+            toggleReaction,
+            edit,
+            deleteMessage,
+            markRead,
+            setTyping,
           },
-    [source, messages, snapshot, loadOlder, send],
+    [
+      source,
+      messages,
+      snapshot,
+      loadOlder,
+      send,
+      toggleReaction,
+      edit,
+      deleteMessage,
+      markRead,
+      setTyping,
+    ],
   );
 }

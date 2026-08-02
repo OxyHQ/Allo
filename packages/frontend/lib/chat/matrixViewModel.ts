@@ -88,8 +88,30 @@ export function toMessage(
     conversationId: roomId,
     messageType: 'user',
     isEncrypted: item.content.kind === 'undecryptable',
+    isEdited: item.content.kind === 'text' && item.content.isEdited,
+    reactions: toReactions(item),
     readStatus: toReadStatus(item),
   };
+}
+
+/**
+ * Reactions, in the shape the bubble's vocabulary has: emoji to the user ids who
+ * sent it.
+ *
+ * `undefined` and not an empty object for a message nobody has reacted to. The
+ * field is optional in `Message` and the overwhelming majority of rows have no
+ * reactions, so this is one fewer object per message per redraw — and the two
+ * are already the same thing to every reader of the field.
+ */
+function toReactions(item: AlloTimelineItem): Message['reactions'] {
+  if (item.reactions.length === 0) {
+    return undefined;
+  }
+  const reactions: Record<string, string[]> = {};
+  for (const reaction of item.reactions) {
+    reactions[reaction.key] = [...reaction.senders];
+  }
+  return reactions;
 }
 
 function bodyOf(item: AlloTimelineItem, labels: UnreadableEventLabels): string {
@@ -108,23 +130,33 @@ function bodyOf(item: AlloTimelineItem, labels: UnreadableEventLabels): string {
 /**
  * How far along an outgoing message is, in the vocabulary the bubble has.
  *
- * The two vocabularies do not line up and the mismatch is worth naming rather
- * than hiding:
+ * Only the sender's own messages carry a status: `MessageMetadata` draws nothing
+ * for anyone else's, so reporting one would be noise.
  *
- * - Only the sender's own messages carry a status. `MessageMetadata` draws
- *   nothing for anyone else's, so reporting one would be noise.
- * - Matrix has no delivery receipt at all (`docs/matrix/data-model.md` §9,
- *   `deliveredTo`), so `delivered` and `read` are never reached here. Every
- *   message the user sends stops at one tick.
- * - `failed` has nowhere to go: the bubble's states are pending, sent, delivered
- *   and read. It is reported as `pending`, which draws the clock — true on iOS
- *   and Android, where the SDK's send queue really is still trying, and
- *   optimistic on web, where nothing retries. Telling the two apart needs a state
- *   in `MessageMetadata` that does not exist.
+ * One of the bubble's five states is unreachable from here, and it is worth
+ * naming rather than hiding. **`delivered` never happens.** Matrix has no
+ * delivery receipt — there is no event for "it reached their device"
+ * (`docs/matrix/data-model.md` §9, `deliveredTo`) — so a message goes from one
+ * tick straight to read, and the middle state belongs to the Express backend
+ * alone. Inventing it here, by treating "the homeserver has it" as delivery,
+ * would put two ticks on a message nobody has received.
  */
 function toReadStatus(item: AlloTimelineItem): Message['readStatus'] {
   if (!item.isOwn) {
     return undefined;
   }
-  return item.sendState === 'sent' ? 'sent' : 'pending';
+  switch (item.sendState) {
+    case 'pending':
+      return 'pending';
+    // Drawn as an error and not as the clock. The clock is honest on iOS and
+    // Android, where the Rust SDK's queue really is still retrying, and a lie on
+    // the web, where nothing retries and the message is simply gone. One of the
+    // two had to be chosen for both, and a message shown as failed that a queue
+    // then sends is a surprise the user recovers from; a message shown as
+    // pending forever is one they do not.
+    case 'failed':
+      return 'failed';
+    case 'sent':
+      return item.isReadByOthers ? 'read' : 'sent';
+  }
 }
