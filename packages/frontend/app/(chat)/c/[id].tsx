@@ -1,6 +1,8 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import ConversationView from "@/components/conversation/ConversationView";
+import { MatrixInvitationCard } from "@/components/matrix/MatrixInvitationCard";
+import { useConversation } from "@/hooks/useConversation";
 import { useConversationsStore } from "@/stores";
 import { useOxy } from "@oxyhq/services";
 import { useUserById, useUsersStore } from "@/stores/usersStore";
@@ -238,9 +240,20 @@ function AlloApiConversationRoute() {
  * a room id and rooms come from sync alone: there is nothing to create here, and
  * a room that has not arrived yet is a room the timeline reports as empty rather
  * than one this route should conjure.
+ *
+ * The one thing it does branch on is an **invitation**, which is a room the
+ * viewer has not joined: it has no readable timeline, and a composer over it
+ * would send into a room this account is not in. That is how every group starts
+ * for everybody who did not create it, so it is the difference between a family
+ * group and a family group nobody else can use.
  */
 function MatrixConversationRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const conversation = useConversation(id);
+
+  if (id && conversation?.isInvitation) {
+    return <MatrixInvitationCard roomId={id} name={conversation.name} />;
+  }
   return <ConversationView conversationId={id || undefined} />;
 }
 

@@ -74,8 +74,16 @@ lib/chat/
   mediaCache.ts          adjuntos ya bajados y descifrados, ídem
   attachments.ts         elegir una foto y describirla; las miniaturas
   matrixViewModel.ts     AlloRoomSummary → Conversation, AlloTimelineItem → Message
+  newConversation.ts     lo que las dos mitades del alta comparten (§8)
+  matrixConversations.ts crear una sala: MXIDs, y esperar a que sync la traiga
+  alloApiConversations.ts crear una conversación en Express, y mapear su respuesta
+  matrixIdentity.ts      id de Oxy → MXID, y por qué es aritmética
+  invitations.ts         aceptar o rechazar una invitación
 lib/matrix/
   directMessage.ts       cuándo crear una conversación es reutilizar una
+  roomCreation.ts        qué es toda sala que Allo crea, antes de cada SDK
+  native/createRoom.ts   los parámetros del binding, con `isEncrypted` a la vista
+  web/createRoom.ts      las opciones de matrix-js-sdk, con el evento de cifrado
   store.native.ts        dos directorios, y cómo borrarlos
   store.web.ts           una base de IndexedDB, y cómo borrarla
   readReceipts.ts        de «quién tiene recibo aquí» a «alguien ha leído esto»
@@ -88,8 +96,10 @@ hooks/
   useMatrixTimeline.ts      → { messages, loadOlder, send, … } | undefined
   useMatrixMedia.ts         → { url(ref) } | undefined, para `getMediaUrl`
   useMatrixEventLabels.ts   las palabras de los eventos que no tienen ninguna
+  useCreateConversation.ts  la costura del alta: gente dentro, un id fuera
 components/matrix/
   MatrixSignInGate.tsx      pinta a sus hijos salvo que falte sesión
+  MatrixInvitationCard.tsx  una invitación, y las dos respuestas que admite
 ```
 
 **Un dispositivo Matrix por instalación.** Un login acuña un dispositivo, y de
@@ -111,9 +121,10 @@ el historial de los demás. Lo que lo evita son dos hechos, ambos en
 **Ningún componente de presentación cambió.** `MessageBubble`, `MessageBlock`,
 `DaySeparator`, las filas de la lista, el layout de tres paneles y los temas por
 conversación siguen recibiendo `Conversation` y `Message`. `Conversation` ganó un
-campo opcional —`isInvitation`, que sólo el camino de Matrix rellena— y ningún
-componente lo lee todavía. Lo único que cambia es de dónde salen los datos, y en
-cada punto de conexión la rama vieja es la expresión que ya estaba:
+campo opcional —`isInvitation`, que sólo el camino de Matrix rellena— y lo lee un
+solo sitio, la rama de Matrix de la ruta `/c/:id` (§8.4); ninguna fila de la lista
+lo mira todavía. Lo único que cambia es de dónde salen los datos, y en cada punto
+de conexión la rama vieja es la expresión que ya estaba:
 
 ```ts
 const conversations = roomConversations ?? storedConversations;
@@ -141,10 +152,15 @@ encenderlo.
   formateador dibuja como nada.
 - Timeline de una conversación, con paginación hacia atrás al llegar arriba.
 - Envío de texto.
-- **Crear una conversación**, en el puerto (`createRoom`). Siempre privada, sólo
-  por invitación y cifrada; un mensaje directo con un solo invitado reutiliza la
-  sala que ya existe con esa persona en vez de acuñar una segunda. Ninguna
-  pantalla lo llama todavía.
+- **Crear una conversación, desde la pantalla de siempre** (`app/(chat)/new.tsx`),
+  directa y de grupo. Siempre privada, sólo por invitación y **cifrada**; un
+  mensaje directo con un solo invitado reutiliza la sala que ya existe con esa
+  persona en vez de acuñar una segunda. Ver §8.
+- **Aceptar o rechazar una invitación**. Una sala a la que a uno le han invitado
+  no es una conversación todavía —no tiene timeline que leer— y así se dibuja:
+  abrirla ofrece unirse o rechazar, y no un compositor que escribiría en una sala
+  en la que esta cuenta no está. Es como empieza un grupo para todos los que no
+  lo crearon.
 - Login OIDC en tres pasos, con `expo-web-browser`.
 - **Sesión persistida**: el segundo arranque no pasa por el navegador. Se guarda
   en el llavero del móvil (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, para que una
@@ -174,8 +190,8 @@ encenderlo.
   homeserver: a diferencia del camino viejo, existe fuera de la web.
 - **Un envío fallido se dibuja como error** y no como el reloj.
 - **Una invitación se distingue de una conversación** (`membership` en el
-  resumen, `Conversation.isInvitation` en la pantalla). Qué hacer con el dato es
-  de la UI, y hoy no hace nada distinto: ver §5.
+  resumen, `Conversation.isInvitation` en la pantalla), y abrirla lleva a las dos
+  respuestas que admite. La fila de la lista todavía se dibuja igual: ver §5.
 - **Adjuntos: fotos, vídeos y notas de voz.** Se eligen del carrete o de la
   cámara, se envían y se reciben. Es la única de estas líneas que no es una
   migración: en Allo la media nunca funcionó, porque el backend de Express nunca
@@ -196,9 +212,11 @@ Por orden de cuánto se nota:
    No es un hueco del puerto: `Message.reactions` existe desde antes que él y
    ningún backend de Allo las ha pintado nunca. Hacerlo es UI nueva para los dos
    caminos, no cableado de éste.
-4. **Nadie llama a `createRoom`.** El puerto sabe crear una conversación; no hay
-   pantalla que lo pida, así que en la app sigue sin poder empezarse un chat
-   nuevo por el camino de Matrix.
+4. **Una conversación nueva no se puede nombrar después, ni cambiar de gente.**
+   El nombre del grupo se escribe al crearlo y ahí se queda: no hay pantalla de
+   ajustes de sala, ni forma de invitar a alguien más, ni de salirse de un grupo
+   al que uno pertenece. Rechazar una invitación es lo único parecido a salir, y
+   sólo vale antes de entrar.
 5. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
    el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
    y la app lo dibuja como un error de sincronización, no como «te han cerrado la
@@ -206,11 +224,10 @@ Por orden de cuánto se nota:
    `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
    ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
    Ajustes— pero hay que saber que hace falta.
-6. **Una invitación se distingue pero se pinta igual.** El resumen dice cuál lo
-   es (`membership`) y `Conversation.isInvitation` lo lleva hasta la pantalla,
-   que todavía no hace nada distinto con él: la fila se dibuja como cualquier
-   otra y abrirla no da timeline. Aceptar o rechazar tampoco existe — el puerto
-   no expone ninguna de las dos.
+6. **La fila de una invitación se pinta como cualquier otra.** Abrirla ya ofrece
+   unirse o rechazar (§8.4), pero en la lista no hay nada que diga que lo es: sin
+   vista previa y sin hora, parece una conversación en la que nadie ha escrito.
+   `Conversation.isInvitation` llega hasta esa fila y la fila no lo lee.
 7. **Un adjunto no se puede abrir a tamaño completo.** La burbuja dibuja la
    miniatura y `handleMediaPress` sigue vacío, así que del original sólo se baja
    lo que la miniatura no cubre: nada. El visor es UI nueva para los dos
@@ -354,3 +371,115 @@ distingue de un fichero de audio. **Sin forma de onda**, y a propósito: el
 grabador de Allo no muestrea amplitudes, y una forma de onda inventada es un
 dibujo de un audio que nadie midió. Por eso tampoco se usa `sendVoiceMessage` en
 nativo, que la exige.
+
+## 8. Empezar una conversación
+
+`app/(chat)/new.tsx` es la pantalla de siempre y busca gente donde siempre: en
+los perfiles de Oxy. Lo único que cambió es a quién le pide la conversación.
+
+### 8.1 Una costura, no dos pantallas
+
+```ts
+const createConversation = useCreateConversation();
+const id = await createConversation({ participantIds, name });
+router.replace(`/c/${id}`);
+```
+
+`useCreateConversation` es donde la bandera elige, y es lo único que elige: la
+pantalla no sabe si al otro lado hay un documento de Mongo o una sala cifrada en
+un homeserver, y no tiene ninguna rama que lo pregunte. El tipo de la costura —
+`ConversationCreator` en `lib/chat/newConversation.ts` — es toda la promesa:
+gente dentro, un id de conversación fuera.
+
+Lo que **no** está en la costura, porque las dos mitades no lo comparten:
+`alloApiConversations.ts` escribe la conversación nueva en el store de Zustand
+que dibuja la lista, y `matrixConversations.ts` no escribe en ninguna parte. La
+lista de Matrix la alimenta el sync y nada más; una fila metida a mano ahí sería
+una segunda fuente de verdad para la misma conversación, y la equivocada.
+
+`planConversation` es lo que sí comparten, y es una decisión por sitio en vez de
+dos: **una persona es un mensaje directo, dos o más son un grupo**, un grupo se
+llama como lo llamó quien lo creó y un directo no se llama de ninguna manera. En
+Matrix esa diferencia es permanente — `m.direct` es lo que hace que todo cliente
+dibuje una conversación de dos con la cara del otro y no con un título generado —
+así que dejar que cada mitad la decidiera por su cuenta es cómo el mismo botón
+acaba creando cosas distintas en cada backend.
+
+### 8.2 A quién se invita
+
+Una pantalla de Allo conoce a la gente por su id de Oxy; un homeserver no conoce
+a nadie por ese nombre. `lib/chat/matrixIdentity.ts` es esa traducción, y es
+**aritmética de cadenas**: `@{oxyUserId}:{serverName}`, como pide §6.2 de
+`data-model.md` — el localpart del MXID se deriva del `sub` de Oxy en MAS,
+precisamente para que no haga falta una tabla con sus huérfanos y sus colisiones.
+
+Dos detalles que no son de estilo:
+
+- **El nombre del servidor sale del MXID del propio usuario**, no de una variable
+  de entorno. `EXPO_PUBLIC_MATRIX_HOMESERVER` es una URL, que no es un nombre de
+  servidor (`https://matrix-client.matrix.org` sirve a `matrix.org`), y una
+  variable con el nombre sería una cosa más que puede contradecir a la cuenta con
+  la que la app está dentro. La sesión no puede contradecirse a sí misma.
+- **Un id que no encaja se rechaza, no se arregla.** Un localpart admite `a-z`,
+  `0-9` y `._=-/+`; la reparación obvia —minúsculas y tirar el resto— es cómo dos
+  personas distintas acaban compartiendo un MXID, que aquí es una invitación
+  enviada a quien no era. El backend hace la misma aritmética en
+  `services/bridges/matrixIdentity.ts` y se niega por la misma razón.
+
+### 8.3 Cifrada, y no por convenio
+
+Ninguna sala que Allo cree puede salir sin cifrar, y no porque nadie vaya a
+escribir el parámetro mal: **no hay parámetro**. `AlloCreateRoomRequest` no tiene
+campo para pedirlo, `native/createRoom.ts` escribe `isEncrypted: true` desde un
+literal y `web/createRoom.ts` mete el `m.room.encryption` en `initial_state`
+desde constantes. El cifrado en Matrix es de ida y no de vuelta: una sala creada
+en claro no se puede cifrar después, así que una familia con una conversación mal
+creada la tiene mal creada para siempre, y no hay nada en pantalla que se vea
+distinto.
+
+Lo que lo sostiene son tres pruebas, y las tres leen datos en vez de llamadas:
+
+- `__tests__/matrix/nativeCreateRoom.test.ts` y `web/createRoom.test.ts` miran
+  **los parámetros que llegan al SDK**, para cada forma de petición que existe.
+- `__tests__/matrix/encryptedRooms.test.ts` cubre lo que las unitarias no pueden:
+  que no aparezca un **segundo** sitio donde se cree una sala, que es lo que hará
+  la próxima persona que añada un canal o una sala de notas. Sigue el patrón de
+  `web/onePlaceUploads.test.ts`.
+- `__tests__/matrix/portBoundary.test.ts` comprueba que ningún SDK de Matrix se
+  importa fuera de `lib/matrix/`.
+
+### 8.4 La invitación
+
+Crear un grupo invita a su gente, y una invitación no es una conversación: no
+tiene timeline que leer hasta que se acepta. `MatrixConversationRoute` lo dibuja
+como lo que es —`MatrixInvitationCard`, con unirse o rechazar— en vez de un
+compositor que escribiría en una sala donde esta cuenta no está.
+
+Aceptar no navega a ningún sitio: cambia la pertenencia en el homeserver, el sync
+lo cuenta, la lista deja de llamarlo invitación y la ruta pasa a dibujar la
+conversación. Rechazar sí navega, porque después de salirse la sala ya no existe
+para este usuario y la ruta no nombra nada.
+
+**Unirse no hace legible lo anterior.** Las claves de los mensajes de antes se
+compartieron con los dispositivos que estaban en la sala entonces, y éste no
+estaba. Lo que llegue a partir de ahora sí, que es lo que espera todo el mundo de
+alguien a quien acaban de dejar entrar.
+
+### 8.5 Esperar a que la sala llegue
+
+`createRoom` responde con un id de sala **antes** de que el sync la haya
+entregado, y el puerto lo dice en su contrato. Navegar ahí directamente abre una
+conversación de la que este cliente no sabe nada: sin nombre —el id de sala hace
+de título—, sin miembros y con un timeline que ni siquiera se puede abrir, porque
+`openTimeline` no encuentra la sala.
+
+Así que `matrixConversations.ts` se suscribe a la lista y espera a que aparezca,
+con un tope de 15 segundos. **Si se agota, navega igual y lo avisa por el log**:
+la sala existe, las invitaciones ya salieron y las demás personas ya la ven;
+negarse a abrirla porque el sync de este dispositivo va lento sería contar un
+fallo que no ha ocurrido.
+
+Lo segundo que hacía falta para eso está en `timelineSource.ts`: un `openTimeline`
+que falla ya no deja el timeline «abriéndose» para siempre. Antes, un intento
+pendiente era justo lo que impedía el siguiente, así que el primer fallo era lo
+último que esa conversación hacía — un spinner hasta que la app se cerrara.

@@ -22,7 +22,20 @@ import { matrixRuntime, type MatrixRuntimeLike } from './matrixRuntime';
  */
 const NO_ROOMS: readonly AlloRoomSummary[] = [];
 
-export class RoomListSource {
+/**
+ * What a reader of the conversation list needs of it.
+ *
+ * Named separately from the class for the same reason {@link MatrixRuntimeLike}
+ * is: {@link RoomListSource} has private fields, which makes it a nominal type
+ * nothing can stand in for, and the code that waits for a freshly created room
+ * to arrive (`matrixConversations.ts`) wants a list it can drive from a test.
+ */
+export interface RoomListLike {
+  subscribe(listener: () => void): AlloUnsubscribe;
+  getSnapshot(): readonly AlloRoomSummary[];
+}
+
+export class RoomListSource implements RoomListLike {
   readonly #runtime: MatrixRuntimeLike;
   readonly #listeners = new Set<() => void>();
 
