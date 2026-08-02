@@ -25,10 +25,16 @@ import type {
 } from '@unomed/react-native-matrix-sdk';
 
 import { MatrixRoomNotFoundError, MatrixSyncNotStartedError } from '@/lib/matrix/errors';
+// Named in full rather than as `@/lib/matrix/store`: this half of the port is
+// the native one and its store is the native one, and saying so leaves no
+// resolution rule to trust. The platform-resolved name is for the code above
+// the split, which must not care.
+import { eraseAlloChatStore } from '@/lib/matrix/store.native';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
   AlloChatClientFactory,
+  AlloClientStore,
   AlloEncryptionState,
   AlloOidcClientMetadata,
   AlloOidcLoginOptions,
@@ -49,7 +55,7 @@ import { applyListUpdate } from './native/listDiff';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
-import { toAlloSession } from './native/session';
+import { NativeSessionDelegate, toAlloSession } from './native/session';
 import { toEncryptionState, toSyncState } from './native/translate';
 
 /**
@@ -99,15 +105,31 @@ function ensurePlatformInitialized(): void {
 
 export const createAlloChatClient: AlloChatClientFactory = async (config) => {
   ensurePlatformInitialized();
+  // Built before the client because that is the only order the binding offers:
+  // the delegate goes to the builder, and only afterwards is there a client for
+  // it to read. See `native/session.ts`.
+  const sessions = new NativeSessionDelegate();
+  const client = await buildClient(config, sessions);
+  sessions.bind(client);
   return new NativeAlloChatClient(
-    await buildClient(config),
+    client,
     toOidcConfiguration(config.oidc),
+    config.store,
+    sessions,
   );
 };
 
-async function buildClient(config: AlloChatClientConfig): Promise<ClientLike> {
+async function buildClient(
+  config: AlloChatClientConfig,
+  sessions: NativeSessionDelegate,
+): Promise<ClientLike> {
   const builder = new ClientBuilder()
     .homeserverUrl(config.homeserverUrl)
+    // The binding's one way of reporting that it has rotated the session's
+    // tokens. Without it a persisted session is a snapshot that goes stale the
+    // first time the SDK refreshes, and every launch after that is a new login
+    // and a new Matrix device.
+    .setSessionDelegate(sessions)
     // The binding's only sliding sync options are "none" and "native": there is
     // no proxy fallback, so a homeserver that does not serve native sliding sync
     // makes `build()` fail with `ClientBuildError.SlidingSyncVersion` instead of
@@ -149,6 +171,8 @@ function toOidcConfiguration(metadata: AlloOidcClientMetadata): OidcConfiguratio
 class NativeAlloChatClient implements AlloChatClient {
   readonly #client: ClientLike;
   readonly #oidc: OidcConfiguration;
+  readonly #store: AlloClientStore;
+  readonly #sessions: NativeSessionDelegate;
   readonly #syncStateListeners = new Set<(state: AlloSyncState) => void>();
   readonly #roomLists = new Set<NativeRoomListHandle>();
   readonly #timelines = new Set<NativeTimelineHandle>();
@@ -157,9 +181,16 @@ class NativeAlloChatClient implements AlloChatClient {
   #syncStateHandle: TaskHandleLike | undefined;
   #syncState: AlloSyncState = 'idle';
 
-  constructor(client: ClientLike, oidc: OidcConfiguration) {
+  constructor(
+    client: ClientLike,
+    oidc: OidcConfiguration,
+    store: AlloClientStore,
+    sessions: NativeSessionDelegate,
+  ) {
     this.#client = client;
     this.#oidc = oidc;
+    this.#store = store;
+    this.#sessions = sessions;
   }
 
   async beginOidcLogin(options: AlloOidcLoginOptions = {}): Promise<AlloOidcLoginRequest> {
@@ -181,6 +212,37 @@ class NativeAlloChatClient implements AlloChatClient {
 
   session(): AlloSession {
     return toAlloSession(this.#client.session());
+  }
+
+  observeSession(onChange: (session: AlloSession) => void): AlloUnsubscribe {
+    return this.#sessions.observe(onChange);
+  }
+
+  /**
+   * Logs out on the homeserver, then takes the store with it.
+   *
+   * The order is not interchangeable. `logout()` needs a working client and a
+   * live access token, so it goes first; the local state goes afterwards and goes
+   * whatever the homeserver said, because a sign-out that leaves this device's
+   * keys on the phone is not a sign-out. A homeserver that could not be reached
+   * is a warning and not a failure — see {@link AlloChatClient.logout} for why
+   * this cannot be reported by throwing.
+   */
+  async logout(): Promise<void> {
+    try {
+      await this.#client.logout();
+    } catch (error) {
+      logger.warn(
+        `${LOG_TAG} the homeserver was not told about this sign-out; the session ` +
+          'is gone from this device either way',
+        error,
+      );
+    }
+    // Before erasing, not after: closing stops the sync loop, and a sync loop
+    // still running against a store that is being deleted writes into a
+    // directory nothing leads to.
+    await this.close();
+    await eraseAlloChatStore(this.#store);
   }
 
   async startSync(): Promise<void> {

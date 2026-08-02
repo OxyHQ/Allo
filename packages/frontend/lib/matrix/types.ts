@@ -187,9 +187,11 @@ export interface AlloOidcLoginRequest {
  * device keychain.
  *
  * A warning that matters more under OIDC than it did under a password: **these
- * tokens rotate**. The SDK refreshes them on its own, and this port does not yet
- * report when it does, so a session stored once and never refreshed goes stale
- * and stops restoring. Persisting sessions needs that gap closed first.
+ * tokens rotate**. The SDK refreshes them on its own, without being asked, and a
+ * copy taken at login is correct for minutes and stale for good afterwards — a
+ * session that looks persisted and quietly stops restoring.
+ * {@link AlloChatClient.observeSession} is how an app hears about it, and
+ * anything that stores a session has to subscribe to it.
  */
 export interface AlloSession {
   readonly userId: string;
@@ -215,6 +217,20 @@ export interface AlloSession {
 export type AlloClientStore =
   | { readonly kind: 'in-memory' }
   | { readonly kind: 'filesystem'; readonly dataPath: string; readonly cachePath: string };
+
+/**
+ * Deletes what a client built on a store would otherwise inherit.
+ *
+ * Separate from {@link AlloChatClient.logout} because it has to be callable when
+ * there is no client: a store left behind by a session that is gone has to be
+ * erased *before* the next client opens it, and the SDKs' own stores hold one
+ * user each — the native one says so outright, that its paths "must be unique per
+ * session". Handing a new session a store that belongs to an older one is the
+ * failure that does not look like its cause.
+ *
+ * Erasing a store nothing has written is not an error.
+ */
+export type AlloChatStoreEraser = (store: AlloClientStore) => Promise<void>;
 
 export interface AlloChatClientConfig {
   readonly homeserverUrl: string;
@@ -264,6 +280,8 @@ export interface AlloTimelineHandle {
  * - {@link startSync} must happen before {@link observeRooms} or
  *   {@link openTimeline}: both are views over the sync loop's state, and there is
  *   nothing to view before it runs.
+ * - {@link logout} is terminal. A client that has logged out holds neither a
+ *   session nor a store; signing in again means building a new one.
  *
  * There is no password login and there will not be one. Allo's homeserver issues
  * sessions through Matrix Authentication Service with Oxy upstream, so the user
@@ -279,6 +297,39 @@ export interface AlloChatClient {
   restoreSession(session: AlloSession): Promise<void>;
   /** The current session. Throws if nobody has logged in. */
   session(): AlloSession;
+  /**
+   * Reports the session every time the SDK replaces it.
+   *
+   * Changes only. The session a login or a restore produced is that call's own
+   * result; this is what happens to it afterwards, which under OIDC is a token
+   * rotation the app never asked for. See {@link AlloSession} for why an app that
+   * persists sessions cannot skip this.
+   *
+   * Both SDKs report it through a callback the client is built with, so
+   * subscribing late does not miss a rotation that has already been applied —
+   * what it misses is being *told* about it, and {@link session} still answers
+   * with the current one.
+   */
+  observeSession(onChange: (session: AlloSession) => void): AlloUnsubscribe;
+
+  /**
+   * Ends the session, and destroys everything it left on this device.
+   *
+   * Two halves that fail independently, and the order is the point. The
+   * homeserver is asked to forget the device first, so that the tokens stop
+   * working; the local stores go afterwards and go *regardless*, because a user
+   * signing out on a train has still signed out. A homeserver that could not be
+   * reached is reported by the implementation's logs, not by throwing: a caller
+   * that saw this throw would have no way to tell "you are still signed in" from
+   * "you are signed out and the server does not know yet", and only the second
+   * one is true.
+   *
+   * What must not survive: the access and refresh tokens, the state store, and
+   * the crypto store with this device's keys. Half of that is worse than none —
+   * the next login opens a crypto store belonging to a device that no longer
+   * exists, and fails in ways that look nothing like their cause.
+   */
+  logout(): Promise<void>;
 
   /** Starts, or restarts after {@link stopSync}, the background sync loop. */
   startSync(): Promise<void>;

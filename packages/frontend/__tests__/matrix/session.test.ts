@@ -8,6 +8,10 @@ import { toAlloSession } from '@/lib/matrix/native/session';
  * beside it, runs under any test runner: the authentication path depends only on
  * this and on the port's own types, so proving it does not require loading a
  * native module that a test process cannot load.
+ *
+ * The delegate in the same module is exercised in `sessionDelegate.test.ts`,
+ * which needs the binding's `SlidingSyncVersion` to build a `Session` and
+ * therefore needs the stub.
  */
 
 describe('toAlloSession', () => {

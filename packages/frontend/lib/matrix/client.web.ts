@@ -34,6 +34,11 @@ import {
   MatrixStoreUnavailableError,
   MatrixSyncNotStartedError,
 } from '@/lib/matrix/errors';
+// Named in full rather than as `@/lib/matrix/store`: this half of the port is
+// the web one and its store is the web one, and saying so leaves no resolution
+// rule to trust. The platform-resolved name is for the code above the split,
+// which must not care.
+import { cryptoDatabasePrefix } from '@/lib/matrix/store.web';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
@@ -127,6 +132,7 @@ class WebAlloChatClient implements AlloChatClient {
    */
   readonly #wasm = new CryptoWasmLoader(initAsync);
   readonly #syncStateListeners = new Set<(state: AlloSyncState) => void>();
+  readonly #sessionListeners = new Set<(session: AlloSession) => void>();
   readonly #roomLists = new Set<WebRoomListHandle>();
   readonly #timelines = new Set<WebTimelineHandle>();
 
@@ -190,6 +196,56 @@ class WebAlloChatClient implements AlloChatClient {
       throw new MatrixNotLoggedInError('Reading the session');
     }
     return this.#session;
+  }
+
+  observeSession(onChange: (session: AlloSession) => void): AlloUnsubscribe {
+    this.#sessionListeners.add(onChange);
+    return () => {
+      this.#sessionListeners.delete(onChange);
+    };
+  }
+
+  /**
+   * Logs out on the homeserver, then deletes every database this session used.
+   *
+   * `clearStores` is the SDK's own answer and covers both halves — the synced
+   * state and the Rust crypto machine's two databases — but only if it is given
+   * the same `cryptoDatabasePrefix` the client was started with. Given the wrong
+   * one it deletes nothing, reports success, and leaves this device's keys in the
+   * browser, which is why the prefix is built in one place by
+   * {@link cryptoDatabasePrefix} rather than spelled out at each end.
+   *
+   * It also refuses to run while the client is running, which is why closing
+   * comes in between rather than being left to `logout(true)`: a homeserver call
+   * that threw would otherwise stop nothing and the stores would survive the
+   * sign-out.
+   */
+  async logout(): Promise<void> {
+    const client = this.#requireClient('Signing out');
+    const session = this.#session;
+
+    try {
+      await client.logout(true);
+    } catch (error) {
+      logger.warn(
+        `${LOG_TAG} the homeserver was not told about this sign-out; the session ` +
+          'is gone from this browser either way',
+        error,
+      );
+    }
+
+    await this.close();
+    await client.clearStores(
+      this.#config.store.kind === 'in-memory' || session === undefined
+        ? {}
+        : {
+            cryptoDatabasePrefix: cryptoDatabasePrefix(
+              this.#config.store.dataPath,
+              session.deviceId,
+            ),
+          },
+    );
+    this.#session = undefined;
   }
 
   async startSync(): Promise<void> {
@@ -287,6 +343,7 @@ class WebAlloChatClient implements AlloChatClient {
       roomList.close();
     }
     this.#syncStateListeners.clear();
+    this.#sessionListeners.clear();
 
     const client = this.#client;
     if (client !== undefined && this.#watchingSyncState) {
@@ -429,8 +486,8 @@ class WebAlloChatClient implements AlloChatClient {
 
     // The crypto store is keyed by device: a second device on this browser is a
     // second set of keys, and letting them share a store makes the SDK refuse to
-    // open it at all. Nothing deletes the store of a device that is no longer
-    // used — that belongs with a logout flow, which this port does not have.
+    // open it at all. The store of a device that is no longer used is deleted by
+    // {@link logout}, which builds the same name through the same function.
     //
     // This is also the call the SDK's multi-tab warning is attached to; see the
     // note at the top of this file for what is not being done about it.
@@ -439,7 +496,10 @@ class WebAlloChatClient implements AlloChatClient {
         ? { useIndexedDB: false }
         : {
             useIndexedDB: true,
-            cryptoDatabasePrefix: `${this.#config.store.dataPath}:${session.deviceId}`,
+            cryptoDatabasePrefix: cryptoDatabasePrefix(
+              this.#config.store.dataPath,
+              session.deviceId,
+            ),
           },
     );
 
@@ -474,23 +534,36 @@ class WebAlloChatClient implements AlloChatClient {
 
   /**
    * The SDK rotates the session's tokens on its own, and under OIDC it does so
-   * often. The port has no way to tell the app that it happened — the same gap
-   * the native half has, documented on {@link AlloSession} — so the best that can
-   * be done here is keep {@link session} answering with the current tokens, so an
-   * app that reads it again gets something worth persisting.
+   * often.
+   *
+   * Two things follow, and both matter. {@link session} has to start answering
+   * with the new tokens, and whoever is persisting the session has to be told —
+   * a copy written at login is correct for minutes and then permanently stale,
+   * which is a session that looks persisted and stops restoring. A listener that
+   * throws is logged rather than allowed to propagate: this is the SDK's refresh
+   * path, and a failed persist must not become a failed refresh.
    */
   #onTokensRefreshed(tokens: AccessTokens): void {
     const session = this.#session;
     if (session === undefined) {
       return;
     }
-    this.#session = {
+    const refreshed: AlloSession = {
       ...session,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
+    this.#session = refreshed;
     // Never the tokens themselves: they are credentials.
     logger.info(`${LOG_TAG} the session's tokens were refreshed`);
+
+    for (const listener of this.#sessionListeners) {
+      try {
+        listener(refreshed);
+      } catch (error) {
+        logger.error(`${LOG_TAG} a refreshed session could not be handled`, error);
+      }
+    }
   }
 
   #watchSyncState(client: MatrixClient): void {

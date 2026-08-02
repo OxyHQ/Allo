@@ -136,6 +136,14 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  observeSession(): AlloUnsubscribe {
+    throw new Error('not used by these tests');
+  }
+
+  async logout(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
   async startSync(): Promise<void> {
     throw new Error('not used by these tests');
   }
