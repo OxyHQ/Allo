@@ -10,6 +10,20 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
+# Un solo despliegue a la vez por rama. Sin esto, dos merges seguidos lanzan dos
+# `update-service --force-new-deployment` sobre el MISMO servicio ECS: cada uno
+# inicia su propio rollout, se pisan, y ninguno se estabiliza dentro de los diez
+# minutos del waiter. Pasó el 2026-08-02 con dos merges separados por 79
+# segundos — los dos despliegues fallaron y el servicio se quedó sirviendo la
+# tarea anterior, con la build en verde y producción desactualizada.
+#
+# `cancel-in-progress: false` es deliberado: encolar, no cancelar. Abortar un
+# despliegue a mitad de rollout deja el servicio en un estado peor que
+# esperar a que termine.
+concurrency:
+  group: deploy-aws-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
