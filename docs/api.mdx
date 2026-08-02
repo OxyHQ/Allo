@@ -250,11 +250,13 @@ Blocks hide the user across the app and reject incoming messages. Restricts hide
 
 ## Reports
 
-Moderation intake, backed by CrowdSource. **Accounts only** — message content is never submitted for review, and a test pins the pipeline's `deliverableTypes()` to exactly `['user']` so that cannot be widened by accident. Encrypted messages stay between the devices that can read them.
+Moderation intake, backed by CrowdSource. **Accounts only** — message content is never submitted for review. Encrypted messages stay between the devices that can read them, and a bridged room, which is *not* encrypted, is excluded on purpose rather than by omission ([data model §6.4](/docs/matrix/data-model)). The rule is enforced by the type of a subject provider, by a test pinning `deliverableTypes()` to exactly `['user']`, and by a test pinning the module graph a provider can reach.
 
 ### `POST /api/reports`
 
 File a report against an account. Returns the created report.
+
+`reportedId` accepts an Oxy user id or an MXID — a client in a room has the latter — and the stored `reportedId` is always the Oxy id. A subject with no Oxy account behind it (a user on another homeserver, a bridge ghost, a room, an event id) is still accepted and stored, with the reason it cannot be reviewed recorded on the report. The response does not distinguish the two cases.
 
 ### `GET /api/reports/mine`
 

@@ -412,12 +412,27 @@ needs the raw body to verify its signature.
 
 ### Reports (moderation)
 
-Account reports only. Message content is deliberately never sent for review —
-it is end-to-end encrypted, and the moderation pipeline's `deliverableTypes()`
-is pinned to `['user']` by a test so nobody can widen it by accident.
+Account reports only. Message content is deliberately never sent for review — it
+is end-to-end encrypted — and that is enforced in three places rather than one:
+`ModerationSubjectProvider` only types an account subject, so a `message`
+provider does not compile; a test pins `deliverableTypes()` to `['user']`; and a
+second test pins the module graph the providers can reach, so no provider can be
+conditioned on a room's encryption state.
+
+That last one is about bridges. A bridged room is **not** encrypted, so the
+server really can read a WhatsApp or Telegram message — and
+`docs/matrix/data-model.md` §6.4 decides on purpose that it still never goes to a
+jury: the coverage would be inverted, the bridge would become load-bearing, and
+most of what is in the room was written by somebody with no Oxy account who never
+agreed to anything.
 
 #### POST /api/reports
 - File a report against an account
+- `reportedId` accepts an Oxy user id **or** an MXID; `Report.reportedId` is
+  always stored as the Oxy id (§6.2), so the dedup key is unchanged
+- A subject with no Oxy account — a user on another homeserver, a bridge ghost, a
+  room or an event id — is still accepted and stored, with the reason it cannot
+  be reviewed recorded on the row (§6.3). The response is identical either way
 - Returns the created report
 
 #### GET /api/reports/mine
