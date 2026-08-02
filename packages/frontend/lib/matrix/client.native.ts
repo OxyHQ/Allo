@@ -747,7 +747,7 @@ class NativeTimelineHandle implements AlloTimelineHandle {
    * encrypt the bytes before they are uploaded when it is set; there is no
    * parameter to pass and no plaintext path to fall into. The web half has to
    * do it by hand, which is why `web/attachments.ts` exists and why it fails
-   * closed. See `docs/matrix/data-model.md` §6.
+   * closed. See `docs/matrix/ui-wiring.md` §7.
    */
   async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
     const parameters = toUploadParameters(attachment);

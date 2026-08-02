@@ -174,7 +174,7 @@ export type AlloEventContent =
  * encrypted by the sending client before they are uploaded**, so the homeserver
  * stores an opaque blob and the key travels inside the encrypted event — the
  * same protection the message body already has, and the reason Allo does not
- * need an upload endpoint of its own. See `docs/matrix/data-model.md` §6.
+ * need an upload endpoint of its own. See `docs/matrix/ui-wiring.md` §7.
  * ------------------------------------------------------------------------- */
 
 /**

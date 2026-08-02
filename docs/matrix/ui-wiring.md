@@ -71,16 +71,23 @@ lib/chat/
   matrixSessionStorage.ts dónde vive: llavero en nativo, localStorage en web
   roomListSource.ts      la lista de salas como external store
   timelineSource.ts      un timeline por sala, ídem, más paginar y enviar
+  mediaCache.ts          adjuntos ya bajados y descifrados, ídem
+  attachments.ts         elegir una foto y describirla; las miniaturas
   matrixViewModel.ts     AlloRoomSummary → Conversation, AlloTimelineItem → Message
 lib/matrix/
   directMessage.ts       cuándo crear una conversación es reutilizar una
   store.native.ts        dos directorios, y cómo borrarlos
   store.web.ts           una base de IndexedDB, y cómo borrarla
   readReceipts.ts        de «quién tiene recibo aquí» a «alguien ha leído esto»
+  native/media.ts        `MessageType` → `AlloMediaContent`, y los records de subida
+  web/attachments.ts     cifrar o negarse, y el contenido del evento
+  web/mediaTransfer.ts   fetch, la máquina de cripto y los object URL
 hooks/
   useMatrixRuntime.ts       useSyncExternalStore sobre el runtime
   useMatrixConversations.ts → Conversation[] | undefined
   useMatrixTimeline.ts      → { messages, loadOlder, send, … } | undefined
+  useMatrixMedia.ts         → { url(ref) } | undefined, para `getMediaUrl`
+  useMatrixEventLabels.ts   las palabras de los eventos que no tienen ninguna
 components/matrix/
   MatrixSignInGate.tsx      pinta a sus hijos salvo que falte sesión
 ```
@@ -169,6 +176,10 @@ encenderlo.
 - **Una invitación se distingue de una conversación** (`membership` en el
   resumen, `Conversation.isInvitation` en la pantalla). Qué hacer con el dato es
   de la UI, y hoy no hace nada distinto: ver §5.
+- **Adjuntos: fotos, vídeos y notas de voz.** Se eligen del carrete o de la
+  cámara, se envían y se reciben. Es la única de estas líneas que no es una
+  migración: en Allo la media nunca funcionó, porque el backend de Express nunca
+  tuvo endpoint de subida. Ver §7.
 
 ## 5. Qué no llega, y por qué
 
@@ -185,22 +196,34 @@ Por orden de cuánto se nota:
    No es un hueco del puerto: `Message.reactions` existe desde antes que él y
    ningún backend de Allo las ha pintado nunca. Hacerlo es UI nueva para los dos
    caminos, no cableado de éste.
-4. **Sin adjuntos.** El puerto no expone la operación todavía.
-5. **Nadie llama a `createRoom`.** El puerto sabe crear una conversación; no hay
+4. **Nadie llama a `createRoom`.** El puerto sabe crear una conversación; no hay
    pantalla que lo pida, así que en la app sigue sin poder empezarse un chat
    nuevo por el camino de Matrix.
-6. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
+5. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
    el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
    y la app lo dibuja como un error de sincronización, no como «te han cerrado la
    sesión». El binding lo cuenta (`ClientDelegate.didReceiveAuthError`) y
    `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
    ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
    Ajustes— pero hay que saber que hace falta.
-7. **Una invitación se distingue pero se pinta igual.** El resumen dice cuál lo
+6. **Una invitación se distingue pero se pinta igual.** El resumen dice cuál lo
    es (`membership`) y `Conversation.isInvitation` lo lleva hasta la pantalla,
    que todavía no hace nada distinto con él: la fila se dibuja como cualquier
    otra y abrirla no da timeline. Aceptar o rechazar tampoco existe — el puerto
    no expone ninguna de las dos.
+7. **Un adjunto no se puede abrir a tamaño completo.** La burbuja dibuja la
+   miniatura y `handleMediaPress` sigue vacío, así que del original sólo se baja
+   lo que la miniatura no cubre: nada. El visor es UI nueva para los dos
+   caminos, no cableado de éste.
+8. **Una nota de voz se envía y no se escucha.** Llega como `m.audio` con su
+   duración y otros clientes la reproducen; aquí la fila dice que hay un
+   adjunto. Falta el reproductor, no el transporte.
+9. **Un vídeo grabado en Allo va sin miniatura.** `expo-image-manipulator` lee
+   imágenes, no fotogramas, así que sacar el primero necesita una dependencia
+   nativa más. Un vídeo de otro cliente suele traer la suya y ésa sí se dibuja.
+10. **Documentos, ubicación, contacto y encuesta** siguen sin implementar en
+    `AttachmentMenu`. El puerto ya sabe enviar un `m.file`; lo que falta es el
+    selector y, para los tres últimos, decidir qué se envía.
 
 ## 6. Web
 
@@ -224,3 +247,110 @@ motor de cripto. Una que quede de un cierre de sesión interrumpido sólo ocupa
 sitio —lleva el id del dispositivo en el nombre, así que la sesión siguiente no
 puede abrirla— y se barre en el arranque siguiente si el navegador ofrece
 `indexedDB.databases()`, que Firefox no tuvo hasta la 126.
+
+## 7. Adjuntos
+
+No es una migración. **En Allo la media nunca ha funcionado**: los seis
+manejadores de `AttachmentMenu` eran stubs vacíos, `onRecordEnd` un TODO, y el
+backend de Express nunca tuvo endpoint de subida. Así que no hay compatibilidad
+que mantener, y tampoco hay que construir un servidor de ficheros: el homeserver
+trae el suyo.
+
+### 7.1 Dónde viven los bytes
+
+Un adjunto son dos cosas que llegan por separado: un evento en la sala, que es
+lo que trae el timeline, y unos bytes en el repositorio de media del homeserver,
+que se piden aparte. **En una sala cifrada el cliente que envía cifra los bytes
+antes de subirlos**, así que el servidor guarda un blob opaco y la clave viaja
+dentro del evento cifrado — la misma protección que ya tenía el cuerpo del
+mensaje.
+
+De ahí sale la forma de `AlloMediaRef`: es **opaco**, y sobre todo **no es una
+URL**. Una URL sugiere algo que una vista puede pedir, y en una sala cifrada eso
+es justo lo que no vale: lo que sirve el homeserver en esa dirección es texto
+cifrado, y un `<Image>` apuntado ahí dibuja una imagen rota.
+`AlloChatClient.downloadMedia` es el único camino de un ref a algo que se pueda
+pintar.
+
+### 7.2 El cifrado, y por qué la mitad web tiene un módulo entero para él
+
+Las dos mitades del puerto llegan al mismo sitio por caminos muy distintos, y la
+asimetría es la razón de casi todo el código:
+
+- **Nativo.** `Timeline.sendImage` y sus hermanas leen el estado de cifrado de la
+  sala dentro de Rust, cifran si toca, suben y envían el evento. No hay parámetro
+  que pasar mal ni camino en claro al que caerse.
+- **Web.** `matrix-js-sdk` no tiene equivalente. `uploadContent()` sube lo que le
+  den a una URL pública y `sendMessage()` mete un `m.image` con `url` en claro en
+  una sala cifrada sin decir nada: no avisa, no falla, el cuerpo del evento sigue
+  cifrado y la burbuja es idéntica. La única diferencia es que la foto la puede
+  leer cualquiera que tenga el mxc.
+
+Por eso en web todo pasa por `resolveAttachmentSource`
+(`lib/matrix/web/attachments.ts`), que decide desde el estado de la sala y de
+nada más:
+
+| Estado de la sala | Qué hace |
+|---|---|
+| `encrypted` | cifra, sube el texto cifrado, y envía un `file` |
+| `unencrypted` | sube tal cual y envía un `url` |
+| `unknown` | **se niega** (`MatrixMediaEncryptionUnknownError`) |
+
+El tercero es el que importa. `unknown` es el estado normal de una sala que el
+sync todavía no ha entregado, y las dos formas de adivinar fallan con tamaños
+distintos: adivinar *cifrada* cuesta un envío fallido; adivinar *sin cifrar*
+deja una fotografía en claro en el homeserver y no hay nada en pantalla que se
+vea distinto. Reintentar en un momento es una recuperación que el usuario
+entiende.
+
+`AlloOutgoingAttachment` **no tiene un campo para pedir texto plano**, y eso es
+una decisión: un booleano ahí sería la vía por la que una pantalla, un refactor
+o un argumento por defecto apagan el cifrado.
+
+Lo que lo sostiene son dos pruebas. `web/attachments.test.ts` mira **los bytes
+que llegan al uploader**, no qué función se llamó — una implementación que cifra
+y luego sube el original pasaría un test de «se llamó a `encrypt()`» y filtraría
+la foto igual. Y `web/onePlaceUploads.test.ts` cubre lo que las unitarias no
+pueden: que no aparezca un **segundo** camino de subida, que es lo que hará la
+próxima persona que añada un selector de documentos o un avatar. Sigue el patrón
+de `recovery/noSilentReset.test.ts`.
+
+### 7.3 De un ref a un píxel
+
+`MediaCarousel` no cambió. Pide la URL de forma **síncrona** durante el render,
+con `getMediaUrl(id, kind)`, y conseguir una es una descarga y un descifrado. La
+respuesta sale por tanto de `lib/chat/mediaCache.ts`, un external store con la
+misma forma que `roomListSource` y `timelineSource`.
+
+**Pedir una URL es lo que arranca la descarga.** `url(ref)` se llama en render;
+si no la tiene, programa la petición y contesta `undefined`; la fila dibuja
+nada, la descarga termina, el store notifica y la fila dibuja la foto. Hacerlo
+desde un Effect sería un Effect por adjunto visible cuyo único trabajo es pedir
+algo que el render ya sabe que necesita. El read es idempotente y deduplicado
+—veinte filas pidiendo el mismo ref hacen una descarga— que es lo que lo hace
+seguro desde render.
+
+La caché está **acotada**, y no por rendimiento: cada entrada es una copia
+descifrada de una foto de una conversación cifrada — un object URL que fija los
+bytes en la pestaña, o un fichero en claro en el directorio de caché del móvil.
+Al desalojar una se libera, y al cambiar de cuenta o cerrar sesión se liberan
+todas.
+
+En la burbuja **la miniatura del emisor gana al original**: 250pt no piden una
+foto de 12 Mpx, y en una sala cifrada la del emisor es la única copia pequeña
+que existe, porque un homeserver no puede redimensionar lo que no puede leer.
+Allo genera la suya a 1024px al enviar.
+
+**`utils/mediaVariant.ts` no interviene.** Resuelve variantes de renderizado de
+Oxy Cloud, que es de donde vienen los avatares; un adjunto de mensaje va al
+repositorio del homeserver y ninguno de los dos servidores entiende los
+identificadores del otro. Los dos caminos conviven detrás de `getMediaUrl` y
+sólo se elige uno.
+
+### 7.4 La nota de voz
+
+Se envía como `m.audio` con su duración real y el marcador MSC3245 que la
+distingue de un fichero de audio. **Sin forma de onda**, y a propósito: el
+grabador de Allo no muestrea amplitudes, y una forma de onda inventada es un
+dibujo de un audio que nadie midió. Por eso tampoco se usa `sendVoiceMessage` en
+nativo, que la exige.
