@@ -8,7 +8,11 @@ import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 export interface MediaCarouselProps {
   media: MediaItem[];
   isAiMessage?: boolean;
-  getMediaUrl: (mediaId: string) => string;
+  /**
+   * Resolve a media id to a URL. Takes the item's kind because the Oxy
+   * rendition variant is MIME-specific — see `mediaVariantForKind`.
+   */
+  getMediaUrl: (mediaId: string, kind: MediaItem['type']) => string;
   onMediaPress?: (mediaId: string, index: number) => void;
   onMediaLongPress?: (mediaId: string, index: number, event: GestureResponderEvent) => void;
 }
@@ -26,7 +30,7 @@ export interface MediaCarouselProps {
  * <MediaCarousel
  *   media={mediaItems}
  *   isAiMessage={false}
- *   getMediaUrl={(id) => `https://example.com/${id}`}
+ *   getMediaUrl={(id, kind) => `https://example.com/${id}?kind=${kind}`}
  *   onMediaPress={(id, index) => console.log('Pressed', id)}
  * />
  * ```
@@ -117,7 +121,7 @@ export const MediaCarousel = memo<MediaCarouselProps>(({
   }
 
   const renderMediaItem = (item: MediaItem, index: number) => {
-    const mediaUrl = getMediaUrl(item.id);
+    const mediaUrl = getMediaUrl(item.id, item.type);
     const isImage = item.type === 'image' || item.type === 'gif';
     const isVideo = item.type === 'video';
 

@@ -79,7 +79,8 @@ import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { groupMessagesByTime, formatMessageGroupsWithDays, FormattedMessageGroup } from '@/utils/messageGrouping';
 
 // Import Message type from store
-import type { Message } from '@/stores';
+import type { MediaItem, Message } from '@/stores';
+import { mediaVariantForKind } from '@/utils/mediaVariant';
 
 /**
  * ConversationView component props
@@ -644,14 +645,14 @@ export default function ConversationView({ conversationId: propConversationId }:
 
 
   /**
-   * Resolve a media download URL from a media ID via the Oxy SDK. Returns an
+   * Resolve a media download URL from a media ID via the Oxy SDK. The rendition
+   * variant depends on the item's kind — see `mediaVariantForKind`. Returns an
    * empty string on failure so the image renderer surfaces a real error state
    * instead of a masking placeholder.
    */
-  const getMediaUrl = useCallback((mediaId: string): string => {
+  const getMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
     try {
-      // Use 'full' for full resolution images in messages.
-      return oxyServices.getFileDownloadUrl(mediaId, 'full');
+      return oxyServices.getFileDownloadUrl(mediaId, mediaVariantForKind(kind));
     } catch (error) {
       console.error('Error getting media URL:', error);
       return '';

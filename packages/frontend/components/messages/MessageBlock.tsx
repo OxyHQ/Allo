@@ -16,7 +16,11 @@ export interface MessageBlockProps {
   isGroup?: boolean;
   getSenderName?: (senderId: string) => string | undefined;
   getSenderAvatar?: (senderId: string) => string | undefined;
-  getMediaUrl: (mediaId: string) => string;
+  /**
+   * Resolve a media id to a URL. Takes the item's kind because the Oxy
+   * rendition variant is MIME-specific — see `mediaVariantForKind`.
+   */
+  getMediaUrl: (mediaId: string, kind: MediaItem['type']) => string;
   visibleTimestampId?: string | null;
   onMessagePress: (messageId: string) => void;
   onMessageLongPress?: (message: Message, position: { x: number; y: number; width?: number; height?: number }) => void;
@@ -44,7 +48,7 @@ export interface MessageBlockProps {
  *   group={messageGroup}
  *   isGroup={true}
  *   getSenderName={(id) => 'John'}
- *   getMediaUrl={(id) => `https://example.com/${id}`}
+ *   getMediaUrl={(id, kind) => `https://example.com/${id}?kind=${kind}`}
  *   onMessagePress={(id) => console.log('Pressed', id)}
  * />
  * ```
