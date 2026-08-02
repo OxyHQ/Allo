@@ -80,9 +80,14 @@ import type { ConversationDto, MessageDto, PublicDeviceBundle } from "@allo/shar
 ```bash
 bun run build   # tsc → dist/
 bun run dev     # tsc --watch
-bun run lint
 bun run clean
 ```
+
+A `lint` script is declared but does not run: this package ships neither eslint
+nor an `eslint.config.js`, so it exits with "ESLint couldn't find an
+eslint.config.js". `tsc` is the only check this package has, and it runs on
+every `bun install` — the root `postinstall` calls `build:shared-types`, so a
+type error here fails the install before anything else compiles.
 
 The backend and frontend consume `dist/`, so `shared-types` builds first in the
 root `bun run build` chain.
