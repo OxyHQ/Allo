@@ -75,6 +75,7 @@ lib/chat/
 lib/matrix/
   store.native.ts        dos directorios, y cómo borrarlos
   store.web.ts           una base de IndexedDB, y cómo borrarla
+  readReceipts.ts        de «quién tiene recibo aquí» a «alguien ha leído esto»
 hooks/
   useMatrixRuntime.ts       useSyncExternalStore sobre el runtime
   useMatrixConversations.ts → Conversation[] | undefined
@@ -135,6 +136,22 @@ encenderlo.
   homeserver, se lleva la sesión guardada, el almacén de estado y el de cripto.
 - Estados propios para los eventos sin texto: no descifrable, redactado, y
   «Allo no sabe dibujar esto todavía». Ninguno se pinta como una burbuja vacía.
+- **Reacciones**, poner y quitar, desde la barra de emoji del menú de acciones.
+  Una sola llamada para los dos sentidos: cuál de los dos es depende de si esta
+  cuenta ya anotó el evento, y eso lo sabe el SDK y no un snapshot de la
+  pantalla.
+- **Edición y borrado** de los mensajes propios. El borrado es una redacción, y
+  una redacción no borra la fila: deja el esqueleto —quién y cuándo— en pie aquí
+  y en todos los demás clientes, y la fila se pone a dibujarse como borrada. El
+  compositor tiene un segundo modo, con una barra encima para cancelarlo.
+- **Recibos de lectura**, en las dos direcciones: se envían mientras la
+  conversación está en pantalla y el segundo tick aparece cuando alguien que no
+  es quien lo envió ha leído. Un recibo de Matrix nombra un evento y cubre todos
+  los anteriores, así que la respuesta por fila sale de recorrer el timeline
+  hacia atrás (`lib/matrix/readReceipts.ts`) y no de preguntar por cada mensaje.
+- **Indicador de escribiendo**, también en las dos direcciones, y por el
+  homeserver: a diferencia del camino viejo, existe fuera de la web.
+- **Un envío fallido se dibuja como error** y no como el reloj.
 
 ## 5. Qué no llega, y por qué
 
@@ -148,20 +165,24 @@ Por orden de cuánto se nota:
 2. **El tamaño de letra por mensaje no viaja.** `AlloTimelineHandle.sendText`
    manda un cuerpo y nada más; `so.oxy.allo.font_size` (§4.2 de
    `data-model.md`) necesita una llamada que el puerto no tiene.
-3. **Un envío fallido dibuja el reloj, no un error.** `MessageMetadata` sólo
-   conoce pendiente / enviado / entregado / leído. El reloj es cierto en móvil,
-   donde la cola del SDK sigue reintentando, y optimista en web, donde no.
-4. **Sin reacciones, sin edición, sin borrado, sin adjuntos, sin recibos de
-   lectura, sin indicador de escribiendo, sin crear conversaciones.** El puerto
-   no expone ninguna de esas operaciones todavía.
-5. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
+3. **Las reacciones no se ven en la burbuja.** Se pueden poner y quitar, y el
+   toggle sabe cuáles son las tuyas, pero nada las dibuja debajo del mensaje.
+   No es un hueco del puerto: `Message.reactions` existe desde antes que él y
+   ningún backend de Allo las ha pintado nunca. Hacerlo es UI nueva para los dos
+   caminos, no cableado de éste.
+4. **Sin adjuntos y sin crear conversaciones.** El puerto no expone ninguna de
+   las dos operaciones todavía.
+5. **Nada reintenta un envío fallido.** Se ve que falló, y no hay forma de
+   volver a intentarlo desde la burbuja; en móvil la cola del SDK ya no lo está
+   intentando y en web nunca hubo cola. Reenviarlo es escribirlo otra vez.
+6. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
    el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
    y la app lo dibuja como un error de sincronización, no como «te han cerrado la
    sesión». El binding lo cuenta (`ClientDelegate.didReceiveAuthError`) y
    `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
    ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
    Ajustes— pero hay que saber que hace falta.
-6. **Las invitaciones aparecen como filas normales.** El puerto las incluye
+7. **Las invitaciones aparecen como filas normales.** El puerto las incluye
    («todo lo que el usuario no ha abandonado»), y abrir una probablemente no dé
    timeline. No se filtran aquí: la definición de qué es una conversación es del
    puerto, no de este mapeo.
