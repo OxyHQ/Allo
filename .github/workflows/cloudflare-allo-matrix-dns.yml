@@ -1,0 +1,148 @@
+# The DNS the Allo Matrix homeserver needs, in the allo.you zone.
+#
+# Four CNAMEs, all DNS-only. Two prove domain ownership to ACM; two point the
+# homeserver's hostnames at the shared ALB.
+#
+# PROXYING MUST BE OFF on all four. Cloudflare's proxy answers with its own
+# addresses, which breaks ACM validation outright and puts a second TLS
+# terminator in front of a load balancer that already has the certificate. Every
+# other `api.*` record in this account is DNS-only for the same reason.
+#
+# `check` reads and writes nothing — it is also how you find out whether the
+# token can edit DNS at all, since CLOUDFLARE_API_TOKEN is shared with the Pages
+# deployments and may be scoped to them. `apply` creates what is missing, leaves
+# anything already correct alone, and refuses to touch a record whose value
+# disagrees rather than overwriting it.
+#
+# It lives HERE, and not in oxy-infra where the rest of the homeserver's
+# infrastructure is, for one reason: the organisation is on the free plan, where
+# organisation secrets are not served to private repositories. oxy-infra is
+# private, so CLOUDFLARE_API_TOKEN arrives there as an empty string and the
+# failure looks like a scope problem. This repository is public, which is also
+# why its Pages deployment has always worked with the same secret.
+#
+# That is not an accident of convenience: allo.you's DNS-adjacent configuration
+# already lives in this repository — `public/_redirects`, `public/_headers`, and
+# the `.well-known/matrix/server` delegation that federation will need.
+name: Cloudflare DNS (Allo Matrix)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'check reads only. apply creates the missing records.'
+        type: choice
+        options: [check, apply]
+        default: check
+        required: true
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys, urllib.request, urllib.error
+
+          # Stripped: a secret pasted with a trailing newline produces
+          # "Invalid format for Authorization header" (code 6111), which reads
+          # like a scope problem and is not one.
+          TOKEN = os.environ["CF_TOKEN"].strip()
+          if not TOKEN:
+              sys.exit("CLOUDFLARE_API_TOKEN is empty")
+          print(f"token: {len(TOKEN)} chars, starts {TOKEN[:4]!r}")
+          APPLY = os.environ["ACTION"] == "apply"
+          ZONE_NAME = "allo.you"
+          ALB = "oxy-alb-648111691.us-west-2.elb.amazonaws.com"
+
+          # (name, value). All CNAME, all DNS-only.
+          WANTED = [
+              ("_0bbaa06e40b8e7ddafcc3f6cf135b55e.matrix.allo.you",
+               "_f8fa465d1292127f6376d99360b6f5d4.jkddzztszm.acm-validations.aws"),
+              ("_16b708d805dd0df7afd3ad593c4c7d19.auth.allo.you",
+               "_47ed72f09e9d02d05e77dcfad191fc06.jkddzztszm.acm-validations.aws"),
+              ("matrix.allo.you", ALB),
+              ("auth.allo.you", ALB),
+          ]
+
+          def api(path, method="GET", body=None):
+              req = urllib.request.Request(
+                  f"https://api.cloudflare.com/client/v4{path}",
+                  method=method,
+                  data=json.dumps(body).encode() if body else None,
+                  headers={"Authorization": f"Bearer {TOKEN}",
+                           "Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      return json.load(r)
+              except urllib.error.HTTPError as e:
+                  detail = json.load(e)
+                  # Cloudflare puts the useful part in `errors`; the status alone
+                  # does not distinguish "no permission" from "no such zone".
+                  print(f"  HTTP {e.code}: {detail.get('errors')}")
+                  return detail
+
+          zones = api(f"/zones?name={ZONE_NAME}")
+          if not zones.get("success"):
+              sys.exit("cannot list zones — the token likely has no DNS scope")
+          results = zones.get("result") or []
+          if not results:
+              sys.exit(f"the token can list zones but cannot see {ZONE_NAME}")
+          zone_id = results[0]["id"]
+          print(f"zone {ZONE_NAME} = {zone_id}\n")
+
+          existing = {}
+          page = 1
+          while True:
+              got = api(f"/zones/{zone_id}/dns_records?per_page=100&page={page}")
+              if not got.get("success"):
+                  sys.exit("cannot list records — the token cannot read DNS")
+              for r in got["result"]:
+                  existing.setdefault(r["name"], []).append(r)
+              info = got["result_info"]
+              if page * info["per_page"] >= info["total_count"]:
+                  break
+              page += 1
+
+          changed = failed = 0
+          for name, value in WANTED:
+              have = existing.get(name, [])
+              match = [r for r in have if r["type"] == "CNAME"
+                       and r["content"].rstrip(".") == value.rstrip(".")]
+              if match:
+                  proxied = match[0].get("proxied")
+                  flag = "  (PROXIED — must be off)" if proxied else ""
+                  print(f"= {name} already correct{flag}")
+                  if proxied:
+                      failed += 1
+                  continue
+              if have:
+                  # Something else answers this name. Overwriting it blind is how
+                  # a working record disappears; report and let a human decide.
+                  print(f"! {name} exists with a different value: "
+                        f"{[(r['type'], r['content']) for r in have]} — left alone")
+                  failed += 1
+                  continue
+              if not APPLY:
+                  print(f"+ {name} MISSING -> {value}")
+                  continue
+              made = api(f"/zones/{zone_id}/dns_records", "POST", {
+                  "type": "CNAME", "name": name, "content": value,
+                  "ttl": 60, "proxied": False,
+              })
+              if made.get("success"):
+                  print(f"+ {name} created")
+                  changed += 1
+              else:
+                  print(f"! {name} could not be created")
+                  failed += 1
+
+          print(f"\n{'applied' if APPLY else 'check only'}: "
+                f"{changed} created, {failed} needing attention")
+          sys.exit(1 if failed else 0)
+          PY
