@@ -4,7 +4,7 @@ Expo/RN frontend + Express backend. Agent: `allo`.
 
 ## Deployment
 
-- **Port**: `8080` | **Domain**: `api.allo.oxy.so` | **ECR**: `oxy/allo`
+- **Port**: `8080` | **Domain**: `api.allo.you` | **ECR**: `oxy/allo`
 - Build: `linux/arm64` Dockerfile in `packages/backend/`.
 - `.github/workflows/deploy-aws.yml` is the only deployment. `server.ts` defaults to `4140` for local dev; ECS injects `PORT=8080`.
 

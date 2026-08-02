@@ -139,7 +139,7 @@ nothing is deployed by hand.
 - **Port** — the container listens on the `PORT` that ECS injects (8080; set in
   oxy-infra's `terraform-uswest2/app-allo.tf`). The `4140` in `server.ts` is the
   local fallback only.
-- **Public URL** — `api.allo.oxy.so`.
+- **Public URL** — `api.allo.you`.
 
 ### Credentials
 

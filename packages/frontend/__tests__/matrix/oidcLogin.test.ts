@@ -17,16 +17,16 @@ import type { SessionFields } from '@/lib/matrix/native/session';
  * a login that succeeded or replays an authorization code the server has seen.
  */
 
-const AUTHORIZATION_URL = 'https://account.allo.oxy.so/authorize?client_id=allo';
+const AUTHORIZATION_URL = 'https://account.allo.you/authorize?client_id=allo';
 const CALLBACK_URL = 'allo://oidc-callback?code=abc&state=xyz';
 
 const SESSION: SessionFields = {
-  userId: '@alice:allo.oxy.so',
+  userId: '@alice:allo.you',
   deviceId: 'DEVICE1',
-  homeserverUrl: 'https://matrix.allo.oxy.so',
+  homeserverUrl: 'https://matrix.allo.you',
   accessToken: 'access',
   refreshToken: 'refresh',
-  oidcData: '{"issuer":"https://account.allo.oxy.so/"}',
+  oidcData: '{"issuer":"https://account.allo.you/"}',
 };
 
 function authorizationData(): OAuthAuthorizationDataLike {
@@ -72,12 +72,12 @@ describe('NativeOidcLoginRequest', () => {
 
     expect(client.completed).toEqual([CALLBACK_URL]);
     expect(session).toEqual({
-      userId: '@alice:allo.oxy.so',
+      userId: '@alice:allo.you',
       deviceId: 'DEVICE1',
-      homeserverUrl: 'https://matrix.allo.oxy.so',
+      homeserverUrl: 'https://matrix.allo.you',
       accessToken: 'access',
       refreshToken: 'refresh',
-      authData: '{"issuer":"https://account.allo.oxy.so/"}',
+      authData: '{"issuer":"https://account.allo.you/"}',
     });
   });
 

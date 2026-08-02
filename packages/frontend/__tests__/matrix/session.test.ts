@@ -17,28 +17,28 @@ describe('toAlloSession', () => {
     // cannot renew itself and stops working when the access token expires.
     expect(
       toAlloSession({
-        userId: '@alice:allo.oxy.so',
+        userId: '@alice:allo.you',
         deviceId: 'DEVICE1',
-        homeserverUrl: 'https://matrix.allo.oxy.so',
+        homeserverUrl: 'https://matrix.allo.you',
         accessToken: 'access',
         refreshToken: 'refresh',
-        oidcData: '{"issuer":"https://account.allo.oxy.so/"}',
+        oidcData: '{"issuer":"https://account.allo.you/"}',
       }),
     ).toEqual({
-      userId: '@alice:allo.oxy.so',
+      userId: '@alice:allo.you',
       deviceId: 'DEVICE1',
-      homeserverUrl: 'https://matrix.allo.oxy.so',
+      homeserverUrl: 'https://matrix.allo.you',
       accessToken: 'access',
       refreshToken: 'refresh',
-      authData: '{"issuer":"https://account.allo.oxy.so/"}',
+      authData: '{"issuer":"https://account.allo.you/"}',
     });
   });
 
   it('keeps the optional credentials absent rather than inventing them', () => {
     const session = toAlloSession({
-      userId: '@alice:allo.oxy.so',
+      userId: '@alice:allo.you',
       deviceId: 'DEVICE1',
-      homeserverUrl: 'https://matrix.allo.oxy.so',
+      homeserverUrl: 'https://matrix.allo.you',
       accessToken: 'access',
       refreshToken: undefined,
       oidcData: undefined,

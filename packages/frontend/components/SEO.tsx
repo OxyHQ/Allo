@@ -57,7 +57,7 @@ export const SEO: React.FC<SEOProps> = ({
   // Generate full URL
   const fullUrl = url || (Platform.OS === 'web' && typeof window !== 'undefined'
     ? `${window.location.origin}${pathname}`
-    : `https://allo.oxy.so${pathname}`);
+    : `https://allo.you${pathname}`);
 
   // Use provided siteName or translated default
   const finalSiteName = siteName || t('seo.siteName', { defaultValue: defaultSEO.siteName });
@@ -72,7 +72,7 @@ export const SEO: React.FC<SEOProps> = ({
   });
 
   // Default image (you should add your logo/image)
-  const pageImage = image || 'https://allo.oxy.so/og-image.png';
+  const pageImage = image || 'https://allo.you/og-image.png';
 
   // Only render on web
   if (Platform.OS !== 'web' || !Head) {

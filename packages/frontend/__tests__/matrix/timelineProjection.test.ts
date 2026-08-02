@@ -21,7 +21,7 @@ jest.mock('@unomed/react-native-matrix-sdk');
 function eventFields(body: string): TimelineEventFields {
   return {
     eventOrTransactionId: new EventOrTransactionId.EventId({ eventId: `$${body}` }),
-    sender: '@alice:allo.oxy.so',
+    sender: '@alice:allo.you',
     senderProfile: new ProfileDetails.Unavailable(),
     content: new TimelineItemContent.MsgLike({
       content: {

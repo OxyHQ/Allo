@@ -4,16 +4,16 @@
 // (ECS injects PORT explicitly).
 export const API_URL =
   process.env.NODE_ENV === 'production'
-    ? 'https://api.allo.oxy.so/api'
+    ? 'https://api.allo.you/api'
     : (process.env.API_URL ?? 'http://localhost:4140/api');
 export const SOCKET_URL =
   process.env.NODE_ENV === "production"
-    ? "wss://api.allo.oxy.so"
+    ? "wss://api.allo.you"
     : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
 
 export const API_URL_SOCKET =
   process.env.NODE_ENV === "production"
-    ? "wss://api.allo.oxy.so"
+    ? "wss://api.allo.you"
     : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
 
 export const API_URL_SOCKET_CHAT = process.env.API_URL_SOCKET_CHAT || 'http://localhost:4140';
