@@ -18,6 +18,24 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 let replicaSet: MongoMemoryReplSet | null = null;
 
 export async function setup(): Promise<void> {
+  /**
+   * An externally provided replica set wins, and the README has always said so —
+   * it just was not true: this file overwrote `ALLO_TEST_MONGODB_URI`
+   * unconditionally, so the documented escape hatch did nothing.
+   *
+   * It matters on machines where `mongodb-memory-server` cannot fetch a binary
+   * at all. On arm64 Linux the download 403s — there is no
+   * `mongodb-linux-aarch64-debian12-<version>.tgz` published — and because this
+   * runs in `globalSetup`, the failure takes down the WHOLE suite, including
+   * tests that never touch a database. Honouring a URI that is already set gives
+   * those machines a way to run the suite against a local `mongod`.
+   *
+   * `MONGOMS_SYSTEM_BINARY=/usr/bin/mongod` is the other way, and it keeps the
+   * in-memory replica set; this one points at a server that is already running.
+   */
+  const provided = process.env.ALLO_TEST_MONGODB_URI;
+  if (provided && provided.trim().length > 0) return;
+
   replicaSet = await MongoMemoryReplSet.create({
     replSet: { count: 1, storageEngine: "wiredTiger" },
   });
