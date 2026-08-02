@@ -1,20 +1,44 @@
-# Temporary diagnostic: which GitHub-hosted runner label can this repo actually use?
-#
-# `Deploy to AWS` ends in `action_required` with zero jobs on every trigger,
-# while `CI` and `Deploy Frontends` run fine on the same commits. The only
-# difference between them is the runner label. This isolates that one variable.
+# Temporary diagnostic: faithful structural copy of deploy-aws.yml with every
+# AWS-mutating step replaced by an echo. Measures one thing only — whether the
+# run gets scheduled at all. Both runner labels already proved fine.
 name: Runner probe
 
 on:
   workflow_dispatch:
 
-jobs:
-  standard:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "ubuntu-latest ran on $(uname -m)"
+permissions:
+  id-token: write
+  contents: read
 
-  arm:
+env:
+  AWS_REGION: us-west-2
+  APP: allo
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     steps:
-      - run: echo "ubuntu-24.04-arm ran on $(uname -m)"
+      - uses: actions/checkout@v7
+
+      - name: Secrets context is readable
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: echo "$SECRETS_JSON" | jq -r 'keys|length' | xargs -I{} echo "{} secrets visible"
+
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::237343248947:role/oxy-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        continue-on-error: true
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        continue-on-error: true
+        uses: docker/setup-buildx-action@v3
+
+      - run: echo "probe reached the end"
