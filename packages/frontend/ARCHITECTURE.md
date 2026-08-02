@@ -13,7 +13,7 @@ This document outlines the architecture and best practices followed in this Expo
 
 ### 2. Code Splitting & Performance
 - **React.lazy()** for dynamic imports of heavy components
-- **Suspense** boundaries with proper loading fallbacks (`LoadingFallback` component)
+- **Suspense** boundaries with proper loading fallbacks
 - Components are split at route boundaries for optimal bundle size
 - Shared components in `components/shared/` for reusability
 
@@ -98,8 +98,10 @@ app/
 - Navigation-related types
 
 ### `components/shared/`
-- **LoadingFallback.tsx**: Suspense fallback component
 - **EmptyState.tsx**: Reusable empty state component
+
+Loading placeholders come from `@oxyhq/bloom`'s `Skeleton` primitives, composed
+at the call site (see the conversation list in `app/(chat)/index.tsx`).
 
 ## Performance Optimizations
 
