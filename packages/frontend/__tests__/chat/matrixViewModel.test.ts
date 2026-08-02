@@ -1,5 +1,6 @@
 import { toConversation, toMessage, type UnreadableEventLabels } from '@/lib/chat/matrixViewModel';
-import type { AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
+import type { AlloRoomPreview, AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
+import { formatConversationTimestamp } from '@/utils/dateUtils';
 
 /**
  * The translation from what the port reports to what Allo's chat components
@@ -22,6 +23,18 @@ function room(overrides: Partial<AlloRoomSummary> = {}): AlloRoomSummary {
     membership: 'joined',
     encryption: 'encrypted',
     unreadCount: 0,
+    latestMessage: undefined,
+    ...overrides,
+  };
+}
+
+function preview(overrides: Partial<AlloRoomPreview> = {}): AlloRoomPreview {
+  return {
+    sentAt: 1_700_000_000_000,
+    sender: '@alice:allo.you',
+    senderDisplayName: 'Alice',
+    isOwn: false,
+    content: { kind: 'text', body: 'see you there', isEdited: false },
     ...overrides,
   };
 }
@@ -42,7 +55,7 @@ function event(overrides: Partial<AlloTimelineItem> = {}): AlloTimelineItem {
 
 describe('toConversation', () => {
   it('carries the room across as a direct conversation', () => {
-    const conversation = toConversation(room({ unreadCount: 3, avatarUrl: 'mxc://a' }));
+    const conversation = toConversation(room({ unreadCount: 3, avatarUrl: 'mxc://a' }), LABELS);
 
     expect(conversation).toMatchObject({
       id: '!room:allo.you',
@@ -54,33 +67,96 @@ describe('toConversation', () => {
   });
 
   it('calls a room that is not a direct message a group', () => {
-    expect(toConversation(room({ isDirect: false })).type).toBe('group');
+    expect(toConversation(room({ isDirect: false }), LABELS).type).toBe('group');
   });
 
   it('falls back to the room id while the name has not synced', () => {
     // A blank row is worse than an ugly one: the user can still tell two
     // unnamed conversations apart by their ids, and cannot tell two blanks apart.
-    expect(toConversation(room({ displayName: undefined })).name).toBe('!room:allo.you');
+    expect(toConversation(room({ displayName: undefined }), LABELS).name).toBe('!room:allo.you');
   });
 
-  it('leaves the last message empty rather than inventing one', () => {
-    // The port's room summary carries no latest event. Reading one would mean a
-    // timeline open per room in the list.
-    expect(toConversation(room()).lastMessage).toBe('');
+  it('shows the last message and the time it was sent', () => {
+    const conversation = toConversation(
+      room({ latestMessage: preview({ sentAt: 1_700_000_000_000 }) }),
+      LABELS,
+    );
+
+    expect(conversation.lastMessage).toBe('see you there');
+    expect(new Date(conversation.timestamp).getTime()).toBe(1_700_000_000_000);
   });
 
   it('leaves the timestamp empty rather than saying "now"', () => {
-    // This is the mistake this test exists to prevent. `AlloRoomSummary` has no
-    // activity time, and `new Date().toISOString()` would put the current time
-    // beside every conversation in the app — including one nobody has touched in
-    // a year. An empty string is what the formatter renders as nothing.
-    expect(toConversation(room()).timestamp).toBe('');
+    // This is the mistake this test exists to prevent. A room whose latest
+    // message this device does not know has no activity time, and the current
+    // time would put "now" beside every conversation in the app — including one
+    // nobody has touched in a year. An empty string is what the formatter
+    // renders as nothing.
+    const conversation = toConversation(room({ latestMessage: undefined }), LABELS);
+
+    expect(conversation.timestamp).toBe('');
+    expect(formatConversationTimestamp(conversation.timestamp)).toBe('');
+  });
+
+  it('leaves the preview empty when there is no message, rather than inventing one', () => {
+    expect(toConversation(room({ latestMessage: undefined }), LABELS).lastMessage).toBe('');
+  });
+
+  it('says so when the last message cannot be read on this device', () => {
+    // A row that went blank would read as a conversation nobody has written in.
+    // A device set up today sees this for every conversation it joins.
+    const conversation = toConversation(
+      room({ latestMessage: preview({ content: { kind: 'undecryptable' } }) }),
+      LABELS,
+    );
+
+    expect(conversation.lastMessage).toBe('cannot be read on this device');
+    expect(conversation.lastMessage).not.toBe('');
+  });
+
+  it('still shows a time for a message it cannot read', () => {
+    // The time comes from the event, which arrived; only its content did not.
+    const conversation = toConversation(
+      room({
+        latestMessage: preview({ content: { kind: 'undecryptable' }, sentAt: 1_600_000_000_000 }),
+      }),
+      LABELS,
+    );
+
+    expect(new Date(conversation.timestamp).getTime()).toBe(1_600_000_000_000);
+  });
+
+  it('says so when the last message was deleted, and when it cannot be drawn', () => {
+    expect(
+      toConversation(room({ latestMessage: preview({ content: { kind: 'redacted' } }) }), LABELS)
+        .lastMessage,
+    ).toBe('was deleted');
+    expect(
+      toConversation(
+        room({
+          latestMessage: preview({ content: { kind: 'unsupported', description: 'm.image' } }),
+        }),
+        LABELS,
+      ).lastMessage,
+    ).toBe('cannot show this yet (m.image)');
+  });
+
+  it('marks an invitation as one', () => {
+    // An invitation is in the list because the port's definition of a
+    // conversation is everything the viewer has not left. It is not a
+    // conversation yet — there is nothing to read in it until it is accepted —
+    // and the screen cannot tell unless this says so.
+    expect(toConversation(room({ membership: 'invited' }), LABELS).isInvitation).toBe(true);
+  });
+
+  it('does not mark a conversation the viewer has joined as an invitation', () => {
+    expect(toConversation(room({ membership: 'joined' }), LABELS).isInvitation).toBe(false);
   });
 
   it('leaves the conversation theme unset', () => {
     // Themes are to travel as an encrypted timeline event and nothing writes one
     // yet, so a Matrix conversation uses the app's theme.
-    expect(toConversation(room()).theme).toBeUndefined();
+    expect(toConversation(room(), LABELS).theme).toBeUndefined();
   });
 });
 

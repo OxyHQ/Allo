@@ -35,6 +35,7 @@ function summary(roomId: string): AlloRoomSummary {
     membership: 'joined',
     encryption: 'encrypted',
     unreadCount: 0,
+    latestMessage: undefined,
   };
 }
 

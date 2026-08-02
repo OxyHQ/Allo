@@ -47,6 +47,12 @@ export type AlloUnsubscribe = () => void;
  * `encryption` here is whatever sync has told us so far and may well be
  * `'unknown'`; {@link AlloChatClient.roomEncryption} is the call that resolves
  * that against the server.
+ *
+ * `membership` is also what tells an **invitation** apart from a conversation.
+ * The list holds everything the viewer has not left, invitations included, and
+ * an invited room is not a conversation yet: it has no readable timeline, so its
+ * {@link latestMessage} is absent, and opening it yields nothing to draw. What
+ * the port owes the UI is the fact; what to do with it is the UI's.
  */
 export interface AlloRoomSummary {
   readonly roomId: string;
@@ -58,6 +64,52 @@ export interface AlloRoomSummary {
   readonly encryption: AlloEncryptionState;
   /** Messages the viewer has not read, independent of notification settings. */
   readonly unreadCount: number;
+  /**
+   * The room's most recent message, or `undefined` when this device knows of
+   * none.
+   *
+   * `undefined` is a real answer and not a placeholder: an invitation, a room
+   * created a second ago, and a room whose messages have not reached this device
+   * all have no latest message, and the row for one has no preview and no time.
+   * Substituting the current time is the mistake this shape exists to prevent —
+   * it puts "now" beside every conversation in the app, including one nobody has
+   * touched in a year.
+   */
+  readonly latestMessage: AlloRoomPreview | undefined;
+}
+
+/**
+ * The one message a conversation row previews.
+ *
+ * It carries {@link AlloEventContent} rather than a string because a preview is
+ * subject to every state a timeline row is: the latest message of an encrypted
+ * room may not be decryptable on this device yet, which is a state of its own and
+ * not an empty preview, and it stops being true the moment the room key arrives.
+ *
+ * `sentAt` is the row's activity time, and there is deliberately no separate
+ * field for it. A time and a preview are the same fact seen twice — a row cannot
+ * honestly show one without the other — and one field cannot go stale against
+ * the other.
+ *
+ * The sender travels with it because a group conversation's row says who spoke,
+ * and both SDKs hand the sender over inside the very object this is read from.
+ * Asking for it later would mean a timeline open per room in the list.
+ *
+ * **What counts as "the latest message".** Message-like events only: text,
+ * stickers, polls, media, an event that failed to decrypt, and a message that has
+ * been redacted. Someone joining a room is not the room's latest message, and a
+ * list that said so would replace every preview with a membership change every
+ * time anyone came or went.
+ */
+export interface AlloRoomPreview {
+  /** Milliseconds since the Unix epoch. */
+  readonly sentAt: number;
+  /** Matrix user id of the sender. */
+  readonly sender: string;
+  /** Undefined while the sender's profile has not been resolved. */
+  readonly senderDisplayName: string | undefined;
+  readonly isOwn: boolean;
+  readonly content: AlloEventContent;
 }
 
 /**

@@ -1,14 +1,22 @@
-import { directRoomIds, orderRoomList, type RoomListEntry } from '@/lib/matrix/web/roomList';
+import {
+  directRoomIds,
+  orderRoomList,
+  selectRoomPreview,
+  type RoomListEntry,
+} from '@/lib/matrix/web/roomList';
 import type { AlloRoomSummary } from '@/lib/matrix/types';
+import type { TimelineEventFields } from '@/lib/matrix/web/translate';
 
 /**
- * The order of the conversation list, and the account data that decides which of
- * its rows are direct messages.
+ * The order of the conversation list, the message each row previews, and the
+ * account data that decides which of its rows are direct messages.
  *
- * `matrix-js-sdk` hands over an unordered set of rooms where the Rust SDK hands
- * over a sorted list, so this is the code that has to produce the same list the
- * native half gets for free.
+ * `matrix-js-sdk` hands over an unordered set of rooms and no notion of a room's
+ * latest message, where the Rust SDK hands over both, so this is the code that
+ * has to produce the list the native half gets for free.
  */
+
+const VIEWER = '@viewer:allo.you';
 
 function summary(roomId: string): AlloRoomSummary {
   return {
@@ -19,11 +27,35 @@ function summary(roomId: string): AlloRoomSummary {
     membership: 'joined',
     encryption: 'encrypted',
     unreadCount: 0,
+    latestMessage: undefined,
   };
 }
 
 function entry(roomId: string, activityTimestamp: number): RoomListEntry {
   return { summary: summary(roomId), activityTimestamp };
+}
+
+/** A timeline event, described by the members the preview reads. */
+function event(type: string, body: string, sentAt = 1_700_000_000_000): TimelineEventFields {
+  return {
+    getId: () => `$${body}`,
+    getTxnId: () => undefined,
+    getSender: () => '@alice:allo.you',
+    getType: () => type,
+    getContent: () => ({ msgtype: 'm.text', body }),
+    getTs: () => sentAt,
+    isRedacted: () => false,
+    replacingEvent: () => null,
+    status: null,
+    sender: { name: 'Alice' },
+  };
+}
+
+/** `count` events of a type no row can preview. */
+function noise(count: number): TimelineEventFields[] {
+  return Array.from({ length: count }, (_unused, index) =>
+    event('m.room.member', `joined-${index}`),
+  );
 }
 
 describe('orderRoomList', () => {
@@ -68,6 +100,64 @@ describe('orderRoomList', () => {
     orderRoomList(entries);
 
     expect(entries.map((item) => item.summary.roomId)).toEqual(['!a:allo.you', '!b:allo.you']);
+  });
+});
+
+describe('selectRoomPreview', () => {
+  it('previews the newest message in the room', () => {
+    const preview = selectRoomPreview(
+      [event('m.room.message', 'older'), event('m.room.message', 'newest')],
+      VIEWER,
+    );
+
+    expect(preview?.content).toEqual({ kind: 'text', body: 'newest', isEdited: false });
+  });
+
+  it('walks past events that are not messages to the last one that is', () => {
+    // The reason this function exists rather than a call to getLastLiveEvent().
+    // Someone joining a room is not the room's latest message, and a list that
+    // said so would lose every preview the moment anybody came or went.
+    const preview = selectRoomPreview(
+      [event('m.room.message', 'the real last message'), ...noise(3)],
+      VIEWER,
+    );
+
+    expect(preview?.content).toEqual({
+      kind: 'text',
+      body: 'the real last message',
+      isEdited: false,
+    });
+  });
+
+  it('has no preview for a room whose timeline this device holds nothing of', () => {
+    // An invitation, and a room created a second ago. Not an empty preview and
+    // above all not a time: `undefined` is what stops a row inventing one.
+    expect(selectRoomPreview([], VIEWER)).toBe(undefined);
+  });
+
+  it('has no preview for a room that holds no messages at all', () => {
+    expect(selectRoomPreview(noise(5), VIEWER)).toBe(undefined);
+  });
+
+  it('gives up rather than walking a long history of events it cannot preview', () => {
+    // The list is rebuilt on every sync response and this search is per room, so
+    // it is bounded. Giving up costs a row its preview; not bounding it costs
+    // every room's whole loaded history, several times a minute.
+    const deep = [event('m.room.message', 'buried'), ...noise(40)];
+
+    expect(selectRoomPreview(deep, VIEWER)).toBe(undefined);
+  });
+
+  it('reads the time from the message it previews and not from any other event', () => {
+    const preview = selectRoomPreview(
+      [
+        event('m.room.message', 'the message', 1_600_000_000_000),
+        event('m.room.member', 'joined', 1_700_000_000_000),
+      ],
+      VIEWER,
+    );
+
+    expect(preview?.sentAt).toBe(1_600_000_000_000);
   });
 });
 

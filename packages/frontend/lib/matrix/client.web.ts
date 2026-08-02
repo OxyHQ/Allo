@@ -74,7 +74,12 @@ import {
   type OidcGrant,
 } from './web/oidcLogin';
 import { planKeyBackup, toRecoveryState } from './web/recovery';
-import { directRoomIds, orderRoomList, type RoomListEntry } from './web/roomList';
+import {
+  directRoomIds,
+  orderRoomList,
+  selectRoomPreview,
+  type RoomListEntry,
+} from './web/roomList';
 import { createSecretStorageKeyCallback } from './web/secretStorage';
 import { decodeAuthData, encodeAuthData } from './web/session';
 import { toEncryptionState, toRoomSummary, toSyncState, toTimelineItem } from './web/translate';
@@ -841,16 +846,22 @@ class WebRoomListHandle implements AlloRoomListHandle {
     }
 
     const direct = directRoomIds(this.#client.getAccountData(EventType.Direct)?.getContent());
+    const viewerUserId = this.#client.getSafeUserId();
     const entries: RoomListEntry[] = [];
 
     // `getVisibleRooms` and not `getRooms`: it drops the old versions of rooms
     // that have been upgraded, which are rooms the user has already been moved
     // out of.
     for (const room of this.#client.getVisibleRooms()) {
+      const timeline = room.getLiveTimeline();
       const summary = toRoomSummary(
         room,
-        room.getLiveTimeline().getState(EventTimeline.FORWARDS),
+        timeline.getState(EventTimeline.FORWARDS),
         direct.has(room.roomId),
+        // The live timeline and not `getLastLiveEvent()`: the row previews the
+        // room's last *message*, and the last event of all is as likely to be
+        // somebody joining. See `selectRoomPreview`.
+        selectRoomPreview(timeline.getEvents(), viewerUserId),
       );
       if (summary === undefined) {
         logger.warn(

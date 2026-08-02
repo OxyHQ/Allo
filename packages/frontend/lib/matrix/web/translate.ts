@@ -5,6 +5,7 @@ import type {
   AlloEventContent,
   AlloEventKey,
   AlloRoomMembership,
+  AlloRoomPreview,
   AlloRoomSummary,
   AlloSendState,
   AlloSyncState,
@@ -34,6 +35,28 @@ const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
 const ROOM_MESSAGE_EVENT_TYPE = 'm.room.message';
 const ROOM_ENCRYPTED_EVENT_TYPE = 'm.room.encrypted';
 const TEXT_MESSAGE_TYPE = 'm.text';
+
+/**
+ * The event types a conversation row previews.
+ *
+ * This list is the web half's copy of a decision the native half gets for free:
+ * the Rust SDK keeps a latest-event cache that only ever holds message-like
+ * events, and `matrix-js-sdk` keeps no such thing — `getLastLiveEvent()` answers
+ * with the last event of any type at all. Without this filter a room's preview
+ * would be replaced by a membership change every time anyone joined or left.
+ *
+ * Both spellings of a poll are here because the stable type was only assigned
+ * after clients had shipped the unstable one, and rooms hold events from both.
+ */
+const PREVIEWABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
+  ROOM_MESSAGE_EVENT_TYPE,
+  // An event that has not been decrypted still reports this type, and it is a
+  // message: "arrived and cannot be read" is a preview, not the absence of one.
+  ROOM_ENCRYPTED_EVENT_TYPE,
+  'm.sticker',
+  'm.poll.start',
+  'org.matrix.msc3381.poll.start',
+]);
 
 /**
  * The SDK's `SyncState` and `EventStatus`, written as the values of their
@@ -162,6 +185,7 @@ export function toRoomSummary(
   room: RoomSummaryFields,
   state: RoomStateFields | undefined,
   isDirect: boolean,
+  latestMessage: AlloRoomPreview | undefined,
 ): AlloRoomSummary | undefined {
   const membership = MEMBERSHIP_LOOKUP[room.getMyMembership()];
   if (membership === undefined) {
@@ -177,6 +201,7 @@ export function toRoomSummary(
     membership,
     encryption: toEncryptionState(room, state),
     unreadCount: toUnreadCount(room.getUnreadNotificationCount()),
+    latestMessage,
   };
 }
 
@@ -189,6 +214,37 @@ export function toRoomSummary(
  */
 function toUnreadCount(count: number): number {
   return Number.isInteger(count) && count > 0 ? count : 0;
+}
+
+/**
+ * A conversation row's preview, or `undefined` for an event that is not one of
+ * the room's messages.
+ *
+ * Being undrawable and not being a message are different answers, and only the
+ * second one is `undefined` here. An image is a message Allo cannot draw yet, so
+ * it comes back as `unsupported` and the row says as much; someone changing their
+ * avatar is not a message at all, and a caller looking for the room's latest one
+ * has to keep looking.
+ *
+ * A sender is required for the same reason a timeline row needs one. The SDK only
+ * ever omits it on events it built locally without one, which is not something a
+ * room's history contains.
+ */
+export function toRoomPreview(
+  event: TimelineEventFields,
+  viewerUserId: string,
+): AlloRoomPreview | undefined {
+  const sender = event.getSender();
+  if (sender === undefined || !PREVIEWABLE_EVENT_TYPES.has(event.getType())) {
+    return undefined;
+  }
+  return {
+    sentAt: event.getTs(),
+    sender,
+    senderDisplayName: event.sender?.name,
+    isOwn: sender === viewerUserId,
+    content: toEventContent(event),
+  };
 }
 
 /** What a conversation row needs of a `MatrixEvent`. */

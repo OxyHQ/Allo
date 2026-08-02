@@ -93,6 +93,13 @@ export interface Conversation {
     unreadCount: number;
     avatar?: string; // For direct: contact avatar, for group: group avatar or first participant avatar
     isArchived?: boolean;
+    /**
+     * The viewer has been invited and has not joined. There is nothing to read in
+     * the conversation until they do, and opening it yields no messages.
+     *
+     * Only the Matrix backend produces this: the Express API has no invitations.
+     */
+    isInvitation?: boolean;
     theme?: string; // Color theme ID (shared with all participants)
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
