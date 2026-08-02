@@ -35,6 +35,7 @@ import { MessageInfoScreen } from '@/components/messages/MessageInfoScreen';
 import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
 import { MicSendButton } from '@/components/messages/MicSendButton';
+import { AttachmentViewer } from '@/components/media/AttachmentViewer';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
@@ -66,6 +67,7 @@ import {
   useContactInfo,
 } from '@/utils/conversationUtils';
 import { getConversationId, useSenderName } from '@/utils/conversationHelpers';
+import { logger } from '@/utils/logger';
 import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
 import { useOxy } from '@oxyhq/services';
 import { useUserById } from '@/stores/usersStore';
@@ -79,10 +81,12 @@ import { useMatrixTimeline } from '@/hooks/useMatrixTimeline';
 import { useMatrixMedia } from '@/hooks/useMatrixMedia';
 import {
   captureMediaAttachment,
+  pickDocumentAttachments,
   pickMediaAttachments,
   toVoiceAttachment,
   type PickedAttachments,
 } from '@/lib/chat/attachments';
+import { selectViewerItem, type ViewerSelection } from '@/lib/chat/attachmentViewer';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -298,6 +302,11 @@ export default function ConversationView({ conversationId: propConversationId }:
   const [actionsMenuVisible, setActionsMenuVisible] = useState(false);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<{ x: number; y: number; width?: number; height?: number } | undefined>();
   const [infoScreenVisible, setInfoScreenVisible] = useState(false);
+  // The gallery the full-screen viewer is showing, or `null` for closed. A
+  // snapshot taken when it opened: the conversation keeps arriving while it is
+  // up, and a gallery that grew underneath the reader would move the picture
+  // they were looking at.
+  const [viewerSelection, setViewerSelection] = useState<ViewerSelection | null>(null);
   const selectedMediaItem = useMemo(() => {
     if (!selectedMessage || !selectedMediaId || !selectedMessage.media) {
       return null;
@@ -804,19 +813,18 @@ export default function ConversationView({ conversationId: propConversationId }:
       <AttachmentMenu
         onClose={() => bottomSheet.openBottomSheet(false)}
         onSelectPhoto={() => handleSelectMedia(pickMediaAttachments)}
-        onSelectDocument={() => {
-          // TODO: Implement document picker
-        }}
-        onSelectLocation={() => {
-          // TODO: Implement location picker
-        }}
+        onSelectDocument={() => handleSelectMedia(pickDocumentAttachments)}
         onSelectCamera={() => handleSelectMedia(captureMediaAttachment)}
-        onSelectContact={() => {
-          // TODO: Implement contact picker
-        }}
-        onSelectPoll={() => {
-          // TODO: Implement poll creator
-        }}
+        // Location, contact and poll are left unwired rather than stubbed. None
+        // of the three is missing a picker: `m.location` is in the spec and the
+        // port does not translate it, a contact card has no event type at all,
+        // and a poll is MSC3381 — so each needs a decision about what Allo
+        // sends before there is anything for a handler to do. See
+        // `docs/matrix/ui-wiring.md` §5. An option the menu offers and silently
+        // ignores is worse than one it does not offer.
+        onSelectLocation={undefined}
+        onSelectContact={undefined}
+        onSelectPoll={undefined}
       />
     );
     bottomSheet.openBottomSheet(true);
@@ -872,6 +880,54 @@ export default function ConversationView({ conversationId: propConversationId }:
       return '';
     }
   }, [oxyServices, matrixMedia]);
+
+  /**
+   * The same media, at full size, for the viewer.
+   *
+   * It differs from `getMediaUrl` on the Express path and only there. That
+   * resolver asks Oxy Cloud for a rendition sized for a 250pt bubble —
+   * `w1280` for a picture, `poster` (a still frame) for a video — and both are
+   * the wrong answer full screen: one is soft on a modern display and the other
+   * is a photograph of a video. Omitting the variant serves the bytes as
+   * uploaded, which is what "full size" means.
+   *
+   * On the Matrix path there is nothing to choose. A media ref already names one
+   * blob in the homeserver's media repository, and the viewer is given the
+   * original ref rather than the thumbnail's — see `lib/chat/attachmentViewer.ts`.
+   */
+  const getFullMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
+    if (matrixMedia) {
+      return matrixMedia.url(mediaId);
+    }
+    try {
+      return oxyServices.getFileDownloadUrl(mediaId, undefined);
+    } catch (error) {
+      logger.error('[Conversation] Error getting full-size media URL:', error);
+      return '';
+    }
+  }, [oxyServices, matrixMedia]);
+
+  /**
+   * The same resolution for an attachment that is not a picture.
+   *
+   * Separate from `getMediaUrl` because it takes no kind. A voice note, an audio
+   * file and a document have no name in `MediaItem['type']`, and the Oxy
+   * rendition variant that argument picks — `w1280`, `poster` — is meaningless
+   * for all three: what is wanted is the file as uploaded, which is what an
+   * omitted variant serves.
+   */
+  const getAttachmentUrl = useCallback((source: string): string => {
+    if (matrixMedia) {
+      return matrixMedia.url(source);
+    }
+    try {
+      return oxyServices.getFileDownloadUrl(source, undefined);
+    } catch (error) {
+      logger.error('[Conversation] Error getting attachment URL:', error);
+      return '';
+    }
+  }, [oxyServices, matrixMedia]);
+
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
       return null;
@@ -932,10 +988,25 @@ export default function ConversationView({ conversationId: propConversationId }:
   ]);
 
   /**
-   * Handle media press (open in fullscreen, etc.)
+   * Opens the full-screen viewer on the picture or video that was tapped.
+   *
+   * The gallery is every attachment in the conversation, not just this
+   * message's: a Matrix event carries one attachment, so five photographs are
+   * five messages, and a viewer built from one of them could never be swiped.
+   * Which page it opens on is decided in `lib/chat/attachmentViewer.ts`, from
+   * the message and the media together — the same file sent twice has the same
+   * media id twice.
+   *
+   * Both backends reach here. The viewer never learns which one: the gallery
+   * comes from `Message.media`, which both fill, and the URLs come from
+   * `getMediaUrl`, which is already reconciled above.
    */
-  const handleMediaPress = useCallback((mediaId: string, index: number) => {
-    // TODO: Implement media viewer
+  const handleMediaPress = useCallback((message: Message, mediaId: string, index: number) => {
+    setViewerSelection(selectViewerItem(messages, message.id, mediaId) ?? null);
+  }, [messages]);
+
+  const handleViewerClose = useCallback(() => {
+    setViewerSelection(null);
   }, []);
 
   /**
@@ -1168,6 +1239,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             getSenderName={getSenderName}
             getSenderAvatar={getSenderAvatar}
             getMediaUrl={getMediaUrl}
+            getAttachmentUrl={getAttachmentUrl}
             visibleTimestampId={visibleTimestampId}
             onMessagePress={toggleTimestamp}
             onMessageLongPress={handleMessageLongPress}
@@ -1188,6 +1260,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     getSenderName,
     getSenderAvatar,
     getMediaUrl,
+    getAttachmentUrl,
     visibleTimestampId,
     toggleTimestamp,
     handleMessageLongPress,
@@ -1325,6 +1398,19 @@ export default function ConversationView({ conversationId: propConversationId }:
             messageElement={selectedMessagePreview || undefined}
             onReactionSelect={handleReactionSelect}
           />
+
+          {/* Full-screen attachment viewer.
+              Keyed on the page it opened at, so tapping a second picture builds
+              a second viewer instead of pushing a new index into this one from
+              an Effect. */}
+          {viewerSelection !== null && (
+            <AttachmentViewer
+              key={viewerSelection.items[viewerSelection.index]?.key}
+              selection={viewerSelection}
+              resolveUrl={getFullMediaUrl}
+              onClose={handleViewerClose}
+            />
+          )}
 
           {/* Message Info Screen */}
           <MessageInfoScreen

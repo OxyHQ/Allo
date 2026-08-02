@@ -31,6 +31,50 @@ export interface MediaItem {
   id: string;
   type: 'image' | 'video' | 'gif';
   url?: string;
+  /**
+   * The full-size original, when {@link id} names a smaller copy of it.
+   *
+   * A bubble is 250pt wide and draws the smallest copy it can get — on the
+   * Matrix path that is the sender's own thumbnail, because a homeserver cannot
+   * resize what it cannot read. The viewer needs the other one, and by the time
+   * a `MediaItem` reaches a component the original is otherwise gone.
+   *
+   * Absent when {@link id} already *is* the original, which is every attachment
+   * on the Express path and any Matrix attachment whose sender made no
+   * thumbnail. Readers should use `fullSizeId ?? id`.
+   */
+  fullSizeId?: string;
+  /** What the sender called it. Used to name a share, never drawn in a bubble. */
+  filename?: string;
+}
+
+/**
+ * What an attachment is when no bubble can draw it.
+ *
+ * A picture and a video go through {@link MediaItem}, because the carousel
+ * renders them and the bubble *is* the picture. The other three have no picture:
+ * a voice note is a player, an audio file is a player, a document is a row with
+ * a name and a size. Collapsing them into `MediaItem` would put them through a
+ * carousel that renders nothing for them, which is the empty bubble this
+ * separation exists to prevent.
+ */
+export type MessageAttachmentKind = 'audio' | 'voice' | 'file';
+
+export interface MessageAttachment {
+  kind: MessageAttachmentKind;
+  /**
+   * Where the bytes are, in a form only the backend that produced it can read.
+   *
+   * Resolved through the same `getMediaUrl` the carousel uses — see
+   * `ConversationView` — so nothing outside that resolver may parse it.
+   */
+  source: string;
+  /** The sender's filename. Never empty. */
+  filename: string;
+  /** Bytes, as the sender's client reported them. Not verified. */
+  size?: number;
+  /** Milliseconds, for audio and voice notes. */
+  durationMs?: number;
 }
 
 export interface StickerItem {
@@ -66,6 +110,8 @@ export interface Message {
   conversationId: string;
   messageType?: 'user' | 'ai';
   media?: MediaItem[];
+  /** An attachment the carousel cannot draw. See {@link MessageAttachment}. */
+  attachment?: MessageAttachment;
   sticker?: StickerItem;
   fontSize?: number;
   replyTo?: string; // Message ID this is replying to

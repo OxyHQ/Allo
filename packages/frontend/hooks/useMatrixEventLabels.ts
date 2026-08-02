@@ -40,10 +40,6 @@ export function useMatrixEventLabels(): UnreadableEventLabels {
       redacted: t('This message was deleted.'),
       unsupported: (description) =>
         t('Allo cannot show this yet ({{kind}}).', { kind: description }),
-      // Says outright that there is a file here and Allo is not showing it,
-      // which is the truth: a voice note and a document both arrive playable
-      // and openable in other clients and neither has a player here yet.
-      attachment: (filename) => t('Attachment: {{name}}', { name: filename }),
       mediaPreview: (kind) => mediaPreviews[kind],
     };
   }, [t]);

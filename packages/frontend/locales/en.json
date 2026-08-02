@@ -591,5 +591,21 @@
     "This message was deleted.": "This message was deleted.",
     "Allo cannot show this yet ({{kind}}).": "Allo cannot show this yet ({{kind}}).",
     "Your Oxy recovery phrase opens your Allo history": "Your Oxy recovery phrase opens your Allo history",
-    "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.": "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves."
+    "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.": "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.",
+    "Close": "Close",
+    "Share": "Share",
+    "{{position}} of {{total}}": "{{position}} of {{total}}",
+    "Attachment": "Attachment",
+    "attachment": "attachment",
+    "Preview while the full picture downloads": "Preview while the full picture downloads",
+    "Video thumbnail": "Video thumbnail",
+    "This attachment is still downloading.": "This attachment is still downloading.",
+    "Sharing is not available on this device.": "Sharing is not available on this device.",
+    "The attachment could not be shared.": "The attachment could not be shared.",
+    "Play": "Play",
+    "Pause": "Pause",
+    "Playback position": "Playback position",
+    "Open {{name}}": "Open {{name}}",
+    "Opening files is not available on this device.": "Opening files is not available on this device.",
+    "The file could not be opened.": "The file could not be opened."
 }

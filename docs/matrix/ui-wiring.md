@@ -72,7 +72,8 @@ lib/chat/
   roomListSource.ts      la lista de salas como external store
   timelineSource.ts      un timeline por sala, ídem, más paginar y enviar
   mediaCache.ts          adjuntos ya bajados y descifrados, ídem
-  attachments.ts         elegir una foto y describirla; las miniaturas
+  attachments.ts         elegir una foto, un vídeo o un fichero, y describirlo
+  attachmentViewer.ts    qué contiene la galería del visor y por dónde se abre
   matrixViewModel.ts     AlloRoomSummary → Conversation, AlloTimelineItem → Message
   newConversation.ts     lo que las dos mitades del alta comparten (§8)
   matrixConversations.ts crear una sala: MXIDs, y esperar a que sync la traiga
@@ -102,6 +103,10 @@ components/matrix/
   MatrixInvitationCard.tsx  una invitación, y las dos respuestas que admite
 ```
 
+Lo que dibuja un adjunto —el visor, el reproductor, la fila de un documento— no
+está en esta lista y no es de Matrix: vive en `components/media/` y
+`components/messages/`, y se alimenta de `Message`. Ver §9.
+
 **Un dispositivo Matrix por instalación.** Un login acuña un dispositivo, y de
 ese dispositivo cuelgan unas claves de cifrado; una app que hace login en cada
 arranque llena la cuenta de dispositivos que nadie puede verificar y que no leen
@@ -118,13 +123,24 @@ el historial de los demás. Lo que lo evita son dos hechos, ambos en
   cómo el puerto lo cuenta —delegado del constructor en nativo, callback del
   `TokenRefresher` en web— y el runtime está suscrito mientras el cliente viva.
 
-**Ningún componente de presentación cambió.** `MessageBubble`, `MessageBlock`,
+**El vocabulario no cambió: `Conversation` y `Message`.** `MessageBubble`,
 `DaySeparator`, las filas de la lista, el layout de tres paneles y los temas por
-conversación siguen recibiendo `Conversation` y `Message`. `Conversation` ganó un
-campo opcional —`isInvitation`, que sólo el camino de Matrix rellena— y lo lee un
-solo sitio, la rama de Matrix de la ruta `/c/:id` (§8.4); ninguna fila de la lista
-lo mira todavía. Lo único que cambia es de dónde salen los datos, y en cada punto
-de conexión la rama vieja es la expresión que ya estaba:
+conversación siguen recibiendo tal cual, y lo único que cambia es de dónde
+salen. Los tres tipos han ganado campos opcionales, y todos siguen la misma
+regla: son hechos sobre una conversación o un mensaje, no sobre un backend, y el
+camino de Express simplemente no los rellena.
+
+- `Conversation.isInvitation` — sólo lo pone Matrix, y lo lee un solo sitio: la
+  rama de Matrix de la ruta `/c/:id` (§8.4). Ninguna fila de la lista lo mira
+  todavía.
+- `MediaItem.fullSizeId` y `MediaItem.filename` — el original detrás de la
+  miniatura, para el visor (§7.3).
+- `Message.attachment` — un adjunto que ningún carrusel puede dibujar: una nota
+  de voz, un audio, un documento (§9).
+
+El único componente de presentación que cambió es `MessageBlock`, que ha ganado
+un prop (`getAttachmentUrl`) y dibuja esas tres filas nuevas. En cada punto de
+conexión la rama vieja sigue siendo la expresión que ya estaba:
 
 ```ts
 const conversations = roomConversations ?? storedConversations;
@@ -192,10 +208,18 @@ encenderlo.
 - **Una invitación se distingue de una conversación** (`membership` en el
   resumen, `Conversation.isInvitation` en la pantalla), y abrirla lleva a las dos
   respuestas que admite. La fila de la lista todavía se dibuja igual: ver §5.
-- **Adjuntos: fotos, vídeos y notas de voz.** Se eligen del carrete o de la
-  cámara, se envían y se reciben. Es la única de estas líneas que no es una
-  migración: en Allo la media nunca funcionó, porque el backend de Express nunca
-  tuvo endpoint de subida. Ver §7.
+- **Adjuntos: fotos, vídeos, notas de voz y documentos.** Se eligen del carrete,
+  de la cámara o del selector de ficheros, se envían y se reciben. Es la única
+  de estas líneas que no es una migración: en Allo la media nunca funcionó,
+  porque el backend de Express nunca tuvo endpoint de subida. Ver §7.
+- **Un adjunto se abre a tamaño completo**, con zoom de pellizco, arrastrar para
+  cerrar y compartir o guardar. El visor no es de Matrix: se alimenta de
+  `Message.media`, que rellenan los dos backends. Ver §9.
+- **Una nota de voz se escucha**, con play, pausa, barra arrastrable y duración.
+  Sin forma de onda, y a propósito: §7.4.
+- **Un documento se abre**, en la app que el sistema tenga para él.
+- **Un vídeo grabado en Allo va con su miniatura**, sacada del primer fotograma
+  en iOS y Android. En web sigue yendo sin ella. Ver §9.4.
 
 ## 5. Qué no llega, y por qué
 
@@ -228,19 +252,27 @@ Por orden de cuánto se nota:
    unirse o rechazar (§8.4), pero en la lista no hay nada que diga que lo es: sin
    vista previa y sin hora, parece una conversación en la que nadie ha escrito.
    `Conversation.isInvitation` llega hasta esa fila y la fila no lo lee.
-7. **Un adjunto no se puede abrir a tamaño completo.** La burbuja dibuja la
-   miniatura y `handleMediaPress` sigue vacío, así que del original sólo se baja
-   lo que la miniatura no cubre: nada. El visor es UI nueva para los dos
-   caminos, no cableado de éste.
-8. **Una nota de voz se envía y no se escucha.** Llega como `m.audio` con su
-   duración y otros clientes la reproducen; aquí la fila dice que hay un
-   adjunto. Falta el reproductor, no el transporte.
-9. **Un vídeo grabado en Allo va sin miniatura.** `expo-image-manipulator` lee
-   imágenes, no fotogramas, así que sacar el primero necesita una dependencia
-   nativa más. Un vídeo de otro cliente suele traer la suya y ésa sí se dibuja.
-10. **Documentos, ubicación, contacto y encuesta** siguen sin implementar en
-    `AttachmentMenu`. El puerto ya sabe enviar un `m.file`; lo que falta es el
-    selector y, para los tres últimos, decidir qué se envía.
+7. **Ubicación, contacto y encuesta** siguen sin implementar, y por eso
+   `AttachmentMenu` **ya no los dibuja**: un manejador ausente quita la casilla,
+   porque un botón que abre, cierra la hoja y no hace nada parece un fallo de la
+   función y no su ausencia. No es cableado lo que falta: hay que decidir qué se
+   envía en cada caso — `m.location` está en la especificación y el puerto no lo
+   traduce, una tarjeta de contacto no tiene tipo de evento ninguno, y una
+   encuesta es MSC3381.
+8. **Una nota de voz no dibuja su forma de onda**, ni la propia ni la ajena.
+   Ver §7.4: la propia no existe porque el grabador de Allo no muestrea
+   amplitudes, y la ajena —MSC3246, que Element sí manda— llega al homeserver
+   pero no al puerto, porque `AlloMediaContent` no tiene ese campo. Ensancharlo
+   toca `types.ts` y las dos mitades.
+9. **Un vídeo grabado en Allo va sin miniatura en web.** En iOS y Android sí la
+   lleva (§9.4); `expo-video` no sabe sacar fotogramas en un navegador y
+   hacerlo a mano es un `<video>` oculto, un `<canvas>` y un `seek` que resuelve
+   distinto en cada uno. Un vídeo de otro cliente suele traer la suya y ésa se
+   dibuja en los tres sitios.
+10. **El visor no reordena ni recarga.** La galería es una foto fija del momento
+    en que se abrió, así que un adjunto que llega mientras está abierto no
+    aparece hasta cerrarlo y volver a abrirlo. Es deliberado —una galería que
+    crece por debajo mueve la foto que se está mirando— y el precio es ése.
 
 ## 6. Web
 
@@ -272,6 +304,11 @@ manejadores de `AttachmentMenu` eran stubs vacíos, `onRecordEnd` un TODO, y el
 backend de Express nunca tuvo endpoint de subida. Así que no hay compatibilidad
 que mantener, y tampoco hay que construir un servidor de ficheros: el homeserver
 trae el suyo.
+
+Esta sección es el **transporte**: cómo salen y entran los bytes. Lo que se hace
+con ellos una vez dentro —el visor, el reproductor, la fila de un documento— es
+la §9, y está separada porque no es de Matrix: se alimenta de `Message.media` y
+`Message.attachment`, que rellenan los dos backends.
 
 ### 7.1 Dónde viven los bytes
 
@@ -358,6 +395,15 @@ foto de 12 Mpx, y en una sala cifrada la del emisor es la única copia pequeña
 que existe, porque un homeserver no puede redimensionar lo que no puede leer.
 Allo genera la suya a 1024px al enviar.
 
+Elegirla tenía un precio que hasta ahora se pagaba entero: **el ref del original
+se perdía**. `MediaItem` sólo llevaba un id, así que en cuanto la fila decidía
+dibujar la miniatura no quedaba nada en la pantalla que supiera dónde estaba la
+foto de verdad — y ésa es la razón de fondo por la que tocar un adjunto no hacía
+nada. `MediaItem.fullSizeId` es lo que arregla eso: sólo se rellena cuando el
+emisor hizo miniatura, para que un `fullSizeId` presente signifique siempre
+«esta fila está dibujando una copia pequeña» y no haga bajar dos veces los
+mismos bytes.
+
 **`utils/mediaVariant.ts` no interviene.** Resuelve variantes de renderizado de
 Oxy Cloud, que es de donde vienen los avatares; un adjunto de mensaje va al
 repositorio del homeserver y ninguno de los dos servidores entiende los
@@ -371,6 +417,27 @@ distingue de un fichero de audio. **Sin forma de onda**, y a propósito: el
 grabador de Allo no muestrea amplitudes, y una forma de onda inventada es un
 dibujo de un audio que nadie midió. Por eso tampoco se usa `sendVoiceMessage` en
 nativo, que la exige.
+
+Al recibir tampoco hay forma de onda, y ahí la razón es otra: la que manda
+Element (MSC3246, `org.matrix.msc3246.audio.waveform`) llega al evento pero no
+al puerto, porque `AlloMediaContent` no tiene ese campo. Dibujar barras sacadas
+de cualquier otra cosa —del tamaño del fichero, de un ruido— sería el mismo
+dibujo inventado, así que `VoiceNoteBubble` pinta una barra de progreso lisa, que
+es honesta sobre lo que se sabe: cuánto dura y por dónde va.
+
+### 7.5 El documento
+
+`AttachmentMenu` abre `expo-document-picker` y lo que sale va por el mismo
+`sendAttachment` que una foto, con `kind: 'file'` — es decir, por
+`resolveAttachmentSource` en web y por `Timeline.sendFile` en nativo. No hay
+segundo camino de subida, que es justo lo que vigila
+`web/onePlaceUploads.test.ts` (§7.2) y lo que ese test decía que haría «la
+próxima persona que añada un selector de documentos».
+
+`copyToCacheDirectory` se deja encendido y no es un ajuste de rendimiento: en
+Android el selector devuelve un `content://` de la app que lo sirvió, y eso no es
+una ruta que el SDK de Rust pueda abrir después, en otro hilo. La copia que hace
+el selector está en el directorio de caché de Allo y sí lo es.
 
 ## 8. Empezar una conversación
 
@@ -483,3 +550,125 @@ Lo segundo que hacía falta para eso está en `timelineSource.ts`: un `openTimel
 que falla ya no deja el timeline «abriéndose» para siempre. Antes, un intento
 pendiente era justo lo que impedía el siguiente, así que el primer fallo era lo
 último que esa conversación hacía — un spinner hasta que la app se cerrara.
+## 9. Lo que se hace con un adjunto una vez está aquí
+
+La §7 termina cuando los bytes están descargados y descifrados. Todo lo de aquí
+empieza ahí, y **nada de ello es de Matrix**: el visor, el reproductor y la fila
+de un documento leen `Message.media` y `Message.attachment`, que rellenan los dos
+backends, y piden sus URL al resolver que `ConversationView` ya reconcilia. Un
+`import` de `CHAT_BACKEND` en cualquiera de estos ficheros sería el principio de
+un segundo visor.
+
+```
+lib/chat/
+  attachmentViewer.ts       qué contiene la galería y por dónde se abre
+components/media/
+  AttachmentViewer.tsx      el modal, el pager y los gestos
+  AttachmentViewerVideo.tsx un vídeo con los controles del sistema
+  zoom.ts                   pellizco, arrastre y descarte, como aritmética
+  pager.ts                  dónde cae un swipe, y qué páginas se construyen
+  shareAttachment.*.ts      compartir en móvil, descargar en navegador
+components/messages/
+  VoiceNoteBubble.tsx       play, pausa, barra arrastrable, duración
+  FileBubble.tsx            nombre, tamaño, y abrir
+  attachmentFormat.ts       el reloj, la fracción, el tamaño de fichero
+```
+
+### 9.1 El visor
+
+La galería es **toda la conversación**, no el mensaje que se tocó: un evento de
+Matrix lleva un adjunto, así que cinco fotos son cinco mensajes y un visor
+construido a partir de uno solo no se podría deslizar. Por dónde se abre lo
+decide `selectViewerItem`, a partir del par mensaje + media — el mismo fichero
+enviado dos veces tiene el mismo id de media dos veces, y la clave de página lleva
+la longitud del id de mensaje por delante para que ningún par pueda colisionar
+con otro.
+
+**Sólo se construyen tres páginas**: la que está en pantalla y sus dos vecinas.
+No es una optimización. Pedir la URL de una página es lo que arranca su descarga
+(§7.3), así que un visor que construyera todas bajaría y descifraría todos los
+adjuntos de la conversación en cuanto alguien tocara uno. Es un test
+(`__tests__/media/pager.test.ts`), no un comentario.
+
+Debajo de la foto grande se dibuja **la miniatura que la burbuja ya tenía**
+mientras baja el original: está descargada y descifrada, y sin ella el visor se
+abre en negro tanto como tarde una foto de 12 Mpx por una conexión que no eligió
+el usuario.
+
+El pager **no es un `ScrollView`**. Un scroll nativo dentro de un `Modal`,
+envolviendo una vista que además quiere pellizco y arrastre, es una negociación
+de gestos que se resuelve distinto en cada plataforma; llevar la traslación a
+mano deja todo en una sola composición de `react-native-gesture-handler` y
+convierte «dónde cae un swipe» en aritmética, que es lo que se puede probar.
+
+El estado se reinicia **remontando**: `ConversationView` le pone al elemento una
+`key` derivada de lo que se tocó, así que tocar una segunda foto construye un
+segundo visor en vez de empujarle un índice nuevo desde un Effect.
+
+### 9.2 Guardar y compartir
+
+En móvil es `expo-sharing`, y la hoja del sistema es las dos cosas a la vez:
+*Guardar imagen* y *Guardar en Archivos* están dentro. La alternativa,
+`expo-media-library`, compra uno de esos destinos a cambio de pedir permiso de
+escritura sobre todo el carrete. En web es una descarga: la Web Share API sólo
+lleva ficheros en Safari de iOS y Chrome de Android, y en un escritorio no ofrece
+nada.
+
+**No se copia nada.** Lo que se comparte es el URI que la caché de media ya
+tiene —el fichero descifrado en el directorio de caché, o el object URL de la
+pestaña—, que es lo que ella libera al desalojarlo, al cambiar de cuenta y al
+cerrar sesión. Escribir una segunda copia en un sitio más cómodo sería una foto
+en claro de una conversación cifrada sobreviviendo a la sesión que podía leerla.
+Por lo mismo el `<Image>` del visor va con `cachePolicy="memory"`: la caché de
+disco de `expo-image` escribiría una copia donde nadie la libera.
+
+El plugin de configuración de `expo-sharing` **no** se añade a `app.config.js`.
+Ese plugin monta una *share extension* de iOS —recibir ficheros de otras apps—,
+que es lo contrario de lo que se usa aquí y una entitlement que no hace falta.
+
+### 9.3 El reproductor
+
+`useAudioPlayer` de `expo-audio`, con un solo Effect y una razón concreta:
+**nada se descarga hasta que se pulsa play**. Los bytes de una nota de voz son la
+grabación entera, no una miniatura, así que una pantalla llena de notas que se
+descargaran solas gastaría los datos de otro para dibujar una fila que es un
+botón de todas formas. Pero eso significa que la pulsación llega cuando todavía
+no hay nada que reproducir, y el momento en que sí lo hay es del reproductor y no
+de React. El Effect es de un solo disparo —se atiende y se limpia— para que no
+vuelva a arrancar cuando la reproducción termine sola.
+
+La duración que se enseña sale de `displayDurationMs`: gana la que midió el
+reproductor, porque leyó los bytes que hay; y mientras no haya bytes vale la del
+evento, que es lo único que existe antes de la primera pulsación. Un reproductor
+que contesta 0 cuenta como que no sabe, no como que dura cero.
+
+`FileBubble` repite exactamente el mismo patrón por la misma razón: un documento
+pesa lo que su emisor quiso, y una fila que se bajara sola 40 MB al pasar por
+delante es peor que una que espera a que la toquen.
+
+### 9.4 La miniatura de un vídeo
+
+**Sin dependencia nueva.** `expo-image-manipulator` lee imágenes y no fotogramas,
+que era el motivo de que un vídeo fuera sin miniatura; pero `expo-video` —que ya
+estaba, ya es plugin en `app.config.js` y ya es lo que los reproduce— saca un
+fotograma con `generateThumbnailsAsync`, y lo que devuelve es un
+`SharedRef<'image'>`, que es justo lo que `ImageManipulator.manipulate` acepta.
+Un decode y el mismo resize que ya existía dan el JPEG que quiere el puerto.
+
+Se pide el fotograma del segundo 0. Algunos codificadores ponen ahí un negro o un
+fundido, y buscar más adelante cuesta decodificar todo lo anterior y elige un
+fotograma que tampoco escogió quien grabó.
+
+En web `generateThumbnailsAsync` lanza, el `catch` se lo come y el vídeo sale sin
+miniatura — que es lo que pasaba en las tres plataformas antes de esto. El
+reproductor de un navegador no extrae fotogramas, y hacerlo a mano es un
+`<video>` oculto, un `<canvas>` y un `seek` que resuelve distinto en cada uno.
+
+### 9.5 Los dos colores que no son del tema
+
+`AttachmentViewer` y `AttachmentViewerVideo` usan `#000000` de fondo y `#FFFFFF`
+de primer plano, y es la única excepción a «nunca colores a mano» en toda la app.
+Un visor es una habitación a oscuras: el fondo es negro opaco en los dos temas
+porque lo que se quiere es que no haya nada iluminado salvo la foto, y sobre negro
+el único primer plano legible es blanco. Un color del tema ahí sería oscuro sobre
+oscuro la mitad de las veces.
