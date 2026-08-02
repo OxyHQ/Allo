@@ -144,18 +144,21 @@ describe('creating a room', () => {
     expect(offenders.map((file) => relative(PORT_DIRECTORY, file))).toEqual([]);
   });
 
-  it('lets the people invited to a room join it, on both platforms', () => {
-    // The other end of creating one. A port that could create a group and not
-    // accept an invitation to it would be a port that makes conversations only
-    // their creator can use — and a UI that can draw an invitation but not
-    // answer it is a row that does nothing when it is tapped.
-    //
-    // Both halves, because a method only one SDK answers is the abstraction
-    // breaking; see the note at the top of `types.ts`.
+  it.each([
+    'acceptInvitation',
+    'leaveRoom',
+    'roomDetails',
+    'inviteToRoom',
+    'renameRoom',
+  ])('answers %s on both platforms', (operation) => {
+    // The other end of creating a room. A port that could create a group and
+    // not join it, add to it, name it or walk out of it would be a port that
+    // makes conversations nobody can administer — and a UI that offers those
+    // things on one platform only is the abstraction breaking, which is what
+    // the note at the top of `types.ts` is about.
     for (const half of ['client.native.ts', 'client.web.ts']) {
       const source = readFileSync(join(PORT_DIRECTORY, half), 'utf8');
-      expect(source).toMatch(/async acceptInvitation\(roomId: string\): Promise<void>/);
-      expect(source).toMatch(/async declineInvitation\(roomId: string\): Promise<void>/);
+      expect(source).toMatch(new RegExp(`async ${operation}\\(`));
     }
   });
 

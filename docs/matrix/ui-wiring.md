@@ -81,12 +81,16 @@ lib/chat/
   alloApiConversations.ts crear una conversación en Express, y mapear su respuesta
   matrixIdentity.ts      id de Oxy → MXID, y por qué es aritmética
   invitations.ts         aceptar o rechazar una invitación
+  roomAdmin.ts           una sala por pantalla: quién está, invitar, renombrar, salir
   pushRegistration.ts    decirle al homeserver que avise a este móvil, y que pare
 lib/matrix/
   directMessage.ts       cuándo crear una conversación es reutilizar una
   roomCreation.ts        qué es toda sala que Allo crea, antes de cada SDK
+  roomMembers.ts         en qué orden se cuenta quién está en una sala
   native/createRoom.ts   los parámetros del binding, con `isEncrypted` a la vista
+  native/roomDetails.ts  el iterador de miembros y los niveles de poder
   web/createRoom.ts      las opciones de matrix-js-sdk, con el evento de cifrado
+  web/roomDetails.ts     los miembros que quedan, y qué permite el estado de la sala
   store.native.ts        dos directorios, y cómo borrarlos
   store.web.ts           una base de IndexedDB, y cómo borrarla
   readReceipts.ts        de «quién tiene recibo aquí» a «alguien ha leído esto»
@@ -103,6 +107,8 @@ hooks/
 components/matrix/
   MatrixSignInGate.tsx      pinta a sus hijos salvo que falte sesión
   MatrixInvitationCard.tsx  una invitación, y las dos respuestas que admite
+app/(chat)/
+  room/[id].tsx             administrar una sala (sólo Matrix; ver §10)
 ```
 
 Lo que dibuja un adjunto —el visor, el reproductor, la fila de un documento— no
@@ -215,8 +221,13 @@ encenderlo.
   homeserver: a diferencia del camino viejo, existe fuera de la web.
 - **Un envío fallido se dibuja como error** y no como el reloj.
 - **Una invitación se distingue de una conversación** (`membership` en el
-  resumen, `Conversation.isInvitation` en la pantalla), y abrirla lleva a las dos
-  respuestas que admite. La fila de la lista todavía se dibuja igual: ver §5.
+  resumen, `Conversation.isInvitation` en la pantalla): la fila de la lista lo
+  dice en vez de quedarse en blanco, y abrirla lleva a las dos respuestas que
+  admite.
+- **Administrar una conversación**: quién está dentro, invitar a más gente,
+  renombrar el grupo y salirse. Lo que cada uno puede hacer sale de los niveles
+  de poder de la sala, así que un botón que el homeserver rechazaría se dibuja
+  desactivado y con el motivo al lado. Ver §10.
 - **Adjuntos: fotos, vídeos, notas de voz y documentos.** Se eligen del carrete,
   de la cámara o del selector de ficheros, se envían y se reciben. Es la única
   de estas líneas que no es una migración: en Allo la media nunca funcionó,
@@ -245,11 +256,12 @@ Por orden de cuánto se nota:
    No es un hueco del puerto: `Message.reactions` existe desde antes que él y
    ningún backend de Allo las ha pintado nunca. Hacerlo es UI nueva para los dos
    caminos, no cableado de éste.
-4. **Una conversación nueva no se puede nombrar después, ni cambiar de gente.**
-   El nombre del grupo se escribe al crearlo y ahí se queda: no hay pantalla de
-   ajustes de sala, ni forma de invitar a alguien más, ni de salirse de un grupo
-   al que uno pertenece. Rechazar una invitación es lo único parecido a salir, y
-   sólo vale antes de entrar.
+4. **A nadie se le puede sacar de un grupo, ni cambiarle el nivel de poder.**
+   Se puede invitar, renombrar, ver quién está y salirse (§10); expulsar, vetar y
+   repartir permisos no están, ni en el puerto ni en la pantalla. El puerto lee
+   los niveles de poder y no los escribe, así que quien creó el grupo es su único
+   administrador para siempre — si esa persona se va, el grupo se queda sin nadie
+   que pueda invitar.
 5. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
    el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
    y la app lo dibuja como un error de sincronización, no como «te han cerrado la
@@ -257,10 +269,12 @@ Por orden de cuánto se nota:
    `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
    ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
    Ajustes— pero hay que saber que hace falta.
-6. **La fila de una invitación se pinta como cualquier otra.** Abrirla ya ofrece
-   unirse o rechazar (§8.4), pero en la lista no hay nada que diga que lo es: sin
-   vista previa y sin hora, parece una conversación en la que nadie ha escrito.
-   `Conversation.isInvitation` llega hasta esa fila y la fila no lo lee.
+6. **Los cambios de otra persona no llegan solos a la pantalla de detalles.**
+   Quién está en la sala se lee cuando se abre la pantalla y otra vez después de
+   cada acción propia (§10.3); si alguien acepta una invitación o renombra el
+   grupo desde otro cliente mientras la pantalla está abierta, no se ve hasta
+   volver a entrar. El puerto expone una foto, no una suscripción, y los dos SDK
+   la dan barata — una suscripción hay que construirla dos veces.
 7. **Ubicación, contacto y encuesta** siguen sin implementar, y por eso
    `AttachmentMenu` **ya no los dibuja**: un manejador ausente quita la casilla,
    porque un botón que abre, cierra la hoja y no hace nada parece un fallo de la
@@ -684,3 +698,83 @@ Un visor es una habitación a oscuras: el fondo es negro opaco en los dos temas
 porque lo que se quiere es que no haya nada iluminado salvo la foto, y sobre negro
 el único primer plano legible es blanco. Un color del tema ahí sería oscuro sobre
 oscuro la mitad de las veces.
+
+---
+
+## 10. Administrar una conversación
+
+Un grupo creado y congelado no sirve: la persona que faltaba se queda fuera para
+siempre. `app/(chat)/room/[id].tsx` es la pantalla que lo abre —quién está
+dentro, añadir gente, el nombre, y la salida— y se llega a ella tocando la
+cabecera de la conversación.
+
+**Es una ruta propia y sólo de Matrix.** Todo lo que dibuja sale del estado de
+una sala y de sus niveles de poder; el backend de Express no tiene ninguna de las
+dos cosas, sus participantes son un documento de Mongo, y `ContactDetails` sigue
+siendo lo que se abre ahí. Es la misma decisión que en `c/[id].tsx`: una frontera
+de componente, no un condicional dentro de un cuerpo.
+
+### 10.1 Los permisos son de la sala, no de la app
+
+Invitar y renombrar dependen de los niveles de poder, y el único sitio que sabe
+la respuesta es la sala. Por eso `AlloRoomDetails` trae los miembros **y**
+`AlloRoomRights` en la misma lectura: una pantalla que pintara la lista de un
+momento y los permisos de otro tendría un botón cuyo estado no cuadra con lo que
+hay debajo.
+
+**Sin permiso se ve el motivo, no un botón que falla.** Un botón activo que el
+homeserver rechaza al pulsarlo enseña un error genérico y deja al usuario sin
+saber si el problema es suyo, de la red o de la app. Deshabilitado y con una
+línea que lo explica es la misma información antes de gastar el intento.
+
+Son dos booleanos y no un `isAdmin` porque Matrix no tiene administradores: tiene
+un nivel de poder por acción, y una sala puede perfectamente dejarte invitar y no
+dejarte renombrarla.
+
+### 10.2 Añadir gente reutiliza la pantalla de buscar gente
+
+`/new?invite=<roomId>` es la pantalla de chat nuevo haciendo lo mismo que hace
+siempre —buscar personas de Oxy y elegirlas— y cambiando sólo el último paso: en
+vez de crear una sala, invita a la que ya existe. Una segunda pantalla de
+búsqueda sería una segunda búsqueda que se desvía de la primera.
+
+Cada invitación es una petición: el protocolo no tiene invitación en lote, así
+que invitar a tres personas puede acabar con dos dentro y una fuera.
+`InviteOutcome` lleva las dos listas y la pantalla cuenta las dos cosas; y las
+peticiones van una detrás de otra, porque varias a la vez es la forma de que el
+homeserver limite unas sí y otras no.
+
+### 10.3 Nada es optimista, y la lectura es una foto
+
+Una invitación que el homeserver rechaza no puede dejar un nombre en la lista, y
+un renombrado que rechaza no puede dejar el título nuevo en pantalla: las dos
+cosas serían la UI contando algo que el servidor no sostiene, que es justo lo que
+una pantalla de administración no puede hacer. Así que cada acción espera al
+homeserver y vuelve a leer.
+
+`AlloChatClient.roomDetails` es una foto y no una suscripción. Se lee al abrir la
+pantalla y otra vez después de cada acción propia; un cambio hecho desde otro
+dispositivo no se ve hasta volver a entrar (§5.6). Es lo que los dos SDK dan
+barato: una suscripción a los miembros habría que construirla dos veces, con dos
+modelos de eventos distintos.
+
+### 10.4 Salir es una sola operación
+
+`leaveRoom` cubre rechazar una invitación y salirse de una conversación, porque
+en Matrix son la misma petición y acaban en la misma pertenencia. Dos métodos en
+el puerto serían dos nombres para una llamada, y la diferencia entre ellos —qué
+estaba enseñando la pantalla— no es del puerto.
+
+Salir se ve: la pertenencia pasa a `leave` y todo el mundo en la sala lo ve. No
+hay forma de salir en privado, y prometerlo sería prometer algo que el protocolo
+no cumple. Tampoco borra nada — la sala sigue ahí para quien se queda — y volver
+sólo es posible si alguien invita otra vez, porque una sala de Allo es sólo por
+invitación.
+
+### 10.5 Los miembros no tienen cara
+
+`AlloRoomMember` no lleva avatar, y es una decisión. Lo que los dos SDK tienen de
+un miembro es un `mxc://`, que no es algo que una vista pueda pedir — el mismo
+problema por el que existe `AlloMediaRef` (§7.1) — así que un campo ahí sería una
+URL que dibuja una imagen rota en todas las filas. Hasta que los avatares de
+miembro pasen por `downloadMedia`, la lista honesta son los nombres.

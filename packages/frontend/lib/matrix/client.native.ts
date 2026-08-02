@@ -60,6 +60,7 @@ import type {
   AlloPusher,
   AlloPusherIdentity,
   AlloRecoveryState,
+  AlloRoomDetails,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -80,6 +81,7 @@ import {
 } from './native/media';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { describeEnableRecoveryProgress, toRecoveryState } from './native/recovery';
+import { readRoomDetails } from './native/roomDetails';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
 import { NativeSessionDelegate, toAlloSession } from './native/session';
@@ -420,8 +422,20 @@ class NativeAlloChatClient implements AlloChatClient {
     await this.#requireRoom(roomId, 'Accepting an invitation').join();
   }
 
-  async declineInvitation(roomId: string): Promise<void> {
-    await this.#requireRoom(roomId, 'Declining an invitation').leave();
+  async leaveRoom(roomId: string): Promise<void> {
+    await this.#requireRoom(roomId, 'Leaving a conversation').leave();
+  }
+
+  async roomDetails(roomId: string): Promise<AlloRoomDetails> {
+    return readRoomDetails(this.#requireRoom(roomId, 'Reading a conversation'));
+  }
+
+  async inviteToRoom(roomId: string, userId: string): Promise<void> {
+    await this.#requireRoom(roomId, 'Inviting somebody').inviteUserById(userId);
+  }
+
+  async renameRoom(roomId: string, name: string): Promise<void> {
+    await this.#requireRoom(roomId, 'Renaming a conversation').setName(name);
   }
 
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {

@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ContactDetails } from '@/components/ContactDetails';
 import { EmptyState } from '@/components/shared/EmptyState';
 import ConversationsList from './index';
+import RoomAdminRoute from './room/[id]';
 import { useConversationsStore } from '@/stores';
 import { useUserById } from '@/stores/usersStore';
 import { useOxy } from '@oxyhq/services';
@@ -41,6 +42,11 @@ export default function ChatLayout() {
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
   const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
   const isNewChatRoute = pathname === '/(chat)/new' || pathname === '/new' || pathname?.endsWith('/new');
+  // The Matrix-only conversation details screen. Matched here for the same
+  // reason the New Chat screen is: on a wide window the panes are chosen from
+  // the path rather than by the navigator, so a route nothing matches would
+  // draw "select a conversation" over a screen the user just opened.
+  const roomDetailsMatch = pathname?.match(/\/room\/([^/]+)$/);
 
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
   const isConversationRoute = conversationIdMatch &&
@@ -165,6 +171,8 @@ export default function ChatLayout() {
                 return null;
               }
             })()
+          ) : roomDetailsMatch ? (
+            <RoomAdminRoute />
           ) : isConversationRoute && conversationIdMatch ? (
             // Show conversation detail from /c/:id route
             // Use the wrapper component that handles the require path correctly
@@ -200,6 +208,7 @@ export default function ChatLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="new" />
         <Stack.Screen name="c/[id]" />
+        <Stack.Screen name="room/[id]" />
         <Stack.Screen name="u/[id]" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/appearance" />
