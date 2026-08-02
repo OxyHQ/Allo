@@ -1,13 +1,11 @@
 import React, { createContext, useState, ReactNode, useRef, useCallback, useMemo } from "react";
-import { StyleSheet, ScrollView, View } from "react-native";
-import { BottomSheetModal, BottomSheetView, BottomSheetBackdrop, BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
-import { useTheme } from "@/hooks/useTheme";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
+import { BottomSheet, type BottomSheetRef } from "@oxyhq/bloom/bottom-sheet";
 
 interface BottomSheetContextProps {
     openBottomSheet: (isOpen: boolean) => void;
     setBottomSheetContent: (content: ReactNode) => void;
-    bottomSheetRef: React.RefObject<BottomSheetModal | null>;
+    bottomSheetRef: React.RefObject<BottomSheetRef | null>;
 }
 
 export const BottomSheetContext = createContext<BottomSheetContextProps>({
@@ -18,62 +16,45 @@ export const BottomSheetContext = createContext<BottomSheetContextProps>({
 
 export const BottomSheetProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [bottomSheetContent, setBottomSheetContent] = useState<ReactNode>(null);
-    const bottomSheetModalRef = useRef<BottomSheetModal | null>(null);
-    const theme = useTheme();
-    const insets = useSafeAreaInsets();
+    const bottomSheetRef = useRef<BottomSheetRef | null>(null);
 
-    // Calculate snap points that allow the sheet to reach the top but respect safe area
-    // The sheet can be dragged to 50% or 100% of screen height, but will stop at safe area top
-    // The topInset prop ensures the sheet respects the safe area (camera notch/status bar)
-    const snapPoints = useMemo(() => {
-        // Return snap points as percentages - 100% will be limited by topInset to respect safe area
-        return ['50%', '100%'];
+    const openBottomSheet = useCallback((isOpen: boolean) => {
+        if (isOpen) {
+            bottomSheetRef.current?.present();
+        } else {
+            bottomSheetRef.current?.dismiss();
+        }
     }, []);
 
-    const renderBackdrop = useCallback(
-        (props: BottomSheetBackdropProps) => (
-            <BottomSheetBackdrop
-                {...props}
-                appearsOnIndex={0}
-                disappearsOnIndex={-1}
-                pressBehavior="close"
-                opacity={0.5}
-            />
-        ),
-        []
-    );
-
-    const openBottomSheet = (isOpen: boolean) => {
-        if (isOpen) {
-            bottomSheetModalRef.current?.present();
-        } else {
-            bottomSheetModalRef.current?.dismiss();
-        }
-    };
+    const contextValue = useMemo(() => ({
+        openBottomSheet,
+        setBottomSheetContent,
+        bottomSheetRef,
+    }), [openBottomSheet]);
 
     return (
-        <BottomSheetContext.Provider value={{ openBottomSheet, setBottomSheetContent, bottomSheetRef: bottomSheetModalRef }}>
+        <BottomSheetContext.Provider value={contextValue}>
             {children}
-            <BottomSheetModal
-                ref={bottomSheetModalRef}
-                snapPoints={snapPoints}
-                topInset={insets.top}
+            {/*
+              The sheet sizes itself to its content, capped at the screen height
+              minus the top safe area. It replaces a @gorhom/bottom-sheet modal
+              pinned to snapPoints ['50%', '100%'] at index 0, which opened every
+              sheet at half the screen regardless of what was inside: a four-line
+              permission prompt got the same half screen as the contact panel.
+
+              Safe-area insets, the themed background, the drag handle and the
+              backdrop (also at 0.5 opacity) live inside the component, so none of
+              them is configured here any more.
+            */}
+            <BottomSheet
+                ref={bottomSheetRef}
                 enablePanDownToClose={true}
-                enableDismissOnClose={true}
-                android_keyboardInputMode="adjustResize"
-                keyboardBehavior="extend"
                 style={styles.contentContainer}
-                backgroundStyle={{ backgroundColor: theme.colors.background }}
-                handleIndicatorStyle={{ backgroundColor: theme.colors.text, width: 40 }}
-                backdropComponent={renderBackdrop}
-                enableContentPanningGesture={true}
-                enableHandlePanningGesture={true}
-                index={0}
             >
-                <BottomSheetView style={[styles.contentView, { backgroundColor: theme.colors.background }]}>
+                <View style={styles.contentView}>
                     {bottomSheetContent}
-                </BottomSheetView>
-            </BottomSheetModal>
+                </View>
+            </BottomSheet>
         </BottomSheetContext.Provider>
     );
 };
