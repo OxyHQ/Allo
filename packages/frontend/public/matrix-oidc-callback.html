@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Signing in to Allo</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: #0b0b0f;
+        color: #f5f5f7;
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        text-align: center;
+        padding: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Where the authorization server sends the browser back on web.
+
+      This is a static file and deliberately not a route of the app. The web
+      export answers unknown paths with index.html (see `_redirects`), so a
+      redirect aimed at an app route would boot a second copy of Allo inside the
+      popup — and two copies means two MatrixClients on one IndexedDB, which the
+      SDK says corrupts the crypto store. A file that exists is served as itself
+      and can do no such thing.
+
+      There is no script here on purpose: expo-web-browser's web implementation
+      reads the popup's URL and closes it. Nothing on this page has to run for the
+      sign-in to complete, and code that touched the authorization code would be
+      code holding a credential for no reason.
+    -->
+    <p>You can close this window and go back to Allo.</p>
+  </body>
+</html>

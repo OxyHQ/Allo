@@ -535,5 +535,17 @@
       "title": "Pagina Non Trovata - allo",
       "description": "La pagina che stai cercando non esiste."
     }
-  }
+  },
+  "Connecting…": "Connessione…",
+  "Finish signing in": "Completa l'accesso",
+  "Allo is waiting for the sign-in page in your browser.": "Allo sta aspettando la pagina di accesso nel tuo browser.",
+  "Allo could not sign you in": "Allo non è riuscito a farti accedere",
+  "Sign in to start chatting": "Accedi per iniziare a chattare",
+  "Something went wrong. Try again.": "Qualcosa è andato storto. Riprova.",
+  "Your conversations live on your Matrix homeserver. Sign in to load them.": "Le tue conversazioni vivono sul tuo homeserver Matrix. Accedi per caricarle.",
+  "Try again": "Riprova",
+  "Sign in": "Accedi",
+  "This message cannot be read on this device.": "Questo messaggio non può essere letto su questo dispositivo.",
+  "This message was deleted.": "Questo messaggio è stato eliminato.",
+  "Allo cannot show this yet ({{kind}}).": "Allo non può ancora mostrare questo ({{kind}})."
 }
