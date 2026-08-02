@@ -107,7 +107,7 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
 - **Offline-first**: Queue + sync (`lib/offlineQueue/`, `lib/offlineStorage.ts`, `lib/optimistic/`)
 - **Real-time**: Socket.io for messaging. WebRTC is scaffolded only — `lib/p2pMessaging.ts` never establishes a connection, and the calls screen renders mock data.
 - **Moderation**: CrowdSource integration for account reports (`src/services/moderation/`, `POST /api/reports`). Message content is deliberately never sent for review.
-- **Push notifications**: not functional end to end. The client posts its token to `/notifications/push-token`, but the backend mounts no notifications route and nothing ever writes a `PushToken`, so `sendPushToUser` has no tokens to deliver to.
+- **Push notifications**: on the Matrix path, and only there. **Synapse owns the pusher registry** — the client registers a pusher with `data.format = "event_id_only"` and the backend implements the Matrix Push Gateway (`POST /_matrix/push/v1/notify`, `routes/pushGateway.ts`), so no device token is stored anywhere in Allo. The gateway is mounted ahead of `express.json()` and of Oxy auth (Synapse has no session) and is authenticated by a per-device HMAC capability in the pusher's URL, minted by `POST /api/push/gateway`. FCM and APNs both ship; APNs is HTTP/2 + an ES256 provider token in `services/push/apns*.ts`, no library. There is no web push, and the notification says "New message" rather than the message — enriching it needs an iOS Notification Service Extension and an Android background service. See `docs/matrix/push.md`.
 - **i18n**: i18next with `locales/` (en, es, it)
 
 ## Theming

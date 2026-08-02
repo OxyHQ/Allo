@@ -5,7 +5,6 @@ import BridgeAccount, {
   type LeanBridgeAccount,
 } from "../../models/BridgeAccount";
 import { logger } from "../../utils/logger";
-import { sendPushToUser } from "../../utils/push";
 import {
   accountStateForBridgeState,
   bridgeStateTtlSeconds,
@@ -71,11 +70,31 @@ export type BridgeStateNotifier = (
   account: LeanBridgeAccount,
 ) => Promise<void>;
 
+/**
+ * Records that a user needs to re-link, without being able to tell them.
+ *
+ * This used to call `sendPushToUser`, which looked up the user's device tokens
+ * in a collection **nothing ever wrote to** — so it found none, sent nothing, and
+ * reported success, every time, since the day it was written. Deleting the
+ * collection (see `config/push.ts`) removed the appearance of a nudge; it did not
+ * remove a nudge, because there had never been one.
+ *
+ * There is no push path back here to replace it with, and that is architectural
+ * rather than unfinished: on Matrix the homeserver owns the pusher registry and
+ * a notification is something an *event in a room* causes. Allo's backend cannot
+ * address a user's phone at all any more, by design. The nudge belongs where the
+ * user is already looking — a message from the bridge bot into the admin room,
+ * which is a Matrix event and would therefore notify through the ordinary path —
+ * and that is a bridge-side change, not one this function can make.
+ *
+ * So it logs, at a level an operator sees, and the account's `action_required`
+ * state remains what the app reads to draw the banner. Documented in
+ * `docs/matrix/push.md` §7.
+ */
 const defaultNotifier: BridgeStateNotifier = async (oxyUserId, account) => {
-  await sendPushToUser(oxyUserId, {
-    title: "Reconnect your account",
-    body: `Your ${account.network} account needs to be linked again.`,
-    data: { type: "bridge_action_required", network: account.network },
+  logger.warn("[Bridges] an account needs re-linking and the user cannot be notified directly", {
+    oxyUserId,
+    network: account.network,
   });
 };
 

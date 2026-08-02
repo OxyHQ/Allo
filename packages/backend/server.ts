@@ -19,8 +19,11 @@ import messagesRoutes from "./src/routes/messages";
 import devicesRoutes from "./src/routes/devices";
 import reportsRoutes from "./src/routes/reports";
 import bridgesRoutes from "./src/routes/bridges";
+import pushRoutes from "./src/routes/push";
 import { createCrowdSourceWebhookRoutes } from "./src/routes/crowdSourceWebhook";
 import { createBridgeInternalRoutes } from "./src/routes/bridgesInternal";
+import { createPushGatewayRoutes } from "./src/routes/pushGateway";
+import { PUSH_GATEWAY_MOUNT_PATH } from "./src/config/push";
 import { startModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
 import { startBridgeStatusSweep } from "./src/services/bridges/BridgeStatusService";
 
@@ -83,6 +86,23 @@ app.use("/webhooks", createCrowdSourceWebhookRoutes());
  * a 429 there is a user who cannot connect.
  */
 app.use("/internal/bridges", createBridgeInternalRoutes());
+
+/**
+ * The Matrix Push Gateway, ahead of the JSON parser and of Oxy authentication
+ * (docs/matrix/push.md §4).
+ *
+ * Called by Synapse and by nothing else. A homeserver has no Oxy session and can
+ * never be given one, so a route behind `createOxyAuthMiddleware` could only ever
+ * answer 401 to the one caller it exists for; and the per-user rate limiter
+ * further down has no user to key on here, so it would throttle every user's
+ * notifications together. Both are properties of this placement rather than of a
+ * check inside the handler.
+ *
+ * Its own authentication is a per-device capability token in the pusher's URL —
+ * see `services/push/gatewayToken.ts`. The router brings its own body parser and
+ * is not mounted at all when no push platform is configured.
+ */
+app.use(PUSH_GATEWAY_MOUNT_PATH, createPushGatewayRoutes());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -294,6 +314,7 @@ authenticatedApiRouter.use("/messages", messagesRoutes);
 authenticatedApiRouter.use("/devices", devicesRoutes);
 authenticatedApiRouter.use("/reports", reportsRoutes);
 authenticatedApiRouter.use("/bridges", bridgesRoutes);
+authenticatedApiRouter.use("/push", pushRoutes);
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
@@ -315,7 +336,6 @@ db.once("open", () => {
   require("./src/models/Conversation");
   require("./src/models/Message");
   require("./src/models/UserSettings");
-  require("./src/models/PushToken");
   require("./src/models/Block");
   require("./src/models/Restrict");
   require("./src/models/UserBehavior");

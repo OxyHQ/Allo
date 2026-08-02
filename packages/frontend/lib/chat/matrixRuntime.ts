@@ -16,6 +16,11 @@ import { logger } from '@/utils/logger';
 import { readMatrixClientConfig } from './matrixConfig';
 import { decodeStoredSession, encodeStoredSession } from './matrixSession';
 import { matrixSessionStorage, type MatrixSessionStorage } from './matrixSessionStorage';
+import {
+  defaultPushRegistrationDependencies,
+  MatrixPushRegistrar,
+  type MatrixPushRegistration,
+} from './pushRegistration';
 
 /**
  * The one Matrix client the app has, and its lifecycle.
@@ -115,6 +120,14 @@ export interface MatrixRuntimeDependencies {
     authorizationUrl: string,
     redirectUri: string,
   ) => Promise<AuthorizationOutcome>;
+  /**
+   * Tells the homeserver whether to notify this device.
+   *
+   * Owned by the runtime rather than by a screen because a pusher belongs to the
+   * session, and the session is what this class holds. See
+   * `pushRegistration.ts` for why that is not an Effect.
+   */
+  readonly pushRegistration: MatrixPushRegistration;
 }
 
 /**
@@ -334,7 +347,10 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       this.#publish({ phase: 'ready', userId: session.userId, error: undefined });
     } catch (error) {
       this.#fail('Allo could not finish the sign-in', error);
+      return;
     }
+
+    this.#registerForNotifications(client);
   }
 
   async #signOut(): Promise<void> {
@@ -358,6 +374,20 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     }
     this.#publish({ phase: 'starting', userId: undefined, error: undefined });
 
+    // Before `logout`, and not after: the call needs the access token that
+    // logging out destroys. A pusher left on the homeserver holds a token that
+    // now belongs to nobody, and what it produces is a notification on a phone
+    // that has signed out.
+    //
+    // A failure here does not stop the sign-out. A user pressing sign out on a
+    // train has signed out, and the pusher they leave behind goes when the
+    // homeserver drops the access token it belongs to.
+    try {
+      await this.#dependencies.pushRegistration.remove(client);
+    } catch (error) {
+      logger.error('[chat] this device could not withdraw its notifications', error);
+    }
+
     try {
       await client.logout();
     } catch (error) {
@@ -371,6 +401,51 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     // and lets the next `#ensureClient` build rather than hand back this one.
     this.#detach();
     await this.#ensureClient();
+  }
+
+  /**
+   * Brings this device's pusher in line with the notification preference.
+   *
+   * Public because the settings screen changes that preference and the homeserver
+   * has to hear about it; a runtime that only registered at sign-in would leave
+   * the switch in the app disagreeing with the pusher on the server. A no-op
+   * before there is a client, which is what makes it safe to call from anywhere.
+   */
+  async syncPushRegistration(): Promise<void> {
+    const client = this.#client;
+    if (client === undefined || this.#state.phase !== 'ready') {
+      return;
+    }
+    await this.#applyPushRegistration(client);
+  }
+
+  /**
+   * Registers for notifications, without making the session wait for it.
+   *
+   * Not awaited on purpose. It is a round trip to Allo's backend and another to
+   * the homeserver, and neither has anything to do with drawing the conversation
+   * list — a sign-in that blocked on them would be a sign-in that fails whenever
+   * the push provider is having a bad day.
+   */
+  #registerForNotifications(client: AlloChatClient): void {
+    void this.#applyPushRegistration(client);
+  }
+
+  /**
+   * Asks the registrar to act, and refuses to let its failure escape.
+   *
+   * `MatrixPushRegistration.apply` is documented never to throw, and this does
+   * not rely on that. One of the two callers deliberately does not await, and an
+   * unawaited promise that rejects is an unhandled rejection — which on a phone
+   * is a crash, in a screen that has nothing to do with notifications, over a
+   * push gateway that was briefly unreachable.
+   */
+  async #applyPushRegistration(client: AlloChatClient): Promise<void> {
+    try {
+      await this.#dependencies.pushRegistration.apply(client);
+    } catch (error) {
+      logger.error('[chat] this device could not be registered for notifications', error);
+    }
   }
 
   /**
@@ -467,6 +542,7 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       return;
     }
     this.#publish({ phase: 'ready', userId: session.userId, error: undefined });
+    this.#registerForNotifications(client);
   }
 
   /**
@@ -621,6 +697,7 @@ const defaultDependencies: MatrixRuntimeDependencies = {
   // name directories and databases, and neither of them loads a Matrix SDK.
   eraseStore: eraseAlloChatStore,
   sessionStorage: matrixSessionStorage,
+  pushRegistration: new MatrixPushRegistrar(defaultPushRegistrationDependencies()),
   authorize: async (authorizationUrl, redirectUri) => {
     const result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
     return result.type === 'success'

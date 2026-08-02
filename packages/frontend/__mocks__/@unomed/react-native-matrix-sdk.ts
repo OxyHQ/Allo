@@ -246,3 +246,20 @@ export const EncryptedMessage = {
   MegolmV1AesSha2: variant('MegolmV1AesSha2'),
   Unknown: variant('Unknown'),
 };
+
+/**
+ * Push formats the binding knows about.
+ *
+ * One variant, which is the point: the Rust enum has no way of expressing a
+ * pusher that would send message content to a gateway. `client.native.ts` relies
+ * on that, so the stub reproduces it rather than declaring a wider enum that
+ * would let a test pass with a format the real binding cannot produce.
+ */
+export enum PushFormat {
+  EventIdOnly = 0,
+}
+
+export const PusherKind = {
+  Http: variant('Http'),
+  Email: variant('Email'),
+};

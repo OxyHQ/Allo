@@ -5,6 +5,7 @@ import {
 } from '@/lib/chat/matrixRuntime';
 import { encodeStoredSession } from '@/lib/chat/matrixSession';
 import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
+import type { MatrixPushRegistration } from '@/lib/chat/pushRegistration';
 import type {
   AlloChatClient,
   AlloMediaFile,
@@ -284,13 +285,52 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  /**
+   * The runtime never calls these: it goes through the injected
+   * `pushRegistration`, and the fake registrar below is what records the calls.
+   * Reaching them means the runtime has grown a second path to the homeserver's
+   * pusher registry, which the ordering tests would no longer be watching.
+   */
+  async registerPusher(): Promise<void> {
+    throw new Error('the runtime must register pushers through pushRegistration');
+  }
+
+  async unregisterPusher(): Promise<void> {
+    throw new Error('the runtime must remove pushers through pushRegistration');
+  }
+
   async close(): Promise<void> {
     this.closes += 1;
   }
 }
 
+/**
+ * The runtime's one route to the homeserver's pusher registry.
+ *
+ * Records into the shared event log rather than counting calls, because what
+ * these tests are about is ORDER: a pusher has to be removed while the access
+ * token still works, which means before `logout` and not after.
+ */
+class FakePushRegistration implements MatrixPushRegistration {
+  applies = 0;
+  removes = 0;
+
+  constructor(readonly events: string[]) {}
+
+  async apply(): Promise<void> {
+    this.applies += 1;
+    this.events.push('registerPusher');
+  }
+
+  async remove(): Promise<void> {
+    this.removes += 1;
+    this.events.push('unregisterPusher');
+  }
+}
+
 interface Harness {
   readonly runtime: MatrixRuntime;
+  readonly pushRegistration: FakePushRegistration;
   /**
    * The client this launch is on.
    *
@@ -329,8 +369,10 @@ function harness(
   const clients: FakeChatClient[] = [new FakeChatClient(events)];
   const opened: string[] = [];
   const erased: AlloClientStore[] = [];
+  const pushRegistration = new FakePushRegistration(events);
   let builds = 0;
   const result: Harness = {
+    pushRegistration,
     client: () => {
       const client = clients[Math.max(builds - 1, 0)];
       if (client === undefined) {
@@ -367,6 +409,7 @@ function harness(
         }
       },
       sessionStorage: storage,
+      pushRegistration,
       authorize: async (url) => {
         opened.push(url);
         return (await overrides.outcome?.()) ?? { kind: 'returned', callbackUrl: 'allo://matrix/oidc?code=abc' };
@@ -951,5 +994,105 @@ describe('MatrixRuntime sign-out', () => {
 
     expect(context.storage.calls).toEqual([]);
     expect(context.runtime.getState().phase).toBe('idle');
+  });
+});
+
+describe('MatrixRuntime push registration', () => {
+  /** A runtime that has restored a session and is syncing. */
+  async function signedIn(): Promise<Harness> {
+    const context = harness({ storage: stored() });
+    context.runtime.subscribe(() => {});
+    await settle();
+    return context;
+  }
+
+  it('registers this device once the session is ready, after a sign-in', async () => {
+    const context = harness();
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.pushRegistration.applies).toBe(1);
+    // After the session is usable, never before: a pusher on a session that
+    // failed to start syncing would be one nothing can withdraw.
+    expect(context.events.indexOf('startSync')).toBeLessThan(
+      context.events.indexOf('registerPusher'),
+    );
+  });
+
+  it('registers this device on a launch that reinstates a stored session', async () => {
+    const context = await signedIn();
+
+    // The common case by far: a launch that does not go through a browser is
+    // still a launch whose device token may have been reissued overnight.
+    expect(context.pushRegistration.applies).toBe(1);
+  });
+
+  it('does not register when the sign-in never reached a working session', async () => {
+    const context = harness();
+    context.runtime.subscribe(() => {});
+    await settle();
+    context.client().startSyncFails = new Error('the homeserver is down');
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.pushRegistration.applies).toBe(0);
+  });
+
+  it('does not let a failed registration fail the sign-in', async () => {
+    // `apply` is documented never to throw, and the runtime does not await it
+    // either: a phone that could not be registered is a gap in notifications and
+    // not a session that has to be thrown away.
+    const context = harness({
+      pushRegistration: {
+        apply: async () => {
+          throw new Error('the push gateway is unreachable');
+        },
+        remove: async () => {},
+      },
+    });
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('ready');
+  });
+
+  it('withdraws the pusher before the token that authorises it is destroyed', async () => {
+    const context = await signedIn();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.pushRegistration.removes).toBe(1);
+    // `logout` invalidates the access token. Afterwards there is nothing left to
+    // authenticate the call that removes the pusher, and the homeserver would go
+    // on holding a device token belonging to a phone that has signed out.
+    expect(context.events.indexOf('unregisterPusher')).toBeLessThan(
+      context.events.indexOf('logout'),
+    );
+  });
+
+  it('brings the homeserver in line when the preference changes', async () => {
+    const context = await signedIn();
+
+    await context.runtime.syncPushRegistration();
+
+    // Called from the settings switch. Without it the app and the homeserver
+    // would disagree until the next launch.
+    expect(context.pushRegistration.applies).toBe(2);
+  });
+
+  it('has nothing to say about notifications before there is a session', async () => {
+    const context = harness();
+
+    await context.runtime.syncPushRegistration();
+
+    expect(context.pushRegistration.applies).toBe(0);
   });
 });

@@ -1,9 +1,10 @@
 # La UI contra el puerto de Matrix
 
 Cómo se enciende el backend de Matrix en la app, qué llega hasta la pantalla y
-qué todavía no. Complementa `client-strategy.md` (qué SDK corre dónde) y
-`data-model.md` (dónde vive cada dato); esto es la capa de en medio: la que
-decide de dónde salen los datos que la UI ya sabía dibujar.
+qué todavía no. Complementa `client-strategy.md` (qué SDK corre dónde),
+`data-model.md` (dónde vive cada dato) y `push.md` (qué pasa con la app cerrada);
+esto es la capa de en medio: la que decide de dónde salen los datos que la UI ya
+sabía dibujar.
 
 ---
 
@@ -80,6 +81,7 @@ lib/chat/
   alloApiConversations.ts crear una conversación en Express, y mapear su respuesta
   matrixIdentity.ts      id de Oxy → MXID, y por qué es aritmética
   invitations.ts         aceptar o rechazar una invitación
+  pushRegistration.ts    decirle al homeserver que avise a este móvil, y que pare
 lib/matrix/
   directMessage.ts       cuándo crear una conversación es reutilizar una
   roomCreation.ts        qué es toda sala que Allo crea, antes de cada SDK
@@ -184,6 +186,13 @@ encenderlo.
   claves) y en `localStorage` en web.
 - **Cerrar sesión**, desde Ajustes. Avisa al homeserver, y borre o no borre el
   homeserver, se lleva la sesión guardada, el almacén de estado y el de cripto.
+  Antes de nada retira el pusher: la llamada necesita el token de acceso que
+  cerrar sesión destruye.
+- **Notificaciones push**, en nativo. El arranque registra un pusher en el
+  homeserver —no en el backend de Allo, que ya no guarda ningún token— y el
+  interruptor de Ajustes lo pone y lo quita. Es la única línea de esta lista que
+  no es una migración: en Allo el push nunca funcionó, en tres sitios distintos a
+  la vez. Ver `push.md`.
 - Estados propios para los eventos sin texto: no descifrable, redactado, y
   «Allo no sabe dibujar esto todavía». Ninguno se pinta como una burbuja vacía,
   y la vista previa de la lista usa las mismas palabras: una conversación cuyo
@@ -273,6 +282,9 @@ Por orden de cuánto se nota:
     en que se abrió, así que un adjunto que llega mientras está abierto no
     aparece hasta cerrarlo y volver a abrirlo. Es deliberado —una galería que
     crece por debajo mueve la foto que se está mirando— y el precio es ése.
+11. **La notificación no dice quién ni qué**, sólo «Nuevo mensaje», y en web no
+    hay push en absoluto. Los dos huecos, y por qué el primero es trabajo nativo
+    y no de cableado, están en `push.md` §9.
 
 ## 6. Web
 
