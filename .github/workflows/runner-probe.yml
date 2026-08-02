@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Secrets context is readable
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: echo "$SECRETS_JSON" | wc -c
+
       - name: Configure AWS credentials (OIDC, no stored keys)
         continue-on-error: true
         uses: aws-actions/configure-aws-credentials@v6
