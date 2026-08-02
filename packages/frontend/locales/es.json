@@ -541,5 +541,17 @@
       "title": "Página No Encontrada - allo",
       "description": "La página que buscas no existe."
     }
-  }
+  },
+  "Connecting…": "Conectando…",
+  "Finish signing in": "Termina de iniciar sesión",
+  "Allo is waiting for the sign-in page in your browser.": "Allo está esperando a la página de inicio de sesión de tu navegador.",
+  "Allo could not sign you in": "Allo no ha podido iniciar tu sesión",
+  "Sign in to start chatting": "Inicia sesión para empezar a chatear",
+  "Something went wrong. Try again.": "Algo ha fallado. Inténtalo de nuevo.",
+  "Your conversations live on your Matrix homeserver. Sign in to load them.": "Tus conversaciones viven en tu servidor de Matrix. Inicia sesión para cargarlas.",
+  "Try again": "Reintentar",
+  "Sign in": "Iniciar sesión",
+  "This message cannot be read on this device.": "Este mensaje no se puede leer en este dispositivo.",
+  "This message was deleted.": "Este mensaje se ha borrado.",
+  "Allo cannot show this yet ({{kind}}).": "Allo todavía no puede mostrar esto ({{kind}})."
 }

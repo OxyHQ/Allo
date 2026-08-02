@@ -49,6 +49,10 @@ import {
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
 
+// Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
+import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
+import { useMatrixConversations } from '@/hooks/useMatrixConversations';
+
 // Utils
 import { colors } from '@/styles/colors';
 import {
@@ -462,7 +466,12 @@ export default function ConversationsList() {
     const router = useRouter();
     const { width: windowWidth } = useWindowDimensions();
     // Get conversations from store
-    const conversations = useConversationsStore(state => state.conversations);
+    const storedConversations = useConversationsStore(state => state.conversations);
+    // ...or from the Matrix room list, which is `undefined` unless this build's
+    // chat backend is Matrix. The port's sync loop keeps it up to date, so there
+    // is nothing to fetch, nothing to cache and nothing to refresh.
+    const roomConversations = useMatrixConversations();
+    const conversations = roomConversations ?? storedConversations;
     const loadCachedConversations = useConversationsStore(state => state.loadCachedConversations);
     const fetchConversations = useConversationsStore(state => state.fetchConversations);
     const refreshConversations = useConversationsStore(state => state.refreshConversations);
@@ -488,18 +497,26 @@ export default function ConversationsList() {
     // than a read taken once: fetching before it lands would paint a list of
     // zeroes over the cache and never recover.
     useEffect(() => {
+        // The Matrix room list is fed by sync, not by a request. Calling the
+        // Express API here would fetch a list this screen is not drawing.
+        if (roomConversations !== undefined) {
+            return;
+        }
         loadCachedConversations();
         if (currentUserId) {
             fetchConversations(currentUserId);
         }
-    }, [loadCachedConversations, fetchConversations, currentUserId]);
+    }, [loadCachedConversations, fetchConversations, currentUserId, roomConversations]);
 
     // Pull-to-refresh, for the same reason, is a no-op until the viewer is known.
     const handleRefresh = useCallback(() => {
+        if (roomConversations !== undefined) {
+            return;
+        }
         if (currentUserId) {
             refreshConversations(currentUserId);
         }
-    }, [refreshConversations, currentUserId]);
+    }, [refreshConversations, currentUserId, roomConversations]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -1171,35 +1188,39 @@ export default function ConversationsList() {
                     )}
                 </Animated.View>
 
-                {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
-                    <ConversationsSkeleton theme={theme} />
-                ) : visibleConversations.length > 0 ? (
-                    <FlashList
-                        data={visibleConversations}
-                        renderItem={renderConversationItem}
-                        keyExtractor={keyExtractor}
-                        extraData={selectedConversationIds}
-                        ListHeaderComponent={SearchBarHeader}
+                {/* Renders its children unchanged unless this build's chat backend
+                    is Matrix and there is no session yet. */}
+                <MatrixSignInGate>
+                    {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
+                        <ConversationsSkeleton theme={theme} />
+                    ) : visibleConversations.length > 0 ? (
+                        <FlashList
+                            data={visibleConversations}
+                            renderItem={renderConversationItem}
+                            keyExtractor={keyExtractor}
+                            extraData={selectedConversationIds}
+                            ListHeaderComponent={SearchBarHeader}
 
-                        keyboardShouldPersistTaps="handled"
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={isRefreshing}
-                                onRefresh={handleRefresh}
-                                tintColor={theme.colors.primary}
-                                colors={[theme.colors.primary]}
-                            />
-                        }
-                    />
-                ) : (
-                    <>
-                        {SearchBarHeader}
-                        <EmptyState
-                            lottieSource={require('@/assets/lottie/welcome.json')}
-                            title={emptyStateCopy}
+                            keyboardShouldPersistTaps="handled"
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={isRefreshing}
+                                    onRefresh={handleRefresh}
+                                    tintColor={theme.colors.primary}
+                                    colors={[theme.colors.primary]}
+                                />
+                            }
                         />
-                    </>
-                )}
+                    ) : (
+                        <>
+                            {SearchBarHeader}
+                            <EmptyState
+                                lottieSource={require('@/assets/lottie/welcome.json')}
+                                title={emptyStateCopy}
+                            />
+                        </>
+                    )}
+                </MatrixSignInGate>
 
                 <Link
                     href="/(chat)/settings"

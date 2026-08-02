@@ -55,7 +55,7 @@ export function getDayKey(timestamp: Date): string {
  * Group messages by time proximity
  * Messages within MESSAGE_GROUPING_TIME_WINDOW_MS are grouped together
  */
-export function groupMessagesByTime(messages: Message[]): MessageGroup[] {
+export function groupMessagesByTime(messages: readonly Message[]): MessageGroup[] {
   if (messages.length === 0) {
     return [];
   }

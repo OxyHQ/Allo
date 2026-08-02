@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect, useContext, useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   StyleSheet,
   View,
   TextInput,
@@ -71,6 +72,9 @@ import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useSenderInfo } from '@/hooks/useSenderInfo';
+// Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
+import { CHAT_BACKEND } from '@/lib/chat/backend';
+import { useMatrixTimeline } from '@/hooks/useMatrixTimeline';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -99,6 +103,19 @@ const EMPTY_MESSAGES: Message[] = [];
 
 // Stable empty style for FlashList contentContainer
 const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 8 };
+
+// Shown above the oldest loaded message while the homeserver is being asked for
+// more. Declared once, at module scope, so the list header is not a new element
+// type on every render.
+const olderMessagesStyles = StyleSheet.create({
+  spinner: { paddingVertical: 12 },
+});
+
+const OlderMessagesSpinner = (
+  <View style={olderMessagesStyles.spinner}>
+    <ActivityIndicator />
+  </View>
+);
 
 
 /**
@@ -169,9 +186,15 @@ export default function ConversationView({ conversationId: propConversationId }:
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
   // Get messages from store (direct access with stable empty array reference)
-  const messages = useMessagesStore(state =>
+  const storedMessages = useMessagesStore(state =>
     conversationId ? (state.messagesByConversation[conversationId] || EMPTY_MESSAGES) : EMPTY_MESSAGES
   );
+
+  // ...or from the Matrix port, which is `undefined` unless this build's chat
+  // backend is Matrix. The room's timeline is a live view over the sync loop, so
+  // there is no fetch: opening it is subscribing to it.
+  const matrixTimeline = useMatrixTimeline(conversationId);
+  const messages = matrixTimeline?.messages ?? storedMessages;
 
   // Group messages by time and format with day separators
   const messageGroups = useMemo(() => {
@@ -183,9 +206,10 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [messages]);
 
   // Get loading state
-  const isLoading = useMessagesStore(state =>
+  const storedIsLoading = useMessagesStore(state =>
     conversationId ? state.isLoading(conversationId) : false
   );
+  const isLoading = matrixTimeline?.isLoading ?? storedIsLoading;
 
   // Get UI state from store - access directly from state for reactivity
   const inputText = useChatUIStore(state =>
@@ -235,6 +259,11 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     // Clear UI state when switching conversations
     clearConversationUI(conversationId);
+
+    // A Matrix timeline is not fetched: it is a live view the port opens over
+    // the sync loop, and asking the Express API for this room's messages would
+    // request a conversation that does not exist there.
+    if (CHAT_BACKEND === 'matrix') return;
 
     // Fetch messages (store will handle duplicate requests)
     if (currentUserId) {
@@ -488,6 +517,43 @@ export default function ConversationView({ conversationId: propConversationId }:
       setMessageTextSize(sizeToUse);
     }
 
+    // On Matrix a message is addressed to a room, not to a recipient: there is
+    // no device list to encrypt for by hand and no user id to look up, because
+    // the room's members and their devices are the homeserver's business and the
+    // SDK's. Everything below this branch exists to satisfy the Signal
+    // implementation, which needs to know who it is encrypting for.
+    //
+    // The per-message font size does not survive this path. `AlloTimelineHandle`
+    // sends a body and nothing else, and Allo's font size is meant to travel as
+    // `so.oxy.allo.font_size` inside the encrypted content
+    // (`docs/matrix/data-model.md` §4.2) — which the port has no call for yet.
+    // The gesture still adjusts the composer; it just does not reach the message.
+    if (matrixTimeline) {
+      try {
+        await matrixTimeline.send(text);
+      } catch (error) {
+        console.error('Error sending message:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
+        toast.error(errorMessage);
+        setInputText(conversationId, text);
+        return;
+      }
+
+      if (sizeToUse && sizeToUse !== originalSize) {
+        setMessageTextSize(originalSize);
+        setTempTextSize(originalSize);
+      }
+      setIsSizeAdjusting(false);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return;
+    }
+
     // Get recipient user ID from conversation
     // For direct messages, get the other participant
     // For groups, we'll need to handle multiple recipients (for now, use first other participant)
@@ -561,7 +627,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline]);
 
   /**
    * Handle Enter key press to send message
@@ -1015,6 +1081,15 @@ export default function ConversationView({ conversationId: propConversationId }:
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}
+                // Older messages are asked for as the top of the list comes into
+                // view. The store-backed path has no such call — it fetches a
+                // conversation whole — so this stays undefined there and the list
+                // behaves exactly as it did.
+                onStartReached={matrixTimeline?.loadOlder}
+                onStartReachedThreshold={0.5}
+                ListHeaderComponent={
+                  matrixTimeline?.isPaginating ? OlderMessagesSpinner : undefined
+                }
               />
               {/* Typing Indicator */}
               {typingUserIds.length > 0 && (

@@ -572,5 +572,17 @@
             "title": "Page Not Found - Allo",
             "description": "The page you're looking for doesn't exist."
         }
-    }
+    },
+    "Connecting…": "Connecting…",
+    "Finish signing in": "Finish signing in",
+    "Allo is waiting for the sign-in page in your browser.": "Allo is waiting for the sign-in page in your browser.",
+    "Allo could not sign you in": "Allo could not sign you in",
+    "Sign in to start chatting": "Sign in to start chatting",
+    "Something went wrong. Try again.": "Something went wrong. Try again.",
+    "Your conversations live on your Matrix homeserver. Sign in to load them.": "Your conversations live on your Matrix homeserver. Sign in to load them.",
+    "Try again": "Try again",
+    "Sign in": "Sign in",
+    "This message cannot be read on this device.": "This message cannot be read on this device.",
+    "This message was deleted.": "This message was deleted.",
+    "Allo cannot show this yet ({{kind}}).": "Allo cannot show this yet ({{kind}})."
 }
