@@ -48,6 +48,7 @@ vi.mock("../../../services/moderation/subjects/registry", async () => {
   return { ...actual, subjectProviderFor: vi.fn() };
 });
 
+import { resetBridgesConfigForTests } from "../../../config/bridges";
 import ModerationOutbox from "../../../models/ModerationOutbox";
 import Report, { ReportCategory, ReportedType } from "../../../models/Report";
 import { reportSubmitEventId } from "../../../services/moderation/ModerationOutboxService";
@@ -194,6 +195,142 @@ describe("report intake durability", () => {
     // The reason is RECORDED, not inferred from the missing row: a missing row is
     // also what a lost write looks like.
     expect(documents?.[0]?.localStatusReason).toContain("end-to-end encrypted");
+  });
+
+  /**
+   * §6.3 — the second way a report can have nowhere to go.
+   *
+   * Everything above is about a TYPE with no provider. These are about a SUBJECT
+   * with no Oxy account, which is a different fact and, before this, an invisible
+   * one: the type is deliverable, the provider exists, the report queues, and hours
+   * later Oxy answers 404 and the delivery worker closes the report saying "the
+   * reported account no longer exists" — about an account that never existed.
+   *
+   * The registry is mocked to return a provider throughout, because that is the
+   * whole point: this branch must fire even when everything about the TYPE is fine.
+   */
+  describe("a subject that is not an Oxy account", () => {
+    const SERVER_NAME = "allo.you";
+
+    beforeEach(() => {
+      process.env.ALLO_MATRIX_SERVER_NAME = SERVER_NAME;
+      resetBridgesConfigForTests();
+      vi.mocked(subjectProviderFor).mockReturnValue({
+        reportedType: ReportedType.USER,
+        subjectType: "identity.profile",
+        snapshot: async () => null,
+      });
+    });
+
+    afterEach(() => {
+      delete process.env.ALLO_MATRIX_SERVER_NAME;
+      resetBridgesConfigForTests();
+    });
+
+    it("stores a bridge ghost with a reason and enqueues NOTHING", async () => {
+      const result = await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.USER,
+        reportedId: `@whatsapp_1234567890:${SERVER_NAME}`,
+        categories: [ReportCategory.HARASSMENT],
+      });
+
+      expect(transaction.committed).toBe(true);
+      expect(ModerationOutbox.updateOne).not.toHaveBeenCalled();
+      expect(result.outboxEventId).toBeUndefined();
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]).toMatchObject({ localStatus: "received" });
+      expect(documents?.[0]?.localStatusReason).toContain("WhatsApp");
+    });
+
+    it("gives the non-Oxy subject its OWN reason, not the encryption one", async () => {
+      /**
+       * The two reasons must stay distinguishable months later. "Allo cannot read
+       * messages" and "this subject has no Oxy account" are different claims with
+       * different remedies, and collapsing them would put a bridge ghost in the
+       * same bucket as every reported message — the bucket nobody investigates
+       * because in Allo it is where most reports live.
+       */
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.USER,
+        reportedId: "@someone:elsewhere.example",
+        categories: [ReportCategory.SPAM],
+      });
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      const reason = documents?.[0]?.localStatusReason;
+      expect(reason).toContain("homeserver");
+      expect(reason).not.toContain("end-to-end encrypted");
+    });
+
+    it("stores an MXID this homeserver owns as the OXY id", async () => {
+      /**
+       * §6.2. The stored key is the Oxy id whichever identifier the client had, so
+       * the unique index sees one subject and §7.3 opens one case. Storing the MXID
+       * would let one reporter file twice about one person.
+       */
+      const oxyId = "507f1f77bcf86cd799439011";
+
+      const result = await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.USER,
+        reportedId: `@${oxyId}:${SERVER_NAME}`,
+        categories: [ReportCategory.SPAM],
+      });
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]).toMatchObject({
+        reportedId: oxyId,
+        localStatus: "queued",
+      });
+      expect(result.outboxEventId).toBe(reportSubmitEventId(REPORT_ID.toString()));
+    });
+
+    it("looks up the duplicate under the canonical id too", async () => {
+      /**
+       * The dedup query is built from the same resolved id as the insert. If it
+       * were not, reporting `@507f…:allo.you` after `507f…` would miss the existing
+       * row, and the unique index would reject the insert INSIDE the transaction —
+       * a 500 where the correct answer is "you have already reported this".
+       */
+      const oxyId = "507f1f77bcf86cd799439011";
+
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.USER,
+        reportedId: `@${oxyId}:${SERVER_NAME}`,
+        categories: [ReportCategory.SPAM],
+      });
+
+      expect(Report.findOne).toHaveBeenCalledWith({
+        reporter: "reporter-1",
+        reportedId: oxyId,
+        reportedType: ReportedType.USER,
+      });
+    });
+
+    it("never queues a Matrix event id for delivery", async () => {
+      /**
+       * §6.5. An event id names one message in one room; it is conversation
+       * metadata and it must never reach CrowdSource. Reported as a `user` — which
+       * is the shape a mistake takes, not an attack — the type check alone would
+       * wave it through, so the SUBJECT check is what stops it.
+       */
+      const result = await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.USER,
+        reportedId: "$eventid123:allo.you",
+        categories: [ReportCategory.HARASSMENT],
+      });
+
+      expect(ModerationOutbox.updateOne).not.toHaveBeenCalled();
+      expect(result.outboxEventId).toBeUndefined();
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]?.localStatusReason).toContain("conversation metadata");
+    });
   });
 
   it("aborts the transaction when the outbox write fails", async () => {
