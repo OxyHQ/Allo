@@ -6,6 +6,7 @@ import {
 } from '@/lib/chat/matrixRuntime';
 import type {
   AlloChatClient,
+  AlloMediaFile,
   AlloEncryptionState,
   AlloOidcLoginRequest,
   AlloRecoveryState,
@@ -151,6 +152,10 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async openTimeline(): Promise<AlloTimelineHandle> {
+    throw new Error('not used by these tests');
+  }
+
+  async downloadMedia(): Promise<AlloMediaFile> {
     throw new Error('not used by these tests');
   }
 

@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
-import { useTranslation } from 'react-i18next';
 
+import { useMatrixEventLabels } from '@/hooks/useMatrixEventLabels';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
-import { toMessage, type UnreadableEventLabels } from '@/lib/chat/matrixViewModel';
+import { toMessage } from '@/lib/chat/matrixViewModel';
 import { timelineSource, type TimelineSnapshot } from '@/lib/chat/timelineSource';
-import type { AlloUnsubscribe } from '@/lib/matrix/types';
+import type { AlloOutgoingAttachment, AlloUnsubscribe } from '@/lib/matrix/types';
 import type { Message } from '@/stores/messagesStore';
 import { logger } from '@/utils/logger';
 
@@ -52,6 +52,14 @@ export interface MatrixTimeline {
   /** Asks the homeserver for older messages. Safe to call on every scroll. */
   readonly loadOlder: () => void;
   readonly send: (body: string) => Promise<void>;
+  /**
+   * Uploads an attachment and sends it.
+   *
+   * Rejects rather than reporting a failed row when the conversation's
+   * encryption state is not settled yet — see `AlloTimelineHandle.sendAttachment`
+   * for why refusing is the only safe answer, and why the caller has to say so.
+   */
+  readonly sendAttachment: (attachment: AlloOutgoingAttachment) => Promise<void>;
   /** Adds the viewer's reaction to a message, or takes it away. */
   readonly toggleReaction: (messageId: string, emoji: string) => Promise<void>;
   /** Replaces the body of a message the viewer sent. */
@@ -76,8 +84,6 @@ export interface MatrixTimeline {
 export function useMatrixTimeline(
   conversationId: string | undefined,
 ): MatrixTimeline | undefined {
-  const { t } = useTranslation();
-
   const source = useMemo(
     () =>
       enabled && conversationId !== undefined ? timelineSource(conversationId) : undefined,
@@ -90,15 +96,7 @@ export function useMatrixTimeline(
     closedTimeline,
   );
 
-  const labels = useMemo<UnreadableEventLabels>(
-    () => ({
-      undecryptable: t('This message cannot be read on this device.'),
-      redacted: t('This message was deleted.'),
-      unsupported: (description) =>
-        t('Allo cannot show this yet ({{kind}}).', { kind: description }),
-    }),
-    [t],
-  );
+  const labels = useMatrixEventLabels();
 
   const messages = useMemo(
     () =>
@@ -126,6 +124,16 @@ export function useMatrixTimeline(
         return;
       }
       await source.sendText(body);
+    },
+    [source],
+  );
+
+  const sendAttachment = useCallback(
+    async (attachment: AlloOutgoingAttachment): Promise<void> => {
+      if (source === undefined) {
+        return;
+      }
+      await source.sendAttachment(attachment);
     },
     [source],
   );
@@ -203,6 +211,7 @@ export function useMatrixTimeline(
             typingUserIds: snapshot.typingUserIds,
             loadOlder,
             send,
+            sendAttachment,
             toggleReaction,
             edit,
             deleteMessage,
@@ -215,6 +224,7 @@ export function useMatrixTimeline(
       snapshot,
       loadOlder,
       send,
+      sendAttachment,
       toggleReaction,
       edit,
       deleteMessage,

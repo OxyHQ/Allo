@@ -159,10 +159,148 @@ export type AlloEventKey =
  */
 export type AlloEventContent =
   | { readonly kind: 'text'; readonly body: string; readonly isEdited: boolean }
+  | { readonly kind: 'media'; readonly media: AlloMediaContent }
   | { readonly kind: 'undecryptable' }
   | { readonly kind: 'redacted' }
   /** An event Allo does not draw yet. `description` names the kind, for logs. */
   | { readonly kind: 'unsupported'; readonly description: string };
+
+/* ---------------------------------------------------------------------------
+ * Attachments
+ *
+ * Media in Matrix is two things that arrive separately: an event in the room,
+ * which is what the timeline carries, and bytes in the homeserver's media
+ * repository, which are fetched on demand. **In an encrypted room the bytes are
+ * encrypted by the sending client before they are uploaded**, so the homeserver
+ * stores an opaque blob and the key travels inside the encrypted event — the
+ * same protection the message body already has, and the reason Allo does not
+ * need an upload endpoint of its own. See `docs/matrix/ui-wiring.md` §7.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * What an attachment is, in the vocabulary the protocol has for it.
+ *
+ * `voice` is not a sixth msgtype — it is an `m.audio` a client marked as a voice
+ * note — but it is a separate kind here because the two are drawn differently
+ * and the distinction is lost the moment it is collapsed.
+ */
+export type AlloMediaKind = 'image' | 'video' | 'audio' | 'voice' | 'file';
+
+/**
+ * Where bytes live, in a form only the implementation that produced it can read.
+ *
+ * **Opaque.** It is a string so it can be a React key and travel through view
+ * models that know nothing about Matrix, and that is the only thing anything
+ * outside `lib/matrix/` may do with it: never parse it, never build one by hand,
+ * never move one between platforms. What the native half writes into it — a
+ * serialized `MediaSource` — means nothing to the web half, which writes an mxc
+ * URI or a whole encrypted-file descriptor.
+ *
+ * It is deliberately *not* a URL. A URL implies something a view can fetch, and
+ * media in an encrypted room is exactly the case where that is false: what the
+ * homeserver serves at the underlying address is ciphertext. {@link
+ * AlloChatClient.downloadMedia} is the only way to turn one of these into
+ * something that can be displayed.
+ */
+export type AlloMediaRef = string;
+
+/** An attachment, as a timeline row carries it. */
+export interface AlloMediaContent {
+  readonly kind: AlloMediaKind;
+  /** The filename the sender's client computed. Never empty. */
+  readonly filename: string;
+  /**
+   * What the sender wrote alongside the attachment, if anything.
+   *
+   * Distinct from {@link filename}: a caption is prose the sender chose, and a
+   * filename is `IMG_4032.HEIC`. Drawing the second one as the first is the
+   * mistake this separation exists to prevent.
+   */
+  readonly caption: string | undefined;
+  readonly source: AlloMediaRef;
+  /**
+   * A smaller copy of the same picture, uploaded by the sender beside it.
+   *
+   * Absent whenever the sender's client made none, which is common. It is the
+   * sender's and not the server's on purpose: a homeserver can only thumbnail
+   * what it can read, so in an encrypted room the *only* thumbnail that exists
+   * is one the sending client encrypted and uploaded itself. Asking the server
+   * to thumbnail an encrypted upload yields a picture of ciphertext.
+   */
+  readonly thumbnail: AlloMediaRef | undefined;
+  /** Pixels. Absent when the sender's client did not say. */
+  readonly width: number | undefined;
+  readonly height: number | undefined;
+  /** Milliseconds, for audio and video. Absent for everything else. */
+  readonly durationMs: number | undefined;
+  /** Bytes, as the sender's client reported them. Not verified here. */
+  readonly size: number | undefined;
+}
+
+/** Bytes ready to be displayed, and the means to let go of them. */
+export interface AlloMediaFile {
+  /**
+   * A URI this app can hand to an image or a video view: a `file://` path on
+   * iOS and Android, a `blob:` URL on web.
+   */
+  readonly uri: string;
+  /**
+   * Releases what backs {@link uri}, after which it no longer resolves.
+   *
+   * Not optional housekeeping on either platform: a `blob:` URL pins its bytes
+   * in the tab's memory until it is revoked, and a decrypted file on a phone is
+   * plaintext sitting in the cache directory. Calling it more than once is safe.
+   */
+  release(): void;
+}
+
+/**
+ * A picture or a small copy of one, on its way out.
+ *
+ * `uri` is whatever the platform's picker handed over — a `file://` path on a
+ * phone, a `blob:` or `data:` URL in a browser — and each implementation reads
+ * it the way its own SDK wants. The UI does not have to know which.
+ */
+export interface AlloOutgoingThumbnail {
+  readonly uri: string;
+  readonly mimetype: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * An attachment on its way out.
+ *
+ * **There is no "encrypt this" option, and there must never be one.** Whether an
+ * attachment is encrypted is decided by the room it is being sent to, inside the
+ * implementation, from the room's own encryption state — never by a caller. A
+ * boolean here would be a way for one screen, one refactor or one default
+ * argument to put a photograph on a homeserver in the clear while every message
+ * around it stays encrypted, and nothing in the UI would look any different.
+ * See `AlloTimelineHandle.sendAttachment`.
+ */
+export interface AlloOutgoingAttachment {
+  readonly kind: AlloMediaKind;
+  /** Shown by clients that list attachments, and used to pick an extension. */
+  readonly filename: string;
+  readonly mimetype: string;
+  /** Where the bytes are now. See {@link AlloOutgoingThumbnail.uri}. */
+  readonly uri: string;
+  /** Prose to send with it. */
+  readonly caption?: string;
+  readonly width?: number;
+  readonly height?: number;
+  /** Bytes. Sent so receivers can decide before downloading. */
+  readonly size?: number;
+  /** Milliseconds. For audio and video. */
+  readonly durationMs?: number;
+  /**
+   * A small copy to send alongside, so receivers can draw the row without
+   * downloading the whole thing. See {@link AlloMediaContent.thumbnail} for why
+   * the sender is the only one who can make it.
+   */
+  readonly thumbnail?: AlloOutgoingThumbnail;
+}
 
 /** A row of a conversation. */
 export interface AlloTimelineItem {
@@ -424,6 +562,28 @@ export interface AlloTimelineHandle {
   sendText(body: string): Promise<void>;
 
   /**
+   * Uploads an attachment and sends the event that points at it.
+   *
+   * **In an encrypted room the bytes are encrypted before they leave the
+   * device, and this call is what guarantees it.** Whether to encrypt is read
+   * from the room, here, and not passed in: see
+   * {@link AlloOutgoingAttachment} for why there is no parameter for it.
+   *
+   * It **refuses to send** when the room's encryption state is
+   * {@link AlloEncryptionState `'unknown'`} — the state a room is in before
+   * sync has delivered `m.room.encryption`. That is the only safe reading of
+   * "not known yet": guessing `unencrypted` uploads a photograph in the clear,
+   * and the user has no way to tell that happened. Waiting a moment and trying
+   * again is the recovery, and it is the caller's.
+   *
+   * Resolves once the homeserver has the event. On iOS and Android the SDK's
+   * send queue owns the upload, so a failure after this resolves shows up as a
+   * failed row rather than a rejected promise; on web there is no queue and
+   * everything fails here.
+   */
+  sendAttachment(attachment: AlloOutgoingAttachment): Promise<void>;
+
+  /**
    * Adds the viewer's reaction, or takes it away if it is already there.
    *
    * One call and not two, because the protocol operation is not symmetric —
@@ -612,6 +772,20 @@ export interface AlloChatClient {
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
   ): Promise<AlloTimelineHandle>;
+
+  /**
+   * Fetches an attachment's bytes and answers with something a view can show.
+   *
+   * **Decryption happens here**, when the ref names media from an encrypted
+   * room, which is why this exists at all instead of the port handing out URLs:
+   * what the homeserver serves at the underlying address is ciphertext, and a
+   * view given that address draws a broken image. See {@link AlloMediaRef}.
+   *
+   * On the client rather than on the timeline because a ref names bytes, not a
+   * room: a conversation can be closed while a picture from it is still open.
+   * The caller owns the result and must {@link AlloMediaFile.release} it.
+   */
+  downloadMedia(ref: AlloMediaRef): Promise<AlloMediaFile>;
 
   /**
    * How far this device has got with 4S. See {@link AlloRecoveryState}.

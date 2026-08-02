@@ -7,6 +7,7 @@ import { encodeStoredSession } from '@/lib/chat/matrixSession';
 import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
 import type {
   AlloChatClient,
+  AlloMediaFile,
   AlloChatClientConfig,
   AlloClientStore,
   AlloEncryptionState,
@@ -256,6 +257,10 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async openTimeline(): Promise<AlloTimelineHandle> {
+    throw new Error('not used by these tests');
+  }
+
+  async downloadMedia(): Promise<AlloMediaFile> {
     throw new Error('not used by these tests');
   }
 

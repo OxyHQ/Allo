@@ -192,6 +192,43 @@ export class MatrixBackupExistsOnServerError extends MatrixPortError {
 }
 
 /**
+ * An attachment was about to be sent to a room whose encryption state is not
+ * known yet.
+ *
+ * The one state that has to stop a send. `m.room.encryption` reaches a client
+ * through sync, so a room that has just been created — or one the app has only
+ * just heard of — honestly answers "not known yet", and both ways of guessing
+ * are wrong in different sizes. Guessing *encrypted* costs a failed send.
+ * Guessing *unencrypted* puts a photograph on a homeserver in the clear, in a
+ * conversation the user believes is private, and there is nothing on screen
+ * that looks any different afterwards. So the port refuses, and the caller's
+ * recovery — waiting a moment and sending again — is one the user understands.
+ */
+export class MatrixMediaEncryptionUnknownError extends MatrixPortError {
+  constructor(roomId: string) {
+    super(
+      `Allo will not upload an attachment to ${roomId} until it knows whether ` +
+        'the conversation is encrypted. Its state has not been synced yet; try ' +
+        'again in a moment.',
+    );
+  }
+}
+
+/**
+ * An attachment's bytes could not be read back from the media repository in a
+ * form this device can use.
+ *
+ * Covers both halves of the trip: an encrypted attachment whose event does not
+ * carry usable key material, and a download that came back as something other
+ * than the bytes that were asked for.
+ */
+export class MatrixMediaUnreadableError extends MatrixPortError {
+  constructor(reason: string) {
+    super(`This attachment cannot be read: ${reason}`);
+  }
+}
+
+/**
  * The homeserver described its secret storage key in a way the client will not
  * act on.
  *

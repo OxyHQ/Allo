@@ -1,5 +1,10 @@
 import { toConversation, toMessage, type UnreadableEventLabels } from '@/lib/chat/matrixViewModel';
-import type { AlloRoomPreview, AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
+import type {
+  AlloMediaContent,
+  AlloRoomPreview,
+  AlloRoomSummary,
+  AlloTimelineItem,
+} from '@/lib/matrix/types';
 import { formatConversationTimestamp } from '@/utils/dateUtils';
 
 /**
@@ -12,6 +17,8 @@ const LABELS: UnreadableEventLabels = {
   undecryptable: 'cannot be read on this device',
   redacted: 'was deleted',
   unsupported: (description) => `cannot show this yet (${description})`,
+  attachment: (filename) => `attachment ${filename}`,
+  mediaPreview: (kind) => `a ${kind}`,
 };
 
 function room(overrides: Partial<AlloRoomSummary> = {}): AlloRoomSummary {
@@ -335,5 +342,127 @@ describe('toMessage', () => {
 
   it('leaves reactions unset when nobody has reacted', () => {
     expect(toMessage(event(), '!room:allo.you', LABELS).reactions).toBeUndefined();
+  });
+});
+
+describe('an attachment, as a message', () => {
+  function media(overrides: Partial<AlloMediaContent> = {}): AlloMediaContent {
+    return {
+      kind: 'image',
+      filename: 'holiday.jpg',
+      caption: undefined,
+      source: 'ref:full',
+      thumbnail: 'ref:thumb',
+      width: 3024,
+      height: 4032,
+      durationMs: undefined,
+      size: 2_400_000,
+      ...overrides,
+    };
+  }
+
+  function messageWith(overrides: Partial<AlloMediaContent> = {}) {
+    return toMessage(
+      event({ content: { kind: 'media', media: media(overrides) } }),
+      '!room:allo.you',
+      LABELS,
+    );
+  }
+
+  it('draws the sender\'s thumbnail rather than the original', () => {
+    // A bubble is 250pt wide and the original is a phone camera's full
+    // resolution. In an encrypted room the sender's thumbnail is the only
+    // smaller copy that exists: a homeserver cannot resize what it cannot read.
+    expect(messageWith().media).toEqual([{ id: 'ref:thumb', type: 'image' }]);
+  });
+
+  it('falls back to the original when the sender made no thumbnail', () => {
+    expect(messageWith({ thumbnail: undefined }).media).toEqual([
+      { id: 'ref:full', type: 'image' },
+    ]);
+  });
+
+  it('carries the port media ref as the id, because that is what resolves it', () => {
+    // `MediaCarousel` calls `getMediaUrl(item.id, …)`, and on the Matrix path
+    // that resolver is the media cache, which takes a ref. An id of Allo's own
+    // invention would resolve to nothing.
+    expect(messageWith().media?.[0].id).toBe('ref:thumb');
+  });
+
+  it('says nothing in the bubble for a picture with no caption', () => {
+    // The bubble *is* the picture. A filename printed under it is noise.
+    expect(messageWith().text).toBe('');
+  });
+
+  it("says the sender's words when there are some", () => {
+    expect(messageWith({ caption: 'look at this' }).text).toBe('look at this');
+  });
+
+  it('draws a video as a video', () => {
+    expect(messageWith({ kind: 'video' }).media).toEqual([
+      { id: 'ref:thumb', type: 'video' },
+    ]);
+  });
+
+  it.each(['audio', 'voice', 'file'] as const)(
+    'gives the carousel no %s, which it cannot draw',
+    (kind) => {
+      // `MediaCarousel` renders images and a still frame for videos and nothing
+      // else. Handing it one of these would produce an empty bubble.
+      const message = messageWith({ kind, filename: 'voice.m4a', thumbnail: undefined });
+
+      expect(message.media).toBeUndefined();
+      expect(message.text).toBe('attachment voice.m4a');
+    },
+  );
+
+  it('lets a caption speak for an attachment it cannot draw either', () => {
+    const message = messageWith({ kind: 'file', caption: 'the contract' });
+
+    expect(message.text).toBe('the contract');
+  });
+});
+
+describe('an attachment, as a conversation row', () => {
+  function rowFor(overrides: Partial<AlloMediaContent>) {
+    return toConversation(
+      room({
+        latestMessage: preview({
+          content: {
+            kind: 'media',
+            media: {
+              kind: 'image',
+              filename: 'holiday.jpg',
+              caption: undefined,
+              source: 'ref:full',
+              thumbnail: undefined,
+              width: undefined,
+              height: undefined,
+              durationMs: undefined,
+              size: undefined,
+              ...overrides,
+            },
+          },
+        }),
+      }),
+      LABELS,
+    );
+  }
+
+  it('names the kind rather than going blank', () => {
+    // The opposite of the bubble, and deliberately so: an empty preview reads
+    // as a conversation nobody has written in.
+    expect(rowFor({ kind: 'image' }).lastMessage).toBe('a image');
+    expect(rowFor({ kind: 'voice' }).lastMessage).toBe('a voice');
+  });
+
+  it('prefers the caption, which is what the sender actually wrote', () => {
+    expect(rowFor({ caption: 'look at this' }).lastMessage).toBe('look at this');
+  });
+
+  it('still shows the time, because a picture is a message', () => {
+    expect(rowFor({ kind: 'image' }).timestamp).toBe(
+      new Date(1_700_000_000_000).toISOString(),
+    );
   });
 });

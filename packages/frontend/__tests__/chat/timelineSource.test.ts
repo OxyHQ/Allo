@@ -7,7 +7,9 @@ import { TimelineSource, timelineSource } from '@/lib/chat/timelineSource';
 import type {
   AlloChatClient,
   AlloEncryptionState,
+  AlloMediaFile,
   AlloOidcLoginRequest,
+  AlloOutgoingAttachment,
   AlloRecoveryState,
   AlloPaginationOutcome,
   AlloRoomListHandle,
@@ -59,6 +61,7 @@ class FakeTimeline implements AlloTimelineHandle {
   closes = 0;
   paginateCalls: number[] = [];
   sent: string[] = [];
+  attachments: AlloOutgoingAttachment[] = [];
   reacted: { eventId: string; key: string }[] = [];
   edited: { eventId: string; body: string }[] = [];
   redacted: { eventId: string; reason: string | undefined }[] = [];
@@ -111,6 +114,10 @@ class FakeTimeline implements AlloTimelineHandle {
 
   async sendText(body: string): Promise<void> {
     this.sent.push(body);
+  }
+
+  async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
+    this.attachments.push(attachment);
   }
 
   async toggleReaction(eventId: string, key: string): Promise<void> {
@@ -176,6 +183,10 @@ class FakeChatClient implements AlloChatClient {
       });
     }
     return timeline;
+  }
+
+  async downloadMedia(): Promise<AlloMediaFile> {
+    throw new Error('not used by these tests');
   }
 
   async beginOidcLogin(): Promise<AlloOidcLoginRequest> {

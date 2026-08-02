@@ -40,6 +40,7 @@ import type {
 import {
   MatrixBackupExistsOnServerError,
   MatrixCryptoUnavailableError,
+  MatrixMediaUnreadableError,
   MatrixNotLoggedInError,
   MatrixOidcCallbackError,
   MatrixRoomNotFoundError,
@@ -61,9 +62,12 @@ import type {
   AlloChatClientFactory,
   AlloCreateRoomRequest,
   AlloEncryptionState,
+  AlloMediaFile,
+  AlloMediaRef,
   AlloReaction,
   AlloOidcLoginOptions,
   AlloOidcLoginRequest,
+  AlloOutgoingAttachment,
   AlloPaginationOutcome,
   AlloRecoveryState,
   AlloRoomListHandle,
@@ -76,8 +80,22 @@ import type {
 } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
+import {
+  decodeMediaRef,
+  encryptionInfoOf,
+  mxcUriOf,
+  resolveAttachmentSource,
+  toAttachmentContent,
+  type OutgoingThumbnailSource,
+} from './web/attachments';
 import { Coalescer } from './web/coalesce';
 import { CryptoWasmLoader } from './web/cryptoWasm';
+import {
+  decryptAttachment,
+  encryptAttachment,
+  readAttachmentBytes,
+  toObjectUrl,
+} from './web/mediaTransfer';
 import {
   WebOidcLoginRequest,
   generateAuthorizationState,
@@ -584,12 +602,72 @@ class WebAlloChatClient implements AlloChatClient {
   ): Promise<AlloTimelineHandle> {
     const client = this.#requireSyncing('Opening a timeline');
     const room = this.#requireRoom(roomId, 'Opening a timeline');
-    const handle = new WebTimelineHandle(client, room, onChange, () => {
-      this.#timelines.delete(handle);
-    });
+    const handle = new WebTimelineHandle(
+      client,
+      room,
+      // The timeline is handed the *authoritative* answer rather than the local
+      // one. `roomEncryption` asks the homeserver when sync has not settled the
+      // question, and an attachment is exactly the case where the difference
+      // matters: see `sendAttachment`.
+      () => this.roomEncryption(room.roomId),
+      onChange,
+      () => {
+        this.#timelines.delete(handle);
+      },
+    );
     this.#timelines.add(handle);
     handle.attach();
     return handle;
+  }
+
+  /**
+   * Fetches an attachment and answers with an object URL a view can show.
+   *
+   * The two halves of the trip that the native SDK does inside Rust, done here
+   * by hand: download the blob from the media repository, and — when the ref
+   * names media from an encrypted room — decrypt it with the key that came
+   * inside the event. What the homeserver serves is ciphertext, so a view
+   * pointed straight at the mxc URL draws a broken image.
+   *
+   * The download is authenticated. Since Matrix 1.11 the media endpoints are
+   * behind the client's access token, and the unauthenticated ones are being
+   * withdrawn; an anonymous fetch works against some homeservers today and
+   * against fewer every release.
+   */
+  async downloadMedia(ref: AlloMediaRef): Promise<AlloMediaFile> {
+    const client = this.#requireClient('Downloading an attachment');
+    const { source, mimetype } = decodeMediaRef(ref);
+
+    const httpUrl = client.mxcUrlToHttp(
+      mxcUriOf(source),
+      undefined,
+      undefined,
+      undefined,
+      false,
+      true,
+      true,
+    );
+    if (httpUrl === null) {
+      throw new MatrixMediaUnreadableError(
+        `${mxcUriOf(source)} is not an address on this homeserver's media repository`,
+      );
+    }
+
+    const response = await fetch(httpUrl, {
+      headers: { Authorization: `Bearer ${client.getAccessToken() ?? ''}` },
+    });
+    if (!response.ok) {
+      throw new MatrixMediaUnreadableError(
+        `the homeserver refused to serve it (HTTP ${response.status})`,
+      );
+    }
+    const downloaded = new Uint8Array(await response.arrayBuffer());
+
+    const info = encryptionInfoOf(source);
+    return toObjectUrl(
+      info === undefined ? downloaded : decryptAttachment(downloaded, info),
+      mimetype,
+    );
   }
 
   async close(): Promise<void> {
@@ -1020,6 +1098,7 @@ class WebRoomListHandle implements AlloRoomListHandle {
 class WebTimelineHandle implements AlloTimelineHandle {
   readonly #client: MatrixClient;
   readonly #room: Room;
+  readonly #roomEncryption: () => Promise<AlloEncryptionState>;
   readonly #onChange: (items: readonly AlloTimelineItem[]) => void;
   readonly #onClose: () => void;
   readonly #coalescer: Coalescer;
@@ -1032,11 +1111,13 @@ class WebTimelineHandle implements AlloTimelineHandle {
   constructor(
     client: MatrixClient,
     room: Room,
+    roomEncryption: () => Promise<AlloEncryptionState>,
     onChange: (items: readonly AlloTimelineItem[]) => void,
     onClose: () => void,
   ) {
     this.#client = client;
     this.#room = room;
+    this.#roomEncryption = roomEncryption;
     this.#onChange = onChange;
     this.#onClose = onClose;
     this.#coalescer = new Coalescer(() => {
@@ -1081,6 +1162,101 @@ class WebTimelineHandle implements AlloTimelineHandle {
     // user's asterisks into formatting they did not ask for.
     await this.#client.sendMessage(this.#room.roomId, { msgtype: MsgType.Text, body });
   }
+
+  /**
+   * Uploads an attachment and sends the event that points at it.
+   *
+   * **This is the one place in Allo where a photograph could leave a device
+   * unencrypted, and the shape of it is what stops that.** `matrix-js-sdk` has
+   * no equivalent of the native SDK's `sendImage`: `uploadContent` uploads
+   * whatever it is given to a public URL, and `sendMessage` will put an
+   * `m.image` with a plaintext `url` into an encrypted room without a word.
+   * Every byte that goes up therefore passes through
+   * {@link resolveAttachmentSource}, which reads the room's encryption state
+   * and refuses to guess — see `web/attachments.ts`.
+   *
+   * The state is asked for **once** and used for both the attachment and its
+   * thumbnail. Asking twice would let a room that finished syncing in between
+   * produce an event with an encrypted picture and a thumbnail of it in the
+   * clear, which leaks the picture almost as well as the picture would.
+   */
+  async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
+    const encryption = await this.#roomEncryption();
+    const deps = { upload: this.#upload, encrypt: encryptAttachment };
+
+    const bytes = await readAttachmentBytes(attachment.uri);
+    const source = await resolveAttachmentSource(
+      { bytes, mimetype: attachment.mimetype, filename: attachment.filename },
+      encryption,
+      this.#room.roomId,
+      deps,
+    );
+
+    let thumbnail: OutgoingThumbnailSource | undefined;
+    if (attachment.thumbnail !== undefined) {
+      const small = attachment.thumbnail;
+      const thumbnailSource = await resolveAttachmentSource(
+        {
+          bytes: await readAttachmentBytes(small.uri),
+          mimetype: small.mimetype,
+          filename: `thumb-${attachment.filename}`,
+        },
+        encryption,
+        this.#room.roomId,
+        deps,
+      );
+      thumbnail = {
+        source: thumbnailSource,
+        mimetype: small.mimetype,
+        width: small.width,
+        height: small.height,
+      };
+    }
+
+    const content = toAttachmentContent(attachment, source, thumbnail, bytes.byteLength);
+    const roomId = this.#room.roomId;
+
+    // The `msgtype` is added here and not in `attachments.ts` because it is the
+    // SDK's own enum, and that module must not import a value from the SDK —
+    // its tests would drag the whole thing in. A switch and not a lookup table
+    // because `sendMessage` takes a union of four content shapes, one per
+    // msgtype, and only a narrowed literal picks an arm of it.
+    switch (attachment.kind) {
+      case 'image':
+        await this.#client.sendMessage(roomId, { ...content, msgtype: MsgType.Image });
+        return;
+      case 'video':
+        await this.#client.sendMessage(roomId, { ...content, msgtype: MsgType.Video });
+        return;
+      case 'audio':
+      case 'voice':
+        await this.#client.sendMessage(roomId, { ...content, msgtype: MsgType.Audio });
+        return;
+      case 'file':
+        await this.#client.sendMessage(roomId, { ...content, msgtype: MsgType.File });
+        return;
+    }
+  }
+
+  /**
+   * Hands bytes to the media repository.
+   *
+   * `includeFilename: false` for every upload, encrypted or not. The filename
+   * travels inside the event — which in an encrypted room is encrypted — and
+   * repeating it on the unauthenticated upload endpoint would put
+   * `passport-scan.jpg` in the homeserver's access log beside a blob that was
+   * encrypted precisely so it would not say what it is.
+   */
+  readonly #upload = async (payload: {
+    readonly bytes: Uint8Array;
+    readonly mimetype: string;
+  }): Promise<string> => {
+    const { content_uri: contentUri } = await this.#client.uploadContent(
+      new Blob([payload.bytes.slice().buffer], { type: payload.mimetype }),
+      { type: payload.mimetype, includeFilename: false },
+    );
+    return contentUri;
+  };
 
   /**
    * Adds the viewer's annotation, or redacts the one they already sent.
