@@ -136,8 +136,15 @@ class ErrorBoundaryBase extends Component<Props, State> {
 const ErrorBoundary: React.ComponentType<Omit<Props, 't'>> = withTranslation()(ErrorBoundaryBase);
 
 /**
- * Smaller error boundary for specific features
- * Falls back to a minimal error state instead of full screen
+ * Error boundary scoped to one part of the screen.
+ *
+ * Use this, not the default export, anywhere a failure should stay local. The
+ * top-level boundary replaces the whole interface with a full-screen apology,
+ * which is the right last resort and the wrong first one: a component that
+ * throws while rendering one panel should not take the navigation, the
+ * conversation list and every other panel down with it.
+ *
+ * `featureName` is what the user reads, so name the surface and not the module.
  */
 export function FeatureErrorBoundary({
     children,
@@ -146,9 +153,15 @@ export function FeatureErrorBoundary({
     children: ReactNode;
     featureName: string;
 }): React.JSX.Element {
-    const Wrapper = ({ children: wrappedChildren }: { children: ReactNode }) => (
+    // Rendered directly rather than through a `Wrapper` component defined in
+    // this function body. A component type created during render is a NEW type
+    // on every render, so React unmounts and remounts the entire subtree each
+    // time — which for a conversation panel means losing scroll position, focus
+    // and any in-flight state, continuously. That is why this helper was safe to
+    // export and unsafe to use, and why nothing used it.
+    return (
         <ErrorBoundaryBase
-            t={(key: string) => key}
+            t={identityTranslate}
             fallback={
                 <View style={styles.featureError}>
                     <Text style={styles.featureErrorText}>
@@ -163,11 +176,14 @@ export function FeatureErrorBoundary({
                 console.error(`[${featureName}] Error:`, error);
             }}
         >
-            {wrappedChildren}
+            {children}
         </ErrorBoundaryBase>
     );
+}
 
-    return <Wrapper>{children}</Wrapper>;
+/** Stable identity so the prop does not change on every render. */
+function identityTranslate(key: string): string {
+    return key;
 }
 
 const styles = StyleSheet.create({
