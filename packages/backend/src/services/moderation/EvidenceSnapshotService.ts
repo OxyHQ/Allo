@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import type { ReportInput } from "@oxyhq/crowdsource";
 import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from "./reportTaxonomy";
+import { resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
 import type { ModerationSubjectSnapshot } from "./subjects/types";
 import type { IReport } from "../../models/Report";
@@ -23,6 +24,12 @@ import type { IReport } from "../../models/Report";
  * So this module does three things and no more: ask the registry for a snapshot of
  * the reported object, translate the reporter's categories into allegations, and
  * assemble both with the report's own identity.
+ *
+ * It also refuses one thing, which is the fourth statement in the function and the
+ * reason it is not a fifth thing: a subject that is not an Oxy account never gets
+ * described. That is `resolveModerationSubject`'s answer, not this module's
+ * opinion, and it is checked here because this is the last line before material
+ * crosses the process boundary (§6.5).
  */
 
 /**
@@ -46,6 +53,37 @@ export class ModerationSubjectUnsupportedError extends Error {
   constructor(reportedType: string) {
     super(`No moderation subject provider is registered for '${reportedType}'.`);
     this.name = "ModerationSubjectUnsupportedError";
+  }
+}
+
+/**
+ * The subject is not an Oxy account, and this is the last place that can still
+ * matter.
+ *
+ * Also unreachable by design — intake never queues one (§6.3) — and also a defect
+ * rather than a state, so it dead-letters for the same reasons as the error above.
+ * It exists anyway because of what the reachable version would DO: §6.5 requires
+ * that a Matrix event id never reach CrowdSource, and an event id that got past
+ * intake would otherwise be composed into an envelope's `externalId` and posted.
+ *
+ * A guard that only exists at intake is a guard against intake's own bugs and
+ * nothing else. This one sits at the last statement before the material is handed
+ * to the SDK, which is the only position from which the requirement is a property
+ * of the deployment rather than of one code path.
+ *
+ * The identifier is deliberately absent from the message. It may BE the event id,
+ * and an exception string is copied into `Report.lastDeliveryError` and into logs —
+ * neither of which is a place conversation metadata should accumulate.
+ */
+export class ModerationSubjectNotAnOxyAccountError extends Error {
+  readonly retryable = false;
+
+  constructor(externalReportId: string) {
+    super(
+      `Report '${externalReportId}' names a subject that is not an Oxy account, so it ` +
+        "cannot be described for review.",
+    );
+    this.name = "ModerationSubjectNotAnOxyAccountError";
   }
 }
 
@@ -95,7 +133,12 @@ export async function buildModerationReportInput(
   const provider = subjectProviderFor(report.reportedType);
   if (!provider) throw new ModerationSubjectUnsupportedError(report.reportedType);
 
-  const snapshot = await provider.snapshot(report.reportedId);
+  const subject = resolveModerationSubject(report.reportedId);
+  if (subject.kind !== "oxy-account") {
+    throw new ModerationSubjectNotAnOxyAccountError(report.id);
+  }
+
+  const snapshot = await provider.snapshot(subject.reportedId);
   if (!snapshot) return null;
 
   const allegationCodes = allegationsForCategories(report.categories);

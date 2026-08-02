@@ -128,7 +128,7 @@ describe("report intake durability", () => {
 
   it("writes the report and its outbox event with the SAME session", async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
+      reportedType: ReportedType.USER,
       subjectType: "identity.profile",
       snapshot: async () => null,
     });
@@ -156,7 +156,7 @@ describe("report intake durability", () => {
 
   it("queues the report at localStatus 'queued' when it is deliverable", async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
+      reportedType: ReportedType.USER,
       subjectType: "identity.profile",
       snapshot: async () => null,
     });
@@ -198,7 +198,7 @@ describe("report intake durability", () => {
 
   it("aborts the transaction when the outbox write fails", async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
+      reportedType: ReportedType.USER,
       subjectType: "identity.profile",
       snapshot: async () => null,
     });

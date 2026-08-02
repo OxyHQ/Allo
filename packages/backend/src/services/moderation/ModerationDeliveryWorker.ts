@@ -22,6 +22,10 @@ import type { ModerationOutboxEvent } from "./ModerationOutboxService";
  * - **The type has no provider.** Unreachable by design — such a report never gets
  *   a delivery event — so an event that reaches it is a defect and is dead-lettered
  *   rather than retried or filed as a state.
+ * - **The subject is not an Oxy account.** Unreachable for the same reason (§6.3
+ *   decides it at intake) and dead-lettered for the same reason, but it is the one
+ *   whose reachable version would be a disclosure rather than a stall: a Matrix
+ *   event id must never reach CrowdSource (§6.5).
  * - **Anything else** is the SDK's `retryable` to answer, and the outbox obeys it.
  */
 
@@ -84,11 +88,11 @@ export async function deliverReportOutboxEvent(
   if (!crowdsource) throw new CrowdSourceUnavailableError();
 
   /**
-   * A `ModerationSubjectUnsupportedError` from here is NOT caught. It carries
-   * `retryable: false`, so the outbox dead-letters the event — the right channel
-   * for a defect that needs a human. Catching it and writing a local state would
-   * put the report in the same place as every deliberately local-only report, which
-   * in Allo is most of them.
+   * A `ModerationSubjectUnsupportedError` or `ModerationSubjectNotAnOxyAccountError`
+   * from here is NOT caught. Both carry `retryable: false`, so the outbox
+   * dead-letters the event — the right channel for a defect that needs a human.
+   * Catching either and writing a local state would put the report in the same
+   * place as every deliberately local-only report, which in Allo is most of them.
    */
   const input = await buildModerationReportInput({
     id: String(report._id),

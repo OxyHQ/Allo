@@ -1,6 +1,6 @@
 import { ReportedType } from "../../../models/Report";
 import { createUserSubjectProvider } from "./userSubject";
-import type { ModerationSubjectProvider } from "./types";
+import type { AccountReportedType, ModerationSubjectProvider } from "./types";
 
 /**
  * Every noun Allo can send for review, and the §5.4 type it is.
@@ -62,6 +62,53 @@ import type { ModerationSubjectProvider } from "./types";
  * deliberately untouched here: a moderation PR is the wrong place to alter the
  * encryption path.)
  *
+ * ### The Matrix restatement, and the one thing it does change
+ *
+ * On Matrix the server stores `m.room.encrypted` instead of `Message.ciphertext`
+ * and still holds no room keys, so the paragraph above survives with one noun
+ * changed (docs/matrix/data-model.md §6.1). The plaintext loophole is the part that
+ * eventually goes away — §8's clean cut deletes the transport and `Message.text`
+ * with it — but that cut has NOT landed, so everything written above about
+ * `models/Message.ts` still describes live code and is not to be pre-emptively
+ * softened.
+ *
+ * ## Why a BRIDGED room does not reopen any of it
+ *
+ * This is the one place where the encryption argument genuinely does not apply, and
+ * it is therefore the one that has to be answered on its own terms (§6.4).
+ *
+ * A bridged room is not encrypted. `latestEncryptionState()` reports it as such,
+ * and that is not an oversight: the bridge holds the far side's keys and
+ * participates as a member, so there is nobody to encrypt to. The server can
+ * therefore read a WhatsApp or Telegram message in full, and a `message` provider
+ * conditioned on the room's encryption state would WORK.
+ *
+ * It must not exist. Two of the three reasons are the ones above, restated:
+ *
+ * 1. **The coverage would be exactly INVERTED**, as with the plaintext fallback.
+ *    Moderation would function precisely where the product's promise does not hold
+ *    — in the rooms Allo tells users are not private — and be blind everywhere it
+ *    does.
+ * 2. **It would make the BRIDGE load-bearing.** The moment moderation depended on
+ *    reading bridged rooms, encrypting them one day would "break moderation", and
+ *    the argument for leaving them readable would be a moderation argument. That is
+ *    the same trap as `Message.text`, one layer out.
+ *
+ * The third is new, and it is the one that would still stand if the other two were
+ * somehow answered:
+ *
+ * 3. **The other end never agreed to anything.** Most of what a bridged room
+ *    contains was written by someone on WhatsApp or Telegram who has no Oxy
+ *    account, never accepted Allo's terms, cannot be a party to a CrowdSource case
+ *    and cannot be told one exists. Sending it to a randomly drawn jury is
+ *    disclosure of a third party's words to strangers, by an application that
+ *    third party has never heard of.
+ *
+ * That decision is enforced by the TYPE of {@link ModerationSubjectProvider}, not
+ * by a condition in this file — see `AccountReportedType` in `./types`. A condition
+ * is something a later change can relax while the tests still pass; a type is
+ * something a later change has to argue with.
+ *
  * ## Why `conversation` has no provider either
  *
  * A group's `name`, `description` and `avatar` are readable server-side, so this
@@ -109,12 +156,23 @@ import type { ModerationSubjectProvider } from "./types";
  * signal a participatory review is good at, and it is the one Allo can supply
  * without weakening anything.
  */
-const PROVIDERS: readonly ModerationSubjectProvider[] = Object.freeze([
-  createUserSubjectProvider(),
-]);
+/**
+ * Keyed by {@link AccountReportedType} rather than held in an array, so the set is
+ * CLOSED rather than merely short.
+ *
+ * A `readonly ModerationSubjectProvider[]` accepts a second element; this record
+ * does not accept a second key. `[ReportedType.MESSAGE]: …` here is an excess
+ * property and does not compile, and omitting `user` is a missing one — the
+ * registry cannot silently become empty either, which is the failure the vacuity
+ * assertion in `subjectProviders.test.ts` was written to catch.
+ */
+const PROVIDERS: Readonly<Record<AccountReportedType, ModerationSubjectProvider>> =
+  Object.freeze({
+    [ReportedType.USER]: createUserSubjectProvider(),
+  });
 
 const BY_REPORTED_TYPE: ReadonlyMap<string, ModerationSubjectProvider> = new Map(
-  PROVIDERS.map((provider) => [provider.reportedType, provider]),
+  Object.values(PROVIDERS).map((provider) => [provider.reportedType, provider]),
 );
 
 /**
@@ -140,6 +198,12 @@ export function subjectProviderFor(
  * the assertion is a privacy control, not a coverage metric: the test that pins
  * this set to exactly `['user']` is what would fail if someone ever wired
  * `message` up, and that failure is the entire point.
+ *
+ * Pinning the set is necessary and not sufficient, which §6.4 says in as many
+ * words. A provider registered under `user` could still describe a bridged room's
+ * messages as context and leave this set untouched, so the same test also pins the
+ * module graph `subjects/` is allowed to reach: encryption state cannot be observed
+ * without importing something that knows about rooms.
  */
 export function deliverableTypes(): string[] {
   return Array.from(BY_REPORTED_TYPE.keys());

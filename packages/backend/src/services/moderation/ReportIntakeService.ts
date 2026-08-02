@@ -12,6 +12,7 @@ import {
   enqueueModerationOutboxEvent,
   reportSubmitEventId,
 } from "./ModerationOutboxService";
+import { resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
 
 /**
@@ -38,6 +39,20 @@ import { subjectProviderFor } from "./subjects/registry";
  * and never leaves, because the server cannot read one. The two must not be
  * conflated, which is why they are different `localStatus` values and why the
  * absent route is written down as a reason rather than inferred from a missing row.
+ *
+ * ## Matrix adds a SECOND way for a report to have nowhere to go
+ *
+ * A type can have no provider, and now a SUBJECT can have no Oxy account: a user on
+ * a homeserver Allo does not run, a bridge ghost, a room, an event id
+ * (docs/matrix/data-model.md §6.3, §6.5). Those two facts are independent — a
+ * perfectly deliverable `user` report can name a WhatsApp ghost — so they are
+ * decided separately here and produce different sentences on the row.
+ *
+ * Left undecided, the second one is not a stored state at all but a 404 arriving
+ * hours later at `ModerationDeliveryWorker`, which closes the report saying "the
+ * reported account no longer exists" — a claim that was never true about an account
+ * that never existed. §6.3's requirement is that the decision be made and written,
+ * and that is what turns an indistinguishable silence into a row somebody can read.
  */
 
 const TRANSACTION_OPTIONS = {
@@ -119,6 +134,45 @@ function localOnlyReason(reportedType: string): string {
   );
 }
 
+/**
+ * What this report is about and whether it can leave, decided from the identifier
+ * alone.
+ *
+ * The two facts are ordered, and the order is a claim rather than a convenience.
+ * "Allo never delivers reports of this TYPE" outranks "this particular subject has
+ * no Oxy account", because the first is permanent and the second is about one row:
+ * a reported message stays local whether its id is an Allo message id, a Matrix
+ * event id or anything else, and saying so is more useful to whoever reads the row
+ * than a sentence about Matrix identifiers.
+ */
+interface ReportRouting {
+  readonly reportedId: string;
+  readonly deliverable: boolean;
+  readonly localStatusReason?: string;
+}
+
+function routeReport(reportedType: ReportedType, reportedId: string): ReportRouting {
+  const subject = resolveModerationSubject(reportedId);
+
+  if (subjectProviderFor(reportedType) === undefined) {
+    return {
+      reportedId: subject.reportedId,
+      deliverable: false,
+      localStatusReason: localOnlyReason(reportedType),
+    };
+  }
+
+  if (subject.kind === "not-an-oxy-account") {
+    return {
+      reportedId: subject.reportedId,
+      deliverable: false,
+      localStatusReason: subject.reason,
+    };
+  }
+
+  return { reportedId: subject.reportedId, deliverable: true };
+}
+
 async function inTransaction<T>(
   operation: (session: ClientSession) => Promise<T>,
 ): Promise<T> {
@@ -141,16 +195,18 @@ async function inTransaction<T>(
  * Store the report, and queue its delivery in the same transaction.
  *
  * Delivery is queued when — and only when — the reported type has a subject
- * provider. A type without one is stored at `received` with the reason recorded,
- * which is the behaviour a reporter should get regardless: the report is a receipt
- * and a local record, and it still counts as a signal about an account even when
- * its material can never be reviewed.
+ * provider AND the reported subject is an Oxy account. Either miss stores the
+ * report at `received` with its own reason recorded, which is the behaviour a
+ * reporter should get regardless: the report is a receipt and a local record, and
+ * it still counts as a signal about an account even when its material can never be
+ * reviewed.
  *
  * That branch is the reason the two writes stay in one transaction rather than
- * being ordered carefully. The condition is read BEFORE the transaction body
- * decides anything, so `localStatus` and the presence of an outbox row are decided
- * together from one fact — a report can never commit as `queued` with nothing to
- * deliver it, nor as `received` with a delivery event that will try anyway.
+ * being ordered carefully. `routeReport` answers BEFORE the transaction body
+ * decides anything, so `localStatus`, `localStatusReason` and the presence of an
+ * outbox row are decided together from one answer — a report can never commit as
+ * `queued` with nothing to deliver it, nor as `received` with a delivery event that
+ * will try anyway.
  *
  * Intake deliberately does not read `CROWDSOURCE_ENABLED`. A report taken while the
  * integration is off still gets its delivery event, so turning the flag on delivers
@@ -160,7 +216,7 @@ async function inTransaction<T>(
  */
 export async function createReport(input: CreateReportInput): Promise<CreateReportResult> {
   const reporter = requireIdentifier(input.reporter, "reporter");
-  const reportedId = requireIdentifier(input.reportedId, "reportedId");
+  const rawReportedId = requireIdentifier(input.reportedId, "reportedId");
   const rawReportedType = requireIdentifier(input.reportedType, "reportedType");
   if (!isReportedType(rawReportedType)) {
     throw new TypeError(
@@ -168,7 +224,23 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
     );
   }
   const reportedType: ReportedType = rawReportedType;
-  const deliverable = subjectProviderFor(reportedType) !== undefined;
+
+  /**
+   * Re-derived here rather than trusted from the caller, for the reason
+   * `requireIdentifier` gives about itself: `createReport` is exported, and the
+   * route is only its first caller. A worker or a reconciliation script handing
+   * over a raw MXID must produce the same stored row as the route does, or the
+   * unique index would let one account be reported twice by one reporter — once
+   * under its Oxy id and once under its MXID — and §7.3's "one penalty per
+   * incident" would fail with nothing failing in a test.
+   *
+   * The DELIVERY pipeline still never does this: §6.2 puts the translation at the
+   * edge, and intake is the edge. Everything past this line sees an Oxy user id.
+   */
+  const { reportedId, deliverable, localStatusReason } = routeReport(
+    reportedType,
+    rawReportedId,
+  );
   const localStatus: ModerationLocalStatus = deliverable ? "queued" : "received";
 
   return await inTransaction(async (session) => {
@@ -187,7 +259,7 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
           details: input.details,
           status: ReportStatus.PENDING,
           localStatus,
-          ...(deliverable ? {} : { localStatusReason: localOnlyReason(reportedType) }),
+          ...(localStatusReason === undefined ? {} : { localStatusReason }),
         },
       ],
       { session },

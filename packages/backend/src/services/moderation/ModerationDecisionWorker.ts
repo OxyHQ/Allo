@@ -13,21 +13,36 @@ import { reportStateForDecision } from "./reportStatus";
  * catches up, instead of being refused at the door and retried until it
  * dead-letters.
  *
- * ## Allo ships in `observe` mode, and there is a second reason beyond caution
+ * ## Allo ships in `observe` mode, and the reason has CHANGED
  *
- * `observe` is the safe first rollout everywhere. In Allo it is also the only mode
- * with anything to run, because **Allo has no platform-level sanction primitive.**
+ * `observe` is the safe first rollout everywhere. In Allo it used to be the only
+ * mode with anything to run, because Allo had no platform-level sanction primitive:
  * `Block` and `Restrict` are per-user relations — "user X will not hear from user
- * Y" — written by a user about their own inbox. There is no account-level
+ * Y" — written by a user about their own inbox, and there was no account-level
  * restriction, no delivery suspension and no global mute for a decision to invoke.
  *
- * So this worker records the decision and stops. Manufacturing an enforcement path
- * — writing `Block` rows on behalf of users who did not ask, or inventing a
- * platform restriction with no delivery-side code to honour it — would be a product
- * decision with real consequences for real accounts, made by a moderation worker
- * because a field said `violation`. Recording the decision is genuinely useful on
- * its own: it is the durable record of conduct across reports, and it is what a
- * future enforcement mechanism would be built to read.
+ * **Synapse has all four.** Its admin API can suspend, deactivate, lock and
+ * shadow-ban an account (docs/matrix/data-model.md §6.6), so the sentence above is
+ * now a description of Allo's own code and not of what is possible. The technical
+ * impossibility is gone.
+ *
+ * That is not permission to enforce, and the distinction is the entire point of
+ * writing it down: the answer to "why does Allo only observe?" is no longer **"it
+ * cannot"** but **"it has not been decided"**, which is a product conversation
+ * rather than an engineering one, and it is a conversation nobody should discover
+ * they are having by reading a stale comment. Two things would have to be built
+ * before it could be had honestly: the code that calls the admin API, and a real
+ * reversal path for `restore` — which exists in `ModerationEnforcementAction` and
+ * `models/Report.ts` and has no implementation anywhere. A worker that could
+ * suspend an account but not un-suspend one is not an enforcement mechanism.
+ *
+ * So this worker still records the decision and stops. Manufacturing an enforcement
+ * path — writing `Block` rows on behalf of users who did not ask, or calling an
+ * admin API because a field said `violation` — would be a product decision with
+ * real consequences for real accounts, taken by a moderation worker. Recording the
+ * decision is genuinely useful on its own: it is the durable record of conduct
+ * across reports, and it is what a future enforcement mechanism would be built to
+ * read.
  *
  * `enforcedAction` is therefore written as the action Allo WOULD take, never as
  * one it did, and `enforcedAt` stays unset until something actually acts.

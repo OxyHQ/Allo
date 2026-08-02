@@ -94,7 +94,7 @@ describe("report envelope input", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
+      reportedType: ReportedType.USER,
       subjectType: "identity.profile",
       snapshot: async () => snapshot,
     });
@@ -151,7 +151,7 @@ describe("report envelope input", () => {
 
   it("returns null when the account is gone", async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
+      reportedType: ReportedType.USER,
       subjectType: "identity.profile",
       snapshot: async () => null,
     });

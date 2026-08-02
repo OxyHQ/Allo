@@ -14,7 +14,8 @@
  * envelope itself — is composed by the SDK from that description and is IDENTICAL
  * for every application and every subject type. So adding a subject type is one
  * file implementing {@link ModerationSubjectProvider} plus one line in the
- * registry.
+ * registry — in every application except this one, where the third rule below
+ * deliberately makes it more than that.
  *
  * Two rules keep it that way, and both are load-bearing rather than stylistic:
  *
@@ -30,15 +31,56 @@
  *
  * ## In Allo there is a third rule, and it outranks both
  *
- * **A provider may only describe material the server can legitimately read.** Allo
- * is end-to-end encrypted; the server holds ciphertext and public keys. A provider
- * is the ONLY place where a decision to disclose could be made, so it is the place
- * the constraint has to be stated. A provider that reached for message plaintext
- * would not be a feature — it would be the point at which the encryption promise
- * quietly stopped being true.
+ * **A provider may only describe an ACCOUNT.** Allo is end-to-end encrypted; the
+ * server holds ciphertext and public keys. A provider is the ONLY place where a
+ * decision to disclose could be made, so it is the place the constraint has to be
+ * stated. A provider that reached for message plaintext would not be a feature — it
+ * would be the point at which the encryption promise quietly stopped being true.
+ *
+ * The rule used to be "may only describe material the server can legitimately
+ * read", and Matrix bridges are why it was tightened. A bridged room is NOT
+ * encrypted — the bridge holds the far side's keys and participates as a member —
+ * so the server genuinely can read one, and the old rule would have permitted a
+ * provider there. docs/matrix/data-model.md §6.4 says no, and the two types below
+ * are how that answer is enforced by the compiler rather than by a condition
+ * somebody could relax.
  */
 
 import type { ContextInput, ReportSubjectInput, ResourceInput } from "@oxyhq/crowdsource";
+import type { ReportedType } from "../../../models/Report";
+
+/**
+ * The reported types a provider may be registered for: the ones whose identifier
+ * names an account.
+ *
+ * A TYPE rather than a runtime list, and that is the whole point of §6.4. The
+ * hazard it closes is not "somebody adds a `message` provider" — that is loud, and
+ * `subjectProviders.test.ts` fails on it. The hazard is the version that reads
+ * REASONABLY in a pull request: *"bridged rooms are not encrypted, so for those we
+ * CAN describe a message"*. A provider conditioned on the room's encryption state
+ * is a one-line diff, it is true on its own terms, and it is exactly the failure —
+ * a WhatsApp conversation disclosed to a jury drawn from strangers.
+ *
+ * Written as a type, that change stops being a one-line diff. `reportedType:
+ * "message"` is not assignable to this alias, so the registry does not compile
+ * until somebody widens the alias — an edit to THIS file, under this comment,
+ * which is a deliberate act and a reviewable one. The three standing reasons are in
+ * `registry.ts`; the two extra sentences a bridge adds are there too.
+ */
+export type AccountReportedType = ReportedType.USER;
+
+/**
+ * §5.4's subject types Allo may emit: the identity realm, and nothing else.
+ *
+ * The counterpart of {@link AccountReportedType}, and it closes the same door from
+ * the other side. A provider could otherwise keep `reportedType: "user"` — passing
+ * every assertion that pins the deliverable SET — while describing a bridged room
+ * as `content.room` or hanging its messages off `context`. The subject type is what
+ * a jury is told it is looking at, so constraining it to the identity realm is what
+ * makes "a jury sees a profile and an allegation" a property of the type system
+ * rather than a description of today's code.
+ */
+export type IdentitySubjectType = "identity.profile";
 
 /**
  * The SDK's resource description, unchanged.
@@ -91,9 +133,9 @@ export interface ModerationSubjectSnapshot {
  */
 export interface ModerationSubjectProvider {
   /** The application's own name for the noun, as it arrives on a report. */
-  readonly reportedType: string;
-  /** §5.4's namespaced subject type, or `custom.<organization>.<object_type>`. */
-  readonly subjectType: string;
+  readonly reportedType: AccountReportedType;
+  /** §5.4's namespaced subject type. */
+  readonly subjectType: IdentitySubjectType;
   /**
    * Describes the object, or returns `null` when it no longer exists.
    *
@@ -101,6 +143,11 @@ export interface ModerationSubjectProvider {
    * delivery is ordinary, and it is the caller's job to decide what that means — a
    * provider that threw would make deletion look like an outage and be retried
    * for days.
+   *
+   * `reportedId` is always an OXY user id (§6.2). An MXID is translated at the
+   * edge, in `services/moderation/subjectIdentity.ts`, and a subject that has no
+   * Oxy account never reaches a provider at all — so nothing here has to know that
+   * Matrix exists, and no provider has an identifier it could resolve to a room.
    */
   snapshot(reportedId: string): Promise<ModerationSubjectSnapshot | null>;
 }
