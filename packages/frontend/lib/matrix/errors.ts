@@ -2,9 +2,10 @@
  * Errors the chat port raises on its own account.
  *
  * Failures that come from the homeserver or the SDK are passed through
- * untouched: wrapping them would throw away the diagnostic the caller needs
- * (uniffi carries `code`, `msg` and `details` on the error's `inner`, not on
- * `message`). What is here are the states the port itself refuses to be in.
+ * untouched: wrapping them would throw away the diagnostic the caller needs —
+ * uniffi carries `code`, `msg` and `details` on the error's `inner` rather than
+ * on `message`, and `matrix-js-sdk` carries `errcode` and `httpStatus` on its
+ * `MatrixError`. What is here are the states the port itself refuses to be in.
  */
 
 /** Base class, so a caller can tell "the port said no" from "the network said no". */
@@ -63,5 +64,70 @@ export class MatrixOidcLoginSettledError extends MatrixPortError {
 export class MatrixRoomNotFoundError extends MatrixPortError {
   constructor(roomId: string) {
     super(`The client has no room ${roomId}. It may not have been synced yet.`);
+  }
+}
+
+/** Something that needs a session was attempted before there was one. */
+export class MatrixNotLoggedInError extends MatrixPortError {
+  constructor(operation: string) {
+    super(
+      `${operation} needs a session. Finish a login with beginOidcLogin(), or ` +
+        'reinstate one with restoreSession().',
+    );
+  }
+}
+
+/**
+ * A second session was started on a client that already has one.
+ *
+ * Worth refusing rather than allowing: a client holds one device's encryption
+ * store, and pointing it at a second device would either take over the first
+ * device's identity or abandon the keys that decrypt its history.
+ */
+export class MatrixSessionAlreadyStartedError extends MatrixPortError {
+  constructor(attempted: string) {
+    super(
+      `Cannot ${attempted}: this client already has a session. Build a new ` +
+        'client for a different one.',
+    );
+  }
+}
+
+/**
+ * The URL the browser came back to did not carry a usable authorization.
+ *
+ * Covers the authorization server saying no, a callback with nothing in it, and
+ * — the one that matters for security — a `state` that is not the one this
+ * request sent, which is how an authorization from somewhere else would arrive.
+ */
+export class MatrixOidcCallbackError extends MatrixPortError {
+  constructor(reason: string) {
+    super(`The OIDC callback cannot be completed: ${reason}`);
+  }
+}
+
+/**
+ * A persisted session could not be read back.
+ *
+ * `AlloSession.authData` is written by one implementation and only that
+ * implementation can read it; the usual cause is a session stored by the native
+ * client being handed to the web one, or the reverse.
+ */
+export class MatrixSessionRestoreError extends MatrixPortError {
+  constructor(reason: string) {
+    super(`This session cannot be restored: ${reason}. Start a new login.`);
+  }
+}
+
+/**
+ * The browser does not offer the storage the client needs.
+ *
+ * Not a hypothetical: private browsing modes and embedded webviews can refuse
+ * IndexedDB, and without it there is nowhere to keep the device's encryption
+ * keys — which means a device that cannot read any of its own history.
+ */
+export class MatrixStoreUnavailableError extends MatrixPortError {
+  constructor(detail: string) {
+    super(`The Matrix client has nowhere to keep its data: ${detail}`);
   }
 }
