@@ -142,7 +142,7 @@ Once the development server is running, you can:
 ### Environment Setup
 
 Base URLs are resolved in `config.ts`, which hardcodes production
-(`https://api.allo.oxy.so`) and only consults the environment in development.
+(`https://api.allo.you`) and only consults the environment in development.
 None of the variables below is required to run against a local backend — the
 defaults already point at `localhost:4140`, Allo's slot in the Oxy per-app port
 map.

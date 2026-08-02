@@ -564,7 +564,7 @@ representar.
 La marca **secundaria**, y sólo para decir *qué* red es (icono de WhatsApp,
 nombre del canal), es el evento de estado `m.bridge` — que sigue siendo un MSC
 inestable (MSC2346, prefijo `uk.half-shot.bridge`) [?] — más el namespace del MXID
-de los usuarios fantasma del appservice (`@whatsapp_...:allo.oxy.so`).
+de los usuarios fantasma del appservice (`@whatsapp_...:allo.you`).
 
 La regla de UI, dicha explícitamente porque es donde se cometen los errores:
 **el candado lo decide el estado de cifrado; el icono de red lo decide el evento

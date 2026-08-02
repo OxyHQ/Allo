@@ -26,11 +26,20 @@ import { startModerationOutboxDispatcher } from "./src/services/moderation/Moder
 // --- Config ---
 dotenv.config();
 
-// Explicit localhost dev origins. The Oxy apex family (*.oxy.so — including
-// allo.oxy.so / api.allo.oxy.so) is allowed automatically by createOxyCors, so
-// only non-apex dev origins need to be listed here. Reused for both the Express
-// CORS middleware and the Socket.IO CORS allowlist.
-const APP_ORIGINS = ["http://localhost:8140", "http://localhost:8141"];
+// Origins that are NOT covered by createOxyCors, which admits the Oxy apex
+// family (*.oxy.so) automatically and nothing else.
+//
+// `https://allo.you` has to be listed explicitly for exactly that reason: it is
+// the product's own domain, outside the oxy.so apex, so the automatic rule does
+// not reach it. Dropping it from here does not fail at boot — it fails in the
+// browser, as a CORS error on every request the web app makes.
+//
+// Reused for both the Express CORS middleware and the Socket.IO allowlist.
+const APP_ORIGINS = [
+  "https://allo.you",
+  "http://localhost:8140",
+  "http://localhost:8141",
+];
 
 const app = express();
 
@@ -110,7 +119,7 @@ const io = new SocketIOServer(server, {
   maxHttpBufferSize: SOCKET_CONFIG.MAX_BUFFER_SIZE,
   connectTimeout: SOCKET_CONFIG.CONNECT_TIMEOUT,
   cors: {
-    origin: [...APP_ORIGINS, "https://allo.oxy.so"],
+    origin: APP_ORIGINS,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
     allowedHeaders: [

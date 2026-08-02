@@ -107,7 +107,7 @@ Dos detalles que sorprenden y conviene tener presentes:
 
 - **[V] bridgev2 no registra namespaces de alias ni de salas.** Sólo de usuarios.
   Los portales se crean sin alias. Si alguien esperaba poder resolver
-  `#whatsapp_XXX:allo.oxy.so`, no va a existir.
+  `#whatsapp_XXX:allo.you`, no va a existir.
 - **[V] `sender_localpart` es aleatorio y distinto del bot visible.** El usuario
   del appservice y el bot que aparece en las salas de gestión no son el mismo
   MXID.
@@ -283,14 +283,14 @@ Configuración relevante:
 bridge:
   permissions:
     "*": relay              # nadie de fuera puede loguearse
-    "allo.oxy.so": user     # todos nuestros usuarios pueden vincular cuentas
-    "@allo-admin:allo.oxy.so": admin
+    "allo.you": user     # todos nuestros usuarios pueden vincular cuentas
+    "@allo-admin:allo.you": admin
   split_portals: true       # ver más abajo — IRREVERSIBLE
   bridge_status_notices: none
   cleanup_on_logout:
     enabled: true
 homeserver:
-  status_endpoint: https://api.allo.oxy.so/internal/bridges/status
+  status_endpoint: https://api.allo.you/internal/bridges/status
 provisioning:
   shared_secret: <secreto de 32+ chars, del gestor de secretos>
   allow_matrix_auth: false  # sólo el backend habla con el bridge
@@ -317,7 +317,7 @@ mutuamente y descubriendo que el otro usa Allo. Para un producto de consumo eso
 es una fuga de privacidad, no una optimización. El coste es más salas y más
 tráfico; se paga.
 
-Los ghosts (`@telegram_123456:allo.oxy.so`) **[V]** siguen siendo compartidos
+Los ghosts (`@telegram_123456:allo.you`) **[V]** siguen siendo compartidos
 entre usuarios aunque los portales estén separados. Eso está bien: un contacto de
 Telegram es la misma persona para todos.
 
@@ -347,8 +347,8 @@ Un *slot* es una tupla estática, creada en despliegue:
 |---|---|
 | ID de appservice | `allo-wa-0042` |
 | Fichero de registro | `/data/appservices/allo-wa-0042.yaml` |
-| `username_template` | `wa0042_{{.}}` → ghosts `@wa0042_34600111222:allo.oxy.so` |
-| Bot | `@wa0042bot:allo.oxy.so` |
+| `username_template` | `wa0042_{{.}}` → ghosts `@wa0042_34600111222:allo.you` |
+| Bot | `@wa0042bot:allo.you` |
 | Puerto | `29500 + 42` |
 | Base de datos | SQLite en volumen propio, o `allo_wa_0042` en Postgres |
 | Proxy | resuelto en runtime vía `get_proxy_url` (§8) |
@@ -384,7 +384,7 @@ configuramos:
 
 ```yaml
 network:
-  get_proxy_url: https://api.allo.oxy.so/internal/bridges/proxy?slot=allo-wa-0042&t=<token>
+  get_proxy_url: https://api.allo.you/internal/bridges/proxy?slot=allo-wa-0042&t=<token>
 ```
 
 el bridge llamará a
@@ -470,7 +470,7 @@ pantalla de "vincular cuenta": la app no lleva lista propia.
     {
       "id": "telegram",
       "displayName": "Telegram",
-      "icon": "mxc://allo.oxy.so/...",
+      "icon": "mxc://allo.you/...",
       "loginFlows": [
         { "id": "phone", "name": "Número de teléfono", "description": "..." },
         { "id": "qr",    "name": "Código QR",          "description": "..." }

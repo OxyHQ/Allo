@@ -775,7 +775,7 @@ export function step5ProbeLockPrimitives(): string {
  * server, so this step stops short of it: discovery is a read, and the
  * authorization URL is built locally.
  */
-const PLACEHOLDER_CLIENT_ID = 'https://allo.oxy.so/spike-placeholder-client';
+const PLACEHOLDER_CLIENT_ID = 'https://allo.you/spike-placeholder-client';
 
 export async function stepOidcDiscovery(homeserver: string): Promise<string> {
     const client = createClient({ baseUrl: homeserver });

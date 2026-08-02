@@ -52,7 +52,7 @@ function textContent(body: string, isEdited = false): SdkTimelineItemContent {
 function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventFields {
   return {
     eventOrTransactionId: new EventOrTransactionId.EventId({ eventId: '$event' }),
-    sender: '@alice:allo.oxy.so',
+    sender: '@alice:allo.you',
     senderProfile: new ProfileDetails.Unavailable(),
     content: textContent('hello'),
     timestamp: 1_700_000_000_000n,
@@ -64,9 +64,9 @@ function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventField
 
 function roomInfo(overrides: Partial<RoomSummaryFields> = {}): RoomSummaryFields {
   return {
-    id: '!room:allo.oxy.so',
+    id: '!room:allo.you',
     displayName: 'Bea',
-    avatarUrl: 'mxc://allo.oxy.so/avatar',
+    avatarUrl: 'mxc://allo.you/avatar',
     isDirect: true,
     membership: Membership.Joined,
     encryptionState: EncryptionState.Encrypted,
@@ -100,9 +100,9 @@ describe('toSyncState', () => {
 describe('toRoomSummary', () => {
   it('carries the fields the conversation list draws', () => {
     expect(toRoomSummary(roomInfo({ numUnreadMessages: 3n }))).toEqual({
-      roomId: '!room:allo.oxy.so',
+      roomId: '!room:allo.you',
       displayName: 'Bea',
-      avatarUrl: 'mxc://allo.oxy.so/avatar',
+      avatarUrl: 'mxc://allo.you/avatar',
       isDirect: true,
       membership: 'joined',
       encryption: 'encrypted',
@@ -161,7 +161,7 @@ describe('toTimelineItem', () => {
       expect(item.content).toEqual({ kind: 'undecryptable' });
       // And it is a full row: the envelope survives even though the content did
       // not, which is what lets the UI place it in the right spot.
-      expect(item.sender).toBe('@alice:allo.oxy.so');
+      expect(item.sender).toBe('@alice:allo.you');
       expect(item.sentAt).toBe(1_700_000_000_000);
     });
 
@@ -205,7 +205,7 @@ describe('toTimelineItem', () => {
       // Dropped rows leave a gap that looks like lost messages. Naming them keeps
       // the gap visible.
       const content = new TimelineItemContent.RoomMembership({
-        userId: '@bea:allo.oxy.so',
+        userId: '@bea:allo.you',
         userDisplayName: undefined,
         change: undefined,
         reason: undefined,
