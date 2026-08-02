@@ -165,6 +165,9 @@ const TYPING_NOTICE_TIMEOUT_MS = 10_000;
  */
 const EDIT_FALLBACK_PREFIX = ' * ';
 
+/** Shared by every row nobody has reacted to, which is nearly all of them. */
+const NO_REACTIONS: readonly AlloReaction[] = [];
+
 /**
  * The SDK's crypto surface. Taken off the client rather than imported, because
  * `matrix-js-sdk@42` does not export `CryptoApi` from its root.
@@ -1217,5 +1220,3 @@ class WebTimelineHandle implements AlloTimelineHandle {
     );
   }
 }
-
-const NO_REACTIONS: readonly AlloReaction[] = [];
