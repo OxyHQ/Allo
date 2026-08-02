@@ -44,9 +44,10 @@ import {
   reportSubmitEventId,
 } from "../../../services/moderation/ModerationOutboxService";
 import { subjectProviderFor } from "../../../services/moderation/subjects/registry";
+import type { ModerationSubjectProvider } from "../../../services/moderation/subjects/types";
 
-const userProvider = {
-  reportedType: "user",
+const userProvider: ModerationSubjectProvider = {
+  reportedType: ReportedType.USER,
   subjectType: "identity.profile",
   snapshot: async () => null,
 };

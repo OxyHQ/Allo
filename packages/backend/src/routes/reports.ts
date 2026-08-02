@@ -11,6 +11,10 @@ import {
   createReport,
   DuplicateReportError,
 } from "../services/moderation/ReportIntakeService";
+import {
+  reportedIdentifierProblem,
+  resolveModerationSubject,
+} from "../services/moderation/subjectIdentity";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
 import { logger } from "../utils/logger";
 
@@ -53,6 +57,20 @@ function parseCategories(value: unknown): ReportCategory[] | null {
  * the evidence. The response deliberately does NOT distinguish the two cases —
  * `delivered` is not echoed back — because a reporter learning which reports leave
  * the deployment learns which reports can be made to disappear.
+ *
+ * ## `reportedId` accepts an MXID, and that changes nothing downstream
+ *
+ * What a client has to hand in a Matrix room is an MXID, so this route takes one
+ * (§6.2). `Report.reportedId` stays an Oxy user id: the translation happens at this
+ * edge and in intake, and the delivery pipeline never learns that Matrix exists.
+ * Changing the stored key to an MXID instead would have moved §7.3's dedup key and
+ * the subject provider for no gain — CrowdSource judges Oxy accounts.
+ *
+ * An identifier with no Oxy account behind it — a user on a homeserver Allo does
+ * not run, a bridge ghost, a room, an event id — is still accepted and still
+ * stored, and is recorded with the reason it cannot be reviewed (§6.3). Refusing it
+ * here would be the same mistake as refusing a reported message, and the 400 would
+ * additionally tell any client which identifiers Allo considers real.
  */
 router.post("/", async (req: AuthRequest, res: Response) => {
   const body: unknown = req.body;
@@ -73,6 +91,18 @@ router.post("/", async (req: AuthRequest, res: Response) => {
   const reportedId = body.reportedId;
   if (typeof reportedId !== "string" || reportedId.trim().length === 0) {
     return sendErrorResponse(res, 400, "Bad Request", "reportedId is required");
+  }
+
+  /**
+   * Bounded before anything reads it. §6.3 makes an unresolvable identifier
+   * something Allo STORES rather than refuses, so this is the only place a size
+   * and a shape can be imposed on it at all — and without one, a report about a
+   * megabyte of attacker-chosen bytes is a permanently stuck outbox slot rather
+   * than a rejected request. `createReport` checks again, because it is exported.
+   */
+  const identifierProblem = reportedIdentifierProblem(reportedId.trim());
+  if (identifierProblem !== undefined) {
+    return sendErrorResponse(res, 400, "Bad Request", identifierProblem);
   }
 
   const categories = parseCategories(body.categories);
@@ -102,11 +132,28 @@ router.post("/", async (req: AuthRequest, res: Response) => {
      * refusal to open a case whose subject and reporter are the same principal —
      * §7.3's dedup key would be well-formed and a jury would be asked a question
      * with no adversary.
+     *
+     * Compared against the RESOLVED subject rather than the raw field, because a
+     * client holding a room has an MXID and not an Oxy id (§6.2). Against the raw
+     * field this check would pass for `@<own localpart>:allo.you` while intake
+     * translated it straight back to the reporter's own Oxy id — a self-report
+     * queued for a jury, reachable by sending the id the UI already has.
      */
-    if (reportedType === ReportedType.USER && reportedId.trim() === reporter) {
+    const subject = resolveModerationSubject(reportedId);
+    if (
+      reportedType === ReportedType.USER &&
+      subject.kind === "oxy-account" &&
+      subject.reportedId === reporter
+    ) {
       return sendErrorResponse(res, 400, "Bad Request", "You cannot report yourself");
     }
 
+    /**
+     * The identifier is handed over AS GIVEN. `createReport` resolves it again and
+     * that resolution is the one that decides the stored row — one authority for
+     * what `reportedId` means, rather than a route that canonicalises and a service
+     * that assumes somebody did.
+     */
     const { report } = await createReport({
       reporter,
       reportedType,
