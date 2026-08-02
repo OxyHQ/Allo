@@ -16,6 +16,9 @@ import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
     Easing,
+    cancelAnimation,
+    withRepeat,
+    withSequence,
     FadeIn,
     FadeOut,
     LinearTransition,
@@ -388,18 +391,34 @@ function SwipeAction({
 function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof useTheme> }) {
     const opacity = useSharedValue(0.3);
 
+    // El pulso se declara como una secuencia que se repite, no como una animación
+    // que se relanza a sí misma desde su propio callback.
+    //
+    // La versión anterior hacía justo eso —`withTiming(1, …, () => { opacity.value
+    // = withTiming(0.3, …) })`— más un `setInterval` de 1600 ms que volvía a
+    // lanzarla sin esperar a que la anterior acabase. En web el setter de un
+    // shared value es un setter de JavaScript corriente, así que un callback que
+    // escribe el mismo valor que lo disparó es recursión directa:
+    //
+    //     RangeError: Maximum call stack size exceeded
+    //         at Object.get [as valueSetter]
+    //
+    // Se veía sólo cuando la lista tardaba en cargar, que es cuando este
+    // esqueleto se monta — es decir, precisamente cuando la app ya iba mal.
+    //
+    // `withRepeat(withSequence(...), -1)` deja el bucle en el hilo de UI, sin
+    // callbacks que reentren y sin temporizador que solape.
     useEffect(() => {
-        opacity.value = withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }, () => {
-            opacity.value = withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) });
-        });
-        const interval = setInterval(() => {
-            opacity.value = withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }, () => {
-                opacity.value = withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) });
-            });
-        }, 1600);
-        return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        opacity.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+            ),
+            -1,
+            false,
+        );
+        return () => cancelAnimation(opacity);
+    }, [opacity]);
 
     const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
     const bone = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
