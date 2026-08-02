@@ -78,13 +78,20 @@ describe('uploading to the media repository', () => {
     // `isEncrypted: boolean` on the outgoing attachment would let a screen, a
     // default argument or a refactor turn encryption off — and the room's own
     // state is the only honest source for that answer.
+    //
+    // Property declarations only, not the whole body: prose about encryption
+    // belongs in this interface's doc comments and saying so must not fail a
+    // test about what the interface *offers*.
     const contract = readFileSync(join(PORT_DIRECTORY, 'types.ts'), 'utf8');
     const outgoing = contract.slice(
       contract.indexOf('export interface AlloOutgoingAttachment'),
     );
-    const body = outgoing.slice(0, outgoing.indexOf('\n}'));
+    const properties = outgoing
+      .slice(0, outgoing.indexOf('\n}'))
+      .split('\n')
+      .filter((line) => /^\s*(readonly\s+)?[A-Za-z_$][\w$]*\??\s*:/.test(line));
 
-    expect(body).not.toMatch(/encrypt/i);
-    expect(body).not.toMatch(/plaintext/i);
+    expect(properties.length).toBeGreaterThan(4);
+    expect(properties.filter((line) => /encrypt|plaintext|clear/i.test(line))).toEqual([]);
   });
 });
