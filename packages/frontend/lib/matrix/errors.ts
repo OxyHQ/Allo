@@ -55,6 +55,24 @@ export class MatrixRoomNotFoundError extends MatrixPortError {
   }
 }
 
+/**
+ * A message operation was asked for on an event the homeserver has not accepted.
+ *
+ * Reactions, edits, redactions and read receipts all address an event by its id,
+ * and a message still on its way out has none — it is addressable only by the
+ * transaction id its own timeline minted for it. The Rust binding can address
+ * some of those anyway and `matrix-js-sdk` cannot, so rather than let the two
+ * platforms disagree about which taps do nothing, both refuse with this.
+ */
+export class MatrixEventNotSentError extends MatrixPortError {
+  constructor(operation: string, key: string) {
+    super(
+      `${operation} needs an event id, and the message ${key} has not been ` +
+        'accepted by the homeserver yet. Wait for it to be sent.',
+    );
+  }
+}
+
 /** Something that needs a session was attempted before there was one. */
 export class MatrixNotLoggedInError extends MatrixPortError {
   constructor(operation: string) {

@@ -18,10 +18,15 @@ jest.mock('@unomed/react-native-matrix-sdk');
  *   every event received, so rows already read must not be read again.
  */
 
-function eventFields(body: string): TimelineEventFields {
+interface EventOptions {
+  readonly sender?: string;
+  readonly readers?: readonly string[];
+}
+
+function eventFields(body: string, options: EventOptions = {}): TimelineEventFields {
   return {
     eventOrTransactionId: new EventOrTransactionId.EventId({ eventId: `$${body}` }),
-    sender: '@alice:allo.you',
+    sender: options.sender ?? '@alice:allo.you',
     senderProfile: new ProfileDetails.Unavailable(),
     content: new TimelineItemContent.MsgLike({
       content: {
@@ -38,6 +43,9 @@ function eventFields(body: string): TimelineEventFields {
     timestamp: 1_700_000_000_000n,
     isOwn: false,
     localSendState: undefined,
+    readReceipts: new Map(
+      (options.readers ?? []).map((userId) => [userId, { timestamp: 1_700_000_000_000n }]),
+    ),
   };
 }
 
@@ -45,13 +53,13 @@ interface CountedRow extends TimelineRow {
   readonly reads: () => number;
 }
 
-function eventRow(id: string, body: string): CountedRow {
+function eventRow(id: string, body: string, options: EventOptions = {}): CountedRow {
   let reads = 0;
   return {
     uniqueId: () => ({ id }),
     asEvent: () => {
       reads += 1;
-      return eventFields(body);
+      return eventFields(body, options);
     },
     reads: () => reads,
   };
@@ -165,5 +173,89 @@ describe('TimelineProjection', () => {
 
   it('reports an empty timeline as an empty list', () => {
     expect(new TimelineProjection().project([])).toEqual([]);
+  });
+});
+
+describe('TimelineProjection read receipts', () => {
+  const BEA = '@bea:allo.you';
+
+  it('marks the rows before the one a receipt names', () => {
+    // The binding attaches a receipt to the single event it names. Reading each
+    // row on its own would report every message but the last as unread.
+    const projection = new TimelineProjection();
+
+    const items = projection.project([
+      eventRow('row-1', 'first'),
+      eventRow('row-2', 'second', { readers: [BEA] }),
+    ]);
+
+    expect(items.map((item) => item.isReadByOthers)).toEqual([true, true]);
+  });
+
+  it('leaves the rows after the receipt unread', () => {
+    const projection = new TimelineProjection();
+
+    const items = projection.project([
+      eventRow('row-1', 'first', { readers: [BEA] }),
+      eventRow('row-2', 'second'),
+    ]);
+
+    expect(items.map((item) => item.isReadByOthers)).toEqual([true, false]);
+  });
+
+  it('moves the mark forward when only the row the receipt moved to changed', () => {
+    // The reason the scan cannot be folded into the per-row cache. When a reader
+    // moves on, the binding hands over new objects for the two rows the receipt
+    // left and arrived at — and for nothing in between, whose answer changed all
+    // the same. Caching the finished item against the row object would leave the
+    // middle of the conversation reporting the old answer for good.
+    const projection = new TimelineProjection();
+    const middle = eventRow('row-2', 'second');
+    projection.project([
+      eventRow('row-1', 'first', { readers: [BEA] }),
+      middle,
+      eventRow('row-3', 'third'),
+    ]);
+
+    const after = projection.project([
+      eventRow('row-1', 'first'),
+      middle,
+      eventRow('row-3', 'third', { readers: [BEA] }),
+    ]);
+
+    expect(after.map((item) => item.isReadByOthers)).toEqual([true, true, true]);
+  });
+
+  it('does not read the unchanged row again to move its mark', () => {
+    // The mark moved without an FFI call, which is the point of doing it in a
+    // second pass: a receipt arriving must not cost a round trip per message in
+    // the window.
+    const projection = new TimelineProjection();
+    const middle = eventRow('row-2', 'second');
+    projection.project([middle, eventRow('row-3', 'third')]);
+
+    projection.project([middle, eventRow('row-3', 'third', { readers: [BEA] })]);
+
+    expect(middle.reads()).toBe(1);
+  });
+
+  it('hands back the same item object while the mark has not changed', () => {
+    const projection = new TimelineProjection();
+    const row = eventRow('row-1', 'first', { readers: [BEA] });
+
+    const before = projection.project([row]);
+    const after = projection.project([row]);
+
+    expect(after[0]).toBe(before[0]);
+  });
+
+  it('does not count the sender reading their own message', () => {
+    const projection = new TimelineProjection();
+
+    const items = projection.project([
+      eventRow('row-1', 'first', { sender: BEA, readers: [BEA] }),
+    ]);
+
+    expect(items[0]?.isReadByOthers).toBe(false);
   });
 });

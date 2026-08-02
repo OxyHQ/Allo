@@ -1,8 +1,12 @@
 import {
+  isTimelineRow,
   toEncryptionState,
+  toReactions,
+  toReaders,
   toRoomSummary,
   toSyncState,
   toTimelineItem,
+  type ReactionEventFields,
   type RoomStateFields,
   type RoomSummaryFields,
   type TimelineEventFields,
@@ -50,6 +54,7 @@ function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventField
     getContent: () => ({ msgtype: 'm.text', body: 'hello' }),
     getTs: () => 1_700_000_000_000,
     isRedacted: () => false,
+    getRelation: () => null,
     replacingEvent: () => null,
     status: null,
     sender: { name: 'Alice' },
@@ -161,7 +166,7 @@ describe('toRoomSummary', () => {
 
 describe('toTimelineItem', () => {
   it('reads a text message', () => {
-    expect(toTimelineItem(event(), VIEWER)).toEqual({
+    expect(toTimelineItem(event(), VIEWER, [])).toEqual({
       key: '$event',
       id: { kind: 'remote', eventId: '$event' },
       sender: '@alice:allo.you',
@@ -170,15 +175,19 @@ describe('toTimelineItem', () => {
       isOwn: false,
       sendState: 'sent',
       content: { kind: 'text', body: 'hello', isEdited: false },
+      reactions: [],
+      // Settled by the caller, which is the only place that can see the later
+      // rows a read receipt actually sits on.
+      isReadByOthers: false,
     });
   });
 
   it('knows which messages are the viewer’s own', () => {
-    expect(toTimelineItem(event({ getSender: () => VIEWER }), VIEWER)?.isOwn).toBe(true);
+    expect(toTimelineItem(event({ getSender: () => VIEWER }), VIEWER, [])?.isOwn).toBe(true);
   });
 
   it('leaves the sender nameless until the SDK has resolved one', () => {
-    expect(toTimelineItem(event({ sender: null }), VIEWER)?.senderDisplayName).toBe(undefined);
+    expect(toTimelineItem(event({ sender: null }), VIEWER, [])?.senderDisplayName).toBe(undefined);
   });
 
   it('reports an edited message with the content that replaced it', () => {
@@ -190,6 +199,7 @@ describe('toTimelineItem', () => {
         replacingEvent: () => ({}),
       }),
       VIEWER,
+      [],
     );
 
     expect(item?.content).toEqual({ kind: 'text', body: 'hello again', isEdited: true });
@@ -200,7 +210,7 @@ describe('toTimelineItem', () => {
       // A device that has just been set up sees this for every message sent
       // before it existed. "Arrived but cannot be read" and "did not arrive" are
       // different facts and the UI has to be able to tell them apart.
-      expect(toTimelineItem(event({ getType: () => 'm.room.encrypted' }), VIEWER)?.content).toEqual(
+      expect(toTimelineItem(event({ getType: () => 'm.room.encrypted' }), VIEWER, [])?.content).toEqual(
         { kind: 'undecryptable' },
       );
     });
@@ -212,6 +222,7 @@ describe('toTimelineItem', () => {
           getContent: () => ({ msgtype: 'm.text', body: 'ciphertext leaked into content' }),
         }),
         VIEWER,
+        [],
       );
 
       expect(item?.content).toEqual({ kind: 'undecryptable' });
@@ -221,6 +232,7 @@ describe('toTimelineItem', () => {
       const item = toTimelineItem(
         event({ getType: () => 'm.room.encrypted', isRedacted: () => true }),
         VIEWER,
+        [],
       );
 
       expect(item?.content).toEqual({ kind: 'redacted' });
@@ -230,7 +242,7 @@ describe('toTimelineItem', () => {
   describe('an event Allo does not draw', () => {
     it('is reported as itself rather than dropped', () => {
       // A gap in a conversation should be visible instead of silent.
-      expect(toTimelineItem(event({ getType: () => 'm.room.member' }), VIEWER)?.content).toEqual({
+      expect(toTimelineItem(event({ getType: () => 'm.room.member' }), VIEWER, [])?.content).toEqual({
         kind: 'unsupported',
         description: 'm.room.member',
       });
@@ -242,6 +254,7 @@ describe('toTimelineItem', () => {
       const item = toTimelineItem(
         event({ getContent: () => ({ msgtype: 'm.image', body: 'holiday.jpg' }) }),
         VIEWER,
+        [],
       );
 
       expect(item?.content).toEqual({
@@ -254,6 +267,7 @@ describe('toTimelineItem', () => {
       const item = toTimelineItem(
         event({ getContent: () => ({ msgtype: 'm.text', body: { evil: true } }) }),
         VIEWER,
+        [],
       );
 
       expect(item?.content.kind).toBe('unsupported');
@@ -270,6 +284,7 @@ describe('toTimelineItem', () => {
           getId: () => '~!room:allo.you:m1700000000',
         }),
         VIEWER,
+        [],
       );
 
       expect(item?.id).toEqual({ kind: 'local', transactionId: 'm1700000000' });
@@ -283,10 +298,12 @@ describe('toTimelineItem', () => {
       const local = toTimelineItem(
         event({ status: 'sending', getTxnId: () => 'm1', getId: () => '~!room:allo.you:m1' }),
         VIEWER,
+        [],
       );
       const remote = toTimelineItem(
         event({ status: 'sent', getTxnId: () => 'm1', getId: () => '$real' }),
         VIEWER,
+        [],
       );
 
       expect(local?.key).toBe(remote?.key);
@@ -295,7 +312,7 @@ describe('toTimelineItem', () => {
 
     it('reports a send that failed as failed, and a cancelled one too', () => {
       const send = (status: 'not_sent' | 'cancelled'): string | undefined =>
-        toTimelineItem(event({ status, getTxnId: () => 'm1' }), VIEWER)?.sendState;
+        toTimelineItem(event({ status, getTxnId: () => 'm1' }), VIEWER, [])?.sendState;
 
       expect(send('not_sent')).toBe('failed');
       expect(send('cancelled')).toBe('failed');
@@ -305,11 +322,115 @@ describe('toTimelineItem', () => {
   describe('an event that cannot be addressed', () => {
     it('is refused rather than given a made-up key', () => {
       // Two rows sharing a key is a list that reorders itself under the user.
-      expect(toTimelineItem(event({ getId: () => undefined }), VIEWER)).toBe(undefined);
+      expect(toTimelineItem(event({ getId: () => undefined }), VIEWER, [])).toBe(undefined);
     });
 
     it('is refused when it has no sender', () => {
-      expect(toTimelineItem(event({ getSender: () => undefined }), VIEWER)).toBe(undefined);
+      expect(toTimelineItem(event({ getSender: () => undefined }), VIEWER, [])).toBe(undefined);
     });
+  });
+});
+
+describe('isTimelineRow', () => {
+  it('keeps an ordinary message', () => {
+    expect(isTimelineRow(event())).toBe(true);
+  });
+
+  it('keeps a redacted message', () => {
+    // The mistake this holds down. A redacted event is not an absent one: it
+    // keeps its place, its sender and its time, and the UI has to be able to draw
+    // "this was deleted" where the message was. Filtering it out would close the
+    // gap and renumber the conversation under the reader.
+    expect(
+      isTimelineRow(event({ isRedacted: () => true, getContent: () => ({}) })),
+    ).toBe(true);
+  });
+
+  it('drops a reaction', () => {
+    // Reactions are timeline events and belong on the message they annotate.
+    // Without this, the first emoji Allo sends comes back down sync and draws
+    // itself as "Allo cannot show this yet (m.reaction)".
+    expect(isTimelineRow(event({ getType: () => 'm.reaction' }))).toBe(false);
+  });
+
+  it('drops a redaction event', () => {
+    // The redaction itself is not a row. What it did to the event it names is.
+    expect(isTimelineRow(event({ getType: () => 'm.room.redaction' }))).toBe(false);
+  });
+
+  it('drops an edit', () => {
+    // The SDK folds the new body into the original, so drawing the replacement
+    // too would show the message twice — the second time with a leading `* `.
+    expect(
+      isTimelineRow(event({ getRelation: () => ({ rel_type: 'm.replace' }) })),
+    ).toBe(false);
+  });
+
+  it('keeps a reply, which points at another event and is still a message', () => {
+    expect(isTimelineRow(event({ getRelation: () => ({}) }))).toBe(true);
+  });
+});
+
+describe('toReactions', () => {
+  function annotation(sender: string | undefined, isRedacted = false): ReactionEventFields {
+    return { getSender: () => sender, isRedacted: () => isRedacted };
+  }
+
+  it('reads the emoji and everyone who sent it', () => {
+    expect(
+      toReactions([
+        ['👍', new Set([annotation('@alice:allo.you'), annotation('@bea:allo.you')])],
+        ['❤️', new Set([annotation('@bea:allo.you')])],
+      ]),
+    ).toEqual([
+      { key: '👍', senders: ['@alice:allo.you', '@bea:allo.you'] },
+      { key: '❤️', senders: ['@bea:allo.you'] },
+    ]);
+  });
+
+  it('reports a message nobody has reacted to as no reactions', () => {
+    // `null` is what the SDK answers for an event with no annotations, and it is
+    // the common case rather than a failure.
+    expect(toReactions(null)).toEqual([]);
+    expect(toReactions([])).toEqual([]);
+  });
+
+  it('leaves out an annotation that was taken back', () => {
+    expect(toReactions([['👍', new Set([annotation('@bea:allo.you', true)])]])).toEqual([]);
+  });
+
+  it('counts a sender once however many annotations arrive from them', () => {
+    // The events come from a homeserver, which is to say from outside.
+    expect(
+      toReactions([
+        ['👍', new Set([annotation('@bea:allo.you'), annotation('@bea:allo.you')])],
+      ]),
+    ).toEqual([{ key: '👍', senders: ['@bea:allo.you'] }]);
+  });
+
+  it('leaves out an annotation with no sender', () => {
+    expect(toReactions([['👍', new Set([annotation(undefined)])]])).toEqual([]);
+  });
+});
+
+describe('toReaders', () => {
+  it('reads the user ids off the read receipts', () => {
+    expect(
+      toReaders([
+        { type: 'm.read', userId: '@bea:allo.you' },
+        { type: 'm.read.private', userId: '@viewer:allo.you' },
+      ]),
+    ).toEqual(['@bea:allo.you', '@viewer:allo.you']);
+  });
+
+  it('leaves out the fully-read marker', () => {
+    // A private bookmark the user's own client moves around. It says where they
+    // stopped, not what they saw, and counting it would let one participant's
+    // scroll position mark another participant's message as read.
+    expect(toReaders([{ type: 'm.fully_read', userId: '@bea:allo.you' }])).toEqual([]);
+  });
+
+  it('reports an event nobody has receipted as nobody', () => {
+    expect(toReaders([])).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import type {
   AlloEncryptionState,
   AlloEventContent,
   AlloEventKey,
+  AlloReaction,
   AlloRoomMembership,
   AlloRoomSummary,
   AlloSendState,
@@ -33,7 +34,12 @@ import type {
 const ROOM_CREATE_EVENT_TYPE = 'm.room.create';
 const ROOM_MESSAGE_EVENT_TYPE = 'm.room.message';
 const ROOM_ENCRYPTED_EVENT_TYPE = 'm.room.encrypted';
+const ROOM_REDACTION_EVENT_TYPE = 'm.room.redaction';
+const REACTION_EVENT_TYPE = 'm.reaction';
 const TEXT_MESSAGE_TYPE = 'm.text';
+const REPLACE_RELATION_TYPE = 'm.replace';
+const READ_RECEIPT_TYPE = 'm.read';
+const PRIVATE_READ_RECEIPT_TYPE = 'm.read.private';
 
 /**
  * The SDK's `SyncState` and `EventStatus`, written as the values of their
@@ -200,12 +206,42 @@ export interface TimelineEventFields {
   getContent(): IContent;
   getTs(): number;
   isRedacted(): boolean;
+  /** `null` for an event that does not point at another one. */
+  getRelation(): { readonly rel_type?: string } | null;
   /** Only its nullness is read: an event with a replacement has been edited. */
   replacingEvent(): object | null;
   /** `null` for every event the homeserver has already accepted. */
   readonly status: SdkEventStatus | null;
   /** The sender's room membership, once the SDK has resolved it. */
   readonly sender: { readonly name: string } | null;
+}
+
+/**
+ * Whether this event is a row of the conversation at all.
+ *
+ * Three kinds of event are in the timeline and are not rows, because each one
+ * exists to change a row that is already there:
+ *
+ * - **reactions**, which belong on the message they annotate;
+ * - **redactions**, which empty the event they name — that event stays, and
+ *   stays a row, which is what makes "deleted" different from "gone";
+ * - **edits**, which replace the body of the event they point at. The SDK
+ *   already folds the new body into the original, so drawing the replacement as
+ *   well would show the message twice, once with a leading `* `.
+ *
+ * The native SDK never surfaces any of these as timeline items, and this is the
+ * web half agreeing. It is not cosmetic: without it, the first reaction Allo
+ * sends comes back down sync and draws itself as "Allo cannot show this yet
+ * (m.reaction)" underneath the message it was meant to decorate.
+ */
+export function isTimelineRow(event: TimelineEventFields): boolean {
+  const type = event.getType();
+  if (type === REACTION_EVENT_TYPE || type === ROOM_REDACTION_EVENT_TYPE) {
+    return false;
+  }
+  // A redacted event has no content left to carry a relation, so this reads the
+  // relation of live events only — which is the only place one can be.
+  return event.getRelation()?.rel_type !== REPLACE_RELATION_TYPE;
 }
 
 /**
@@ -217,10 +253,15 @@ export interface TimelineEventFields {
  * transaction id the SDK minted for them. An event with neither is not something
  * to draw a guess for — it is a bug worth seeing — so the caller drops it and
  * says so rather than inventing a key, which would collide with the next one.
+ *
+ * `isReadByOthers` is left `false` and settled by the caller. It is the one field
+ * of a row that is not a function of that row: the receipt that says this message
+ * was read normally sits on a later one. See `lib/matrix/readReceipts.ts`.
  */
 export function toTimelineItem(
   event: TimelineEventFields,
   viewerUserId: string,
+  reactions: readonly AlloReaction[],
 ): AlloTimelineItem | undefined {
   const sender = event.getSender();
   const identity = toEventIdentity(event);
@@ -236,7 +277,78 @@ export function toTimelineItem(
     isOwn: sender === viewerUserId,
     sendState: toSendState(event.status),
     content: toEventContent(event),
+    reactions,
+    isReadByOthers: false,
   };
+}
+
+/** What {@link toReactions} needs of the annotation events the SDK aggregated. */
+export interface ReactionEventFields {
+  getSender(): string | undefined;
+  isRedacted(): boolean;
+}
+
+const NO_REACTIONS: readonly AlloReaction[] = [];
+
+/**
+ * The reactions on one message, from the SDK's aggregation of its annotations.
+ *
+ * `null` is what the SDK answers for a message nobody has reacted to, and it is
+ * the overwhelmingly common case: it is reported as no reactions rather than as
+ * an absence, because a message with none and a message whose annotations have
+ * not loaded look the same to a reader and there is nothing to draw for either.
+ *
+ * Two things are dropped. A redacted annotation is a reaction that was taken
+ * back — the container usually removes it, and a race where it has not is not a
+ * reason to draw it. And a sender is counted once per key however many
+ * annotations arrive from them, because the count is of people and the events
+ * come from a homeserver, which is to say from outside.
+ */
+export function toReactions(
+  annotations: readonly (readonly [string, ReadonlySet<ReactionEventFields>])[] | null,
+): readonly AlloReaction[] {
+  if (annotations === null || annotations.length === 0) {
+    return NO_REACTIONS;
+  }
+
+  const reactions: AlloReaction[] = [];
+  for (const [key, events] of annotations) {
+    const senders = new Set<string>();
+    for (const event of events) {
+      const sender = event.getSender();
+      if (sender !== undefined && !event.isRedacted()) {
+        senders.add(sender);
+      }
+    }
+    if (senders.size > 0) {
+      reactions.push({ key, senders: [...senders] });
+    }
+  }
+  return reactions.length === 0 ? NO_REACTIONS : reactions;
+}
+
+/** What {@link toReaders} needs of the SDK's cached receipts for one event. */
+export interface ReceiptFields {
+  readonly type: string;
+  readonly userId: string;
+}
+
+/**
+ * The user ids whose read receipt names this event.
+ *
+ * `m.fully_read` is filtered out and the two read receipts are kept. A fully-read
+ * marker is a private bookmark the user's own client moves around — it says where
+ * they stopped, not what they saw — and counting it would let one participant's
+ * scroll position mark another participant's message as read.
+ */
+export function toReaders(receipts: readonly ReceiptFields[]): readonly string[] {
+  const readers: string[] = [];
+  for (const receipt of receipts) {
+    if (receipt.type === READ_RECEIPT_TYPE || receipt.type === PRIVATE_READ_RECEIPT_TYPE) {
+      readers.push(receipt.userId);
+    }
+  }
+  return readers;
 }
 
 interface EventIdentity {
