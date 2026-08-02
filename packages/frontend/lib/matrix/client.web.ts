@@ -15,6 +15,12 @@ import {
   createClient,
   isValidAuthMetadata,
 } from 'matrix-js-sdk';
+// Not exported from the root of `matrix-js-sdk@42`, only from this path inside
+// the package — which a future version may move. The spike found the same
+// (`spikes/matrix-web/RESULTS.md`, constraint 3). Depending on an internal path
+// beats reimplementing PBKDF2, which would have to agree byte for byte with what
+// Rust computes on the other platform.
+import { deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api/index.js';
 import type {
   AccessTokens,
   MatrixClient,
@@ -26,6 +32,8 @@ import type {
 } from 'matrix-js-sdk';
 
 import {
+  MatrixBackupExistsOnServerError,
+  MatrixCryptoUnavailableError,
   MatrixNotLoggedInError,
   MatrixOidcCallbackError,
   MatrixRoomNotFoundError,
@@ -42,6 +50,7 @@ import type {
   AlloOidcLoginOptions,
   AlloOidcLoginRequest,
   AlloPaginationOutcome,
+  AlloRecoveryState,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -59,7 +68,9 @@ import {
   generateAuthorizationState,
   type OidcGrant,
 } from './web/oidcLogin';
+import { planKeyBackup, toRecoveryState } from './web/recovery';
 import { directRoomIds, orderRoomList, type RoomListEntry } from './web/roomList';
+import { createSecretStorageKeyCallback } from './web/secretStorage';
 import { decodeAuthData, encodeAuthData } from './web/session';
 import { toEncryptionState, toRoomSummary, toSyncState, toTimelineItem } from './web/translate';
 
@@ -115,6 +126,12 @@ const INITIAL_SYNC_LIMIT = 20;
 /** `m.room.encryption` is room state with an empty state key. */
 const ENCRYPTION_STATE_KEY = '';
 
+/**
+ * The SDK's crypto surface. Taken off the client rather than imported, because
+ * `matrix-js-sdk@42` does not export `CryptoApi` from its root.
+ */
+type WebCryptoApi = NonNullable<ReturnType<MatrixClient['getCrypto']>>;
+
 export const createAlloChatClient: AlloChatClientFactory = async (config) =>
   new WebAlloChatClient(config);
 
@@ -135,6 +152,25 @@ class WebAlloChatClient implements AlloChatClient {
   #syncState: AlloSyncState = 'idle';
   #syncing = false;
   #watchingSyncState = false;
+  /**
+   * The 4S passphrase, for as long as this client exists.
+   *
+   * Held rather than passed, because the SDK does not take it as an argument: it
+   * calls back for the secret storage key whenever it needs one, including long
+   * after the recovery call that set this returned — a secret shared by another
+   * device mid-session arrives that way. A callback that could only answer
+   * during `enableRecovery` would leave those requests unanswered.
+   *
+   * It is a credential, and this is the honest account of what that means here.
+   * It is never logged, never persisted and never sent anywhere; it is dropped
+   * on {@link close}. It is *not* wiped: JavaScript strings cannot be
+   * overwritten, so unlike the native binding — which zeroes its copy after
+   * PBKDF2 — this holds a string until the garbage collector gets to it. What
+   * bounds the exposure is not this field but where the value comes from: it is
+   * derived from the Oxy phrase, which is already on the device, so an attacker
+   * who can read this process's memory had the input to it either way.
+   */
+  #recoveryPassphrase: string | undefined;
 
   constructor(config: AlloChatClientConfig) {
     this.#config = config;
@@ -265,6 +301,88 @@ class WebAlloChatClient implements AlloChatClient {
     }
   }
 
+  async recoveryState(): Promise<AlloRecoveryState> {
+    const client = this.#requireClient('Reading the recovery state');
+    const crypto = this.#requireCrypto('Reading the recovery state');
+    return toRecoveryState({
+      defaultKeyId: await client.secretStorage.getDefaultKeyId(),
+      crossSigningReady: await crypto.isCrossSigningReady(),
+      backupActive: (await crypto.getActiveSessionBackupVersion()) !== null,
+    });
+  }
+
+  /**
+   * Creates 4S and the key backup.
+   *
+   * Note what is *not* passed: neither `setupNewSecretStorage` nor
+   * `setupNewCrossSigning`. Both mean "reset even if it already exists", and
+   * both are what the spike used because it built a fresh account on every run.
+   * In the app they would be the bug this whole path exists to avoid — the
+   * caller has already established that there is nothing to reset, and passing
+   * them would turn a mistaken state reading into a destroyed store.
+   *
+   * Nor is `authUploadDeviceSigningKeys`. Uploading cross-signing keys can
+   * require interactive auth, and the only interactive auth Allo could satisfy
+   * is a Matrix password its users do not have — sessions come from Matrix
+   * Authentication Service with Oxy upstream. On a first upload MAS asks for
+   * none, which is the case this call is in; if a deployment's homeserver asks
+   * anyway, the request fails with the homeserver's own error, which is a better
+   * thing to read than a callback that pretends to authenticate and cannot.
+   */
+  async enableRecovery(passphrase: string): Promise<void> {
+    const crypto = this.#requireCrypto('Enabling recovery');
+    this.#recoveryPassphrase = passphrase;
+
+    const plan = planKeyBackup({
+      serverHasBackup: (await crypto.getKeyBackupInfo()) !== null,
+      backupActive: (await crypto.getActiveSessionBackupVersion()) !== null,
+    });
+    if (plan === 'refuse') {
+      this.#recoveryPassphrase = undefined;
+      throw new MatrixBackupExistsOnServerError();
+    }
+
+    await crypto.bootstrapCrossSigning({});
+    await crypto.bootstrapSecretStorage({
+      setupNewKeyBackup: plan === 'create',
+      createSecretStorageKey: () => crypto.createRecoveryKeyFromPassphrase(passphrase),
+    });
+    // `bootstrapSecretStorage` creates the backup version on the server, but the
+    // local engine only starts using it once it has been checked and trusted.
+    // Without this the device has a backup it is not uploading to, and
+    // `recoveryState()` — correctly — keeps reporting `incomplete`.
+    await crypto.checkKeyBackupAndEnable();
+  }
+
+  /**
+   * Takes everything this device is missing out of the account's existing 4S.
+   *
+   * Three calls where the native binding has one, in an order that is not
+   * interchangeable — the spike found that skipping the middle one fails with
+   * `No decryption key found in crypto store`
+   * (`spikes/matrix-web/RESULTS.md`, constraint 2):
+   *
+   * 1. `bootstrapCrossSigning({})` pulls the cross-signing private keys out of
+   *    4S and signs this device with the self-signing key it just got, which is
+   *    why recovery leaves the device verified with nobody scanning anything.
+   * 2. `loadSessionBackupPrivateKeyFromSecretStorage()` pulls the megolm backup
+   *    decryption key out of 4S and into the crypto store.
+   * 3. `restoreKeyBackup()` downloads the room keys and imports them, which is
+   *    the step that turns unreadable rows into messages.
+   */
+  async recoverWithPassphrase(passphrase: string): Promise<void> {
+    const crypto = this.#requireCrypto('Recovering from the key backup');
+    this.#recoveryPassphrase = passphrase;
+
+    await crypto.bootstrapCrossSigning({});
+    await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+    await crypto.checkKeyBackupAndEnable();
+    const result = await crypto.restoreKeyBackup();
+    logger.info(
+      `${LOG_TAG} recovered ${result.imported} of ${result.total} room keys from the backup`,
+    );
+  }
+
   async openTimeline(
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
@@ -295,6 +413,7 @@ class WebAlloChatClient implements AlloChatClient {
     }
     this.#syncing = false;
     this.#syncState = 'idle';
+    this.#recoveryPassphrase = undefined;
     client?.stopClient();
   }
 
@@ -416,6 +535,17 @@ class WebAlloChatClient implements AlloChatClient {
       refreshToken: session.refreshToken,
       tokenRefreshFunction: refresher.tokenRefreshFunction,
       store,
+      // How the crypto stack asks for the key to secret storage. Registered at
+      // construction because that is the only place the SDK takes it, and it
+      // reads the passphrase through a closure rather than capturing one, so a
+      // recovery that happens later still has an answer. See
+      // `web/secretStorage.ts`.
+      cryptoCallbacks: {
+        getSecretStorageKey: createSecretStorageKeyCallback(
+          () => this.#recoveryPassphrase,
+          deriveRecoveryKeyFromPassphrase,
+        ),
+      },
       // Allo's calls do not go through Matrix, so the SDK has no reason to poll
       // the homeserver for TURN servers.
       disableVoip: true,
@@ -519,6 +649,14 @@ class WebAlloChatClient implements AlloChatClient {
       throw new MatrixNotLoggedInError(operation);
     }
     return this.#client;
+  }
+
+  #requireCrypto(operation: string): WebCryptoApi {
+    const crypto = this.#requireClient(operation).getCrypto();
+    if (crypto === undefined) {
+      throw new MatrixCryptoUnavailableError(operation);
+    }
+    return crypto;
   }
 
   #requireSyncing(operation: string): MatrixClient {

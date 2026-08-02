@@ -207,6 +207,31 @@ export interface AlloSession {
 }
 
 /**
+ * How far this device has got with Matrix's server-side secret storage (4S) and
+ * the key backup that hangs off it.
+ *
+ * These four values describe **this device**, not the account. `enabled` is not
+ * "the server has a backup", it is "the server has one *and* this device holds
+ * every secret it needs from it" — which is the question that decides whether
+ * old messages are readable here. The native binding answers it directly with
+ * `RecoveryState`; the web half assembles the same answer from three calls.
+ */
+export type AlloRecoveryState =
+  /** No 4S on the account. Nobody has ever set recovery up. */
+  | 'disabled'
+  /** 4S exists, and this device is missing something it holds. */
+  | 'incomplete'
+  /** This device has everything. Old messages are readable and it is verified. */
+  | 'enabled'
+  /**
+   * Not settled yet. The crypto stack starts up in the background and cannot
+   * answer until it has; the honest report is that the question is still open,
+   * because acting on a guess here either creates a second 4S store or skips a
+   * recovery the device needed.
+   */
+  | 'unknown';
+
+/**
  * Where the client keeps its state and its crypto store.
  *
  * `in-memory` throws away the device identity when the process dies, which makes
@@ -268,6 +293,18 @@ export interface AlloTimelineHandle {
  * There is no password login and there will not be one. Allo's homeserver issues
  * sessions through Matrix Authentication Service with Oxy upstream, so the user
  * never has a Matrix password to give.
+ *
+ * **Two operations both SDKs offer are missing on purpose.** `resetRecoveryKey`
+ * and `recoverAndReset` each replace the 4S key with 32 random bytes and strip
+ * the passphrase block out of the account data. Neither fails, neither warns,
+ * and after either one the passphrase derived from the user's Oxy identity stops
+ * opening anything — the link that this port exists to maintain is gone, and the
+ * only way back is a key nobody was ever shown. They are absent from this
+ * interface so that no screen can reach them, and
+ * `__tests__/matrix/recovery/noSilentReset.test.ts` fails if an implementation
+ * calls one anyway. Changing the recovery key is
+ * {@link AlloChatClient.enableRecovery} with a newly derived passphrase, which
+ * keeps the link. See `docs/matrix/client-strategy.md` §3.2.
  */
 export interface AlloChatClient {
   /**
@@ -304,6 +341,46 @@ export interface AlloChatClient {
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
   ): Promise<AlloTimelineHandle>;
+
+  /**
+   * How far this device has got with 4S. See {@link AlloRecoveryState}.
+   *
+   * Asynchronous on both platforms even though the native binding answers
+   * synchronously, because the answer is only worth having once the crypto
+   * stack has finished starting, and waiting for that is the implementation's
+   * job rather than every caller's.
+   */
+  recoveryState(): Promise<AlloRecoveryState>;
+
+  /**
+   * Creates 4S and the key backup for this account, unlocked by `passphrase`.
+   *
+   * Only correct in state `disabled`. Calling it when 4S already exists creates
+   * a *second* store and makes it the default, which abandons the first one and
+   * every secret in it — the native SDK reallocates the key outright, and the
+   * web SDK is no kinder. {@link ensureMatrixRecovery} is what enforces that,
+   * and it is the only intended caller.
+   *
+   * `passphrase` is a credential: never log it, never persist it, never send it
+   * anywhere. Allo derives it from the Oxy identity — see
+   * `lib/matrix/recovery/passphrase.ts`.
+   */
+  enableRecovery(passphrase: string): Promise<void>;
+
+  /**
+   * Opens the account's existing 4S with `passphrase` and takes from it
+   * everything this device is missing: the cross-signing keys, the key backup
+   * decryption key, and then the room keys themselves.
+   *
+   * Two consequences worth stating because the UI depends on them. Messages
+   * that arrived before this device existed become readable — that is the whole
+   * point. And the device signs itself with the self-signing key it just
+   * recovered, so it ends up cross-signing verified without anyone scanning a QR
+   * code or comparing emoji.
+   *
+   * Only correct in state `incomplete`.
+   */
+  recoverWithPassphrase(passphrase: string): Promise<void>;
 
   /** Stops sync and releases every handle this client handed out. */
   close(): Promise<void>;

@@ -11,6 +11,8 @@ import {
 } from '@unomed/react-native-matrix-sdk';
 import type {
   ClientLike,
+  EnableRecoveryProgress,
+  EncryptionLike,
   OidcConfiguration,
   RoomLike,
   RoomListEntriesListener,
@@ -35,6 +37,7 @@ import type {
   AlloOidcLoginRequest,
   AlloOidcPrompt,
   AlloPaginationOutcome,
+  AlloRecoveryState,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -47,6 +50,7 @@ import { logger } from '@/utils/logger';
 
 import { applyListUpdate } from './native/listDiff';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
+import { describeEnableRecoveryProgress, toRecoveryState } from './native/recovery';
 import { RoomSummaryCache } from './native/roomSummaries';
 import { TimelineProjection } from './native/timelineProjection';
 import { toAlloSession } from './native/session';
@@ -156,6 +160,7 @@ class NativeAlloChatClient implements AlloChatClient {
   #sync: SyncServiceLike | undefined;
   #syncStateHandle: TaskHandleLike | undefined;
   #syncState: AlloSyncState = 'idle';
+  #encryptionHandle: EncryptionLike | undefined;
 
   constructor(client: ClientLike, oidc: OidcConfiguration) {
     this.#client = client;
@@ -236,6 +241,42 @@ class NativeAlloChatClient implements AlloChatClient {
     return toEncryptionState(await room.latestEncryptionState());
   }
 
+  async recoveryState(): Promise<AlloRecoveryState> {
+    const encryption = this.#encryption();
+    // The binding starts the crypto stack in background tasks once a session is
+    // installed, and `recoveryState()` answers `Unknown` until they have run.
+    // Reading it without waiting is how a device that only needed to recover
+    // decides it has nothing to do.
+    await encryption.waitForE2eeInitializationTasks();
+    return toRecoveryState(encryption.recoveryState());
+  }
+
+  async enableRecovery(passphrase: string): Promise<void> {
+    // The return value is the 4S key in base58 — a second credential that opens
+    // exactly what the passphrase opens. Allo derives its passphrase from the
+    // Oxy identity and can produce it again at any time, so there is nothing to
+    // show the user and nothing to keep. It is dropped here rather than stored
+    // in a variable that someone later logs.
+    await this.#encryption().enableRecovery(
+      // Not waiting for every room key to reach the backup. On an account with
+      // history that is minutes of uploading, and this call sits between a
+      // finished sign-in and a usable app. The backup engine carries on in the
+      // background either way; what the user is waiting for is 4S existing, and
+      // that is done long before the upload is.
+      false,
+      passphrase,
+      this.#recoveryProgress,
+    );
+  }
+
+  async recoverWithPassphrase(passphrase: string): Promise<void> {
+    // One call does what web needs three for: it opens 4S, takes the
+    // cross-signing keys and the backup decryption key out of it, and imports
+    // the room keys. The parameter is named `recoveryKey` and documented to
+    // accept either form; a passphrase is what Allo has.
+    await this.#encryption().recover(passphrase);
+  }
+
   async openTimeline(
     roomId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
@@ -260,6 +301,7 @@ class NativeAlloChatClient implements AlloChatClient {
     this.#syncStateListeners.clear();
     this.#syncStateHandle?.cancel();
     this.#syncStateHandle = undefined;
+    this.#encryptionHandle = undefined;
 
     const sync = this.#sync;
     // Dropped, not merely stopped: the state listener is gone with it, and
@@ -269,6 +311,32 @@ class NativeAlloChatClient implements AlloChatClient {
     this.#syncState = 'idle';
     await sync?.stop();
   }
+
+  /**
+   * The encryption handle, built once.
+   *
+   * `encryption()` mints a new object across the FFI boundary on every call, and
+   * the recovery path asks for it several times in a row.
+   */
+  #encryption(): EncryptionLike {
+    this.#encryptionHandle ??= this.#client.encryption();
+    return this.#encryptionHandle;
+  }
+
+  /**
+   * Progress while 4S is being created.
+   *
+   * The translation is a separate, tested function because one of the variants
+   * carries the recovery key: see `native/recovery.ts`.
+   */
+  readonly #recoveryProgress = {
+    onUpdate: (progress: EnableRecoveryProgress): void => {
+      const description = describeEnableRecoveryProgress(progress);
+      if (description !== undefined) {
+        logger.info(`${LOG_TAG} enabling recovery: ${description}`);
+      }
+    },
+  };
 
   #requireSync(operation: string): SyncServiceLike {
     if (this.#sync === undefined) {
