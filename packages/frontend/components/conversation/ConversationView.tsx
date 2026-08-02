@@ -40,6 +40,7 @@ import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
 import { CopyIcon } from '@/assets/icons/copy-icon';
 import { TrashIcon } from '@/assets/icons/trash-icon';
+import { CloseIcon } from '@/assets/icons/close-icon';
 
 // Icons
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
@@ -181,7 +182,7 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Initialize realtime messaging and typing indicator hooks
   const { sendTypingIndicator } = useRealtimeMessaging(conversationId);
-  const typingUserIds = useTypingIndicator(conversationId);
+  const storedTypingUserIds = useTypingIndicator(conversationId);
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
@@ -195,6 +196,28 @@ export default function ConversationView({ conversationId: propConversationId }:
   // there is no fetch: opening it is subscribing to it.
   const matrixTimeline = useMatrixTimeline(conversationId);
   const messages = matrixTimeline?.messages ?? storedMessages;
+
+  // The store-backed indicator is re-emitted as a DOM event and so only ever
+  // fires on web; the port's comes from the homeserver and works everywhere.
+  const typingUserIds = matrixTimeline?.typingUserIds ?? storedTypingUserIds;
+
+  /**
+   * Says the viewer is typing, wherever this conversation lives.
+   *
+   * The throttling around this — one notice per five seconds, a stop after three
+   * idle — belongs to the composer and is the same either way; only the wire
+   * changes.
+   */
+  const notifyTyping = useCallback(
+    (isTyping: boolean) => {
+      if (matrixTimeline) {
+        matrixTimeline.setTyping(isTyping);
+        return;
+      }
+      sendTypingIndicator(isTyping);
+    },
+    [matrixTimeline, sendTypingIndicator],
+  );
 
   // Group messages by time and format with day separators
   const messageGroups = useMemo(() => {
@@ -219,12 +242,36 @@ export default function ConversationView({ conversationId: propConversationId }:
     conversationId ? state.getVisibleTimestampId(conversationId) : null
   );
 
+  const editingMessageId = useChatUIStore(state =>
+    conversationId ? state.editingByConversation[conversationId] : undefined
+  );
+
   // Get store actions (using selectors to avoid re-renders)
   const fetchMessages = useMessagesStore(state => state.fetchMessages);
   const clearConversationUI = useChatUIStore(state => state.clearConversationUI);
   const setInputText = useChatUIStore(state => state.setInputText);
   const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
+  const setEditing = useChatUIStore(state => state.setEditing);
   const sendMessage = useMessagesStore(state => state.sendMessage);
+
+  /**
+   * Tell the homeserver the newest message here has been seen.
+   *
+   * An Effect because it is the one thing on this screen that is neither derived
+   * state nor a response to something the user did: nobody taps "I have read
+   * this", and the fact being reported — that a conversation with these messages
+   * in it is on screen — only exists after the render that put them there. It is
+   * a write to an external system, which is the case Effects are for.
+   *
+   * Keyed on the newest message rather than on the list, so scrolling, a
+   * reaction, or an edit does not re-send. Re-running is harmless anyway: the
+   * source drops a receipt for an event it has already sent one for.
+   */
+  const markRead = matrixTimeline?.markRead;
+  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : undefined;
+  useEffect(() => {
+    markRead?.();
+  }, [markRead, newestMessageId]);
 
 
   const flatListRef = useRef<FlashListRef<FormattedMessageGroup> | null>(null);
@@ -409,6 +456,21 @@ export default function ConversationView({ conversationId: propConversationId }:
       alignItems: 'center',
       padding: 32,
     },
+    editingBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+    },
+    editingBannerText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.primary,
+    },
     typingIndicator: {
       paddingHorizontal: 16,
       paddingVertical: 8,
@@ -477,21 +539,21 @@ export default function ConversationView({ conversationId: propConversationId }:
         // Throttle: only send typing=true once every 5 seconds
         const now = Date.now();
         if (now - lastTypingEmitRef.current > 5000) {
-          sendTypingIndicator(true);
+          notifyTyping(true);
           lastTypingEmitRef.current = now;
         }
         // Stop typing after 3 seconds of no input
         typingTimeoutRef.current = setTimeout(() => {
-          sendTypingIndicator(false);
+          notifyTyping(false);
           lastTypingEmitRef.current = 0;
           typingTimeoutRef.current = null;
         }, 3000);
       } else {
-        sendTypingIndicator(false);
+        notifyTyping(false);
         lastTypingEmitRef.current = 0;
       }
     }
-  }, [conversationId, setInputText, sendTypingIndicator]);
+  }, [conversationId, setInputText, notifyTyping]);
 
   const handleSend = useCallback(async (sizeToUse?: number) => {
     if (!conversationId || inputText.trim().length === 0) return;
@@ -505,7 +567,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-    sendTypingIndicator(false);
+    notifyTyping(false);
 
     // Clear input immediately for better UX (before sending)
     if (conversationId) {
@@ -530,7 +592,15 @@ export default function ConversationView({ conversationId: propConversationId }:
     // The gesture still adjusts the composer; it just does not reach the message.
     if (matrixTimeline) {
       try {
-        await matrixTimeline.send(text);
+        // The same composer, sending or rewriting. An edit keeps the original
+        // event's place and timestamp on every client in the room; only the body
+        // changes, which is why the row does not move when this returns.
+        if (editingMessageId !== undefined) {
+          await matrixTimeline.edit(editingMessageId, text);
+          setEditing(conversationId, undefined);
+        } else {
+          await matrixTimeline.send(text);
+        }
       } catch (error) {
         console.error('Error sending message:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
@@ -627,7 +697,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline, notifyTyping, editingMessageId, setEditing]);
 
   /**
    * Handle Enter key press to send message
@@ -823,13 +893,21 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
 
     try {
-      const currentReactions = selectedMessage.reactions || {};
-      const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
-
-      if (hasReacted) {
-        await removeReaction(conversationId, selectedMessage.id, emoji);
+      if (matrixTimeline) {
+        // One call for both directions. Which one it is depends on whether this
+        // account has already annotated the event, and the port asks the SDK
+        // that question against state a snapshot here could be a sync behind —
+        // a reaction sent from the user's phone a moment ago, for instance.
+        await matrixTimeline.toggleReaction(selectedMessage.id, emoji);
       } else {
-        await addReaction(conversationId, selectedMessage.id, emoji);
+        const currentReactions = selectedMessage.reactions || {};
+        const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
+
+        if (hasReacted) {
+          await removeReaction(conversationId, selectedMessage.id, emoji);
+        } else {
+          await addReaction(conversationId, selectedMessage.id, emoji);
+        }
       }
     } catch (error) {
       console.error('[Conversation] Error toggling reaction:', error);
@@ -837,7 +915,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     } finally {
       resetSelectionState();
     }
-  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState]);
+  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState, matrixTimeline]);
 
   const setReplyTo = useChatUIStore((state) => state.setReplyTo);
   const replyTo = useChatUIStore((state) => conversationId && state.replyToByConversation ? state.replyToByConversation[conversationId] : undefined);
@@ -876,12 +954,48 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [resetSelectionState]);
 
   /**
+   * Handle edit action
+   *
+   * Puts the composer into rewrite mode with the current body in it. The message
+   * is not touched until the user sends; cancelling leaves it exactly as it was.
+   */
+  const handleEdit = useCallback((message: Message) => {
+    resetSelectionState({ preserveMessage: true });
+    if (!conversationId) return;
+    setEditing(conversationId, message.id);
+    setInputText(conversationId, message.text);
+    inputRef.current?.focus();
+  }, [resetSelectionState, conversationId, setEditing, setInputText]);
+
+  const handleCancelEdit = useCallback(() => {
+    if (!conversationId) return;
+    setEditing(conversationId, undefined);
+    setInputText(conversationId, '');
+  }, [conversationId, setEditing, setInputText]);
+
+  /**
    * Handle delete action
+   *
+   * On Matrix this is a redaction, and a redaction is not a disappearance: the
+   * event keeps its place, its sender and its time on every client in the room,
+   * and only its content goes. The row stays and starts drawing itself as
+   * deleted, which is the protocol working — see `AlloTimelineHandle.redact`.
    */
   const handleDelete = useCallback((message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    // TODO: Implement delete functionality
-  }, [resetSelectionState]);
+    if (!matrixTimeline) {
+      // The Express backend has no endpoint that removes a message, so there is
+      // nothing to call and no reason to pretend otherwise by clearing it here:
+      // a message gone from this device and present on every other one is worse
+      // than one that is still there.
+      toast.error('Deleting messages is not available on this account.');
+      return;
+    }
+    matrixTimeline.deleteMessage(message.id).catch((error: unknown) => {
+      console.error('[Conversation] Error deleting message:', error);
+      toast.error('Failed to delete message');
+    });
+  }, [resetSelectionState, matrixTimeline]);
 
   /**
    * Handle info action
@@ -918,18 +1032,32 @@ export default function ConversationView({ conversationId: propConversationId }:
         label: 'Info',
         onPress: () => handleInfo(message),
       },
-      {
+    ];
+
+    // Both only ever apply to the viewer's own messages. Matrix lets a moderator
+    // redact somebody else's, but Allo does not check power levels, and an
+    // action offered to everyone that works for a few is worse than one that is
+    // not offered: the failure arrives after the tap, from the homeserver.
+    if (message.isSent) {
+      if (matrixTimeline) {
+        actions.push({
+          label: 'Edit',
+          onPress: () => handleEdit(message),
+        });
+      }
+      actions.push({
         label: 'Delete',
         icon: <TrashIcon size={20} color="#FF3B30" />,
         onPress: () => handleDelete(message),
         destructive: true,
-      },
-    ];
+      });
+    }
+
     if (context === 'media') {
       return actions.filter(action => action.label !== 'Copy');
     }
     return actions;
-  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleDelete]);
+  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleEdit, handleDelete, matrixTimeline]);
 
   /**
    * Handle swipe to reply
@@ -1139,6 +1267,22 @@ export default function ConversationView({ conversationId: propConversationId }:
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
           >
+            {/* Rewrite mode. Without a way out of it, the next thing the user
+                typed would silently replace an old message instead of sending. */}
+            {editingMessageId !== undefined && (
+              <View style={styles.editingBanner}>
+                <ThemedText style={styles.editingBannerText}>Editing message</ThemedText>
+                <TouchableOpacity
+                  onPress={handleCancelEdit}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel editing"
+                >
+                  <CloseIcon size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={styles.inputContainer}>
               {/* Attach Button */}
               <TouchableOpacity
