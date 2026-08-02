@@ -64,12 +64,17 @@ bun run dev:frontend
 
 ```
 lib/chat/
-  backend.ts          la bandera
-  matrixConfig.ts     homeserver, OIDC, almacén
-  matrixRuntime.ts    el cliente y su ciclo de vida, fuera de React
-  roomListSource.ts   la lista de salas como external store
-  timelineSource.ts   un timeline por sala, ídem, más paginar y enviar
-  matrixViewModel.ts  AlloRoomSummary → Conversation, AlloTimelineItem → Message
+  backend.ts             la bandera
+  matrixConfig.ts        homeserver, OIDC, almacén
+  matrixRuntime.ts       el cliente y su ciclo de vida, fuera de React
+  matrixSession.ts       la sesión guardada: versión, validación, homeserver
+  matrixSessionStorage.ts dónde vive: llavero en nativo, localStorage en web
+  roomListSource.ts      la lista de salas como external store
+  timelineSource.ts      un timeline por sala, ídem, más paginar y enviar
+  matrixViewModel.ts     AlloRoomSummary → Conversation, AlloTimelineItem → Message
+lib/matrix/
+  store.native.ts        dos directorios, y cómo borrarlos
+  store.web.ts           una base de IndexedDB, y cómo borrarla
 hooks/
   useMatrixRuntime.ts       useSyncExternalStore sobre el runtime
   useMatrixConversations.ts → Conversation[] | undefined
@@ -77,6 +82,22 @@ hooks/
 components/matrix/
   MatrixSignInGate.tsx      pinta a sus hijos salvo que falte sesión
 ```
+
+**Un dispositivo Matrix por instalación.** Un login acuña un dispositivo, y de
+ese dispositivo cuelgan unas claves de cifrado; una app que hace login en cada
+arranque llena la cuenta de dispositivos que nadie puede verificar y que no leen
+el historial de los demás. Lo que lo evita son dos hechos, ambos en
+`matrixRuntime.ts`:
+
+- **la sesión guardada manda.** El almacén en disco pertenece a la sesión que hay
+  en el llavero y a ninguna otra, así que un arranque que no encuentra sesión
+  borra el almacén *antes* de abrirlo. Eso hace que todas las formas de perder
+  una sesión —un cierre de sesión, un cierre a medias, un registro de una versión
+  vieja de Allo— terminen en el mismo estado limpio.
+- **la sesión no es una foto.** El SDK rota sus tokens por su cuenta, así que lo
+  que se escribió en el login caduca en menos de una hora. `observeSession` es
+  cómo el puerto lo cuenta —delegado del constructor en nativo, callback del
+  `TokenRefresher` en web— y el runtime está suscrito mientras el cliente viva.
 
 **Ningún componente de presentación cambió.** `MessageBubble`, `MessageBlock`,
 `DaySeparator`, las filas de la lista, el layout de tres paneles y los temas por
@@ -106,6 +127,12 @@ encenderlo.
 - Timeline de una conversación, con paginación hacia atrás al llegar arriba.
 - Envío de texto.
 - Login OIDC en tres pasos, con `expo-web-browser`.
+- **Sesión persistida**: el segundo arranque no pasa por el navegador. Se guarda
+  en el llavero del móvil (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, para que una
+  restauración de iCloud no lleve la sesión a un teléfono donde no están las
+  claves) y en `localStorage` en web.
+- **Cerrar sesión**, desde Ajustes. Avisa al homeserver, y borre o no borre el
+  homeserver, se lleva la sesión guardada, el almacén de estado y el de cripto.
 - Estados propios para los eventos sin texto: no descifrable, redactado, y
   «Allo no sabe dibujar esto todavía». Ninguno se pinta como una burbuja vacía.
 
@@ -113,28 +140,28 @@ encenderlo.
 
 Por orden de cuánto se nota:
 
-1. **La sesión no se persiste.** Cada arranque es un login nuevo y, por tanto, un
-   dispositivo Matrix nuevo. No es un olvido: `AlloSession` documenta que el SDK
-   rota los tokens sin avisar a la app y que una sesión guardada se queda rancia
-   y deja de restaurarse. Cerrar ese hueco es trabajo en el puerto. Por lo mismo
-   el almacén es `in-memory`: un almacén de cripto en disco sólo acumularía las
-   claves de dispositivos que nadie va a volver a usar.
-2. **La fila de la lista no tiene ni vista previa ni hora.** `AlloRoomSummary` no
+1. **La fila de la lista no tiene ni vista previa ni hora.** `AlloRoomSummary` no
    lleva último evento ni marca de actividad. El orden no se pierde —lo da el
    puerto— pero el texto y la hora se quedan vacíos, que es lo que el formateador
    dibuja como nada. Inventar `Date.now()` pondría «ahora» al lado de cada
    conversación de la app.
-3. **El tamaño de letra por mensaje no viaja.** `AlloTimelineHandle.sendText`
+2. **El tamaño de letra por mensaje no viaja.** `AlloTimelineHandle.sendText`
    manda un cuerpo y nada más; `so.oxy.allo.font_size` (§4.2 de
    `data-model.md`) necesita una llamada que el puerto no tiene.
-4. **Un envío fallido dibuja el reloj, no un error.** `MessageMetadata` sólo
+3. **Un envío fallido dibuja el reloj, no un error.** `MessageMetadata` sólo
    conoce pendiente / enviado / entregado / leído. El reloj es cierto en móvil,
    donde la cola del SDK sigue reintentando, y optimista en web, donde no.
-5. **Sin reacciones, sin edición, sin borrado, sin adjuntos, sin recibos de
+4. **Sin reacciones, sin edición, sin borrado, sin adjuntos, sin recibos de
    lectura, sin indicador de escribiendo, sin crear conversaciones.** El puerto
    no expone ninguna de esas operaciones todavía.
-6. **Sin cerrar sesión.** El único camino de vuelta es reiniciar la app.
-7. **Las invitaciones aparecen como filas normales.** El puerto las incluye
+5. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
+   el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
+   y la app lo dibuja como un error de sincronización, no como «te han cerrado la
+   sesión». El binding lo cuenta (`ClientDelegate.didReceiveAuthError`) y
+   `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
+   ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
+   Ajustes— pero hay que saber que hace falta.
+6. **Las invitaciones aparecen como filas normales.** El puerto las incluye
    («todo lo que el usuario no ha abandonado»), y abrir una probablemente no dé
    timeline. No se filtran aquí: la definición de qué es una conversación es del
    puerto, no de este mapeo.
@@ -148,3 +175,16 @@ la app arrancaría una segunda copia de Allo dentro del popup — y dos copias s
 dos `MatrixClient` sobre un IndexedDB, que es la corrupción del almacén de cripto
 que avisa el SDK. Sigue en pie lo que dice `client.web.ts`: Allo en web es segura
 en una pestaña y no está probada en dos.
+
+La sesión vive en `localStorage`, no en un llavero, porque un navegador no tiene
+ninguno: lo que la protege es el origen, la misma protección de la que ya depende
+el almacén de cripto en IndexedDB. Un navegador que lo niega —modo privado, algún
+webview— se rechaza al primer intento de leerla, igual que el puerto ya rechaza
+uno sin IndexedDB, y por la misma razón: la alternativa es hacer login en cada
+arranque y acuñar un dispositivo cada vez.
+
+Al cerrar sesión se borran las tres bases: el estado sincronizado y las dos del
+motor de cripto. Una que quede de un cierre de sesión interrumpido sólo ocupa
+sitio —lleva el id del dispositivo en el nombre, así que la sesión siguiente no
+puede abrirla— y se barre en el arranque siguiente si el navegador ofrece
+`indexedDB.databases()`, que Firefox no tuvo hasta la 126.
