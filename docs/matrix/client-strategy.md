@@ -693,9 +693,20 @@ En orden de cuánto duele si sale mal:
    `RESULTS.md` lista esa y otras cuatro restricciones que la implementación tiene
    que respetar.
 
-   El puerto de §2.3 ya está escrito (`packages/frontend/lib/matrix/`), aunque su
-   mitad web sigue lanzando a propósito: el spike demuestra que la vía es viable,
-   no la deja cableada.
+   El puerto de §2.3 está escrito entero (`packages/frontend/lib/matrix/`), las
+   dos mitades: `client.web.ts` implementa el mismo contrato sobre
+   `matrix-js-sdk@42` y respeta las cinco restricciones de `RESULTS.md`. El
+   `.wasm` lo copia a `public/` el script `packages/frontend/scripts/copy-matrix-wasm.js`
+   antes de cada build de web, y `lib/matrix/web/cryptoWasm.ts` es el único sitio
+   que llama a `initAsync(url)` — en cuanto hay sesión y justo antes de
+   `initRustCrypto()`, no al abrir la app **[V]**.
+
+   Medido sobre el export real de este frontend, no sobre el del spike: con el
+   puerto alcanzable desde una ruta, el bundle de entrada pasa de 7 817 517 a
+   8 982 238 bytes sin comprimir, o sea **+1,16 MB de JavaScript** por el SDK y
+   el pegamento de wasm-bindgen **[T]**. Los 7,8 MB del `.wasm` no están ahí
+   dentro: siguen siendo una descarga aparte y diferida. Nada de la UI importa
+   todavía el puerto, así que hoy el coste es cero.
 2. **El coste de PBKDF2 en un Android real.** Medí 143 ms en máquina de desarrollo
    **[T]**; no en teléfono. No cambia la decisión, sí el copy de la pantalla de espera.
 3. **Que el homeserver que se despliegue sirva sliding sync nativo.** Es un requisito
@@ -717,6 +728,12 @@ En orden de cuánto duele si sale mal:
    `navigator.locks` o `SharedWorker` — el spike sólo confirma que ambas primitivas
    existen en el runtime — y sigue sin evaluarse cuál encaja mejor con el arranque
    de Expo web. Detalle en `spikes/matrix-web/RESULTS.md`.
+
+   La implementación no lo resuelve ni lo disimula: el hueco está señalado en la
+   cabecera de `packages/frontend/lib/matrix/client.web.ts` y en la llamada a
+   `initRustCrypto()`, que es donde el propio SDK cuelga el aviso **[V]**. Nada
+   en el puerto detecta una segunda pestaña. En una pestaña la web es segura; en
+   dos, no está probada.
 
 ---
 

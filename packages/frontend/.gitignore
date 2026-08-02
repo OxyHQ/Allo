@@ -21,6 +21,10 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
+# Copied out of node_modules by scripts/copy-matrix-wasm.js before every web
+# build. 7.8 MB of build output that happens to live in a source directory.
+/public/matrix_sdk_crypto_wasm_bg.wasm
+
 # debug
 npm-debug.*
 yarn-debug.*

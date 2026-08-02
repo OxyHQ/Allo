@@ -62,16 +62,21 @@ encryption described in `docs/encryption.mdx` is what actually runs.
   imported here; every type is an Allo view model.
 - `client.native.ts` + `native/` — the iOS/Android implementation over
   `@unomed/react-native-matrix-sdk` 0.9.1.
-- `client.web.ts` — a deliberate hole. It throws
-  `MatrixPlatformUnsupportedError`; the replacement (`matrix-js-sdk` +
-  `matrix-sdk-crypto-wasm`) is proven viable but not wired up.
+- `client.web.ts` + `web/` — the web implementation over `matrix-js-sdk` 42 and
+  `@matrix-org/matrix-sdk-crypto-wasm` 18, on ordinary `/sync` rather than
+  sliding sync. The crypto WebAssembly is fetched by `web/cryptoWasm.ts` and
+  nowhere else, once a session exists — see the gotcha below. Two open tabs
+  remain unsafe and unguarded; the hole is marked in the file's header.
 - `errors.ts` — the states the port refuses to be in.
 
 **Nothing in the app imports it.** No file under `app/`, `components/`,
 `hooks/`, `stores/`, `utils/` or `features/` references it; its only consumers
-are its own modules and `__tests__/matrix/`, which run against
-`__mocks__/@unomed/react-native-matrix-sdk.ts`. Do not read the presence of this
-directory as Allo being a Matrix client.
+are its own modules and `__tests__/matrix/`. The native tests run against
+`__mocks__/@unomed/react-native-matrix-sdk.ts`; the web ones need no mock,
+because every module they cover takes what it needs of the SDK as a structural
+type and imports none of it at runtime. Do not read the presence of this
+directory as Allo being a Matrix client — because nothing imports the port,
+neither SDK is in the shipped bundle today.
 
 Two spikes back the decisions. Both live outside the workspaces, so a root
 `bun install` does not touch them and they do not affect the main `bun.lock`.
@@ -118,5 +123,16 @@ Components use `useTheme()` from `@/hooks/useTheme` — a thin wrapper over `@ox
 **`@react-native-community/netinfo`:** root `overrides` + `resolutions` pin to `12.0.1` (exact, not a range); frontend declares it as a direct dep.
 
 **`@unomed/react-native-matrix-sdk`:** listed in root `trustedDependencies` so Bun will run its postinstall. It is a direct frontend dependency but has no Expo config plugin entry in `app.config.js` yet.
+
+**`@matrix-org/matrix-sdk-crypto-wasm`:** its `.wasm` is 7.8 MB and cannot be
+resolved by Metro the way the package expects — it uses `import.meta.url`, which
+under the web export points at a path that does not exist, and the SPA fallback
+in `public/_redirects` answers that path with `index.html`, so the failure reads
+as a WebAssembly MIME type error rather than a missing file. Every web script
+(`start`, `dev`, `web`, `build*`) therefore runs `scripts/copy-matrix-wasm.js`
+first, which copies the module into `public/` (gitignored), and
+`lib/matrix/web/cryptoWasm.ts` passes that URL to `initAsync()` explicitly. If
+you add a way to build for web, add the copy step to it. `public/_headers`
+keeps the file revalidating, because its URL carries no content hash.
 
 **`bun.lock` regeneration:** always run `bun install` from the **monorepo root** (not inside a package). A sub-package install can drop workspace resolution lines from `bun.lock`, breaking CI's `--frozen-lockfile`. CI and `packages/backend/Dockerfile` both pin bun 1.3.14 — keep them aligned with your local bun when regenerating the lockfile.
