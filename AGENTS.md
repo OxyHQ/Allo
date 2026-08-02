@@ -81,8 +81,14 @@ The native tests run against `__mocks__/@unomed/react-native-matrix-sdk.ts`; the
 web ones need no mock, because every module they cover takes what it needs of the
 SDK as a structural type and imports none of it at runtime.
 
-Setting the flag to `matrix` does not yet give a working app: **there is no
-homeserver.** `matrix.allo.you` does not resolve, and `allo.you/.well-known/matrix/client`
+Setting the flag to `matrix` does not give a working app against *our own*
+homeserver: **there is none.** It does work against somebody else's —
+`matrix.org` serves the OIDC surface the port needs, and its dynamic client
+registration was exercised with Allo's own payload shape. The trade (foreign
+MXIDs, no Oxy SSO, and conversations that cannot be migrated later) is set out in
+`docs/matrix/interim-homeserver.md`.
+
+As for ours: `matrix.allo.you` does not resolve, and `allo.you/.well-known/matrix/client`
 answers 200 only because the SPA fallback serves `index.html` for every unknown
 path. The Terraform exists in `oxy-infra` (`terraform-uswest2/app-allo-matrix.tf`)
 and has never been applied.
