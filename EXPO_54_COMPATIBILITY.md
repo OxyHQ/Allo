@@ -1,5 +1,18 @@
 # Expo 54 Compatibility Report
 
+> **Historical record — do not treat any version or benchmark below as current.**
+>
+> This report was written against Expo SDK 54. The app is now on **Expo 57**
+> (React Native 0.86, React 19.2.3), three SDK releases later, so every package
+> version listed here is out of date — `@react-native-community/netinfo`, for
+> one, is pinned to `12.0.1` today rather than the `^11.4.1` below. The
+> verification, benchmarks and testing checklist were all performed against a
+> codebase that has since changed, and none of them has been re-run.
+>
+> It is kept because the reasoning about each optimization may still be useful.
+> For what the repo actually contains now, see [AGENTS.md](./AGENTS.md) and
+> [docs/architecture.mdx](./docs/architecture.mdx).
+
 ## ✅ All Optimizations Verified for Expo 54
 
 This document confirms that all big tech optimizations are **fully compatible** with Expo 54.0.32.
