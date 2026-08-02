@@ -16,8 +16,10 @@ export function useSenderInfo(
     if (conversation?.participants) {
       conversation.participants.forEach((p) => {
         if (p.id && p.id !== user?.id) {
-          // Try to fetch by ID (assuming getProfileByUsername handles IDs as per docs)
-          usersStore.ensureById(p.id, (id) => oxyServices.getProfileByUsername(id));
+          // `getUserById`, not `getProfileByUsername`. A participant id is an
+          // Oxy account id, and the by-username endpoint 404s on one — which it
+          // did, once per participant per render, in production.
+          usersStore.ensureById(p.id, (id) => oxyServices.getUserById(id));
         }
       });
     }

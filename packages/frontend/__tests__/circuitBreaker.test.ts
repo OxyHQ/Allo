@@ -147,3 +147,41 @@ describe('CircuitBreaker', () => {
     });
   });
 });
+
+/**
+ * The Oxy client writes the status in two places and not every path writes both.
+ * A breaker that cannot read one of them counts an ordinary 404 as an outage —
+ * which is exactly what took `profile/design/:id` down in production.
+ */
+describe('CircuitBreaker against real Oxy client error shapes', () => {
+  /** `HttpService` sets both `status` and `response` on the thrown Error. */
+  function oxyHttpError(status: number): Error {
+    return Object.assign(new Error(`HTTP ${status}: `), {
+      status,
+      response: { status, statusText: '' },
+    });
+  }
+
+  /** The XHR upload path carries only `status`; there is no `response` beside it. */
+  function oxyStatusOnlyError(status: number): Error {
+    return Object.assign(new Error(`HTTP ${status}: `), { status });
+  }
+
+  it('stays closed through 404s that carry both status and response', async () => {
+    const breaker = makeBreaker();
+    await failWith(breaker, oxyHttpError(404), THRESHOLD * 2);
+    expect(breaker.getState()).toBe('closed');
+  });
+
+  it('stays closed through 404s that carry only status', async () => {
+    const breaker = makeBreaker();
+    await failWith(breaker, oxyStatusOnlyError(404), THRESHOLD * 2);
+    expect(breaker.getState()).toBe('closed');
+  });
+
+  it('still opens on a 503 that carries only status', async () => {
+    const breaker = makeBreaker();
+    await failWith(breaker, oxyStatusOnlyError(503), THRESHOLD);
+    expect(breaker.getState()).toBe('open');
+  });
+});
