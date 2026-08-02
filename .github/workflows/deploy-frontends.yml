@@ -31,6 +31,26 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           NODE_ENV: production
+          # EXPO_PUBLIC_* is substituted at build time, so these are baked into
+          # the bundle here and cannot be changed without another build.
+          #
+          # Matrix, not the Express backend. The old transport's encryption is
+          # static ECDH with no KDF (docs/encryption.mdx) and its groups,
+          # multi-device and media never worked; this is the cut.
+          EXPO_PUBLIC_CHAT_BACKEND: matrix
+          # matrix.org, NOT our homeserver — that one is blocked on an IAM trust
+          # policy (oxy-infra, design doc §11.3 step 3). The trade is written
+          # down in docs/matrix/interim-homeserver.md and the important half is:
+          # `server_name` is permanent per room and per event, so accounts and
+          # conversations made here DO NOT migrate to allo.you later.
+          #
+          # This is the `m.homeserver.base_url` matrix.org publishes, not the
+          # apex. Dynamic client registration against it was exercised with this
+          # client's own payload shape and returned HTTP 201, so no
+          # EXPO_PUBLIC_MATRIX_OIDC_CLIENT_ID is needed; the redirect URI
+          # defaults to https://allo.you/matrix-oidc-callback.html, which is a
+          # real file in public/ and deliberately not a route of the app.
+          EXPO_PUBLIC_MATRIX_HOMESERVER: https://matrix-client.matrix.org
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:
