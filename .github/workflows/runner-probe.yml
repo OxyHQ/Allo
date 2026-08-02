@@ -1,0 +1,20 @@
+# Temporary diagnostic: which GitHub-hosted runner label can this repo actually use?
+#
+# `Deploy to AWS` ends in `action_required` with zero jobs on every trigger,
+# while `CI` and `Deploy Frontends` run fine on the same commits. The only
+# difference between them is the runner label. This isolates that one variable.
+name: Runner probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  standard:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu-latest ran on $(uname -m)"
+
+  arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - run: echo "ubuntu-24.04-arm ran on $(uname -m)"
