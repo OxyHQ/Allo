@@ -103,7 +103,12 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       const cached = get().byUserId[userId];
       if (cached && !forceRefresh) return cached;
       
-      const res = await api.get<UserAppearance>(`profile/design/${userId}`);
+      // `settings`, not `design`. There has never been a /profile/design route
+      // on the backend, so this 404ed for every user on every render — and the
+      // catch below returned null, which is indistinguishable from "this user
+      // has no custom appearance". `ensureUserSettings` creates a default, so
+      // the real endpoint answers 200 for anyone.
+      const res = await api.get<UserAppearance>(`profile/settings/${userId}`);
       const doc = unwrapApiData<UserAppearance>(res.data);
       
       if (doc) {
@@ -114,6 +119,12 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       
       return doc ?? null;
     } catch (e) {
+      // Appearance is decoration: a caller that cannot read it draws the
+      // default and the conversation still works, so this returns null rather
+      // than propagating. It does not stay quiet about it — swallowing the
+      // failure is what let a permanently wrong URL look like "no custom
+      // appearance" for as long as it did.
+      console.warn(`[Appearance] Could not load appearance for ${userId}:`, getErrorMessage(e));
       return null;
     }
   },
