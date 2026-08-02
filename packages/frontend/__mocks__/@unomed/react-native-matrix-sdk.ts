@@ -59,6 +59,11 @@ export enum SyncServiceState {
   Offline = 4,
 }
 
+export enum SlidingSyncVersion {
+  None = 0,
+  Native = 1,
+}
+
 export enum RecoveryState {
   Unknown = 0,
   Enabled = 1,
