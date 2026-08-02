@@ -36,6 +36,13 @@ on:
 # --force-new-deployment` sobre el mismo servicio y ninguno se estabilizó. Su
 # mitigación hoy es de proceso: no fusionar dos PRs seguidos sin dejar que el
 # primero termine de desplegar.
+#
+# Los otros backends (alia, homiio, syra) SÍ llevan un bloque `concurrency`
+# junto al anclaje por digest. Aquí se omite a propósito: mientras `main` siga
+# sin arrancar por un motivo no diagnosticado, añadir la misma construcción que
+# se probó y se revirtió mete una segunda variable en la misma investigación.
+# Es un pendiente, no un descarte — reintrodúzcalo cuando el disparador esté
+# explicado.
 
 permissions:
   id-token: write
@@ -83,20 +90,48 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push (linux/arm64)
+        id: build
+        env:
+          COMMIT_TAG: ${{ github.sha }}
         run: |
           IMG=$ECR_REGISTRY/oxy/$APP
-          docker build -f "$DOCKERFILE" -t "$IMG:${{ github.sha }}" -t "$IMG:latest" .
-          docker push "$IMG:${{ github.sha }}"
-          docker push "$IMG:latest"
+          # The digest comes out of the build itself, via --metadata-file.
+          # Resolving it afterwards with `aws ecr describe-images` is not an
+          # option here: oxy-github-deploy has no ecr:DescribeImages, confirmed
+          # with `aws iam simulate-principal-policy` (implicitDeny), so that
+          # call fails at deploy time behind a green build.
+          docker buildx build \
+            --platform linux/arm64 \
+            -f "$DOCKERFILE" \
+            -t "$IMG:$COMMIT_TAG" \
+            -t "$IMG:latest" \
+            --metadata-file "$RUNNER_TEMP/build-metadata.json" \
+            --push \
+            .
 
-      - name: Deploy to ECS (rolling; skipped until the service exists)
+          # :latest is still moved, but nothing that deploys reads it. It exists
+          # so a from-scratch `terraform apply` -- whose app-service module
+          # declares `<repo>:latest` as the task definition's bootstrap image --
+          # creates the service on a current build rather than an ancient one.
+          DIGEST=$(jq -r '.["containerimage.digest"] // empty' "$RUNNER_TEMP/build-metadata.json")
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::buildx produced no usable image digest (got: ${DIGEST:-<empty>})"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >>"$GITHUB_OUTPUT"
+          echo "Built $COMMIT_TAG -> $DIGEST"
+
+      - name: Register immutable task definition and deploy
+        env:
+          IMAGE_URI: ${{ env.ECR_REGISTRY }}/oxy/${{ env.APP }}@${{ steps.build.outputs.digest }}
         run: |
           STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].status' --output text 2>/dev/null || echo NONE)
-          if [ "$STATUS" = "ACTIVE" ]; then
-            aws ecs update-service --cluster "$CLUSTER" --service "$APP" --force-new-deployment >/dev/null
-            aws ecs wait services-stable --cluster "$CLUSTER" --services "$APP"
-            echo "deployed $APP"
-          else
-            echo "ECS service $APP not created yet — image is in ECR, skipping deploy"
+          if [ "$STATUS" != "ACTIVE" ]; then
+            echo "ECS service $APP not created yet - image is in ECR, skipping deploy"
+            exit 0
           fi
+          bash .github/scripts/deploy-ecs-image.sh
