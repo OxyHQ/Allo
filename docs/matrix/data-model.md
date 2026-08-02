@@ -534,15 +534,17 @@ deja el esqueleto del evento (quién, cuándo, en qué sala) [?].
 cliente modificado no borra nada. Está bien construirlo, está mal describirlo como
 una garantía.
 
-#### Cómo se marca una sala como secreta
+#### Cómo se marca una sala como efímera
 
-**[C]** Evento de estado `so.oxy.allo.room_class` con `{"class": "secret"}`. Aquí
-sí conviene el estado y no el timeline, al revés que con el tema (§4.1): la clase
-de la sala tiene que ser legible **antes** de tener ninguna clave, porque decide
-cómo se trata la sala desde el primer sync. Un evento cifrado sería un
-huevo-y-gallina. El coste — el servidor sabe que una sala es "secreta" — es
+**[C]** Evento de estado `so.oxy.allo.room_class` con `{"class": "ephemeral"}`.
+Aquí sí conviene el estado y no el timeline, al revés que con el tema (§4.1): la
+clase de la sala tiene que ser legible **antes** de tener ninguna clave, porque
+decide cómo se trata la sala desde el primer sync. Un evento cifrado sería un
+huevo-y-gallina. El coste — el servidor sabe que una sala es efímera — es
 inevitable de todos modos: si el cliente tiene que comportarse distinto, ese
-comportamiento es observable.
+comportamiento es observable. Y aquí pesa menos que en el diseño anterior: que el
+servidor sepa que debe redactar el contenido pasado un plazo no es una fuga, es
+el mecanismo.
 
 ### 5.3 Chats puenteados — la marca no debe ser un flag
 

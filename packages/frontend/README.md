@@ -40,16 +40,18 @@ This package contains the complete React Native application that runs on Android
 
 ### User Experience
 - Universal app: Android, iOS, and Web
-- User profiles with followers/following
-- Notifications (push and in-app)
+- User profiles (`app/(chat)/u/[id].tsx`)
 - Multi-language support (English, Spanish, Italian)
 - Responsive design and theming
 - Modern UI with custom icons and animations
 
+Push notifications are wired on this side but have no server to talk to — see
+[Push Notifications](#push-notifications-expo--fcm) below.
+
 ## Tech Stack
-- [Expo](https://expo.dev/) & React Native
+- [Expo](https://expo.dev/) SDK 57 & React Native 0.86 (React 19.2)
 - TypeScript
-- NativeWind (Tailwind CSS for React Native)
+- NativeWind 5 (preview) — Tailwind CSS for React Native, paired with `tailwindcss` 4.3
 - Zustand (state management)
 - i18next (internationalization)
 - Expo Router (file-based routing)
@@ -67,23 +69,28 @@ This package contains the complete React Native application that runs on Android
 ├── assets/             # Images, icons, fonts
 ├── constants/          # App-wide constants
 ├── context/            # React context providers
-├── features/           # Feature modules (e.g., trends)
 ├── hooks/              # Custom React hooks
-├── interfaces/         # TypeScript interfaces
 ├── lib/                # Library code
 │   ├── signalProtocol.ts  # End-to-end encryption/decryption (static ECDH + AES-256-GCM)
 │   ├── offlineStorage.ts  # Offline message storage
-│   ├── p2pMessaging.ts    # Peer-to-peer messaging
+│   ├── offlineQueue/      # Queued mutations, replayed on reconnect
+│   ├── p2pMessaging.ts    # Peer-to-peer messaging (scaffolding; not functional)
+│   ├── matrix/            # Matrix client port (see below) — nothing imports it yet
 │   └── ...
-├── locales/            # i18n translation files
+├── locales/            # i18n translation files (en, es, it)
+├── plugins/            # Expo config plugins
 ├── scripts/            # Utility scripts
 ├── stores/             # State management (Zustand)
 │   ├── messagesStore.ts      # Encrypted message store
 │   ├── deviceKeysStore.ts    # Device key management
 │   └── ...
 ├── styles/             # Global styles and colors
+├── types/              # TypeScript types
 ├── utils/              # Utility functions
+├── __mocks__/          # Jest manual mocks (the Matrix native binding)
+├── __tests__/          # Jest suites
 ├── app.config.js       # Expo app configuration
+├── config.ts           # Base URLs and third-party keys
 ├── package.json        # Project metadata and dependencies
 └── ...
 ```
@@ -91,7 +98,7 @@ This package contains the complete React Native application that runs on Android
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and Bun 1.3+
+- Node.js 20.19+ and Bun 1.3+
 - Expo CLI (optional, but recommended)
 - For iOS development: macOS with Xcode
 - For Android development: Android Studio
@@ -134,17 +141,36 @@ Once the development server is running, you can:
 
 ### Environment Setup
 
-The app uses environment variables for configuration. Create a `.env` file in this package directory:
+Base URLs are resolved in `config.ts`, which hardcodes production
+(`https://api.allo.oxy.so`) and only consults the environment in development.
+None of the variables below is required to run against a local backend — the
+defaults already point at `localhost:4140`, Allo's slot in the Oxy per-app port
+map.
 
 ```env
-# API Configuration
-EXPO_PUBLIC_API_URL=http://localhost:4140
-EXPO_PUBLIC_WS_URL=ws://localhost:4140
+# Dev-only API overrides, read by config.ts
+API_URL=http://localhost:4140/api
+API_URL_SOCKET=ws://localhost:4140
 
-# Analytics and Monitoring
-EXPO_PUBLIC_POSTHOG_KEY=your_posthog_key
-EXPO_PUBLIC_BITDRIFT_KEY=your_bitdrift_key
+# Oxy identity. OXY_BASE_URL defaults to https://api.oxy.so in every build —
+# there is deliberately no dev branch, because pointing identity at a local port
+# renders a signed-out app instead of failing loudly.
+EXPO_PUBLIC_OXY_BASE_URL=https://api.oxy.so
+EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
+
+# Selects the build variant in app.config.js ('testflight' | 'production')
+EXPO_PUBLIC_ENV=
+
+# Optional third-party keys; empty string when unset
+EXPO_PUBLIC_KLIPY_APP_KEY=
+EXPO_PUBLIC_STRIPE_LINK_PLUS=
+EXPO_PUBLIC_STRIPE_LINK_FILE=
 ```
+
+`EXPO_PUBLIC_WS_URL`, `EXPO_PUBLIC_POSTHOG_KEY` and `EXPO_PUBLIC_BITDRIFT_KEY`
+appear in older docs and are read nowhere in this package. Setting them changes
+nothing. (`@bitdrift/react-native` is configured as an Expo plugin in
+`app.config.js`, not through an environment variable.)
 
 ## Development Scripts
 
@@ -193,6 +219,24 @@ This package is part of the Allo monorepo and integrates with:
 - **Peer-to-peer**: Not implemented. `lib/p2pMessaging.ts`'s `establishP2PConnection` always returns `false` (a placeholder), and the WebRTC offer/answer/ICE-candidate handlers are unimplemented stubs. Every message currently goes through the server relay.
 - **Media attachments**: Not implemented. The attachment menu's photo, document, camera, location, contact, and poll handlers are all no-ops (`components/conversation/ConversationView.tsx`), and there is no upload endpoint on the backend.
 
+## Matrix client port
+
+`lib/matrix/` is a client port for the [Matrix migration](../../docs/matrix/).
+It is code that exists, not a feature that runs: **no screen, hook or store
+imports it**, and the messaging described above is still what the app does.
+
+| Module | What it is |
+|--------|-----------|
+| `types.ts` | The port interface (`AlloChatClient`) plus its view models. Nothing here may import a Matrix SDK. |
+| `client.native.ts`, `native/` | The iOS/Android implementation over `@unomed/react-native-matrix-sdk`. |
+| `client.web.ts` | Deliberately unimplemented — it throws `MatrixPlatformUnsupportedError` rather than returning a stub that quietly does nothing. |
+| `errors.ts` | The states the port refuses to be in. |
+
+`__tests__/matrix/` covers the pure translation modules against
+`__mocks__/@unomed/react-native-matrix-sdk.ts`; the native binding itself cannot
+be loaded in a test process. Those suites need jest under the `jest-expo`
+preset, which is why `bun run test` here is not interchangeable with `bun test`.
+
 ### Device-First Architecture
 
 - **Local Storage**: All messages are stored locally using AsyncStorage (offline-first)
@@ -218,10 +262,25 @@ Access security settings via: **Settings → Security & Encryption**
 
 ## Push Notifications (Expo + FCM)
 
-- `expo-notifications` is configured via plugin in `app.config.js` for native builds.
-- The app registers the device push token after the user authenticates and posts it to the backend endpoint `/api/notifications/push-token`.
-- Backend requires Firebase Admin credentials via env vars to send FCM pushes.
-- Push notifications are encrypted and don't contain message content.
+**Not functional end to end.** The client half is built; the server half is
+missing, so no push has ever been delivered.
+
+- `expo-notifications` is configured via plugin in `app.config.js` for native
+  builds, and `components/notifications/RegisterPushToken.tsx` fetches the
+  device token after the user authenticates.
+- It then `POST`s it to `/notifications/push-token`, and
+  `app/(chat)/settings/index.tsx` `DELETE`s the same path when the user turns
+  notifications off. **The backend mounts no notifications router**, so both
+  calls 404. `RegisterPushToken` catches the failure and logs a warning, which
+  is why nothing surfaces in the UI.
+- Nothing therefore ever writes a `PushToken` document. The backend's
+  `utils/push.ts` can send through Firebase Admin, but `sendPushToUser` queries
+  a collection that stays empty — and no route calls it either.
+- Registration is also skipped on web and in Expo Go (remote push needs a
+  development build from SDK 53 onward).
+
+Closing this needs a backend route that persists the token and a call site that
+sends on new messages; neither exists today.
 
 ## Contributing
 

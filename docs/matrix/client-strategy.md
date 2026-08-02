@@ -299,13 +299,17 @@ Lo que **sí** diverge, y hay que registrarlo:
    cerrada no reintenta nada de todos modos. Pero significa que el comportamiento
    offline de Allo en web será peor que en móvil, y eso es una decisión de producto
    que alguien tiene que aceptar por escrito, no un detalle de implementación.
-3. **Los chats secretos.** `data-model.md` §5.2(c) ya establece que el key backup es
-   por cuenta y no por sala, y que un segundo cliente sube al backup las claves que
-   tenga **[V]** (`docs/matrix/data-model.md:452-490`). El cliente web de Allo es
-   exactamente ese segundo cliente. **[C]** No empeora el análisis de ese documento
-   —que ya contempla "otro cliente Matrix con la misma cuenta rompe la propiedad"—
-   pero lo hace inmediato en vez de hipotético: si se elige la opción **B** de
-   `data-model.md` §5.2(c), la web hay que incluirla en esa promesa desde el día uno.
+3. **El segundo nivel de chat.** `data-model.md` §5.2 establece que el key backup
+   es por cuenta y no por sala, y que un segundo cliente sube al backup las claves
+   que tenga. El cliente web de Allo es exactamente ese segundo cliente.
+
+   **Resuelto el 2026-08-02**, y en una dirección que desactiva este punto: el
+   nivel dejó de perseguir "estas claves no se respaldan" —inalcanzable— y pasó a
+   perseguir "el contenido no persiste". Se llama **efímero**. Como la defensa es
+   la redacción del contenido en el servidor y no la ausencia de la clave, que la
+   web sea otro cliente con la misma cuenta deja de importar: redactado el evento,
+   no hay nada que descifrar desde ningún cliente. El puerto de web no necesita
+   ninguna excepción para esto.
 
 ### Recomendación — Incógnita 1
 
@@ -624,11 +628,12 @@ peor que no tenerlo, porque cambia lo que el usuario cree.
    PIN.** Si el usuario la activa, entra en el `ikm` del HKDF. Se documenta que si la
    pierde, pierde el historial — que es exactamente el modelo estándar de Matrix, y es
    una elección legítima para quien la quiera.
-4. **No apoyar los chats secretos en esto.** La defensa real de un chat secreto es
-   quedarse fuera de 4S y del key backup, que es la discusión abierta de
-   `data-model.md` §5.2(c) **[V]** (`docs/matrix/data-model.md:452-490`). El esquema de
-   esta sección es para chats normales; que el historial normal sea recuperable es
-   una feature, no un descuido.
+4. **No apoyar el segundo nivel de chat en esto.** Quedarse fuera de 4S y del key
+   backup no es alcanzable en Matrix — `data-model.md` §5.2(c) — y por eso ese
+   nivel se redefinió el 2026-08-02 como **efímero**: su defensa es la redacción
+   del contenido en el servidor, no la ausencia de la clave. El esquema de esta
+   sección es para chats normales; que el historial normal sea recuperable es una
+   feature, no un descuido.
 5. **No exponer `resetRecoveryKey()` ni `recoverAndReset()` en la UI** (§3.2). Rompen
    el vínculo en silencio.
 
