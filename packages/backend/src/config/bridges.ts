@@ -420,11 +420,18 @@ export function loadBridgesConfig(
 ): BridgesConfig {
   const parsed = buildBridgesEnvSchema(environment).parse(environment);
 
+  /**
+   * Built in CATALOGUE order, not in the order somebody typed into the
+   * environment variable.
+   *
+   * The catalogue's order is stable across deployments; a comma-separated string
+   * is not. Ordering here rather than in the accessor means there is one order
+   * in the system — a second sort downstream is a second thing that can disagree.
+   */
+  const requested = new Set(parsed.ALLO_BRIDGES_ENABLED);
   const networks = new Map<BridgeNetworkId, EnabledBridgeNetwork>();
-  for (const candidate of parsed.ALLO_BRIDGES_ENABLED) {
-    // `superRefine` has already rejected anything that would fail here; this
-    // narrowing exists so the map cannot be built from an unvalidated string.
-    if (!isBridgeNetworkId(candidate)) continue;
+  for (const candidate of BRIDGE_NETWORK_IDS) {
+    if (!requested.has(candidate)) continue;
     const entry = BRIDGE_NETWORK_CATALOG[candidate];
     const prefix = networkEnvPrefix(candidate);
     const baseUrl = httpOrigin.parse(environment[`${prefix}BASE_URL`]);
@@ -516,12 +523,9 @@ export function enabledBridgeNetwork(
   return bridgesConfig().networks.get(network);
 }
 
-/** Every enabled network, in catalogue order so the list is stable across boots. */
+/** Every enabled network. Already in catalogue order — see `loadBridgesConfig`. */
 export function enabledBridgeNetworks(): readonly EnabledBridgeNetwork[] {
-  const config = bridgesConfig();
-  return BRIDGE_NETWORK_IDS.map((id) => config.networks.get(id)).filter(
-    (network): network is EnabledBridgeNetwork => network !== undefined,
-  );
+  return [...bridgesConfig().networks.values()];
 }
 
 /** Resets the memoised config. Tests only; there is no runtime reconfiguration. */
