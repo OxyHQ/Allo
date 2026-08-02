@@ -46,11 +46,12 @@ and `react-native-css` 3.
 
 ## Migration to Matrix
 
-Allo is moving to Matrix and will stop carrying its own transport. The design
-work is in `docs/matrix/` (`data-model.md`, `bridges.md`, `client-strategy.md`)
-and precedes implementation deliberately — each document exists to find the
-places where the approved plan does not survive contact with what Matrix
-actually does.
+Allo is moving to Matrix and will stop carrying its own transport. `docs/matrix/`
+holds both halves: `data-model.md`, `bridges.md` and `client-strategy.md` are
+design that preceded implementation deliberately — each exists to find the places
+where the approved plan does not survive contact with what Matrix actually does —
+while `ui-wiring.md` and `push.md` describe what is built, and keep an explicit,
+numbered list of what still is not.
 
 **The current transport is still the one that works.** Everything the app
 does today goes through `@allo/backend` over REST + Socket.IO, and the
@@ -69,14 +70,22 @@ encryption described in `docs/encryption.mdx` is what actually runs.
   remain unsafe and unguarded; the hole is marked in the file's header.
 - `errors.ts` — the states the port refuses to be in.
 
-**Nothing in the app imports it.** No file under `app/`, `components/`,
-`hooks/`, `stores/`, `utils/` or `features/` references it; its only consumers
-are its own modules and `__tests__/matrix/`. The native tests run against
-`__mocks__/@unomed/react-native-matrix-sdk.ts`; the web ones need no mock,
-because every module they cover takes what it needs of the SDK as a structural
-type and imports none of it at runtime. Do not read the presence of this
-directory as Allo being a Matrix client — because nothing imports the port,
-neither SDK is in the shipped bundle today.
+**The app imports it, behind a flag.** Sixteen files under `app/`,
+`components/` and `hooks/` reach the port through the `lib/chat/` seam —
+conversation creation, the timeline, media, invitations, push and recovery. Which
+backend answers is decided by `EXPO_PUBLIC_CHAT_BACKEND` (`lib/chat/backend.ts`):
+unset means `allo-api`, so **the shipped default is still the legacy backend**,
+and a misspelt value throws at import rather than silently serving the wrong app.
+
+The native tests run against `__mocks__/@unomed/react-native-matrix-sdk.ts`; the
+web ones need no mock, because every module they cover takes what it needs of the
+SDK as a structural type and imports none of it at runtime.
+
+Setting the flag to `matrix` does not yet give a working app: **there is no
+homeserver.** `matrix.allo.you` does not resolve, and `allo.you/.well-known/matrix/client`
+answers 200 only because the SPA fallback serves `index.html` for every unknown
+path. The Terraform exists in `oxy-infra` (`terraform-uswest2/app-allo-matrix.tf`)
+and has never been applied.
 
 Two spikes back the decisions. Both live outside the workspaces, so a root
 `bun install` does not touch them and they do not affect the main `bun.lock`.
