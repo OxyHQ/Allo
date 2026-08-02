@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { View, Text, TouchableOpacity, Alert, Platform, ScrollView, Animated } from "react-native";
+import { View, Text, TouchableOpacity, Alert, ScrollView, Animated } from "react-native";
 import { ThemedView } from "@/components/ThemedView";
 import { Header } from "@/components/layout/Header";
 import { HeaderIconButton } from "@/components/layout/HeaderIconButton";
@@ -18,7 +18,9 @@ import { authenticatedClient } from "@/utils/api";
 import { confirmDialog, alertDialog } from "@/utils/alerts";
 import { getData, storeData } from "@/utils/storage";
 // (already imported above)
-import { hasNotificationPermission, requestNotificationPermissions, getDevicePushToken } from "@/utils/notifications";
+import { hasNotificationPermission, requestNotificationPermissions } from "@/utils/notifications";
+import { isPushEnabled, NOTIFICATION_PREFERENCE_KEY } from "@/lib/chat/pushRegistration";
+import { matrixRuntime } from "@/lib/chat/matrixRuntime";
 import { signOutOfMatrix } from "@/hooks/useMatrixRuntime";
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
@@ -128,64 +130,47 @@ export default function SettingsScreen() {
 
     // Settings state
     const [notifications, setNotifications] = useState(true);
-    const unregisterPushToken = useCallback(async () => {
-        try {
-            const tokenInfo = await getDevicePushToken();
-            if (!tokenInfo?.token) return;
-            await authenticatedClient.delete('/notifications/push-token', { data: { token: tokenInfo.token } });
-        } catch (e) {
-            console.warn('Failed to unregister push token:', e);
-        }
-    }, []);
 
-    const registerPushIfPermitted = useCallback(async () => {
-        if (Constants.appOwnership === 'expo') {
-            console.warn('expo-notifications: Remote push is unavailable in Expo Go. Use a development build.');
-            return false;
-        }
-        const granted = await hasNotificationPermission() || await requestNotificationPermissions();
-        if (!granted) return false;
-        try {
-            const tokenInfo = await getDevicePushToken();
-            if (!tokenInfo?.token) return false;
-            await authenticatedClient.post('/notifications/push-token', {
-                token: tokenInfo.token,
-                type: tokenInfo.type || (Platform.OS === 'ios' ? 'apns' : 'fcm'),
-                platform: Platform.OS,
-                locale: Intl.DateTimeFormat().resolvedOptions().locale || 'en-US',
-            });
-            return true;
-        } catch (e) {
-            console.warn('Failed to (re)register push token:', e);
-            return false;
-        }
-    }, []);
-
+    /**
+     * Turning notifications on or off.
+     *
+     * The switch writes the preference and then asks the runtime to bring the
+     * homeserver in line with it: on Matrix the pusher lives on the homeserver,
+     * so "off" is a pusher deleted there rather than a token deleted here. Allo
+     * keeps no device tokens of its own any more — see `docs/matrix/push.md`.
+     *
+     * Permission is requested only when switching **on**, because that is the
+     * moment the user has asked for notifications. Being denied still leaves the
+     * preference on: the pusher is registered either way and the notifications
+     * start appearing the moment permission is granted in system settings, which
+     * is better than a switch that silently flips itself back.
+     */
     const onToggleNotifications = useCallback(async (value: boolean) => {
         setNotifications(value);
-        const storageKey = `pref:${user?.id || 'global'}:notificationsEnabled`;
-        await storeData(storageKey, value);
-        if (value) {
-            await registerPushIfPermitted();
-        } else {
-            await unregisterPushToken();
+        await storeData(NOTIFICATION_PREFERENCE_KEY, value);
+        if (value && Constants.appOwnership !== 'expo') {
+            const granted = await hasNotificationPermission() || await requestNotificationPermissions();
+            if (!granted) {
+                await alertDialog({
+                    title: t('Notifications'),
+                    message: t('notification.permission.denied'),
+                });
+            }
         }
-    }, [registerPushIfPermitted, unregisterPushToken, user?.id]);
+        await matrixRuntime.syncPushRegistration();
+    }, [t]);
 
     // Load initial notifications toggle from storage
     useEffect(() => {
         let mounted = true;
         const load = async () => {
-            const storageKey = `pref:${user?.id || 'global'}:notificationsEnabled`;
-            const saved = await getData<boolean>(storageKey);
+            const saved = await isPushEnabled();
             if (!mounted) return;
-            if (typeof saved === 'boolean') {
-                setNotifications(saved);
-            }
+            setNotifications(saved);
         };
         load();
         return () => { mounted = false; };
-    }, [user?.id]);
+    }, []);
 
     // Get theme mode from appearance store
     const mySettings = useAppearanceStore((state) => state.mySettings);

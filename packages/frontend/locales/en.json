@@ -607,5 +607,8 @@
     "Playback position": "Playback position",
     "Open {{name}}": "Open {{name}}",
     "Opening files is not available on this device.": "Opening files is not available on this device.",
-    "The file could not be opened.": "The file could not be opened."
+    "The file could not be opened.": "The file could not be opened.",
+    "notification.push.title": "Allo",
+    "notification.push.body": "New message",
+    "notification.permission.denied": "Notifications are off for Allo in your system settings, so nothing will appear until you turn them on there."
 }

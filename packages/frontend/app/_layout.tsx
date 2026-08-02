@@ -19,7 +19,6 @@ import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react
 // Components
 import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
-import RegisterPush from '@/components/notifications/RegisterPushToken';
 import { SideBar } from "@/components/SideBar";
 import { BottomBar } from "@/components/layout/BottomBar";
 import { ThemedView } from "@/components/ThemedView";
@@ -243,7 +242,6 @@ export default function RootLayout() {
           />
         )}
         <MainLayout isScreenNotMobile={isScreenNotMobile} />
-        <RegisterPush />
       </AppProviders>
     );
   }, [

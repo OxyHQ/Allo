@@ -8,6 +8,8 @@ import {
   Membership,
   MessageType,
   OidcPrompt,
+  PushFormat,
+  PusherKind,
   ReceiptType,
   RoomListEntriesDynamicFilterKind,
   SlidingSyncVersion,
@@ -55,6 +57,8 @@ import type {
   AlloOidcPrompt,
   AlloOutgoingAttachment,
   AlloPaginationOutcome,
+  AlloPusher,
+  AlloPusherIdentity,
   AlloRecoveryState,
   AlloRoomListHandle,
   AlloRoomSummary,
@@ -293,6 +297,43 @@ class NativeAlloChatClient implements AlloChatClient {
     // directory nothing leads to.
     await this.close();
     await eraseAlloChatStore(this.#store);
+  }
+
+  /**
+   * Registers this device's pusher with the homeserver.
+   *
+   * `PushFormat.EventIdOnly` is the only value the binding has — the Rust enum
+   * has exactly one variant — so on this platform the guarantee in
+   * {@link AlloPusher} is enforced by the SDK itself and not only by us. The web
+   * half has to state it, because `matrix-js-sdk` will happily register any
+   * format string it is given.
+   *
+   * The fallback text travels as `default_payload`, which the homeserver echoes
+   * back to the gateway inside `devices[].data` on every notification. It is a
+   * JSON *string* here because that is what the binding takes; Rust parses it
+   * into a JSON value before it reaches the wire.
+   */
+  async registerPusher(pusher: AlloPusher): Promise<void> {
+    await this.#client.setPusher(
+      { pushkey: pusher.pushkey, appId: pusher.appId },
+      new PusherKind.Http({
+        data: {
+          url: pusher.gatewayUrl,
+          format: PushFormat.EventIdOnly,
+          defaultPayload: JSON.stringify(pusher.fallbackNotification),
+        },
+      }),
+      pusher.appDisplayName,
+      pusher.deviceDisplayName,
+      // No profile tag: Allo has one set of push rules per account and nothing
+      // that would select a different one per device.
+      undefined,
+      pusher.lang,
+    );
+  }
+
+  async unregisterPusher(identity: AlloPusherIdentity): Promise<void> {
+    await this.#client.deletePusher({ pushkey: identity.pushkey, appId: identity.appId });
   }
 
   async startSync(): Promise<void> {

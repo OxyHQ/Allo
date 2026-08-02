@@ -74,6 +74,8 @@ import type {
   AlloOidcLoginRequest,
   AlloOutgoingAttachment,
   AlloPaginationOutcome,
+  AlloPusher,
+  AlloPusherIdentity,
   AlloRecoveryState,
   AlloRoomListHandle,
   AlloRoomSummary,
@@ -364,6 +366,52 @@ class WebAlloChatClient implements AlloChatClient {
           },
     );
     this.#session = undefined;
+  }
+
+  /**
+   * Registers this device's pusher with the homeserver.
+   *
+   * `format` is written here as a literal and is not reachable from a caller —
+   * see {@link AlloPusher}. `matrix-js-sdk` types it as an open `string` and will
+   * register whatever it is given, so on this half the guarantee that Allo's
+   * gateway never receives message content is upheld by this line and by the test
+   * that watches it (`__tests__/matrix/onePlacePushers.test.ts`). The native half
+   * gets the same guarantee from its binding, whose enum has one variant.
+   *
+   * `data` is built as a variable rather than inline because the SDK's type for
+   * it names only the three keys it knows about, and `default_payload` is a
+   * fourth that the homeserver passes through to the gateway untouched. It is a
+   * JSON string for the same reason it is one on native: the value has to survive
+   * a round trip through two SDKs and a homeserver, and a string is the shape
+   * both of them agree on.
+   *
+   * **Nothing in the app calls this on web.** A browser has no APNs or FCM device
+   * token — `utils/notifications.ts` answers `null` there — so there is no
+   * `pushkey` to register. It is implemented because the port is one contract and
+   * a half-implemented one is worse than an unused one, and because the day web
+   * push arrives this is where it lands.
+   */
+  async registerPusher(pusher: AlloPusher): Promise<void> {
+    const client = this.#requireClient('Registering a pusher');
+    const data: Record<string, string> = {
+      url: pusher.gatewayUrl,
+      format: 'event_id_only',
+      default_payload: JSON.stringify(pusher.fallbackNotification),
+    };
+    await client.setPusher({
+      app_id: pusher.appId,
+      pushkey: pusher.pushkey,
+      kind: 'http',
+      app_display_name: pusher.appDisplayName,
+      device_display_name: pusher.deviceDisplayName,
+      lang: pusher.lang,
+      data,
+    });
+  }
+
+  async unregisterPusher(identity: AlloPusherIdentity): Promise<void> {
+    const client = this.#requireClient('Removing a pusher');
+    await client.removePusher(identity.pushkey, identity.appId);
   }
 
   async startSync(): Promise<void> {

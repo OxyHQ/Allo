@@ -569,5 +569,8 @@
   "Playback position": "Posizione di riproduzione",
   "Open {{name}}": "Apri {{name}}",
   "Opening files is not available on this device.": "L'apertura dei file non è disponibile su questo dispositivo.",
-  "The file could not be opened.": "Non è stato possibile aprire il file."
+  "The file could not be opened.": "Non è stato possibile aprire il file.",
+  "notification.push.title": "Allo",
+  "notification.push.body": "Nuovo messaggio",
+  "notification.permission.denied": "Le notifiche di Allo sono disattivate nelle impostazioni di sistema, quindi non apparirà nulla finché non le attivi lì."
 }

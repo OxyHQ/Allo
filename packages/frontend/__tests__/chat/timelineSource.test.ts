@@ -266,6 +266,14 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  async registerPusher(): Promise<void> {
+    throw new Error('This fake does not register pushers.');
+  }
+
+  async unregisterPusher(): Promise<void> {
+    throw new Error('This fake does not register pushers.');
+  }
+
   async close(): Promise<void> {
     throw new Error('not used by these tests');
   }

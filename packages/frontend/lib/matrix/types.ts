@@ -493,6 +493,87 @@ export type AlloRecoveryState =
    */
   | 'unknown';
 
+/* ---------------------------------------------------------------------------
+ * Push notifications
+ *
+ * On Matrix the **homeserver owns the pusher registry**. A device registers
+ * itself once, and from then on the homeserver decides which events deserve a
+ * notification and posts them to a push gateway with the device's token inside
+ * the request. Allo's backend therefore holds no table of device tokens at all —
+ * see `docs/matrix/push.md`.
+ *
+ * What the port owes the app is a way to register and to stop; what it owes the
+ * *user* is the guarantee below about format.
+ * ------------------------------------------------------------------------- */
+
+/** What identifies a pusher on the homeserver. The pair is its primary key. */
+export interface AlloPusherIdentity {
+  /**
+   * Which application this token belongs to, in reverse-DNS.
+   *
+   * It is what tells the gateway which provider owns the `pushkey`, so it is per
+   * platform and it is not a display string. Allo's backend supplies it rather
+   * than the app carrying a constant, because the backend is the half that knows
+   * which app ids it can actually deliver for.
+   */
+  readonly appId: string;
+  /**
+   * The device token the operating system issued: an APNs token, or an FCM
+   * registration token.
+   *
+   * Not a secret in the cryptographic sense, but it addresses one person's
+   * phone: never log it, and never send it anywhere but the homeserver and the
+   * endpoint that mints this device's gateway URL.
+   */
+  readonly pushkey: string;
+}
+
+/**
+ * Text the gateway shows when it has nothing else to show.
+ *
+ * The gateway genuinely has nothing else, and that is the design working rather
+ * than failing: Allo's rooms are encrypted and its pushers ask for
+ * `event_id_only`, so the notification that reaches the server names an event
+ * and never says what is in it. It also does not know what language to write in.
+ * The app knows both, so it says once — here, at registration — what its user
+ * should read on the lock screen.
+ */
+export interface AlloPusherFallbackNotification {
+  readonly title: string;
+  readonly body: string;
+}
+
+/**
+ * A pusher to register.
+ *
+ * **There is no field for the notification format, and there must never be
+ * one.** Every pusher this port registers asks the homeserver for
+ * `event_id_only`, which is what keeps message plaintext off Allo's servers: the
+ * alternative format sends the event's content, the sender and the room's name
+ * to the gateway on every message, and in an unencrypted room that content is
+ * the message itself. A parameter here would be the way one screen, one refactor
+ * or one default argument turns that off — and nothing in the app would look any
+ * different afterwards, because the notification would still arrive. Same rule,
+ * and the same reason, as {@link AlloOutgoingAttachment} having no "encrypt
+ * this" option.
+ */
+export interface AlloPusher extends AlloPusherIdentity {
+  /**
+   * Where the homeserver sends the notification.
+   *
+   * Minted per device by Allo's backend and carrying a capability token bound to
+   * this `pushkey`, which is what stops the gateway from being an open relay
+   * aimed at users' phones. A credential of sorts: never log it.
+   */
+  readonly gatewayUrl: string;
+  /** Shown in the user's list of devices on other clients. */
+  readonly appDisplayName: string;
+  readonly deviceDisplayName: string;
+  /** The reader's language, as a BCP-47 tag. */
+  readonly lang: string;
+  readonly fallbackNotification: AlloPusherFallbackNotification;
+}
+
 /**
  * Where the client keeps its state and its crypto store.
  *
@@ -854,6 +935,37 @@ export interface AlloChatClient {
    * Only correct in state `incomplete`.
    */
   recoverWithPassphrase(passphrase: string): Promise<void>;
+
+  /**
+   * Tells the homeserver to notify this device.
+   *
+   * Idempotent by construction: a pusher is identified by its `app_id` and
+   * `pushkey`, so registering the same pair again replaces the record rather than
+   * adding one. That is what makes it safe — and correct — to do on every launch,
+   * which is also necessary: device tokens are reissued by the operating system
+   * without warning, and a pusher holding the previous one is a phone that has
+   * quietly stopped ringing.
+   *
+   * Needs a session and nothing else. It does not wait for sync, because a
+   * notification is the homeserver's business and not this device's view of the
+   * room list.
+   *
+   * See {@link AlloPusher} for the one thing that is deliberately not a
+   * parameter.
+   */
+  registerPusher(pusher: AlloPusher): Promise<void>;
+
+  /**
+   * Tells the homeserver to stop notifying this device.
+   *
+   * Must happen **before** {@link logout}: the call needs the access token that
+   * logging out destroys. A pusher left behind on the homeserver keeps a device
+   * token that now belongs to nobody, and the notifications it produces arrive on
+   * a phone that has signed out.
+   *
+   * Removing a pusher that is not there is not an error.
+   */
+  unregisterPusher(identity: AlloPusherIdentity): Promise<void>;
 
   /** Stops sync and releases every handle this client handed out. */
   close(): Promise<void>;
