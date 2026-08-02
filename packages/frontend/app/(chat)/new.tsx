@@ -7,11 +7,12 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@oxyhq/bloom/toast';
 import { TextFieldInput } from '@oxyhq/bloom';
+import { useTranslation } from 'react-i18next';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -24,6 +25,7 @@ import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
+import { roomAdminSource } from '@/lib/chat/roomAdmin';
 import { useOxy } from '@oxyhq/services';
 import type { User as OxyUser } from '@oxyhq/core';
 import type { Href } from 'expo-router';
@@ -61,12 +63,24 @@ interface User {
  * the id of a conversation to open; whether that is a row in Mongo or an
  * encrypted room on a homeserver is decided by `EXPO_PUBLIC_CHAT_BACKEND` and is
  * not this screen's business. See `lib/chat/newConversation.ts`.
+ *
+ * **It is also the app's one people-picker.** With `?invite=<roomId>` it adds
+ * the people chosen to a conversation that already exists instead of making a
+ * new one; everything above that last step — the search, the selection, the
+ * rows — is the same screen doing the same job, and a second copy of it would
+ * be a second search that drifts. Only the Matrix room details screen produces
+ * that link, because only Matrix has a way to invite somebody to a room that
+ * already exists.
  */
 export default function NewChatScreen() {
+  const { t } = useTranslation();
   const theme = useTheme();
   const router = useRouter();
   const { oxyServices } = useOxy();
   const createConversation = useCreateConversation();
+  const { invite: inviteRoomId } = useLocalSearchParams<{ invite?: string }>();
+  /** Adding to a conversation rather than starting one. */
+  const isInviting = typeof inviteRoomId === 'string' && inviteRoomId !== '';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -122,12 +136,12 @@ export default function NewChatScreen() {
       setUsers(mappedUsers);
     } catch (error) {
       logger.error('[NewChat] Error searching users:', error);
-      toast.error('Failed to search users');
+      toast.error(t('Failed to search users'));
       setUsers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [oxyServices]);
+  }, [oxyServices, t]);
 
   // Debounced search
   const debouncedSearch = useMemo(() => {
@@ -187,36 +201,100 @@ export default function NewChatScreen() {
         router.replace(`/c/${conversationId}` as Href);
       } catch (error: unknown) {
         logger.error('[NewChat] Error creating conversation:', error);
-        toast.error(getErrorMessage(error) || 'Failed to create conversation');
+        toast.error(getErrorMessage(error) || t('Failed to create conversation'));
       } finally {
         setIsCreating(false);
       }
     },
-    [createConversation, isCreating, router],
+    [createConversation, isCreating, router, t],
+  );
+
+  /**
+   * Adds the chosen people to a conversation that already exists.
+   *
+   * Every invitation is its own request, so some can be accepted and others
+   * refused; what is reported is what happened, and the screen only leaves when
+   * at least one person was actually invited. Telling the user "added" and
+   * going back to a group nobody joined is the failure this shape prevents.
+   */
+  const invitePeople = useCallback(
+    async (roomId: string, participantIds: readonly string[]) => {
+      if (isCreating) {
+        return;
+      }
+      setIsCreating(true);
+      // Borrowed rather than merely fetched: the registry hands out one source
+      // per room and drops it when nothing is watching, so a screen that used
+      // one without subscribing would leave an entry behind for every room it
+      // ever invited into. Watching it also means that if the details screen
+      // this was opened from is still on the stack, its member list is the one
+      // that gets refreshed.
+      const source = roomAdminSource(roomId);
+      const release = source.subscribe(() => {});
+      try {
+        const outcome = await source.invite(participantIds);
+        if (outcome.failed.length > 0) {
+          toast.error(
+            t('Some invitations could not be sent ({{count}})', {
+              count: outcome.failed.length,
+            }),
+          );
+        }
+        if (outcome.invited.length === 0) {
+          return;
+        }
+        toast.success(t('Invitations sent ({{count}})', { count: outcome.invited.length }));
+        setSelectedUserIds(new Set());
+        setIsSelectionMode(false);
+        router.replace(`/c/${roomId}` as Href);
+      } catch (error: unknown) {
+        logger.error('[NewChat] Error inviting people:', error);
+        toast.error(getErrorMessage(error) || t('Allo could not invite anybody'));
+      } finally {
+        release();
+        setIsCreating(false);
+      }
+    },
+    [isCreating, router, t],
   );
 
   // Open a one-to-one conversation with the user whose row was tapped
   const openConversation = useCallback(
     async (user: User) => {
-      // If in selection mode, toggle selection instead
-      if (isSelectionMode) {
+      // While adding people to a conversation there is nothing to open: a tap
+      // is a choice, which is what selection mode already means.
+      if (isSelectionMode || isInviting) {
         toggleUserSelection(user.id);
         return;
       }
       await startConversation([user.id], undefined);
     },
-    [isSelectionMode, toggleUserSelection, startConversation],
+    [isInviting, isSelectionMode, toggleUserSelection, startConversation],
   );
 
-  // Create the conversation the selected people are in: one of them is a direct
-  // message, more than one is a group.
-  const createSelectedConversation = useCallback(async () => {
+  // What the button at the bottom does: add the chosen people to a conversation
+  // that exists, or start one where a single person is a direct message and
+  // more than one is a group.
+  const submitSelection = useCallback(async () => {
     if (selectedUserIds.size === 0) {
-      toast.error('Please select at least one user');
+      toast.error(t('Choose at least one person'));
       return;
     }
-    await startConversation(Array.from(selectedUserIds), groupName);
-  }, [selectedUserIds, groupName, startConversation]);
+    const participantIds = Array.from(selectedUserIds);
+    if (isInviting && inviteRoomId !== undefined) {
+      await invitePeople(inviteRoomId, participantIds);
+      return;
+    }
+    await startConversation(participantIds, groupName);
+  }, [
+    groupName,
+    invitePeople,
+    inviteRoomId,
+    isInviting,
+    selectedUserIds,
+    startConversation,
+    t,
+  ]);
 
   const styles = StyleSheet.create({
     container: {
@@ -370,7 +448,7 @@ export default function NewChatScreen() {
       <ThemedView style={styles.container}>
         <Header
           options={{
-            title: 'New Chat',
+            title: isInviting ? t('Add people') : t('New Chat'),
             showBackButton: true,
           }}
         />
@@ -389,7 +467,7 @@ export default function NewChatScreen() {
               />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search users..."
+                placeholder={t('Search users…')}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -419,7 +497,7 @@ export default function NewChatScreen() {
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
               <ThemedText style={[styles.emptyStateText, { marginTop: 16 }]}>
-                Searching...
+                {t('Searching…')}
               </ThemedText>
             </View>
           ) : users.length > 0 ? (
@@ -433,14 +511,18 @@ export default function NewChatScreen() {
           ) : searchQuery.length >= 2 ? (
             <EmptyState
               lottieSource={require('@/assets/lottie/welcome.json')}
-              title="No users found"
+              title={t('No users found')}
             />
           ) : (
             <EmptyState
               lottieSource={require('@/assets/lottie/welcome.json')}
-              title={searchQuery.length === 0
-                ? 'Search for users to start a conversation'
-                : 'Type at least 2 characters to search'}
+              title={
+                searchQuery.length === 0
+                  ? isInviting
+                    ? t('Search for the people to add')
+                    : t('Search for users to start a conversation')
+                  : t('Type at least 2 characters to search')
+              }
             />
           )}
 
@@ -450,11 +532,11 @@ export default function NewChatScreen() {
                   other person's name by every client, so a title here would be
                   one nobody asked for — and on Matrix it would be a name the
                   homeserver can read, because room state is not encrypted. */}
-              {selectedUserIds.size > 1 && (
+              {!isInviting && selectedUserIds.size > 1 && (
                 <View style={styles.groupNameField}>
                   <TextFieldInput
-                    label="Group name"
-                    placeholder="Group name (optional)"
+                    label={t('Group name')}
+                    placeholder={t('Group name (optional)')}
                     value={groupName}
                     onChangeText={setGroupName}
                     autoCapitalize="sentences"
@@ -466,7 +548,7 @@ export default function NewChatScreen() {
               <TouchableOpacity
                 style={[styles.createButton, isCreating && styles.createButtonDisabled]}
                 onPress={() => {
-                  void createSelectedConversation();
+                  void submitSelection();
                 }}
                 disabled={isCreating}
                 accessibilityRole="button"
@@ -476,9 +558,15 @@ export default function NewChatScreen() {
                   <ActivityIndicator color={theme.colors.background} />
                 ) : (
                   <ThemedText style={styles.createButtonText}>
-                    {selectedUserIds.size === 1
-                      ? 'Start Chat'
-                      : `Start Group Chat (${selectedUserIds.size})`}
+                    {isInviting
+                      ? t('Add to the conversation ({{count}})', {
+                          count: selectedUserIds.size,
+                        })
+                      : selectedUserIds.size === 1
+                        ? t('Start Chat')
+                        : t('Start Group Chat ({{count}})', {
+                            count: selectedUserIds.size,
+                          })}
                   </ThemedText>
                 )}
               </TouchableOpacity>

@@ -15,6 +15,7 @@ import type {
   AlloMediaFile,
   AlloOidcLoginRequest,
   AlloRecoveryState,
+  AlloRoomDetails,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -107,7 +108,19 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
-  async declineInvitation(): Promise<void> {
+  async leaveRoom(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async roomDetails(): Promise<AlloRoomDetails> {
+    throw new Error('not used by these tests');
+  }
+
+  async inviteToRoom(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async renameRoom(): Promise<void> {
     throw new Error('not used by these tests');
   }
 

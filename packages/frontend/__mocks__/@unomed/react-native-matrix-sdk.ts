@@ -77,6 +77,40 @@ export enum RoomPreset {
   TrustedPrivateChat = 2,
 }
 
+/**
+ * The numbering matters, unlike most of this file.
+ *
+ * A tag enum's values are the Rust variant names, so a rename shows up as a
+ * type error; these are ordinals, and getting one wrong would send a question
+ * about `m.room.name` to whatever event sits at that index instead — silently,
+ * and identically on both sides of the mock. `nativeRoomDetails.test.ts` reads
+ * the binding's own declaration and fails if this list drifts from it.
+ */
+export enum StateEventType {
+  CallMember = 0,
+  PolicyRuleRoom = 1,
+  PolicyRuleServer = 2,
+  PolicyRuleUser = 3,
+  RoomAliases = 4,
+  RoomAvatar = 5,
+  RoomCanonicalAlias = 6,
+  RoomCreate = 7,
+  RoomEncryption = 8,
+  RoomGuestAccess = 9,
+  RoomHistoryVisibility = 10,
+  RoomJoinRules = 11,
+  RoomMemberEvent = 12,
+  RoomName = 13,
+  RoomPinnedEvents = 14,
+  RoomPowerLevels = 15,
+  RoomServerAcl = 16,
+  RoomThirdPartyInvite = 17,
+  RoomTombstone = 18,
+  RoomTopic = 19,
+  SpaceChild = 20,
+  SpaceParent = 21,
+}
+
 // --- Tag enums -----------------------------------------------------------
 
 export enum TimelineItemContent_Tags {
@@ -133,6 +167,15 @@ export enum ProfileDetails_Tags {
   Pending = 'Pending',
   Ready = 'Ready',
   Error = 'Error',
+}
+
+export enum MembershipState_Tags {
+  Ban = 'Ban',
+  Invite = 'Invite',
+  Join = 'Join',
+  Knock = 'Knock',
+  Leave = 'Leave',
+  Custom = 'Custom',
 }
 
 export enum RoomVisibility_Tags {
@@ -206,6 +249,15 @@ export const ProfileDetails = {
   Pending: variant(ProfileDetails_Tags.Pending),
   Ready: variant(ProfileDetails_Tags.Ready),
   Error: variant(ProfileDetails_Tags.Error),
+};
+
+export const MembershipState = {
+  Ban: variant(MembershipState_Tags.Ban),
+  Invite: variant(MembershipState_Tags.Invite),
+  Join: variant(MembershipState_Tags.Join),
+  Knock: variant(MembershipState_Tags.Knock),
+  Leave: variant(MembershipState_Tags.Leave),
+  Custom: variant(MembershipState_Tags.Custom),
 };
 
 export const RoomVisibility = {

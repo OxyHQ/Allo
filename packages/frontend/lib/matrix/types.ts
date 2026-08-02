@@ -113,6 +113,74 @@ export interface AlloRoomPreview {
 }
 
 /**
+ * Somebody a room holds.
+ *
+ * **No avatar**, and that is a decision rather than an omission. What both SDKs
+ * have for a member is an `mxc://` URI, which is not something a view can
+ * fetch — the same problem {@link AlloMediaRef} exists for — so a field here
+ * would be a URL that draws a broken image in every member row. Until member
+ * avatars go through {@link AlloChatClient.downloadMedia} the honest list is
+ * names, and a name is what a row needs to be readable anyway.
+ */
+export interface AlloRoomMember {
+  readonly userId: string;
+  /** The name the room knows them by. Absent when they have set none. */
+  readonly displayName: string | undefined;
+  /**
+   * Whether they are in the room or have only been asked.
+   *
+   * Two values and not the five of {@link AlloRoomMembership}: this list is who
+   * is in the room, so somebody who left, was removed or was banned is not in
+   * it. Reporting them would make "who is in this conversation" a list that
+   * includes people who are not.
+   */
+  readonly membership: 'joined' | 'invited';
+}
+
+/**
+ * What the viewer may do in a room.
+ *
+ * Read from the room's power levels, which is the only authority for it: a
+ * client that decides on its own is a client that draws a button the homeserver
+ * then refuses. Both fields answer for *this* viewer in *this* room and nobody
+ * else.
+ *
+ * They are two booleans and not one `isAdmin`, because Matrix does not have
+ * administrators — it has a power level per action, and a room can perfectly
+ * well let somebody invite people and not rename it.
+ */
+export interface AlloRoomRights {
+  readonly canInvite: boolean;
+  readonly canRename: boolean;
+}
+
+/**
+ * A room, as the screen that administers it draws it.
+ *
+ * Separate from {@link AlloRoomSummary} — which is a *row* in a list and is kept
+ * deliberately cheap — because everything here costs a read of the room's whole
+ * member list and its power levels, and the conversation list would pay it once
+ * per room.
+ */
+export interface AlloRoomDetails {
+  readonly roomId: string;
+  /** The name from room state, or one computed from the members. */
+  readonly name: string | undefined;
+  readonly isDirect: boolean;
+  /**
+   * Everybody in the room, the viewer included, ordered by the name they are
+   * drawn with.
+   *
+   * The viewer is in it because they are in the room, and a list of "everybody
+   * else" is a different question the screen can ask by knowing who it is. The
+   * order is the port's because neither SDK has one: an unordered list would
+   * reshuffle itself between two reads of the same unchanged room.
+   */
+  readonly members: readonly AlloRoomMember[];
+  readonly rights: AlloRoomRights;
+}
+
+/**
  * A conversation to be created.
  *
  * There is no "encrypted" option, and that is a decision rather than an omission:
@@ -862,14 +930,66 @@ export interface AlloChatClient {
   acceptInvitation(roomId: string): Promise<void>;
 
   /**
-   * Refuses an invitation, by leaving the room it is to.
+   * Leaves a room: refusing an invitation and walking out of a conversation.
    *
-   * A refusal is visible to the room: the membership becomes `leave`, and
-   * whoever sent the invitation can see that. There is no way to decline
-   * privately, and pretending otherwise would be a promise the protocol does
-   * not keep.
+   * **One call for both**, because Matrix has one operation for both — the same
+   * `leave` endpoint, the same resulting membership. Two methods here would be
+   * two names for one request, and the difference between them is what the
+   * screen that called it was showing, which is not the port's business.
+   *
+   * Leaving is visible to the room. The membership becomes `leave` and everyone
+   * in it can see so; there is no way to leave, or to decline, privately, and
+   * pretending otherwise would be a promise the protocol does not keep.
+   *
+   * What it does not do is delete anything. The room stays on the homeserver
+   * for the people still in it, this device keeps whatever it had decrypted,
+   * and rejoining is possible only by being invited again — an Allo room is
+   * invite-only, which is the point.
    */
-  declineInvitation(roomId: string): Promise<void>;
+  leaveRoom(roomId: string): Promise<void>;
+
+  /**
+   * Who is in a room, and what the viewer is allowed to do about it.
+   *
+   * One call rather than three, because all of it is read from the same room
+   * state and a screen that showed members from one moment and permissions from
+   * another would draw a button whose enabled-ness disagreed with the list
+   * beside it.
+   *
+   * A snapshot, not a subscription. It is read when a screen asks and again
+   * after that screen changes something, which is what the port can promise
+   * cheaply on both platforms; a change made from another device shows up the
+   * next time it is asked for. See `docs/matrix/ui-wiring.md` §9.
+   */
+  roomDetails(roomId: string): Promise<AlloRoomDetails>;
+
+  /**
+   * Invites one person to a room that already exists.
+   *
+   * One person per call because that is what the protocol has — there is no
+   * bulk invite — so a caller inviting three people makes three requests, any
+   * of which can fail on its own. Collapsing them here would have to either
+   * hide the ones that worked or fail the ones that did.
+   *
+   * The invitation is what the other person sees; nobody is added to a room by
+   * being invited to it. See {@link acceptInvitation}.
+   */
+  inviteToRoom(roomId: string, userId: string): Promise<void>;
+
+  /**
+   * Renames a room.
+   *
+   * `m.room.name` is a state event, and **state events are not encrypted**
+   * (`docs/matrix/data-model.md` §4): the name is readable by the homeserver,
+   * unlike everything said inside the room. That is a property of Matrix rather
+   * than of this call, and the reason Allo does not put anything but a title
+   * here.
+   *
+   * Whether the viewer may do this at all is
+   * {@link AlloRoomRights.canRename}; a homeserver that refuses answers with a
+   * `M_FORBIDDEN` this rejects with.
+   */
+  renameRoom(roomId: string, name: string): Promise<void>;
 
   /**
    * The authoritative encryption state of a room, asking the server when sync

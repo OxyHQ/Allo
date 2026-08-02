@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
-import { useRouter, usePathname, useSegments } from 'expo-router';
+import { useRouter, usePathname, useSegments, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import { toast } from '@oxyhq/bloom/toast';
@@ -360,7 +360,19 @@ export default function ConversationView({ conversationId: propConversationId }:
    * On desktop: details are already visible in right pane
    */
   const handleHeaderPress = useCallback(() => {
-    if (!conversationId || !conversation || !bottomSheet) return;
+    if (!conversationId) return;
+
+    // On Matrix the conversation's details are a room's: who is in it, what the
+    // power levels let this account do, and the way out. None of that is in
+    // `ContactDetails`, which draws the participants of a Mongo document, so
+    // the two backends go to different places rather than to one screen that
+    // would have to be both.
+    if (CHAT_BACKEND === 'matrix') {
+      router.push(`/room/${conversationId}` as Href);
+      return;
+    }
+
+    if (!conversation || !bottomSheet) return;
 
     if (!isLargeScreen) {
       bottomSheet.setBottomSheetContent(
@@ -381,7 +393,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       );
       bottomSheet.openBottomSheet(true);
     }
-  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata, currentUserId]);
+  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata, currentUserId, router]);
 
   // Styles memoized for performance
   const styles = useMemo(() => StyleSheet.create({

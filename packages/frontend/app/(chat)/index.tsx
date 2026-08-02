@@ -30,6 +30,7 @@ import { toast } from '@oxyhq/bloom/toast';
 
 // Components
 import { Search, Skeleton } from '@oxyhq/bloom';
+import { useTranslation } from 'react-i18next';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
@@ -152,6 +153,7 @@ interface ConversationRowStyles {
     conversationTimestampUnread: TextStyle;
     conversationBottomRow: ViewStyle;
     conversationMessage: TextStyle;
+    invitationLabel: TextStyle;
     unreadBadge: ViewStyle;
     unreadText: TextStyle;
 }
@@ -207,6 +209,7 @@ const ConversationRow = React.memo(function ConversationRow({
     onSwipeAction,
     registerSwipeableRef,
 }: ConversationRowProps) {
+    const { t } = useTranslation();
     const isGroup = isGroupConversation(item);
     // Reactive: subscribes to this conversation's participant user cache.
     const displayName = useConversationDisplayName(item, currentUserId);
@@ -302,9 +305,15 @@ const ConversationRow = React.memo(function ConversationRow({
                     </ThemedText>
                 </View>
                 <View style={styles.conversationBottomRow}>
-                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                        {item.lastMessage}
-                    </ThemedText>
+                    {item.isInvitation ? (
+                        <ThemedText style={styles.invitationLabel} numberOfLines={1}>
+                            {t('Invitation · tap to answer')}
+                        </ThemedText>
+                    ) : (
+                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                            {item.lastMessage}
+                        </ThemedText>
+                    )}
                     {item.unreadCount > 0 && (
                         <View style={styles.unreadBadge}>
                             <Text style={styles.unreadText}>
@@ -730,6 +739,16 @@ export default function ConversationsList() {
         conversationMessage: {
             fontSize: 13,
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
+            flex: 1,
+            marginRight: 8,
+        },
+        // An invitation has no preview to show — there is nothing readable in
+        // the room yet — so the row says what it is instead of going blank and
+        // reading as a conversation nobody has written in.
+        invitationLabel: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: theme.colors.primary,
             flex: 1,
             marginRight: 8,
         },

@@ -77,6 +77,7 @@ import type {
   AlloPusher,
   AlloPusherIdentity,
   AlloRecoveryState,
+  AlloRoomDetails,
   AlloRoomListHandle,
   AlloRoomSummary,
   AlloSession,
@@ -110,6 +111,7 @@ import {
   type OidcGrant,
 } from './web/oidcLogin';
 import { planKeyBackup, toRecoveryState } from './web/recovery';
+import { readRoomDetails } from './web/roomDetails';
 import {
   directRoomIds,
   directRoomsWith,
@@ -540,8 +542,46 @@ class WebAlloChatClient implements AlloChatClient {
     await this.#requireSyncing('Accepting an invitation').joinRoom(roomId);
   }
 
-  async declineInvitation(roomId: string): Promise<void> {
-    await this.#requireSyncing('Declining an invitation').leave(roomId);
+  async leaveRoom(roomId: string): Promise<void> {
+    await this.#requireSyncing('Leaving a conversation').leave(roomId);
+  }
+
+  /**
+   * Who is in a room, and what the viewer may do about it.
+   *
+   * Synchronous under the promise: everything read here is in the client's
+   * store already, because the room list the screen came from is built from the
+   * same store. `getMembers()` therefore answers with the members sync has
+   * delivered — for a room whose member list was lazily loaded that can be a
+   * subset, and the honest fix is `loadMembersIfNeeded`, which the SDK calls
+   * for us when the room is joined.
+   *
+   * Whether it is a direct message is `m.direct`'s answer, the same account
+   * data the room list reads, because a room is not marked direct in its own
+   * state.
+   */
+  async roomDetails(roomId: string): Promise<AlloRoomDetails> {
+    const operation = 'Reading a conversation';
+    const client = this.#requireSyncing(operation);
+    const room = this.#requireRoom(roomId, operation);
+    const state = room.getLiveTimeline().getState(EventTimeline.FORWARDS);
+    if (state === undefined) {
+      // A room whose state has not been delivered cannot answer who is in it or
+      // what the viewer may do; reporting "no permissions" would draw a screen
+      // full of disabled buttons and blame the user's power level for it.
+      throw new MatrixRoomNotFoundError(roomId);
+    }
+    await room.loadMembersIfNeeded();
+    const direct = directRoomIds(client.getAccountData(EventType.Direct)?.getContent());
+    return readRoomDetails(room, state, client.getSafeUserId(), direct.has(roomId));
+  }
+
+  async inviteToRoom(roomId: string, userId: string): Promise<void> {
+    await this.#requireSyncing('Inviting somebody').invite(roomId, userId);
+  }
+
+  async renameRoom(roomId: string, name: string): Promise<void> {
+    await this.#requireSyncing('Renaming a conversation').setRoomName(roomId, name);
   }
 
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {

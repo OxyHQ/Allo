@@ -11,6 +11,7 @@ import type {
   AlloMediaFile,
   AlloOidcLoginRequest,
   AlloRecoveryState,
+  AlloRoomDetails,
   AlloRoomListHandle,
   AlloSession,
   AlloTimelineHandle,
@@ -40,11 +41,23 @@ class FakeChatClient implements AlloChatClient {
     this.accepted.push(roomId);
   }
 
-  async declineInvitation(roomId: string): Promise<void> {
+  async leaveRoom(roomId: string): Promise<void> {
     if (this.refuse !== undefined) {
       throw this.refuse;
     }
     this.declined.push(roomId);
+  }
+
+  async roomDetails(): Promise<AlloRoomDetails> {
+    throw new Error('not used by these tests');
+  }
+
+  async inviteToRoom(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async renameRoom(): Promise<void> {
+    throw new Error('not used by these tests');
   }
 
   async beginOidcLogin(): Promise<AlloOidcLoginRequest> {

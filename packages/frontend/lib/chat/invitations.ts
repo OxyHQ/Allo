@@ -27,8 +27,15 @@ export class MatrixInvitations {
     await this.#runtime.client('Accepting an invitation').acceptInvitation(roomId);
   };
 
+  /**
+   * Refuses an invitation, which in Matrix is leaving the room it is to.
+   *
+   * The port has one call for both because the protocol has one operation for
+   * both; what makes this a refusal rather than a departure is only that the
+   * viewer had not joined. See {@link AlloChatClient.leaveRoom}.
+   */
   readonly decline = async (roomId: string): Promise<void> => {
-    await this.#runtime.client('Declining an invitation').declineInvitation(roomId);
+    await this.#runtime.client('Declining an invitation').leaveRoom(roomId);
   };
 }
 
