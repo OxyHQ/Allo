@@ -22,9 +22,48 @@ const backendClient = linkedBackend.client;
 // from the package root, so an inferred type would reference an internal path.
 const authenticatedClient: ReturnType<typeof oxyClient.getClient> = oxyClient.getClient();
 
-// Circuit breaker to prevent cascading failures
-// Opens after 5 consecutive failures, stays open for 30 seconds
-const apiCircuitBreaker = new CircuitBreaker(5, 60000, 30000);
+// Circuit breakers prevent cascading failures: 5 consecutive failures open the
+// circuit for 30 seconds.
+//
+// They are scoped PER ENDPOINT, never shared across the whole API. A single
+// global breaker means any one failing endpoint disables every other one — a
+// flaky settings poll would block the device-key lookups that encryption
+// depends on, turning an unrelated outage into "no message can be sent at all".
+const CIRCUIT_FAILURE_THRESHOLD = 5;
+const CIRCUIT_FAILURE_WINDOW_MS = 60000;
+const CIRCUIT_RESET_MS = 30000;
+
+const circuitBreakers = new Map<string, CircuitBreaker>();
+
+// Path segments that carry an identifier rather than naming a resource. Without
+// collapsing them, every recipient would get their own breaker and the map
+// would grow without bound.
+const IDENTIFIER_SEGMENT = /^(\d+|[0-9a-fA-F]{16,}|[0-9A-Za-z_-]{20,})$/;
+
+/** Groups requests to the same resource, e.g. `/devices/user/abc` -> `/devices/user/:id`. */
+function circuitKeyFor(endpoint: string): string {
+  const [path] = endpoint.split('?');
+  return path
+    .split('/')
+    .map((segment) => (IDENTIFIER_SEGMENT.test(segment) ? ':id' : segment))
+    .join('/');
+}
+
+function breakerFor(endpoint: string): CircuitBreaker {
+  const key = circuitKeyFor(endpoint);
+  const existing = circuitBreakers.get(key);
+  if (existing) {
+    return existing;
+  }
+  const breaker = new CircuitBreaker(
+    CIRCUIT_FAILURE_THRESHOLD,
+    CIRCUIT_FAILURE_WINDOW_MS,
+    CIRCUIT_RESET_MS,
+    key
+  );
+  circuitBreakers.set(key, breaker);
+  return breaker;
+}
 
 // Request deduplication cache - prevents duplicate simultaneous requests
 // WhatsApp/Telegram pattern: if same request is in flight, return same promise
@@ -63,7 +102,7 @@ export const api = {
   async get<T = unknown>(endpoint: string, params?: Record<string, unknown>): Promise<{ data: T }> {
     const key = createRequestKey('GET', endpoint, params);
     const data = await deduplicateRequest(key, () =>
-      apiCircuitBreaker.execute(() =>
+      breakerFor(endpoint).execute(() =>
         backendClient.get<T>(endpoint, { params })
       )
     );
@@ -72,7 +111,7 @@ export const api = {
 
   async post<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate POST requests as they may have side effects
-    const data = await apiCircuitBreaker.execute(() =>
+    const data = await breakerFor(endpoint).execute(() =>
       backendClient.post<T>(endpoint, body)
     );
     return { data };
@@ -80,7 +119,7 @@ export const api = {
 
   async put<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PUT requests as they may have side effects
-    const data = await apiCircuitBreaker.execute(() =>
+    const data = await breakerFor(endpoint).execute(() =>
       backendClient.put<T>(endpoint, body)
     );
     return { data };
@@ -88,7 +127,7 @@ export const api = {
 
   async delete<T = unknown>(endpoint: string): Promise<{ data: T }> {
     // Don't deduplicate DELETE requests as they may have side effects
-    const data = await apiCircuitBreaker.execute(() =>
+    const data = await breakerFor(endpoint).execute(() =>
       backendClient.delete<T>(endpoint)
     );
     return { data };
@@ -96,7 +135,7 @@ export const api = {
 
   async patch<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PATCH requests as they may have side effects
-    const data = await apiCircuitBreaker.execute(() =>
+    const data = await breakerFor(endpoint).execute(() =>
       backendClient.patch<T>(endpoint, body)
     );
     return { data };
