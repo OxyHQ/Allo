@@ -113,6 +113,27 @@ export interface AlloRoomPreview {
 }
 
 /**
+ * A conversation to be created.
+ *
+ * There is no "encrypted" option, and that is a decision rather than an omission:
+ * Allo is an encrypted messenger, and encryption in Matrix is one-way — a room
+ * created without it can never be given it. An option here would let a mistake
+ * become a conversation that is permanently in the clear.
+ */
+export interface AlloCreateRoomRequest {
+  /** Matrix user ids to invite. A conversation with nobody in it is allowed. */
+  readonly invite: readonly string[];
+  /** Absent for a direct message, whose name is computed from its members. */
+  readonly name: string | undefined;
+  /**
+   * Whether this is a one-to-one conversation, which is a claim about the room
+   * and not a count of its invitees: it decides `m.direct`, and through it the
+   * name and avatar the room is drawn with.
+   */
+  readonly isDirect: boolean;
+}
+
+/**
  * How an event addresses itself.
  *
  * A message the viewer just sent exists in the timeline before the homeserver
@@ -439,6 +460,27 @@ export interface AlloChatClient {
   observeRooms(
     onChange: (rooms: readonly AlloRoomSummary[]) => void,
   ): Promise<AlloRoomListHandle>;
+
+  /**
+   * Creates a conversation, and answers with its room id.
+   *
+   * Every room Allo creates is private, invite-only and encrypted; see
+   * {@link AlloCreateRoomRequest} for why none of that is a parameter.
+   *
+   * **A direct message with one invitee reuses the room that already exists with
+   * that person, if there is one.** Two people have one conversation, and the
+   * homeserver will happily mint a second room between the same pair every time
+   * it is asked — which is a second thread of history that neither of them can
+   * see from the other. What "already exists" means is what `m.direct` says and
+   * what sync has delivered, so a client that has just started may not know about
+   * a room it will know about a moment later; the alternative is refusing to
+   * create anything until sync settles.
+   *
+   * The room id comes back before sync has delivered the room, so it will not be
+   * in {@link observeRooms}'s list yet and {@link openTimeline} on it may still
+   * throw.
+   */
+  createRoom(request: AlloCreateRoomRequest): Promise<string>;
 
   /**
    * The authoritative encryption state of a room, asking the server when sync

@@ -112,3 +112,53 @@ export function directRoomIds(content: Record<string, unknown> | undefined): Rea
   }
   return roomIds;
 }
+
+/**
+ * The rooms `m.direct` records as shared with one person, oldest entry first.
+ *
+ * Read with the same suspicion as {@link directRoomIds}, and for the same reason:
+ * every client the user has ever used has written to this event.
+ */
+export function directRoomsWith(
+  content: Record<string, unknown> | undefined,
+  userId: string,
+): readonly string[] {
+  const rooms = content?.[userId];
+  if (!Array.isArray(rooms)) {
+    return [];
+  }
+  return rooms.filter((roomId): roomId is string => typeof roomId === 'string');
+}
+
+/**
+ * `m.direct` with one more room recorded against one person.
+ *
+ * **Every other person's conversations are carried over.** Account data is
+ * replaced whole, so a write that only sent the pair it cared about would delete
+ * the "direct" flag from every conversation the user has ever had — with every
+ * other client that ever set one.
+ *
+ * What it does not carry over is anything in the event that is not a list of room
+ * ids, because that is not `m.direct` content and the write has to produce
+ * content the next reader can trust. The same suspicion as {@link directRoomIds},
+ * applied to a write instead of a read.
+ *
+ * A room already recorded is not recorded twice, so this is safe to apply to what
+ * the server already holds.
+ */
+export function withDirectRoom(
+  content: Record<string, unknown> | undefined,
+  userId: string,
+  roomId: string,
+): Record<string, string[]> {
+  const next: Record<string, string[]> = {};
+  for (const otherUserId of Object.keys(content ?? {})) {
+    const rooms = directRoomsWith(content, otherUserId);
+    if (rooms.length > 0) {
+      next[otherUserId] = [...rooms];
+    }
+  }
+  const existing = next[userId] ?? [];
+  next[userId] = existing.includes(roomId) ? existing : [...existing, roomId];
+  return next;
+}

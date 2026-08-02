@@ -1,7 +1,9 @@
 import {
   directRoomIds,
+  directRoomsWith,
   orderRoomList,
   selectRoomPreview,
+  withDirectRoom,
   type RoomListEntry,
 } from '@/lib/matrix/web/roomList';
 import type { AlloRoomSummary } from '@/lib/matrix/types';
@@ -158,6 +160,88 @@ describe('selectRoomPreview', () => {
     );
 
     expect(preview?.sentAt).toBe(1_600_000_000_000);
+  });
+});
+
+describe('directRoomsWith', () => {
+  it('answers with the rooms recorded against one person', () => {
+    const rooms = directRoomsWith(
+      { '@alice:allo.you': ['!one:allo.you', '!two:allo.you'], '@bob:allo.you': ['!three'] },
+      '@alice:allo.you',
+    );
+
+    expect(rooms).toEqual(['!one:allo.you', '!two:allo.you']);
+  });
+
+  it('answers with nothing for a person who has none, and for no account data', () => {
+    expect(directRoomsWith({}, '@alice:allo.you')).toEqual([]);
+    expect(directRoomsWith(undefined, '@alice:allo.you')).toEqual([]);
+  });
+
+  it('ignores an entry that is not a list of room ids', () => {
+    expect(directRoomsWith({ '@alice:allo.you': '!not-a-list' }, '@alice:allo.you')).toEqual([]);
+    expect(directRoomsWith({ '@alice:allo.you': [42, '!real'] }, '@alice:allo.you')).toEqual([
+      '!real',
+    ]);
+  });
+});
+
+describe('withDirectRoom', () => {
+  it('records the new room against the person it is shared with', () => {
+    expect(withDirectRoom(undefined, '@alice:allo.you', '!new:allo.you')).toEqual({
+      '@alice:allo.you': ['!new:allo.you'],
+    });
+  });
+
+  it('keeps the conversations the user already had with everybody else', () => {
+    // Account data is replaced whole. A write that sent only the pair it cared
+    // about would strip the "direct" flag off every other conversation the user
+    // has, with every client that ever set one.
+    const next = withDirectRoom(
+      { '@bob:allo.you': ['!bob-room'], '@carol:allo.you': ['!carol-room'] },
+      '@alice:allo.you',
+      '!new:allo.you',
+    );
+
+    expect(next).toEqual({
+      '@bob:allo.you': ['!bob-room'],
+      '@carol:allo.you': ['!carol-room'],
+      '@alice:allo.you': ['!new:allo.you'],
+    });
+  });
+
+  it('adds to the rooms already shared with that person rather than replacing them', () => {
+    const next = withDirectRoom(
+      { '@alice:allo.you': ['!old:allo.you'] },
+      '@alice:allo.you',
+      '!new:allo.you',
+    );
+
+    expect(next['@alice:allo.you']).toEqual(['!old:allo.you', '!new:allo.you']);
+  });
+
+  it('does not record the same room twice', () => {
+    const next = withDirectRoom(
+      { '@alice:allo.you': ['!room:allo.you'] },
+      '@alice:allo.you',
+      '!room:allo.you',
+    );
+
+    expect(next['@alice:allo.you']).toEqual(['!room:allo.you']);
+  });
+
+  it('writes back content the next reader can trust', () => {
+    // What it declines to carry over is what is not `m.direct` content at all.
+    const next = withDirectRoom(
+      { '@bob:allo.you': 'not-a-list', '@carol:allo.you': [7, '!carol-room'] },
+      '@alice:allo.you',
+      '!new:allo.you',
+    );
+
+    expect(next).toEqual({
+      '@carol:allo.you': ['!carol-room'],
+      '@alice:allo.you': ['!new:allo.you'],
+    });
   });
 });
 

@@ -247,6 +247,10 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  async createRoom(): Promise<string> {
+    throw new Error('not used by these tests');
+  }
+
   async roomEncryption(): Promise<AlloEncryptionState> {
     return 'encrypted';
   }
