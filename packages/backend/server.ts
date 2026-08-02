@@ -18,8 +18,11 @@ import conversationsRoutes from "./src/routes/conversations";
 import messagesRoutes from "./src/routes/messages";
 import devicesRoutes from "./src/routes/devices";
 import reportsRoutes from "./src/routes/reports";
+import bridgesRoutes from "./src/routes/bridges";
 import { createCrowdSourceWebhookRoutes } from "./src/routes/crowdSourceWebhook";
+import { createBridgeInternalRoutes } from "./src/routes/bridgesInternal";
 import { startModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
+import { startBridgeStatusSweep } from "./src/services/bridges/BridgeStatusService";
 
 // Middleware
 
@@ -65,6 +68,21 @@ export const oxy = oxyClient;
  * moderation decision back on a retry schedule for no reason.
  */
 app.use("/webhooks", createCrowdSourceWebhookRoutes());
+
+/**
+ * Bridge callbacks, ahead of the JSON parser and of Oxy authentication
+ * (docs/matrix/bridges.md §5.4).
+ *
+ * These are called by the bridge processes and never by the app. Mounting them
+ * here means an Oxy session cannot satisfy them and the per-user rate limiter
+ * further down cannot throttle them — properties of the ASSEMBLY rather than of
+ * a check inside each handler. The router brings its own body parser, so it does
+ * not depend on middleware mounted after it.
+ *
+ * `GET /internal/bridges/proxy` in particular sits on the bridge's connect path:
+ * a 429 there is a user who cannot connect.
+ */
+app.use("/internal/bridges", createBridgeInternalRoutes());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -275,6 +293,7 @@ authenticatedApiRouter.use("/conversations", conversationsRoutes);
 authenticatedApiRouter.use("/messages", messagesRoutes);
 authenticatedApiRouter.use("/devices", devicesRoutes);
 authenticatedApiRouter.use("/reports", reportsRoutes);
+authenticatedApiRouter.use("/bridges", bridgesRoutes);
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
@@ -304,6 +323,9 @@ db.once("open", () => {
   require("./src/models/Report");
   require("./src/models/ModerationOutbox");
   require("./src/models/ModerationEvent");
+  require("./src/models/BridgeAccount");
+  require("./src/models/BridgeLinkSession");
+  require("./src/models/BridgeProxyLease");
 });
 
 // --- Server Listen ---
@@ -318,6 +340,12 @@ const bootServer = async () => {
     // claim query, and a drain against a disconnected Mongo would only log noise.
     // A no-op unless CROWDSOURCE_ENABLED=true.
     startModerationOutboxDispatcher();
+    /**
+     * The sweep that notices SILENCE (bridges.md §5.4). A no-op unless a bridge
+     * network is enabled. Started after the database is reachable for the same
+     * reason as the dispatcher: its first act is a query.
+     */
+    startBridgeStatusSweep();
     server.listen(PORT, () => {
       logger.info(`Allo backend server running on port ${PORT}`);
     });

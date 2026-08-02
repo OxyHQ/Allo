@@ -92,8 +92,14 @@ CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 # secret still verify.
 CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
 
+# Bridge orchestration (optional; see "Bridges" below). No network is enabled
+# and no internal route is mounted when ALLO_BRIDGES_ENABLED is empty.
+ALLO_BRIDGES_ENABLED=
+ALLO_MATRIX_SERVER_NAME=allo.you
+
 # Tests only: point the vitest suite at an existing MongoDB replica set instead
-# of downloading a mongodb-memory-server binary.
+# of downloading a mongodb-memory-server binary. Honoured when already set —
+# see "Running the tests without a downloaded binary" below.
 ALLO_TEST_MONGODB_URI=
 ```
 
@@ -426,6 +432,103 @@ is pinned to `['user']` by a test so nobody can widen it by accident.
 - Registered before `express.json()` so the raw body survives for signature
   verification.
 
+### Bridges
+
+Orchestration for the mautrix bridges. Design: [`docs/matrix/bridges.md`](../../docs/matrix/bridges.md).
+The bridges themselves are separate AGPL processes run **unmodified**; nothing
+here patches or embeds them.
+
+#### Authenticated, for the app
+
+| Route | Purpose |
+|---|---|
+| `GET /api/bridges/networks` | The catalogue the account-linking screen renders. Only **enabled** networks; the app carries no list of its own. |
+| `GET /api/bridges/accounts` | The caller's linked accounts. |
+| `POST /api/bridges/networks/:network/link` | Start a login. Body: `{ "flowId": "phone" }`. |
+| `GET /api/bridges/links/:linkId` | Long-poll behind a QR step. Socket.IO (`bridgeLinkStep`) is the fast path; this is the one that always works. |
+| `POST /api/bridges/links/:linkId/submit` | Answer the current step. Body: `{ "values": { "<fieldId>": "…" } }`. |
+| `DELETE /api/bridges/links/:linkId` | Abandon an attempt. |
+| `DELETE /api/bridges/accounts/:accountId` | Unlink. Does **not** release the proxy lease. |
+| `POST /api/bridges/accounts/:accountId/reconnect` | Re-read `whoami` and reconcile the stored state. |
+
+Two rules these routes exist to enforce:
+
+- **A disabled network answers 404, not 403.** A 403 says "exists, but not for
+  you", which lets a client enumerate the roadmap by probing identifiers. A
+  disabled network, an unknown one and a half-configured one all give the same
+  answer.
+- **The MXID is derived from the authenticated Oxy identity, never from the
+  request.** The provisioning `shared_secret` makes a bridge believe `?user_id=`
+  with no further checks, so an MXID a client could influence would make these
+  endpoints "link an account for whoever you like".
+
+#### Internal, called only by the bridges
+
+Mounted at `/internal/bridges`, **before `express.json()` and before Oxy
+authentication**, with their own body parser — so no Oxy session can satisfy them
+and the per-user rate limiter cannot throttle them.
+
+| Route | Auth |
+|---|---|
+| `POST /internal/bridges/status` | `Authorization: Bearer <as_token>`, constant-time against every enabled network. The matching token also identifies which bridge sent it. |
+| `GET /internal/bridges/proxy` | `?t=<ALLO_BRIDGE_PROXY_ENDPOINT_TOKEN>`. Mounted only when a proxy provider is configured. Answers `{"proxy_url": "…"}` — that field name is what the bridge deserialises. |
+
+#### Configuration
+
+A network is reachable only if it is listed in `ALLO_BRIDGES_ENABLED` **and** has
+its complete trio of variables **and** satisfies the preconditions its catalogue
+row declares. All of it is checked at boot in one `superRefine`, so a deployment
+that asks for a network it cannot serve does not start.
+
+```env
+ALLO_BRIDGES_ENABLED=telegram,slack
+ALLO_MATRIX_SERVER_NAME=allo.you
+
+ALLO_BRIDGE_TELEGRAM_BASE_URL=http://allo-bridge-telegram:29317
+ALLO_BRIDGE_TELEGRAM_SHARED_SECRET=<32+ chars>
+ALLO_BRIDGE_TELEGRAM_AS_TOKEN=<the registration's as_token>
+
+# Optional tuning
+ALLO_BRIDGES_MAX_ACCOUNTS_PER_NETWORK=2
+ALLO_BRIDGES_LINK_TTL_SECONDS=600
+ALLO_BRIDGES_DISPLAY_STEP_TTL_SECONDS=170   # WhatsApp's QR window is ~2m40s
+ALLO_BRIDGES_STALE_MARGIN_SECONDS=300
+ALLO_BRIDGES_HTTP_TIMEOUT_MS=15000
+
+# Proxy provider. Required to enable any network whose catalogue row says
+# requiresProxy — WhatsApp, Instagram, Messenger. Without it they cannot be
+# turned on at all, which is the point: every user would otherwise egress from
+# one datacentre address, correlated for banning.
+ALLO_BRIDGE_PROXY_PROVIDER=provider-a
+ALLO_BRIDGE_PROXY_GATEWAY=http://gateway.example:8000
+ALLO_BRIDGE_PROXY_USERNAME_TEMPLATE=acct-country-{country}-session-{session}
+ALLO_BRIDGE_PROXY_PASSWORD=<from the secret manager>
+ALLO_BRIDGE_PROXY_COUNTRIES=ES,PT,FR
+ALLO_BRIDGE_PROXY_ECHO_URL=https://echo.example/whoami
+ALLO_BRIDGE_PROXY_ENDPOINT_TOKEN=<32+ chars, rotatable on its own>
+```
+
+`{country}` and `{session}` in the username template are load-bearing and the
+config refuses a template missing either: without the first the provider egresses
+wherever it likes while the lease claims otherwise, and without the second every
+user shares one session and one exit address.
+
+The echo endpoint must answer `{"ip": "…", "country": "ES"}` and is fetched
+**through** the proxy. If the country it reports disagrees with the lease, the
+lease is quarantined and the account does not connect — better an account that
+fails to connect than one that connects from the wrong country.
+
+#### What is deliberately not built yet
+
+- **Discord.** Its catalogue row says `architecture: "legacy"`: `mautrix-discord`
+  speaks a different `/v1` provisioning API that needs its own adapter, and whose
+  wire format the design does not pin down. Listing it in `ALLO_BRIDGES_ENABLED`
+  fails at boot rather than publishing a network whose login cannot start.
+- **The per-user slot pool for WhatsApp and Meta** (`bridges.md` §4.3). Those
+  networks cannot be enabled without a contracted proxy provider, and the design
+  leaves the slot count, the per-slot secrets and the legal sign-off open.
+  `BridgeAccount.slotId` and the proxy endpoint's `?slot=` are in place for it.
+
 ## Real-time Messaging (Socket.IO)
 
 The backend provides real-time messaging through Socket.IO.
@@ -544,10 +647,27 @@ const socket = io('http://localhost:4140/messaging', {
 - `bun run clean` — Clean build artifacts
 
 This package declares no `lint` script. The suite in `src/__tests__/` runs
-against a real MongoDB replica set started by `vitest.globalSetup.ts`; set
-`ALLO_TEST_MONGODB_URI` to point it at an existing server instead of letting
-`mongodb-memory-server` download one. CI runs it on every PR
-(`.github/workflows/ci.yml`).
+against a real MongoDB replica set started by `vitest.globalSetup.ts`. CI runs it
+on every PR (`.github/workflows/ci.yml`).
+
+### Running the tests without a downloaded binary
+
+`mongodb-memory-server` fetches a `mongod` build on first run, and on **arm64
+Linux there is none to fetch** — the download 403s, because no
+`mongodb-linux-aarch64-debian12-<version>.tgz` is published. Because the fetch
+happens in `globalSetup`, that failure takes down the whole suite, including the
+tests that never open a database. Two ways round it:
+
+```bash
+# Use a mongod that is already installed. Still an in-memory replica set.
+MONGOMS_SYSTEM_BINARY=/usr/bin/mongod bun run test
+
+# Or point the suite at a replica set that is already running.
+ALLO_TEST_MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0 bun run test
+```
+
+Both need a *replica set*, not a standalone: the suite rests on multi-document
+transactions and on unique indexes, and neither behaves the same without one.
 
 ## Monorepo Integration
 

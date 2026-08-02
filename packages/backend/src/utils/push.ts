@@ -1,7 +1,15 @@
 import { initializeApp, cert, type ServiceAccount, type FirebaseError } from 'firebase-admin/app';
 import { getMessaging, type MulticastMessage } from 'firebase-admin/messaging';
 import PushToken from '../models/PushToken';
-import { oxy } from '../../server';
+// `oxyClient` directly, not `oxy` re-exported from `server.ts`.
+//
+// The re-export is the same singleton, so this is not a behaviour change — but
+// importing it from `server.ts` made a utility depend on the whole application:
+// anything that reached push notifications also assembled an Express app, a
+// Socket.IO server and the Firebase SDK as an import side effect. That is a
+// cycle (`server` → routes → utils → `server`) and it is what stops a route
+// being testable in isolation.
+import { oxyClient as oxy } from '@oxyhq/core';
 import { logger } from './logger';
 
 let firebaseInitialized = false;
