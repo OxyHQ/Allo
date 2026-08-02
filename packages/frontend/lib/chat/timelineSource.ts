@@ -1,5 +1,6 @@
 import { MatrixEventNotSentError } from '@/lib/matrix/errors';
 import type {
+  AlloOutgoingAttachment,
   AlloPaginationOutcome,
   AlloTimelineHandle,
   AlloTimelineItem,
@@ -176,6 +177,19 @@ export class TimelineSource {
   readonly sendText = async (body: string): Promise<void> => {
     const handle = await this.#require('Sending a message');
     await handle.sendText(body);
+  };
+
+  /**
+   * Uploads an attachment and sends it.
+   *
+   * Nothing optimistic happens here either, and it matters more than it does
+   * for text: an upload takes seconds, so the local echo the port puts in the
+   * timeline is the only thing on screen while it runs, and a second row added
+   * here would sit beside it for the whole upload.
+   */
+  readonly sendAttachment = async (attachment: AlloOutgoingAttachment): Promise<void> => {
+    const handle = await this.#require('Sending an attachment');
+    await handle.sendAttachment(attachment);
   };
 
   /** Adds the viewer's reaction to a row, or takes it away. */

@@ -76,6 +76,13 @@ import { useSenderInfo } from '@/hooks/useSenderInfo';
 // Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { useMatrixTimeline } from '@/hooks/useMatrixTimeline';
+import { useMatrixMedia } from '@/hooks/useMatrixMedia';
+import {
+  captureMediaAttachment,
+  pickMediaAttachments,
+  toVoiceAttachment,
+  type PickedAttachments,
+} from '@/lib/chat/attachments';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
@@ -196,6 +203,11 @@ export default function ConversationView({ conversationId: propConversationId }:
   // there is no fetch: opening it is subscribing to it.
   const matrixTimeline = useMatrixTimeline(conversationId);
   const messages = matrixTimeline?.messages ?? storedMessages;
+
+  // Attachments the port has fetched and decrypted, keyed by the media refs the
+  // messages above carry. `undefined` on the Express path, where a media id is
+  // an Oxy Cloud file id instead — see `getMediaUrl`.
+  const matrixMedia = useMatrixMedia();
 
   // The store-backed indicator is re-emitted as a DOM event and so only ever
   // fires on web; the port's comes from the homeserver and works everywhere.
@@ -724,6 +736,64 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [inputText, handleSend]);
 
   /**
+   * Sends one attachment, and says so when it does not go.
+   *
+   * Attachments exist on the Matrix path only, and that is a property of the
+   * backend rather than a gap in this screen: Allo's Express API has never had
+   * an upload endpoint, and the homeserver's media repository is what replaces
+   * it. A build talking to the old backend says so instead of opening a picker
+   * that leads nowhere.
+   *
+   * Failures are shown rather than logged. An upload is something the user
+   * started and waited for, and the one that matters most —
+   * `MatrixMediaEncryptionUnknownError`, raised when the conversation's
+   * encryption state has not synced yet — is recovered from by trying again,
+   * which nobody does if nothing said anything.
+   */
+  const sendAttachments = useCallback(async (attachments: PickedAttachments) => {
+    if (attachments.length === 0) {
+      return;
+    }
+    if (!matrixTimeline) {
+      toast.error('Attachments need the Matrix chat backend.');
+      return;
+    }
+    for (const attachment of attachments) {
+      try {
+        await matrixTimeline.sendAttachment(attachment);
+      } catch (error) {
+        console.error('Error sending attachment:', error);
+        toast.error(
+          error instanceof Error ? error.message : 'The attachment could not be sent.'
+        );
+        return;
+      }
+    }
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [matrixTimeline]);
+
+  /**
+   * Picks from the photo library, or takes a picture, and sends what comes back.
+   *
+   * The picker's own promise is what this awaits — there is no Effect and no
+   * subscription — because opening a picker is something the user did, and the
+   * result belongs to that event and not to a later render.
+   */
+  const handleSelectMedia = useCallback(
+    (pick: () => Promise<PickedAttachments>) => {
+      pick()
+        .then(sendAttachments)
+        .catch((error: unknown) => {
+          console.error('Error choosing an attachment:', error);
+          toast.error('The attachment could not be read.');
+        });
+    },
+    [sendAttachments]
+  );
+
+  /**
    * Handle attach button press
    * Opens WhatsApp-style attachment menu in bottom sheet
    */
@@ -733,18 +803,14 @@ export default function ConversationView({ conversationId: propConversationId }:
     bottomSheet.setBottomSheetContent(
       <AttachmentMenu
         onClose={() => bottomSheet.openBottomSheet(false)}
-        onSelectPhoto={() => {
-          // TODO: Implement photo picker
-        }}
+        onSelectPhoto={() => handleSelectMedia(pickMediaAttachments)}
         onSelectDocument={() => {
           // TODO: Implement document picker
         }}
         onSelectLocation={() => {
           // TODO: Implement location picker
         }}
-        onSelectCamera={() => {
-          // TODO: Implement camera
-        }}
+        onSelectCamera={() => handleSelectMedia(captureMediaAttachment)}
         onSelectContact={() => {
           // TODO: Implement contact picker
         }}
@@ -754,7 +820,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       />
     );
     bottomSheet.openBottomSheet(true);
-  }, [bottomSheet]);
+  }, [bottomSheet, handleSelectMedia]);
 
   /**
    * Handle emoji button press
@@ -781,19 +847,31 @@ export default function ConversationView({ conversationId: propConversationId }:
 
 
   /**
-   * Resolve a media download URL from a media ID via the Oxy SDK. The rendition
-   * variant depends on the item's kind — see `mediaVariantForKind`. Returns an
-   * empty string on failure so the image renderer surfaces a real error state
-   * instead of a masking placeholder.
+   * Resolve a media download URL from a media ID.
+   *
+   * Two different resolutions behind one prop, and they must not be mixed. On
+   * the Matrix path the id is the port's opaque media ref: the bytes live in
+   * the homeserver's media repository, are encrypted in an encrypted room, and
+   * are fetched and decrypted by the port — so the answer comes from a cache and
+   * is `''` until it arrives. On the Express path the id is an Oxy Cloud file
+   * id and the URL is built from it, with a rendition variant that depends on
+   * the item's kind (`mediaVariantForKind`). Neither server can resolve the
+   * other's identifiers.
+   *
+   * Returns an empty string when there is nothing yet, so the image renderer
+   * surfaces its own empty state instead of a masking placeholder.
    */
   const getMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
+    if (matrixMedia) {
+      return matrixMedia.url(mediaId);
+    }
     try {
       return oxyServices.getFileDownloadUrl(mediaId, mediaVariantForKind(kind));
     } catch (error) {
       console.error('Error getting media URL:', error);
       return '';
     }
-  }, [oxyServices]);
+  }, [oxyServices, matrixMedia]);
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
       return null;
@@ -1346,8 +1424,9 @@ export default function ConversationView({ conversationId: propConversationId }:
                 scale={scale}
                 onRecordStart={() => {
                 }}
+                // The recorder reports seconds; `toVoiceAttachment` converts.
                 onRecordEnd={(uri, duration) => {
-                  // TODO: Send audio message
+                  void sendAttachments([toVoiceAttachment(uri, duration)]);
                 }}
                 onRecordCancel={() => {
                 }}

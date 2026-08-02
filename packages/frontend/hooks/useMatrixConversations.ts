@@ -1,9 +1,9 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import type { Conversation } from '@/app/(chat)/index';
+import { useMatrixEventLabels } from '@/hooks/useMatrixEventLabels';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
-import { toConversation, type UnreadableEventLabels } from '@/lib/chat/matrixViewModel';
+import { toConversation } from '@/lib/chat/matrixViewModel';
 import { roomListSource } from '@/lib/chat/roomListSource';
 import type { AlloRoomSummary, AlloUnsubscribe } from '@/lib/matrix/types';
 
@@ -26,28 +26,17 @@ const noRooms = (): readonly AlloRoomSummary[] => NO_ROOMS;
 const enabled = CHAT_BACKEND === 'matrix';
 
 export function useMatrixConversations(): readonly Conversation[] | undefined {
-  const { t } = useTranslation();
-
   const rooms = useSyncExternalStore(
     enabled ? roomListSource.subscribe : subscribeToNothing,
     enabled ? roomListSource.getSnapshot : noRooms,
     noRooms,
   );
 
-  /**
-   * The same words the timeline uses for the same three facts. A conversation
-   * whose last message cannot be read on this device says so in the list too:
-   * an empty preview there reads as a conversation nobody has written in.
-   */
-  const labels = useMemo<UnreadableEventLabels>(
-    () => ({
-      undecryptable: t('This message cannot be read on this device.'),
-      redacted: t('This message was deleted.'),
-      unsupported: (description) =>
-        t('Allo cannot show this yet ({{kind}}).', { kind: description }),
-    }),
-    [t],
-  );
+  // The same words the timeline uses for the same facts. A conversation whose
+  // last message cannot be read on this device says so in the list too, and one
+  // whose last message is a photograph says "Photo": an empty preview reads as a
+  // conversation nobody has written in.
+  const labels = useMatrixEventLabels();
 
   // Derived during render, as a mapping of the snapshot should be. An Effect that
   // mirrored this into state would render one frame of the previous list every

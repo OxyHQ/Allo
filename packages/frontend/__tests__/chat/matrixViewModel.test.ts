@@ -12,6 +12,8 @@ const LABELS: UnreadableEventLabels = {
   undecryptable: 'cannot be read on this device',
   redacted: 'was deleted',
   unsupported: (description) => `cannot show this yet (${description})`,
+  attachment: (filename) => `attachment ${filename}`,
+  mediaPreview: (kind) => `a ${kind}`,
 };
 
 function room(overrides: Partial<AlloRoomSummary> = {}): AlloRoomSummary {

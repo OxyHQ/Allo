@@ -1,6 +1,11 @@
 import type { Conversation } from '@/app/(chat)/index';
-import type { AlloEventContent, AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
-import type { Message } from '@/stores/messagesStore';
+import type {
+  AlloEventContent,
+  AlloMediaContent,
+  AlloRoomSummary,
+  AlloTimelineItem,
+} from '@/lib/matrix/types';
+import type { MediaItem, Message } from '@/stores/messagesStore';
 
 /**
  * The port's view model, translated into the one Allo's chat components draw.
@@ -29,6 +34,25 @@ export interface UnreadableEventLabels {
   readonly redacted: string;
   /** Allo does not draw this kind of event yet. Given the kind's name. */
   readonly unsupported: (description: string) => string;
+  /**
+   * An attachment in a **bubble** that has no picture to draw and no caption: a
+   * voice note, an audio file, a document.
+   *
+   * Given the sender's filename, because that is the only thing about it worth
+   * reading. A picture and a video never use this — the bubble *is* the
+   * picture, and a filename printed under it is noise.
+   */
+  readonly attachment: (filename: string) => string;
+  /**
+   * An attachment in a **conversation row** that has no caption.
+   *
+   * Separate from {@link attachment} because the two places want opposite
+   * things. A picture in a bubble should say nothing; the same picture as a
+   * conversation's latest message must say "Photo", or the row goes blank and
+   * reads as a conversation nobody has written in — which is the mistake this
+   * whole mapping is shaped to prevent.
+   */
+  readonly mediaPreview: (kind: AlloMediaContent['kind']) => string;
 }
 
 /**
@@ -64,7 +88,7 @@ export function toConversation(
     // user sees while sync has not yet delivered the room's name or enough
     // members to compute one.
     name: summary.displayName ?? summary.roomId,
-    lastMessage: latest === undefined ? '' : bodyOf(latest.content, labels),
+    lastMessage: latest === undefined ? '' : previewOf(latest.content, labels),
     timestamp: latest === undefined ? '' : new Date(latest.sentAt).toISOString(),
     unreadCount: summary.unreadCount,
     avatar: summary.avatarUrl,
@@ -97,12 +121,54 @@ export function toMessage(
     isSent: item.isOwn,
     conversationId: roomId,
     messageType: 'user',
+    media: item.content.kind === 'media' ? toMediaItems(item.content.media) : undefined,
     isEncrypted: item.content.kind === 'undecryptable',
     isEdited: item.content.kind === 'text' && item.content.isEdited,
     reactions: toReactions(item),
     readStatus: toReadStatus(item),
   };
 }
+
+/**
+ * The picture or the video the carousel draws, or `undefined` for an attachment
+ * that has none.
+ *
+ * A list, because `Message.media` is one and `MessageBlock` flattens the group's
+ * — but always of length one here: a Matrix event carries a single attachment,
+ * and the several-in-one-message case is `m.gallery`, which Allo does not send
+ * and reports as unsupported.
+ *
+ * **The `id` is the port's media ref**, not an identifier of Allo's, and that is
+ * what makes the carousel work unchanged: it calls `getMediaUrl(item.id, …)`,
+ * and the ref is exactly what `AlloChatClient.downloadMedia` takes. See
+ * `lib/chat/mediaCache.ts` for what turns one into a URL.
+ *
+ * **The thumbnail is preferred over the original whenever the sender made one.**
+ * A bubble is 250pt wide and the original is a phone camera's full-resolution
+ * photograph; on an encrypted room the sender's thumbnail is the only smaller
+ * copy that exists, because a homeserver cannot resize what it cannot read.
+ */
+function toMediaItems(media: AlloMediaContent): MediaItem[] | undefined {
+  const type = CAROUSEL_TYPE_BY_KIND[media.kind];
+  if (type === undefined) {
+    return undefined;
+  }
+  return [{ id: media.thumbnail ?? media.source, type }];
+}
+
+/**
+ * Which attachments the carousel can draw, and as what.
+ *
+ * Audio, voice notes and documents are absent because `MediaCarousel` renders
+ * nothing for them — it draws images and a still frame for videos — and giving
+ * it one would produce an empty bubble. They are drawn as a line of text
+ * instead; see {@link UnreadableEventLabels.attachment}.
+ */
+const CAROUSEL_TYPE_BY_KIND: Readonly<Partial<Record<AlloMediaContent['kind'], MediaItem['type']>>> =
+  {
+    image: 'image',
+    video: 'video',
+  };
 
 /**
  * Reactions, in the shape the bubble's vocabulary has: emoji to the user ids who
@@ -125,17 +191,26 @@ function toReactions(item: AlloTimelineItem): Message['reactions'] {
 }
 
 /**
- * What an event says, in words, whether it is a bubble or a row's preview.
+ * What an event says in a **bubble**.
  *
- * One function for both because the three states that carry no text mean exactly
- * the same thing in each place. A conversation whose last message this device
- * cannot decrypt has to say so in the list as well as in the timeline: an empty
- * preview there reads as a conversation nobody has written in.
+ * The three states that carry no text mean the same thing here as in a
+ * conversation row, and {@link previewOf} delegates to this for all of them.
+ * Only an attachment differs, and it differs completely: see
+ * {@link UnreadableEventLabels.mediaPreview}.
  */
 function bodyOf(content: AlloEventContent, labels: UnreadableEventLabels): string {
   switch (content.kind) {
     case 'text':
       return content.body;
+    case 'media':
+      return (
+        captionOf(content.media) ??
+        // A picture says nothing: the bubble is the picture. Anything the
+        // carousel cannot draw has to say something, or it is an empty bubble.
+        (CAROUSEL_TYPE_BY_KIND[content.media.kind] === undefined
+          ? labels.attachment(content.media.filename)
+          : '')
+      );
     case 'undecryptable':
       return labels.undecryptable;
     case 'redacted':
@@ -143,6 +218,25 @@ function bodyOf(content: AlloEventContent, labels: UnreadableEventLabels): strin
     case 'unsupported':
       return labels.unsupported(content.description);
   }
+}
+
+/**
+ * What an event says in a **conversation row**.
+ *
+ * A conversation whose last message this device cannot decrypt has to say so in
+ * the list as well as in the timeline, and so does one whose last message is a
+ * photograph: an empty preview reads as a conversation nobody has written in.
+ */
+function previewOf(content: AlloEventContent, labels: UnreadableEventLabels): string {
+  if (content.kind === 'media') {
+    return captionOf(content.media) ?? labels.mediaPreview(content.media.kind);
+  }
+  return bodyOf(content, labels);
+}
+
+/** The sender's own words about an attachment, if they wrote any. */
+function captionOf(media: AlloMediaContent): string | undefined {
+  return media.caption !== undefined && media.caption !== '' ? media.caption : undefined;
 }
 
 /**
