@@ -25,7 +25,11 @@ bun run dev:frontend       # @allo/frontend only
 bun run dev:backend        # @allo/backend only
 bun run build              # build all
 bun run build:shared-types # rebuild types (runs on postinstall too)
+bun run typecheck          # backend then frontend, no emit
+bun run test               # all workspaces
 ```
+
+A root `lint` script exists but is not usable: the backend declares no `lint`, and `shared-types` declares one without shipping eslint or a config. Only the frontend lints.
 
 ## Dependency graph
 
@@ -38,27 +42,30 @@ bun run build:shared-types # rebuild types (runs on postinstall too)
 
 External shared deps both halves pull from npm:
 
-- `@oxyhq/core` — auth client + types
+- `@oxyhq/core` — auth client + types. Its `/server` entry point supplies the backend's auth, CORS and rate-limit middleware.
+- `@oxyhq/contracts` — shared API contracts
 - `@oxyhq/services` — RN auth context (frontend only)
 - `@oxyhq/bloom` — UI primitives (frontend only)
+- `@oxyhq/crowdsource*` — moderation pipeline (backend only)
 
 ## Frontend
 
-`packages/frontend/` is an Expo SDK 54 app using Expo Router for file-based routing. Highlights:
+`packages/frontend/` is an Expo SDK 57 app (React Native 0.86, React 19.2) using Expo Router for file-based routing. Highlights:
 
 | Area | Module |
 |------|--------|
-| Routing | `app/` (Expo Router v54, typed routes) |
-| Styling | NativeWind 4 (Tailwind for RN) + Bloom theme tokens |
+| Routing | `app/` (Expo Router 57, typed routes) |
+| Styling | NativeWind 5 preview (Tailwind for RN) + Bloom theme tokens |
 | State (UI) | Zustand stores in `stores/` |
 | State (server) | Custom hooks in `hooks/` over the offline-aware API client in `lib/api/` |
 | Encryption | `lib/signalProtocol.ts` + `stores/deviceKeysStore.ts` |
 | Offline cache | `lib/offlineStorage.ts` + `lib/offlineQueue/` (AsyncStorage) |
 | Secure storage | `lib/secureStorage.ts` (wraps `expo-secure-store`) |
 | Real-time | Socket.IO client (`lib/network/`) |
-| P2P | `lib/p2pMessaging.ts` (WebRTC data channels) |
+| P2P | `lib/p2pMessaging.ts` (WebRTC data channels; not functional) |
+| Matrix | `lib/matrix/` — client port for the [migration](./matrix/client-strategy). Nothing imports it yet. |
 | i18n | `lib/i18n.ts` + `locales/` (en, es, it) |
-| Notifications | `expo-notifications` + backend `/api/notifications/push-token` |
+| Notifications | `expo-notifications`. The token POST has no server route — see [Push](#push-notifications). |
 
 ### Responsive layout
 
@@ -66,9 +73,9 @@ Breakpoints live in `constants/responsive.ts`:
 
 - `< 768px` — single-pane stack
 - `768 - 1023px` — list + thread two-pane
-- `>= 1024px` — list + thread + details three-pane
+- `>= 1024px` — list + thread + contact details three-pane
 
-The chat layouts (`app/(chat)/_layout.tsx`, `app/c/_layout.tsx`) read these breakpoints and switch component trees at the boundary.
+One file does all three: `app/(chat)/_layout.tsx` reads both breakpoints and switches component trees at each boundary. The thread route it renders into is `app/(chat)/c/[id].tsx`; there is no `app/c/` group and no second layout.
 
 ### Stores
 
@@ -93,13 +100,16 @@ State that needs to survive launch goes through Zustand's persist middleware ove
 
 ```
 src/
-  middleware/   security (rate limiter, brute force protection)
+  config/       CrowdSource moderation configuration
   models/       Mongoose schemas
   routes/       Express routers mounted under /api
-  services/     business logic shared across routes
+  services/     the moderation pipeline (CrowdSource intake, outbox, workers)
   types/        backend-only TS types
-  utils/        helpers (database connect, logger, etc.)
+  utils/        helpers (database connect, logger, push, etc.)
+  __tests__/    vitest suites, run against a real MongoDB replica set
 ```
+
+There is no `middleware/` directory: auth, CORS and rate limiting all come from `@oxyhq/core/server`.
 
 ### Mongoose models
 
@@ -110,8 +120,10 @@ src/
 | `Device` | Public key bundle (identity key, signed pre-key, one-time pre-keys) per `(userId, deviceId)` — unique index |
 | `UserSettings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
 | `Block` / `Restrict` | Per-user block + restrict lists |
-| `PushToken` | Expo / FCM tokens for push delivery |
+| `PushToken` | Expo / FCM tokens for push delivery. Nothing writes to it — see [Push](#push-notifications). |
 | `UserBehavior` | Per-user UX preferences / analytics counters |
+| `Report` | Account reports filed by users |
+| `ModerationEvent` / `ModerationOutbox` | The CrowdSource moderation pipeline's event log and transactional outbox |
 
 There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxyhq/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
 
@@ -119,17 +131,19 @@ There is **no `User` model**. Identity is delegated to Oxy. The backend trusts t
 
 ```ts
 import { oxyClient } from "@oxyhq/core";
-
-const oxy = oxyClient;
+import { createOxyAuthMiddleware } from "@oxyhq/core/server";
 
 // Public routes
 publicApiRouter.get("/health", (req, res) => res.json({ status: "ok" }));
 
 // Authenticated routes
-app.use("/api", oxy.auth(), authenticatedApiRouter);
+app.use("/api", publicApiRouter);
+app.use("/api", createOxyAuthMiddleware(oxyClient), authenticatedApiRouter);
 ```
 
-`oxy.auth()` validates the incoming `Authorization: Bearer <jwt>` against the Oxy API, populates `req.user = { id, ... }`, and rejects with 401 if the token is missing or invalid. Optional auth is available via the `optionalAuth` middleware in `server.ts` for routes that surface different data depending on sign-in state.
+`createOxyAuthMiddleware` validates the incoming `Authorization: Bearer <jwt>` against the Oxy API, populates `req.user = { id, ... }`, and rejects with 401 if the token is missing or invalid. Both routers mount on `/api`; the public one is registered first, so `/api/health` is reached before the auth middleware runs.
+
+There is no optional-auth middleware. Every route is either fully public or fully authenticated.
 
 ### Real-time
 
@@ -141,7 +155,36 @@ Each authenticated socket auto-joins `user:<userId>`. The client then sends `joi
 
 ### Security middleware
 
-`src/middleware/security.ts` exports `rateLimiter` and `bruteForceProtection`. They are applied in `server.ts` to surface-area routes (login attempts via Oxy, sensitive mutations). MongoDB connection failures surface as `503 Database temporarily unavailable` rather than 500s, so clients can retry.
+Allo writes none of its own. `server.ts` applies three middlewares from `@oxyhq/core/server`:
+
+- `createOxyCors({ appOrigins })` — the Oxy apex family (`*.oxy.so`) is admitted automatically; `appOrigins` adds the two local dev origins. The allowlist is a literal in `server.ts`, not an environment variable.
+- `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.
+- `createOxyAuthMiddleware(oxyClient)` — described above.
+
+Separately, a guard early in the chain answers requests with `503 Database temporarily unavailable` when Mongo is not connected, rather than letting them fail as 500s, so clients can retry.
+
+### Push notifications
+
+`utils/push.ts` can deliver through Firebase Admin, but nothing reaches it. The frontend posts its device token to `/notifications/push-token`, and **no notifications router is mounted**, so the call 404s and no `PushToken` document is ever created. `sendPushToUser` reads a collection that stays empty, and no route calls it. Push is inert on both ends.
+
+## Where this is going: Matrix
+
+Allo is migrating to Matrix, and this architecture is what it migrates off. The
+design lives in [`docs/matrix/`](./matrix/data-model) and deliberately precedes
+implementation.
+
+Nothing above has changed yet. The REST + Socket.IO transport, the Mongoose
+models, and the encryption in [Encryption](./encryption) are all still what runs.
+
+The one piece of Matrix code in the tree is `packages/frontend/lib/matrix/`, a
+client port: an interface (`types.ts`) that may not import a Matrix SDK, a
+native implementation over `@unomed/react-native-matrix-sdk`, and a web half
+that throws `MatrixPlatformUnsupportedError` rather than pretending to work. No
+screen, hook or store imports any of it; its only callers are its own tests.
+
+Two spikes validated the decisions behind it. `spikes/matrix-web/` is complete
+and documented; of `spikes/matrix-rn/` only the generated `android/` project is
+committed, so the Android run it performed cannot be reproduced from the repo.
 
 ## Shared types
 
