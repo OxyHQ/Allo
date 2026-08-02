@@ -111,6 +111,11 @@ export enum EventOrTransactionId_Tags {
   TransactionId = 'TransactionId',
 }
 
+export enum UploadSource_Tags {
+  File = 'File',
+  Data = 'Data',
+}
+
 export enum EventSendState_Tags {
   NotSentYet = 'NotSentYet',
   SendingFailed = 'SendingFailed',
@@ -171,6 +176,11 @@ export const MessageType = {
 export const EventOrTransactionId = {
   EventId: variant(EventOrTransactionId_Tags.EventId),
   TransactionId: variant(EventOrTransactionId_Tags.TransactionId),
+};
+
+export const UploadSource = {
+  File: variant(UploadSource_Tags.File),
+  Data: variant(UploadSource_Tags.Data),
 };
 
 export const EventSendState = {

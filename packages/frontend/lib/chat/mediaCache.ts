@@ -53,7 +53,15 @@ export class MatrixMediaCache {
 
   readonly subscribe = (listener: () => void): AlloUnsubscribe => {
     this.#listeners.add(listener);
-    this.#watchingRuntime ??= this.#runtime.subscribe(this.#onRuntimeChanged);
+    if (this.#watchingRuntime === undefined) {
+      this.#watchingRuntime = this.#runtime.subscribe(this.#onRuntimeChanged);
+      // Read once on the way in as well as on every change. The runtime only
+      // notifies on change, so without this the cache would never learn *which*
+      // account it is holding pictures for — and a sign-out, which reports a
+      // user id of `undefined`, would look identical to the state it started in
+      // and clear nothing.
+      this.#onRuntimeChanged();
+    }
     return () => {
       this.#listeners.delete(listener);
     };
