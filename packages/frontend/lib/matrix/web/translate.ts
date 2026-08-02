@@ -13,6 +13,8 @@ import type {
   AlloTimelineItem,
 } from '@/lib/matrix/types';
 
+import { toMediaContent } from './attachments';
+
 /**
  * Translation from `matrix-js-sdk`'s model to Allo's view model.
  *
@@ -484,8 +486,14 @@ export function toEventContent(event: TimelineEventFields): AlloEventContent {
 
   const content = event.getContent();
   if (content.msgtype !== TEXT_MESSAGE_TYPE) {
-    // An image's `body` is its filename. Drawing it as the message text would be
-    // worse than admitting the row is not drawable yet.
+    const media = toMediaContent(content);
+    if (media !== undefined) {
+      return { kind: 'media', media };
+    }
+    // Emotes, notices, locations, and an attachment whose event does not
+    // actually point at any bytes. Reported as itself rather than as its
+    // `body`, which for several of them is a fallback string written for
+    // clients that cannot draw the real thing.
     return { kind: 'unsupported', description: `${ROOM_MESSAGE_EVENT_TYPE}:${String(content.msgtype)}` };
   }
   if (typeof content.body !== 'string') {

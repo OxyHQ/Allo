@@ -28,6 +28,8 @@ import type {
   AlloTimelineItem,
 } from '@/lib/matrix/types';
 
+import { toMediaContent } from './media';
+
 /**
  * Translation from the binding's model to Allo's view model.
  *
@@ -256,12 +258,17 @@ export function toEventContent(content: TimelineItemContent): AlloEventContent {
   switch (kind.tag) {
     case MsgLikeKind_Tags.Message: {
       const message = kind.inner.content;
-      if (message.msgType.tag !== MessageType_Tags.Text) {
-        // An image's `body` is its filename. Drawing it as the message text would
-        // be worse than admitting the row is not drawable yet.
-        return { kind: 'unsupported', description: `m.room.message:${message.msgType.tag}` };
+      if (message.msgType.tag === MessageType_Tags.Text) {
+        return { kind: 'text', body: message.body, isEdited: message.isEdited };
       }
-      return { kind: 'text', body: message.body, isEdited: message.isEdited };
+      const media = toMediaContent(message.msgType);
+      if (media !== undefined) {
+        return { kind: 'media', media };
+      }
+      // Emotes, notices, locations and whatever the binding grows next. Reported
+      // as themselves rather than as their `body`, which for several of them is
+      // a fallback string written for clients that cannot draw the real thing.
+      return { kind: 'unsupported', description: `m.room.message:${message.msgType.tag}` };
     }
 
     case MsgLikeKind_Tags.UnableToDecrypt:

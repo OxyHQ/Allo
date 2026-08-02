@@ -1,8 +1,10 @@
+import { Directory, File, Paths } from 'expo-file-system';
 import {
   ClientBuilder,
   EditedContent,
   EventOrTransactionId,
   LogLevel,
+  MediaSource,
   Membership,
   MessageType,
   OidcPrompt,
@@ -24,6 +26,7 @@ import type {
   RoomListEntriesListener,
   RoomListEntriesUpdate,
   RoomListEntriesWithDynamicAdaptersResultLike,
+  SendAttachmentJoinHandleLike,
   Session,
   SyncServiceLike,
   TaskHandleLike,
@@ -46,10 +49,13 @@ import type {
   AlloClientStore,
   AlloCreateRoomRequest,
   AlloEncryptionState,
+  AlloMediaFile,
+  AlloMediaRef,
   AlloOidcClientMetadata,
   AlloOidcLoginOptions,
   AlloOidcLoginRequest,
   AlloOidcPrompt,
+  AlloOutgoingAttachment,
   AlloPaginationOutcome,
   AlloRecoveryState,
   AlloRoomListHandle,
@@ -63,6 +69,12 @@ import type {
 import { logger } from '@/utils/logger';
 
 import { applyListUpdate } from './native/listDiff';
+import {
+  decodeMediaRef,
+  toThumbnailInfo,
+  toThumbnailSource,
+  toUploadParameters,
+} from './native/media';
 import { NativeOidcLoginRequest } from './native/oidcLogin';
 import { describeEnableRecoveryProgress, toRecoveryState } from './native/recovery';
 import { RoomSummaryCache } from './native/roomSummaries';
@@ -102,6 +114,19 @@ const REUSABLE_MEMBERSHIPS: ReadonlySet<Membership> = new Set([
   Membership.Joined,
   Membership.Invited,
 ]);
+
+/**
+ * Where downloaded attachments are put, inside the app's cache directory.
+ *
+ * A cache and not a document directory, because everything in it is a *copy* of
+ * something the homeserver still holds and can be fetched again — and because
+ * the decrypted copy of a picture from an encrypted conversation is the one
+ * piece of Allo's data the system should be free to reclaim.
+ */
+const MEDIA_DIRECTORY = 'matrix-media';
+
+/** Makes each downloaded file's name unique within a run. See {@link cacheFileName}. */
+let mediaSequence = 0;
 
 /**
  * Rust's logging and callback machinery is process-global and has to be set up
@@ -426,6 +451,68 @@ class NativeAlloChatClient implements AlloChatClient {
     return handle;
   }
 
+  /**
+   * Fetches an attachment and puts it somewhere a view can read it.
+   *
+   * Three things happen here and each one is deliberate.
+   *
+   * `getMediaFile` streams and **decrypts**: the SDK downloads the blob, and
+   * when the ref names media from an encrypted room it decrypts it with the key
+   * that travelled inside the event. Nothing in JavaScript ever holds the
+   * bytes, which is what keeps a video off the bridge.
+   *
+   * The file is then `persist`ed into a directory Allo owns, and the SDK's own
+   * handle is dropped. That is not tidiness: the binding's handle deletes its
+   * file when it is garbage collected, and nothing here can say when that is —
+   * a picture would vanish from the screen at a moment decided by the
+   * collector. Owning the file makes {@link AlloMediaFile.release} the only
+   * thing that removes it.
+   *
+   * The name it lands under is built from a counter and the extension, never
+   * from the sender's filename. A filename arrives from another device, over
+   * the network, and a `../` in one is how a remote sender would write outside
+   * this directory.
+   */
+  async downloadMedia(ref: AlloMediaRef): Promise<AlloMediaFile> {
+    const { source, mimetype, filename } = decodeMediaRef(ref);
+    const handle = await this.#client.getMediaFile(
+      MediaSource.fromJson(source),
+      filename,
+      mimetype,
+      // Cached, so scrolling past the same picture twice downloads it once.
+      true,
+      undefined,
+    );
+
+    const directory = new Directory(Paths.cache, MEDIA_DIRECTORY);
+    directory.create({ intermediates: true, idempotent: true });
+    mediaSequence += 1;
+    const file = new File(directory, cacheFileName(mediaSequence, filename));
+
+    if (!handle.persist(toStorePath(file.uri))) {
+      throw new Error(
+        `The attachment ${filename} was downloaded but could not be written to ` +
+          "the app's cache directory.",
+      );
+    }
+
+    return {
+      uri: file.uri,
+      release: () => {
+        // Plaintext on a phone's disk. A picture from an encrypted conversation
+        // that outlives the screen showing it is exactly what the encryption was
+        // for, so this is not housekeeping.
+        try {
+          if (file.exists) {
+            file.delete();
+          }
+        } catch (error) {
+          logger.warn(`${LOG_TAG} a downloaded attachment could not be removed`, error);
+        }
+      },
+    };
+  }
+
   async close(): Promise<void> {
     for (const timeline of [...this.#timelines]) {
       timeline.close();
@@ -652,6 +739,68 @@ class NativeTimelineHandle implements AlloTimelineHandle {
     );
   }
 
+  /**
+   * Uploads an attachment and sends the event that points at it.
+   *
+   * **Nothing here decides whether to encrypt, and nothing here can get it
+   * wrong.** These five calls read the room's encryption state inside Rust and
+   * encrypt the bytes before they are uploaded when it is set; there is no
+   * parameter to pass and no plaintext path to fall into. The web half has to
+   * do it by hand, which is why `web/attachments.ts` exists and why it fails
+   * closed. See `docs/matrix/data-model.md` §6.
+   */
+  async sendAttachment(attachment: AlloOutgoingAttachment): Promise<void> {
+    const parameters = toUploadParameters(attachment);
+    const thumbnailSource = toThumbnailSource(attachment.thumbnail);
+    const thumbnailInfo = toThumbnailInfo(attachment.thumbnail);
+    const size = toU64(attachment.size);
+
+    const sending = ((): SendAttachmentJoinHandleLike => {
+      switch (attachment.kind) {
+        case 'image':
+          return this.#timeline.sendImage(parameters, thumbnailSource, {
+            width: toU64(attachment.width),
+            height: toU64(attachment.height),
+            mimetype: attachment.mimetype,
+            size,
+            thumbnailInfo,
+          });
+        case 'video':
+          return this.#timeline.sendVideo(parameters, thumbnailSource, {
+            duration: attachment.durationMs,
+            width: toU64(attachment.width),
+            height: toU64(attachment.height),
+            mimetype: attachment.mimetype,
+            size,
+            thumbnailInfo,
+          });
+        // Both arms send `m.audio`, and the difference between them is a marker
+        // the binding does not let this file set: `sendVoiceMessage` demands a
+        // waveform, and Allo's recorder samples no amplitudes. Inventing one
+        // would draw a picture of audio that was never measured, so a recording
+        // goes out as an ordinary audio attachment carrying its real duration.
+        case 'audio':
+        case 'voice':
+          return this.#timeline.sendAudio(parameters, {
+            duration: attachment.durationMs,
+            mimetype: attachment.mimetype,
+            size,
+          });
+        case 'file':
+          return this.#timeline.sendFile(parameters, {
+            mimetype: attachment.mimetype,
+            size,
+            thumbnailInfo,
+          });
+      }
+    })();
+
+    // The `join()` is what makes this promise mean anything: the call above
+    // returns as soon as the upload has been *queued*, so without it the
+    // composer would clear itself before a byte had left the phone.
+    await sending.join();
+  }
+
   async toggleReaction(eventId: string, key: string): Promise<void> {
     // One call for both directions: the binding looks up whether this account
     // already annotated the event and either sends or redacts accordingly.
@@ -730,6 +879,46 @@ class NativeTimelineHandle implements AlloTimelineHandle {
  */
 function toEventOrTransactionId(eventId: string): EventOrTransactionId {
   return new EventOrTransactionId.EventId({ eventId });
+}
+
+/**
+ * A `u64` field of the binding's media records, from a JavaScript number.
+ *
+ * `undefined` stays `undefined`, and so does anything that is not a positive
+ * whole number: `BigInt(1.5)` throws, and a width of zero is a default some
+ * client filled in rather than a measurement.
+ */
+function toU64(value: number | undefined): bigint | undefined {
+  return value !== undefined && Number.isSafeInteger(value) && value > 0
+    ? BigInt(value)
+    : undefined;
+}
+
+/**
+ * What a downloaded attachment is called on disk.
+ *
+ * **Nothing of the sender's filename reaches the path except its extension**,
+ * and that is stripped to letters and digits. The name came from another
+ * device over the network; a `../` or an absolute path in one is how a remote
+ * sender would write outside the cache directory. The extension survives
+ * because `expo-image` and `expo-video` pick a decoder from it.
+ */
+function cacheFileName(sequence: number, filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  const extension =
+    dot > 0 ? filename.slice(dot + 1).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) : '';
+  return extension === '' ? `${sequence}` : `${sequence}.${extension}`;
+}
+
+/**
+ * The plain path the Rust SDK writes to, from the URI expo-file-system speaks.
+ *
+ * The same conversion `store.native.ts` does for the SQLite directories, for
+ * the same reason: the binding takes operating system paths, and a URI's
+ * percent-encoding has to come off before one becomes a path.
+ */
+function toStorePath(uri: string): string {
+  return uri.startsWith('file://') ? decodeURIComponent(uri.slice('file://'.length)) : uri;
 }
 
 /**
