@@ -557,28 +557,28 @@ export const useMessagesStore = create<MessagesState>()(
           throw new Error(`Encryption not available.${errorDetails}`);
         }
 
-        // Encrypt message (or use plaintext fallback if recipient keys unavailable)
-        let ciphertext: string | undefined;
-        let isEncrypted = false;
+        // A message that cannot be encrypted is not sent.
+        //
+        // This used to fall back to plaintext when the recipient had no
+        // registered devices, which turns a lookup returning an empty list —
+        // a transient server error, a race on first launch, a tampered
+        // response — into a silent downgrade of the conversation. The user
+        // sees a message delivered normally and has no way to tell it went out
+        // in the clear.
+        //
+        // Failing here is visible and recoverable: the caller surfaces the
+        // error and the message stays in the composer. Sending in the clear is
+        // neither.
+        let ciphertext: string;
         try {
           const updatedDeviceKeysStore = useDeviceKeysStore.getState();
           ciphertext = await updatedDeviceKeysStore.encryptMessageForRecipient(text, recipientUserId);
-          isEncrypted = true;
         } catch (error) {
-          console.warn('[Messages] Encryption failed, using plaintext fallback:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown encryption error';
-          
-          // If recipient has no devices registered, allow plaintext as fallback
-          if (errorMessage.includes('No devices found') || errorMessage.includes('No preKeys')) {
-            console.warn('[Messages] Recipient has no registered devices. Sending as plaintext (less secure).');
-            // Continue without encryption - will send as plaintext
-            isEncrypted = false;
-            ciphertext = undefined;
-          } else {
-            // For other encryption errors, still throw
-            throw new Error('Failed to encrypt message. Please try again.');
-          }
+          console.error('[Messages] Refusing to send: encryption failed', error);
+          const detail = error instanceof Error ? error.message : 'unknown error';
+          throw new Error(`This message was not sent because it could not be encrypted (${detail}).`);
         }
+        const isEncrypted = true;
 
         // Create message object with pending status (will update when sent)
         const message: Message = {
