@@ -1,5 +1,7 @@
 # Reusable AWS deploy workflow — copy to each repo as .github/workflows/deploy-aws.yml
 # and substitute allo (ecs service + ecr repo name) and packages/backend/Dockerfile (path).
+# Al copiarlo, revise también la lista de secretos del paso de sincronización:
+# ya no se descubren solos, se enumeran.
 name: Deploy to AWS
 
 on:
@@ -10,39 +12,17 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
-# PENDIENTE: los despliegues desde `main` no arrancan.
-#
-# Desde el 2026-08-02 ~01:25, cada run de este workflow disparado por `push` a
-# `main` termina en `action_required` con CERO jobs — nunca empieza. `CI` y
-# `Deploy Frontends` sí corren sobre los mismos commits, así que no es del repo
-# ni de la organización: es de este workflow, en esta rama.
-#
-# Descartado que lo cause un bloque `concurrency` que se probó y se revirtió: el
-# run del propio commit de revert, sin ese bloque, quedó igualmente en
-# `action_required`. La API no da más: sin aprobaciones pendientes, Actions
-# habilitado, workflow activo, actor el propietario.
-#
-# Lo que queda por mirar, y necesita la interfaz web porque la API no lo expone:
-# el motivo que GitHub muestra en la propia página del run. Suele ser una regla
-# de aprobación o un límite de gasto de Actions.
-#
-# Ojo al modo de fallo mientras tanto: un despliegue que no arranca no aparece en
-# rojo en ningún sitio. CI queda en verde, el PR queda fusionado, y producción se
-# queda atrás en silencio. Antes de dar por desplegado un cambio de backend,
-# compruébelo contra el servicio, no contra el estado del PR.
-#
-# El problema que motivó aquel `concurrency` sigue abierto: el 2026-08-02 dos
-# merges separados por 79 segundos lanzaron dos `update-service
-# --force-new-deployment` sobre el mismo servicio y ninguno se estabilizó. Su
-# mitigación hoy es de proceso: no fusionar dos PRs seguidos sin dejar que el
-# primero termine de desplegar.
-#
-# Los otros backends (alia, homiio, syra) SÍ llevan un bloque `concurrency`
-# junto al anclaje por digest. Aquí se omite a propósito: mientras `main` siga
-# sin arrancar por un motivo no diagnosticado, añadir la misma construcción que
-# se probó y se revirtió mete una segunda variable en la misma investigación.
-# Es un pendiente, no un descarte — reintrodúzcalo cuando el disparador esté
-# explicado.
+# Un despliegue que no arranca no se ve en rojo en ninguna parte: CI queda en
+# verde, el PR queda fusionado y producción se queda atrás en silencio. Antes de
+# dar por desplegado un cambio de backend, compruébelo contra el servicio.
+
+# Dos merges seguidos lanzan dos `update-service --force-new-deployment` sobre el
+# mismo servicio y ninguno llega a estabilizarse. Los despliegues se encolan en
+# vez de solaparse; no se cancela el que esté en curso, porque abortar a mitad
+# deja el servicio con la mitad de las tareas en la revisión nueva.
+concurrency:
+  group: deploy-aws-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -70,25 +50,46 @@ jobs:
           role-to-assume: arn:aws:iam::237343248947:role/oxy-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
+      # Los secretos se enumeran de uno en uno, a propósito.
+      #
+      # Este paso expandía el contexto `secrets` entero con `toJSON(secrets)`, y
+      # eso es lo que tenía los despliegues parados: GitHub crea el run con
+      # conclusión `action_required` y CERO jobs, sin aprobación pendiente que
+      # conceder y sin que la API diga el motivo en ningún campo. Verificado
+      # A-B-A-B sobre este mismo repo: quitando esa expresión el run arranca,
+      # devolviéndola vuelve a bloquearse.
+      #
+      # Enumerar es además el mínimo privilegio. El bucle anterior copiaba todo
+      # secreto visible al repo, así que CLOUDFLARE_API_TOKEN y NPM_TOKEN —que
+      # son de otros workflows— acababan en el espacio SSM de esta app.
+      #
+      # Al añadir un secreto nuevo hay que añadirlo aquí; si no, no llega a SSM.
       - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
         env:
-          SECRETS_JSON: ${{ toJSON(secrets) }}
+          APP_MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          SHARED_REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
-          SHARED="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY REDIS_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET"
-          echo "$SECRETS_JSON" | jq -r 'to_entries[] | select((.key|ascii_upcase) as $k | ($k=="GITHUB_TOKEN" or ($k|startswith("ACTIONS_")))|not) | [.key,.value]|@tsv' | \
-          while IFS=$'\t' read -r k v; do
-            [ -z "$k" ] && continue
-            if [ -z "$v" ] || [ "$v" = "-" ]; then
-              echo "::warning::skip empty/placeholder secret $k; SSM unchanged"
-              continue
+          sync_secret() {
+            name="$1"; value="$2"; path="$3"
+            if [ -z "$value" ] || [ "$value" = "-" ]; then
+              echo "::warning::skip empty/placeholder secret $name; SSM unchanged"
+              return 0
             fi
-            if [ "$k" = "REDIS_URL" ] && [ "$AWS_REGION" = "us-west-2" ] && ! printf '%s' "$v" | grep -q '\.usw2\.cache\.amazonaws\.com'; then
-              echo "::warning::skip REDIS_URL because it does not point at the us-west-2 Valkey endpoint; SSM unchanged"
-              continue
-            fi
-            case " $SHARED " in *" $k "*) path="/oxy/_shared/$k";; *) path="/oxy/$APP/$k";; esac
-            aws ssm put-parameter --name "$path" --value "$v" --type SecureString --overwrite >/dev/null && echo "synced -> $path"
-          done
+            aws ssm put-parameter --name "$path" --value "$value" --type SecureString --overwrite >/dev/null
+            echo "synced -> $path"
+          }
+
+          sync_secret MONGODB_URI "$APP_MONGODB_URI" "/oxy/$APP/MONGODB_URI"
+
+          # Valkey vive en la región del clúster; una URL de otra región deja al
+          # servicio sin caché de forma silenciosa, así que se rechaza.
+          if [ -n "$SHARED_REDIS_URL" ] && [ "$SHARED_REDIS_URL" != "-" ] &&
+             [ "$AWS_REGION" = "us-west-2" ] &&
+             ! printf '%s' "$SHARED_REDIS_URL" | grep -q '\.usw2\.cache\.amazonaws\.com'; then
+            echo "::warning::skip REDIS_URL because it does not point at the us-west-2 Valkey endpoint; SSM unchanged"
+          else
+            sync_secret REDIS_URL "$SHARED_REDIS_URL" "/oxy/_shared/REDIS_URL"
+          fi
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
