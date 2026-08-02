@@ -10,26 +10,32 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
-# NOTA: aquí hubo un bloque `concurrency` y hubo que quitarlo — ver más abajo.
+# PENDIENTE: los despliegues desde `main` no arrancan.
 #
-# El problema que intentaba resolver es real: el 2026-08-02 dos merges separados
-# por 79 segundos lanzaron dos `update-service --force-new-deployment` sobre el
-# mismo servicio ECS, se pisaron, y ninguno de los dos waiters vio estabilidad en
-# sus diez minutos. Los dos despliegues fallaron con la build en verde y
-# producción sirviendo la tarea anterior.
+# Desde el 2026-08-02 ~01:25, cada run de este workflow disparado por `push` a
+# `main` termina en `action_required` con CERO jobs — nunca empieza. `CI` y
+# `Deploy Frontends` sí corren sobre los mismos commits, así que no es del repo
+# ni de la organización: es de este workflow, en esta rama.
 #
-# Pero añadir
+# Descartado que lo cause un bloque `concurrency` que se probó y se revirtió: el
+# run del propio commit de revert, sin ese bloque, quedó igualmente en
+# `action_required`. La API no da más: sin aprobaciones pendientes, Actions
+# habilitado, workflow activo, actor el propietario.
 #
-#     concurrency:
-#       group: deploy-aws-${{ github.ref }}
-#       cancel-in-progress: false
+# Lo que queda por mirar, y necesita la interfaz web porque la API no lo expone:
+# el motivo que GitHub muestra en la propia página del run. Suele ser una regla
+# de aprobación o un límite de gasto de Actions.
 #
-# a nivel de workflow dejó TODOS los runs en `action_required` con cero jobs —
-# nunca arrancaban—, tanto por `push` como por `workflow_dispatch`. Comprobado
-# ejecutando el mismo workflow desde una rama sin ese bloque: arranca. Con él, no.
+# Ojo al modo de fallo mientras tanto: un despliegue que no arranca no aparece en
+# rojo en ningún sitio. CI queda en verde, el PR queda fusionado, y producción se
+# queda atrás en silencio. Antes de dar por desplegado un cambio de backend,
+# compruébelo contra el servicio, no contra el estado del PR.
 #
-# Quien lo vuelva a intentar: verifíquelo en una rama ANTES de fusionarlo, porque
-# el síntoma es que deja de desplegarse sin que nada aparezca en rojo.
+# El problema que motivó aquel `concurrency` sigue abierto: el 2026-08-02 dos
+# merges separados por 79 segundos lanzaron dos `update-service
+# --force-new-deployment` sobre el mismo servicio y ninguno se estabilizó. Su
+# mitigación hoy es de proceso: no fusionar dos PRs seguidos sin dejar que el
+# primero termine de desplegar.
 
 permissions:
   id-token: write
