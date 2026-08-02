@@ -10,19 +10,26 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
-# Un solo despliegue a la vez por rama. Sin esto, dos merges seguidos lanzan dos
-# `update-service --force-new-deployment` sobre el MISMO servicio ECS: cada uno
-# inicia su propio rollout, se pisan, y ninguno se estabiliza dentro de los diez
-# minutos del waiter. Pasó el 2026-08-02 con dos merges separados por 79
-# segundos — los dos despliegues fallaron y el servicio se quedó sirviendo la
-# tarea anterior, con la build en verde y producción desactualizada.
+# NOTA: aquí hubo un bloque `concurrency` y hubo que quitarlo — ver más abajo.
 #
-# `cancel-in-progress: false` es deliberado: encolar, no cancelar. Abortar un
-# despliegue a mitad de rollout deja el servicio en un estado peor que
-# esperar a que termine.
-concurrency:
-  group: deploy-aws-${{ github.ref }}
-  cancel-in-progress: false
+# El problema que intentaba resolver es real: el 2026-08-02 dos merges separados
+# por 79 segundos lanzaron dos `update-service --force-new-deployment` sobre el
+# mismo servicio ECS, se pisaron, y ninguno de los dos waiters vio estabilidad en
+# sus diez minutos. Los dos despliegues fallaron con la build en verde y
+# producción sirviendo la tarea anterior.
+#
+# Pero añadir
+#
+#     concurrency:
+#       group: deploy-aws-${{ github.ref }}
+#       cancel-in-progress: false
+#
+# a nivel de workflow dejó TODOS los runs en `action_required` con cero jobs —
+# nunca arrancaban—, tanto por `push` como por `workflow_dispatch`. Comprobado
+# ejecutando el mismo workflow desde una rama sin ese bloque: arranca. Con él, no.
+#
+# Quien lo vuelva a intentar: verifíquelo en una rama ANTES de fusionarlo, porque
+# el síntoma es que deja de desplegarse sin que nada aparezca en rojo.
 
 permissions:
   id-token: write
