@@ -331,17 +331,18 @@ class WebAlloChatClient implements AlloChatClient {
    */
   async enableRecovery(passphrase: string): Promise<void> {
     const crypto = this.#requireCrypto('Enabling recovery');
-    this.#recoveryPassphrase = passphrase;
 
+    // Decided before the passphrase is held, so that a refusal leaves nothing
+    // behind and nothing has been started.
     const plan = planKeyBackup({
       serverHasBackup: (await crypto.getKeyBackupInfo()) !== null,
       backupActive: (await crypto.getActiveSessionBackupVersion()) !== null,
     });
     if (plan === 'refuse') {
-      this.#recoveryPassphrase = undefined;
       throw new MatrixBackupExistsOnServerError();
     }
 
+    this.#recoveryPassphrase = passphrase;
     await crypto.bootstrapCrossSigning({});
     await crypto.bootstrapSecretStorage({
       setupNewKeyBackup: plan === 'create',

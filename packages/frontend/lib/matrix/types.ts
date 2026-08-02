@@ -289,6 +289,10 @@ export interface AlloTimelineHandle {
  * - {@link startSync} must happen before {@link observeRooms} or
  *   {@link openTimeline}: both are views over the sync loop's state, and there is
  *   nothing to view before it runs.
+ * - the three recovery calls need a session, and nothing more. They are about
+ *   this device's encryption keys, not about the room list, so they do not wait
+ *   for sync — which is what lets recovery finish before the first timeline is
+ *   drawn, and the messages in it be readable when it is.
  *
  * There is no password login and there will not be one. Allo's homeserver issues
  * sessions through Matrix Authentication Service with Oxy upstream, so the user

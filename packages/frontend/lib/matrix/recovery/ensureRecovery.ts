@@ -1,4 +1,4 @@
-import type { AlloRecoveryState } from '@/lib/matrix/types';
+import type { AlloChatClient } from '@/lib/matrix/types';
 
 import { readOxyRecoveryPhrase, type OxyRecoveryPhraseReader } from './oxyIdentity';
 import { deriveMatrixRecoveryPassphrase } from './passphrase';
@@ -24,12 +24,17 @@ import { deriveMatrixRecoveryPassphrase } from './passphrase';
  * not protect what this protects.
  */
 
-/** The three methods of the port this decision needs. Nothing else. */
-export interface RecoveryCapableClient {
-  recoveryState(): Promise<AlloRecoveryState>;
-  enableRecovery(passphrase: string): Promise<void>;
-  recoverWithPassphrase(passphrase: string): Promise<void>;
-}
+/**
+ * The three methods of the port this decision needs. Nothing else.
+ *
+ * Taken from {@link AlloChatClient} rather than restated, so a change to any of
+ * the three signatures is a compile error here instead of a fake that still
+ * satisfies an interface the real client no longer matches.
+ */
+export type RecoveryCapableClient = Pick<
+  AlloChatClient,
+  'recoveryState' | 'enableRecovery' | 'recoverWithPassphrase'
+>;
 
 /** Why recovery was not attempted. Each of these is a different thing to say. */
 export type AlloRecoverySkipReason =
