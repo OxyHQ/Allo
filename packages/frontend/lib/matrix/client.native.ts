@@ -10,8 +10,6 @@ import {
   OidcPrompt,
   ReceiptType,
   RoomListEntriesDynamicFilterKind,
-  RoomPreset,
-  RoomVisibility,
   SlidingSyncVersion,
   SlidingSyncVersionBuilder,
   initPlatform,
@@ -68,6 +66,7 @@ import type {
 } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
+import { toCreateRoomParameters } from './native/createRoom';
 import { applyListUpdate } from './native/listDiff';
 import {
   decodeMediaRef,
@@ -347,11 +346,9 @@ class NativeAlloChatClient implements AlloChatClient {
    * walked out of is not one to reopen, so the membership is checked rather than
    * assumed.
    *
-   * The parameters that are not the caller's: the room is private, invite-only
-   * and encrypted, which is what Allo is. `TrustedPrivateChat` for a direct
-   * message gives both people the same power level, because a conversation
-   * between two people has no moderator; a group keeps `PrivateChat`, where the
-   * creator can name it and invite.
+   * The parameters that are not the caller's — private, invite-only, encrypted —
+   * are built by {@link toCreateRoomParameters}, which is where they can be
+   * asserted on.
    */
   async createRoom(request: AlloCreateRoomRequest): Promise<string> {
     const invitee = soleDirectInvitee(request);
@@ -362,24 +359,28 @@ class NativeAlloChatClient implements AlloChatClient {
       }
     }
 
-    const room = await this.#client.createRoom({
-      name: request.name,
-      topic: undefined,
-      isEncrypted: true,
-      isDirect: request.isDirect,
-      visibility: new RoomVisibility.Private(),
-      preset: request.isDirect ? RoomPreset.TrustedPrivateChat : RoomPreset.PrivateChat,
-      invite: [...request.invite],
-      avatar: undefined,
-      powerLevelContentOverride: undefined,
-      joinRuleOverride: undefined,
-      historyVisibilityOverride: undefined,
-      canonicalAlias: undefined,
-    });
+    const room = await this.#client.createRoom(toCreateRoomParameters(request));
     // The binding writes `m.direct` itself for a direct message with one invitee,
     // which is the same rule {@link soleDirectInvitee} states; the web half has to
     // do it by hand.
     return room;
+  }
+
+  /**
+   * Joins an invited room.
+   *
+   * The room is asked rather than the client: `Room.join()` acts on the room the
+   * invitation is for, where `joinRoomById` would ask the homeserver to resolve
+   * an id this client has already resolved. The room being in the state store is
+   * also what makes an invitation to a room this device has never heard of fail
+   * as "no such room" rather than as a network error.
+   */
+  async acceptInvitation(roomId: string): Promise<void> {
+    await this.#requireRoom(roomId, 'Accepting an invitation').join();
+  }
+
+  async declineInvitation(roomId: string): Promise<void> {
+    await this.#requireRoom(roomId, 'Declining an invitation').leave();
   }
 
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {

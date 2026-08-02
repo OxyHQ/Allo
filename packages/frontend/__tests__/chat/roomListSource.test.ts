@@ -135,6 +135,14 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  async acceptInvitation(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async declineInvitation(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
   async roomEncryption(): Promise<AlloEncryptionState> {
     throw new Error('not used by these tests');
   }

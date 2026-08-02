@@ -4,6 +4,7 @@ import {
   type MatrixRuntimeState,
 } from '@/lib/chat/matrixRuntime';
 import { TimelineSource, timelineSource } from '@/lib/chat/timelineSource';
+import { MatrixRoomNotFoundError } from '@/lib/matrix/errors';
 import type {
   AlloChatClient,
   AlloEncryptionState,
@@ -159,9 +160,18 @@ class FakeChatClient implements AlloChatClient {
   openTimelineCalls: string[] = [];
   #pendingOpen: (() => void) | undefined;
   #holdOpen = false;
+  #refuseOpen = false;
 
   holdOpen(): void {
     this.#holdOpen = true;
+  }
+
+  /**
+   * What the port does for a room it has not been told about — the ordinary
+   * answer for a conversation created a second ago, or a deep link into one.
+   */
+  refuseOpen(refuse: boolean): void {
+    this.#refuseOpen = refuse;
   }
 
   releaseOpen(): void {
@@ -175,6 +185,9 @@ class FakeChatClient implements AlloChatClient {
     onChange: (items: readonly AlloTimelineItem[]) => void,
   ): Promise<AlloTimelineHandle> {
     this.openTimelineCalls.push(roomId);
+    if (this.#refuseOpen) {
+      throw new MatrixRoomNotFoundError(roomId);
+    }
     const timeline = new FakeTimeline(onChange);
     this.timelines.push(timeline);
     if (this.#holdOpen) {
@@ -226,6 +239,14 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async createRoom(): Promise<string> {
+    throw new Error('not used by these tests');
+  }
+
+  async acceptInvitation(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async declineInvitation(): Promise<void> {
     throw new Error('not used by these tests');
   }
 
@@ -324,6 +345,49 @@ describe('TimelineSource opening', () => {
     await settle();
 
     expect(source.getSnapshot().isOpening).toBe(false);
+  });
+
+  it('stops saying it is opening when the room could not be opened', async () => {
+    // The ordinary way here is a room this client has not been told about yet:
+    // one created a second ago, or a deep link into an invitation. Staying
+    // "opening" would leave a spinner on the screen for the rest of the session.
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { runtime, source } = readyTimeline();
+      runtime.chatClient.refuseOpen(true);
+
+      source.subscribe(() => {});
+      await settle();
+
+      expect(source.getSnapshot().isOpening).toBe(false);
+      expect(error).toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('tries again after a failed open', async () => {
+    // A pending open is what suppresses the next attempt, so an attempt that
+    // failed has to stop counting as one — otherwise the first failure is the
+    // last thing this source ever does.
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { runtime, source } = readyTimeline();
+      runtime.chatClient.refuseOpen(true);
+      source.subscribe(() => {});
+      await settle();
+
+      runtime.chatClient.refuseOpen(false);
+      // Anything that makes the runtime publish: a sync heartbeat is the one
+      // that happens on its own.
+      runtime.become('ready');
+      await settle();
+
+      expect(runtime.chatClient.openTimelineCalls).toEqual([ROOM, ROOM]);
+      expect(source.getSnapshot().isOpening).toBe(false);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('publishes the rows the port reports', async () => {

@@ -331,6 +331,24 @@ export class TimelineSource {
         this.#publish({ isOpening: false });
         this.#publishItems(generation, handle.items());
         return handle;
+      })
+      .catch((error: unknown) => {
+        // A timeline that could not be opened must not stay "opening" forever.
+        // The ordinary way here is a room the homeserver has and this client has
+        // not been told about yet — a conversation created a second ago, a deep
+        // link into an invitation — and leaving the attempt in flight would keep
+        // the screen on a spinner for the rest of the session *and* stop the
+        // next attempt, because a pending open is what suppresses it. Reporting
+        // "not open" lets a later runtime change, or a remount, try again.
+        //
+        // Only when this attempt is still the current one: an abandoned open
+        // has already been superseded, and its state belongs to whoever
+        // superseded it.
+        if (generation === this.#generation) {
+          this.#opening = undefined;
+          this.#publish({ isOpening: false });
+        }
+        throw error;
       });
     this.#opening = opening;
     return opening;

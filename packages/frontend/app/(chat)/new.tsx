@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@oxyhq/bloom/toast';
-import LottieView from 'lottie-react-native';
+import { TextFieldInput } from '@oxyhq/bloom';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -19,21 +19,26 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
+import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useOxy } from '@oxyhq/services';
-import { useConversationsStore } from '@/stores';
 import type { User as OxyUser } from '@oxyhq/core';
 import type { Href } from 'expo-router';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
-// Types
-import type { Conversation, ConversationType } from '@/app/(chat)/index';
-
-// Utils
-import { api } from '@/utils/api';
+/**
+ * How long a group's name may be.
+ *
+ * A room name is state, not a message: it is drawn in a list row, a header and
+ * a notification, all of which truncate. The cap is here so the truncation is
+ * the user's choice rather than a surprise, and it is well inside what either
+ * backend accepts.
+ */
+const GROUP_NAME_MAX_LENGTH = 64;
 
 interface User {
   id: string;
@@ -47,47 +52,38 @@ interface User {
   avatar?: string;
 }
 
-/** Participant shape returned by the backend conversations API. */
-interface ApiConversationParticipant {
-  userId: string;
-  username?: string;
-  avatar?: string;
-  name?: { displayName?: string; first?: string; last?: string };
-}
-
-/** Conversation shape returned by the backend conversations API. */
-interface ApiConversation {
-  _id?: string;
-  id?: string;
-  type?: ConversationType;
-  name?: string;
-  createdAt?: string;
-  avatar?: string;
-  participants?: ApiConversationParticipant[];
-}
-
-/**
- * POST /conversations payload — the backend may return the conversation bare or
- * wrapped under a nested `data` key, so both shapes are accepted.
- */
-type CreateConversationPayload = ApiConversation & { data?: ApiConversation };
-
 /**
  * New Chat Screen
  * Allows users to search for and start a new conversation
+ *
+ * **One creation path, whichever backend this build talks to.** Everything below
+ * chooses people and hands them to `useCreateConversation`, which answers with
+ * the id of a conversation to open; whether that is a row in Mongo or an
+ * encrypted room on a homeserver is decided by `EXPO_PUBLIC_CHAT_BACKEND` and is
+ * not this screen's business. See `lib/chat/newConversation.ts`.
  */
 export default function NewChatScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { oxyServices, user: currentUser } = useOxy();
-  const addConversation = useConversationsStore((state) => state.addConversation);
-  const conversations = useConversationsStore((state) => state.conversations);
+  const { oxyServices } = useOxy();
+  const createConversation = useCreateConversation();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  /**
+   * A conversation is being created right now.
+   *
+   * Not cosmetic: creating one is a round trip, and a second tap during it makes
+   * a second conversation. A direct message survives that — both backends
+   * deduplicate a conversation between the same two people — but a group does
+   * not, and two identical family groups with different histories is not a state
+   * anyone recovers from.
+   */
+  const [isCreating, setIsCreating] = useState(false);
 
   // Search for users using Oxy Services
   const searchUsers = useCallback(async (query: string) => {
@@ -125,7 +121,7 @@ export default function NewChatScreen() {
 
       setUsers(mappedUsers);
     } catch (error) {
-      console.error('[NewChat] Error searching users:', error);
+      logger.error('[NewChat] Error searching users:', error);
       toast.error('Failed to search users');
       setUsers([]);
     } finally {
@@ -170,132 +166,57 @@ export default function NewChatScreen() {
     });
   }, []);
 
-  // Open conversation directly with a user
-  const openConversation = useCallback(async (user: User) => {
-    // If in selection mode, toggle selection instead
-    if (isSelectionMode) {
-      toggleUserSelection(user.id);
-      return;
-    }
-
-    try {
-      // First check if conversation already exists
-      const existingConversation = conversations.find((conv) => {
-        if (conv.type !== 'direct') return false;
-        const otherParticipant = conv.participants?.find(p => p.id !== currentUser?.id);
-        return otherParticipant?.id === user.id || otherParticipant?.username === user.username;
-      });
-
-      if (existingConversation) {
-        // Navigate using user ID route for direct conversations
-        // Use unified /c/:id route for all conversations
-        router.replace(`/c/${existingConversation.id}` as Href);
+  /**
+   * Starts the conversation and opens it.
+   *
+   * The one place this screen creates anything. `replace` and not `push`,
+   * because the conversation takes the place of the screen that chose who is in
+   * it: going back from it belongs in the list, not here.
+   */
+  const startConversation = useCallback(
+    async (participantIds: readonly string[], name: string | undefined) => {
+      if (isCreating) {
         return;
       }
+      setIsCreating(true);
+      try {
+        const conversationId = await createConversation({ participantIds, name });
+        setSelectedUserIds(new Set());
+        setIsSelectionMode(false);
+        setGroupName('');
+        router.replace(`/c/${conversationId}` as Href);
+      } catch (error: unknown) {
+        logger.error('[NewChat] Error creating conversation:', error);
+        toast.error(getErrorMessage(error) || 'Failed to create conversation');
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [createConversation, isCreating, router],
+  );
 
-      // Create new conversation
-      const response = await api.post<CreateConversationPayload>('/conversations', {
-        type: 'direct',
-        participantIds: [user.id],
-      });
+  // Open a one-to-one conversation with the user whose row was tapped
+  const openConversation = useCallback(
+    async (user: User) => {
+      // If in selection mode, toggle selection instead
+      if (isSelectionMode) {
+        toggleUserSelection(user.id);
+        return;
+      }
+      await startConversation([user.id], undefined);
+    },
+    [isSelectionMode, toggleUserSelection, startConversation],
+  );
 
-      const apiConversation: ApiConversation = response.data.data || response.data;
-      const participants = (apiConversation.participants || []).map((p) => ({
-        id: p.userId,
-        name: {
-          displayName: p.name?.displayName || p.username || 'Unknown',
-          first: p.name?.first || '',
-          last: p.name?.last || '',
-        },
-        username: p.username,
-        avatar: p.avatar,
-      }));
-
-      const conversation: Conversation = {
-        id: apiConversation._id || apiConversation.id || '',
-        type: 'direct' as ConversationType,
-        name: apiConversation.name || 'Direct Chat',
-        lastMessage: '',
-        timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
-        unreadCount: 0,
-        avatar: apiConversation.avatar,
-        participants,
-        groupName: apiConversation.name,
-        groupAvatar: apiConversation.avatar,
-        participantCount: participants.length,
-      };
-
-      addConversation(conversation);
-
-      logger.debug('[NewChat] Navigating to new conversation:', `/c/${conversation.id}`);
-      router.replace(`/c/${conversation.id}` as Href);
-    } catch (error: unknown) {
-      console.error('[NewChat] Error opening conversation:', error);
-      const errorMessage = getErrorMessage(error) || 'Failed to open conversation';
-      toast.error(errorMessage);
-    }
-  }, [isSelectionMode, toggleUserSelection, router, conversations, currentUser?.id, addConversation]);
-
-  // Create new conversation (for groups)
-  const createConversation = useCallback(async () => {
+  // Create the conversation the selected people are in: one of them is a direct
+  // message, more than one is a group.
+  const createSelectedConversation = useCallback(async () => {
     if (selectedUserIds.size === 0) {
       toast.error('Please select at least one user');
       return;
     }
-
-    try {
-      const participantIds = Array.from(selectedUserIds);
-      const type = participantIds.length === 1 ? 'direct' : 'group';
-
-      // Create conversation via API
-      const response = await api.post<CreateConversationPayload>('/conversations', {
-        type,
-        participantIds,
-      });
-
-      // API returns { data: conversation }, so response.data is { data: conversation }
-      const apiConversation: ApiConversation = response.data.data || response.data;
-
-      // Transform to frontend format
-      const participants = (apiConversation.participants || []).map((p) => ({
-        id: p.userId,
-        name: {
-          displayName: p.name?.displayName || p.username || 'Unknown',
-          first: p.name?.first || '',
-          last: p.name?.last || '',
-        },
-        username: p.username,
-        avatar: p.avatar,
-      }));
-
-      const conversation = {
-        id: apiConversation._id || apiConversation.id || '',
-        type: apiConversation.type || 'direct',
-        name: apiConversation.name || (type === 'group' ? 'Group Chat' : 'Direct Chat'),
-        lastMessage: '',
-        timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
-        unreadCount: 0,
-        avatar: apiConversation.avatar,
-        participants,
-        groupName: apiConversation.name,
-        groupAvatar: apiConversation.avatar,
-        participantCount: participants.length,
-      };
-
-      // Add to store
-      addConversation(conversation);
-
-      // Clear selection and exit selection mode
-      setSelectedUserIds(new Set());
-      setIsSelectionMode(false);
-
-      router.replace(`/c/${conversation.id}` as Href);
-    } catch (error: unknown) {
-      console.error('[NewChat] Error creating conversation:', error);
-      const errorMessage = getErrorMessage(error) || 'Failed to create conversation';
-      toast.error(errorMessage);
-    }
-  }, [selectedUserIds, addConversation, router]);
+    await startConversation(Array.from(selectedUserIds), groupName);
+  }, [selectedUserIds, groupName, startConversation]);
 
   const styles = StyleSheet.create({
     container: {
@@ -373,18 +294,25 @@ export default function NewChatScreen() {
       color: theme.colors.textSecondary,
       textAlign: 'center',
     },
-    createButton: {
+    createFooter: {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
-      padding: 16,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: theme.colors.background,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
     },
+    groupNameField: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+    },
+    createButton: {
+      padding: 16,
+      backgroundColor: theme.colors.primary,
+    },
     createButtonText: {
-      color: '#FFFFFF',
+      color: theme.colors.background,
       fontSize: 16,
       fontWeight: '600',
       textAlign: 'center',
@@ -402,7 +330,7 @@ export default function NewChatScreen() {
       <TouchableOpacity
         style={styles.userItem}
         onPress={() => {
-          openConversation(item);
+          void openConversation(item);
         }}
         onLongPress={() => {
           toggleUserSelection(item.id);
@@ -416,7 +344,7 @@ export default function NewChatScreen() {
             isSelected && styles.selectionIndicatorSelected,
           ]}>
             {isSelected && (
-              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+              <Ionicons name="checkmark" size={16} color={theme.colors.background} />
             )}
           </View>
         )}
@@ -435,7 +363,7 @@ export default function NewChatScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [selectedUserIds, isSelectionMode, openConversation, toggleUserSelection, styles]);
+  }, [selectedUserIds, isSelectionMode, openConversation, toggleUserSelection, styles, theme.colors.background]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -447,86 +375,116 @@ export default function NewChatScreen() {
           }}
         />
 
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputWrapper}>
-            <Ionicons
-              name="search"
-              size={20}
-              color={theme.colors.textSecondary}
+        {/* On the Matrix backend there is nothing to choose from and nowhere to
+            put a new conversation until there is a client: the people are
+            invited by their id on the homeserver this account lives on. With the
+            flag unset the gate renders its children and nothing else. */}
+        <MatrixSignInGate>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputWrapper}>
+              <Ionicons
+                name="search"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search users..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    setUsers([]);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={20}
+                    color={theme.colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {isLoading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <ThemedText style={[styles.emptyStateText, { marginTop: 16 }]}>
+                Searching...
+              </ThemedText>
+            </View>
+          ) : users.length > 0 ? (
+            <FlatList
+              style={styles.usersList}
+              data={users}
+              renderItem={renderUserItem}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
             />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search users..."
-              placeholderTextColor={theme.colors.textSecondary}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
+          ) : searchQuery.length >= 2 ? (
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title="No users found"
             />
-            {searchQuery.length > 0 && (
+          ) : (
+            <EmptyState
+              lottieSource={require('@/assets/lottie/welcome.json')}
+              title={searchQuery.length === 0
+                ? 'Search for users to start a conversation'
+                : 'Type at least 2 characters to search'}
+            />
+          )}
+
+          {isSelectionMode && selectedUserIds.size > 0 && (
+            <View style={styles.createFooter}>
+              {/* Only for a group. A one-to-one conversation is drawn with the
+                  other person's name by every client, so a title here would be
+                  one nobody asked for — and on Matrix it would be a name the
+                  homeserver can read, because room state is not encrypted. */}
+              {selectedUserIds.size > 1 && (
+                <View style={styles.groupNameField}>
+                  <TextFieldInput
+                    label="Group name"
+                    placeholder="Group name (optional)"
+                    value={groupName}
+                    onChangeText={setGroupName}
+                    autoCapitalize="sentences"
+                    maxLength={GROUP_NAME_MAX_LENGTH}
+                    returnKeyType="done"
+                  />
+                </View>
+              )}
               <TouchableOpacity
+                style={[styles.createButton, isCreating && styles.createButtonDisabled]}
                 onPress={() => {
-                  setSearchQuery('');
-                  setUsers([]);
+                  void createSelectedConversation();
                 }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                disabled={isCreating}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isCreating }}
               >
-                <Ionicons
-                  name="close-circle"
-                  size={20}
-                  color={theme.colors.textSecondary}
-                />
+                {isCreating ? (
+                  <ActivityIndicator color={theme.colors.background} />
+                ) : (
+                  <ThemedText style={styles.createButtonText}>
+                    {selectedUserIds.size === 1
+                      ? 'Start Chat'
+                      : `Start Group Chat (${selectedUserIds.size})`}
+                  </ThemedText>
+                )}
               </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <ThemedText style={[styles.emptyStateText, { marginTop: 16 }]}>
-              Searching...
-            </ThemedText>
-          </View>
-        ) : users.length > 0 ? (
-          <FlatList
-            style={styles.usersList}
-            data={users}
-            renderItem={renderUserItem}
-            keyExtractor={(item) => item.id}
-            keyboardShouldPersistTaps="handled"
-          />
-        ) : searchQuery.length >= 2 ? (
-          <EmptyState
-            lottieSource={require('@/assets/lottie/welcome.json')}
-            title="No users found"
-          />
-        ) : (
-          <EmptyState
-            lottieSource={require('@/assets/lottie/welcome.json')}
-            title={searchQuery.length === 0
-              ? 'Search for users to start a conversation'
-              : 'Type at least 2 characters to search'}
-          />
-        )}
-
-        {isSelectionMode && selectedUserIds.size > 0 && (
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              selectedUserIds.size === 0 && styles.createButtonDisabled,
-            ]}
-            onPress={createConversation}
-            disabled={selectedUserIds.size === 0}
-          >
-            <ThemedText style={styles.createButtonText}>
-              {selectedUserIds.size === 1
-                ? 'Start Chat'
-                : `Start Group Chat (${selectedUserIds.size})`}
-            </ThemedText>
-          </TouchableOpacity>
-        )}
+            </View>
+          )}
+        </MatrixSignInGate>
       </ThemedView>
     </SafeAreaView>
   );

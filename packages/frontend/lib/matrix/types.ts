@@ -763,6 +763,34 @@ export interface AlloChatClient {
   createRoom(request: AlloCreateRoomRequest): Promise<string>;
 
   /**
+   * Joins a room the viewer has been invited to.
+   *
+   * The other half of {@link createRoom}: creating a conversation invites the
+   * people in it, and an invitation is not a conversation until it is accepted.
+   * Until then the room has no readable timeline — which is why
+   * {@link AlloRoomSummary.membership} exists, and why a UI that could show an
+   * invitation but not accept one would be showing a conversation nobody can
+   * ever open.
+   *
+   * Joining an encrypted room does **not** make its earlier messages readable:
+   * the keys for those were shared with the devices in the room at the time,
+   * and this device was not one of them. What arrives after the join is
+   * readable, which is what everybody in the room expects of somebody who has
+   * just been let in.
+   */
+  acceptInvitation(roomId: string): Promise<void>;
+
+  /**
+   * Refuses an invitation, by leaving the room it is to.
+   *
+   * A refusal is visible to the room: the membership becomes `leave`, and
+   * whoever sent the invitation can see that. There is no way to decline
+   * privately, and pretending otherwise would be a promise the protocol does
+   * not keep.
+   */
+  declineInvitation(roomId: string): Promise<void>;
+
+  /**
    * The authoritative encryption state of a room, asking the server when sync
    * has not settled it locally.
    */

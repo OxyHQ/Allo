@@ -71,6 +71,12 @@ export enum RecoveryState {
   Incomplete = 3,
 }
 
+export enum RoomPreset {
+  PrivateChat = 0,
+  PublicChat = 1,
+  TrustedPrivateChat = 2,
+}
+
 // --- Tag enums -----------------------------------------------------------
 
 export enum TimelineItemContent_Tags {
@@ -127,6 +133,12 @@ export enum ProfileDetails_Tags {
   Pending = 'Pending',
   Ready = 'Ready',
   Error = 'Error',
+}
+
+export enum RoomVisibility_Tags {
+  Public = 'Public',
+  Private = 'Private',
+  Custom = 'Custom',
 }
 
 export enum EnableRecoveryProgress_Tags {
@@ -194,6 +206,12 @@ export const ProfileDetails = {
   Pending: variant(ProfileDetails_Tags.Pending),
   Ready: variant(ProfileDetails_Tags.Ready),
   Error: variant(ProfileDetails_Tags.Error),
+};
+
+export const RoomVisibility = {
+  Public: variant(RoomVisibility_Tags.Public),
+  Private: variant(RoomVisibility_Tags.Private),
+  Custom: variant(RoomVisibility_Tags.Custom),
 };
 
 export const EnableRecoveryProgress = {

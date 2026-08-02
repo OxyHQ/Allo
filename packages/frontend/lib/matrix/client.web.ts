@@ -54,6 +54,11 @@ import {
 // rule to trust. The platform-resolved name is for the code above the split,
 // which must not care.
 import { soleDirectInvitee } from '@/lib/matrix/directMessage';
+import {
+  ROOM_ENCRYPTION_STATE_KEY,
+  roomPresetFor,
+  type AlloRoomPreset,
+} from '@/lib/matrix/roomCreation';
 import { cryptoDatabasePrefix } from '@/lib/matrix/store.web';
 import { markReadByOthers } from '@/lib/matrix/readReceipts';
 import type {
@@ -89,6 +94,7 @@ import {
   type OutgoingThumbnailSource,
 } from './web/attachments';
 import { Coalescer } from './web/coalesce';
+import { toCreateRoomOptions } from './web/createRoom';
 import { CryptoWasmLoader } from './web/cryptoWasm';
 import {
   decryptAttachment,
@@ -171,14 +177,17 @@ const LOG_TAG = '[matrix]';
  */
 const INITIAL_SYNC_LIMIT = 20;
 
-/** `m.room.encryption` is room state with an empty state key. */
-const ENCRYPTION_STATE_KEY = '';
-
 /**
- * The only encryption algorithm Matrix defines for rooms, spelled out because
- * `matrix-js-sdk@42` does not export a constant for it from its root.
+ * The two presets Allo creates rooms with, in the SDK's vocabulary.
+ *
+ * A table rather than a conditional so that the mapping is total: a preset added
+ * to {@link AlloRoomPreset} and not to this stops the build here, rather than
+ * falling through to whatever the last branch was.
  */
-const MEGOLM_ALGORITHM = 'm.megolm.v1.aes-sha2';
+const WEB_PRESETS: Readonly<Record<AlloRoomPreset, Preset>> = {
+  'trusted-private-chat': Preset.TrustedPrivateChat,
+  'private-chat': Preset.PrivateChat,
+};
 
 /**
  * How long the homeserver keeps this browser's typing notice alive.
@@ -410,8 +419,10 @@ class WebAlloChatClient implements AlloChatClient {
    * which the next client to mark it fixes.
    *
    * The parameters that are not the caller's: private, invite-only, encrypted.
-   * `TrustedPrivateChat` for a direct message gives both people the same power
-   * level, because a conversation between two people has no moderator.
+   * The encrypted part is {@link toCreateRoomOptions}'s, which is where it can be
+   * asserted on; `visibility` and `preset` are the two the SDK spells as string
+   * enums, so they are supplied here. Private is about the directory listing and
+   * is not what keeps the room shut — the preset's invite-only join rule is.
    */
   async createRoom(request: AlloCreateRoomRequest): Promise<string> {
     const client = this.#requireClient('Creating a conversation');
@@ -425,18 +436,9 @@ class WebAlloChatClient implements AlloChatClient {
     }
 
     const created = await client.createRoom({
-      name: request.name,
+      ...toCreateRoomOptions(request),
       visibility: Visibility.Private,
-      preset: request.isDirect ? Preset.TrustedPrivateChat : Preset.PrivateChat,
-      is_direct: request.isDirect,
-      invite: [...request.invite],
-      initial_state: [
-        {
-          type: EventType.RoomEncryption,
-          state_key: ENCRYPTION_STATE_KEY,
-          content: { algorithm: MEGOLM_ALGORITHM },
-        },
-      ],
+      preset: WEB_PRESETS[roomPresetFor(request)],
     });
 
     if (invitee !== undefined) {
@@ -477,6 +479,23 @@ class WebAlloChatClient implements AlloChatClient {
     }
   }
 
+  /**
+   * Joins an invited room.
+   *
+   * `joinRoom` and not `Room.join()`, which `matrix-js-sdk` does not have: a
+   * room object here is a view of synced state and joining is a request. Sync
+   * has to be running for the same reason it does on the native side — an
+   * invitation the user can see is one sync delivered — so this refuses rather
+   * than joining a room id that arrived from somewhere else.
+   */
+  async acceptInvitation(roomId: string): Promise<void> {
+    await this.#requireSyncing('Accepting an invitation').joinRoom(roomId);
+  }
+
+  async declineInvitation(roomId: string): Promise<void> {
+    await this.#requireSyncing('Declining an invitation').leave(roomId);
+  }
+
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {
     const room = this.#requireRoom(roomId, "Reading a room's encryption state");
     const client = this.#requireClient("Reading a room's encryption state");
@@ -493,7 +512,7 @@ class WebAlloChatClient implements AlloChatClient {
       const content = await client.getStateEvent(
         roomId,
         EventType.RoomEncryption,
-        ENCRYPTION_STATE_KEY,
+        ROOM_ENCRYPTION_STATE_KEY,
       );
       return typeof content.algorithm === 'string' ? 'encrypted' : 'unencrypted';
     } catch (error) {
