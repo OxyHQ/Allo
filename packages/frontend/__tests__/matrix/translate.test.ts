@@ -18,9 +18,11 @@ import {
   toEncryptionState,
   toReactions,
   toReaders,
+  toRoomPreview,
   toRoomSummary,
   toSyncState,
   toTimelineItem,
+  type RoomPreviewFields,
   type RoomSummaryFields,
   type TimelineEventFields,
 } from '@/lib/matrix/native/translate';
@@ -65,6 +67,18 @@ function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventField
   };
 }
 
+/** A room's latest event, described by the members the row's preview reads. */
+function preview(overrides: Partial<RoomPreviewFields> = {}): RoomPreviewFields {
+  return {
+    sender: '@alice:allo.you',
+    senderProfile: new ProfileDetails.Unavailable(),
+    content: textContent('hello'),
+    timestamp: 1_700_000_000_000n,
+    isOwn: false,
+    ...overrides,
+  };
+}
+
 function roomInfo(overrides: Partial<RoomSummaryFields> = {}): RoomSummaryFields {
   return {
     id: '!room:allo.you',
@@ -102,7 +116,7 @@ describe('toSyncState', () => {
 
 describe('toRoomSummary', () => {
   it('carries the fields the conversation list draws', () => {
-    expect(toRoomSummary(roomInfo({ numUnreadMessages: 3n }))).toEqual({
+    expect(toRoomSummary(roomInfo({ numUnreadMessages: 3n }), undefined)).toEqual({
       roomId: '!room:allo.you',
       displayName: 'Bea',
       avatarUrl: 'mxc://allo.you/avatar',
@@ -110,18 +124,19 @@ describe('toRoomSummary', () => {
       membership: 'joined',
       encryption: 'encrypted',
       unreadCount: 3,
+      latestMessage: undefined,
     });
   });
 
   it('passes an undetermined encryption state through instead of guessing', () => {
     expect(
-      toRoomSummary(roomInfo({ encryptionState: EncryptionState.Unknown })).encryption,
+      toRoomSummary(roomInfo({ encryptionState: EncryptionState.Unknown }), undefined).encryption,
     ).toBe('unknown');
   });
 
   it('names every membership', () => {
     const membershipOf = (membership: Membership): string =>
-      toRoomSummary(roomInfo({ membership })).membership;
+      toRoomSummary(roomInfo({ membership }), undefined).membership;
 
     expect(membershipOf(Membership.Invited)).toBe('invited');
     expect(membershipOf(Membership.Joined)).toBe('joined');
@@ -131,7 +146,67 @@ describe('toRoomSummary', () => {
   });
 
   it('reads an unread count that arrives as a bigint', () => {
-    expect(toRoomSummary(roomInfo({ numUnreadMessages: 42n })).unreadCount).toBe(42);
+    expect(toRoomSummary(roomInfo({ numUnreadMessages: 42n }), undefined).unreadCount).toBe(42);
+  });
+
+  it('leaves a room with no latest event without a preview, and so without a time', () => {
+    // The mistake this shape exists to prevent. An invitation and a room created
+    // a second ago both have no latest event, and the row for one has to be able
+    // to say nothing — a substituted time would read as "now" beside every
+    // conversation in the app.
+    expect(toRoomSummary(roomInfo(), undefined).latestMessage).toBe(undefined);
+  });
+
+  it('carries the room’s latest message and the time it was sent', () => {
+    const summary = toRoomSummary(roomInfo(), preview({ timestamp: 1_600_000_000_000n }));
+
+    expect(summary.latestMessage).toEqual({
+      sentAt: 1_600_000_000_000,
+      sender: '@alice:allo.you',
+      senderDisplayName: undefined,
+      isOwn: false,
+      content: { kind: 'text', body: 'hello', isEdited: false },
+    });
+  });
+});
+
+describe('toRoomPreview', () => {
+  it('reads a timestamp that arrives as a bigint', () => {
+    expect(toRoomPreview(preview({ timestamp: 1_700_000_000_000n })).sentAt).toBe(
+      1_700_000_000_000,
+    );
+  });
+
+  it('names the sender once their profile has been resolved', () => {
+    const named = preview({
+      senderProfile: new ProfileDetails.Ready({
+        displayName: 'Alice',
+        displayNameAmbiguous: false,
+        avatarUrl: undefined,
+      }),
+    });
+
+    expect(toRoomPreview(named).senderDisplayName).toBe('Alice');
+  });
+
+  it("marks the viewer's own message as theirs", () => {
+    expect(toRoomPreview(preview({ isOwn: true })).isOwn).toBe(true);
+  });
+
+  it('previews a message that cannot be decrypted as exactly that', () => {
+    // Not an empty preview. A device set up today cannot read the last message of
+    // every conversation it joins, and a blank row there reads as a conversation
+    // nobody has written in.
+    const undecryptable = preview({
+      content: new TimelineItemContent.MsgLike({
+        content: {
+          kind: new MsgLikeKind.UnableToDecrypt({ msg: new EncryptedMessage.Unknown() }),
+          reactions: [],
+        },
+      }),
+    });
+
+    expect(toRoomPreview(undecryptable).content).toEqual({ kind: 'undecryptable' });
   });
 });
 

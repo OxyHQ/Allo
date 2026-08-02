@@ -73,6 +73,7 @@ lib/chat/
   timelineSource.ts      un timeline por sala, ídem, más paginar y enviar
   matrixViewModel.ts     AlloRoomSummary → Conversation, AlloTimelineItem → Message
 lib/matrix/
+  directMessage.ts       cuándo crear una conversación es reutilizar una
   store.native.ts        dos directorios, y cómo borrarlos
   store.web.ts           una base de IndexedDB, y cómo borrarla
   readReceipts.ts        de «quién tiene recibo aquí» a «alguien ha leído esto»
@@ -102,9 +103,10 @@ el historial de los demás. Lo que lo evita son dos hechos, ambos en
 
 **Ningún componente de presentación cambió.** `MessageBubble`, `MessageBlock`,
 `DaySeparator`, las filas de la lista, el layout de tres paneles y los temas por
-conversación siguen recibiendo `Conversation` y `Message`. Lo único que cambia es
-de dónde salen, y en cada punto de conexión la rama vieja es la expresión que ya
-estaba:
+conversación siguen recibiendo `Conversation` y `Message`. `Conversation` ganó un
+campo opcional —`isInvitation`, que sólo el camino de Matrix rellena— y ningún
+componente lo lee todavía. Lo único que cambia es de dónde salen los datos, y en
+cada punto de conexión la rama vieja es la expresión que ya estaba:
 
 ```ts
 const conversations = roomConversations ?? storedConversations;
@@ -124,9 +126,18 @@ encenderlo.
 
 ## 4. Qué llega a la pantalla hoy
 
-- Lista de conversaciones, en el orden que da el puerto (no se reordena aquí).
+- Lista de conversaciones, en el orden que da el puerto (no se reordena aquí),
+  **con vista previa del último mensaje y su hora**. La hora sale del mensaje y
+  no de un campo aparte: son el mismo hecho visto dos veces, y una fila no puede
+  enseñar honestamente una sin la otra. Una sala cuyo último mensaje este
+  dispositivo no conoce se queda sin texto y sin hora, que es lo que el
+  formateador dibuja como nada.
 - Timeline de una conversación, con paginación hacia atrás al llegar arriba.
 - Envío de texto.
+- **Crear una conversación**, en el puerto (`createRoom`). Siempre privada, sólo
+  por invitación y cifrada; un mensaje directo con un solo invitado reutiliza la
+  sala que ya existe con esa persona en vez de acuñar una segunda. Ninguna
+  pantalla lo llama todavía.
 - Login OIDC en tres pasos, con `expo-web-browser`.
 - **Sesión persistida**: el segundo arranque no pasa por el navegador. Se guarda
   en el llavero del móvil (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, para que una
@@ -135,7 +146,10 @@ encenderlo.
 - **Cerrar sesión**, desde Ajustes. Avisa al homeserver, y borre o no borre el
   homeserver, se lleva la sesión guardada, el almacén de estado y el de cripto.
 - Estados propios para los eventos sin texto: no descifrable, redactado, y
-  «Allo no sabe dibujar esto todavía». Ninguno se pinta como una burbuja vacía.
+  «Allo no sabe dibujar esto todavía». Ninguno se pinta como una burbuja vacía,
+  y la vista previa de la lista usa las mismas palabras: una conversación cuyo
+  último mensaje no se puede leer aquí lo dice, en vez de quedarse en blanco y
+  parecer una conversación en la que nadie ha escrito.
 - **Reacciones**, poner y quitar, desde la barra de emoji del menú de acciones.
   Una sola llamada para los dos sentidos: cuál de los dos es depende de si esta
   cuenta ya anotó el evento, y eso lo sabe el SDK y no un snapshot de la
@@ -152,29 +166,29 @@ encenderlo.
 - **Indicador de escribiendo**, también en las dos direcciones, y por el
   homeserver: a diferencia del camino viejo, existe fuera de la web.
 - **Un envío fallido se dibuja como error** y no como el reloj.
+- **Una invitación se distingue de una conversación** (`membership` en el
+  resumen, `Conversation.isInvitation` en la pantalla). Qué hacer con el dato es
+  de la UI, y hoy no hace nada distinto: ver §5.
 
 ## 5. Qué no llega, y por qué
 
 Por orden de cuánto se nota:
 
-1. **La fila de la lista no tiene ni vista previa ni hora.** `AlloRoomSummary` no
-   lleva último evento ni marca de actividad. El orden no se pierde —lo da el
-   puerto— pero el texto y la hora se quedan vacíos, que es lo que el formateador
-   dibuja como nada. Inventar `Date.now()` pondría «ahora» al lado de cada
-   conversación de la app.
-2. **El tamaño de letra por mensaje no viaja.** `AlloTimelineHandle.sendText`
+1. **El tamaño de letra por mensaje no viaja.** `AlloTimelineHandle.sendText`
    manda un cuerpo y nada más; `so.oxy.allo.font_size` (§4.2 de
    `data-model.md`) necesita una llamada que el puerto no tiene.
+2. **Nada reintenta un envío fallido.** Se ve que falló, y no hay forma de
+   volver a intentarlo desde la burbuja; en móvil la cola del SDK ya no lo está
+   intentando y en web nunca hubo cola. Reenviarlo es escribirlo otra vez.
 3. **Las reacciones no se ven en la burbuja.** Se pueden poner y quitar, y el
    toggle sabe cuáles son las tuyas, pero nada las dibuja debajo del mensaje.
    No es un hueco del puerto: `Message.reactions` existe desde antes que él y
    ningún backend de Allo las ha pintado nunca. Hacerlo es UI nueva para los dos
    caminos, no cableado de éste.
-4. **Sin adjuntos y sin crear conversaciones.** El puerto no expone ninguna de
-   las dos operaciones todavía.
-5. **Nada reintenta un envío fallido.** Se ve que falló, y no hay forma de
-   volver a intentarlo desde la burbuja; en móvil la cola del SDK ya no lo está
-   intentando y en web nunca hubo cola. Reenviarlo es escribirlo otra vez.
+4. **Sin adjuntos.** El puerto no expone la operación todavía.
+5. **Nadie llama a `createRoom`.** El puerto sabe crear una conversación; no hay
+   pantalla que lo pida, así que en la app sigue sin poder empezarse un chat
+   nuevo por el camino de Matrix.
 6. **Una sesión revocada desde fuera no se nota hasta el siguiente arranque.** Si
    el usuario borra este dispositivo desde otro cliente, el sync empieza a fallar
    y la app lo dibuja como un error de sincronización, no como «te han cerrado la
@@ -182,10 +196,11 @@ Por orden de cuánto se nota:
    `matrix-js-sdk` también (`HttpApiEvent.SessionLoggedOut`); el puerto no expone
    ninguno de los dos todavía. El camino de vuelta existe —cerrar sesión desde
    Ajustes— pero hay que saber que hace falta.
-7. **Las invitaciones aparecen como filas normales.** El puerto las incluye
-   («todo lo que el usuario no ha abandonado»), y abrir una probablemente no dé
-   timeline. No se filtran aquí: la definición de qué es una conversación es del
-   puerto, no de este mapeo.
+7. **Una invitación se distingue pero se pinta igual.** El resumen dice cuál lo
+   es (`membership`) y `Conversation.isInvitation` lo lleva hasta la pantalla,
+   que todavía no hace nada distinto con él: la fila se dibuja como cualquier
+   otra y abrirla no da timeline. Aceptar o rechazar tampoco existe — el puerto
+   no expone ninguna de las dos.
 
 ## 6. Web
 

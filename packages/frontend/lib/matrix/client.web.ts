@@ -4,17 +4,20 @@ import {
   EventTimeline,
   EventType,
   IndexedDBStore,
+  KnownMembership,
   MatrixError,
   MatrixEventEvent,
   MemoryStore,
   MsgType,
   OAuth2,
+  Preset,
   ReceiptType,
   RelationType,
   RoomEvent,
   RoomMemberEvent,
   RoomStateEvent,
   TokenRefresher,
+  Visibility,
   createClient,
   isValidAuthMetadata,
 } from 'matrix-js-sdk';
@@ -49,12 +52,14 @@ import {
 // the web one and its store is the web one, and saying so leaves no resolution
 // rule to trust. The platform-resolved name is for the code above the split,
 // which must not care.
+import { soleDirectInvitee } from '@/lib/matrix/directMessage';
 import { cryptoDatabasePrefix } from '@/lib/matrix/store.web';
 import { markReadByOthers } from '@/lib/matrix/readReceipts';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
   AlloChatClientFactory,
+  AlloCreateRoomRequest,
   AlloEncryptionState,
   AlloReaction,
   AlloOidcLoginOptions,
@@ -79,7 +84,14 @@ import {
   type OidcGrant,
 } from './web/oidcLogin';
 import { planKeyBackup, toRecoveryState } from './web/recovery';
-import { directRoomIds, orderRoomList, type RoomListEntry } from './web/roomList';
+import {
+  directRoomIds,
+  directRoomsWith,
+  orderRoomList,
+  selectRoomPreview,
+  withDirectRoom,
+  type RoomListEntry,
+} from './web/roomList';
 import { createSecretStorageKeyCallback } from './web/secretStorage';
 import { decodeAuthData, encodeAuthData } from './web/session';
 import {
@@ -143,6 +155,12 @@ const INITIAL_SYNC_LIMIT = 20;
 
 /** `m.room.encryption` is room state with an empty state key. */
 const ENCRYPTION_STATE_KEY = '';
+
+/**
+ * The only encryption algorithm Matrix defines for rooms, spelled out because
+ * `matrix-js-sdk@42` does not export a constant for it from its root.
+ */
+const MEGOLM_ALGORITHM = 'm.megolm.v1.aes-sha2';
 
 /**
  * How long the homeserver keeps this browser's typing notice alive.
@@ -356,6 +374,89 @@ class WebAlloChatClient implements AlloChatClient {
     this.#roomLists.add(handle);
     handle.attach();
     return handle;
+  }
+
+  /**
+   * Creates a conversation, or hands back the one that already exists.
+   *
+   * Two things the native binding does on its own have to be done by hand here.
+   * There is no index of direct messages, so the existing room is looked for in
+   * `m.direct` itself; and nothing writes `m.direct` after a room is created, so
+   * a direct message that is not recorded there would come back from sync as an
+   * ordinary group with a generated name.
+   *
+   * The account data write comes after the room exists, and a failure is reported
+   * rather than allowed to lose the room: the conversation has been created and
+   * the invitation sent, and throwing here would tell the caller nothing had
+   * happened. What the user sees instead is a conversation drawn as a group,
+   * which the next client to mark it fixes.
+   *
+   * The parameters that are not the caller's: private, invite-only, encrypted.
+   * `TrustedPrivateChat` for a direct message gives both people the same power
+   * level, because a conversation between two people has no moderator.
+   */
+  async createRoom(request: AlloCreateRoomRequest): Promise<string> {
+    const client = this.#requireClient('Creating a conversation');
+    const invitee = soleDirectInvitee(request);
+
+    if (invitee !== undefined) {
+      const existing = this.#existingDirectRoom(client, invitee);
+      if (existing !== undefined) {
+        return existing;
+      }
+    }
+
+    const created = await client.createRoom({
+      name: request.name,
+      visibility: Visibility.Private,
+      preset: request.isDirect ? Preset.TrustedPrivateChat : Preset.PrivateChat,
+      is_direct: request.isDirect,
+      invite: [...request.invite],
+      initial_state: [
+        {
+          type: EventType.RoomEncryption,
+          state_key: ENCRYPTION_STATE_KEY,
+          content: { algorithm: MEGOLM_ALGORITHM },
+        },
+      ],
+    });
+
+    if (invitee !== undefined) {
+      await this.#recordDirectRoom(client, invitee, created.room_id);
+    }
+    return created.room_id;
+  }
+
+  /**
+   * The direct message this browser already knows of with one person, if there is
+   * one it makes sense to reopen.
+   *
+   * `m.direct` outlives the rooms it names — leaving a conversation does not
+   * remove it — so the membership decides, and a room sync has not delivered is
+   * one this client cannot vouch for and does not reuse.
+   */
+  #existingDirectRoom(client: MatrixClient, userId: string): string | undefined {
+    const content = client.getAccountData(EventType.Direct)?.getContent();
+    for (const roomId of directRoomsWith(content, userId)) {
+      const membership = client.getRoom(roomId)?.getMyMembership();
+      if (membership === KnownMembership.Join || membership === KnownMembership.Invite) {
+        return roomId;
+      }
+    }
+    return undefined;
+  }
+
+  async #recordDirectRoom(client: MatrixClient, userId: string, roomId: string): Promise<void> {
+    try {
+      const content = client.getAccountData(EventType.Direct)?.getContent();
+      await client.setAccountData(EventType.Direct, withDirectRoom(content, userId, roomId));
+    } catch (error) {
+      logger.error(
+        `${LOG_TAG} room ${roomId} was created but could not be marked as a direct ` +
+          'message; it will be drawn as a group until some client marks it',
+        error,
+      );
+    }
   }
 
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {
@@ -878,16 +979,22 @@ class WebRoomListHandle implements AlloRoomListHandle {
     }
 
     const direct = directRoomIds(this.#client.getAccountData(EventType.Direct)?.getContent());
+    const viewerUserId = this.#client.getSafeUserId();
     const entries: RoomListEntry[] = [];
 
     // `getVisibleRooms` and not `getRooms`: it drops the old versions of rooms
     // that have been upgraded, which are rooms the user has already been moved
     // out of.
     for (const room of this.#client.getVisibleRooms()) {
+      const timeline = room.getLiveTimeline();
       const summary = toRoomSummary(
         room,
-        room.getLiveTimeline().getState(EventTimeline.FORWARDS),
+        timeline.getState(EventTimeline.FORWARDS),
         direct.has(room.roomId),
+        // The live timeline and not `getLastLiveEvent()`: the row previews the
+        // room's last *message*, and the last event of all is as likely to be
+        // somebody joining. See `selectRoomPreview`.
+        selectRoomPreview(timeline.getEvents(), viewerUserId),
       );
       if (summary === undefined) {
         logger.warn(

@@ -1,5 +1,5 @@
 import type { Conversation } from '@/app/(chat)/index';
-import type { AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
+import type { AlloEventContent, AlloRoomSummary, AlloTimelineItem } from '@/lib/matrix/types';
 import type { Message } from '@/stores/messagesStore';
 
 /**
@@ -34,24 +34,29 @@ export interface UnreadableEventLabels {
 /**
  * A room, as a row of the conversation list.
  *
- * Two of `Conversation`'s fields cannot be filled from what the port reports, and
- * they are left empty rather than invented:
+ * **A row with no known time says nothing, and must be able to.** A room whose
+ * latest message this device does not know — an invitation, a conversation
+ * created a moment ago, one whose history has not arrived — has no preview and no
+ * time, and both come out empty. `formatConversationTimestamp` renders an empty
+ * string as nothing, which is the honest answer; the current time would put "now"
+ * beside every conversation in the app, including one nobody has touched in a
+ * year. That is the mistake this mapping is shaped to make impossible: the time
+ * is read from the message, so there is no time to invent when there is no
+ * message.
  *
- * - `lastMessage`. {@link AlloRoomSummary} carries no latest event. Reading one
- *   would mean opening a timeline per room, which for a list of hundreds is a
- *   timeline per room open at once.
- * - `timestamp`. Nor does it carry an activity time. The *order* of the list is
- *   not lost — the port hands it back already ordered, and this mapping never
- *   re-sorts — but the time shown next to each row is. An empty string is what
- *   `formatConversationTimestamp` renders as nothing, which is the honest answer;
- *   `Date.now()` would put "now" beside every conversation in the app.
+ * The *order* of the list is not this mapping's business either way. The port
+ * hands it back already ordered and nothing here re-sorts.
  *
- * `theme` is absent for the same kind of reason and is not a gap in the port: a
- * conversation's theme is to be an encrypted timeline event
- * (`docs/matrix/data-model.md` §4.1) and no code writes or reads one yet, so
- * every Matrix conversation falls back to the app's theme.
+ * `theme` is absent, and is not a gap in the port: a conversation's theme is to
+ * be an encrypted timeline event (`docs/matrix/data-model.md` §4.1) and no code
+ * writes or reads one yet, so every Matrix conversation falls back to the app's
+ * theme.
  */
-export function toConversation(summary: AlloRoomSummary): Conversation {
+export function toConversation(
+  summary: AlloRoomSummary,
+  labels: UnreadableEventLabels,
+): Conversation {
+  const latest = summary.latestMessage;
   return {
     id: summary.roomId,
     type: summary.isDirect ? 'direct' : 'group',
@@ -59,10 +64,15 @@ export function toConversation(summary: AlloRoomSummary): Conversation {
     // user sees while sync has not yet delivered the room's name or enough
     // members to compute one.
     name: summary.displayName ?? summary.roomId,
-    lastMessage: '',
-    timestamp: '',
+    lastMessage: latest === undefined ? '' : bodyOf(latest.content, labels),
+    timestamp: latest === undefined ? '' : new Date(latest.sentAt).toISOString(),
     unreadCount: summary.unreadCount,
     avatar: summary.avatarUrl,
+    // An invitation is in the list because the port's definition of a
+    // conversation is everything the viewer has not left, and it is not a
+    // conversation yet: there is nothing to read in it and accepting comes first.
+    // What to do about that is the screen's decision, not this mapping's.
+    isInvitation: summary.membership === 'invited',
   };
 }
 
@@ -80,7 +90,7 @@ export function toMessage(
 ): Message {
   return {
     id: item.key,
-    text: bodyOf(item, labels),
+    text: bodyOf(item.content, labels),
     senderId: item.sender,
     senderName: item.senderDisplayName,
     timestamp: new Date(item.sentAt),
@@ -114,16 +124,24 @@ function toReactions(item: AlloTimelineItem): Message['reactions'] {
   return reactions;
 }
 
-function bodyOf(item: AlloTimelineItem, labels: UnreadableEventLabels): string {
-  switch (item.content.kind) {
+/**
+ * What an event says, in words, whether it is a bubble or a row's preview.
+ *
+ * One function for both because the three states that carry no text mean exactly
+ * the same thing in each place. A conversation whose last message this device
+ * cannot decrypt has to say so in the list as well as in the timeline: an empty
+ * preview there reads as a conversation nobody has written in.
+ */
+function bodyOf(content: AlloEventContent, labels: UnreadableEventLabels): string {
+  switch (content.kind) {
     case 'text':
-      return item.content.body;
+      return content.body;
     case 'undecryptable':
       return labels.undecryptable;
     case 'redacted':
       return labels.redacted;
     case 'unsupported':
-      return labels.unsupported(item.content.description);
+      return labels.unsupported(content.description);
   }
 }
 
