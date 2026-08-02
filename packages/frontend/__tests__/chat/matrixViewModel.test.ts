@@ -49,6 +49,8 @@ function event(overrides: Partial<AlloTimelineItem> = {}): AlloTimelineItem {
     isOwn: false,
     sendState: 'sent',
     content: { kind: 'text', body: 'hello', isEdited: false },
+    reactions: [],
+    isReadByOthers: false,
     ...overrides,
   };
 }
@@ -248,17 +250,90 @@ describe('toMessage', () => {
     expect(message.readStatus).toBe('sent');
   });
 
-  it('does not claim a failed send reached the homeserver', () => {
-    // The bubble has no failed state, so this settles for the clock. What it
-    // must never do is report `sent`, which draws the tick that tells the user
-    // the message arrived.
+  it('draws a failed send as an error and not as the clock', () => {
+    // The mistake this holds down. `failed` and `pending` look the same to a
+    // switch that only tests for `sent`, and the two mean opposite things: the
+    // clock says "still going", and nothing is still going. On the web nothing
+    // retries at all, so a clock there is a message the user believes is on its
+    // way and which no longer exists.
     const message = toMessage(
       event({ isOwn: true, sendState: 'failed' }),
       '!room:allo.you',
       LABELS,
     );
 
+    expect(message.readStatus).toBe('failed');
+    expect(message.readStatus).not.toBe('pending');
     expect(message.readStatus).not.toBe('sent');
-    expect(message.readStatus).toBe('pending');
+  });
+
+  it('shows two ticks once somebody else has read the message', () => {
+    const message = toMessage(
+      event({ isOwn: true, sendState: 'sent', isReadByOthers: true }),
+      '!room:allo.you',
+      LABELS,
+    );
+
+    expect(message.readStatus).toBe('read');
+  });
+
+  it('never reports a message as delivered', () => {
+    // Matrix has no delivery receipt: there is no event for "it reached their
+    // device". `delivered` draws a tick that would mean something Allo cannot
+    // know, so no combination of states may reach it.
+    const states = (['pending', 'sent', 'failed'] as const).flatMap((sendState) =>
+      [false, true].map(
+        (isReadByOthers) =>
+          toMessage(event({ isOwn: true, sendState, isReadByOthers }), '!room:allo.you', LABELS)
+            .readStatus,
+      ),
+    );
+
+    expect(states).not.toContain('delivered');
+  });
+
+  it('reports an edited message as edited', () => {
+    const message = toMessage(
+      event({ content: { kind: 'text', body: 'fixed', isEdited: true } }),
+      '!room:allo.you',
+      LABELS,
+    );
+
+    expect(message.isEdited).toBe(true);
+    expect(message.text).toBe('fixed');
+  });
+
+  it('does not call a redacted message an edited one', () => {
+    // Both arrive as "the body you had is not the body now", and only one of them
+    // is a correction the sender made.
+    const message = toMessage(
+      event({ content: { kind: 'redacted' } }),
+      '!room:allo.you',
+      LABELS,
+    );
+
+    expect(message.isEdited).toBe(false);
+  });
+
+  it('carries reactions across as emoji to senders', () => {
+    const message = toMessage(
+      event({
+        reactions: [
+          { key: '👍', senders: ['@alice:allo.you', '@bob:allo.you'] },
+          { key: '❤️', senders: ['@bob:allo.you'] },
+        ],
+      }),
+      '!room:allo.you',
+      LABELS,
+    );
+
+    expect(message.reactions).toEqual({
+      '👍': ['@alice:allo.you', '@bob:allo.you'],
+      '❤️': ['@bob:allo.you'],
+    });
+  });
+
+  it('leaves reactions unset when nobody has reacted', () => {
+    expect(toMessage(event(), '!room:allo.you', LABELS).reactions).toBeUndefined();
   });
 });

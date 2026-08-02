@@ -16,6 +16,8 @@ import type { EventTimelineItem, TimelineItemContent as SdkTimelineItemContent }
 
 import {
   toEncryptionState,
+  toReactions,
+  toReaders,
   toRoomPreview,
   toRoomSummary,
   toSyncState,
@@ -60,6 +62,7 @@ function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventField
     timestamp: 1_700_000_000_000n,
     isOwn: false,
     localSendState: undefined,
+    readReceipts: new Map(),
     ...overrides,
   };
 }
@@ -390,5 +393,92 @@ describe('toTimelineItem', () => {
     expect(toTimelineItem('row-1', event({ timestamp: 1_234_567_890_123n })).sentAt).toBe(
       1_234_567_890_123,
     );
+  });
+
+  it('leaves the read mark for the projection to settle', () => {
+    // Whether a message has been read is decided by a receipt on a *later* row,
+    // so it cannot be answered from one event. Reporting `true` here would need
+    // information this function does not have.
+    expect(toTimelineItem('row-1', event()).isReadByOthers).toBe(false);
+  });
+});
+
+describe('toReactions', () => {
+  function reacted(reactions: { key: string; senders: string[] }[]): SdkTimelineItemContent {
+    return new TimelineItemContent.MsgLike({
+      content: {
+        kind: new MsgLikeKind.Message({
+          content: {
+            msgType: new MessageType.Text({ content: { body: 'hello' } }),
+            body: 'hello',
+            isEdited: false,
+          },
+        }),
+        reactions: reactions.map((reaction) => ({
+          key: reaction.key,
+          senders: reaction.senders.map((senderId) => ({
+            senderId,
+            timestamp: 1_700_000_000_000n,
+          })),
+        })),
+      },
+    });
+  }
+
+  it('reads the emoji and everyone who sent it', () => {
+    expect(
+      toReactions(
+        reacted([
+          { key: '👍', senders: ['@alice:allo.you', '@bea:allo.you'] },
+          { key: '❤️', senders: ['@bea:allo.you'] },
+        ]),
+      ),
+    ).toEqual([
+      { key: '👍', senders: ['@alice:allo.you', '@bea:allo.you'] },
+      { key: '❤️', senders: ['@bea:allo.you'] },
+    ]);
+  });
+
+  it('reports a message nobody has reacted to as no reactions', () => {
+    expect(toReactions(reacted([]))).toEqual([]);
+  });
+
+  it('reports no reactions for an event that cannot carry any', () => {
+    // A state event has no annotations, and the binding says so in the shape:
+    // `reactions` lives on the message-like content and nowhere else.
+    expect(toReactions(new TimelineItemContent.CallInvite())).toEqual([]);
+  });
+
+  it('keeps the reactions on a redacted message', () => {
+    // A redaction empties the message, not the emoji people put on it.
+    expect(
+      toReactions(
+        new TimelineItemContent.MsgLike({
+          content: {
+            kind: new MsgLikeKind.Redacted(),
+            reactions: [
+              { key: '👍', senders: [{ senderId: '@bea:allo.you', timestamp: 1n }] },
+            ],
+          },
+        }),
+      ),
+    ).toEqual([{ key: '👍', senders: ['@bea:allo.you'] }]);
+  });
+});
+
+describe('toReaders', () => {
+  it('reads the user ids off the receipts the binding attached', () => {
+    expect(
+      toReaders({
+        readReceipts: new Map([
+          ['@bea:allo.you', { timestamp: 1n }],
+          ['@carla:allo.you', { timestamp: 2n }],
+        ]),
+      }),
+    ).toEqual(['@bea:allo.you', '@carla:allo.you']);
+  });
+
+  it('reports an event nobody has receipted as nobody', () => {
+    expect(toReaders({ readReceipts: new Map() })).toEqual([]);
   });
 });

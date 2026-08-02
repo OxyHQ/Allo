@@ -39,12 +39,22 @@ interface ChatUIState {
   // Reply to message ID by conversation
   replyToByConversation: Record<string, string | undefined>;
 
+  /**
+   * The message the composer is currently rewriting, by conversation.
+   *
+   * Kept here beside the input text rather than in the screen, for the same
+   * reason the input text is: a conversation the user switches away from and
+   * comes back to still has the half-finished edit they left in it.
+   */
+  editingByConversation: Record<string, string | undefined>;
+
   // Actions
   setVisibleTimestamp: (conversationId: string, messageId: string | null) => void;
   setInputText: (conversationId: string, text: string) => void;
   clearInputText: (conversationId: string) => void;
   setAttachmentMenuOpen: (conversationId: string, isOpen: boolean) => void;
   setReplyTo: (conversationId: string, messageId: string | undefined) => void;
+  setEditing: (conversationId: string, messageId: string | undefined) => void;
   clearConversationUI: (conversationId: string) => void;
 
   // Selectors
@@ -60,6 +70,7 @@ export const useChatUIStore = create<ChatUIState>()(
     inputTextByConversation: {},
     isAttachmentMenuOpenByConversation: {},
     replyToByConversation: {},
+    editingByConversation: {},
 
     // Actions - Optimized with immer for O(1) updates (critical for typing performance)
     setVisibleTimestamp: (conversationId, messageId) => {
@@ -92,12 +103,19 @@ export const useChatUIStore = create<ChatUIState>()(
       });
     },
 
+    setEditing: (conversationId, messageId) => {
+      set((state) => {
+        state.editingByConversation[conversationId] = messageId;
+      });
+    },
+
     clearConversationUI: (conversationId) => {
       set((state) => {
         delete state.visibleTimestampByConversation[conversationId];
         delete state.inputTextByConversation[conversationId];
         delete state.isAttachmentMenuOpenByConversation[conversationId];
         delete state.replyToByConversation[conversationId];
+        delete state.editingByConversation[conversationId];
       });
     },
 

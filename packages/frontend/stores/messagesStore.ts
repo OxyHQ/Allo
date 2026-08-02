@@ -43,6 +43,18 @@ export interface StickerItem {
   packId?: string;
 }
 
+/**
+ * How far a message the viewer sent got on its way out.
+ *
+ * `failed` is not a slower `pending`. Pending means something is still trying;
+ * failed means nothing is, and the two draw different marks — see
+ * `components/messages/messageStatus.ts`.
+ *
+ * `delivered` is only ever reached by the Express backend, which has a delivery
+ * receipt. Matrix has none.
+ */
+export type MessageReadStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
 export interface Message {
   id: string;
   text: string;
@@ -62,8 +74,10 @@ export interface Message {
   isEncrypted?: boolean;
   ciphertext?: string;
   encryptionVersion?: number;
-  // Read receipt status
-  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
+  /** Drawn on the sender's own bubble only. See {@link MessageReadStatus}. */
+  readStatus?: MessageReadStatus;
+  /** The body has been replaced since it was sent. */
+  isEdited?: boolean;
   // Server timestamp set when the message has been edited
   editedAt?: Date;
 }

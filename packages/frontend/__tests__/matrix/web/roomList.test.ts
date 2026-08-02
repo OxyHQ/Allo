@@ -38,7 +38,12 @@ function entry(roomId: string, activityTimestamp: number): RoomListEntry {
 }
 
 /** A timeline event, described by the members the preview reads. */
-function event(type: string, body: string, sentAt = 1_700_000_000_000): TimelineEventFields {
+function event(
+  type: string,
+  body: string,
+  sentAt = 1_700_000_000_000,
+  relation: { readonly rel_type?: string } | null = null,
+): TimelineEventFields {
   return {
     getId: () => `$${body}`,
     getTxnId: () => undefined,
@@ -47,6 +52,7 @@ function event(type: string, body: string, sentAt = 1_700_000_000_000): Timeline
     getContent: () => ({ msgtype: 'm.text', body }),
     getTs: () => sentAt,
     isRedacted: () => false,
+    getRelation: () => relation,
     replacingEvent: () => null,
     status: null,
     sender: { name: 'Alice' },
@@ -129,6 +135,25 @@ describe('selectRoomPreview', () => {
       body: 'the real last message',
       isEdited: false,
     });
+  });
+
+  it('walks past an edit to the message it corrected', () => {
+    // The two halves of this meeting: Allo can send edits now, and the web room
+    // list picks its own preview. A replacement is an `m.room.message`, so the
+    // type filter lets it through, and its body is the ` * ` fallback — the row
+    // would read "* corrected" while the timeline read "corrected". The message
+    // it replaced already carries the new body.
+    const preview = selectRoomPreview(
+      [
+        event('m.room.message', 'corrected'),
+        event('m.room.message', ' * corrected', 1_700_000_000_001, {
+          rel_type: 'm.replace',
+        }),
+      ],
+      VIEWER,
+    );
+
+    expect(preview?.content).toEqual({ kind: 'text', body: 'corrected', isEdited: false });
   });
 
   it('has no preview for a room whose timeline this device holds nothing of', () => {

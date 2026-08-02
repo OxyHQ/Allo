@@ -5,6 +5,7 @@ import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';
+import type { MessageReadStatus } from '@/stores/messagesStore';
 import { MessageMetadata } from './MessageMetadata';
 
 /**
@@ -37,8 +38,8 @@ export interface MessageBubbleProps {
   isCloseToPrevious?: boolean;
   /** Type of message: 'user' (with bubble) or 'ai' (plain text, no bubble) */
   messageType?: MessageType;
-  /** Read status for sent messages */
-  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
+  /** Read status for sent messages. `failed` draws an error, not the clock. */
+  readStatus?: MessageReadStatus;
   /** Whether the message was edited */
   isEdited?: boolean;
   /** Custom font size for this message (if adjusted via send button) */

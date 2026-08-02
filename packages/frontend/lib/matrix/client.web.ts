@@ -11,7 +11,10 @@ import {
   MsgType,
   OAuth2,
   Preset,
+  ReceiptType,
+  RelationType,
   RoomEvent,
+  RoomMemberEvent,
   RoomStateEvent,
   TokenRefresher,
   Visibility,
@@ -51,12 +54,14 @@ import {
 // which must not care.
 import { soleDirectInvitee } from '@/lib/matrix/directMessage';
 import { cryptoDatabasePrefix } from '@/lib/matrix/store.web';
+import { markReadByOthers } from '@/lib/matrix/readReceipts';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
   AlloChatClientFactory,
   AlloCreateRoomRequest,
   AlloEncryptionState,
+  AlloReaction,
   AlloOidcLoginOptions,
   AlloOidcLoginRequest,
   AlloPaginationOutcome,
@@ -89,7 +94,15 @@ import {
 } from './web/roomList';
 import { createSecretStorageKeyCallback } from './web/secretStorage';
 import { decodeAuthData, encodeAuthData } from './web/session';
-import { toEncryptionState, toRoomSummary, toSyncState, toTimelineItem } from './web/translate';
+import {
+  isTimelineRow,
+  toEncryptionState,
+  toReactions,
+  toReaders,
+  toRoomSummary,
+  toSyncState,
+  toTimelineItem,
+} from './web/translate';
 
 /**
  * The web implementation of the Allo chat port, over `matrix-js-sdk` and the Rust
@@ -148,6 +161,30 @@ const ENCRYPTION_STATE_KEY = '';
  * `matrix-js-sdk@42` does not export a constant for it from its root.
  */
 const MEGOLM_ALGORITHM = 'm.megolm.v1.aes-sha2';
+
+/**
+ * How long the homeserver keeps this browser's typing notice alive.
+ *
+ * Longer than the composer's re-emit interval, so a user typing steadily never
+ * flickers, and short enough that a tab closed mid-sentence stops claiming to be
+ * typing within a few seconds. There is nothing to clean up on the way out: the
+ * server forgets it on its own, which is the only cleanup a closed tab gets.
+ */
+const TYPING_NOTICE_TIMEOUT_MS = 10_000;
+
+/**
+ * What an edit's `body` is prefixed with for clients that cannot aggregate.
+ *
+ * The convention the spec suggests and every client follows: a receiver that does
+ * not understand `m.replace` shows the fallback body, and the leading `* ` is
+ * what tells its reader they are looking at a correction. Clients that do
+ * understand it — including both halves of this port — read `m.new_content`
+ * instead and never show the prefix.
+ */
+const EDIT_FALLBACK_PREFIX = ' * ';
+
+/** Shared by every row nobody has reacted to, which is nearly all of them. */
+const NO_REACTIONS: readonly AlloReaction[] = [];
 
 /**
  * The SDK's crypto surface. Taken off the client rather than imported, because
@@ -986,8 +1023,10 @@ class WebTimelineHandle implements AlloTimelineHandle {
   readonly #onChange: (items: readonly AlloTimelineItem[]) => void;
   readonly #onClose: () => void;
   readonly #coalescer: Coalescer;
+  readonly #typingListeners = new Set<(userIds: readonly string[]) => void>();
 
   #items: readonly AlloTimelineItem[] = [];
+  #typing: readonly string[] = [];
   #closed = false;
 
   constructor(
@@ -1012,6 +1051,9 @@ class WebTimelineHandle implements AlloTimelineHandle {
     this.#client.on(RoomEvent.TimelineReset, this.#onTimelineReset);
     this.#client.on(RoomEvent.LocalEchoUpdated, this.#onRoomChanged);
     this.#client.on(RoomEvent.Redaction, this.#onRoomChanged);
+    // Somebody read something. Nothing else reports it: a receipt is not a
+    // timeline event, and it is what moves a row's read mark.
+    this.#client.on(RoomEvent.Receipt, this.#onRoomChanged);
     // A room key arriving turns an unreadable row into a readable one.
     this.#client.on(MatrixEventEvent.Decrypted, this.#onEventChanged);
     this.#client.on(MatrixEventEvent.Replaced, this.#onEventChanged);
@@ -1040,6 +1082,77 @@ class WebTimelineHandle implements AlloTimelineHandle {
     await this.#client.sendMessage(this.#room.roomId, { msgtype: MsgType.Text, body });
   }
 
+  /**
+   * Adds the viewer's annotation, or redacts the one they already sent.
+   *
+   * The SDK has no toggle, so the decision is made here, and it is made from the
+   * aggregated relations rather than from anything this handle remembers: a
+   * reaction sent from the user's phone a second ago is in there and is not in
+   * any local state.
+   */
+  async toggleReaction(eventId: string, key: string): Promise<void> {
+    const existing = this.#viewerReaction(eventId, key);
+    if (existing !== undefined) {
+      await this.#client.redactEvent(this.#room.roomId, existing);
+      return;
+    }
+    await this.#client.sendEvent(this.#room.roomId, EventType.Reaction, {
+      'm.relates_to': { rel_type: RelationType.Annotation, event_id: eventId, key },
+    });
+  }
+
+  async edit(eventId: string, body: string): Promise<void> {
+    await this.#client.sendMessage(this.#room.roomId, {
+      msgtype: MsgType.Text,
+      body: `${EDIT_FALLBACK_PREFIX}${body}`,
+      'm.new_content': { msgtype: MsgType.Text, body },
+      'm.relates_to': { rel_type: RelationType.Replace, event_id: eventId },
+    });
+  }
+
+  async redact(eventId: string, reason: string | undefined): Promise<void> {
+    await this.#client.redactEvent(this.#room.roomId, eventId, undefined, { reason });
+  }
+
+  /**
+   * Sends a public read receipt for one event.
+   *
+   * An event id the room does not hold is reported and dropped rather than
+   * thrown: the caller is a reader scrolling, the id came from a timeline that
+   * may since have been reset by a gappy sync, and there is no version of "your
+   * read receipt did not go out" worth interrupting them with.
+   */
+  async sendReadReceipt(eventId: string): Promise<void> {
+    const event = this.#room.findEventById(eventId);
+    if (event === undefined) {
+      logger.warn(
+        `${LOG_TAG} no read receipt was sent for ${eventId}: it is not in ` +
+          `${this.#room.roomId}`,
+      );
+      return;
+    }
+    // `Read` and not `ReadPrivate`: a mark nobody else can see is one the
+    // sender's own bubble could never draw, and drawing it is the point.
+    await this.#client.sendReadReceipt(event, ReceiptType.Read);
+  }
+
+  async sendTypingNotice(isTyping: boolean): Promise<void> {
+    await this.#client.sendTyping(this.#room.roomId, isTyping, TYPING_NOTICE_TIMEOUT_MS);
+  }
+
+  observeTyping(onChange: (userIds: readonly string[]) => void): AlloUnsubscribe {
+    this.#typingListeners.add(onChange);
+    if (this.#typingListeners.size === 1) {
+      this.#client.on(RoomMemberEvent.Typing, this.#onTyping);
+    }
+    return () => {
+      this.#typingListeners.delete(onChange);
+      if (this.#typingListeners.size === 0) {
+        this.#client.off(RoomMemberEvent.Typing, this.#onTyping);
+      }
+    };
+  }
+
   close(): void {
     if (this.#closed) {
       return;
@@ -1051,10 +1164,41 @@ class WebTimelineHandle implements AlloTimelineHandle {
     this.#client.off(RoomEvent.TimelineReset, this.#onTimelineReset);
     this.#client.off(RoomEvent.LocalEchoUpdated, this.#onRoomChanged);
     this.#client.off(RoomEvent.Redaction, this.#onRoomChanged);
+    this.#client.off(RoomEvent.Receipt, this.#onRoomChanged);
     this.#client.off(MatrixEventEvent.Decrypted, this.#onEventChanged);
     this.#client.off(MatrixEventEvent.Replaced, this.#onEventChanged);
+    if (this.#typingListeners.size > 0) {
+      this.#client.off(RoomMemberEvent.Typing, this.#onTyping);
+    }
+    this.#typingListeners.clear();
 
     this.#onClose();
+  }
+
+  /**
+   * The id of the viewer's own annotation with this key, if they sent one.
+   *
+   * Redacted annotations are skipped: the relation container usually drops them
+   * on redaction, and redacting one twice would be a request the homeserver
+   * refuses rather than a reaction the user gets back.
+   */
+  #viewerReaction(eventId: string, key: string): string | undefined {
+    const viewerUserId = this.#client.getSafeUserId();
+    const annotations = this.#room.relations.getChildEventsForEvent(
+      eventId,
+      RelationType.Annotation,
+      EventType.Reaction,
+    );
+    for (const annotation of annotations?.getRelations() ?? []) {
+      if (
+        annotation.getSender() === viewerUserId &&
+        annotation.getRelation()?.key === key &&
+        !annotation.isRedacted()
+      ) {
+        return annotation.getId();
+      }
+    }
+    return undefined;
   }
 
   readonly #onRoomChanged = (_event: unknown, room?: Room): void => {
@@ -1083,6 +1227,47 @@ class WebTimelineHandle implements AlloTimelineHandle {
     }
   };
 
+  /**
+   * Not coalesced with the timeline.
+   *
+   * The two travel at different speeds and mean different things: a typing notice
+   * is only useful while it is true, and putting it behind the same frame of
+   * delay as a batch of decrypted messages is how "is typing" arrives after the
+   * message it was announcing.
+   */
+  readonly #onTyping = (_event: MatrixEvent, member: { roomId: string }): void => {
+    if (member.roomId === this.#room.roomId) {
+      this.#publishTyping();
+    }
+  };
+
+  #publishTyping(): void {
+    if (this.#closed) {
+      return;
+    }
+    const viewerUserId = this.#client.getSafeUserId();
+    // Asked of the room rather than accumulated from the events, because the
+    // SDK's members are the state the events have already been applied to — and
+    // one member stopping does not tell us about the others.
+    const typing = this.#room
+      .getMembers()
+      .filter((member) => member.typing && member.userId !== viewerUserId)
+      .map((member) => member.userId);
+
+    if (
+      typing.length === this.#typing.length &&
+      typing.every((userId, index) => userId === this.#typing[index])
+    ) {
+      // `RoomMember.typing` is republished on every sync that carries an
+      // `m.typing`, which for one person typing steadily is several a second.
+      return;
+    }
+    this.#typing = typing;
+    for (const listener of this.#typingListeners) {
+      listener(typing);
+    }
+  }
+
   #publish(): void {
     if (this.#closed) {
       return;
@@ -1090,11 +1275,17 @@ class WebTimelineHandle implements AlloTimelineHandle {
 
     const viewerUserId = this.#client.getSafeUserId();
     const items: AlloTimelineItem[] = [];
+    const readers: (readonly string[])[] = [];
     // Local echoes are in here too: the client is started with the SDK's default
     // chronological ordering, which puts a message in the timeline the moment it
     // is sent rather than in a list of its own.
     for (const event of this.#room.getLiveTimeline().getEvents()) {
-      const item = toTimelineItem(event, viewerUserId);
+      // Reactions, redactions and edits are in the timeline and are not rows of
+      // it; each one changes a row that is already there. See `isTimelineRow`.
+      if (!isTimelineRow(event)) {
+        continue;
+      }
+      const item = toTimelineItem(event, viewerUserId, this.#reactionsFor(event));
       if (item === undefined) {
         logger.warn(
           `${LOG_TAG} an event in ${this.#room.roomId} has neither an event id nor a ` +
@@ -1103,9 +1294,36 @@ class WebTimelineHandle implements AlloTimelineHandle {
         continue;
       }
       items.push(item);
+      readers.push(toReaders(this.#room.getReceiptsForEvent(event)));
     }
 
-    this.#items = items;
+    // A receipt names one event and covers every earlier one, so the read mark of
+    // a row comes from what is *after* it. See `lib/matrix/readReceipts.ts`.
+    const readByOthers = markReadByOthers(
+      items.map((item, index) => ({ sender: item.sender, readers: readers[index] })),
+    );
+
+    this.#items = items.map((item, index) =>
+      readByOthers[index] ? { ...item, isReadByOthers: true } : item,
+    );
     this.#onChange(this.#items);
+  }
+
+  /**
+   * The reactions the SDK has aggregated onto one event.
+   *
+   * A local echo has no event id the homeserver knows, so nothing can have
+   * annotated it yet and there is nothing to look up.
+   */
+  #reactionsFor(event: MatrixEvent): readonly AlloReaction[] {
+    const eventId = event.getId();
+    if (eventId === undefined) {
+      return NO_REACTIONS;
+    }
+    return toReactions(
+      this.#room.relations
+        .getChildEventsForEvent(eventId, RelationType.Annotation, EventType.Reaction)
+        ?.getSortedAnnotationsByKey() ?? null,
+    );
   }
 }

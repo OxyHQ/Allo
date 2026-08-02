@@ -1,3 +1,4 @@
+import { MatrixEventNotSentError } from '@/lib/matrix/errors';
 import type {
   AlloPaginationOutcome,
   AlloTimelineHandle,
@@ -32,15 +33,19 @@ export interface TimelineSnapshot {
   readonly isPaginating: boolean;
   /** There are no older events to ask for. */
   readonly reachedStart: boolean;
+  /** Matrix user ids of everyone else typing in this room, right now. */
+  readonly typingUserIds: readonly string[];
 }
 
 const NO_ITEMS: readonly AlloTimelineItem[] = [];
+const NOBODY_TYPING: readonly string[] = [];
 
 const CLOSED: TimelineSnapshot = {
   items: NO_ITEMS,
   isOpening: false,
   isPaginating: false,
   reachedStart: false,
+  typingUserIds: NOBODY_TYPING,
 };
 
 const OPENING: TimelineSnapshot = { ...CLOSED, isOpening: true };
@@ -53,6 +58,23 @@ export class TimelineNotOpenError extends Error {
         'watching it.',
     );
     this.name = 'TimelineNotOpenError';
+  }
+}
+
+/**
+ * An operation named a row that is not in the timeline.
+ *
+ * The UI addresses messages by the key it draws them with, and a key that is no
+ * longer there is ordinary rather than exceptional: a conversation can be reset
+ * by a gappy sync between a long press and the tap that follows it.
+ */
+export class TimelineRowNotFoundError extends Error {
+  constructor(operation: string, key: string, roomId: string) {
+    super(
+      `${operation} names the message ${key}, which is no longer in the timeline ` +
+        `of ${roomId}.`,
+    );
+    this.name = 'TimelineRowNotFoundError';
   }
 }
 
@@ -83,6 +105,9 @@ export class TimelineSource {
   #handle: AlloTimelineHandle | undefined;
   #opening: Promise<AlloTimelineHandle> | undefined;
   #watchingRuntime: AlloUnsubscribe | undefined;
+  #watchingTyping: AlloUnsubscribe | undefined;
+  /** The last event id a read receipt was sent for. See {@link markRead}. */
+  #receipted: string | undefined;
   /** See `roomListSource.ts`: invalidates callbacks from a superseded handle. */
   #generation = 0;
 
@@ -153,6 +178,99 @@ export class TimelineSource {
     await handle.sendText(body);
   };
 
+  /** Adds the viewer's reaction to a row, or takes it away. */
+  readonly toggleReaction = async (key: string, emoji: string): Promise<void> => {
+    const handle = await this.#require('Reacting to a message');
+    await handle.toggleReaction(this.#eventId('Reacting to a message', key), emoji);
+  };
+
+  /** Replaces the body of a row the viewer sent. */
+  readonly edit = async (key: string, body: string): Promise<void> => {
+    const handle = await this.#require('Editing a message');
+    await handle.edit(this.#eventId('Editing a message', key), body);
+  };
+
+  /**
+   * Removes a row's content.
+   *
+   * The row stays: a redaction leaves the event's skeleton standing and the
+   * timeline reports it with a `redacted` content kind. Nothing is removed from
+   * the snapshot here, and nothing should be — a row that vanished locally and
+   * stayed everywhere else would be a lie that survives until the next sync.
+   */
+  readonly redact = async (key: string, reason?: string): Promise<void> => {
+    const handle = await this.#require('Deleting a message');
+    await handle.redact(this.#eventId('Deleting a message', key), reason);
+  };
+
+  /**
+   * Tells the homeserver everything up to the newest row has been read.
+   *
+   * Safe to call on every render that might have changed the conversation: an
+   * event already receipted is not sent again, and a timeline whose newest row is
+   * still a local echo has nothing to receipt yet.
+   */
+  readonly markRead = async (): Promise<void> => {
+    const newest = this.#newestRemoteEventId();
+    if (newest === undefined || newest === this.#receipted) {
+      return;
+    }
+    const handle = await this.#require('Sending a read receipt');
+    // Recorded before the call rather than after it, so that a second render
+    // arriving while this one is in flight does not send the same receipt twice.
+    this.#receipted = newest;
+    try {
+      await handle.sendReadReceipt(newest);
+    } catch (error) {
+      // Let the next change try again: a receipt that never went out leaves the
+      // sender's bubble one tick short for good.
+      if (this.#receipted === newest) {
+        this.#receipted = undefined;
+      }
+      throw error;
+    }
+  };
+
+  /** Says whether the viewer is typing here. */
+  readonly sendTypingNotice = async (isTyping: boolean): Promise<void> => {
+    const handle = await this.#require('Sending a typing notice');
+    await handle.sendTypingNotice(isTyping);
+  };
+
+  /**
+   * The event id of a row, by the key the UI draws it with.
+   *
+   * Two ways to fail and they are different problems, so they are different
+   * errors: the row is gone, or the row is there and is still on its way out.
+   */
+  #eventId(operation: string, key: string): string {
+    const item = this.#snapshot.items.find((candidate) => candidate.key === key);
+    if (item === undefined) {
+      throw new TimelineRowNotFoundError(operation, key, this.#roomId);
+    }
+    if (item.id.kind !== 'remote') {
+      throw new MatrixEventNotSentError(operation, key);
+    }
+    return item.id.eventId;
+  }
+
+  /**
+   * The newest row the homeserver has accepted, if there is one.
+   *
+   * Searched from the end, because the rows this skips over — a message the user
+   * has just sent and its neighbours — are the only ones that can be local.
+   */
+  #newestRemoteEventId(): string | undefined {
+    const items = this.#snapshot.items;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const id = items[index].id;
+      if (id.kind === 'remote') {
+        return id.eventId;
+      }
+    }
+    return undefined;
+  }
+
   readonly #onRuntimeChanged = (): void => {
     if (this.#runtime.getState().phase === 'ready') {
       if (this.#handle === undefined && this.#opening === undefined) {
@@ -191,6 +309,11 @@ export class TimelineSource {
         }
         this.#handle = handle;
         this.#opening = undefined;
+        this.#watchingTyping = handle.observeTyping((typingUserIds) => {
+          if (generation === this.#generation) {
+            this.#publish({ typingUserIds });
+          }
+        });
         this.#publish({ isOpening: false });
         this.#publishItems(generation, handle.items());
         return handle;
@@ -210,6 +333,11 @@ export class TimelineSource {
   #drop(): void {
     this.#generation += 1;
     this.#opening = undefined;
+    this.#watchingTyping?.();
+    this.#watchingTyping = undefined;
+    // The receipt belongs to the handle that sent it. A session that came back
+    // has to be free to say again what it said before it went away.
+    this.#receipted = undefined;
     const handle = this.#handle;
     this.#handle = undefined;
     handle?.close();
@@ -238,7 +366,8 @@ export class TimelineSource {
       next.items === this.#snapshot.items &&
       next.isOpening === this.#snapshot.isOpening &&
       next.isPaginating === this.#snapshot.isPaginating &&
-      next.reachedStart === this.#snapshot.reachedStart
+      next.reachedStart === this.#snapshot.reachedStart &&
+      next.typingUserIds === this.#snapshot.typingUserIds
     ) {
       return;
     }

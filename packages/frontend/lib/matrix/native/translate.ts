@@ -19,6 +19,7 @@ import type {
   AlloEncryptionState,
   AlloEventContent,
   AlloEventKey,
+  AlloReaction,
   AlloRoomMembership,
   AlloRoomPreview,
   AlloRoomSummary,
@@ -136,11 +137,17 @@ export type TimelineEventFields = Pick<
   | 'timestamp'
   | 'isOwn'
   | 'localSendState'
+  | 'readReceipts'
 >;
 
 /**
  * @param key identity of the row within its timeline, from the SDK's own list
  * identity, so that a local echo and the remote event it becomes are one row.
+ *
+ * `isReadByOthers` is left `false` here and settled by the projection. It is the
+ * one field of a row that is not a function of that row: a receipt sitting on a
+ * later message is what says this one was read, so the answer needs the whole
+ * timeline and this function has one event. See `lib/matrix/readReceipts.ts`.
  */
 export function toTimelineItem(
   key: string,
@@ -157,7 +164,51 @@ export function toTimelineItem(
     isOwn: event.isOwn,
     sendState: toSendState(event.localSendState),
     content: toEventContent(event.content),
+    reactions: toReactions(event.content),
+    isReadByOthers: false,
   };
+}
+
+/**
+ * The user ids whose read receipt names this event.
+ *
+ * The binding hands over a map keyed by user id, and the keys are the whole
+ * answer: what each `Receipt` carries beyond that is a timestamp and a thread
+ * id, and neither changes whether the message was read.
+ */
+export function toReaders(
+  event: Pick<TimelineEventFields, 'readReceipts'>,
+): readonly string[] {
+  return [...event.readReceipts.keys()];
+}
+
+const NO_REACTIONS: readonly AlloReaction[] = [];
+
+/**
+ * The reactions on a row.
+ *
+ * Only message-like events carry them — a state event has no annotations — and
+ * the binding says so in the shape: `reactions` lives on `MsgLikeContent` and
+ * not on `TimelineItemContent`. Reactions on an undecryptable or redacted event
+ * survive, which is right: an emoji on a message this device cannot read is
+ * still a fact about the conversation.
+ */
+export function toReactions(content: TimelineItemContent): readonly AlloReaction[] {
+  if (content.tag !== TimelineItemContent_Tags.MsgLike) {
+    return NO_REACTIONS;
+  }
+  const reactions = content.inner.content.reactions;
+  if (reactions.length === 0) {
+    // The common case by a wide margin, and worth not allocating for: this runs
+    // once per row per batch, and a batch arrives on every event received.
+    return NO_REACTIONS;
+  }
+  return reactions.map((reaction) => ({
+    key: reaction.key,
+    // The binding carries a timestamp per sender that Allo has nothing to draw
+    // with, and one sender can appear only once per key.
+    senders: reaction.senders.map((sender) => sender.senderId),
+  }));
 }
 
 function toEventKey(id: EventTimelineItem['eventOrTransactionId']): AlloEventKey {

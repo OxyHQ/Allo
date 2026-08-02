@@ -1,9 +1,12 @@
 import {
   ClientBuilder,
+  EditedContent,
+  EventOrTransactionId,
   LogLevel,
   Membership,
   MessageType,
   OidcPrompt,
+  ReceiptType,
   RoomListEntriesDynamicFilterKind,
   RoomPreset,
   RoomVisibility,
@@ -406,9 +409,18 @@ class NativeAlloChatClient implements AlloChatClient {
   ): Promise<AlloTimelineHandle> {
     const room = this.#requireRoom(roomId, 'Opening a timeline');
     const timeline = await room.timeline();
-    const handle = new NativeTimelineHandle(timeline, onChange, () => {
-      this.#timelines.delete(handle);
-    });
+    // The room travels with the timeline because two of the handle's operations
+    // are the room's in the binding and not the timeline's: a typing notice is
+    // about the conversation, not about any event in it.
+    const handle = new NativeTimelineHandle(
+      timeline,
+      room,
+      this.#client.userId(),
+      onChange,
+      () => {
+        this.#timelines.delete(handle);
+      },
+    );
     await handle.attach();
     this.#timelines.add(handle);
     return handle;
@@ -578,21 +590,29 @@ class NativeRoomListHandle implements AlloRoomListHandle {
 
 class NativeTimelineHandle implements AlloTimelineHandle {
   readonly #timeline: TimelineLike;
+  readonly #room: RoomLike;
+  readonly #viewerUserId: string;
   readonly #onChange: (items: readonly AlloTimelineItem[]) => void;
   readonly #onClose: () => void;
   readonly #rows: TimelineItemLike[] = [];
   readonly #projection = new TimelineProjection();
+  readonly #typingListeners = new Set<(userIds: readonly string[]) => void>();
 
   #items: readonly AlloTimelineItem[] = [];
   #stream: TaskHandleLike | undefined;
+  #typingStream: TaskHandleLike | undefined;
   #closed = false;
 
   constructor(
     timeline: TimelineLike,
+    room: RoomLike,
+    viewerUserId: string,
     onChange: (items: readonly AlloTimelineItem[]) => void,
     onClose: () => void,
   ) {
     this.#timeline = timeline;
+    this.#room = room;
+    this.#viewerUserId = viewerUserId;
     this.#onChange = onChange;
     this.#onClose = onClose;
   }
@@ -632,6 +652,60 @@ class NativeTimelineHandle implements AlloTimelineHandle {
     );
   }
 
+  async toggleReaction(eventId: string, key: string): Promise<void> {
+    // One call for both directions: the binding looks up whether this account
+    // already annotated the event and either sends or redacts accordingly.
+    await this.#timeline.toggleReaction(toEventOrTransactionId(eventId), key);
+  }
+
+  async edit(eventId: string, body: string): Promise<void> {
+    await this.#timeline.edit(
+      toEventOrTransactionId(eventId),
+      // Text for the same reason `sendText` is text: an edit is the user typing
+      // again, and their asterisks are asterisks.
+      new EditedContent.RoomMessage({
+        content: messageEventContentNew(new MessageType.Text({ content: { body } })),
+      }),
+    );
+  }
+
+  async redact(eventId: string, reason: string | undefined): Promise<void> {
+    await this.#timeline.redactEvent(toEventOrTransactionId(eventId), reason);
+  }
+
+  async sendReadReceipt(eventId: string): Promise<void> {
+    // `Read` and not `ReadPrivate`: a read mark nobody else can see is one the
+    // sender's own bubble could never draw, and drawing it is the point.
+    await this.#timeline.sendReadReceipt(ReceiptType.Read, eventId);
+  }
+
+  async sendTypingNotice(isTyping: boolean): Promise<void> {
+    await this.#room.typingNotice(isTyping);
+  }
+
+  observeTyping(onChange: (userIds: readonly string[]) => void): AlloUnsubscribe {
+    this.#typingListeners.add(onChange);
+    // Subscribed on the first listener rather than in `attach`, so a conversation
+    // nobody is watching for typing costs no stream at all.
+    this.#typingStream ??= this.#room.subscribeToTypingNotifications({
+      call: (typingUserIds: string[]): void => {
+        // The viewer's own typing comes back down sync on some homeservers, and
+        // "you are typing" is not something to draw at the reader.
+        const others = typingUserIds.filter((userId) => userId !== this.#viewerUserId);
+        for (const listener of this.#typingListeners) {
+          listener(others);
+        }
+      },
+    });
+    return () => {
+      this.#typingListeners.delete(onChange);
+      if (this.#typingListeners.size === 0) {
+        this.#typingStream?.cancel();
+        this.#typingStream = undefined;
+      }
+    };
+  }
+
   close(): void {
     if (this.#closed) {
       return;
@@ -639,8 +713,23 @@ class NativeTimelineHandle implements AlloTimelineHandle {
     this.#closed = true;
     this.#stream?.cancel();
     this.#stream = undefined;
+    this.#typingStream?.cancel();
+    this.#typingStream = undefined;
+    this.#typingListeners.clear();
     this.#onClose();
   }
+}
+
+/**
+ * An event id in the shape the timeline addresses rows with.
+ *
+ * Always the `EventId` arm. The port's message operations take an event id and
+ * nothing else — see `AlloTimelineHandle` — so the transaction id arm, which is
+ * how the binding addresses a row still on its way out, is unreachable from here
+ * by construction.
+ */
+function toEventOrTransactionId(eventId: string): EventOrTransactionId {
+  return new EventOrTransactionId.EventId({ eventId });
 }
 
 /**

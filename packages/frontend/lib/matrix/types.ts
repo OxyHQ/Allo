@@ -181,7 +181,54 @@ export interface AlloTimelineItem {
   readonly isOwn: boolean;
   readonly sendState: AlloSendState;
   readonly content: AlloEventContent;
+  /** Empty when nobody has reacted. Never `undefined`. */
+  readonly reactions: readonly AlloReaction[];
+  /**
+   * Somebody other than the sender has read this row.
+   *
+   * A boolean and not a list of readers, because that is the question the bubble
+   * asks and because the honest list is not available: a Matrix receipt is a
+   * high-water mark, so the only thing known about a reader who has moved on is
+   * that they read *at least* this far. Reporting a list would invite a group
+   * conversation to draw "read by 2 of 5" out of numbers that do not mean that.
+   *
+   * The sender is excluded from their own count. Clients send a receipt for the
+   * message they have just sent, and letting that count would put the read mark
+   * on every outgoing message the instant it left.
+   */
+  readonly isReadByOthers: boolean;
 }
+
+/* ---------------------------------------------------------------------------
+ * Message operations
+ *
+ * Everything below to the end of this comment block is about acting on a message
+ * that already exists — reacting to it, editing it, removing it — and about the
+ * two signals that travel alongside a conversation rather than inside it: read
+ * receipts and typing notices. The calls themselves live on
+ * {@link AlloTimelineHandle}, for the same reason `sendText` does: they are
+ * operations on an open conversation, and in the Rust binding most of them are
+ * literally timeline methods.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * One emoji, and everybody who sent it.
+ *
+ * Senders and not a count, because the only two questions the UI asks are how
+ * many there are and whether the viewer is among them, and a count answers only
+ * the first. Matrix identifies a reaction by an arbitrary string — `key` in the
+ * spec — which is an emoji by convention and not by rule; it is passed through
+ * unchanged rather than validated, because a homeserver will happily carry one
+ * Allo cannot draw and dropping it would understate the count.
+ */
+export interface AlloReaction {
+  /** The reaction itself, usually a single emoji. */
+  readonly key: string;
+  /** Matrix user ids, without duplicates. */
+  readonly senders: readonly string[];
+}
+
+/* ------------------------------------------------------------------------- */
 
 /**
  * Who Allo says it is to the authorization server.
@@ -353,12 +400,20 @@ export interface AlloRoomListHandle {
 }
 
 /**
- * A live view of one conversation, plus the two operations that only make sense
- * with it open.
+ * A live view of one conversation, plus the operations that only make sense with
+ * it open.
  *
  * Sending lives here and not on the client because in the Rust binding sending
  * *is* a timeline operation — `Room` has no send method — and a message's local
- * echo belongs to the timeline that produced it.
+ * echo belongs to the timeline that produced it. The message operations below it
+ * followed for the same reason and one more: every one of them is something the
+ * user does to a message they are looking at, so a caller that can name the event
+ * necessarily has the timeline open.
+ *
+ * All of them take an **event id** rather than an {@link AlloEventKey}. A row
+ * still on its way out has no event id, and nothing here can act on one; see
+ * `MatrixEventNotSentError` in `errors.ts` for why both platforms refuse rather
+ * than one of them trying.
  */
 export interface AlloTimelineHandle {
   /** The current items, oldest first. The array is replaced, never mutated. */
@@ -367,6 +422,71 @@ export interface AlloTimelineHandle {
   paginateBackwards(count: number): Promise<AlloPaginationOutcome>;
   /** Sends plain text. The body is sent verbatim; it is not parsed as markdown. */
   sendText(body: string): Promise<void>;
+
+  /**
+   * Adds the viewer's reaction, or takes it away if it is already there.
+   *
+   * One call and not two, because the protocol operation is not symmetric —
+   * adding sends an `m.annotation`, removing redacts the one that was sent — and
+   * only the client holding the timeline knows which of its own annotations to
+   * redact. A caller that tried to choose would be choosing from a snapshot that
+   * may be one sync behind.
+   */
+  toggleReaction(eventId: string, key: string): Promise<void>;
+
+  /**
+   * Replaces the body of a message the viewer sent.
+   *
+   * The original event stays on the homeserver and this is a new event pointing
+   * at it, which is why the row keeps its identity and its timestamp and only
+   * `isEdited` changes.
+   */
+  edit(eventId: string, body: string): Promise<void>;
+
+  /**
+   * Removes an event's content, which is what Matrix has instead of deleting.
+   *
+   * **The row does not go away.** A redaction strips the content and leaves the
+   * skeleton — sender, timestamp, position — standing, on this device and on
+   * everyone else's, and that is the protocol working rather than failing. It is
+   * why {@link AlloEventContent} has a `redacted` state at all: the UI has to be
+   * able to draw "this was deleted" and it must not draw it as an empty bubble
+   * or, worse, drop the row and renumber the conversation under the reader.
+   *
+   * `reason` is sent to the homeserver and is visible to everyone in the room.
+   */
+  redact(eventId: string, reason: string | undefined): Promise<void>;
+
+  /**
+   * Tells the homeserver the viewer has read up to and including this event.
+   *
+   * A Matrix receipt is a high-water mark, not a per-message flag: it names one
+   * event and covers everything before it. Sending one for an event older than
+   * the last one sent is therefore not an error and not a correction — the
+   * homeserver keeps the newer mark — so a caller may send freely as the reader
+   * scrolls.
+   */
+  sendReadReceipt(eventId: string): Promise<void>;
+
+  /**
+   * Says whether the viewer is typing in this room.
+   *
+   * The homeserver expires the notice on its own after a few seconds, so `true`
+   * has to be repeated while the user keeps typing and `false` is a courtesy
+   * rather than a requirement. Nothing is retried: a typing notice that did not
+   * arrive is worth nothing by the time it could be sent again.
+   */
+  sendTypingNotice(isTyping: boolean): Promise<void>;
+
+  /**
+   * Reports who else is typing in this room, whenever it changes.
+   *
+   * Changes only, and the viewer is never in the list. The state before the
+   * first call is nobody: a room nobody has typed in reports nothing, and there
+   * is nothing to report anyway.
+   */
+  observeTyping(onChange: (userIds: readonly string[]) => void): AlloUnsubscribe;
+
   close(): void;
 }
 

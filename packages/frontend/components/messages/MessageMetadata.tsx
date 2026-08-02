@@ -6,12 +6,26 @@ import { colors } from '@/styles/colors';
 import { MsgDblCheckIcon } from '@/assets/icons/msgdblcheck-icon';
 import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
 import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
+import { MsgFailedIcon } from '@/assets/icons/msgfailed-icon';
+import { statusMark, type MessageStatusMark } from '@/components/messages/messageStatus';
+import type { MessageReadStatus } from '@/stores/messagesStore';
+
+/** The picture for each mark. Which mark a status gets is `messageStatus.ts`. */
+const MARK_ICONS: Record<
+  MessageStatusMark,
+  (props: { size: number; color: string }) => React.ReactElement
+> = {
+  clock: MsgPendingIcon,
+  tick: MsgCheckIcon,
+  'double-tick': MsgDblCheckIcon,
+  error: MsgFailedIcon,
+};
 
 export interface MessageMetadataProps {
   timestamp: Date;
   isSent?: boolean;
   isEdited?: boolean;
-  readStatus?: 'pending' | 'sent' | 'delivered' | 'read';
+  readStatus?: MessageReadStatus;
   showTimestamp?: boolean;
   variant?: 'default' | 'bubble';
 }
@@ -88,6 +102,12 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   }), [isBubbleVariant, isSent, theme, timestampColor]);
 
   const readIndicatorColor = useMemo(() => {
+    // A failure is the one status that keeps its own colour inside a bubble.
+    // Everything else on that background is deliberately quiet, and a mark the
+    // user is meant to act on cannot be.
+    if (readStatus === 'failed') {
+      return theme.colors.error;
+    }
     if (isBubbleVariant) {
       return timestampColor;
     }
@@ -100,19 +120,9 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   const statusIcon = useMemo(() => {
     if (!isSent || !readStatus) return null;
     const iconSize = isBubbleVariant ? MESSAGING_CONSTANTS.TIMESTAMP_SIZE : MESSAGING_CONSTANTS.TIMESTAMP_SIZE + 2;
-    const commonProps = { size: iconSize, color: readIndicatorColor };
+    const Icon = MARK_ICONS[statusMark(readStatus)];
 
-    switch (readStatus) {
-      case 'read':
-        return <MsgDblCheckIcon {...commonProps} />;
-      case 'delivered':
-        return <MsgCheckIcon {...commonProps} />;
-      case 'sent':
-        return <MsgCheckIcon {...commonProps} />;
-      case 'pending':
-      default:
-        return <MsgPendingIcon {...commonProps} />;
-    }
+    return <Icon size={iconSize} color={readIndicatorColor} />;
   }, [isBubbleVariant, isSent, readStatus, readIndicatorColor]);
 
   if (!showTimestamp) {

@@ -30,7 +30,7 @@ import type {
 
 const ROOM = '!room:allo.you';
 
-function event(key: string): AlloTimelineItem {
+function event(key: string, overrides: Partial<AlloTimelineItem> = {}): AlloTimelineItem {
   return {
     key,
     id: { kind: 'remote', eventId: `$${key}` },
@@ -40,18 +40,37 @@ function event(key: string): AlloTimelineItem {
     isOwn: false,
     sendState: 'sent',
     content: { kind: 'text', body: key, isEdited: false },
+    reactions: [],
+    isReadByOthers: false,
+    ...overrides,
   };
+}
+
+/** A row the homeserver has not accepted yet: addressable only by transaction id. */
+function localEcho(key: string): AlloTimelineItem {
+  return event(key, {
+    id: { kind: 'local', transactionId: `txn-${key}` },
+    sendState: 'pending',
+    isOwn: true,
+  });
 }
 
 class FakeTimeline implements AlloTimelineHandle {
   closes = 0;
   paginateCalls: number[] = [];
   sent: string[] = [];
+  reacted: { eventId: string; key: string }[] = [];
+  edited: { eventId: string; body: string }[] = [];
+  redacted: { eventId: string; reason: string | undefined }[] = [];
+  receipted: string[] = [];
+  typingNotices: boolean[] = [];
+  typingUnsubscribes = 0;
   outcome: AlloPaginationOutcome = 'more-available';
   /** When set, `paginateBackwards` waits for {@link releasePagination}. */
   #pendingPagination: (() => void) | undefined;
   #holdPagination = false;
   #items: readonly AlloTimelineItem[] = [];
+  #typingListeners = new Set<(userIds: readonly string[]) => void>();
 
   constructor(private readonly onChange: (items: readonly AlloTimelineItem[]) => void) {}
 
@@ -62,6 +81,12 @@ class FakeTimeline implements AlloTimelineHandle {
   publish(items: readonly AlloTimelineItem[]): void {
     this.#items = items;
     this.onChange(items);
+  }
+
+  publishTyping(userIds: readonly string[]): void {
+    for (const listener of this.#typingListeners) {
+      listener(userIds);
+    }
   }
 
   holdPagination(): void {
@@ -86,6 +111,34 @@ class FakeTimeline implements AlloTimelineHandle {
 
   async sendText(body: string): Promise<void> {
     this.sent.push(body);
+  }
+
+  async toggleReaction(eventId: string, key: string): Promise<void> {
+    this.reacted.push({ eventId, key });
+  }
+
+  async edit(eventId: string, body: string): Promise<void> {
+    this.edited.push({ eventId, body });
+  }
+
+  async redact(eventId: string, reason: string | undefined): Promise<void> {
+    this.redacted.push({ eventId, reason });
+  }
+
+  async sendReadReceipt(eventId: string): Promise<void> {
+    this.receipted.push(eventId);
+  }
+
+  async sendTypingNotice(isTyping: boolean): Promise<void> {
+    this.typingNotices.push(isTyping);
+  }
+
+  observeTyping(onChange: (userIds: readonly string[]) => void): AlloUnsubscribe {
+    this.#typingListeners.add(onChange);
+    return () => {
+      this.#typingListeners.delete(onChange);
+      this.typingUnsubscribes += 1;
+    };
   }
 
   close(): void {
@@ -445,6 +498,239 @@ describe('TimelineSource sending', () => {
     const { source } = readyTimeline();
 
     await expect(source.sendText('hello')).rejects.toThrow(ROOM);
+  });
+});
+
+describe('TimelineSource message operations', () => {
+  async function watching(): Promise<{ runtime: FakeRuntime; source: TimelineSource }> {
+    const ready = readyTimeline();
+    ready.source.subscribe(() => {});
+    await settle();
+    return ready;
+  }
+
+  it('resolves the key the UI draws with into the event id the port wants', async () => {
+    // The UI holds `Message.id`, which is the row key. Handing that to the
+    // homeserver would address an event that does not exist.
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+
+    await source.toggleReaction('row-1', '👍');
+
+    expect(runtime.chatClient.timelines[0].reacted).toEqual([{ eventId: '$row-1', key: '👍' }]);
+  });
+
+  it('edits by event id', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+
+    await source.edit('row-1', 'fixed');
+
+    expect(runtime.chatClient.timelines[0].edited).toEqual([
+      { eventId: '$row-1', body: 'fixed' },
+    ]);
+  });
+
+  it('redacts by event id, with no reason unless one is given', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+
+    await source.redact('row-1');
+
+    expect(runtime.chatClient.timelines[0].redacted).toEqual([
+      { eventId: '$row-1', reason: undefined },
+    ]);
+  });
+
+  it('leaves the redacted row in the timeline', async () => {
+    // The mistake this holds down. A redaction is not a deletion: the event keeps
+    // its place, its sender and its time on every client in the room, and the
+    // port reports it with a `redacted` content kind. Dropping the row here would
+    // renumber the conversation under the reader and disagree with every other
+    // device until the next sync — and then disagree with itself.
+    const { runtime, source } = await watching();
+    const rows = [event('row-1'), event('row-2')];
+    runtime.chatClient.timelines[0].publish(rows);
+
+    await source.redact('row-1');
+
+    expect(source.getSnapshot().items).toBe(rows);
+    expect(source.getSnapshot().items.map((item) => item.key)).toEqual(['row-1', 'row-2']);
+  });
+
+  it('refuses to act on a message the homeserver has not accepted', async () => {
+    // A local echo has no event id at all. Sending its transaction id would
+    // address nothing, and the native SDK's ability to do slightly better is not
+    // worth two platforms disagreeing about which taps work.
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([localEcho('row-1')]);
+
+    await expect(source.toggleReaction('row-1', '👍')).rejects.toThrow('has not been accepted');
+    expect(runtime.chatClient.timelines[0].reacted).toEqual([]);
+  });
+
+  it('says which message it could not find when the row is gone', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+
+    await expect(source.edit('row-9', 'fixed')).rejects.toThrow('row-9');
+  });
+});
+
+describe('TimelineSource read receipts', () => {
+  async function watching(): Promise<{ runtime: FakeRuntime; source: TimelineSource }> {
+    const ready = readyTimeline();
+    ready.source.subscribe(() => {});
+    await settle();
+    return ready;
+  }
+
+  it('receipts the newest row', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1'), event('row-2')]);
+
+    await source.markRead();
+
+    expect(runtime.chatClient.timelines[0].receipted).toEqual(['$row-2']);
+  });
+
+  it('does not send the same receipt twice', async () => {
+    // Called from a render, so it runs whenever anything about the conversation
+    // changes: a reaction, a scroll, a redraw. Every one of those would otherwise
+    // be a request to the homeserver.
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+
+    await source.markRead();
+    await source.markRead();
+    await source.markRead();
+
+    expect(runtime.chatClient.timelines[0].receipted).toEqual(['$row-1']);
+  });
+
+  it('receipts again once a newer message arrives', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1')]);
+    await source.markRead();
+
+    runtime.chatClient.timelines[0].publish([event('row-1'), event('row-2')]);
+    await source.markRead();
+
+    expect(runtime.chatClient.timelines[0].receipted).toEqual(['$row-1', '$row-2']);
+  });
+
+  it('skips over a message of the viewer’s own that has not been sent', async () => {
+    // The newest row right after sending is a local echo with no event id.
+    // Receipting the newest *remote* one keeps the mark moving.
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([event('row-1'), localEcho('row-2')]);
+
+    await source.markRead();
+
+    expect(runtime.chatClient.timelines[0].receipted).toEqual(['$row-1']);
+  });
+
+  it('sends nothing for a conversation with no remote messages', async () => {
+    const { runtime, source } = await watching();
+    runtime.chatClient.timelines[0].publish([localEcho('row-1')]);
+
+    await source.markRead();
+
+    expect(runtime.chatClient.timelines[0].receipted).toEqual([]);
+  });
+
+  it('tries again after a receipt that failed to go out', async () => {
+    // Otherwise one refusal from the homeserver leaves the sender's bubble one
+    // tick short for the rest of the conversation.
+    const { runtime, source } = await watching();
+    const timeline = runtime.chatClient.timelines[0];
+    timeline.publish([event('row-1')]);
+    timeline.sendReadReceipt = async () => {
+      throw new Error('the homeserver said no');
+    };
+
+    await expect(source.markRead()).rejects.toThrow('the homeserver said no');
+
+    timeline.sendReadReceipt = async (eventId: string) => {
+      timeline.receipted.push(eventId);
+    };
+    await source.markRead();
+
+    expect(timeline.receipted).toEqual(['$row-1']);
+  });
+
+  it('sends nothing for a conversation nothing is watching', async () => {
+    // Not an error: a screen that unmounted while a render was in flight is
+    // ordinary, and there is nothing a reader could do about it either way.
+    const { source } = readyTimeline();
+
+    await expect(source.markRead()).resolves.toBeUndefined();
+  });
+});
+
+describe('TimelineSource typing', () => {
+  it('reports who else is typing', async () => {
+    const { runtime, source } = readyTimeline();
+    source.subscribe(() => {});
+    await settle();
+
+    runtime.chatClient.timelines[0].publishTyping(['@bea:allo.you']);
+
+    expect(source.getSnapshot().typingUserIds).toEqual(['@bea:allo.you']);
+  });
+
+  it('notifies its watchers when typing changes', async () => {
+    const { runtime, source } = readyTimeline();
+    let notifications = 0;
+    source.subscribe(() => {
+      notifications += 1;
+    });
+    await settle();
+    notifications = 0;
+
+    runtime.chatClient.timelines[0].publishTyping(['@bea:allo.you']);
+
+    expect(notifications).toBe(1);
+  });
+
+  it('says nobody is typing in a conversation that has just been opened', async () => {
+    const { source } = readyTimeline();
+    source.subscribe(() => {});
+    await settle();
+
+    expect(source.getSnapshot().typingUserIds).toEqual([]);
+  });
+
+  it('forgets who was typing when the session goes away', async () => {
+    const { runtime, source } = readyTimeline();
+    source.subscribe(() => {});
+    await settle();
+    runtime.chatClient.timelines[0].publishTyping(['@bea:allo.you']);
+
+    runtime.become('signed-out');
+
+    expect(source.getSnapshot().typingUserIds).toEqual([]);
+  });
+
+  it('stops listening for typing when the timeline closes', async () => {
+    const { runtime, source } = readyTimeline();
+    const unsubscribe = source.subscribe(() => {});
+    await settle();
+
+    unsubscribe();
+
+    expect(runtime.chatClient.timelines[0].typingUnsubscribes).toBe(1);
+  });
+
+  it('passes the viewer’s own typing through to the port', async () => {
+    const { runtime, source } = readyTimeline();
+    source.subscribe(() => {});
+    await settle();
+
+    await source.sendTypingNotice(true);
+    await source.sendTypingNotice(false);
+
+    expect(runtime.chatClient.timelines[0].typingNotices).toEqual([true, false]);
   });
 });
 
