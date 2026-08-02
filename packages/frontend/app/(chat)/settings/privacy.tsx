@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';
 import { ThemedView } from '@/components/ThemedView';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
@@ -145,154 +146,44 @@ export default function PrivacySettingsScreen() {
                 contentContainerClassName="px-4 pt-5 pb-6"
                 showsVerticalScrollIndicator={false}
             >
-                {/* Privacy settings card */}
-                <View
-                    className="rounded-2xl border overflow-hidden"
-                    style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
-                >
-                    {/* Private profile */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4 pt-4.5"
+                <SettingsListGroup>
+                    <SettingsListItem
+                        icon={<IconComponent name="lock-closed" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.privateProfile')}
+                        value={getProfileVisibilityText()}
                         onPress={handlePrivateProfilePress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="lock-closed" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.privateProfile')}
-                                </Text>
-                            </View>
-                        </View>
-                        <View className="flex-row items-center gap-2">
-                            <Text className="text-sm font-medium" style={{ color: theme.colors.textSecondary }}>
-                                {getProfileVisibilityText()}
-                            </Text>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </View>
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Tags and allos */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="at" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.tagsAndallos')}
                         onPress={handleTagsallosPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="at" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.tagsAndallos')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Online status */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="ellipse" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.onlineStatus')}
                         onPress={handleOnlineStatusPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="ellipse" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.onlineStatus')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Restricted profiles */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="people" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.restrictedProfiles')}
                         onPress={handleRestrictedProfilesPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="people" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.restrictedProfiles')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Blocked profiles */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="close-circle" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.blockedProfiles')}
                         onPress={handleBlockedProfilesPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="close-circle" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.blockedProfiles')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Hidden Words */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="eye-off" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.hiddenWords')}
                         onPress={handleHiddenWordsPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="eye-off" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.hiddenWords')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-
-                    <View className="h-[1px] mx-4" style={{ backgroundColor: theme.colors.border }} />
-
-                    {/* Hide like and share counts */}
-                    <TouchableOpacity
-                        className="flex-row items-center justify-between px-4 py-4 pb-4.5"
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="heart-outline" size={20} color={theme.colors.text} />}
+                        title={t('settings.privacy.hideLikeShareCounts')}
                         onPress={handleHideLikeShareCountsPress}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="heart-outline" size={20} color={theme.colors.text} />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-base font-medium" style={{ color: theme.colors.text }}>
-                                    {t('settings.privacy.hideLikeShareCounts')}
-                                </Text>
-                            </View>
-                        </View>
-                        <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                    </TouchableOpacity>
-                </View>
+                    />
+                </SettingsListGroup>
             </ScrollView>
         </ThemedView>
     );

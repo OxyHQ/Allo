@@ -8,7 +8,6 @@ import React, { memo, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { MenuProvider } from 'react-native-popup-menu';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -66,19 +65,17 @@ export const AppProviders = memo(function AppProviders({
           <OxyProvider baseURL={OXY_BASE_URL} clientId={OXY_CLIENT_ID}>
             <MediaResolverProvider>
               <I18nextProvider i18n={i18n}>
-                <BottomSheetModalProvider>
-                  <BottomSheetProvider>
-                    <MenuProvider>
-                      <ErrorBoundary>
-                        <HomeRefreshProvider>
-                          {children}
-                          <ConnectionStatusToasts />
-                          <StatusBar style="auto" />
-                        </HomeRefreshProvider>
-                      </ErrorBoundary>
-                    </MenuProvider>
-                  </BottomSheetProvider>
-                </BottomSheetModalProvider>
+                <BottomSheetProvider>
+                  <MenuProvider>
+                    <ErrorBoundary>
+                      <HomeRefreshProvider>
+                        {children}
+                        <ConnectionStatusToasts />
+                        <StatusBar style="auto" />
+                      </HomeRefreshProvider>
+                    </ErrorBoundary>
+                  </MenuProvider>
+                </BottomSheetProvider>
               </I18nextProvider>
             </MediaResolverProvider>
           </OxyProvider>

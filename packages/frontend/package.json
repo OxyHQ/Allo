@@ -48,7 +48,6 @@
     "@babel/plugin-transform-export-namespace-from": "^7.27.1",
     "@bitdrift/react-native": "^0.12.12",
     "@expo/vector-icons": "^15.1.1",
-    "@gorhom/bottom-sheet": "^5.2.14",
     "@legendapp/list": "^3.3.2",
     "@matrix-org/matrix-sdk-crypto-wasm": "^18.4.0",
     "@noble/ciphers": "^2.2.0",

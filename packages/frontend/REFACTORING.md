@@ -62,7 +62,7 @@ components/
 ├── Compose/           # Compose-related sheets and tools
 ├── common/            # Common/shared UI components
 ├── ui/                # Base UI primitives
-├── shared/            # Shared components (EmptyState, LoadingFallback)
+├── shared/            # Shared components (EmptyState)
 ├── providers/         # App providers and configuration
 └── ... (other root components)
 ```

@@ -13,7 +13,7 @@ import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { router, type Href } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/hooks/useTheme';
 import { useMessagePreferencesStore } from '@/stores';
@@ -22,8 +22,6 @@ import { MessageBubble } from '@/components/messages/MessageBubble';
 import { LogoIcon } from '@/assets/logo';
 import { COLOR_THEMES } from '@/styles/colorThemes';
 import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
-
-const IconComponent = Ionicons;
 
 // App icon options (visual only for now)
 const APP_ICONS = [
@@ -251,33 +249,24 @@ export default function AppearanceSettingsScreen() {
         </ScrollView>
 
         {/* Chat Background + Auto-Night Mode */}
-        <View
-          className="rounded-2xl border overflow-hidden"
-          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
-        >
-          <TouchableOpacity
-            className={`flex-row items-center justify-between ${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal}`}
+        <SettingsListGroup>
+          <SettingsListItem
+            title="Chat Background"
             onPress={() => router.push('/settings/chat-background' as Href)}
-          >
-            <Text className="text-base" style={{ color: theme.colors.text }}>
-              Chat Background
-            </Text>
-            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-          </TouchableOpacity>
-          <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-          <View className={`flex-row items-center justify-between ${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal}`}>
-            <Text className="text-base" style={{ color: theme.colors.text }}>
-              Auto-Night Mode
-            </Text>
-            <Switch
-              value={autoNightMode}
-              onValueChange={setAutoNightMode}
-              trackColor={{ false: theme.colors.border, true: selectedColorTheme.primaryColor }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor={theme.colors.border}
-            />
-          </View>
-        </View>
+          />
+          <SettingsListItem
+            title="Auto-Night Mode"
+            rightElement={
+              <Switch
+                value={autoNightMode}
+                onValueChange={setAutoNightMode}
+                trackColor={{ false: theme.colors.border, true: selectedColorTheme.primaryColor }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor={theme.colors.border}
+              />
+            }
+          />
+        </SettingsListGroup>
 
         {/* TEXT SIZE */}
         <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>

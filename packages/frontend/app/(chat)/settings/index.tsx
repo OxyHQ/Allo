@@ -9,6 +9,7 @@ import { useOxy } from "@oxyhq/services";
 import { useTranslation } from "react-i18next";
 
 import { Ionicons } from "@expo/vector-icons";
+import { SettingsListGroup, SettingsListItem } from "@oxyhq/bloom/settings-list";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { LogoIcon } from "@/assets/logo";
@@ -72,6 +73,30 @@ export default function SettingsScreen() {
     );
     const leftActionDescription = swipeActionOptions.find(option => option.value === leftSwipeAction)?.description;
     const rightActionDescription = swipeActionOptions.find(option => option.value === rightSwipeAction)?.description;
+
+    const cloudSyncEnabled = useMessagesStore((state) => state.cloudSyncEnabled);
+    const deviceKeysInitialized = useDeviceKeysStore((state) => state.isInitialized);
+    // deviceId is a number; format it here because the row renders a string.
+    // Compared against undefined rather than truthiness so device 0 still reads
+    // as initialized.
+    const deviceId = useDeviceKeysStore((state) =>
+        state.deviceKeys?.deviceId !== undefined
+            ? String(state.deviceKeys.deviceId)
+            : 'Not initialized'
+    );
+
+    const onToggleCloudSync = useCallback(async (enabled: boolean) => {
+        useMessagesStore.getState().setCloudSyncEnabled(enabled);
+        try {
+            await authenticatedClient.put('/profile/settings', {
+                security: {
+                    cloudSyncEnabled: enabled,
+                },
+            });
+        } catch (error) {
+            console.error('Error updating cloud sync setting:', error);
+        }
+    }, []);
 
     // Determine Expo SDK/version information with safe fallbacks
     const expoSdkVersion =
@@ -307,13 +332,15 @@ export default function SettingsScreen() {
                 contentContainerClassName={`px-${SPACING.screen.horizontal} pt-${SPACING.screen.vertical} pb-${SPACING.content.gapLarge}`}
                 showsVerticalScrollIndicator={false}
             >
-                {/* User Info */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t("settings.sections.account")}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
+                {/*
+                  The two account rows keep their own markup: they lead with a
+                  40px avatar disc, and SettingsListItem's icon slot is a fixed
+                  20x20 box that a disc that size would spill out of. The group
+                  around them is Bloom's, so the card matches every other section.
+                */}
+                <SettingsListGroup title={t("settings.sections.account")}>
                         <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => showBottomSheet?.("ManageAccount")}
                         >
                             <View className={`w-10 h-10 rounded-full items-center justify-center mr-${SPACING.item.iconMargin}`} style={{ backgroundColor: theme.colors.primary }}>
@@ -333,9 +360,8 @@ export default function SettingsScreen() {
                             </View>
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
                         <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
+                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
                             onPress={() => showBottomSheet?.("FileManagement")}
                         >
                             <View className={`w-10 h-10 rounded-full items-center justify-center mr-${SPACING.item.iconMargin}`} style={{ backgroundColor: theme.colors.primary }}>
@@ -355,146 +381,63 @@ export default function SettingsScreen() {
                             </View>
                             <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
                         </TouchableOpacity>
-                    </View>
-                </View>
+                </SettingsListGroup>
 
                 {/* About allo */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.aboutallo')}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        {/* App Title and Version */}
-                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <LogoIcon size={20} color={theme.colors.primary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.appName')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.aboutallo.version', {
-                                            version: Constants.expoConfig?.version || '1.0.0',
-                                        })}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Build Info */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="hammer" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.build')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {typeof Constants.expoConfig?.runtimeVersion === 'string'
-                                            ? Constants.expoConfig.runtimeVersion
-                                            : t('settings.aboutallo.buildVersion')}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Platform Info */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent
-                                        name="phone-portrait"
-                                        size={20}
-                                        color={theme.colors.textSecondary}
-                                    />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.platform')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {Constants.platform?.ios
-                                            ? 'iOS'
-                                            : Constants.platform?.android
-                                                ? 'Android'
-                                                : 'Web'}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Oxy SDK */}
-                        <TouchableOpacity className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`} onPress={() => showBottomSheet?.('AppInfo')}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.oxySDK')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{oxySdkVersion}</Text>
-                                </View>
-                            </View>
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Expo SDK */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.expoSDK')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{expoSdkVersion}</Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* API URL (from env/config) */}
-                        <View className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="globe" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.aboutallo.apiUrl')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{apiUrl}</Text>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </View>
+                <SettingsListGroup title={t('settings.sections.aboutallo')}>
+                    <SettingsListItem
+                        icon={<LogoIcon size={20} color={theme.colors.primary} />}
+                        title={t('settings.aboutallo.appName')}
+                        description={t('settings.aboutallo.version', {
+                            version: Constants.expoConfig?.version || '1.0.0',
+                        })}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="hammer" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.aboutallo.build')}
+                        description={
+                            typeof Constants.expoConfig?.runtimeVersion === 'string'
+                                ? Constants.expoConfig.runtimeVersion
+                                : t('settings.aboutallo.buildVersion')
+                        }
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="phone-portrait" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.aboutallo.platform')}
+                        description={
+                            Constants.platform?.ios
+                                ? 'iOS'
+                                : Constants.platform?.android
+                                    ? 'Android'
+                                    : 'Web'
+                        }
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.aboutallo.oxySDK')}
+                        description={oxySdkVersion}
+                        onPress={() => showBottomSheet?.('AppInfo')}
+                        showChevron={false}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="code-slash" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.aboutallo.expoSDK')}
+                        description={expoSdkVersion}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="globe" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.aboutallo.apiUrl')}
+                        description={apiUrl}
+                    />
+                </SettingsListGroup>
 
                 {/* Conversation Swipes */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>
-                        {t('settings.sections.conversations', 'Conversations')}
-                    </Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="swap-horizontal" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        {t('settings.conversations.swipeTitle', 'Swipe actions')}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.conversations.swipeSubtitle', 'Choose what happens when you swipe chats.')}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
+                <SettingsListGroup title={t('settings.sections.conversations', 'Conversations')}>
+                        <SettingsListItem
+                            icon={<IconComponent name="swap-horizontal" size={20} color={theme.colors.textSecondary} />}
+                            title={t('settings.conversations.swipeTitle', 'Swipe actions')}
+                            description={t('settings.conversations.swipeSubtitle', 'Choose what happens when you swipe chats.')}
+                        />
 
                         <View className={`px-${SPACING.item.paddingHorizontal} py-${SPACING.item.paddingVertical}`}>
                             <Text className={`text-[13px] font-semibold mb-${SPACING.content.gap} uppercase`} style={{ color: theme.colors.text }}>
@@ -532,8 +475,6 @@ export default function SettingsScreen() {
                             )}
                         </View>
 
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
                         <View className={`px-${SPACING.item.paddingHorizontal} py-${SPACING.item.paddingVertical} pb-${SPACING.item.paddingVertical}`}>
                             <Text className={`text-[13px] font-semibold mb-${SPACING.content.gap} uppercase`} style={{ color: theme.colors.text }}>
                                 {t('settings.conversations.rightSwipe', 'Right swipe')}
@@ -569,447 +510,201 @@ export default function SettingsScreen() {
                                 </Text>
                             )}
                         </View>
-                    </View>
-                </View>
+                </SettingsListGroup>
 
                 {/* Support & Feedback */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.supportFeedback')}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={() => {
-                                Alert.alert(
-                                    t('settings.supportFeedback.helpSupport'),
-                                    t('settings.supportFeedback.helpSupportMessage'),
-                                    [{ text: t('common.ok') }],
-                                );
-                            }}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="help-circle" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.supportFeedback.helpSupport')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.supportFeedback.helpSupportDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={() => {
-                                Alert.alert(
-                                    t('settings.supportFeedback.sendFeedback'),
-                                    t('settings.supportFeedback.sendFeedbackMessage'),
-                                    [
-                                        { text: t('common.cancel'), style: 'cancel' },
-                                        {
-                                            text: t('common.sendFeedback'),
-                                            onPress: () => {
-                                                Alert.alert(
-                                                    t('common.success'),
-                                                    t('settings.supportFeedback.sendFeedbackThankYou'),
-                                                );
-                                            },
+                <SettingsListGroup title={t('settings.sections.supportFeedback')}>
+                    <SettingsListItem
+                        icon={<IconComponent name="help-circle" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.supportFeedback.helpSupport')}
+                        description={t('settings.supportFeedback.helpSupportDesc')}
+                        onPress={() => {
+                            Alert.alert(
+                                t('settings.supportFeedback.helpSupport'),
+                                t('settings.supportFeedback.helpSupportMessage'),
+                                [{ text: t('common.ok') }],
+                            );
+                        }}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="chatbubble" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.supportFeedback.sendFeedback')}
+                        description={t('settings.supportFeedback.sendFeedbackDesc')}
+                        onPress={() => {
+                            Alert.alert(
+                                t('settings.supportFeedback.sendFeedback'),
+                                t('settings.supportFeedback.sendFeedbackMessage'),
+                                [
+                                    { text: t('common.cancel'), style: 'cancel' },
+                                    {
+                                        text: t('common.sendFeedback'),
+                                        onPress: () => {
+                                            Alert.alert(
+                                                t('common.success'),
+                                                t('settings.supportFeedback.sendFeedbackThankYou'),
+                                            );
                                         },
-                                    ],
-                                );
-                            }}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="chatbubble" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        {t('settings.supportFeedback.sendFeedback')}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.supportFeedback.sendFeedbackDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={() => {
-                                Alert.alert(
-                                    t('settings.supportFeedback.rateApp'),
-                                    t('settings.supportFeedback.rateAppMessage'),
-                                    [
-                                        { text: t('common.maybeLater'), style: 'cancel' },
-                                        {
-                                            text: t('common.rateNow'),
-                                            onPress: () => {
-                                                Alert.alert(
-                                                    t('common.success'),
-                                                    t('settings.supportFeedback.rateAppThankYou'),
-                                                );
-                                            },
+                                    },
+                                ],
+                            );
+                        }}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="star" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.supportFeedback.rateApp')}
+                        description={t('settings.supportFeedback.rateAppDesc')}
+                        onPress={() => {
+                            Alert.alert(
+                                t('settings.supportFeedback.rateApp'),
+                                t('settings.supportFeedback.rateAppMessage'),
+                                [
+                                    { text: t('common.maybeLater'), style: 'cancel' },
+                                    {
+                                        text: t('common.rateNow'),
+                                        onPress: () => {
+                                            Alert.alert(
+                                                t('common.success'),
+                                                t('settings.supportFeedback.rateAppThankYou'),
+                                            );
                                         },
-                                    ],
-                                );
-                            }}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="star" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.supportFeedback.rateApp')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.supportFeedback.rateAppDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                                    },
+                                ],
+                            );
+                        }}
+                    />
+                </SettingsListGroup>
 
                 {/* Privacy */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.privacy')}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={() => router.push('/settings/privacy')}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        {t('settings.privacy.title')}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.privacy.description')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <SettingsListGroup title={t('settings.sections.privacy')}>
+                    <SettingsListItem
+                        icon={<IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.privacy.title')}
+                        description={t('settings.privacy.description')}
+                        onPress={() => router.push('/settings/privacy')}
+                    />
+                </SettingsListGroup>
 
                 {/* Security & Encryption */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>Security & Encryption</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        {/* Cloud Sync */}
-                        <View className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="cloud-outline" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        Cloud Sync
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        Enable cloud backup and sync (device-first by default)
-                                    </Text>
-                                </View>
-                            </View>
+                <SettingsListGroup title="Security & Encryption">
+                    <SettingsListItem
+                        icon={<IconComponent name="cloud-outline" size={20} color={theme.colors.textSecondary} />}
+                        title="Cloud Sync"
+                        description="Enable cloud backup and sync (device-first by default)"
+                        rightElement={
                             <Toggle
-                                value={useMessagesStore((state) => state.cloudSyncEnabled)}
-                                onValueChange={async (enabled) => {
-                                    useMessagesStore.getState().setCloudSyncEnabled(enabled);
-                                    try {
-                                        await authenticatedClient.put('/profile/settings', {
-                                            security: {
-                                                cloudSyncEnabled: enabled,
-                                            },
-                                        });
-                                    } catch (error) {
-                                        console.error('Error updating cloud sync setting:', error);
-                                    }
-                                }}
+                                value={cloudSyncEnabled}
+                                onValueChange={onToggleCloudSync}
                             />
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Encryption Status */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        Signal Protocol Encryption
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {useDeviceKeysStore((state) => state.isInitialized)
-                                            ? 'End-to-end encryption enabled'
-                                            : 'Initializing encryption...'}
-                                    </Text>
-                                </View>
-                            </View>
+                        }
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />}
+                        title="Signal Protocol Encryption"
+                        description={
+                            deviceKeysInitialized
+                                ? 'End-to-end encryption enabled'
+                                : 'Initializing encryption...'
+                        }
+                        rightElement={
                             <IconComponent
-                                name={useDeviceKeysStore((state) => state.isInitialized) ? 'checkmark-circle' : 'time-outline'}
+                                name={deviceKeysInitialized ? 'checkmark-circle' : 'time-outline'}
                                 size={20}
-                                color={useDeviceKeysStore((state) => state.isInitialized) ? '#4CAF50' : theme.colors.textSecondary}
+                                color={deviceKeysInitialized ? '#4CAF50' : theme.colors.textSecondary}
                             />
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Device Info */}
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        Device ID
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {useDeviceKeysStore((state) => state.deviceKeys?.deviceId || 'Not initialized')}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                </View>
+                        }
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />}
+                        title="Device ID"
+                        description={deviceId}
+                    />
+                </SettingsListGroup>
 
                 {/* App Preferences */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.preferences')}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        {/* Appearance */}
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={() => router.push('/settings/appearance')}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="color-palette" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.preferences.appearance')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.preferences.appearanceDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Language Selection */}
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={() => router.push('/settings/language')}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="language" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('Language')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {getLanguageDisplayName(currentLanguage)}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        {/* Font Size */}
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={() => router.push('/settings/font-size')}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="text" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        {t('settings.preferences.fontSize')}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.preferences.fontSizeDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        {/* Profile Customization */}
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={() => router.push('/settings/profile-customization')}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="person-circle-outline" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>
-                                        {t('settings.preferences.profileCustomization')}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.preferences.profileCustomizationDesc')}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <View className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent
-                                        name="notifications"
-                                        size={20}
-                                        color={theme.colors.textSecondary}
-                                    />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.preferences.notifications')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.preferences.notificationsDesc')}
-                                    </Text>
-                                </View>
-                            </View>
+                <SettingsListGroup title={t('settings.sections.preferences')}>
+                    <SettingsListItem
+                        icon={<IconComponent name="color-palette" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.preferences.appearance')}
+                        description={t('settings.preferences.appearanceDesc')}
+                        onPress={() => router.push('/settings/appearance')}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="language" size={20} color={theme.colors.textSecondary} />}
+                        title={t('Language')}
+                        description={getLanguageDisplayName(currentLanguage)}
+                        onPress={() => router.push('/settings/language')}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="text" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.preferences.fontSize')}
+                        description={t('settings.preferences.fontSizeDesc')}
+                        onPress={() => router.push('/settings/font-size')}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="person-circle-outline" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.preferences.profileCustomization')}
+                        description={t('settings.preferences.profileCustomizationDesc')}
+                        onPress={() => router.push('/settings/profile-customization')}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="notifications" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.preferences.notifications')}
+                        description={t('settings.preferences.notificationsDesc')}
+                        rightElement={
                             <Toggle
                                 value={notifications}
                                 onValueChange={onToggleNotifications}
                             />
-                        </View>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <View className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}>
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="moon" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.preferences.darkMode')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t('settings.preferences.darkModeDesc')}
-                                    </Text>
-                                </View>
-                            </View>
+                        }
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="moon" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.preferences.darkMode')}
+                        description={t('settings.preferences.darkModeDesc')}
+                        rightElement={
                             <Toggle
                                 value={isDarkModeActive}
                                 onValueChange={handleDarkModeToggle}
                             />
-                        </View>
-                    </View>
-                </View>
+                        }
+                    />
+                </SettingsListGroup>
 
                 {/* Data Management */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.text }}>{t('settings.sections.data')}</Text>
-
-                    <View className="rounded-2xl border overflow-hidden" style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}>
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pt-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={handleExportData}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="download" size={20} color={theme.colors.textSecondary} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.text }}>{t('settings.data.exportData')}</Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{t('settings.data.exportDataDesc')}</Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between`}
-                            onPress={handleClearCache}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="trash" size={20} color={theme.colors.error} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.error }}>
-                                        {t("settings.data.clearCache")}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{t("settings.data.clearCacheDesc")}</Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-
-                        <View className={`h-[1px] mx-${SPACING.item.paddingHorizontal}`} style={{ backgroundColor: theme.colors.border }} />
-
-                        <TouchableOpacity
-                            className={`${SPACING_CLASSES.listItem} pb-${SPACING.item.paddingHorizontal} flex-row items-center justify-between`}
-                            onPress={handleResetPersonalization}
-                        >
-                            <View className="flex-row items-center flex-1">
-                                <View className={`mr-${SPACING.item.iconMargin} items-center justify-center`}>
-                                    <IconComponent name="refresh" size={20} color={theme.colors.error} />
-                                </View>
-                                <View>
-                                    <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.error }}>
-                                        {t("settings.data.resetPersonalization")}
-                                    </Text>
-                                    <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>
-                                        {t("settings.data.resetPersonalizationDesc")}
-                                    </Text>
-                                </View>
-                            </View>
-                            <IconComponent name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <SettingsListGroup title={t('settings.sections.data')}>
+                    <SettingsListItem
+                        icon={<IconComponent name="download" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.data.exportData')}
+                        description={t('settings.data.exportDataDesc')}
+                        onPress={handleExportData}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="trash" size={20} color={theme.colors.error} />}
+                        title={t('settings.data.clearCache')}
+                        description={t('settings.data.clearCacheDesc')}
+                        destructive
+                        onPress={handleClearCache}
+                    />
+                    <SettingsListItem
+                        icon={<IconComponent name="refresh" size={20} color={theme.colors.error} />}
+                        title={t('settings.data.resetPersonalization')}
+                        description={t('settings.data.resetPersonalizationDesc')}
+                        destructive
+                        onPress={handleResetPersonalization}
+                    />
+                </SettingsListGroup>
 
                 {/* Sign Out */}
-                <View className={`mb-${SPACING.section.gap}`}>
-                    <TouchableOpacity
-                        className={`${SPACING_CLASSES.listItem} flex-row items-center justify-between rounded-2xl border overflow-hidden`}
-                        style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.error }}
+                <SettingsListGroup>
+                    <SettingsListItem
+                        icon={<IconComponent name="log-out" size={20} color={theme.colors.error} />}
+                        title={t('settings.signOut')}
+                        description={t('settings.signOutDesc')}
+                        destructive
+                        showChevron={false}
                         onPress={handleSignOut}
-                    >
-                        <View className="flex-row items-center flex-1">
-                            <View className="mr-3 items-center justify-center">
-                                <IconComponent name="log-out" size={20} color={theme.colors.error} />
-                            </View>
-                            <View>
-                                <Text className="text-[15px] font-medium mb-0.5" style={{ color: theme.colors.error }}>
-                                    {t("settings.signOut")}
-                                </Text>
-                                <Text className="text-[13px]" style={{ color: theme.colors.textSecondary }}>{t("settings.signOutDesc")}</Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                </View>
+                    />
+                </SettingsListGroup>
             </Animated.ScrollView>
         </ThemedView>
     );
