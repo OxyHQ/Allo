@@ -574,6 +574,16 @@ export default function SettingsScreen() {
                     />
                 </SettingsListGroup>
 
+                {/* Linked accounts — conversations Allo carries from other networks */}
+                <SettingsListGroup title={t('settings.sections.linkedAccounts', 'Other networks')}>
+                    <SettingsListItem
+                        icon={<IconComponent name="git-network-outline" size={20} color={theme.colors.textSecondary} />}
+                        title={t('settings.linkedAccounts.title', 'Linked accounts')}
+                        description={t('settings.linkedAccounts.description', 'Bring conversations from other messaging networks into Allo')}
+                        onPress={() => router.push('/settings/linked-accounts')}
+                    />
+                </SettingsListGroup>
+
                 {/* Security & Encryption */}
                 <SettingsListGroup title="Security & Encryption">
                     <SettingsListItem

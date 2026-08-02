@@ -215,6 +215,19 @@ describe("the bridge orchestration API", () => {
     delete process.env.ALLO_BRIDGE_TELEGRAM_BASE_URL;
     delete process.env.ALLO_BRIDGE_TELEGRAM_SHARED_SECRET;
     delete process.env.ALLO_BRIDGE_TELEGRAM_AS_TOKEN;
+    /**
+     * Set by the one test that needs a second, proxy-requiring network. Cleared
+     * here rather than there so that a failing assertion cannot leave a proxy
+     * provider configured for every test that follows — which would silently make
+     * WhatsApp enableable in tests written to assume it is not.
+     */
+    delete process.env.ALLO_BRIDGE_WHATSAPP_BASE_URL;
+    delete process.env.ALLO_BRIDGE_WHATSAPP_SHARED_SECRET;
+    delete process.env.ALLO_BRIDGE_WHATSAPP_AS_TOKEN;
+    delete process.env.ALLO_BRIDGE_PROXY_PROVIDER;
+    delete process.env.ALLO_BRIDGE_PROXY_GATEWAY;
+    delete process.env.ALLO_BRIDGE_PROXY_USERNAME_TEMPLATE;
+    delete process.env.ALLO_BRIDGE_PROXY_PASSWORD;
     resetBridgesConfigForTests();
     resetBridgeFlowCacheForTests();
     await BridgeAccount.deleteMany({});
@@ -310,6 +323,67 @@ describe("the bridge orchestration API", () => {
         (flow: { id: string }) => flow.id,
       );
       expect(flows).toEqual(["phone", "qr"]);
+    });
+
+    it("tells the app which networks it must warn about before linking", async () => {
+      /**
+       * §8 and §9.2 rule 2. `requiresProxy` is the server's own word for "this
+       * network's anti-fraud bans on correlated egress", and it is the only
+       * thing the app can key an account-ban warning off without carrying a
+       * network list of its own — which §9.2 forbids precisely so that turning a
+       * network on stays an environment variable rather than an app release.
+       *
+       * Asserted as `false` on Telegram rather than merely present, because the
+       * field is only useful if it DISCRIMINATES: a payload that said `true`
+       * everywhere would warn about every network and teach users to dismiss it.
+       */
+      const response = await request(appWithAuth()).get("/api/bridges/networks");
+
+      expect(response.body.data.networks[0]).toMatchObject({
+        id: "telegram",
+        requiresProxy: false,
+      });
+    });
+
+    it("reports requiresProxy as true for the networks that actually need one", async () => {
+      /**
+       * The other half of the assertion above, and it is not symmetry for its own
+       * sake — it is the half that has teeth.
+       *
+       * Pinning only Telegram's `false` is satisfied by a route that hardcodes
+       * `false`, which is a catalogue that never warns anybody: WhatsApp and Meta
+       * would be offered with no mention that they ban accounts caught on
+       * unofficial clients. Measured, not assumed — this test was written after
+       * `requiresProxy: network.requiresProxy` was mutated to `requiresProxy:
+       * false` and the suite stayed green.
+       *
+       * WhatsApp needs a configured proxy provider to be enabled at all (§9.2
+       * rule 2), so turning it on here means turning that on too. Both bridges
+       * point at the same stub: what is under test is the catalogue's shape, not
+       * the two processes a real deployment would run.
+       */
+      process.env.ALLO_BRIDGES_ENABLED = "telegram,whatsapp";
+      process.env.ALLO_BRIDGE_WHATSAPP_BASE_URL = bridge.origin;
+      process.env.ALLO_BRIDGE_WHATSAPP_SHARED_SECRET = SECRET;
+      process.env.ALLO_BRIDGE_WHATSAPP_AS_TOKEN = AS_TOKEN;
+      process.env.ALLO_BRIDGE_PROXY_PROVIDER = "provider-a";
+      process.env.ALLO_BRIDGE_PROXY_GATEWAY = "http://gateway.example:8000";
+      process.env.ALLO_BRIDGE_PROXY_USERNAME_TEMPLATE =
+        "acct-country-{country}-session-{session}";
+      process.env.ALLO_BRIDGE_PROXY_PASSWORD = "a-proxy-password";
+      resetBridgesConfigForTests();
+      resetBridgeFlowCacheForTests();
+
+      const response = await request(appWithAuth()).get("/api/bridges/networks");
+
+      const byId = new Map<string, { requiresProxy: boolean }>(
+        response.body.data.networks.map(
+          (network: { id: string; requiresProxy: boolean }) => [network.id, network],
+        ),
+      );
+
+      expect(byId.get("whatsapp")?.requiresProxy).toBe(true);
+      expect(byId.get("telegram")?.requiresProxy).toBe(false);
     });
 
     it("carries the capability the user has to be told about before linking", async () => {
