@@ -16,9 +16,6 @@ import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
     Easing,
-    cancelAnimation,
-    withRepeat,
-    withSequence,
     FadeIn,
     FadeOut,
     LinearTransition,
@@ -33,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { toast } from '@oxyhq/bloom/toast';
 
 // Components
+import { Skeleton } from '@oxyhq/bloom';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
@@ -389,59 +387,53 @@ function SwipeAction({
 }
 
 function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof useTheme> }) {
-    const opacity = useSharedValue(0.3);
-
-    // El pulso se declara como una secuencia que se repite, no como una animación
-    // que se relanza a sí misma desde su propio callback.
+    // Compuesto con las primitivas de `Skeleton` de Bloom en vez de con vistas y
+    // una animación propias.
     //
-    // La versión anterior hacía justo eso —`withTiming(1, …, () => { opacity.value
-    // = withTiming(0.3, …) })`— más un `setInterval` de 1600 ms que volvía a
-    // lanzarla sin esperar a que la anterior acabase. En web el setter de un
-    // shared value es un setter de JavaScript corriente, así que un callback que
-    // escribe el mismo valor que lo disparó es recursión directa:
+    // La versión anterior animaba la opacidad con
+    //
+    //     opacity.value = withTiming(1, …, () => {
+    //       opacity.value = withTiming(0.3, …);
+    //     });
+    //
+    // más un `setInterval` de 1600 ms que la relanzaba sin esperar. Un callback
+    // que escribe el mismo shared value que lo disparó es recursión directa: en
+    // web el setter es un setter de JavaScript corriente, y producción devolvía
     //
     //     RangeError: Maximum call stack size exceeded
     //         at Object.get [as valueSetter]
     //
-    // Se veía sólo cuando la lista tardaba en cargar, que es cuando este
-    // esqueleto se monta — es decir, precisamente cuando la app ya iba mal.
-    //
-    // `withRepeat(withSequence(...), -1)` deja el bucle en el hilo de UI, sin
-    // callbacks que reentren y sin temporizador que solape.
-    useEffect(() => {
-        opacity.value = withRepeat(
-            withSequence(
-                withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0.3, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-            ),
-            -1,
-            false,
-        );
-        return () => cancelAnimation(opacity);
-    }, [opacity]);
-
-    const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-    const bone = theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-
+    // El brillo vive ahora en la librería compartida, así que este fichero no
+    // tiene animación que mantener y el resto del ecosistema arregla o mejora el
+    // efecto una sola vez.
     return (
-        <Animated.View style={[{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            minHeight: 64,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: theme.colors.border,
-        }, animStyle]}>
-            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: bone, marginRight: 12 }} />
-            <View style={{ flex: 1, justifyContent: 'center' }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <View style={{ width: SKELETON_NAME_WIDTHS[index % SKELETON_NAME_WIDTHS.length], height: 14, borderRadius: 4, backgroundColor: bone }} />
-                    <View style={{ width: 40, height: 10, borderRadius: 3, backgroundColor: bone }} />
-                </View>
-                <View style={{ width: SKELETON_MSG_WIDTHS[index % SKELETON_MSG_WIDTHS.length], height: 12, borderRadius: 4, backgroundColor: bone }} />
-            </View>
-        </Animated.View>
+        <Skeleton.Row
+            style={{
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                minHeight: 64,
+                alignItems: 'center',
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: theme.colors.border,
+            }}
+        >
+            <Skeleton.Circle size={44} style={{ marginRight: 12 }} />
+            <Skeleton.Col style={{ flex: 1, justifyContent: 'center' }}>
+                <Skeleton.Row style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <Skeleton.Box
+                        width={SKELETON_NAME_WIDTHS[index % SKELETON_NAME_WIDTHS.length]}
+                        height={14}
+                        borderRadius={4}
+                    />
+                    <Skeleton.Box width={40} height={10} borderRadius={3} />
+                </Skeleton.Row>
+                <Skeleton.Box
+                    width={SKELETON_MSG_WIDTHS[index % SKELETON_MSG_WIDTHS.length]}
+                    height={12}
+                    borderRadius={4}
+                />
+            </Skeleton.Col>
+        </Skeleton.Row>
     );
 }
 
