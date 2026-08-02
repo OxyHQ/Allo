@@ -3,7 +3,7 @@
  *
  * This is not a layer that abstracts Matrix. It is a narrow port shaped by what
  * Allo's UI draws, with one implementation per platform resolved by file
- * extension (`client.native.ts` on iOS/Android, `client.ts` on web). See
+ * extension (`client.native.ts` on iOS/Android, `client.web.ts` on web). See
  * `docs/matrix/client-strategy.md` §2.3.
  *
  * The rule that keeps it narrow: if this file grows a member that only one of
