@@ -62,6 +62,18 @@ export interface BridgeNetworkCatalogEntry {
    * process for all users (§4.1), `true` means one process per user (§4.3).
    */
   readonly requiresProxy: boolean;
+  /**
+   * What this network can and cannot do once linked, for the app to say so at
+   * the moment of linking.
+   *
+   * `secretChats: false` on Telegram is not a missing feature, it is an
+   * architectural impossibility (§11): a secret chat's keys are bound to the
+   * authorisation key of the device that accepted it, so a bridge — which
+   * authenticates as a NEW device — cannot read one, and no client could. A user
+   * who links Telegram and then cannot find their secret chats will conclude the
+   * bridge is broken, and will be right to complain if nobody warned them.
+   */
+  readonly capabilities: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -74,12 +86,42 @@ export interface BridgeNetworkCatalogEntry {
 export const BRIDGE_NETWORK_CATALOG: Readonly<
   Record<BridgeNetworkId, BridgeNetworkCatalogEntry>
 > = Object.freeze({
-  telegram: { displayName: "Telegram", architecture: "bridgev2", requiresProxy: false },
-  slack: { displayName: "Slack", architecture: "bridgev2", requiresProxy: false },
-  discord: { displayName: "Discord", architecture: "legacy", requiresProxy: false },
-  whatsapp: { displayName: "WhatsApp", architecture: "bridgev2", requiresProxy: true },
-  instagram: { displayName: "Instagram", architecture: "bridgev2", requiresProxy: true },
-  messenger: { displayName: "Messenger", architecture: "bridgev2", requiresProxy: true },
+  telegram: {
+    displayName: "Telegram",
+    architecture: "bridgev2",
+    requiresProxy: false,
+    capabilities: Object.freeze({ secretChats: false }),
+  },
+  slack: {
+    displayName: "Slack",
+    architecture: "bridgev2",
+    requiresProxy: false,
+    capabilities: Object.freeze({}),
+  },
+  discord: {
+    displayName: "Discord",
+    architecture: "legacy",
+    requiresProxy: false,
+    capabilities: Object.freeze({}),
+  },
+  whatsapp: {
+    displayName: "WhatsApp",
+    architecture: "bridgev2",
+    requiresProxy: true,
+    capabilities: Object.freeze({}),
+  },
+  instagram: {
+    displayName: "Instagram",
+    architecture: "bridgev2",
+    requiresProxy: true,
+    capabilities: Object.freeze({}),
+  },
+  messenger: {
+    displayName: "Messenger",
+    architecture: "bridgev2",
+    requiresProxy: true,
+    capabilities: Object.freeze({}),
+  },
 });
 
 export function isBridgeNetworkId(value: string): value is BridgeNetworkId {
@@ -377,6 +419,7 @@ export interface EnabledBridgeNetwork {
   readonly displayName: string;
   readonly architecture: BridgeArchitecture;
   readonly requiresProxy: boolean;
+  readonly capabilities: Readonly<Record<string, boolean>>;
   /** Origin of the bridge's appservice listener, no trailing slash. */
   readonly baseUrl: string;
   /**
@@ -453,6 +496,7 @@ export function loadBridgesConfig(
         displayName: entry.displayName,
         architecture: entry.architecture,
         requiresProxy: entry.requiresProxy,
+        capabilities: entry.capabilities,
         baseUrl,
         sharedSecret,
         asToken,

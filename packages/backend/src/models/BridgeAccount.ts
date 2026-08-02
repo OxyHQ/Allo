@@ -192,6 +192,14 @@ BridgeAccountSchema.index(
 /** The TTL sweep scans by state and staleness (§5.4). */
 BridgeAccountSchema.index({ state: 1, lastStateAt: 1 });
 /**
+ * The status webhook's lookup when the bridge's report carries no `user_id`.
+ *
+ * The unique index above starts with `oxyUserId`, so it cannot serve a query
+ * that only knows the network and the remote login — that would be a collection
+ * scan on the hot path of every state change every bridge reports.
+ */
+BridgeAccountSchema.index({ network: 1, remoteLoginId: 1 });
+/**
  * `GET /internal/bridges/proxy` resolves a slot to its lease through this, on
  * the bridge's connect path — which cannot afford a collection scan. Sparse
  * because only per-user-process networks ever set it.
