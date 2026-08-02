@@ -89,6 +89,17 @@ export class NativeSessionDelegate implements ClientSessionDelegate {
   }
 
   /**
+   * Drops every listener, for a client that is being closed.
+   *
+   * The delegate outlives the client it was built for — Rust holds it — so
+   * without this a closed client would keep reporting rotations to whoever was
+   * watching the session it no longer has.
+   */
+  releaseObservers(): void {
+    this.#listeners.clear();
+  }
+
+  /**
    * The session as the SDK last left it.
    *
    * Answered from the client rather than from storage, which is not what the name

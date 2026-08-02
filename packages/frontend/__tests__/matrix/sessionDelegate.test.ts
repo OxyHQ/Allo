@@ -91,6 +91,22 @@ describe('NativeSessionDelegate observing', () => {
     expect(calls).toBe(0);
   });
 
+  it('reports nothing once its client has been closed', () => {
+    // Rust holds the delegate, so it outlives the client it was built for. A
+    // listener left on it would keep being told about a session the client no
+    // longer has.
+    const delegate = new NativeSessionDelegate();
+    let calls = 0;
+    delegate.observe(() => {
+      calls += 1;
+    });
+
+    delegate.releaseObservers();
+    delegate.saveSessionInKeychain(REFRESHED);
+
+    expect(calls).toBe(0);
+  });
+
   it('carries on when a listener throws', () => {
     // This is the SDK's token refresh path, called synchronously from Rust. A
     // listener that failed must not become a refresh that failed, and must not

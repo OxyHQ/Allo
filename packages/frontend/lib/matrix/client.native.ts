@@ -320,6 +320,7 @@ class NativeAlloChatClient implements AlloChatClient {
       roomList.close();
     }
     this.#syncStateListeners.clear();
+    this.#sessions.releaseObservers();
     this.#syncStateHandle?.cancel();
     this.#syncStateHandle = undefined;
 

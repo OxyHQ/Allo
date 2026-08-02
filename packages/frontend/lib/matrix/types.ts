@@ -184,7 +184,9 @@ export interface AlloOidcLoginRequest {
  *
  * `accessToken`, `refreshToken` and `authData` are credentials: they must never
  * be logged, never sent to Allo's backend, and never written anywhere but the
- * device keychain.
+ * best storage the platform has — the device keychain on a phone, and on web the
+ * origin's own, which is all a browser offers and is the same protection the
+ * crypto store already relies on.
  *
  * A warning that matters more under OIDC than it did under a password: **these
  * tokens rotate**. The SDK refreshes them on its own, without being asked, and a
