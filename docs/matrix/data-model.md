@@ -78,12 +78,14 @@ no hay comportamiento previo que preservar — y elimina la deuda de compatibili
 [V] `packages/backend/package.json:35`. La sección 7 de este documento no
 sustituye un sistema en funcionamiento: sustituye un hueco.
 
-### 1.3 `ConversationService` es código muerto
+### 1.3 `ConversationService` era código muerto
 
-`packages/backend/src/services/ConversationService.ts` (309 líneas) no lo importa
-ningún fichero. La única mención es un comentario en
-`packages/backend/src/middleware/errorHandler.ts:5`. Se borra sin análisis de
-impacto.
+`packages/backend/src/services/ConversationService.ts` (309 líneas) no lo
+importaba ningún fichero; la única mención era un comentario en
+`packages/backend/src/middleware/errorHandler.ts:5`. Se borró sin análisis de
+impacto, junto con el propio `errorHandler.ts`, y ninguno de los dos existe ya
+en el repositorio. Lo que sigue en esta sección describe el estado en el momento
+del análisis.
 
 ### 1.4 La ruta de texto plano sigue viva
 
@@ -106,7 +108,7 @@ justificación del proyecto, no sólo aquí.
 
 | Qué | Ficheros a borrar |
 |-----|-------------------|
-| `Conversation` | `packages/backend/src/models/Conversation.ts`, `packages/backend/src/routes/conversations.ts`, `packages/backend/src/services/ConversationService.ts`, `packages/shared-types/src/conversation.ts` |
+| `Conversation` | `packages/backend/src/models/Conversation.ts`, `packages/backend/src/routes/conversations.ts`, `packages/shared-types/src/conversation.ts` (`services/ConversationService.ts` ya se borró, §1.3) |
 | `Message` | `packages/backend/src/models/Message.ts`, `packages/backend/src/routes/messages.ts`, `packages/shared-types/src/message.ts` |
 | `Device` | `packages/backend/src/models/Device.ts`, `packages/backend/src/routes/devices.ts`, `packages/shared-types/src/device.ts` |
 | `PushToken` | `packages/backend/src/models/PushToken.ts`, `packages/backend/src/utils/push.ts`, `packages/backend/src/utils/notificationUtils.ts` |
@@ -124,7 +126,8 @@ Matrix trae su propio transporte, su propia cola de envío y su propio almacén
 local. Todo lo que Allo construyó para eso desaparece:
 
 - **Socket.IO entero**, servidor y cliente. El servidor son ~140 líneas de
-  `server.ts:104-244` más `src/utils/socket.ts` y `src/types/realtime.ts`; el
+  `server.ts:104-244` más `src/types/realtime.ts` (`src/utils/socket.ts`, que
+  también estaba aquí, se borró ya por muerto); el
   cliente es `packages/frontend/lib/network/` y `hooks/useRealtimeMessaging.ts`.
   Los eventos `newMessage`, `messageUpdated`, `messageDeleted`, `typing`,
   `messageReactionUpdated` y `conversationThemeUpdated` los sustituye el sync de
