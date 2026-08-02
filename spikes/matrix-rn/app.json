@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Allo Matrix Spike",
+    "slug": "allo-matrix-spike",
+    "owner": "oxyhq",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "so.oxy.allo.matrixspike",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "so.oxy.allo.matrixspike"
+    },
+    "plugins": [
+      "./plugins/withMatrixSdkAbis",
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "566c51af-f20a-4fa7-9799-fde601ea983d"
+      }
+    }
+  }
+}

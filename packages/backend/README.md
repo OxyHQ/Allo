@@ -28,7 +28,7 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern chat 
 
 ### Prerequisites
 
-- Node.js 18+ and Bun 1.3+
+- Node.js 20.19+ and Bun 1.3+
 - MongoDB instance
 - Git
 
@@ -78,7 +78,9 @@ OXY_API_URL=https://api.oxy.so
 PORT=4140
 NODE_ENV=development
 
-# Push notifications (optional; push is skipped when unset)
+# Push notifications (optional). Without these, utils/push.ts logs that push is
+# disabled and returns. Setting them is still not enough to make push work —
+# see the note at the end of this file.
 FIREBASE_PROJECT_ID=your_firebase_project_id
 FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
 
@@ -86,6 +88,13 @@ FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
 CROWDSOURCE_ENABLED=false
 CROWDSOURCE_ENFORCEMENT_MODE=shadow
 CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
+# Set during a secret rotation so in-flight deliveries signed with the old
+# secret still verify.
+CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
+
+# Tests only: point the vitest suite at an existing MongoDB replica set instead
+# of downloading a mongodb-memory-server binary.
+ALLO_TEST_MONGODB_URI=
 ```
 
 There is no `FRONTEND_URL`: the CORS allowlist is not read from the environment.
@@ -147,7 +156,16 @@ therefore pointless: the next deploy overwrites it. Change the GitHub secret.
 
 ### Authentication
 
-All authenticated endpoints require a Bearer token from Oxy. The backend uses `@oxyhq/services` for authentication middleware.
+All authenticated endpoints require a Bearer token from Oxy. The middleware
+comes from `@oxyhq/core/server` — `createOxyAuthMiddleware(oxy)`, mounted on
+`/api` in `server.ts` — alongside `createOxyCors` and `createOxyRateLimit` from
+the same package. There is no local middleware directory.
+
+Routes are split into two routers: `publicApiRouter` (health only) and
+`authenticatedApiRouter`, which carries `/profile`, `/conversations`,
+`/messages`, `/devices` and `/reports`. The CrowdSource webhook is mounted
+separately at `/webhooks/crowdsource`, ahead of the JSON body parser, because it
+needs the raw body to verify its signature.
 
 ### Health Check
 
@@ -386,6 +404,28 @@ All authenticated endpoints require a Bearer token from Oxy. The backend uses `@
 #### DELETE /api/profile/restricts/:restrictedId
 - Unrestrict a user
 
+### Reports (moderation)
+
+Account reports only. Message content is deliberately never sent for review —
+it is end-to-end encrypted, and the moderation pipeline's `deliverableTypes()`
+is pinned to `['user']` by a test so nobody can widen it by accident.
+
+#### POST /api/reports
+- File a report against an account
+- Returns the created report
+
+#### GET /api/reports/mine
+- List the reports the calling user has filed
+
+### CrowdSource webhook
+
+#### POST /webhooks/crowdsource
+- Public, but signature-verified. Mounted **only** when
+  `CROWDSOURCE_WEBHOOK_SECRET` is set; without it the server logs that the route
+  is not mounted and carries on.
+- Registered before `express.json()` so the raw body survives for signature
+  verification.
+
 ## Real-time Messaging (Socket.IO)
 
 The backend provides real-time messaging through Socket.IO.
@@ -415,6 +455,9 @@ const socket = io('http://localhost:4140/messaging', {
 - `leaveConversation` - Leave a conversation room
   - Payload: `conversationId: string`
 
+- `typing` - Typing indicator
+  - Payload: `{ conversationId: string, userId: string, isTyping: boolean }`
+
 #### Server → Client
 
 - `newMessage` - New message received
@@ -425,6 +468,9 @@ const socket = io('http://localhost:4140/messaging', {
 
 - `messageDeleted` - Message was deleted
   - Payload: `{ id: string }`
+
+- `typing` - Mirrored to everyone in the room except the sender
+  - Payload: `{ conversationId: string, userId: string, isTyping: boolean }`
 
 ## Database Schema
 
@@ -464,14 +510,26 @@ const socket = io('http://localhost:4140/messaging', {
 {
   conversationId: string,
   senderId: string, // Oxy user ID
+  senderDeviceId: number, // Device that sent it
+
+  // Encrypted content
+  ciphertext?: string, // Base64; the server cannot decrypt this
+  encryptedMedia?: EncryptedMediaItem[],
+
+  // Legacy plaintext fields — also what the plaintext fallback writes
   text?: string,
   media?: MediaItem[],
+
+  encryptionVersion?: number,
+  messageType?: "text" | "media" | "system",
+
   replyTo?: string, // Message ID
   fontSize?: number,
   editedAt?: Date,
   deletedAt?: Date,
   readBy: Record<string, Date>, // userId -> read timestamp
   deliveredTo: string[], // Array of user IDs
+  reactions?: Record<string, string[]>, // emoji -> userIds
   createdAt: Date,
   updatedAt: Date
 }
@@ -482,8 +540,14 @@ const socket = io('http://localhost:4140/messaging', {
 - `bun run dev` — Start development server with hot reload
 - `bun run build` — Build the project
 - `bun run start` — Start production server
-- `bun run lint` — Lint codebase
+- `bun run test` — Run the vitest suite
 - `bun run clean` — Clean build artifacts
+
+This package declares no `lint` script. The suite in `src/__tests__/` runs
+against a real MongoDB replica set started by `vitest.globalSetup.ts`; set
+`ALLO_TEST_MONGODB_URI` to point it at an existing server instead of letting
+`mongodb-memory-server` download one. CI runs it on every PR
+(`.github/workflows/ci.yml`).
 
 ## Monorepo Integration
 
@@ -494,7 +558,10 @@ This package is part of the Allo monorepo and integrates with:
 
 ### Shared Dependencies
 - Uses `@allo/shared-types` for type safety across packages
-- Integrates with `@oxyhq/services` for authentication
+- Integrates with `@oxyhq/core` for authentication, CORS and rate limiting. This
+  package does not depend on `@oxyhq/services` — that is the React Native SDK
+  and is a frontend dependency only.
+- Uses `@oxyhq/crowdsource*` for the moderation pipeline
 
 ## Security & Encryption
 
@@ -525,6 +592,15 @@ Direct messages are encrypted client-side with a static Diffie-Hellman scheme (s
 
 ## Notes
 
+- **Matrix migration**: Allo is moving to Matrix and this service is what it
+  will move off. See [docs/matrix/](../../docs/matrix/) for the design. Nothing
+  has changed here yet — this backend is still the transport the app uses.
+- **Push notifications do not work**: `src/routes/notifications.ts` was deleted in
+  commit `670f008` and never remounted, so the `POST /notifications/push-token`
+  the client still sends 404s and no `PushToken` document is ever written.
+  `utils/push.ts` can talk to Firebase, but `sendPushToUser` queries an empty
+  collection — and the only thing that calls it is `createNotification`, which
+  nothing outside its own file calls either.
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Real-time**: Socket.IO is used for real-time message delivery and updates.

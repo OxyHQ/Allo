@@ -134,7 +134,7 @@ A decryption failure surfaces as a UI placeholder rather than a crash. There is 
 
 ## Media
 
-Not implemented. `EncryptedMediaItem` exists as a type in `@allo/shared-types` and the `Message` schema has a field for `encryptedMedia`, but no code path in the frontend ever produces one — the attachment menu's photo, document, camera, location, contact, and poll options (`AttachmentMenu`, wired up in `ConversationView.tsx`) are all unimplemented placeholders. There is also no file-upload endpoint on the backend: `packages/backend/src/utils/mongoose-gridfs.ts` implements a GridFS read/write helper, but nothing in the app imports it.
+Not implemented. `EncryptedMediaItem` exists as a type in `@allo/shared-types` and the `Message` schema has a field for `encryptedMedia`, but no code path in the frontend ever produces one — the attachment menu's photo, document, camera, location, contact, and poll options (`AttachmentMenu`, wired up in `ConversationView.tsx`) are all unimplemented placeholders. There is no file-upload endpoint on the backend either; the unused GridFS helper that used to sit in `utils/` has since been deleted, so nothing on the server can store an attachment today.
 
 ## Device-first + cloud sync
 
@@ -159,6 +159,24 @@ By default `UserSettings.security.cloudSyncEnabled` is `false`. That means:
 - A compromised device with a screen reader, screenshots, or root access can read plaintext after the local decrypt — encryption is end-to-end, not end-to-eye.
 - Forgetting the device credential and losing every other signed-in device, with cloud sync off, destroys the conversations permanently. There is no server-side reset.
 - A malicious peer can lie about who they are at the human level. The protocol only proves that a given ciphertext and a given device's identity key produce a consistent shared secret — and today that proof is weakened by everything above. Out-of-band identity verification is the user's job.
+
+## What replaces this
+
+Allo is migrating to Matrix, which brings its own end-to-end encryption and
+would retire everything on this page — the static ECDH derivation, the unused
+pre-keys, and the gaps listed above alike.
+
+That work is at the design stage and none of it is implemented. What has been
+worked out, and where the mapping is not free, is in
+[Matrix: data model](./matrix/data-model). The clearest example of a constraint
+found there rather than assumed: Matrix's key backup is per **account**, not per
+room — no call in the encryption API takes a room id — so a chat tier cannot
+opt its keys out of the backup, and any other Matrix client signed into the same
+account would upload them regardless. That is why the second tier is now defined
+by how long messages last (*ephemeral*) rather than by a secrecy guarantee the
+protocol cannot enforce (§5.2).
+
+Until that lands, this page describes the encryption Allo actually performs.
 
 ## Audit trail
 

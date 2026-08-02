@@ -6,14 +6,18 @@ order: 3
 
 # API
 
-The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `oxy.auth()`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
+The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `createOxyAuthMiddleware` from `@oxyhq/core/server`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
+
+`GET /api/health` is the only public route under `/api`. `POST /webhooks/crowdsource` sits outside it entirely and authenticates by signature instead.
 
 ## Base URL
 
 | Env | URL |
 |-----|-----|
-| Production | `https://api.allo.earth` |
+| Production | `https://api.allo.oxy.so` |
 | Development | `http://localhost:4140` |
+
+Both are hardcoded in `packages/frontend/config.ts`; only the development side can be overridden from the environment.
 
 ## Health
 
@@ -244,6 +248,22 @@ Reset learned UX preferences (`UserBehavior` collection).
 
 Blocks hide the user across the app and reject incoming messages. Restricts hide their messages without telling them.
 
+## Reports
+
+Moderation intake, backed by CrowdSource. **Accounts only** — message content is never submitted for review, and a test pins the pipeline's `deliverableTypes()` to exactly `['user']` so that cannot be widened by accident. Encrypted messages stay between the devices that can read them.
+
+### `POST /api/reports`
+
+File a report against an account. Returns the created report.
+
+### `GET /api/reports/mine`
+
+List the reports the calling user has filed.
+
+### `POST /webhooks/crowdsource`
+
+Inbound decisions from CrowdSource. Public but signature-verified, and mounted **only** when `CROWDSOURCE_WEBHOOK_SECRET` is set — otherwise the server logs that the route is absent and starts anyway. It is registered ahead of the JSON body parser so the raw body survives for signature verification.
+
 ## Real-time (Socket.IO)
 
 The Socket.IO server is attached to the same HTTP server. The primary namespace is `/messaging`.
@@ -290,7 +310,7 @@ Only three event categories ever trigger client-side side effects beyond updatin
 | `401` | Missing or invalid Oxy bearer token |
 | `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
 | `404` | Resource not found, or you are not a participant |
-| `429` | Rate limited (see `src/middleware/security.ts`) |
+| `429` | Rate limited by `createOxyRateLimit` (`@oxyhq/core/server`), applied per resolved user |
 | `503` | MongoDB temporarily unavailable — retry with backoff |
 
 All error bodies are JSON.
@@ -304,5 +324,8 @@ The full Mongoose models are in `packages/backend/src/models/`:
 - `Device.ts` — userId + deviceId (unique), identityKeyPublic, signedPreKey, preKeys[], registrationId
 - `UserSettings.ts` — appearance / privacy / security / profileCustomization
 - `Block.ts`, `Restrict.ts`, `PushToken.ts`, `UserBehavior.ts`
+- `Report.ts`, `ModerationEvent.ts`, `ModerationOutbox.ts` — the moderation pipeline
 
 TypeScript shapes are re-exported from `@allo/shared-types` for the frontend.
+
+There is no notifications endpoint. The client posts a device token to `/notifications/push-token`, nothing serves that path, and no `PushToken` document is ever written — see [Architecture](./architecture#push-notifications).

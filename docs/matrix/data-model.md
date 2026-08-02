@@ -26,8 +26,8 @@ los mueve, los nombres de los métodos no.
 
 Las marcas **[B]** valen más que **[?]**: describen lo que la app puede llamar
 *hoy*, no lo que el protocolo permite en abstracto. Varias decisiones de este
-documento cambian según esa distinción, y la más importante — los chats secretos
-— se decide entera ahí.
+documento cambian según esa distinción, y la más importante — qué puede ser de
+verdad el segundo nivel de chat — se decidió entera ahí (§5.2).
 
 ---
 
@@ -78,12 +78,14 @@ no hay comportamiento previo que preservar — y elimina la deuda de compatibili
 [V] `packages/backend/package.json:35`. La sección 7 de este documento no
 sustituye un sistema en funcionamiento: sustituye un hueco.
 
-### 1.3 `ConversationService` es código muerto
+### 1.3 `ConversationService` era código muerto
 
-`packages/backend/src/services/ConversationService.ts` (309 líneas) no lo importa
-ningún fichero. La única mención es un comentario en
-`packages/backend/src/middleware/errorHandler.ts:5`. Se borra sin análisis de
-impacto.
+`packages/backend/src/services/ConversationService.ts` (330 líneas) no lo
+importaba ningún fichero; la única mención era un comentario en
+`packages/backend/src/middleware/errorHandler.ts:5`. Se borró sin análisis de
+impacto, junto con el propio `errorHandler.ts`, y ninguno de los dos existe ya
+en el repositorio. Lo que sigue en esta sección describe el estado en el momento
+del análisis.
 
 ### 1.4 La ruta de texto plano sigue viva
 
@@ -106,7 +108,7 @@ justificación del proyecto, no sólo aquí.
 
 | Qué | Ficheros a borrar |
 |-----|-------------------|
-| `Conversation` | `packages/backend/src/models/Conversation.ts`, `packages/backend/src/routes/conversations.ts`, `packages/backend/src/services/ConversationService.ts`, `packages/shared-types/src/conversation.ts` |
+| `Conversation` | `packages/backend/src/models/Conversation.ts`, `packages/backend/src/routes/conversations.ts`, `packages/shared-types/src/conversation.ts` (`services/ConversationService.ts` ya se borró, §1.3) |
 | `Message` | `packages/backend/src/models/Message.ts`, `packages/backend/src/routes/messages.ts`, `packages/shared-types/src/message.ts` |
 | `Device` | `packages/backend/src/models/Device.ts`, `packages/backend/src/routes/devices.ts`, `packages/shared-types/src/device.ts` |
 | `PushToken` | `packages/backend/src/models/PushToken.ts`, `packages/backend/src/utils/push.ts`, `packages/backend/src/utils/notificationUtils.ts` |
@@ -124,7 +126,8 @@ Matrix trae su propio transporte, su propia cola de envío y su propio almacén
 local. Todo lo que Allo construyó para eso desaparece:
 
 - **Socket.IO entero**, servidor y cliente. El servidor son ~140 líneas de
-  `server.ts:104-244` más `src/utils/socket.ts` y `src/types/realtime.ts`; el
+  `server.ts:104-244` más `src/types/realtime.ts` (`src/utils/socket.ts`, que
+  también estaba aquí, se borró ya por muerto); el
   cliente es `packages/frontend/lib/network/` y `hooks/useRealtimeMessaging.ts`.
   Los eventos `newMessage`, `messageUpdated`, `messageDeleted`, `typing`,
   `messageReactionUpdated` y `conversationThemeUpdated` los sustituye el sync de
@@ -398,7 +401,7 @@ descifrarlos son un problema aparte [?]. Confundirlas lleva a configurar
 `history_visibility: shared` y creer que con eso el dispositivo nuevo verá el
 pasado. No lo verá: verá ciphertext.
 
-### 5.2 Chats secretos — lo que Matrix da y lo que hay que construir
+### 5.2 El segundo nivel: de "secreto" a "efímero"
 
 Cuatro propiedades pedidas. Una por una.
 
@@ -475,18 +478,53 @@ Consecuencias, en orden de gravedad:
 3. Por tanto **un chat secreto en Allo no puede prometer más que "Allo no guarda
    estas claves"**, no "estas claves no existen fuera de tus dispositivos".
 
-**[C]** Hay que elegir explícitamente entre:
+Marcar la sala con un evento de estado o de timeline no cambia qué hace el
+subsistema de backup; sólo se lo cuenta a la UI. Así que la promesa literal —
+"estas claves no se respaldan" — no es alcanzable sin parchear el SDK.
 
-- **A.** Construir la exclusión por sala en el SDK (upstream) y aceptar la
-  restricción de clientes en MAS. Es la única versión que cumple lo prometido.
-- **B.** Redefinir "secreto" a lo que Matrix sí garantiza sin tocar nada:
-  verificación obligatoria + sin reenvío de claves + borrado local por
-  temporizador, y **decir en la UI que el historial puede sobrevivir en el backup
-  de la cuenta**. Es honesto y es mucho menos de lo que la palabra "secreto"
-  sugiere.
+#### DECISIÓN (2026-08-02): no se persigue esa promesa. Se persigue otra.
 
-No hay opción C. Marcar la sala con un evento de estado o de timeline no cambia
-qué hace el subsistema de backup; sólo se lo cuenta a la UI.
+El nivel deja de definirse por **dónde están las claves** y pasa a definirse por
+**cuánto dura el contenido**. Se llama **efímero**, no secreto.
+
+El razonamiento es que la pregunta cambió cuando los chats normales salieron
+mejor de lo previsto. Con el key backup derivado de la identidad de Oxy
+(verificado en ejecución, ver `spikes/matrix-web/RESULTS.md`), un chat normal ya
+es E2EE con historial en cualquier dispositivo y verificación automática. Lo
+único que un nivel superior podía añadir encima era protección frente a que la
+frase de recuperación de Oxy se filtre **en el futuro**: hoy, si se compromete,
+se expone todo el historial.
+
+Y esa propiedad **sí** se puede conseguir sin tocar el SDK, por el otro lado: si
+el contenido no persiste, tener la clave no sirve de nada. `redactEvent`
+[B] `FFI:29234` borra el contenido en el servidor. Un mensaje redactado no se
+descifra con ninguna clave porque ya no hay nada que descifrar.
+
+Qué se construye, entonces:
+
+- Redacción en servidor pasado un plazo, no sólo borrado local.
+- Rotación agresiva de sesiones Megolm, para que una clave filtrada abra la menor
+  ventana posible de lo que aún no se haya redactado.
+- Sin copia local persistente.
+- La marca sigue siendo el evento de estado `so.oxy.allo.room_class`, ahora con
+  `{"class": "ephemeral"}`.
+
+Qué **no** se promete, y debe decirse en la UI con estas palabras y no con otras:
+es una garantía de interfaz, no criptográfica. Un cliente modificado del otro
+lado puede guardar copia, igual que en Signal o en Telegram. Lo que se garantiza
+es que **nosotros** no conservamos el contenido y que el servidor deja de tenerlo.
+
+Las alternativas descartadas, y por qué:
+
+- **Exclusión por sala upstream.** Cumple la promesa literal, pero exige trabajo
+  en Rust sobre un SDK ajeno con revisión que no controlamos, y obliga a
+  restringir en MAS qué clientes pueden autenticarse — con lo que la cuenta del
+  usuario deja de ser una cuenta Matrix normal, que era una de las razones para
+  elegir Matrix.
+- **Capa de cifrado propia encima.** Cumpliría la promesa sin tocar el SDK, pero
+  sería un protocolo propio. Este repositorio ya tuvo uno, `signalProtocol.ts`,
+  que estuvo roto durante meses sin que nadie lo notara y cuya documentación
+  prometía forward secrecy que no existía. No se hace un segundo.
 
 #### (d) Efímeros — no existe en el spec
 
@@ -499,15 +537,17 @@ deja el esqueleto del evento (quién, cuándo, en qué sala) [?].
 cliente modificado no borra nada. Está bien construirlo, está mal describirlo como
 una garantía.
 
-#### Cómo se marca una sala como secreta
+#### Cómo se marca una sala como efímera
 
-**[C]** Evento de estado `so.oxy.allo.room_class` con `{"class": "secret"}`. Aquí
-sí conviene el estado y no el timeline, al revés que con el tema (§4.1): la clase
-de la sala tiene que ser legible **antes** de tener ninguna clave, porque decide
-cómo se trata la sala desde el primer sync. Un evento cifrado sería un
-huevo-y-gallina. El coste — el servidor sabe que una sala es "secreta" — es
+**[C]** Evento de estado `so.oxy.allo.room_class` con `{"class": "ephemeral"}`.
+Aquí sí conviene el estado y no el timeline, al revés que con el tema (§4.1): la
+clase de la sala tiene que ser legible **antes** de tener ninguna clave, porque
+decide cómo se trata la sala desde el primer sync. Un evento cifrado sería un
+huevo-y-gallina. El coste — el servidor sabe que una sala es efímera — es
 inevitable de todos modos: si el cliente tiene que comportarse distinto, ese
-comportamiento es observable.
+comportamiento es observable. Y aquí pesa menos que en el diseño anterior: que el
+servidor sepa que debe redactar el contenido pasado un plazo no es una fuga, es
+el mecanismo.
 
 ### 5.3 Chats puenteados — la marca no debe ser un flag
 
@@ -703,8 +743,11 @@ descifrados en AsyncStorage (§2.3).
 **En el código:** las rutas de §2.1 y §2.2.
 
 **En la documentación:** `docs/encryption.mdx` describe entero el protocolo que se
-elimina. Queda obsoleto de arriba abajo. (No lo toco: hay otro trabajo en curso
-sobre ese fichero.)
+elimina. Queda obsoleto de arriba abajo el día que la migración aterrice, pero no
+antes: hoy sigue siendo la descripción exacta de lo que la app cifra, y ese
+trabajo —el de hacer que describiera el protocolo real y no el que se le
+atribuía— ya terminó. El fichero remite ahora a este documento para lo que viene,
+en su sección «What replaces this».
 
 ### 8.2 Lo que un corte limpio no resuelve solo
 
@@ -818,9 +861,10 @@ Oxy no cambie: el corte limpio corta las conversaciones, no las cuentas.
 
 Por orden de riesgo para el proyecto:
 
-1. **Los chats secretos no salen de la configuración** (§5.2c). O se contribuye la
-   exclusión por sala del key backup a matrix-rust-sdk, o se redefine "secreto"
-   públicamente a algo menos. Es una bifurcación de alcance, no un detalle.
+1. ~~**Los chats secretos no salen de la configuración**~~ — **resuelto el
+   2026-08-02** (§5.2). El segundo nivel pasa a definirse por cuánto dura el
+   contenido y no por dónde están las claves: se llama **efímero**, se construye
+   con redacción en servidor y rotación agresiva, y no exige parchear el SDK.
 2. **`OnlyTrustedDevices` es por cliente, no por sala** (§5.2a). Mismo tipo de
    problema, mismo tipo de solución.
 3. **Reenvío de claves y compartición de historial al invitar**: no he podido

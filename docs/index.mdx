@@ -18,6 +18,11 @@ Identity is delegated to the Oxy platform: users sign in with their Oxy account 
 
 For account management UI see [MyAccount](/developers/docs/accounts). For the underlying RN SDK see [@oxyhq/services](/developers/docs/services).
 
+**Migrating to Matrix.** Allo will stop carrying its own transport; the design
+work is under [Matrix](#documentation-map) at the bottom of this page and
+deliberately precedes any implementation. Everything described here is still
+what the app actually does today.
+
 ## Architecture
 
 ```
@@ -69,7 +74,7 @@ bun install
 
 ### Prerequisites
 
-- Node.js 18+ and Bun 1.0+
+- Node.js 20.19+ and Bun 1.3+
 - MongoDB (local or hosted) — connection string goes into `packages/backend/.env`
 - For iOS: macOS + Xcode. For Android: Android Studio.
 
@@ -79,19 +84,29 @@ bun install
 
 ```env
 MONGODB_URI=mongodb://localhost:27017/allo
+# Read by @oxyhq/core, not by this package. Defaults to https://api.oxy.so.
 OXY_API_URL=https://api.oxy.so
-FRONTEND_URL=https://allo.earth
-PORT=3000
+# 4140 is Allo's slot in the Oxy per-app port map; ECS injects PORT=8080.
+PORT=4140
 NODE_ENV=development
 ```
 
-`packages/frontend/.env`:
+There is no `FRONTEND_URL` and no `JWT_SECRET`. Both appear in older deployment
+docs and are read by neither this package nor `@oxyhq/core`; the CORS allowlist
+is a literal in `server.ts` plus whatever `createOxyCors` admits automatically.
+
+`packages/frontend/.env` — optional. `config.ts` hardcodes production and
+defaults development to `localhost:4140`, so a local run needs nothing set:
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:4140
-EXPO_PUBLIC_WS_URL=ws://localhost:4140
-EXPO_PUBLIC_POSTHOG_KEY=optional_posthog_key
+API_URL=http://localhost:4140/api
+API_URL_SOCKET=ws://localhost:4140
+EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
 ```
+
+See the [frontend README](https://github.com/OxyHQ/Allo/blob/main/packages/frontend/README.md#environment-setup)
+for the full list. `EXPO_PUBLIC_WS_URL` and `EXPO_PUBLIC_POSTHOG_KEY` were
+documented here previously and are read nowhere.
 
 ## Quick start
 
@@ -158,24 +173,35 @@ The backend exposes a `/messaging` namespace (`server.ts`). The client authentic
 
 ### Routing
 
-Frontend routing follows Expo Router v54 conventions:
+Frontend routing follows Expo Router 57 conventions:
 
 ```
 app/
   _layout.tsx
+  (auth)/
+    index.tsx            # sign-in
   (chat)/
-    _layout.tsx          # two-pane on >=768px
+    _layout.tsx          # two-pane at >=768px, plus a details column at >=1024px
     index.tsx            # conversation list
+    new.tsx              # start a conversation
+    c/[id].tsx           # individual conversation
+    u/[id].tsx           # user profile
     settings/...
-  c/
-    _layout.tsx          # three-pane on >=1024px
-    [id].tsx             # individual conversation
+  calls.tsx              # calls screen (mock data)
 ```
 
-Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a details column.
+Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a contact-details column. All three come out of the single `(chat)/_layout.tsx`.
 
 ## Documentation map
+
+The system as it runs today:
 
 - [Architecture](./architecture) — package layout, dependency graph, build order
 - [Encryption](./encryption) — key bundle, static ECDH derivation, AES-GCM framing, and known gaps
 - [API](./api) — backend REST and Socket.IO surface
+
+Where it is going — design only, nothing implemented:
+
+- [Matrix: data model](./matrix/data-model) — how Allo's conversations map onto Matrix rooms, and what that mapping costs
+- [Matrix: bridges](./matrix/bridges) — bridge topology and its constraints
+- [Matrix: client strategy](./matrix/client-strategy) — which SDK on which platform, and why

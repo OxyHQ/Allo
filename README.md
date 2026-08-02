@@ -19,6 +19,19 @@
 
 **Allo** is a chat platform for mobile and web with **end-to-end encrypted direct messages** and a **device-first architecture**. It features offline support and a clean, modern UI. Built with Expo, React Native, and a Node.js backend in a modern monorepo structure, it supports file-based routing, multi-language support, and a modern UI.
 
+### Moving to Matrix
+
+Allo is migrating to [Matrix](https://matrix.org) and will stop carrying its own
+transport. The design work lives in [`docs/matrix/`](./docs/matrix/) and comes
+before the code on purpose.
+
+Nothing has switched over yet. The messaging that works today is the one
+described below and in [`docs/`](./docs/): REST plus Socket.IO against
+`@allo/backend`, with the encryption in [Encryption](./docs/encryption.mdx).
+A Matrix client port exists at `packages/frontend/lib/matrix/` — an interface, a
+native implementation, and a web half that throws on purpose — but no screen in
+the app imports it.
+
 ### Key Security Features
 
 - 🔐 **End-to-End Encryption** - Direct messages are encrypted client-side with static ECDH (P-256) between identity keys + AES-256-GCM. There is no KDF and no forward secrecy — see [Encryption](./docs/encryption.mdx) for what that means and for known gaps (group chats, multi-device, plaintext fallback)
@@ -35,62 +48,76 @@ This is a **monorepo** using Bun workspaces with the following structure:
 /
 ├── packages/            # All code packages
 │   ├── frontend/        # Expo React Native app (Allo)
-│   │   ├── app/         # App entry, screens, and routing
-│   │   │   ├── [username]/  # User profile, followers, following
-│   │   │   ├── kaana/       # AI assistant or help section
-│   │   │   ├── p/[id]/      # Post details, replies, quotes
+│   │   ├── app/         # Expo Router file-based routes
+│   │   │   ├── (auth)/      # Sign-in
+│   │   │   ├── (chat)/      # Conversation list, settings, c/[id] thread, u/[id] profile
+│   │   │   ├── calls.tsx    # Calls screen (renders mock data)
 │   │   │   └── ...
 │   │   ├── components/  # UI components
 │   │   ├── assets/      # Images, icons, fonts
 │   │   ├── constants/   # App-wide constants
 │   │   ├── context/     # React context providers
-│   │   ├── features/    # Feature modules
 │   │   ├── hooks/       # Custom React hooks
-│   │   ├── interfaces/  # TypeScript interfaces
 │   │   ├── lib/         # Library code
 │   │   │   ├── signalProtocol.ts  # End-to-end encryption (static ECDH + AES-256-GCM)
 │   │   │   ├── offlineStorage.ts  # Offline message storage
+│   │   │   ├── offlineQueue/       # Queued mutations, replayed on reconnect
 │   │   │   ├── p2pMessaging.ts     # Peer-to-peer scaffolding (not functional)
+│   │   │   ├── matrix/             # Matrix client port — not wired to the UI yet
 │   │   │   └── ...
-│   │   ├── locales/     # i18n translation files
+│   │   ├── locales/     # i18n translation files (en, es, it)
+│   │   ├── plugins/     # Expo config plugins
 │   │   ├── scripts/     # Utility scripts
 │   │   ├── stores/      # State management (Zustand)
 │   │   │   ├── messagesStore.ts    # Encrypted message store
 │   │   │   ├── deviceKeysStore.ts  # Device key management
 │   │   │   └── ...
 │   │   ├── styles/      # Global styles and colors
-│   │   └── utils/       # Utility functions
+│   │   ├── types/       # TypeScript types
+│   │   ├── utils/       # Utility functions
+│   │   ├── __mocks__/   # Jest manual mocks (the Matrix native binding)
+│   │   └── __tests__/   # Jest suites
 │   ├── backend/         # Node.js/Express API server
-│   │   ├── src/         # Backend source code
-│   │   │   ├── controllers/ # API controllers
-│   │   │   ├── middleware/  # Express middleware
+│   │   ├── server.ts    # Entry point: Express app + Socket.IO + route mounting
+│   │   ├── src/
+│   │   │   ├── config/      # CrowdSource moderation config
 │   │   │   ├── models/      # MongoDB models
 │   │   │   │   ├── Conversation.ts  # Chat conversations
 │   │   │   │   ├── Message.ts       # Encrypted messages
-│   │   │   │   ├── Device.ts         # Device public key bundles
+│   │   │   │   ├── Device.ts        # Device public key bundles
 │   │   │   │   └── ...
-│   │   │   ├── routes/      # API routes
+│   │   │   ├── routes/      # Express routers
 │   │   │   │   ├── conversations.ts # Conversation endpoints
 │   │   │   │   ├── messages.ts      # Message endpoints
 │   │   │   │   ├── devices.ts       # Device key management
+│   │   │   │   ├── reports.ts       # Account reports
 │   │   │   │   └── ...
-│   │   │   ├── scripts/     # Utility scripts
-│   │   │   ├── sockets/     # WebSocket handlers
+│   │   │   ├── services/    # Moderation pipeline (CrowdSource)
 │   │   │   ├── types/       # TypeScript types
-│   │   │   └── utils/       # Utility functions
+│   │   │   ├── utils/       # Utility functions
+│   │   │   └── __tests__/   # Vitest suites
+│   │   ├── Dockerfile   # linux/arm64 image built by the AWS deploy workflow
 │   │   └── ...
 │   └── shared-types/    # Shared TypeScript types
 │       ├── src/         # Type definitions
 │       └── dist/        # Compiled types
+├── docs/                # Project documentation (see below)
+│   └── matrix/          # Design notes for the Matrix migration
+├── spikes/              # Throwaway apps that validated the Matrix decisions
 ├── package.json         # Root package.json with workspaces
 ├── tsconfig.json        # Root TypeScript config
 └── ...
 ```
 
+There is no `controllers/`, `middleware/` or `sockets/` directory in the
+backend: routes hold their own handlers, the auth / CORS / rate-limit middleware
+comes from `@oxyhq/core/server`, and the Socket.IO wiring lives directly in
+`server.ts`.
+
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and Bun 1.3+
+- Node.js 20.19+ and Bun 1.3+ (the root `engines` field pins both; CI and the backend Dockerfile use bun 1.3.14)
 - MongoDB instance
 - Expo CLI for mobile development
 
@@ -123,10 +150,17 @@ bun run dev:backend
 ```
 
 #### Frontend Development
-The frontend is an Expo React Native app that can run on:
-- **Web**: `bun run web` (or `bun run dev:frontend` then press 'w')
-- **iOS**: `bun run ios` (requires macOS and Xcode)
-- **Android**: `bun run android` (requires Android Studio)
+The frontend is an Expo React Native app that can run on Web, iOS and Android.
+Start it with `bun run dev:frontend` from the root and press `w`, `i` or `a`.
+
+The per-platform scripts live in `packages/frontend` (there are no root aliases
+for them), so run them with a filter or from that directory:
+
+```bash
+bun run --filter @allo/frontend web      # or ios / android
+```
+
+iOS requires macOS and Xcode; Android requires Android Studio.
 
 #### Backend Development
 The backend runs on the development server with hot reload:
@@ -144,10 +178,15 @@ bun run dev:backend
 - `bun run build:shared-types` — Build shared types package
 - `bun run build:frontend` — Build frontend for production
 - `bun run build:backend` — Build backend for production
+- `bun run typecheck` — Typecheck backend then frontend (no emit)
 - `bun run test` — Run tests across all packages
-- `bun run lint` — Lint all packages
 - `bun run clean` — Clean all build artifacts
 - `bun install` — Install dependencies for all packages
+
+A root `lint` script exists but does not work end to end: the backend declares
+no `lint` script, and `shared-types` declares one without shipping eslint or an
+eslint config, so it fails with "ESLint couldn't find an eslint.config.js". Only
+`packages/frontend` is lintable today (`bun run --filter @allo/frontend lint`).
 
 ### Frontend (`@allo/frontend`)
 - `bun run start` — Start Expo development server
@@ -162,10 +201,11 @@ bun run dev:backend
 - `bun run dev` — Start development server with hot reload
 - `bun run build` — Build the project
 - `bun run start` — Start production server
-- `bun run lint` — Lint codebase
+- `bun run test` — Run the vitest suite (starts a real MongoDB replica set)
 - `bun run clean` — Clean build artifacts
-- `bun run migrate` — Run database migrations
-- `bun run migrate:dev` — Run database migrations in development
+
+There are no migration scripts. The backend has never had one, and the Mongoose
+schemas are applied on connect.
 
 ### Shared Types (`@allo/shared-types`)
 - `bun run build` — Build TypeScript types
@@ -178,12 +218,34 @@ bun run dev:backend
 
 All project documentation is available in the [`docs/`](./docs/) folder:
 
+These describe the system as it runs today:
+
 - [Overview](./docs/index.mdx) - What Allo is and how the pieces fit together
 - [Architecture](./docs/architecture.mdx) - Packages, data flow, and real-time transport
-- [Encryption](./docs/encryption.mdx) - Signal Protocol, device keys, key exchange
+- [Encryption](./docs/encryption.mdx) - Device keys, static ECDH derivation, and what isn't implemented
 - [API Reference](./docs/api.mdx) - REST and Socket.IO surface
-- [Matrix Migration: Data Model](./docs/matrix/data-model.md) - Design notes for the Matrix migration
+
+These describe where it is going — design only, no implementation proposed yet:
+
+- [Matrix Migration: Data Model](./docs/matrix/data-model.md) - How Allo's conversations map onto Matrix rooms, and what the mapping costs
 - [Matrix Migration: Bridges](./docs/matrix/bridges.md) - Bridge topology and its constraints
+- [Matrix Migration: Client Strategy](./docs/matrix/client-strategy.md) - Which SDK on which platform, and why
+
+### Spikes
+
+`spikes/` holds the throwaway apps that tested the risky assumptions before the
+design committed to them. They are not part of the workspaces and are not built
+by any root script.
+
+- `spikes/matrix-web/` — `matrix-js-sdk` + `matrix-sdk-crypto-wasm` under a
+  production Expo web export. Has its own [README](./spikes/matrix-web/README.md)
+  and a [RESULTS.md](./spikes/matrix-web/RESULTS.md) recording what it proved and
+  what it did not.
+- `spikes/matrix-rn/` — `@unomed/react-native-matrix-sdk` on a physical Android
+  device. Its [README](./spikes/matrix-rn/README.md) covers how to run the C1–C8
+  checks and how to read them. Needs ARM hardware: the native library ships only
+  `armeabi-v7a` and `arm64-v8a`, so an x86_64 emulator installs and then crashes.
+  The generated `android/` project is not committed — run `expo prebuild`.
 
 ### API Documentation
 
@@ -209,7 +271,7 @@ Contributions are welcome! Please open issues or pull requests for bug fixes, fe
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests and linting: `bun run test && bun run lint`
+4. Run the checks CI runs: `bun run typecheck && bun run test`
 5. Submit a pull request
 
 ## License
