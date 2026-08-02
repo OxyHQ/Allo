@@ -1,0 +1,11 @@
+# Cloudflare Pages reads this file from the export root, the same way it reads
+# _redirects.
+#
+# The Matrix crypto WebAssembly module is served from a fixed path with no
+# content hash in it — unlike the JS bundles, which Metro fingerprints — because
+# the app has to know the URL to hand to `initAsync()` before it can load
+# anything. A long cache on a mutable URL would mean a browser keeping one
+# deploy's 7.8 MB module forever, so this one file revalidates instead: the
+# ETag makes a repeat visit a conditional request, not another download.
+/matrix_sdk_crypto_wasm_bg.wasm
+  Cache-Control: public, max-age=0, must-revalidate
