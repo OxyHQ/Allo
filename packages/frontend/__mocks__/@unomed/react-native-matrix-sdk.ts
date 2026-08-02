@@ -64,6 +64,13 @@ export enum SlidingSyncVersion {
   Native = 1,
 }
 
+export enum RecoveryState {
+  Unknown = 0,
+  Enabled = 1,
+  Disabled = 2,
+  Incomplete = 3,
+}
+
 // --- Tag enums -----------------------------------------------------------
 
 export enum TimelineItemContent_Tags {
@@ -117,6 +124,15 @@ export enum ProfileDetails_Tags {
   Error = 'Error',
 }
 
+export enum EnableRecoveryProgress_Tags {
+  Starting = 'Starting',
+  CreatingBackup = 'CreatingBackup',
+  CreatingRecoveryKey = 'CreatingRecoveryKey',
+  BackingUp = 'BackingUp',
+  RoomKeyUploadError = 'RoomKeyUploadError',
+  Done = 'Done',
+}
+
 // --- Variant constructors, for building fixtures -------------------------
 
 export const TimelineItemContent = {
@@ -168,6 +184,15 @@ export const ProfileDetails = {
   Pending: variant(ProfileDetails_Tags.Pending),
   Ready: variant(ProfileDetails_Tags.Ready),
   Error: variant(ProfileDetails_Tags.Error),
+};
+
+export const EnableRecoveryProgress = {
+  Starting: variant(EnableRecoveryProgress_Tags.Starting),
+  CreatingBackup: variant(EnableRecoveryProgress_Tags.CreatingBackup),
+  CreatingRecoveryKey: variant(EnableRecoveryProgress_Tags.CreatingRecoveryKey),
+  BackingUp: variant(EnableRecoveryProgress_Tags.BackingUp),
+  RoomKeyUploadError: variant(EnableRecoveryProgress_Tags.RoomKeyUploadError),
+  Done: variant(EnableRecoveryProgress_Tags.Done),
 };
 
 export const QueueWedgeError = {

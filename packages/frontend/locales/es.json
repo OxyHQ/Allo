@@ -553,5 +553,7 @@
   "Sign in": "Iniciar sesión",
   "This message cannot be read on this device.": "Este mensaje no se puede leer en este dispositivo.",
   "This message was deleted.": "Este mensaje se ha borrado.",
-  "Allo cannot show this yet ({{kind}}).": "Allo todavía no puede mostrar esto ({{kind}})."
+  "Allo cannot show this yet ({{kind}}).": "Allo todavía no puede mostrar esto ({{kind}}).",
+  "Your Oxy recovery phrase opens your Allo history": "Tu frase de recuperación de Oxy abre tu historial de Allo",
+  "Allo unlocks your encrypted message backup with a key derived from your Oxy recovery phrase. That is why a new device can read your old conversations as soon as you sign in — and it means anyone who has that phrase can read them too, including messages sent before they got it. Keep it as carefully as you would keep the conversations themselves.": "Allo abre tu copia de seguridad de mensajes cifrados con una clave derivada de tu frase de recuperación de Oxy. Por eso un dispositivo nuevo puede leer tus conversaciones antiguas nada más iniciar sesión, y por eso cualquiera que tenga esa frase también puede leerlas, incluidos los mensajes enviados antes de que la consiguiera. Guárdala con el mismo cuidado con el que guardarías las propias conversaciones."
 }

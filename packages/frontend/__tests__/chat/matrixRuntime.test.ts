@@ -11,6 +11,7 @@ import type {
   AlloClientStore,
   AlloEncryptionState,
   AlloOidcLoginRequest,
+  AlloRecoveryState,
   AlloRoomListHandle,
   AlloSession,
   AlloSyncState,
@@ -251,6 +252,18 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async openTimeline(): Promise<AlloTimelineHandle> {
+    throw new Error('not used by these tests');
+  }
+
+  async recoveryState(): Promise<AlloRecoveryState> {
+    throw new Error('not used by these tests');
+  }
+
+  async enableRecovery(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async recoverWithPassphrase(): Promise<void> {
     throw new Error('not used by these tests');
   }
 

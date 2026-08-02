@@ -4,6 +4,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Header } from "@/components/layout/Header";
 import { HeaderIconButton } from "@/components/layout/HeaderIconButton";
 import { Toggle } from "@/components/Toggle";
+import { RecoveryDisclosure } from "@/components/matrix/RecoveryDisclosure";
 import { BackArrowIcon } from "@/assets/icons/back-arrow-icon";
 import { useOxy } from "@oxyhq/services";
 import { useTranslation } from "react-i18next";
@@ -622,6 +623,7 @@ export default function SettingsScreen() {
                         title="Device ID"
                         description={deviceId}
                     />
+                    <RecoveryDisclosure />
                 </SettingsListGroup>
 
                 {/* App Preferences */}

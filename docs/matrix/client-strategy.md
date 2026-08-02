@@ -672,6 +672,59 @@ peor que no tenerlo, porque cambia lo que el usuario cree.
    passphrase adicional opcional —con entropía, no un PIN— para quien quiera
    separación.
 
+### 3.7 Lo que salió al implementarlo
+
+El esquema está escrito y es el de arriba, sin desviaciones: la derivación en
+`packages/frontend/lib/matrix/recovery/passphrase.ts`, la máquina de estados de
+§3.4 en `recovery/ensureRecovery.ts` —aparte de los dos SDK, para poder probarla
+sin ninguno— y las dos mitades en `client.native.ts` y `client.web.ts`. Los
+puntos 1 a 4 de §3.2 y §3.4 se cumplen tal cual. Cuatro cosas que el diseño no
+podía saber:
+
+1. **De dónde sale la frase de Oxy, y dónde no sale.** El diseño da por hecho el
+   `oxyPhrase` como entrada disponible. La única vía es
+   `KeyManager.getRecoveryMnemonic()` **[V]**
+   (`node_modules/@oxyhq/core/src/crypto/keyManager.ts:1828-1853`), y **devuelve
+   `null` en web sin consultar ningún almacenamiento**: la primera línea del
+   método es `if (isWebPlatform()) return null`, porque Oxy guarda identidades
+   sólo en el llavero nativo. También devuelve `null` en nativo para cualquier
+   identidad creada antes de que Oxy empezara a guardar la frase.
+
+   Consecuencia, dicha sin adornos: **la promesa "el historial se abre solo al
+   entrar con Oxy" se cumple hoy en iOS y Android, y no en web.** No es un fallo
+   de la derivación —web deriva igual de bien si se le da la frase— sino que en
+   web no hay de dónde leerla. El puerto lo reporta como tal en vez de fallar:
+   `readOxyRecoveryPhrase` distingue `absent` (no hay frase aquí; hace falta que
+   el usuario la escriba) de `unavailable` (llavero bloqueado; reintentar), y
+   `ensureMatrixRecovery` responde `skipped` con el motivo. Lo que falta para
+   cerrar web es una pantalla que pida la frase, o que `@oxyhq/core` ofrezca la
+   frase en web — decisión que no es de Allo.
+
+2. **`deriveRecoveryKeyFromPassphrase` no se exporta de la raíz**, como ya
+   avisaba `spikes/matrix-web/RESULTS.md` (restricción 3). Confirmado en
+   `matrix-js-sdk@42`. La importación de `matrix-js-sdk/lib/crypto-api/index.js`
+   está aislada en `client.web.ts` y se le pasa a `web/secretStorage.ts` como
+   argumento, igual que `cryptoWasm.ts` recibe su `initAsync`.
+
+3. **El `setupNewKeyBackup` de web necesita una guarda que el binding nativo trae
+   de fábrica.** `bootstrapSecretStorage({setupNewKeyBackup: true})` llama al
+   reset del backup, que crea una versión nueva en el servidor; toda clave de
+   sala que sólo viva en la versión anterior queda descifrable por una clave que
+   ya no tiene nadie. El SDK nativo se niega con `RecoveryError::BackupExistsOnServer`
+   (§3.2) y el de web no. `web/recovery.ts:planKeyBackup` reproduce esa negativa.
+
+4. **Sin `authUploadDeviceSigningKeys` en web, a propósito.** El spike usaba UIA
+   por contraseña; Allo no tiene contraseña de Matrix que dar. En la primera
+   subida de claves de cross-signing MAS no pide autenticación (MSC3967), que es
+   el caso en el que está esta llamada. Si un homeserver la pidiera igualmente,
+   el error es el suyo y se ve — mejor que un callback que finge autenticar.
+
+Y una nota sobre el punto 5 de la recomendación: la frase está en la UI, en
+Ajustes → Security & Encryption, en los tres idiomas
+(`components/matrix/recoveryDisclosureCopy.ts`). La passphrase adicional
+opcional **no** está implementada; sigue siendo una opción abierta y su ausencia
+no rompe nada de lo anterior.
+
 ---
 
 ## 4. Lo que no pude verificar
@@ -707,15 +760,19 @@ En orden de cuánto duele si sale mal:
    el pegamento de wasm-bindgen **[T]**. Los 7,8 MB del `.wasm` no están ahí
    dentro: siguen siendo una descarga aparte y diferida. Nada de la UI importa
    todavía el puerto, así que hoy el coste es cero.
-2. **El coste de PBKDF2 en un Android real.** Medí 143 ms en máquina de desarrollo
+2. **De dónde saca web la frase de Oxy.** Abierto, y es hoy el hueco más grande
+   del esquema: `KeyManager.getRecoveryMnemonic()` devuelve `null` en web por
+   construcción, así que la derivación funciona y no tiene entrada. Detalle y
+   consecuencias en §3.7 punto 1. Nativo no está afectado.
+3. **El coste de PBKDF2 en un Android real.** Medí 143 ms en máquina de desarrollo
    **[T]**; no en teléfono. No cambia la decisión, sí el copy de la pantalla de espera.
-3. **Que el homeserver que se despliegue sirva sliding sync nativo.** Es un requisito
+4. **Que el homeserver que se despliegue sirva sliding sync nativo.** Es un requisito
    duro para móvil **[B]** y no depende de este documento.
-4. **Nada de lo que afirmo sobre el spec de Matrix por sí mismo.** Todo lo marcado
+5. **Nada de lo que afirmo sobre el spec de Matrix por sí mismo.** Todo lo marcado
    **[R]**/**[B]**/**[J]** es lo que estas implementaciones concretas hacen, que es lo
    que la app va a ejecutar. Donde el spec diga otra cosa, gana el código, pero
    conviene saberlo.
-5. **Multi-pestaña en web.** Sigue abierto, y el spike lo dejó **más flojo** de lo
+6. **Multi-pestaña en web.** Sigue abierto, y el spike lo dejó **más flojo** de lo
    que decía esta línea. El encargo era reproducir y caracterizar el fallo, y **no
    se reprodujo**: dos pestañas con la misma sesión, el mismo `device_id` y el
    mismo IndexedDB envían, descifran y se leen entre ellas sin divergencia, ni
