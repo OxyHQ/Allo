@@ -3,9 +3,12 @@ import {
   type AuthorizationOutcome,
   type MatrixRuntimeDependencies,
 } from '@/lib/chat/matrixRuntime';
+import { encodeStoredSession } from '@/lib/chat/matrixSession';
+import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
+  AlloClientStore,
   AlloEncryptionState,
   AlloOidcLoginRequest,
   AlloRoomListHandle,
@@ -16,17 +19,24 @@ import type {
 } from '@/lib/matrix/types';
 
 /**
- * The client's lifecycle: building it, signing in through a browser, and what
- * happens when any of that fails.
+ * The client's lifecycle: building it, reinstating the session of a previous
+ * launch, signing in through a browser, signing out, and what happens when any
+ * of that fails.
  *
  * Everything the runtime touches that is not its own logic is injected, so all
- * of this runs without a homeserver, without a browser and without either Matrix
- * SDK.
+ * of this runs without a homeserver, without a browser, without a keychain and
+ * without either Matrix SDK.
  */
+
+const STORE: AlloClientStore = {
+  kind: 'filesystem',
+  dataPath: '/allo/matrix',
+  cachePath: '/allo/matrix-cache',
+};
 
 const CONFIG: AlloChatClientConfig = {
   homeserverUrl: 'https://matrix.example',
-  store: { kind: 'in-memory' },
+  store: STORE,
   oidc: {
     clientName: 'Allo',
     redirectUri: 'allo://matrix/oidc',
@@ -42,6 +52,84 @@ const SESSION: AlloSession = {
   refreshToken: 'secret-refresh-token',
   authData: undefined,
 };
+
+/** The same session after the SDK has rotated its tokens. */
+const REFRESHED_SESSION: AlloSession = {
+  ...SESSION,
+  accessToken: 'secret-access-token-2',
+  refreshToken: 'secret-refresh-token-2',
+};
+
+/**
+ * The keychain, or `localStorage`, as one string and a log of what was done to
+ * it.
+ *
+ * The log is what most of these tests assert on. Persisting a session is a
+ * sequence — read, erase, write, clear — and almost everything that can go wrong
+ * with it is an ordering mistake that leaves the right values in the wrong order.
+ */
+class FakeSessionStorage implements MatrixSessionStorage {
+  /** Every operation asked of it, in the order it was asked. */
+  readonly calls: string[] = [];
+  /** The same, in the harness's log of everything the runtime did. */
+  readonly events: string[];
+
+  value: string | undefined;
+  writeFails: Error | undefined;
+  clearFails: Error | undefined;
+  /** While true, a write does not finish until {@link releaseWrites}. */
+  holdWrites = false;
+
+  #held: (() => void)[] = [];
+
+  constructor(events: string[] = []) {
+    this.events = events;
+  }
+
+  async read(): Promise<string | undefined> {
+    this.#record('read');
+    return this.value;
+  }
+
+  async write(value: string): Promise<void> {
+    this.#record('write');
+    if (this.holdWrites) {
+      await new Promise<void>((resolve) => {
+        this.#held.push(resolve);
+      });
+    }
+    if (this.writeFails !== undefined) {
+      throw this.writeFails;
+    }
+    this.value = value;
+  }
+
+  async clear(): Promise<void> {
+    this.#record('clear');
+    if (this.clearFails !== undefined) {
+      throw this.clearFails;
+    }
+    this.value = undefined;
+  }
+
+  #record(call: string): void {
+    this.calls.push(call);
+    this.events.push(call);
+  }
+
+  releaseWrites(): void {
+    for (const release of this.#held.splice(0)) {
+      release();
+    }
+  }
+
+  /** What is stored, as the session it holds. */
+  storedSession(): AlloSession | undefined {
+    return this.value === undefined
+      ? undefined
+      : (JSON.parse(this.value) as { session: AlloSession }).session;
+  }
+}
 
 class FakeLoginRequest implements AlloOidcLoginRequest {
   readonly authorizationUrl = 'https://auth.example/authorize?state=xyz';
@@ -61,14 +149,25 @@ class FakeLoginRequest implements AlloOidcLoginRequest {
 
 class FakeChatClient implements AlloChatClient {
   readonly request = new FakeLoginRequest();
+  /** Every call the runtime made, shared with the rest of the harness. */
+  readonly events: string[];
   beginOidcLoginCalls = 0;
   startSyncCalls = 0;
   closes = 0;
+  logouts = 0;
+  restoredWith: AlloSession | undefined;
   beginOidcLoginFails: Error | undefined;
   startSyncFails: Error | undefined;
+  restoreSessionFails: Error | undefined;
+  logoutFails: Error | undefined;
 
   #syncListeners = new Set<(state: AlloSyncState) => void>();
+  #sessionListeners = new Set<(session: AlloSession) => void>();
   #syncState: AlloSyncState = 'idle';
+
+  constructor(events: string[]) {
+    this.events = events;
+  }
 
   async beginOidcLogin(): Promise<AlloOidcLoginRequest> {
     this.beginOidcLoginCalls += 1;
@@ -78,13 +177,47 @@ class FakeChatClient implements AlloChatClient {
     return this.request;
   }
 
-  async restoreSession(): Promise<void> {}
+  async restoreSession(session: AlloSession): Promise<void> {
+    this.events.push('restoreSession');
+    this.restoredWith = session;
+    if (this.restoreSessionFails !== undefined) {
+      throw this.restoreSessionFails;
+    }
+  }
 
   session(): AlloSession {
     return SESSION;
   }
 
+  observeSession(onChange: (session: AlloSession) => void): AlloUnsubscribe {
+    this.#sessionListeners.add(onChange);
+    return () => {
+      this.#sessionListeners.delete(onChange);
+    };
+  }
+
+  /** Stands in for the SDK rotating the session's tokens on its own. */
+  rotateSession(session: AlloSession): void {
+    for (const listener of this.#sessionListeners) {
+      listener(session);
+    }
+  }
+
+  /** How many listeners the runtime currently has on the session. */
+  sessionListenerCount(): number {
+    return this.#sessionListeners.size;
+  }
+
+  async logout(): Promise<void> {
+    this.events.push('logout');
+    this.logouts += 1;
+    if (this.logoutFails !== undefined) {
+      throw this.logoutFails;
+    }
+  }
+
   async startSync(): Promise<void> {
+    this.events.push('startSync');
     this.startSyncCalls += 1;
     if (this.startSyncFails !== undefined) {
       throw this.startSyncFails;
@@ -128,9 +261,26 @@ class FakeChatClient implements AlloChatClient {
 
 interface Harness {
   readonly runtime: MatrixRuntime;
-  readonly client: FakeChatClient;
+  /**
+   * The client this launch is on.
+   *
+   * A getter and not a field: signing out builds a new one, and a test that held
+   * on to the first would be asserting about a client the runtime has already
+   * thrown away.
+   */
+  client(): FakeChatClient;
+  /** Every client ever built, oldest first. */
+  readonly clients: FakeChatClient[];
+  readonly storage: FakeSessionStorage;
+  /**
+   * Everything the runtime did, in order, across storage, the store and the
+   * client. What most of these tests are actually about is this sequence.
+   */
+  readonly events: string[];
   /** What the browser step was asked to open, in order. */
   readonly opened: string[];
+  /** The stores the runtime asked to have erased, in order. */
+  readonly erased: AlloClientStore[];
   createClientCalls: number;
 }
 
@@ -138,24 +288,55 @@ function harness(
   overrides: Partial<MatrixRuntimeDependencies> & {
     outcome?: () => Promise<AuthorizationOutcome>;
     createClientFails?: () => Error | undefined;
+    storage?: FakeSessionStorage;
+    eraseStoreFails?: Error;
   } = {},
 ): Harness {
-  const client = new FakeChatClient();
+  const storage = overrides.storage ?? new FakeSessionStorage();
+  const events = storage.events;
+  // One client up front, so a test can arm its failures before the runtime asks
+  // for it. Every rebuild after that gets a new one.
+  const clients: FakeChatClient[] = [new FakeChatClient(events)];
   const opened: string[] = [];
+  const erased: AlloClientStore[] = [];
+  let builds = 0;
   const result: Harness = {
-    client,
+    client: () => {
+      const client = clients[Math.max(builds - 1, 0)];
+      if (client === undefined) {
+        throw new Error('the harness lost track of its clients');
+      }
+      return client;
+    },
+    clients,
+    storage,
+    events,
     opened,
+    erased,
     createClientCalls: 0,
     runtime: new MatrixRuntime({
       config: () => CONFIG,
       createClient: async () => {
         result.createClientCalls += 1;
+        events.push('createClient');
         const failure = overrides.createClientFails?.();
         if (failure !== undefined) {
           throw failure;
         }
-        return client;
+        builds += 1;
+        if (clients.length < builds) {
+          clients.push(new FakeChatClient(events));
+        }
+        return result.client();
       },
+      eraseStore: async (store) => {
+        events.push('eraseStore');
+        erased.push(store);
+        if (overrides.eraseStoreFails !== undefined) {
+          throw overrides.eraseStoreFails;
+        }
+      },
+      sessionStorage: storage,
       authorize: async (url) => {
         opened.push(url);
         return (await overrides.outcome?.()) ?? { kind: 'returned', callbackUrl: 'allo://matrix/oidc?code=abc' };
@@ -164,6 +345,13 @@ function harness(
     }),
   };
   return result;
+}
+
+/** A session already written down, as a previous launch would have left it. */
+function stored(session: AlloSession = SESSION): FakeSessionStorage {
+  const storage = new FakeSessionStorage();
+  storage.value = encodeStoredSession(session);
+  return storage;
 }
 
 /** Lets every already-queued promise settle. */
@@ -247,8 +435,8 @@ describe('MatrixRuntime sign-in', () => {
     await settle();
 
     expect(context.opened).toEqual(['https://auth.example/authorize?state=xyz']);
-    expect(context.client.request.completedWith).toBe('allo://matrix/oidc?code=abc');
-    expect(context.client.startSyncCalls).toBe(1);
+    expect(context.client().request.completedWith).toBe('allo://matrix/oidc?code=abc');
+    expect(context.client().startSyncCalls).toBe(1);
     expect(context.runtime.getState()).toMatchObject({
       phase: 'ready',
       userId: '@nate:matrix.example',
@@ -264,7 +452,7 @@ describe('MatrixRuntime sign-in', () => {
     await context.runtime.signIn();
     await settle();
 
-    expect(context.client.request.aborts).toBe(1);
+    expect(context.client().request.aborts).toBe(1);
     expect(context.runtime.getState().phase).toBe('signed-out');
     expect(context.runtime.getState().error).toBeUndefined();
   });
@@ -286,7 +474,7 @@ describe('MatrixRuntime sign-in', () => {
     release();
     await Promise.all([first, second]);
 
-    expect(context.client.beginOidcLoginCalls).toBe(1);
+    expect(context.client().beginOidcLoginCalls).toBe(1);
     expect(context.opened).toHaveLength(1);
   });
 
@@ -296,12 +484,12 @@ describe('MatrixRuntime sign-in', () => {
     await context.runtime.signIn();
     await context.runtime.signIn();
 
-    expect(context.client.beginOidcLoginCalls).toBe(1);
+    expect(context.client().beginOidcLoginCalls).toBe(1);
   });
 
   it('reports a completion the homeserver rejected', async () => {
     const context = harness();
-    context.client.request.completion = async () => {
+    context.client().request.completion = async () => {
       throw new Error('M_UNKNOWN_TOKEN');
     };
 
@@ -319,7 +507,7 @@ describe('MatrixRuntime sign-in', () => {
     // only the final state would not notice: the failure lands a moment later
     // and the end state is the same either way.
     const context = harness();
-    context.client.startSyncFails = new Error('sliding sync is not available');
+    context.client().startSyncFails = new Error('sliding sync is not available');
     const phases: string[] = [];
     context.runtime.subscribe(() => {
       phases.push(context.runtime.getState().phase);
@@ -342,7 +530,7 @@ describe('MatrixRuntime sign-in', () => {
     await context.runtime.signIn();
     await settle();
 
-    expect(context.client.startSyncCalls).toBe(1);
+    expect(context.client().startSyncCalls).toBe(1);
     expect(phases).toContain('ready');
   });
 
@@ -375,7 +563,7 @@ describe('MatrixRuntime notifications', () => {
     // whole conversation list for nothing.
     const context = harness();
     await context.runtime.signIn();
-    context.client.emitSyncState('running');
+    context.client().emitSyncState('running');
 
     let notifications = 0;
     context.runtime.subscribe(() => {
@@ -384,12 +572,12 @@ describe('MatrixRuntime notifications', () => {
     await settle();
     notifications = 0;
 
-    context.client.emitSyncState('running');
-    context.client.emitSyncState('running');
+    context.client().emitSyncState('running');
+    context.client().emitSyncState('running');
 
     expect(notifications).toBe(0);
 
-    context.client.emitSyncState('offline');
+    context.client().emitSyncState('offline');
     expect(notifications).toBe(1);
   });
 
@@ -398,7 +586,7 @@ describe('MatrixRuntime notifications', () => {
     await context.runtime.signIn();
 
     const first = context.runtime.getState();
-    context.client.emitSyncState(first.sync);
+    context.client().emitSyncState(first.sync);
 
     expect(context.runtime.getState()).toBe(first);
   });
@@ -414,8 +602,324 @@ describe('MatrixRuntime notifications', () => {
     await settle();
     unsubscribe();
 
-    context.client.emitSyncState('offline');
+    context.client().emitSyncState('offline');
 
     expect(notifications).toBe(0);
+  });
+});
+
+describe('MatrixRuntime session persistence', () => {
+  it('reinstates a stored session without opening a browser', async () => {
+    // The whole point. A launch that finds a session does not sign in again, so
+    // the homeserver is not asked to mint a second Matrix device.
+    const context = harness({ storage: stored() });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.opened).toEqual([]);
+    expect(context.client().beginOidcLoginCalls).toBe(0);
+    expect(context.client().restoredWith).toEqual(SESSION);
+    expect(context.runtime.getState()).toMatchObject({
+      phase: 'ready',
+      userId: '@nate:matrix.example',
+    });
+  });
+
+  it('erases the store before it opens one it has no session for', async () => {
+    // Order, not just the fact. What may be on disk is the store of a session
+    // that is gone — a sign-out the app did not live to finish — and the SDKs'
+    // stores hold one user each. Erasing after the client has opened it is the
+    // same as not erasing at all.
+    const context = harness();
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.erased).toEqual([STORE]);
+    expect(context.events.indexOf('eraseStore')).toBeLessThan(
+      context.events.indexOf('createClient'),
+    );
+  });
+
+  it('leaves the store alone when it has a session to put back into it', async () => {
+    // The store belongs to the session being restored. Erasing here would throw
+    // away the device's encryption keys and every message it could still read.
+    const context = harness({ storage: stored() });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.erased).toEqual([]);
+  });
+
+  it('refuses a session stored for a different homeserver, and forgets it', async () => {
+    // A build repointed at another homeserver. The device id in this session was
+    // never issued there, and restoring it would ask that server about a device
+    // it has never heard of.
+    const context = harness({
+      storage: stored({ ...SESSION, homeserverUrl: 'https://elsewhere.example' }),
+    });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().restoredWith).toBeUndefined();
+    expect(context.storage.value).toBeUndefined();
+    expect(context.erased).toEqual([STORE]);
+    expect(context.runtime.getState().phase).toBe('signed-out');
+  });
+
+  it('writes the session down before it starts syncing', async () => {
+    // The Matrix device exists on the homeserver the moment the login completes.
+    // Everything between that and the write is a window in which the app can die
+    // and leave a device nothing will ever recognise.
+    const context = harness();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.storage.storedSession()).toEqual(SESSION);
+    expect(context.events.indexOf('write')).toBeLessThan(
+      context.events.indexOf('startSync'),
+    );
+  });
+
+  it('writes down every session the SDK rotates to', async () => {
+    // Under OIDC the tokens are short-lived and the SDK refreshes them on its
+    // own. A session written once at login is correct for minutes and stale for
+    // good, which is a session that looks persisted and stops restoring.
+    const context = harness();
+    await context.runtime.signIn();
+    await settle();
+
+    context.client().rotateSession(REFRESHED_SESSION);
+    await settle();
+
+    expect(context.storage.storedSession()).toEqual(REFRESHED_SESSION);
+  });
+
+  it('writes rotations one at a time, in the order they arrived', async () => {
+    // Two writes that overlap can finish in either order, and the loser leaves
+    // the older tokens on disk. Rotations arrive from the SDK, which does not
+    // wait for anything.
+    const context = harness();
+    await context.runtime.signIn();
+    await settle();
+    const last: AlloSession = { ...SESSION, accessToken: 'secret-access-token-3' };
+
+    context.storage.holdWrites = true;
+    context.client().rotateSession(REFRESHED_SESSION);
+    await settle();
+    context.client().rotateSession(last);
+    await settle();
+
+    // Three rotations' worth of writes have been asked for; two have started.
+    expect(context.storage.calls.filter((call) => call === 'write')).toHaveLength(2);
+
+    context.storage.holdWrites = false;
+    context.storage.releaseWrites();
+    await settle();
+
+    expect(context.storage.calls.filter((call) => call === 'write')).toHaveLength(3);
+    expect(context.storage.storedSession()).toEqual(last);
+  });
+
+  it('keeps the stored session when a restore fails', async () => {
+    // A homeserver that is down, or a phone opened with no network. Discarding
+    // on the first failure would cost the user the device this whole mechanism
+    // exists to keep.
+    const context = harness({ storage: stored() });
+    context.client().restoreSessionFails = new Error('the homeserver is unreachable');
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.storage.storedSession()).toEqual(SESSION);
+  });
+
+  it('starts over on an erased store when the user signs in after a failed restore', async () => {
+    // The client has had a session put into it, so it cannot be given another —
+    // and the store under it belongs to the session that could not be reopened.
+    const context = harness({ storage: stored() });
+    context.client().restoreSessionFails = new Error('this session is not valid');
+    context.runtime.subscribe(() => {});
+    await settle();
+    const spent = context.clients[0];
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.createClientCalls).toBe(2);
+    expect(spent?.beginOidcLoginCalls).toBe(0);
+    expect(context.erased).toEqual([STORE]);
+    expect(context.runtime.getState()).toMatchObject({
+      phase: 'ready',
+      userId: '@nate:matrix.example',
+    });
+  });
+
+  it('gives the device back when a sign-in cannot be remembered', async () => {
+    // A session that cannot be written down mints a Matrix device for one run of
+    // the app, and the next launch mints another. Handing it back is the only
+    // ending that does not accumulate them.
+    const context = harness();
+    context.storage.writeFails = new Error('the keychain refused the write');
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.clients[0]?.logouts).toBe(1);
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.runtime.getState().error).toContain('could not remember');
+  });
+
+  it('signs in once across two launches', async () => {
+    // One Matrix device per installation, stated as the thing a user would
+    // notice: the second launch never reaches the browser.
+    const storage = new FakeSessionStorage();
+
+    const first = harness({ storage });
+    await first.runtime.signIn();
+    await settle();
+    await first.runtime.close();
+
+    const second = harness({ storage });
+    second.runtime.subscribe(() => {});
+    await settle();
+
+    expect(first.opened).toHaveLength(1);
+    expect(second.opened).toEqual([]);
+    expect(second.client().restoredWith?.deviceId).toBe('DEVICE');
+    expect(second.runtime.getState().phase).toBe('ready');
+  });
+
+  it('never puts the session in the state it publishes', async () => {
+    // The state is read by components and drawn on screen. The tokens in a
+    // session are credentials.
+    const context = harness();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(JSON.stringify(context.runtime.getState())).not.toContain('secret-');
+  });
+});
+
+describe('MatrixRuntime sign-out', () => {
+  /** A runtime that has restored a session and is syncing. */
+  async function signedIn(): Promise<Harness> {
+    const context = harness({ storage: stored() });
+    context.runtime.subscribe(() => {});
+    await settle();
+    return context;
+  }
+
+  it('clears the session, tells the homeserver, and comes back signed out', async () => {
+    const context = await signedIn();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.clients[0]?.logouts).toBe(1);
+    expect(context.storage.value).toBeUndefined();
+    expect(context.runtime.getState()).toMatchObject({
+      phase: 'signed-out',
+      userId: undefined,
+      error: undefined,
+    });
+  });
+
+  it('clears the stored session before it tells the homeserver', async () => {
+    // Interrupted after the clear, the next launch finds no session and erases
+    // the store: clean. Interrupted the other way round it finds a session for a
+    // device the homeserver has already forgotten, and fails to restore it on
+    // every launch from then on.
+    const context = await signedIn();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.events.indexOf('clear')).toBeLessThan(context.events.indexOf('logout'));
+  });
+
+  it('builds the next client on an erased store', async () => {
+    const context = await signedIn();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.createClientCalls).toBe(2);
+    expect(context.erased).toEqual([STORE]);
+    expect(context.events.lastIndexOf('eraseStore')).toBeLessThan(
+      context.events.lastIndexOf('createClient'),
+    );
+  });
+
+  it('stops listening to a session it has signed out of', async () => {
+    // A subscription left on the old client would write a dead session back into
+    // storage the next time its SDK rotated the tokens, and the launch after
+    // that would try to restore it.
+    const context = await signedIn();
+    const previous = context.clients[0];
+
+    await context.runtime.signOut();
+    await settle();
+    previous?.rotateSession(REFRESHED_SESSION);
+    await settle();
+
+    expect(previous?.sessionListenerCount()).toBe(0);
+    expect(context.storage.value).toBeUndefined();
+  });
+
+  it('finishes the sign-out when the local teardown fails', async () => {
+    // The store did not go. The rebuild erases it anyway, because there is no
+    // session left for it to belong to.
+    const context = await signedIn();
+    if (context.clients[0] !== undefined) {
+      context.clients[0].logoutFails = new Error('the crypto store would not close');
+    }
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.storage.value).toBeUndefined();
+    expect(context.erased).toEqual([STORE]);
+    expect(context.runtime.getState().phase).toBe('signed-out');
+  });
+
+  it('refuses to sign out when the stored session cannot be cleared', async () => {
+    // Reporting a sign-out while leaving an access token on the device is the
+    // one outcome worse than not signing out.
+    const context = await signedIn();
+    context.storage.clearFails = new Error('the keychain refused');
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.clients[0]?.logouts).toBe(0);
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.runtime.getState().error).toContain('could not forget');
+  });
+
+  it('shares one attempt between simultaneous sign-outs', async () => {
+    // The second would be working on a client the first has already taken apart.
+    const context = await signedIn();
+
+    await Promise.all([context.runtime.signOut(), context.runtime.signOut()]);
+    await settle();
+
+    expect(context.clients[0]?.logouts).toBe(1);
+    expect(context.createClientCalls).toBe(2);
+  });
+
+  it('does nothing when nobody has signed in', async () => {
+    const context = harness();
+
+    await context.runtime.signOut();
+
+    expect(context.storage.calls).toEqual([]);
+    expect(context.runtime.getState().phase).toBe('idle');
   });
 });

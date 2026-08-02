@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 
+import { resolveAlloChatStore } from '@/lib/matrix/store';
 import type { AlloChatClientConfig, AlloOidcClientMetadata } from '@/lib/matrix/types';
 
 /**
@@ -96,21 +97,21 @@ export function readOidcMetadata(
 /**
  * The configuration the port is built with.
  *
- * The store is in memory, and that is a decision rather than an oversight. A
- * filesystem store keeps a device's encryption keys across launches, which is
- * only worth anything if the *session* survives too — and it does not: the port
- * documents that a persisted session goes stale, because the SDK rotates its
- * tokens without telling the app (`lib/matrix/types.ts`, `AlloSession`). Until
- * that gap is closed, every launch is a new login and therefore a new Matrix
- * device, and a crypto store on disk would only accumulate the keys of devices
- * nothing will ever use again.
+ * The store is on disk, which is what makes an installation one Matrix device
+ * rather than one per launch. It only became worth having once the session
+ * survived too: a device's encryption keys are useless without the session that
+ * names the device, so before sessions were persisted a store on disk would have
+ * accumulated the keys of devices nothing would ever use again. Where "on disk"
+ * is — two directories, or an IndexedDB database — is `lib/matrix/store.*.ts`'s
+ * to decide, because it is the one thing here that is not the same question on
+ * both platforms.
  */
 export function readMatrixClientConfig(): AlloChatClientConfig {
   const homeserverUrl = readHomeserverUrl(process.env.EXPO_PUBLIC_MATRIX_HOMESERVER);
   const redirectUri = resolveRedirectUri(process.env.EXPO_PUBLIC_MATRIX_OIDC_REDIRECT_URI);
   return {
     homeserverUrl,
-    store: { kind: 'in-memory' },
+    store: resolveAlloChatStore(),
     oidc: readOidcMetadata(
       homeserverUrl,
       process.env.EXPO_PUBLIC_MATRIX_OIDC_CLIENT_ID,
