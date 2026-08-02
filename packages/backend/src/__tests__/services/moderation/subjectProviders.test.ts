@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import path from "path";
 import { describe, expect, it, vi } from "vitest";
 import { ReportedType } from "../../../models/Report";
 import {
@@ -56,6 +58,159 @@ describe("moderation subject registry", () => {
   it("resolves the user provider to the identity.profile subject type", () => {
     const provider = subjectProviderFor(ReportedType.USER);
     expect(provider?.subjectType).toBe("identity.profile");
+  });
+});
+
+/**
+ * §6.4 — the assertion above is necessary and is NOT sufficient.
+ *
+ * A bridged room is not encrypted. The bridge holds the far side's keys and joins
+ * as a member, so the server really can read a WhatsApp message in full, and the
+ * argument that protects every other room — "the server holds ciphertext and has no
+ * decryption code" — simply does not apply there. That makes a `message` provider
+ * *technically* possible for the first time, and it makes the review that would
+ * approve it read reasonably: "bridged rooms aren't encrypted, so for those we can
+ * describe the content".
+ *
+ * Pinning `deliverableTypes()` to `['user']` does not catch that change in its most
+ * likely form. The one-line version keeps `reportedType: 'user'` and hangs the
+ * bridged room's messages off the snapshot's `context`: the deliverable SET is
+ * untouched, every assertion above still passes, and a jury of strangers receives a
+ * WhatsApp conversation written mostly by somebody with no Oxy account who never
+ * agreed to anything.
+ *
+ * So what is pinned here is the MODULE GRAPH. A provider cannot condition on a
+ * room's encryption state without reading room state, and it cannot read room state
+ * without importing something that knows what a room is. The closure below is that
+ * import surface, and it is deliberately small enough that any growth is a
+ * deliberate act with a failing test attached.
+ *
+ * This will occasionally fail for an innocent refactor. That is the trade: the
+ * alternative is a denylist of suspicious module names, which is defeated by
+ * calling the new module something else.
+ */
+describe("what the subject providers are allowed to reach", () => {
+  const SUBJECTS_DIRECTORY = path.resolve(__dirname, "../../../services/moderation/subjects");
+
+  /**
+   * The first-party modules reachable from `subjects/`, as relative paths from
+   * `src/`. Nothing here can observe a room, a conversation, a message or an
+   * encryption state — which is the property, stated as a list because a property
+   * about absence has to be checked against something.
+   */
+  const ALLOWED_FIRST_PARTY = [
+    "models/Report.ts",
+    "services/moderation/subjects/registry.ts",
+    "services/moderation/subjects/types.ts",
+    "services/moderation/subjects/userSubject.ts",
+    "utils/oxyUserDisplay.ts",
+  ];
+
+  /** The packages that closure imports. Also pinned: a new one is a new capability. */
+  const ALLOWED_PACKAGES = [
+    "@allo/shared-types",
+    "@oxyhq/core",
+    "@oxyhq/crowdsource",
+    "mongoose",
+  ];
+
+  /**
+   * Module state a provider must not be able to observe, checked by NAME as well.
+   *
+   * Redundant with the closure while the closure is correct, and it is here for the
+   * day it is not: a list that must be edited to make a test pass is a list that
+   * gets edited to make a test pass. This one names the thing itself, so widening
+   * the closure to include a room-state module still fails, loudly, on the
+   * assertion that actually describes §6.4.
+   */
+  const FORBIDDEN_MODULE_PATTERN = /conversation|message|room|encrypt|cipher|crypto|bridge/i;
+
+  const SOURCE_ROOT = path.resolve(__dirname, "../../..");
+
+  function importSpecifiers(sourcePath: string): string[] {
+    /**
+     * Comments are stripped before the scan. The prose in these files is long and
+     * quotes things, and a scan that read it matched a sentence as a dependency —
+     * a test failing for a reason unrelated to what it protects is a test that
+     * gets weakened rather than believed.
+     */
+    const code = readFileSync(sourcePath, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\/[^\n]*/g, " ");
+
+    const specifiers: string[] = [];
+    /** `import … from "x"`, `export … from "x"` and `import("x")` alike. */
+    for (const match of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      const specifier = match[1];
+      if (specifier !== undefined) specifiers.push(specifier);
+    }
+    return specifiers;
+  }
+
+  /** Every first-party module reachable from `subjects/`, plus the packages seen. */
+  function moduleClosure(): { firstParty: string[]; packages: string[] } {
+    const seen = new Set<string>();
+    const packages = new Set<string>();
+    const queue = ["registry.ts", "types.ts", "userSubject.ts"].map((file) =>
+      path.join(SUBJECTS_DIRECTORY, file),
+    );
+
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (current === undefined || seen.has(current)) continue;
+      seen.add(current);
+
+      for (const specifier of importSpecifiers(current)) {
+        if (!specifier.startsWith(".")) {
+          packages.add(specifier);
+          continue;
+        }
+        const resolved = path.resolve(path.dirname(current), `${specifier}.ts`);
+        queue.push(resolved);
+      }
+    }
+
+    return {
+      firstParty: [...seen].map((file) => path.relative(SOURCE_ROOT, file)).sort(),
+      packages: [...packages].sort(),
+    };
+  }
+
+  it("reaches exactly the modules it needs to describe an account, and no others", () => {
+    const { firstParty, packages } = moduleClosure();
+
+    expect(firstParty).toEqual(ALLOWED_FIRST_PARTY);
+    expect(packages).toEqual(ALLOWED_PACKAGES);
+  });
+
+  it("registers no provider that can observe a room's encryption state", () => {
+    /**
+     * The assertion §6.4 asks for by name. `deliverableTypes()` answers "is there a
+     * `message` provider"; this answers the harder question — "could any provider
+     * behave differently in a bridged room" — and the answer is no, because nothing
+     * in its reach can tell it whether a room is encrypted.
+     */
+    const { firstParty, packages } = moduleClosure();
+
+    for (const module of [...firstParty, ...packages]) {
+      expect(
+        FORBIDDEN_MODULE_PATTERN.test(module),
+        `${module} is reachable from the subject providers. A provider that can see ` +
+          "room, conversation or encryption state can be conditioned on a bridged " +
+          "room being unencrypted, which is exactly what §6.4 forbids.",
+      ).toBe(false);
+    }
+  });
+
+  it("declares only identity-realm subject types", () => {
+    /**
+     * The other half of the same door. A provider could keep `reportedType: 'user'`
+     * — leaving `deliverableTypes()` untouched — and still tell a jury it is looking
+     * at a room. The subject type is what the jury is told, so it is pinned too.
+     */
+    for (const type of deliverableTypes()) {
+      expect(subjectProviderFor(type)?.subjectType).toBe("identity.profile");
+    }
   });
 });
 
