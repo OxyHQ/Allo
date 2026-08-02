@@ -16,18 +16,6 @@ export class MatrixPortError extends Error {
   }
 }
 
-/**
- * Thrown by the web implementation, which does not exist yet.
- *
- * It throws rather than returning a stub because a stub that silently does
- * nothing is how a platform ends up shipping with its messaging quietly broken.
- */
-export class MatrixPlatformUnsupportedError extends MatrixPortError {
-  constructor(platform: string, reason: string) {
-    super(`The Matrix chat port has no implementation for ${platform}: ${reason}`);
-  }
-}
-
 /** An operation that reads sync state was attempted before sync was started. */
 export class MatrixSyncNotStartedError extends MatrixPortError {
   constructor(operation: string) {
