@@ -132,10 +132,20 @@ prerrequisitos de la Fase 2.
    explícita **[J]** (mismo fichero). **[C]** Copiar el `.wasm` a
    `packages/frontend/public/` — que ya existe y se copia al `dist/` del export web
    **[V]** (`packages/frontend/public/`) — y llamar `initAsync("/matrix_sdk_crypto_wasm_bg.wasm")`.
-   Es una línea, no una batalla con el bundler. **[?]** No he ejecutado el export web
-   con el paquete instalado; que el import de JS resuelva limpio bajo Metro es lo
-   único de esta sección que no está probado, y es lo primero que debería probar el
-   spike de web.
+   Es una línea, no una batalla con el bundler. **Confirmado después por el spike**
+   (`spikes/matrix-web/RESULTS.md`): resuelve limpio y el `.wasm` carga desde el
+   export de producción. Con un matiz que aquí se daba por opcional y no lo es —
+   `initAsync(url)` **hay que** llamarlo, porque si se deja el cargador por defecto
+   el `_redirects` de `public/` sirve el `index.html` en lugar de un 404 y el fallo
+   aparece como error de MIME de WebAssembly, no como fichero ausente.
+
+   El spike midió además que el `.wasm` **no se descarga al abrir la app** —tres
+   peticiones al cargar, ninguna es el `.wasm`—, así que el diferido no es una
+   aspiración sino el comportamiento por defecto; lo que queda por decidir es cuándo
+   llama el puerto a `initAsync`. Y un aviso que no estaba aquí: el `.wasm` se sirve
+   desde una ruta fija sin hash de contenido, así que un `Cache-Control` largo
+   impediría que una actualización del paquete invalidara nada. Conviene versionar
+   el nombre al copiarlo.
 3. **Multi-pestaña.** La documentación es explícita: *"the cryptography stack is not
    thread-safe. Having multiple `MatrixClient` instances connected to the same Indexed
    DB will cause data corruption and decryption failures"* **[J]**
@@ -216,8 +226,15 @@ meses y donde aparecen los bugs de decrypción fantasma.
   **[V]** (`.github/workflows/deploy-frontends.yml`).
 
 **La forma del puerto.** **[C]** Un módulo con dos implementaciones resueltas por
-Metro vía extensión (`matrixClient.native.ts` / `matrixClient.web.ts`), exportando
-un tipo único. Concretamente, y a propósito corto:
+Metro vía extensión, exportando un tipo único. Concretamente, y a propósito corto:
+
+> **Ya escrito.** El puerto existe en `packages/frontend/lib/matrix/`, con los
+> ficheros llamados `client.native.ts` y `client.web.ts` —no `matrixClient.*`,
+> como proponía este boceto—. El contrato real está en `lib/matrix/types.ts` y no
+> coincide método a método con lo de abajo: `startSync()`/`stopSync()` en vez de
+> `start()`/`stop()`, `observeRooms` en vez de `observeRoomList`, y el envío
+> cuelga del timeline y no del cliente. Manda el código; esto queda como el
+> razonamiento que llevó hasta él.
 
 ```ts
 // Ciclo de vida
@@ -320,9 +337,11 @@ Lo que **sí** diverge, y hay que registrarlo:
    (no sliding sync), el `.wasm` servido desde `public/` e `initAsync(url)` explícito.
 3. Un puerto `AlloChatClient` como el de §2.3, resuelto por `.native.ts` / `.web.ts`.
    No abstraer el timeline del SDK; abstraer el modelo de vista de Allo.
-4. Cerrar antes de escribir el puerto, con un spike de web de un día: que
-   `matrix-js-sdk` + el `.wasm` sobrevivan a `expo export --platform web`. Es el único
-   riesgo de esta sección que no está verificado, y es barato de cerrar.
+4. ~~Cerrar antes de escribir el puerto, con un spike de web de un día.~~ **Hecho:**
+   `spikes/matrix-web/` ejecutó exactamente eso y `matrix-js-sdk` + el `.wasm`
+   sobreviven al `expo export --platform web` (`RESULTS.md`, y la §4.1 de aquí).
+   Lo que sale del spike y hay que arrastrar a la implementación son sus cinco
+   restricciones, no un simple "funciona".
 5. Añadir a los prerrequisitos de despliegue: **homeserver con sliding sync nativo**
    (lo exige móvil, no web).
 
@@ -659,10 +678,24 @@ peor que no tenerlo, porque cambia lo que el usuario cree.
 
 En orden de cuánto duele si sale mal:
 
-1. **Que `matrix-js-sdk` + el `.wasm` sobrevivan a `expo export --platform web` bajo
-   Metro.** Es el único riesgo de la §2 sin cerrar. La API tiene la escotilla
-   (`initAsync(url)`) y `public/` existe, pero no lo he ejecutado. Un spike de un día
-   lo cierra, y debe hacerse **antes** de escribir el puerto de §2.3.
+1. ~~**Que `matrix-js-sdk` + el `.wasm` sobrevivan a `expo export --platform web` bajo
+   Metro.**~~ **Cerrado.** El spike se hizo y está en `spikes/matrix-web/`, con sus
+   resultados en `RESULTS.md`: **PASS** sobre el export de producción servido
+   estáticamente, que era justo donde se temía la rotura. Carga e instancia el
+   `.wasm` en 62 ms, genera identidad real y consigue una ida y vuelta cifrada más
+   una recuperación de key backup en un dispositivo nuevo.
+
+   Confirmó también la escotilla, y de paso que no era opcional: `initAsync(url)`
+   hay que llamarlo **explícitamente**, porque el cargador por defecto resuelve el
+   `.wasm` por `import.meta.url` a una ruta que el export no tiene, y el fallback
+   SPA de `packages/frontend/public/_redirects` responde con el `index.html` en vez
+   de un 404 — así que el error que se ve es de tipo MIME y no de fichero ausente.
+   `RESULTS.md` lista esa y otras cuatro restricciones que la implementación tiene
+   que respetar.
+
+   El puerto de §2.3 ya está escrito (`packages/frontend/lib/matrix/`), aunque su
+   mitad web sigue lanzando a propósito: el spike demuestra que la vía es viable,
+   no la deja cableada.
 2. **El coste de PBKDF2 en un Android real.** Medí 143 ms en máquina de desarrollo
    **[T]**; no en teléfono. No cambia la decisión, sí el copy de la pantalla de espera.
 3. **Que el homeserver que se despliegue sirva sliding sync nativo.** Es un requisito
@@ -671,9 +704,19 @@ En orden de cuánto duele si sale mal:
    **[R]**/**[B]**/**[J]** es lo que estas implementaciones concretas hacen, que es lo
    que la app va a ejecutar. Donde el spec diga otra cosa, gana el código, pero
    conviene saberlo.
-5. **Multi-pestaña en web.** Sé que el problema existe y está documentado **[J]**; no
-   he evaluado cuál de las dos soluciones (`navigator.locks` o `SharedWorker`) encaja
-   mejor con el arranque de Expo web.
+5. **Multi-pestaña en web.** Sigue abierto, y el spike lo dejó **más flojo** de lo
+   que decía esta línea. El encargo era reproducir y caracterizar el fallo, y **no
+   se reprodujo**: dos pestañas con la misma sesión, el mismo `device_id` y el
+   mismo IndexedDB envían, descifran y se leen entre ellas sin divergencia, ni
+   siquiera bajo un estrés de 10 mensajes alternos con un tercer dispositivo de
+   testigo. Lo único determinista fue la barandilla del SDK cuando los `device_id`
+   difieren.
+
+   Eso no es un PASS: el peligro que documenta el propio SDK es una **carrera**, y
+   una prueba de minutos no la fuerza. Sigue habiendo que presupuestar
+   `navigator.locks` o `SharedWorker` — el spike sólo confirma que ambas primitivas
+   existen en el runtime — y sigue sin evaluarse cuál encaja mejor con el arranque
+   de Expo web. Detalle en `spikes/matrix-web/RESULTS.md`.
 
 ---
 

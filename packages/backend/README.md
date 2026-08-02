@@ -595,10 +595,12 @@ Direct messages are encrypted client-side with a static Diffie-Hellman scheme (s
 - **Matrix migration**: Allo is moving to Matrix and this service is what it
   will move off. See [docs/matrix/](../../docs/matrix/) for the design. Nothing
   has changed here yet — this backend is still the transport the app uses.
-- **Push notifications do not work**: `utils/push.ts` can talk to Firebase, but
-  no route mounts a notifications endpoint, so the `POST /notifications/push-token`
-  the client sends 404s and no `PushToken` document is ever written.
-  `sendPushToUser` queries an empty collection, and no route calls it anyway.
+- **Push notifications do not work**: `src/routes/notifications.ts` was deleted in
+  commit `670f008` and never remounted, so the `POST /notifications/push-token`
+  the client still sends 404s and no `PushToken` document is ever written.
+  `utils/push.ts` can talk to Firebase, but `sendPushToUser` queries an empty
+  collection — and the only thing that calls it is `createNotification`, which
+  nothing outside its own file calls either.
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Real-time**: Socket.IO is used for real-time message delivery and updates.

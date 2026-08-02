@@ -80,7 +80,7 @@ sustituye un sistema en funcionamiento: sustituye un hueco.
 
 ### 1.3 `ConversationService` era código muerto
 
-`packages/backend/src/services/ConversationService.ts` (309 líneas) no lo
+`packages/backend/src/services/ConversationService.ts` (330 líneas) no lo
 importaba ningún fichero; la única mención era un comentario en
 `packages/backend/src/middleware/errorHandler.ts:5`. Se borró sin análisis de
 impacto, junto con el propio `errorHandler.ts`, y ninguno de los dos existe ya
@@ -743,8 +743,11 @@ descifrados en AsyncStorage (§2.3).
 **En el código:** las rutas de §2.1 y §2.2.
 
 **En la documentación:** `docs/encryption.mdx` describe entero el protocolo que se
-elimina. Queda obsoleto de arriba abajo. (No lo toco: hay otro trabajo en curso
-sobre ese fichero.)
+elimina. Queda obsoleto de arriba abajo el día que la migración aterrice, pero no
+antes: hoy sigue siendo la descripción exacta de lo que la app cifra, y ese
+trabajo —el de hacer que describiera el protocolo real y no el que se le
+atribuía— ya terminó. El fichero remite ahora a este documento para lo que viene,
+en su sección «What replaces this».
 
 ### 8.2 Lo que un corte limpio no resuelve solo
 
