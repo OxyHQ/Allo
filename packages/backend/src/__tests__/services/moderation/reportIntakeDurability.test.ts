@@ -48,7 +48,20 @@ vi.mock("../../../services/moderation/subjects/registry", async () => {
   return { ...actual, subjectProviderFor: vi.fn() };
 });
 
-import { resetBridgesConfigForTests } from "../../../config/bridges";
+/**
+ * Wrapped rather than replaced: the real implementation still runs, and the spy is
+ * only here so one test can assert that a reported MESSAGE never asks the bridge
+ * configuration anything. That is not a performance assertion — it is how the
+ * ordering inside `routeReport` is pinned from the outside.
+ */
+vi.mock("../../../config/bridges", async () => {
+  const actual = await vi.importActual<typeof import("../../../config/bridges")>(
+    "../../../config/bridges",
+  );
+  return { ...actual, bridgesConfig: vi.fn(actual.bridgesConfig) };
+});
+
+import { bridgesConfig, resetBridgesConfigForTests } from "../../../config/bridges";
 import ModerationOutbox from "../../../models/ModerationOutbox";
 import Report, { ReportCategory, ReportedType } from "../../../models/Report";
 import { reportSubmitEventId } from "../../../services/moderation/ModerationOutboxService";
@@ -56,6 +69,7 @@ import {
   DuplicateReportError,
   createReport,
 } from "../../../services/moderation/ReportIntakeService";
+import { MAX_REPORTED_IDENTIFIER_BYTES } from "../../../services/moderation/subjectIdentity";
 import { subjectProviderFor } from "../../../services/moderation/subjects/registry";
 
 interface TransactionSpy {
@@ -330,6 +344,170 @@ describe("report intake durability", () => {
 
       const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
       expect(documents?.[0]?.localStatusReason).toContain("conversation metadata");
+    });
+  });
+
+  /**
+   * The order in which intake decides, pinned from the outside.
+   *
+   * "This TYPE never leaves" outranks "this SUBJECT has no Oxy account", and the
+   * ordering has to live in the control flow rather than only in the reason that
+   * comes back. When it did not, resolving ran for every reported type, and a
+   * `message` report whose id began with `@` and matched this homeserver came out
+   * with its `reportedId` rewritten to the MXID's localpart — a string shaped like
+   * an Oxy user id, stored as the identity of a reported message, where an
+   * MXID → Oxy translation means nothing whatsoever.
+   */
+  describe("a type with no provider is decided before the subject is resolved", () => {
+    const SERVER_NAME = "allo.you";
+
+    beforeEach(() => {
+      process.env.ALLO_MATRIX_SERVER_NAME = SERVER_NAME;
+      resetBridgesConfigForTests();
+      vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    });
+
+    afterEach(() => {
+      delete process.env.ALLO_MATRIX_SERVER_NAME;
+      resetBridgesConfigForTests();
+    });
+
+    it("stores an MXID-shaped message id verbatim, never as a localpart", async () => {
+      const messageId = `@${"a".repeat(24)}:${SERVER_NAME}`;
+
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.MESSAGE,
+        reportedId: messageId,
+        categories: [ReportCategory.HARASSMENT],
+      });
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]).toMatchObject({ reportedId: messageId });
+    });
+
+    it("does not consult the bridge configuration at all", async () => {
+      /**
+       * The other half of the same defect, and the one a value assertion cannot
+       * see: every reported message was parsing bridge configuration to compute an
+       * answer that was then discarded.
+       */
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.MESSAGE,
+        reportedId: `@${"a".repeat(24)}:${SERVER_NAME}`,
+        categories: [ReportCategory.HARASSMENT],
+      });
+
+      expect(bridgesConfig).not.toHaveBeenCalled();
+    });
+
+    it("still records the type's own reason, not a subject one", async () => {
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.MESSAGE,
+        reportedId: "@someone:elsewhere.example",
+        categories: [ReportCategory.HARASSMENT],
+      });
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]?.localStatusReason).toContain("end-to-end encrypted");
+      expect(documents?.[0]?.localStatusReason).not.toContain("homeserver");
+    });
+  });
+
+  /**
+   * §6.3 turns "we could not resolve it" into "we store it and say why", which is
+   * the right answer and also the reason an unbounded identifier is reachable at
+   * all: untrusted bytes are persisted by design. What that costs is not a rejected
+   * insert — the composite index takes a megabyte without complaint — it is a `user`
+   * report whose delivery event calls `getUserById` with a megabyte in the URL path
+   * and fails with something `isOxyUserNotFound` does not recognise, so the outbox
+   * retries it as an outage for ever.
+   */
+  describe("the bound on a reported identifier", () => {
+    it("refuses an identifier longer than the Matrix ceiling", async () => {
+      await expect(
+        createReport({
+          reporter: "reporter-1",
+          reportedType: ReportedType.USER,
+          reportedId: "a".repeat(MAX_REPORTED_IDENTIFIER_BYTES + 1),
+          categories: [ReportCategory.SPAM],
+        }),
+      ).rejects.toThrow(TypeError);
+
+      expect(Report.findOne).not.toHaveBeenCalled();
+      expect(Report.create).not.toHaveBeenCalled();
+    });
+
+    it("accepts one of exactly the ceiling, so the bound is not off by one", async () => {
+      vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.MESSAGE,
+        reportedId: "a".repeat(MAX_REPORTED_IDENTIFIER_BYTES),
+        categories: [ReportCategory.SPAM],
+      });
+
+      expect(Report.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts BYTES, not characters", async () => {
+      /**
+       * The limits that eventually bite — a URL, a header, an index key — are byte
+       * limits. 200 characters of Cyrillic is 400 bytes, and a character-counted
+       * bound would wave it through.
+       */
+      await expect(
+        createReport({
+          reporter: "reporter-1",
+          reportedType: ReportedType.USER,
+          reportedId: "д".repeat(200),
+          categories: [ReportCategory.SPAM],
+        }),
+      ).rejects.toThrow(/at most 255 bytes/);
+    });
+
+    it.each([
+      ["a newline", "user\n-1"],
+      ["a null byte", "user\u0000-1"],
+      ["an interior space", "user -1"],
+      ["a tab", "user\t-1"],
+      ["a zero-width space", "user\u200B-1"],
+      ["a bidi override", "user\u202E-1"],
+    ])("refuses %s", async (_label, reportedId) => {
+      /**
+       * None of these appears in an ObjectId, an MXID, a room id, an alias or an
+       * event id, so nothing real is refused. What is refused is an identifier that
+       * behaves like something other than an identifier — one that breaks a log
+       * line, truncates in a C-backed layer, or renders as a different account than
+       * the one the row holds.
+       */
+      await expect(
+        createReport({
+          reporter: "reporter-1",
+          reportedType: ReportedType.USER,
+          reportedId,
+          categories: [ReportCategory.SPAM],
+        }),
+      ).rejects.toThrow(/whitespace or control characters/);
+
+      expect(Report.create).not.toHaveBeenCalled();
+    });
+
+    it("still forgives surrounding whitespace, which is trimmed", async () => {
+      vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+
+      await createReport({
+        reporter: "reporter-1",
+        reportedType: ReportedType.MESSAGE,
+        reportedId: "  message-1  ",
+        categories: [ReportCategory.SPAM],
+      });
+
+      const [documents] = vi.mocked(Report.create).mock.calls[0] ?? [];
+      expect(documents?.[0]).toMatchObject({ reportedId: "message-1" });
     });
   });
 

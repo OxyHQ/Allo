@@ -12,7 +12,7 @@ import {
   enqueueModerationOutboxEvent,
   reportSubmitEventId,
 } from "./ModerationOutboxService";
-import { resolveModerationSubject } from "./subjectIdentity";
+import { reportedIdentifierProblem, resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
 
 /**
@@ -134,6 +134,12 @@ function localOnlyReason(reportedType: string): string {
   );
 }
 
+interface ReportRouting {
+  readonly reportedId: string;
+  readonly deliverable: boolean;
+  readonly localStatusReason?: string;
+}
+
 /**
  * What this report is about and whether it can leave, decided from the identifier
  * alone.
@@ -144,24 +150,29 @@ function localOnlyReason(reportedType: string): string {
  * a reported message stays local whether its id is an Allo message id, a Matrix
  * event id or anything else, and saying so is more useful to whoever reads the row
  * than a sentence about Matrix identifiers.
+ *
+ * The ordering is in the CONTROL FLOW and not only in the returned reason, which is
+ * the part that was wrong when this function was first written. Resolving before
+ * the type check ran the MXID -> Oxy translation for every reported type, so a
+ * `message` report whose id happened to start with `@` and match this homeserver
+ * had its `reportedId` rewritten to the MXID's localpart -- a string shaped exactly
+ * like an Oxy user id, stored as the identity of a reported MESSAGE, where that
+ * translation means nothing at all. It also made every reported message read
+ * `bridgesConfig()` to compute an answer that was then thrown away.
+ *
+ * Nothing is resolved for a type that has no provider. The identifier is stored as
+ * the caller gave it, which for those types is the only thing it can honestly be.
  */
-interface ReportRouting {
-  readonly reportedId: string;
-  readonly deliverable: boolean;
-  readonly localStatusReason?: string;
-}
-
 function routeReport(reportedType: ReportedType, reportedId: string): ReportRouting {
-  const subject = resolveModerationSubject(reportedId);
-
   if (subjectProviderFor(reportedType) === undefined) {
     return {
-      reportedId: subject.reportedId,
+      reportedId,
       deliverable: false,
       localStatusReason: localOnlyReason(reportedType),
     };
   }
 
+  const subject = resolveModerationSubject(reportedId);
   if (subject.kind === "not-an-oxy-account") {
     return {
       reportedId: subject.reportedId,
@@ -217,6 +228,23 @@ async function inTransaction<T>(
 export async function createReport(input: CreateReportInput): Promise<CreateReportResult> {
   const reporter = requireIdentifier(input.reporter, "reporter");
   const rawReportedId = requireIdentifier(input.reportedId, "reportedId");
+
+  /**
+   * Bounded HERE as well as at the route, and for the same reason `requireIdentifier`
+   * exists at all: this function is exported and the route is only its first caller.
+   *
+   * Section 6.3 is what makes the bound necessary rather than tidy. An identifier
+   * that resolves to nothing is deliberately STORED instead of refused, so an
+   * unbounded one is untrusted bytes reaching Mongo by design -- and a `user` report
+   * carrying a megabyte of them still gets a delivery event, whose `getUserById`
+   * fails with something `isOxyUserNotFound` cannot recognise and the outbox
+   * therefore retries as an outage forever.
+   */
+  const identifierProblem = reportedIdentifierProblem(rawReportedId);
+  if (identifierProblem !== undefined) {
+    throw new TypeError(`createReport: ${identifierProblem}.`);
+  }
+
   const rawReportedType = requireIdentifier(input.reportedType, "reportedType");
   if (!isReportedType(rawReportedType)) {
     throw new TypeError(

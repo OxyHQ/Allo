@@ -11,7 +11,10 @@ import {
   createReport,
   DuplicateReportError,
 } from "../services/moderation/ReportIntakeService";
-import { resolveModerationSubject } from "../services/moderation/subjectIdentity";
+import {
+  reportedIdentifierProblem,
+  resolveModerationSubject,
+} from "../services/moderation/subjectIdentity";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
 import { logger } from "../utils/logger";
 
@@ -88,6 +91,18 @@ router.post("/", async (req: AuthRequest, res: Response) => {
   const reportedId = body.reportedId;
   if (typeof reportedId !== "string" || reportedId.trim().length === 0) {
     return sendErrorResponse(res, 400, "Bad Request", "reportedId is required");
+  }
+
+  /**
+   * Bounded before anything reads it. §6.3 makes an unresolvable identifier
+   * something Allo STORES rather than refuses, so this is the only place a size
+   * and a shape can be imposed on it at all — and without one, a report about a
+   * megabyte of attacker-chosen bytes is a permanently stuck outbox slot rather
+   * than a rejected request. `createReport` checks again, because it is exported.
+   */
+  const identifierProblem = reportedIdentifierProblem(reportedId.trim());
+  if (identifierProblem !== undefined) {
+    return sendErrorResponse(res, 400, "Bad Request", identifierProblem);
   }
 
   const categories = parseCategories(body.categories);

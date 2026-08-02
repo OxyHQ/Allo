@@ -50,6 +50,82 @@ import { oxyUserIdFromMatrixUserId } from "../bridges/matrixIdentity";
  */
 
 /**
+ * The longest identifier Allo will take a report about.
+ *
+ * 255 bytes is Matrix's own ceiling for a user id, sigil and server name included,
+ * and `services/bridges/matrixIdentity.ts` already refuses to build anything longer.
+ * An Oxy ObjectId is 24 bytes and a room alias is bounded by the same spec limit,
+ * so nothing legitimate comes close.
+ *
+ * ## What an unbounded identifier actually costs
+ *
+ * Not a rejected insert. The composite unique index was the first suspicion and it
+ * is wrong: WiredTiger dropped the 1024-byte index key limit in FCV 4.2, and the
+ * server this runs against takes a megabyte-long `reportedId` without complaint.
+ *
+ * The real cost is downstream, and §6.3 is what makes it reachable — an identifier
+ * that resolves to nothing is deliberately STORED rather than refused, so untrusted
+ * bytes reach Mongo by design and the only question is how many:
+ *
+ * 1. **A stuck outbox slot, permanently.** A `user` report with a megabyte
+ *    identifier still gets a delivery event, and `oxyClient.getUserById` puts that
+ *    identifier in a URL path. What comes back is not a 404 — it is a request-line
+ *    or header-size failure, or a transport error, and `isOxyUserNotFound` does not
+ *    recognise it. The provider rethrows, the outbox reads that as an OUTAGE, and
+ *    the event is retried forever instead of closing. One report, one delivery slot,
+ *    gone for good.
+ * 2. **Unbounded attacker-controlled rows in an indexed field.** `reportedId` is
+ *    indexed twice, and any authenticated user can write it.
+ * 3. It would otherwise ride out as `subject.externalId` and `author.oxyUserId` in
+ *    a CrowdSource envelope, which is somebody else's parser.
+ *
+ * Bytes, not characters: the limits that eventually bite are byte limits, and a
+ * 255-character identifier of astral-plane codepoints is a kilobyte.
+ */
+export const MAX_REPORTED_IDENTIFIER_BYTES = 255;
+
+/**
+ * Control characters and whitespace, neither of which appears in any identifier
+ * Allo can legitimately receive.
+ *
+ * An Oxy ObjectId is hexadecimal; a Matrix user id, room id, alias and event id are
+ * all defined without whitespace. So this rejects nothing real, and it refuses the
+ * shapes that make an identifier act like something other than an identifier: a
+ * newline in a value that reaches a log line and a URL path, a `\0` that truncates
+ * in a C-backed layer, a bidi override that makes an operator read one account name
+ * while the row holds another.
+ *
+ * The value has already been trimmed by the time it gets here, so leading and
+ * trailing spaces are forgiven and interior ones are not.
+ */
+const FORBIDDEN_IDENTIFIER_CHARACTERS =
+  /[\s\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028\u2029\u202A-\u202E\u2066-\u2069\uFEFF]/u;
+
+/**
+ * The reason a reported identifier is unusable, or `undefined` when it is fine.
+ *
+ * Returns a reason rather than throwing, because its two callers owe their users
+ * different things: `POST /api/reports` owes a 400 with a message, and
+ * `createReport` owes a `TypeError` to whatever called it without a route. One
+ * definition of the rule, two shapes of refusal — the alternative is a route that
+ * catches a `TypeError` and guesses which of several causes produced it.
+ *
+ * Both borders check, and that is deliberate rather than redundant. `createReport`
+ * is exported and the route is only its first caller; a guard that lives at one
+ * caller is a guard that holds until the second one arrives.
+ */
+export function reportedIdentifierProblem(identifier: string): string | undefined {
+  const bytes = Buffer.byteLength(identifier, "utf8");
+  if (bytes > MAX_REPORTED_IDENTIFIER_BYTES) {
+    return `reportedId must be at most ${MAX_REPORTED_IDENTIFIER_BYTES} bytes, received ${bytes}`;
+  }
+  if (FORBIDDEN_IDENTIFIER_CHARACTERS.test(identifier)) {
+    return "reportedId must not contain whitespace or control characters";
+  }
+  return undefined;
+}
+
+/**
  * A reported identifier, resolved.
  *
  * Binary on purpose. Everything downstream needs one bit — can CrowdSource judge
