@@ -246,6 +246,12 @@ describe("the bridge orchestration API", () => {
        * The two must be indistinguishable. If a disabled network answered
        * differently from an unknown one, the difference itself would enumerate
        * the catalogue.
+       *
+       * The shared status is pinned to 404 as well as compared, and that second
+       * assertion is not redundant: a mutation changing `resolveNetwork` to 403
+       * moves BOTH responses together and leaves an equality-only test perfectly
+       * green. Measured, not assumed — it survived exactly that mutation until
+       * this line was added.
        */
       const disabled = await request(appWithAuth())
         .post("/api/bridges/networks/whatsapp/link")
@@ -254,6 +260,7 @@ describe("the bridge orchestration API", () => {
         .post("/api/bridges/networks/signal/link")
         .send({ flowId: "qr" });
 
+      expect(disabled.status).toBe(404);
       expect(unknown.status).toBe(disabled.status);
       expect(unknown.body).toEqual(disabled.body);
     });
