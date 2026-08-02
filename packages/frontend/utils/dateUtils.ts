@@ -59,10 +59,18 @@ function getShortDateFormatter(): Intl.DateTimeFormat {
  *  - Yesterday:  "Yesterday"
  *  - This week:  "Monday"
  *  - Older:      "1/15/25"
+ *  - Unknown:    "" — a row whose time nobody knows shows no time
+ *
+ * The last case is a real one and not a defensive flourish. A conversation this
+ * device has seen no message in has no activity time, and the alternative to
+ * saying nothing is saying "now" beside a conversation nobody has touched.
  */
 export const formatConversationTimestamp = (input: string | Date): string => {
   try {
     const date = typeof input === 'string' ? new Date(input) : input;
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
     const now = new Date();
 
     // Start of today (midnight)

@@ -35,6 +35,7 @@ function summary(roomId: string): AlloRoomSummary {
     membership: 'joined',
     encryption: 'encrypted',
     unreadCount: 0,
+    latestMessage: undefined,
   };
 }
 
@@ -126,6 +127,10 @@ class FakeChatClient implements AlloChatClient {
   }
 
   observeSyncState(_onChange: (state: AlloSyncState) => void): AlloUnsubscribe {
+    throw new Error('not used by these tests');
+  }
+
+  async createRoom(): Promise<string> {
     throw new Error('not used by these tests');
   }
 

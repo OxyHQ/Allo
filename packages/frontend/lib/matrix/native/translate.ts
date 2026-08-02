@@ -20,6 +20,7 @@ import type {
   AlloEventContent,
   AlloEventKey,
   AlloRoomMembership,
+  AlloRoomPreview,
   AlloRoomSummary,
   AlloSendState,
   AlloSyncState,
@@ -79,7 +80,40 @@ export type RoomSummaryFields = Pick<
   | 'numUnreadMessages'
 >;
 
-export function toRoomSummary(info: RoomSummaryFields): AlloRoomSummary {
+/** The fields of `EventTimelineItem` a conversation *row* reads. */
+export type RoomPreviewFields = Pick<
+  EventTimelineItem,
+  'sender' | 'senderProfile' | 'content' | 'timestamp' | 'isOwn'
+>;
+
+/**
+ * The row's preview, from the room's latest event.
+ *
+ * Nothing is filtered here because the binding has already done it: what
+ * `Room.latestEvent()` answers with comes from the Rust SDK's latest-event cache,
+ * which only ever holds message-like events — a member joining never becomes a
+ * room's latest event. The web half has no such cache and has to make the same
+ * choice by hand.
+ *
+ * @param preview the room's latest event, or `undefined` when it has none. A
+ * room this device has seen no message in is not a room whose preview is empty.
+ */
+export function toRoomPreview(preview: RoomPreviewFields): AlloRoomPreview {
+  return {
+    // `Timestamp` is milliseconds since the epoch as a bigint, exact as a number
+    // for another 285 000 years.
+    sentAt: Number(preview.timestamp),
+    sender: preview.sender,
+    senderDisplayName: toSenderDisplayName(preview.senderProfile),
+    isOwn: preview.isOwn,
+    content: toEventContent(preview.content),
+  };
+}
+
+export function toRoomSummary(
+  info: RoomSummaryFields,
+  preview: RoomPreviewFields | undefined,
+): AlloRoomSummary {
   return {
     roomId: info.id,
     displayName: info.displayName,
@@ -88,6 +122,7 @@ export function toRoomSummary(info: RoomSummaryFields): AlloRoomSummary {
     membership: MEMBERSHIPS[info.membership],
     encryption: toEncryptionState(info.encryptionState),
     unreadCount: Number(info.numUnreadMessages),
+    latestMessage: preview === undefined ? undefined : toRoomPreview(preview),
   };
 }
 

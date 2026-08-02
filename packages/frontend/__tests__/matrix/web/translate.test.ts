@@ -1,5 +1,6 @@
 import {
   toEncryptionState,
+  toRoomPreview,
   toRoomSummary,
   toSyncState,
   toTimelineItem,
@@ -107,7 +108,7 @@ describe('toEncryptionState', () => {
 
 describe('toRoomSummary', () => {
   it('reads a room the way the conversation list draws it', () => {
-    expect(toRoomSummary(room(), roomState(['m.room.create']), true)).toEqual({
+    expect(toRoomSummary(room(), roomState(['m.room.create']), true, undefined)).toEqual({
       roomId: '!room:allo.you',
       displayName: 'Kitchen',
       avatarUrl: 'mxc://allo.you/avatar',
@@ -115,6 +116,7 @@ describe('toRoomSummary', () => {
       membership: 'joined',
       encryption: 'encrypted',
       unreadCount: 3,
+      latestMessage: undefined,
     });
   });
 
@@ -122,7 +124,8 @@ describe('toRoomSummary', () => {
     const memberships = ['join', 'invite', 'leave', 'knock', 'ban'];
     const mapped = memberships.map(
       (membership) =>
-        toRoomSummary(room({ getMyMembership: () => membership }), undefined, false)?.membership,
+        toRoomSummary(room({ getMyMembership: () => membership }), undefined, false, undefined)
+          ?.membership,
     );
 
     expect(mapped).toEqual(['joined', 'invited', 'left', 'knocked', 'banned']);
@@ -131,9 +134,9 @@ describe('toRoomSummary', () => {
   it('drops a room whose membership this version of Allo has no name for', () => {
     // `Membership` is an open string type. Reporting an unknown one as joined
     // would put a room the user is not in at the top of their conversations.
-    expect(toRoomSummary(room({ getMyMembership: () => 'm.future.state' }), undefined, false)).toBe(
-      undefined,
-    );
+    expect(
+      toRoomSummary(room({ getMyMembership: () => 'm.future.state' }), undefined, false, undefined),
+    ).toBe(undefined);
   });
 
   it('treats a room with no name and no avatar as having neither', () => {
@@ -141,6 +144,7 @@ describe('toRoomSummary', () => {
       room({ name: '', getMxcAvatarUrl: () => null }),
       undefined,
       false,
+      undefined,
     );
 
     expect(summary?.displayName).toBe(undefined);
@@ -151,11 +155,86 @@ describe('toRoomSummary', () => {
     const counts = [-1, Number.NaN, 1.5];
     const mapped = counts.map(
       (count) =>
-        toRoomSummary(room({ getUnreadNotificationCount: () => count }), undefined, false)
+        toRoomSummary(room({ getUnreadNotificationCount: () => count }), undefined, false, undefined)
           ?.unreadCount,
     );
 
     expect(mapped).toEqual([0, 0, 0]);
+  });
+});
+
+describe('toRoomPreview', () => {
+  it('reads the message a conversation row shows', () => {
+    expect(toRoomPreview(event(), VIEWER)).toEqual({
+      sentAt: 1_700_000_000_000,
+      sender: '@alice:allo.you',
+      senderDisplayName: 'Alice',
+      isOwn: false,
+      content: { kind: 'text', body: 'hello', isEdited: false },
+    });
+  });
+
+  it('carries the time the message was sent and never the time it was read', () => {
+    // The field this whole change exists for. A row's time is the message's, and
+    // the only way to have one is to have a message.
+    expect(toRoomPreview(event({ getTs: () => 1_600_000_000_000 }), VIEWER)?.sentAt).toBe(
+      1_600_000_000_000,
+    );
+  });
+
+  it("marks the viewer's own message as theirs", () => {
+    expect(toRoomPreview(event({ getSender: () => VIEWER }), VIEWER)?.isOwn).toBe(true);
+  });
+
+  it('previews a message that cannot be decrypted as exactly that', () => {
+    // Not an empty preview. A device set up today cannot read the last message of
+    // every conversation it joins, and a blank row there reads as a conversation
+    // nobody has written in.
+    const preview = toRoomPreview(event({ getType: () => 'm.room.encrypted' }), VIEWER);
+
+    expect(preview?.content).toEqual({ kind: 'undecryptable' });
+  });
+
+  it('previews a redacted message as redacted', () => {
+    expect(toRoomPreview(event({ isRedacted: () => true }), VIEWER)?.content).toEqual({
+      kind: 'redacted',
+    });
+  });
+
+  it('previews a message it cannot draw as a message it cannot draw', () => {
+    // An image is a message. The row has to say something about it, and naming
+    // the kind is better than showing the filename its body carries.
+    const preview = toRoomPreview(
+      event({ getContent: () => ({ msgtype: 'm.image', body: 'IMG_0042.jpg' }) }),
+      VIEWER,
+    );
+
+    expect(preview?.content).toEqual({
+      kind: 'unsupported',
+      description: 'm.room.message:m.image',
+    });
+  });
+
+  it('does not preview an event that is not one of the room’s messages', () => {
+    // The case the whole filter exists for: without it, every conversation's
+    // preview becomes "someone joined" the moment someone does.
+    const memberships = ['m.room.member', 'm.room.name', 'm.room.avatar', 'm.reaction'];
+
+    expect(memberships.map((type) => toRoomPreview(event({ getType: () => type }), VIEWER))).toEqual(
+      [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  it('previews stickers and polls, in both spellings a poll has', () => {
+    const types = ['m.sticker', 'm.poll.start', 'org.matrix.msc3381.poll.start'];
+
+    for (const type of types) {
+      expect(toRoomPreview(event({ getType: () => type }), VIEWER)).toBeDefined();
+    }
+  });
+
+  it('does not preview an event with no sender', () => {
+    expect(toRoomPreview(event({ getSender: () => undefined }), VIEWER)).toBe(undefined);
   });
 });
 

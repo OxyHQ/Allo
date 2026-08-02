@@ -1,9 +1,12 @@
 import {
   ClientBuilder,
   LogLevel,
+  Membership,
   MessageType,
   OidcPrompt,
   RoomListEntriesDynamicFilterKind,
+  RoomPreset,
+  RoomVisibility,
   SlidingSyncVersion,
   SlidingSyncVersionBuilder,
   initPlatform,
@@ -26,6 +29,7 @@ import type {
   TimelineLike,
 } from '@unomed/react-native-matrix-sdk';
 
+import { soleDirectInvitee } from '@/lib/matrix/directMessage';
 import { MatrixRoomNotFoundError, MatrixSyncNotStartedError } from '@/lib/matrix/errors';
 // Named in full rather than as `@/lib/matrix/store`: this half of the port is
 // the native one and its store is the native one, and saying so leaves no
@@ -37,6 +41,7 @@ import type {
   AlloChatClientConfig,
   AlloChatClientFactory,
   AlloClientStore,
+  AlloCreateRoomRequest,
   AlloEncryptionState,
   AlloOidcClientMetadata,
   AlloOidcLoginOptions,
@@ -81,6 +86,19 @@ const LOG_TAG = '[matrix]';
  * conversations would be missing.
  */
 const ROOM_LIST_PAGE_SIZE = 500;
+
+/**
+ * The memberships that make an existing direct message worth reopening.
+ *
+ * A room the user was invited to is one: accepting the invitation is how the
+ * conversation continues, and inviting them to a second room instead leaves two.
+ * A room they left, were kicked from or were banned from is not — `m.direct`
+ * still names it, and the way back in is not to send another message into it.
+ */
+const REUSABLE_MEMBERSHIPS: ReadonlySet<Membership> = new Set([
+  Membership.Joined,
+  Membership.Invited,
+]);
 
 /**
  * Rust's logging and callback machinery is process-global and has to be set up
@@ -291,6 +309,49 @@ class NativeAlloChatClient implements AlloChatClient {
     handle.attach(roomList.entriesWithDynamicAdapters(ROOM_LIST_PAGE_SIZE, handle.listener));
     this.#roomLists.add(handle);
     return handle;
+  }
+
+  /**
+   * Creates a conversation, or hands back the one that already exists.
+   *
+   * `getDmRoom` is the binding's own index of `m.direct`, and it answers for
+   * rooms the user has left as well as ones they are in — a conversation somebody
+   * walked out of is not one to reopen, so the membership is checked rather than
+   * assumed.
+   *
+   * The parameters that are not the caller's: the room is private, invite-only
+   * and encrypted, which is what Allo is. `TrustedPrivateChat` for a direct
+   * message gives both people the same power level, because a conversation
+   * between two people has no moderator; a group keeps `PrivateChat`, where the
+   * creator can name it and invite.
+   */
+  async createRoom(request: AlloCreateRoomRequest): Promise<string> {
+    const invitee = soleDirectInvitee(request);
+    if (invitee !== undefined) {
+      const existing = this.#client.getDmRoom(invitee);
+      if (existing !== undefined && REUSABLE_MEMBERSHIPS.has(existing.membership())) {
+        return existing.id();
+      }
+    }
+
+    const room = await this.#client.createRoom({
+      name: request.name,
+      topic: undefined,
+      isEncrypted: true,
+      isDirect: request.isDirect,
+      visibility: new RoomVisibility.Private(),
+      preset: request.isDirect ? RoomPreset.TrustedPrivateChat : RoomPreset.PrivateChat,
+      invite: [...request.invite],
+      avatar: undefined,
+      powerLevelContentOverride: undefined,
+      joinRuleOverride: undefined,
+      historyVisibilityOverride: undefined,
+      canonicalAlias: undefined,
+    });
+    // The binding writes `m.direct` itself for a direct message with one invitee,
+    // which is the same rule {@link soleDirectInvitee} states; the web half has to
+    // do it by hand.
+    return room;
   }
 
   async roomEncryption(roomId: string): Promise<AlloEncryptionState> {
