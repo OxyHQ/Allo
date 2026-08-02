@@ -151,6 +151,9 @@ export default function ChatLayout() {
               <Stack.Screen name="settings/language" />
               <Stack.Screen name="settings/privacy" />
               <Stack.Screen name="settings/profile-customization" />
+              <Stack.Screen name="settings/linked-accounts" />
+              {/* Second level: one screen per network, driven by the server's catalogue */}
+              <Stack.Screen name="settings/linked-accounts/[network]" />
               {/* Second level nested routes under privacy */}
               <Stack.Screen name="settings/privacy/profile-visibility" />
               <Stack.Screen name="settings/privacy/tags-allos" />
@@ -215,6 +218,8 @@ export default function ChatLayout() {
         <Stack.Screen name="settings/language" />
         <Stack.Screen name="settings/privacy" />
         <Stack.Screen name="settings/profile-customization" />
+        <Stack.Screen name="settings/linked-accounts" />
+        <Stack.Screen name="settings/linked-accounts/[network]" />
       </Stack>
     </ThemedView>
   );

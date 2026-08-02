@@ -11,6 +11,10 @@ import type {
   MessageAttachment,
   MessageAttachmentKind,
 } from '@/stores/messagesStore';
+import { roomSummarySecurity, type GhostNamespace } from './roomOrigin';
+
+/** Shared so that the default argument is one identity and not a new array per row. */
+const NO_NAMESPACES: readonly GhostNamespace[] = [];
 
 /**
  * The port's view model, translated into the one Allo's chat components draw.
@@ -75,6 +79,16 @@ export interface UnreadableEventLabels {
 export function toConversation(
   summary: AlloRoomSummary,
   labels: UnreadableEventLabels,
+  /**
+   * The bridges' ghost-user namespaces, so a row can say which remote network it
+   * came from — and, more importantly, so it never claims to be end-to-end when
+   * a bridge is reading it.
+   *
+   * Defaulted to none rather than required. A build with no bridge enabled has no
+   * namespaces to pass, and `roomSummarySecurity` with an empty list degrades to
+   * "not bridged", which is both correct there and the answer that says less.
+   */
+  namespaces: readonly GhostNamespace[] = NO_NAMESPACES,
 ): Conversation {
   const latest = summary.latestMessage;
   return {
@@ -93,6 +107,12 @@ export function toConversation(
     // conversation yet: there is nothing to read in it and accepting comes first.
     // What to do about that is the screen's decision, not this mapping's.
     isInvitation: summary.membership === 'invited',
+    /**
+     * Both marks, decided together in one place (`data-model.md` §5.3). The row
+     * draws what it is handed and works nothing out for itself — that is the
+     * whole reason `roomOrigin.ts` exists.
+     */
+    security: roomSummarySecurity(summary, namespaces),
   };
 }
 

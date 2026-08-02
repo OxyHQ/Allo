@@ -36,6 +36,8 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConversationSecurityMark } from '@/components/bridges/ConversationSecurityMark';
+import type { ConversationSecurity } from '@/lib/chat/roomOrigin';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -100,6 +102,16 @@ export interface Conversation {
      * Only the Matrix backend produces this: the Express API has no invitations.
      */
     isInvitation?: boolean;
+    /**
+     * What may be claimed about who can read this conversation, and which remote
+     * network carries it if any (`docs/matrix/data-model.md` §5.3).
+     *
+     * Decided once by `lib/chat/roomOrigin.ts` and never by a component. Absent
+     * on conversations from the Express API, which has no rooms, no bridges and
+     * no encryption state to read — and absent is correctly drawn as no mark at
+     * all rather than as an open padlock.
+     */
+    security?: ConversationSecurity;
     theme?: string; // Color theme ID (shared with all participants)
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
@@ -210,6 +222,7 @@ const ConversationRow = React.memo(function ConversationRow({
     registerSwipeableRef,
 }: ConversationRowProps) {
     const { t } = useTranslation();
+    const theme = useTheme();
     const isGroup = isGroupConversation(item);
     // Reactive: subscribes to this conversation's participant user cache.
     const displayName = useConversationDisplayName(item, currentUserId);
@@ -281,6 +294,18 @@ const ConversationRow = React.memo(function ConversationRow({
                             <ThemedText style={styles.conversationName} numberOfLines={1}>
                                 {displayName}
                             </ThemedText>
+                            {/*
+                              * Both marks, from one decision made in
+                              * `lib/chat/roomOrigin.ts`. The row deliberately does
+                              * no case analysis of its own — see
+                              * `data-model.md` §5.3 for why that separation is the
+                              * point rather than a style preference.
+                              */}
+                            <ConversationSecurityMark
+                                security={item.security}
+                                size={13}
+                                color={theme.colors.textSecondary}
+                            />
                             {isGroup && participantCount > 0 && (
                                 <ThemedText
                                     style={[
