@@ -252,7 +252,7 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
                 <MessageMetadata
                   timestamp={message.timestamp}
                   isSent={message.isSent}
-                  isEdited={false}
+                  isEdited={message.isEdited === true}
                   readStatus={message.readStatus}
                   showTimestamp={true}
                 />
