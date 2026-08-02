@@ -8,6 +8,7 @@ import type {
   AlloChatClient,
   AlloEncryptionState,
   AlloOidcLoginRequest,
+  AlloRecoveryState,
   AlloPaginationOutcome,
   AlloRoomListHandle,
   AlloSession,
@@ -153,6 +154,18 @@ class FakeChatClient implements AlloChatClient {
   }
 
   async roomEncryption(): Promise<AlloEncryptionState> {
+    throw new Error('not used by these tests');
+  }
+
+  async recoveryState(): Promise<AlloRecoveryState> {
+    throw new Error('not used by these tests');
+  }
+
+  async enableRecovery(): Promise<void> {
+    throw new Error('not used by these tests');
+  }
+
+  async recoverWithPassphrase(): Promise<void> {
     throw new Error('not used by these tests');
   }
 

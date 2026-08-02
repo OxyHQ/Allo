@@ -119,3 +119,75 @@ export class MatrixStoreUnavailableError extends MatrixPortError {
     super(`The Matrix client has nowhere to keep its data: ${detail}`);
   }
 }
+
+/**
+ * A recovery phrase that is not a BIP-39 mnemonic.
+ *
+ * The message names no words and quotes nothing back: the phrase is the whole
+ * Oxy identity, and an error string is the one place a credential most easily
+ * escapes into a log.
+ */
+export class MatrixRecoveryPhraseInvalidError extends MatrixPortError {
+  constructor() {
+    super(
+      'That is not a valid Oxy recovery phrase, so no key can be derived from ' +
+        'it. Check the words rather than the message history.',
+    );
+  }
+}
+
+/**
+ * The crypto machine was asked for before it existed.
+ *
+ * On web the SDK's `getCrypto()` answers `undefined` until the WebAssembly has
+ * been loaded and initialised, which the port does while a session starts. A
+ * caller seeing this has asked before there was a session.
+ */
+export class MatrixCryptoUnavailableError extends MatrixPortError {
+  constructor(operation: string) {
+    super(
+      `${operation} needs the encryption stack, which is only brought up once ` +
+        'there is a session. Finish a login or restore a session first.',
+    );
+  }
+}
+
+/**
+ * Recovery was asked to create a key backup while the server already holds one
+ * this device cannot use.
+ *
+ * Refused rather than resolved, because both ways of resolving it lose
+ * something: creating a new backup version orphans every room key that only the
+ * old version holds, and adopting the old one needs a key this device does not
+ * have. The native SDK refuses the same case with `BackupExistsOnServer`; this
+ * is the web half saying the same thing rather than quietly resetting.
+ */
+export class MatrixBackupExistsOnServerError extends MatrixPortError {
+  constructor() {
+    super(
+      'The homeserver already holds a key backup that this device has not ' +
+        'enabled. Creating a new one would abandon the keys in it, so recovery ' +
+        'stops here: open the existing backup with the recovery passphrase ' +
+        'instead.',
+    );
+  }
+}
+
+/**
+ * The homeserver described its secret storage key in a way the client will not
+ * act on.
+ *
+ * Everything in `m.secret_storage.key.*` comes from the server, so it is
+ * external input and is treated as such. A hostile or broken homeserver cannot
+ * steal the passphrase — it never sees it — but it can publish a description
+ * that makes the client derive a useless key or spend an unbounded amount of
+ * time trying. Refusing loudly is the only outcome that is not one of those.
+ */
+export class MatrixSecretStorageKeyUnusableError extends MatrixPortError {
+  constructor(keyId: string, reason: string) {
+    super(
+      `The secret storage key ${keyId} published by the homeserver cannot be ` +
+        `used: ${reason}`,
+    );
+  }
+}
