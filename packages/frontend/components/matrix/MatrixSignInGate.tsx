@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useOxy } from '@oxyhq/services';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useMatrixRuntime, signInToMatrix } from '@/hooks/useMatrixRuntime';
 import { useTheme } from '@/hooks/useTheme';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
+import { shouldAutoSignIn } from '@/lib/chat/matrixAutoSignIn';
 
 /**
  * Stands between the chat UI and a Matrix client that is not ready yet.
@@ -22,6 +24,26 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const theme = useTheme();
   const runtime = useMatrixRuntime();
+  const { user } = useOxy();
+  // A ref, not state: starting the sign-in must not itself cause a render, and
+  // nothing on screen depends on whether it has been tried.
+  const attempted = useRef(false);
+
+  // Read during render rather than from an Effect, because this is a decision
+  // about the state just computed — not a synchronisation with anything
+  // outside. `signInToMatrix` publishes its progress through the runtime, which
+  // re-renders this component on its own.
+  if (
+    CHAT_BACKEND === 'matrix' &&
+    shouldAutoSignIn({
+      phase: runtime.phase,
+      hasOxySession: user?.id !== undefined,
+      alreadyAttempted: attempted.current,
+    })
+  ) {
+    attempted.current = true;
+    signInToMatrix();
+  }
 
   const styles = useMemo(
     () =>
@@ -95,12 +117,12 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.container}>
       <ThemedText style={styles.title}>
-        {failed ? t('Allo could not sign you in') : t('Sign in to start chatting')}
+        {failed ? t('Allo could not sign you in') : t('Connect your chat')}
       </ThemedText>
       <ThemedText style={styles.detail}>
         {failed
           ? (runtime.error ?? t('Something went wrong. Try again.'))
-          : t('Your conversations live on your Matrix homeserver. Sign in to load them.')}
+          : t('One more step and your conversations are here.')}
       </ThemedText>
       <TouchableOpacity
         accessibilityRole="button"
@@ -108,7 +130,7 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
         onPress={signInToMatrix}
       >
         <ThemedText style={styles.buttonLabel}>
-          {failed ? t('Try again') : t('Sign in')}
+          {failed ? t('Try again') : t('Continue')}
         </ThemedText>
       </TouchableOpacity>
     </View>
