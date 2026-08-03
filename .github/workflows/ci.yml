@@ -63,7 +63,7 @@ jobs:
       # re-downloads the server binary, which is slow enough to make people stop
       # trusting the job.
       - name: Cache MongoDB binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ env.MONGOMS_VERSION }}
