@@ -1,28 +1,21 @@
 # Expo Router is a single-page app: every route is resolved in the browser, so
 # any path that is not a real file has to be answered with the shell.
 #
-# BEFORE FEDERATION IS OPENED, READ THIS.
+# The Matrix delegation is no longer a trap here, and this note stays so it does
+# not become one again.
 #
 # `server_name` is `allo.you` while the homeserver answers at `matrix.allo.you`,
-# so remote servers resolve it by requesting
+# so a remote server resolves it by requesting
 # `https://allo.you/.well-known/matrix/server` — a path served by THIS project,
-# not by the homeserver's load balancer.
+# not by the homeserver's load balancer. Both delegation files now exist under
+# `public/.well-known/matrix/`, and `public/_headers` gives them
+# `Content-Type: application/json`, which they need because neither has an
+# extension for anything to infer a type from.
 #
-# The rule below answers it with `index.html` and status **200**. That is worse
-# than serving nothing: the server-server resolution algorithm falls through to
-# the `_matrix-fed._tcp` SRV record when the well-known request fails, and a 200
-# carrying HTML is not a failure it can detect cleanly — it is a successful
-# response that happens not to be the JSON anyone wanted. The homeserver design
-# doc reasons from "on a non-200 it falls through", which does not hold here.
-#
-# So opening federation means adding, ABOVE this rule, a real
-# `/.well-known/matrix/server` returning `{"m.server":"matrix.allo.you:443"}`
-# with `Content-Type: application/json` — as a static file, a `_worker.js`, or a
-# Cloudflare redirect rule. Serving it on 443 through the existing ALB means
-# port 8448 is never needed.
-#
-# `/.well-known/matrix/client` is not needed by Allo itself, which is told where
-# its homeserver is by `EXPO_PUBLIC_MATRIX_HOMESERVER` and never asks. It is
-# needed only if a third-party Matrix client should be able to sign in to an
-# `@…:allo.you` account.
+# Real assets are served before the rule below is consulted, so those files win.
+# Delete them and this rule answers those paths with `index.html` and status
+# **200**, which is worse than serving nothing: server-server resolution falls
+# through to the `_matrix-fed._tcp` SRV record when the well-known request
+# *fails*, and a 200 carrying HTML is a success that happens not to be the JSON
+# anyone wanted. There is no SRV record to fall through to.
 /*  /index.html  200
