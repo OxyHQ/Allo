@@ -1,0 +1,19 @@
+diff --git a/src/utils/getBundleUrl.web.ts b/src/utils/getBundleUrl.web.ts
+index f6ef2145f095570ec6890368b9fc36362720c5fd..8fc2a602a259fe223ec00dc928e19296dd708d70 100644
+--- a/src/utils/getBundleUrl.web.ts
++++ b/src/utils/getBundleUrl.web.ts
+@@ -11,6 +11,14 @@ export function getBundleUrl(): string | null {
+     // TODO: Try to support `import.meta.url` when the ecosystem supports ESM,
+     // and jest doesn't throw SyntaxError when accessing `import.meta`.
+     scriptURL = (document.currentScript as HTMLScriptElement)?.src;
++    // `document.currentScript` is only set while a script is being evaluated.
++    // Metro evaluates modules lazily through its own registry, so by the time
++    // any module body runs it is already null and this returns null — which
++    // makes `import.meta.url` null, and any `new URL(relative, import.meta.url)`
++    // throw "Failed to construct 'URL': Invalid base URL" on import.
++    // The document's own URL is the correct base for a script served from the
++    // same origin, and is always available in a browser.
++    scriptURL ??= globalThis.location?.href;
+   }
+ 
+   if (scriptURL == null) {
