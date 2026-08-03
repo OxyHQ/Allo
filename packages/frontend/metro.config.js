@@ -18,44 +18,38 @@ for (const ext of ['woff2', 'woff']) {
   }
 }
 
-// `@matrix-org/matrix-sdk-crypto-wasm` cannot be loaded through its ESM entry
-// here. `index.mjs` evaluates, at module scope:
+// `@matrix-org/matrix-sdk-crypto-wasm` ships two entries and Metro can bundle
+// neither. Both fail at MODULE SCOPE, before any of our code runs, so no
+// argument to `initAsync` can prevent it:
 //
-//   const defaultURL = new URL("./pkg/matrix_sdk_crypto_wasm_bg.wasm", import.meta.url);
+//   index.mjs  `new URL("./pkg/…wasm", import.meta.url)` — Metro gives
+//              `import.meta.url` no usable value on web.
+//              -> Failed to construct 'URL': Invalid base URL
+//   index.cjs  `require.resolve("./pkg/…wasm")` — Metro's runtime `require`
+//              has no `resolve`.
+//              -> r.resolve is not a function
 //
-// Metro's web output gives `import.meta.url` no usable value, so that line throws
-// `Failed to construct 'URL': Invalid base URL` the moment the module is
-// imported — before `initAsync` is reached, which means passing an explicit URL
-// to `initAsync` does not avoid it. In production this surfaced as "Allo could
-// not start its Matrix client", with nothing pointing at the SDK.
+// Both reached production as "Allo could not start its Matrix client".
 //
-// `index.cjs` is the same bindings without that line: its default is a
-// `require.resolve`, which Metro answers with a module id it never has to parse
-// as a URL. `lib/matrix/web/cryptoWasm.ts` passes the real URL explicitly, so
-// the default is never used either way.
-//
-// `.wasm` joins `assetExts` because that `require.resolve` has to resolve at
-// bundle time. The file Metro emits from it is unused — the copy the app
-// actually fetches is placed in `public/` by `scripts/copy-matrix-wasm.js`,
-// which every web script runs first.
-if (!config.resolver.assetExts.includes('wasm')) {
-  config.resolver.assetExts.push('wasm');
-}
-
+// Web therefore uses our own entry, which is upstream's minus that one line.
+// Two mappings are needed rather than one because the package's `exports` map
+// declares only `.`: neither `<pkg>/index.cjs` nor `<pkg>/pkg/…_bg.js` can be
+// imported by path, and asking for either raises ERR_PACKAGE_PATH_NOT_EXPORTED.
+// Resolving the entry and walking up from it sidesteps the map.
+const path = require('path');
 const CRYPTO_WASM = '@matrix-org/matrix-sdk-crypto-wasm';
-// Composed from the package directory rather than asked for as a subpath: the
-// package's `exports` map declares only `.`, so `require.resolve` of
-// `<pkg>/index.cjs` fails with ERR_PACKAGE_PATH_NOT_EXPORTED. Resolving the
-// entry and taking its directory sidesteps the map — `node.cjs` and `index.cjs`
-// are siblings at the package root.
-const CRYPTO_WASM_CJS = require('path').join(
-  require('path').dirname(require.resolve(CRYPTO_WASM)),
-  'index.cjs',
-);
+const CRYPTO_WASM_BINDINGS = 'matrix-sdk-crypto-wasm-bindings';
+const cryptoWasmDir = path.dirname(require.resolve(CRYPTO_WASM));
+const cryptoWasmTargets = {
+  [CRYPTO_WASM]: path.join(__dirname, 'lib/matrix/web/cryptoWasmEntry.js'),
+  [CRYPTO_WASM_BINDINGS]: path.join(cryptoWasmDir, 'pkg/matrix_sdk_crypto_wasm_bg.js'),
+};
+
 const upstreamResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (platform === 'web' && moduleName === CRYPTO_WASM) {
-    return context.resolveRequest(context, CRYPTO_WASM_CJS, platform);
+  const target = platform === 'web' ? cryptoWasmTargets[moduleName] : undefined;
+  if (target !== undefined) {
+    return context.resolveRequest(context, target, platform);
   }
   return (upstreamResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
 };
