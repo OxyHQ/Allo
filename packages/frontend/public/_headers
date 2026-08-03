@@ -9,3 +9,21 @@
 # ETag makes a repeat visit a conditional request, not another download.
 /matrix_sdk_crypto_wasm_bg.wasm
   Cache-Control: public, max-age=0, must-revalidate
+
+# The Matrix delegation files have no extension, so nothing infers a type for
+# them and they would go out as octet-stream. The spec asks for JSON, and a
+# federating server that cannot parse the answer falls through to the SRV
+# record — which does not exist here.
+#
+# `_redirects` sends unmatched paths to index.html, but real assets are served
+# before that rule is consulted, so these files win. They did not exist until
+# now, which is why that path used to answer 200 with HTML.
+/.well-known/matrix/server
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+/.well-known/matrix/client
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
