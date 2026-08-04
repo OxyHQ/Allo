@@ -37,6 +37,14 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/frontend/package.json ./packages/frontend/
 
+# The root manifest's `patchedDependencies` is read and RESOLVED before --filter
+# narrows anything, so every patch file it names must exist even when the patched
+# package belongs to a workspace this image never installs. `expo` is exactly
+# that: a frontend dependency, filtered out below, whose patch file bun still
+# insists on finding — without this line the install dies with
+# "Couldn't find patch file: 'patches/expo@57.0.6.patch'".
+COPY patches ./patches/
+
 # shared-types source must exist before install: the root "postinstall" script
 # builds it (bun run build:shared-types) as part of `bun install`.
 COPY packages/shared-types ./packages/shared-types/
