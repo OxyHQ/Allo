@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@allo/shared-types": "file:../shared-types",
-    "@oxyhq/contracts": "^0.19.0",
-    "@oxyhq/core": "^13.0.0",
+    "@oxyhq/contracts": "^0.24.0",
+    "@oxyhq/core": "^19.1.2",
     "@oxyhq/crowdsource": "0.3.0",
     "@oxyhq/crowdsource-contracts": "0.3.0",
     "@oxyhq/crowdsource-express": "0.3.0",
