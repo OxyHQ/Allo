@@ -98,8 +98,18 @@ jobs:
       # checkout it is absent and every `router.push()` argument degrades to
       # plain `string`. Expo ships no standalone typegen command to generate it
       # here, and running a full web export just to typecheck costs minutes.
-      # Everything else IS checked; a developer who has run the app locally sees
-      # strictly more than this job does.
+      #
+      # Generating it locally no longer closes the gap either, so do not reach for
+      # that as a workaround. Since app/(chat)/[username].tsx exists, a dynamic
+      # segment sits at the root of a group and emits `/${SingleRoutePart<T>}`
+      # into the href union, which with T = string collapses to `/${string}` —
+      # satisfied by every path. Measured both ways: with that file present tsc
+      # accepts router.push('/definitely/not/a/route'); with it moved aside tsc
+      # rejects it.
+      #
+      # What covers routes instead is a test, and it runs in the job below:
+      # __tests__/routes/navigationTargets.test.ts reads the routes off app/ and
+      # the destinations out of the source and compares them.
       - name: Typecheck frontend
         run: bun run typecheck:frontend
 
