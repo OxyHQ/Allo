@@ -16,6 +16,8 @@ import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { useEphemeralSweep } from '@/hooks/useEphemeralSweep';
 import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
+import { ProfileScreen } from '@/components/profile/ProfileScreen';
+import { profileHandleFromPathname } from '@/lib/profile/handle';
 
 const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
   try {
@@ -55,6 +57,10 @@ export default function ChatLayout() {
   // the path rather than by the navigator, so a route nothing matches would
   // draw "select a conversation" over a screen the user just opened.
   const roomDetailsMatch = pathname?.match(/\/room\/([^/]+)$/);
+  // A profile, for the same reason: `/@alice` reaches this layout as an ordinary
+  // path, and without a branch for it the sidebar's own "Profile" row would open
+  // a screen that this pane immediately paints "select a conversation" over.
+  const profileHandle = profileHandleFromPathname(pathname);
 
   const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
   const isConversationRoute = conversationIdMatch &&
@@ -162,15 +168,15 @@ export default function ChatLayout() {
               <Stack.Screen name="settings/linked-accounts" />
               {/* Second level: one screen per network, driven by the server's catalogue */}
               <Stack.Screen name="settings/linked-accounts/[network]" />
-              {/* Second level nested routes under privacy */}
+              {/* Second level nested routes under privacy. Online status is not
+                  among them: it is one boolean, and it is a switch in the list. */}
               <Stack.Screen name="settings/privacy/profile-visibility" />
-              <Stack.Screen name="settings/privacy/tags-allos" />
-              <Stack.Screen name="settings/privacy/online-status" />
               <Stack.Screen name="settings/privacy/restricted" />
               <Stack.Screen name="settings/privacy/blocked" />
               <Stack.Screen name="settings/privacy/hidden-words" />
-              <Stack.Screen name="settings/privacy/hide-counts" />
             </Stack>
+          ) : profileHandle !== null ? (
+            <ProfileScreen handle={profileHandle} />
           ) : isNewChatRoute ? (
             // Show new chat screen
             (() => {
@@ -221,10 +227,15 @@ export default function ChatLayout() {
         <Stack.Screen name="c/[id]" />
         <Stack.Screen name="room/[id]" />
         <Stack.Screen name="u/[id]" />
+        <Stack.Screen name="[username]" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/appearance" />
         <Stack.Screen name="settings/language" />
         <Stack.Screen name="settings/privacy" />
+        <Stack.Screen name="settings/privacy/profile-visibility" />
+        <Stack.Screen name="settings/privacy/blocked" />
+        <Stack.Screen name="settings/privacy/restricted" />
+        <Stack.Screen name="settings/privacy/hidden-words" />
         <Stack.Screen name="settings/profile-customization" />
         <Stack.Screen name="settings/linked-accounts" />
         <Stack.Screen name="settings/linked-accounts/[network]" />

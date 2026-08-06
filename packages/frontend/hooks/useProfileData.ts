@@ -1,8 +1,27 @@
 import { useEffect, useMemo } from 'react';
-import { useUsersStore, useUserByUsername, type UserEntity } from '@/stores/usersStore';
-import { useAppearanceStore, type UserAppearance } from '@/stores/appearanceStore';
-import { usePrivacySettings } from './usePrivacySettings';
+import { useQuery } from '@tanstack/react-query';
+
 import { useOxy } from '@oxyhq/services';
+import type { User } from '@oxyhq/core';
+
+import { useAppearanceStore, type UserAppearance } from '@/stores/appearanceStore';
+import { getHttpStatus } from '@/utils/errors';
+
+/**
+ * WHO A PROFILE URL NAMES.
+ *
+ * One lookup, by HANDLE. `oxyServices.getProfileByUsername` takes a username;
+ * `getUserById` takes an account id. Passing an id to the by-username endpoint
+ * 404s — quietly, once per render — and that exact confusion shipped once
+ * already; `hooks/useSenderInfo.ts` carries the note. Everything that arrives at
+ * this hook comes out of a `/@handle` URL, so there is only ever a handle here.
+ *
+ * React Query rather than `useState` + `useEffect`, for a reason beyond the house
+ * rule: the old shape derived `loading` as "asked for a username and have no
+ * profile", which is also what "no such account" looks like, so an unknown handle
+ * span forever instead of saying so. A query has three outcomes and this hook
+ * reports all three.
+ */
 
 export interface ProfileDesign {
   displayName: string;
@@ -10,7 +29,6 @@ export interface ProfileDesign {
   avatar?: string;
   coverPhotoEnabled: boolean;
   minimalistMode: boolean;
-  primaryColor?: string;
 }
 
 export interface ProfileData {
@@ -20,122 +38,95 @@ export interface ProfileData {
   verified?: boolean;
   avatar?: string;
   design: ProfileDesign;
-  privacy?: {
-    profileVisibility?: 'public' | 'private' | 'followers_only';
-  };
-  [key: string]: unknown;
 }
 
+export const profileQueryKeys = {
+  byUsername: (username: string) => ['profile', 'byUsername', username] as const,
+};
+
 /**
- * Computes profile design values from Oxy profile + backend customization settings
+ * How long a profile stays fresh.
+ *
+ * Five minutes, matching the Oxy client's own cache TTL for the same call, so a
+ * navigation back to a profile does not re-request what the SDK would have
+ * answered from memory anyway.
  */
-function computeDesign(
-  oxyProfile: UserEntity | undefined,
-  appearance: UserAppearance | undefined
-): ProfileDesign {
-  if (!oxyProfile) {
-    return {
-      displayName: '',
-      coverPhotoEnabled: true,
-      minimalistMode: false,
-    };
-  }
+const PROFILE_STALE_TIME_MS = 5 * 60 * 1000;
 
+/** The display name, honouring the override the user set in Allo's own settings. */
+function computeDesign(profile: User, appearance: UserAppearance | undefined): ProfileDesign {
   const customization = appearance?.profileCustomization;
-  const nameValue = typeof oxyProfile?.name === 'string'
-    ? oxyProfile.name
-    : oxyProfile?.name?.displayName;
-
   return {
-    displayName: customization?.displayName || nameValue || oxyProfile?.username || '',
+    displayName:
+      customization?.displayName || profile.name?.displayName || profile.username || '',
     coverImage: customization?.coverImage || appearance?.profileHeaderImage,
-    avatar: oxyProfile?.avatar ?? undefined,
+    avatar: profile.avatar ?? undefined,
     coverPhotoEnabled: customization?.coverPhotoEnabled ?? true,
     minimalistMode: customization?.minimalistMode ?? false,
-    primaryColor: appearance?.appearance?.primaryColor,
   };
 }
 
-/**
- * Unified hook for profile data that combines:
- * - Oxy profile data (from usersStore)
- * - Appearance/customization settings (from appearanceStore)
- * - Privacy settings
- * 
- * Uses proper Zustand selectors to avoid unnecessary re-renders
- */
 export function useProfileData(username?: string): {
   data: ProfileData | null;
   loading: boolean;
+  /** The lookup finished and the handle belongs to nobody. */
+  notFound: boolean;
+  /** The lookup failed for a reason that is not "no such account". */
+  failed: boolean;
 } {
   const { oxyServices } = useOxy();
-  
-  // Use existing hooks for store access
-  const ensureByUsername = useUsersStore((state) => state.ensureByUsername);
-  const loadForUser = useAppearanceStore((state) => state.loadForUser);
-  
-  // Get user from store using existing hook
-  const oxyProfile = useUserByUsername(username);
-  
-  // Subscribe to appearance settings for this user
-  const appearance = useAppearanceStore((state) => {
-    const id = oxyProfile?.id;
-    return id ? state.byUserId[id] : undefined;
+
+  const query = useQuery({
+    queryKey: profileQueryKeys.byUsername(username ?? ''),
+    queryFn: () => oxyServices.getProfileByUsername(username ?? ''),
+    enabled: Boolean(username),
+    staleTime: PROFILE_STALE_TIME_MS,
+    // A handle nobody holds is an answer, not an outage. Retrying it four times
+    // turns an instant "no such account" into several seconds of spinner.
+    retry: (failureCount, error) => getHttpStatus(error) !== 404 && failureCount < 2,
   });
-  
-  // Load privacy settings
-  const privacySettings = usePrivacySettings(oxyProfile?.id);
 
-  // Fetch profile data when username changes
+  const profile = query.data;
+  const userId = profile?.id;
+
+  const appearance = useAppearanceStore((state) =>
+    userId ? state.byUserId[userId] : undefined,
+  );
+  const loadForUser = useAppearanceStore((state) => state.loadForUser);
+
+  /**
+   * Allo's own customization for this account, which lives in a Zustand store
+   * outside React and is shared with `useAvatarShape` and the theme.
+   *
+   * An Effect because that is what synchronising with an external store is: the
+   * store caches per user id and ignores a repeat, so this settles after one
+   * request per profile. Putting the same document in the query cache as well
+   * would give the avatar shape and the cover photo two sources that disagree.
+   */
   useEffect(() => {
-    if (!username) return;
+    if (userId) {
+      void loadForUser(userId);
+    }
+  }, [userId, loadForUser]);
 
-    let cancelled = false;
-
-    const fetchProfile = async () => {
-      try {
-        // Fetch fresh data - this will update the store
-        const data = await ensureByUsername(
-          username,
-          (u) => oxyServices.getProfileByUsername(u)
-        );
-
-        if (!cancelled && data?.id) {
-          // Load appearance settings for this user
-          await loadForUser(data.id, true);
-        }
-      } catch (err) {
-        console.debug('Profile fetch error:', err);
-      }
-    };
-
-    fetchProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [username, ensureByUsername, loadForUser, oxyServices]);
-
-  // Compute unified profile data
-  const profileData = useMemo((): ProfileData | null => {
-    if (!oxyProfile) return null;
-
-    const design = computeDesign(oxyProfile, appearance);
-
+  const data = useMemo<ProfileData | null>(() => {
+    if (!profile) return null;
     return {
-      ...oxyProfile,
-      id: oxyProfile.id || '',
-      username: oxyProfile.username || '',
-      // Cached `UserEntity.avatar` is nullable (mirrors the SDK `User.avatar`);
-      // normalize `null` → `undefined` for the UI-facing `ProfileData` shape.
-      avatar: oxyProfile.avatar ?? undefined,
-      design,
-      privacy: privacySettings || undefined,
+      id: profile.id,
+      username: profile.username ?? '',
+      bio: typeof profile.bio === 'string' ? profile.bio : undefined,
+      verified: profile.verified === true,
+      avatar: profile.avatar ?? undefined,
+      design: computeDesign(profile, appearance),
     };
-  }, [oxyProfile, appearance, privacySettings]);
+  }, [profile, appearance]);
 
-  // Loading state: true if username provided but no profile data yet
-  const loading = Boolean(username && !oxyProfile);
+  const status = query.isError ? getHttpStatus(query.error) : undefined;
 
-  return { data: profileData, loading };
+  return {
+    data,
+    loading: Boolean(username) && query.isPending,
+    notFound: status === 404,
+    failed: query.isError && status !== 404,
+  };
 }

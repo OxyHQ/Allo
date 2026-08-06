@@ -25,7 +25,20 @@ import { useOxy } from '@oxyhq/services';
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
+import { ProfileIdentity } from './profile/ProfileIdentity';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
+
+/**
+ * The handle without its `@`.
+ *
+ * `contactUsername` reaches this component both ways — the conversation metadata
+ * stores it bare, the prop's own default carries the sigil — and the renderer
+ * puts the `@` on itself, so a value that already had one would draw `@@name`.
+ */
+function bareHandle(username: string | undefined): string | undefined {
+  const handle = username?.replace(/^@+/, '');
+  return handle ? handle : undefined;
+}
 
 /**
  * Participant item component for group conversations
@@ -259,36 +272,8 @@ export function ContactDetails({
       paddingHorizontal: 16,
       paddingTop: 24,
     },
-    avatarContainer: {
-      alignItems: 'center',
-      marginBottom: 24,
-    },
     avatar: {
       marginBottom: 12,
-    },
-    nameContainer: {
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    name: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      color: theme.colors.text,
-      marginBottom: 4,
-    },
-    username: {
-      fontSize: 16,
-      color: theme.colors.textSecondary,
-      marginBottom: 8,
-    },
-    status: {
-      fontSize: 14,
-      color: theme.colors.textSecondary,
-    },
-    onlineStatus: {
-      fontSize: 14,
-      color: '#4CAF50',
-      fontWeight: '500',
     },
     section: {
       marginBottom: 24,
@@ -371,45 +356,34 @@ export function ContactDetails({
           </ThemedText>
         </View>
 
-        {/* Avatar and Name - Always visible */}
-        <View style={styles.avatarContainer}>
-          {isGroup && otherParticipants?.length > 0 ? (
-            <GroupAvatar
-              participants={otherParticipants}
-              size={100}
-              maxAvatars={2}
-              style={styles.avatar}
-            />
-          ) : (
-            <Avatar
-              source={contactAvatarUrl ? { uri: contactAvatarUrl } : undefined}
-              size={100}
-              style={styles.avatar}
-              label={displayName.charAt(0)}
-              shape={contactAvatarShape}
-            />
-          )}
-          <View style={styles.nameContainer}>
-            <ThemedText style={styles.name}>{displayName}</ThemedText>
-            {!isGroup && contactUsername && (
-              <ThemedText style={styles.username}>{contactUsername}</ThemedText>
-            )}
-            {isGroup && otherParticipants?.length > 0 && (
-              <ThemedText style={styles.username}>
-                {otherParticipants.length} participant{otherParticipants.length > 1 ? 's' : ''}
-              </ThemedText>
-            )}
-            {!isGroup && (
-              contactData.isOnline ? (
-                <ThemedText style={styles.onlineStatus}>Online</ThemedText>
-              ) : (
-                <ThemedText style={styles.status}>
-                  Last seen {formatLastSeen(contactData.lastSeen)}
-                </ThemedText>
-              )
-            )}
-          </View>
-        </View>
+        {/* Avatar and Name - Always visible. The same renderer the profile
+            screen uses, so a person looks the same wherever they are shown. */}
+        <ProfileIdentity
+          displayName={displayName}
+          handle={isGroup ? undefined : bareHandle(contactUsername)}
+          status={
+            isGroup
+              ? otherParticipants.length > 0
+                ? `${otherParticipants.length} participant${otherParticipants.length > 1 ? 's' : ''}`
+                : undefined
+              : contactData.isOnline
+                ? 'Online'
+                : `Last seen ${formatLastSeen(contactData.lastSeen)}`
+          }
+          statusIsPresence={!isGroup && contactData.isOnline}
+          avatarUrl={contactAvatarUrl}
+          avatarShape={contactAvatarShape}
+          avatarSlot={
+            isGroup && otherParticipants.length > 0 ? (
+              <GroupAvatar
+                participants={otherParticipants}
+                size={100}
+                maxAvatars={2}
+                style={styles.avatar}
+              />
+            ) : undefined
+          }
+        />
 
         {/* Tabs */}
         <AnimatedTabBar
