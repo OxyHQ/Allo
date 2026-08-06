@@ -26,6 +26,9 @@ import { useTheme } from "@/hooks/useTheme";
 import { useOxy, useAuth, ProfileButton } from "@oxyhq/services";
 import { useMyAvatarShape } from "@/hooks/useAvatarShape";
 
+// Utils
+import { profileHref } from "@/lib/profile/handle";
+
 /** Hover handlers supported by react-native-web-hover's Pressable on web. */
 interface HoverHandlers {
     onHoverIn?: () => void;
@@ -50,10 +53,13 @@ export function SideBar() {
     const avatarUri = user?.avatar ? oxyServices.getFileDownloadUrl(user.avatar as string, 'thumb') : undefined;
     const myAvatarShape = useMyAvatarShape();
 
+    /** This account's own profile URL, or `null` when there is no usable handle. */
+    const myProfileHref = useMemo(() => profileHref(user?.username), [user?.username]);
+
     const handleManageAccount = useCallback(() => router.push(ROUTES.SETTINGS), [router]);
     const handleOpenProfile = useCallback(() => {
-        if (user?.username) router.push(`/@${user.username}`);
-    }, [router, user?.username]);
+        if (myProfileHref !== null) router.push(myProfileHref);
+    }, [router, myProfileHref]);
     const handleAddAccount = useCallback(() => {
         void signIn();
     }, [signIn]);
@@ -75,12 +81,12 @@ export function SideBar() {
         ];
 
         // Add profile item if user is authenticated
-        if (user?.username) {
+        if (myProfileHref !== null) {
             items.push({
                 title: t("Profile"),
                 icon: <Avatar source={avatarUri} size={24} shape={myAvatarShape} />,
                 iconActive: <Avatar source={avatarUri} size={24} shape={myAvatarShape} />,
-                route: `/@${user.username}`,
+                route: myProfileHref,
             });
         }
 
@@ -101,7 +107,7 @@ export function SideBar() {
         );
 
         return items;
-    }, [user, avatarUri, theme.colors, t]);
+    }, [myProfileHref, avatarUri, myAvatarShape, theme.colors, t]);
 
     const handleHoverIn = useCallback(() => {
         if (hoverCollapseTimeout.current) {

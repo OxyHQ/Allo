@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { Text, StyleProp, TextStyle, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
+import { linkifyTokens } from '@/lib/text/linkify';
+import { profileHref } from '@/lib/profile/handle';
 
 interface LinkifiedTextProps {
   text: string;
@@ -10,119 +12,56 @@ interface LinkifiedTextProps {
   suffix?: React.ReactNode;
 }
 
-// Renders text with clickable @allos, #hashtags, $cashtags, and URLs
+/**
+ * A message body with its mentions and links made tappable.
+ *
+ * What counts as either is decided by `lib/text/linkify.ts`, which is where the
+ * reasoning lives — including why a `#hashtag` is drawn as ordinary text here.
+ *
+ * A mention whose handle cannot address a profile is rendered as plain text
+ * rather than as a link that goes nowhere: `profileHref` returns `null` for a
+ * handle carrying a `/`, `?`, `#` or whitespace, which is exactly the shape a
+ * sender would craft to make a mention open something other than the person it
+ * names.
+ */
 export const LinkifiedText: React.FC<LinkifiedTextProps> = ({ text, style, linkStyle, suffix }) => {
   const router = useRouter();
   const theme = useTheme();
+
   const nodes = useMemo(() => {
-    if (!text) return null;
+    const tokens = linkifyTokens(text);
+    const linkColor: StyleProp<TextStyle> = [{ color: theme.colors.primary }, linkStyle];
 
-    const elements: React.ReactNode[] = [];
-
-    // 1) allos in format [@DisplayName](username) - from backend
-    // 2) URLs: http(s)://... or www....
-    // 3) Entities with preceding boundary capture: hashtags, cashtags
-    const pattern = /(\[@([^\]]+)\]\(([^)]+)\))|(https?:\/\/[^\s]+|www\.[^\s]+)|(^|[^A-Za-z0-9_])(#[A-Za-z][A-Za-z0-9_]*|\$[A-Z]{1,6}(?:\.[A-Z]{1,2})?)/g;
-
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    let key = 0;
-
-    const pushText = (t: string) => {
-      if (!t) return;
-      elements.push(<Text key={`t-${key++}`}>{t}</Text>);
-    };
-
-    const trimUrlTrailingPunct = (raw: string) => {
-      let url = raw;
-      let trailing = '';
-      while (/[.,!?):;\]]$/.test(url)) {
-        trailing = url.slice(-1) + trailing;
-        url = url.slice(0, -1);
+    return tokens.map((token, index) => {
+      if (token.kind === 'text') {
+        return <Text key={`t-${index}`}>{token.text}</Text>;
       }
-      return { url, trailing };
-    };
 
-    while ((match = pattern.exec(text)) !== null) {
-      const full = match[0];
-      const alloFull = match[1];      // [@DisplayName](username)
-      const alloDisplay = match[2];   // DisplayName
-      const alloUsername = match[3];  // username
-      const urlCandidate = match[4];
-      const boundary = match[5] ?? '';
-      const entity = match[6];
-
-      if (alloFull) {
-        // Handle allo: display "DisplayName" (without @) but make it clickable
-        const start = match.index;
-        pushText(text.slice(lastIndex, start));
-
-        elements.push(
+      if (token.kind === 'url') {
+        return (
           <Text
-            key={`m-${key++}`}
-            style={[{ color: theme.colors.primary }, linkStyle]}
-            onPress={() => router.push(`/@${alloUsername}`)}
+            key={`u-${index}`}
+            style={linkColor}
+            onPress={() => {
+              void Linking.openURL(token.href);
+            }}
           >
-            {alloDisplay}
+            {token.label}
           </Text>
         );
-        lastIndex = start + full.length;
-      } else if (urlCandidate) {
-        const start = match.index;
-        pushText(text.slice(lastIndex, start));
-
-        const { url, trailing } = trimUrlTrailingPunct(urlCandidate);
-        const href = url.startsWith('http') ? url : `https://${url}`;
-        elements.push(
-          <Text
-            key={`u-${key++}`}
-            style={[{ color: theme.colors.primary }, linkStyle]}
-            onPress={() => Linking.openURL(href)}
-          >
-            {url}
-          </Text>
-        );
-        pushText(trailing);
-        lastIndex = start + full.length;
-      } else if (entity) {
-        const entityStart = match.index + boundary.length;
-        pushText(text.slice(lastIndex, match.index));
-        pushText(boundary);
-
-        if (entity.startsWith('#')) {
-          const tag = entity.slice(1);
-          const q = encodeURIComponent(`#${tag}`);
-          elements.push(
-            <Text
-              key={`h-${key++}`}
-              style={[{ color: theme.colors.primary }, linkStyle]}
-              onPress={() => router.push(`/search/${q}`)}
-            >
-              {entity}
-            </Text>
-          );
-        } else if (entity.startsWith('$')) {
-          const symbol = entity.slice(1);
-          const q = encodeURIComponent(`$${symbol}`);
-          elements.push(
-            <Text
-              key={`c-${key++}`}
-              style={[{ color: theme.colors.primary }, linkStyle]}
-              onPress={() => router.push(`/search/${q}`)}
-            >
-              {entity}
-            </Text>
-          );
-        } else {
-          pushText(entity);
-        }
-
-        lastIndex = entityStart + entity.length;
       }
-    }
 
-    pushText(text.slice(lastIndex));
-    return elements;
+      const href = profileHref(token.handle);
+      if (href === null) {
+        return <Text key={`m-${index}`}>{token.label}</Text>;
+      }
+
+      return (
+        <Text key={`m-${index}`} style={linkColor} onPress={() => router.push(href)}>
+          {token.label}
+        </Text>
+      );
+    });
   }, [text, linkStyle, router, theme.colors.primary]);
 
   if (!text) return null;
