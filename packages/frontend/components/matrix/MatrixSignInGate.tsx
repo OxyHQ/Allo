@@ -45,6 +45,14 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
     signInToMatrix();
   }
 
+  // Starting it does not move the phase within this render, so without this the
+  // pass that begins the sign-in still draws the screen offering to begin it —
+  // the exact screen the automatic start exists to remove, shown for as long as
+  // the runtime takes to react. The phase leaves `signed-out` on its own, to
+  // `authorizing` when the browser opens or `failed` when it cannot, and both
+  // are handled below.
+  const startingItself = attempted.current && runtime.phase === 'signed-out';
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -92,7 +100,7 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (runtime.phase === 'idle' || runtime.phase === 'starting') {
+  if (runtime.phase === 'idle' || runtime.phase === 'starting' || startingItself) {
     return (
       <View style={styles.container}>
         <ActivityIndicator style={styles.spinner} color={theme.colors.primary} />
