@@ -1,6 +1,7 @@
 {
     "name": "@allo/shared-types",
     "version": "1.0.0",
+    "private": true,
     "description": "Shared TypeScript types for allo frontend and backend",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -19,7 +20,6 @@
         "allo"
     ],
     "author": "allo Team",
-    "license": "UNLICENSED",
     "devDependencies": {
         "typescript": "^5.9.3",
         "@types/node": "^24.9.2"
