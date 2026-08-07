@@ -52,6 +52,57 @@ const NAME_FALLS_BACK_TO_ID = new RegExp(
     String.raw`(?:\?\?|\|\|)\s*[A-Za-z0-9_.?[\]'"]*\b(?:${IDENTIFIER_FIELDS})\b`,
 );
 
+/** The bindings this app draws as a person's name. */
+const NAME_BINDINGS = String.raw`name|displayName|title|label|senderName|contactName|roomName`;
+
+/**
+ * An identifier assigned INTO a name, which is the same bug wearing a variable.
+ *
+ * {@link NAME_FALLS_BACK_TO_ID} reads one direction — `displayName ?? userId`.
+ * Reverse the operands and it matches nothing, yet
+ * `const name = member.userId ?? person?.displayName` draws exactly the
+ * `@<hex>:allo.you` this whole change removed. The identifier never appears next
+ * to a `<Text>`; it appears next to an `=`, and two lines later `name` is drawn
+ * by a rule that has no reason to suspect it.
+ *
+ * Found by mutation: that one line was applied to `app/(chat)/room/[id].tsx` and
+ * all 1355 tests stayed green. A regression test that cannot fail on a
+ * one-line reintroduction of the bug it is named after is decoration.
+ */
+const NAME_BINDING = new RegExp(
+  String.raw`\b(?:const|let)\s+(?:${NAME_BINDINGS})\s*(?::[^=]+)?=\s*([^;\n]*)`,
+  'g',
+);
+
+const IDENTIFIER_FIELD = new RegExp(String.raw`\b(?:${IDENTIFIER_FIELDS})\b`);
+
+/**
+ * What a name-shaped binding is actually assigned, with the two places an
+ * identifier legitimately appears taken out first.
+ *
+ * `people(senderId)?.displayName` passes an id to a resolver and keeps the name
+ * it answers with; `isIncoming && senderId ? getSenderName(senderId) : undefined`
+ * tests one. Both are correct, and a rule that could not tell them from
+ * `member.userId ?? person?.displayName` would be switched off within a week —
+ * all three of Allo's current name bindings are of the first two kinds.
+ *
+ * So: call arguments go (innermost first, until none are left), then a ternary's
+ * condition. `??` and `?.` are not ternaries and survive, which is the point —
+ * the identifier in the reversed fallback is on neither side of a `?`.
+ */
+function assignedNames(source: string): string[] {
+  const values: string[] = [];
+  for (const [, initializer] of source.matchAll(NAME_BINDING)) {
+    let value = initializer;
+    for (let previous = ''; value !== previous; ) {
+      previous = value;
+      value = value.replace(/\([^()]*\)/g, '()');
+    }
+    values.push(value.replace(/^[^?]*?\?(?![.?])/, ''));
+  }
+  return values;
+}
+
 /**
  * The two components that put a string on screen in this app.
  *
@@ -204,6 +255,18 @@ describe('no Matrix user id can reach the screen', () => {
     // homeserver. It is the only path, because nobody there has a Matrix display
     // name. What to draw for somebody who cannot be named is
     // `chat.person.unknown`, and `lib/chat/people.ts` is what decides it.
+    expect(offenders).toEqual([]);
+  });
+
+  it('never assigns an identifier into something called a name', () => {
+    const offenders = sourceFiles()
+      .filter(({ path }) => NOT_DRAWN[path.split(sep).join('/')] === undefined)
+      .filter(({ source }) => assignedNames(source).some((value) => IDENTIFIER_FIELD.test(value)))
+      .map(({ path }) => path);
+
+    // The rule above only reads `name ?? id`. Written the other way round the
+    // identifier lands in a variable the drawing rules trust by its name, and
+    // the bug is back with nothing to catch it.
     expect(offenders).toEqual([]);
   });
 
