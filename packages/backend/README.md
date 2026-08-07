@@ -97,6 +97,27 @@ CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
 ALLO_BRIDGES_ENABLED=
 ALLO_MATRIX_SERVER_NAME=allo.you
 
+# Matrix Authentication Service (optional; see "Authentication" below). Setting
+# ALLO_MAS_ISSUER is what makes this backend accept a Matrix access token
+# alongside an Oxy one. Empty means Oxy tokens only, which is the deployed
+# default. The introspection URL must be same-origin with the issuer or the
+# process refuses to boot.
+ALLO_MAS_ISSUER=
+ALLO_MAS_INTROSPECTION_URL=
+ALLO_MAS_INTROSPECTION_CLIENT_ID=
+ALLO_MAS_INTROSPECTION_CLIENT_SECRET=
+ALLO_MAS_ALLOWED_CLIENT_IDS=
+ALLO_MAS_ACCEPTED_SCOPES=
+ALLO_MAS_EXPECTED_AUDIENCE=
+ALLO_MAS_INTROSPECTION_CACHE_SECONDS=
+ALLO_MAS_INTROSPECTION_TIMEOUT_MS=
+
+# Allo's own credential for calling the Oxy API as itself (optional; both or
+# neither). Every Oxy route the directory uses is public, so the lookups work
+# without it — see "People directory" below.
+ALLO_OXY_SERVICE_API_KEY=
+ALLO_OXY_SERVICE_API_SECRET=
+
 # Tests only: point the vitest suite at an existing MongoDB replica set instead
 # of downloading a mongodb-memory-server binary. Honoured when already set —
 # see "Running the tests without a downloaded binary" below.
@@ -162,16 +183,84 @@ therefore pointless: the next deploy overwrites it. Change the GitHub secret.
 
 ### Authentication
 
-All authenticated endpoints require a Bearer token from Oxy. The middleware
-comes from `@oxyhq/core/server` — `createOxyAuthMiddleware(oxy)`, mounted on
-`/api` in `server.ts` — alongside `createOxyCors` and `createOxyRateLimit` from
-the same package. There is no local middleware directory.
+Two ways to be signed in, told apart by the **HTTP authentication scheme**:
+
+```
+Authorization: Bearer <oxy access token>          ← the default, and what ships
+Authorization: MatrixBearer <MAS access token>    ← opt-in, see below
+```
+
+The Oxy half is unchanged: `createOxyAuthMiddleware(oxy)` from
+`@oxyhq/core/server`, mounted on `/api` in `server.ts`, alongside
+`createOxyCors` and `createOxyRateLimit` from the same package.
+
+The Matrix half is `src/middleware/matrixAuth.ts`, mounted immediately ahead of
+it, and it answers **only** requests using the `MatrixBearer` scheme. Everything
+else passes straight through untouched. The scheme carries the discrimination
+rather than a side header because a side header can be stripped by a proxy and
+separated from the credential it describes; `oxy.auth()` extracts a token only
+from a header beginning with the exact string `"Bearer "`, so a MatrixBearer
+credential is structurally invisible to it, and a refused MatrixBearer request
+is never offered to the Oxy validator for a second opinion.
+
+The token itself is opaque, so it is validated by RFC 7662 introspection against
+MAS on every request, subject to a **30-second** cache (`exp` is an additional
+ceiling, never an extension). That window is the bound on how long a revoked
+token keeps working. Beyond `active`, the checks are: the token is an access
+token and not a refresh token, it carries the MSC2967 Matrix client-API scope,
+its `iss` and `aud` match when the response carries them, its `client_id` is in
+the allowlist when one is configured, and its `username` is a well-formed Oxy
+account id — a bridge ghost such as `whatsapp_447700900000` is refused, not
+coerced. MAS unreachable is **503, never 401**: an outage must not sign anybody
+out. See `src/config/matrixAuth.ts` for the boot-time rules and
+`src/services/auth/` for the rest.
+
+Both paths produce the same `req.userId` / `req.user`, so no route knows or
+cares which sign-in produced the request.
 
 Routes are split into two routers: `publicApiRouter` (health only) and
 `authenticatedApiRouter`, which carries `/profile`, `/conversations`,
-`/messages`, `/devices` and `/reports`. The CrowdSource webhook is mounted
-separately at `/webhooks/crowdsource`, ahead of the JSON body parser, because it
-needs the raw body to verify its signature.
+`/messages`, `/devices`, `/reports`, `/bridges`, `/push` and `/directory`. The
+CrowdSource webhook is mounted separately at `/webhooks/crowdsource`, ahead of
+the JSON body parser, because it needs the raw body to verify its signature.
+
+**The Socket.IO handshake is not covered.** It still authenticates with
+`oxy.authSocket()`, so a MAS token cannot open a websocket. That is deliberate:
+the realtime namespace belongs to the legacy transport, which the Matrix path
+replaces with `/sync` rather than authenticating into.
+
+### People directory
+
+`/api/directory/*` answers the five Oxy lookups the app makes today, so that an
+app authenticating only through MAS — and therefore holding no Oxy session —
+can still draw a person.
+
+| Route | Replaces |
+| --- | --- |
+| `GET /api/directory/profiles/username/:username` | `oxyServices.getProfileByUsername` |
+| `GET /api/directory/users/:userId` | `oxyServices.getUserById` |
+| `POST /api/directory/users/by-ids` (`{ ids }`, max 100) | `oxyServices.getUsersByIds` |
+| `GET /api/directory/profiles/search?query=&limit=&offset=` | `oxyServices.searchProfiles` |
+| `GET /api/directory/assets/:fileId/url?variant=` | `oxyServices.getFileDownloadUrl` |
+
+Every one answers a `DirectoryUser` (or a list of them) from
+`@allo/shared-types`, which is a **projection**: id, handle, display name,
+first/last, avatar id, resolved avatar URL, bio. The Oxy `User` carries `email`,
+`phone`, `address` and `birthday`, and this backend asks Oxy as itself, so
+anything it forwarded it would forward to every signed-in user.
+
+Each `DirectoryUser` already carries `avatarUrl`, so the fifteen places in the
+app that turn an avatar id into a URL become a field read rather than a request.
+The asset endpoint exists for an id that arrives from somewhere else.
+
+Authenticated, even though every underlying Oxy route is public: an
+unauthenticated profile lookup here would be an enumeration endpoint pointed at
+Oxy's whole user base with Allo's IP reputation in front of it.
+
+No service credential is required, for the same reason. Setting
+`ALLO_OXY_SERVICE_API_KEY` / `ALLO_OXY_SERVICE_API_SECRET` only changes how the
+bulk lookup authenticates; see `src/config/oxyService.ts`, which also documents
+the console.oxy.so step that mints them.
 
 ### Health Check
 

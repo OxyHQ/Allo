@@ -137,6 +137,30 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
 
 ## Key features
 
+- **Authentication:** two ways in, told apart by the HTTP scheme.
+  `Authorization: Bearer` is an Oxy token and is what the app sends today;
+  `Authorization: MatrixBearer` is a Matrix Authentication Service token,
+  validated by RFC 7662 introspection in `packages/backend/src/middleware/matrixAuth.ts`
+  plus `src/services/auth/`. The scheme, and not a side header, carries the
+  discrimination: a proxy that strips an unknown header would otherwise separate
+  a credential from its issuer, and `oxy.auth()` reads a token only from a header
+  beginning with the exact string `"Bearer "`, so the two validators cannot see
+  each other's tokens. There is no fall-through between them. The MAS path is
+  **off unless `ALLO_MAS_ISSUER` is set**, and the introspection endpoint must be
+  same-origin with the issuer or the process refuses to boot — MAS sends no `iss`,
+  so where the question is asked IS the issuer verification. An introspection
+  answer is cached for at most 30 seconds, which is the bound on how long a
+  revoked token keeps working; MAS unreachable is 503 and never 401, because an
+  outage must not sign everybody out. **The Socket.IO handshake is not covered**
+  and still requires an Oxy token.
+- **People directory:** `/api/directory/*` (`packages/backend/src/routes/directory.ts`)
+  answers the five Oxy lookups the app makes — `getProfileByUsername`,
+  `getUserById`, `getUsersByIds`, `searchProfiles`, `getFileDownloadUrl` — so an
+  app with no Oxy session can still draw a person. **The frontend still calls Oxy
+  directly**; this is the surface it moves to. Every underlying Oxy route is
+  public, so no service credential is needed, and the responses are a PROJECTION
+  (`DirectoryUser` in `@allo/shared-types`) rather than the Oxy `User`, which
+  carries `email`, `phone`, `address` and `birthday`.
 - **E2E encryption:** `lib/signalProtocol.ts` does static ECDH (P-256) between
   identity keys, no KDF, AES-256-GCM. **It is not the Signal Protocol despite the
   filename:** no forward secrecy, prekeys generated but unused, and groups,
