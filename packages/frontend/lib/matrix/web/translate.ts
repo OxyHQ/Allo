@@ -260,7 +260,7 @@ export function toRoomPreview(
   return {
     sentAt: event.getTs(),
     sender,
-    senderDisplayName: event.sender?.name,
+    senderDisplayName: toSenderDisplayName(event.sender),
     isOwn: sender === viewerUserId,
     content: toEventContent(event),
   };
@@ -281,8 +281,32 @@ export interface TimelineEventFields {
   replacingEvent(): object | null;
   /** `null` for every event the homeserver has already accepted. */
   readonly status: SdkEventStatus | null;
-  /** The sender's room membership, once the SDK has resolved it. */
-  readonly sender: { readonly name: string } | null;
+  /**
+   * The sender's room membership, once the SDK has resolved it.
+   *
+   * `rawDisplayName` and not `name`, for the same reason `web/roomDetails.ts`
+   * reads the raw one: the SDK's `name` falls back to the user id when somebody
+   * has set no display name, and disambiguates two people with the same name by
+   * appending theirs — so `name` is an MXID, or a name with an MXID in
+   * brackets after it, exactly as often as somebody has no display name. On
+   * Allo's homeserver that is everybody, so every sender the port reported was
+   * an identifier while the field promised a name. `undefined` is what the port
+   * documents for "no name here", and it is now what it means.
+   */
+  readonly sender: { readonly rawDisplayName?: string } | null;
+}
+
+/**
+ * The sender's display name, or nothing.
+ *
+ * An empty string is not a name, and the SDK hands one over for a member whose
+ * `m.room.member` event carries `displayname: ""`.
+ */
+function toSenderDisplayName(
+  sender: { readonly rawDisplayName?: string } | null,
+): string | undefined {
+  const name = sender?.rawDisplayName;
+  return name === undefined || name === '' ? undefined : name;
 }
 
 /**
@@ -341,7 +365,7 @@ export function toTimelineItem(
     key: identity.key,
     id: identity.id,
     sender,
-    senderDisplayName: event.sender?.name,
+    senderDisplayName: toSenderDisplayName(event.sender),
     sentAt: event.getTs(),
     isOwn: sender === viewerUserId,
     sendState: toSendState(event.status),

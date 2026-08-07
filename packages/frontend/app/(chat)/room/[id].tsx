@@ -12,11 +12,19 @@ import { EphemeralSection } from '@/components/matrix/EphemeralSection';
 import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useChatPeople } from '@/hooks/useChatPeople';
 import { useEphemeralPolicy } from '@/hooks/useEphemeralPolicy';
 import { useMatrixRuntime } from '@/hooks/useMatrixRuntime';
 import { useTheme } from '@/hooks/useTheme';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { ephemeralPolicies } from '@/lib/chat/ephemeralPolicies';
+import {
+  conversationTitleFrom,
+  isOwnRoomName,
+  NO_CHAT_PERSON_REQUESTS,
+  viewerServerNameOf,
+  type ChatPerson,
+} from '@/lib/chat/people';
 import { roomAdminSource, type RoomAdminSnapshot } from '@/lib/chat/roomAdmin';
 import type {
   AlloEphemeralPolicy,
@@ -102,10 +110,45 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
     return byUserId;
   }, [snapshot.trust]);
 
-  const nameOf = useCallback(
-    (userId: string) =>
-      details?.members.find((member) => member.userId === userId)?.displayName ?? userId,
+  /**
+   * Who everybody in this room is.
+   *
+   * One request for the whole room rather than one per row: a family group of
+   * thirty must not be thirty requests, and `useChatPeople` collects every id
+   * asked for in a tick into a single lookup. Matrix's own name for a member
+   * travels with the id because for a bridged contact it is the only name there
+   * will ever be.
+   */
+  const requests = useMemo(
+    () =>
+      details === undefined
+        ? NO_CHAT_PERSON_REQUESTS
+        : details.members.map((member) => ({
+            userId: member.userId,
+            matrixDisplayName: member.displayName,
+          })),
     [details],
+  );
+  const people = useChatPeople(requests);
+  const serverName = useMemo(() => viewerServerNameOf(runtime.userId), [runtime.userId]);
+
+  /**
+   * The name to put in a sentence about somebody.
+   *
+   * It used to be `member.displayName ?? userId`, so the warning that names the
+   * people an ephemeral conversation will not send to was a list of MXIDs — the
+   * exact thing `EphemeralSection` takes this mapper in order to avoid. Somebody
+   * still being looked up has no name yet, and the honest word for them is the
+   * one `chat.person.unknown` carries rather than their identifier.
+   */
+  const nameOf = useCallback(
+    (userId: string) => {
+      const person = people(userId);
+      return person === undefined || person.displayName === ''
+        ? t('chat.person.unknown')
+        : person.displayName;
+    },
+    [people, t],
   );
 
   const setPolicy = useCallback(
@@ -177,6 +220,7 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
       renderItem={({ item }) => (
         <MemberRow
           member={item}
+          person={people(item.userId)}
           isViewer={item.userId === runtime.userId}
           trust={trustByUserId.get(item.userId)}
           // The identity of the people in a conversation only decides anything
@@ -192,7 +236,12 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
               over by a `useState` that was initialised once. */}
           <RoomNameSection
             key={details.name ?? ''}
-            name={details.name}
+            title={conversationTitleFrom(details.name, serverName, people)}
+            // The room's own name and nothing else goes in the field: a title
+            // computed from the people in the room is not something the user
+            // typed, and offering it back would let one tap write a list of
+            // Matrix ids into `m.room.name` for everybody, in the clear.
+            name={isOwnRoomName(details.name, serverName) ? details.name : undefined}
             isDirect={details.isDirect}
             canRename={rights?.canRename === true}
             onRename={source.rename}
@@ -249,11 +298,15 @@ function RoomAdminScreen({ roomId }: { readonly roomId: string }) {
  * homeserver's name changes, rather than by an Effect watching a prop.
  */
 function RoomNameSection({
+  title,
   name,
   isDirect,
   canRename,
   onRename,
 }: {
+  /** What this conversation is called on screen, people already resolved. */
+  readonly title: string;
+  /** The room's own `m.room.name`, and only that. See the call site. */
   readonly name: string | undefined;
   readonly isDirect: boolean;
   readonly canRename: boolean;
@@ -289,7 +342,7 @@ function RoomNameSection({
     // would ever see the point of.
     return (
       <View style={styles.section}>
-        <ThemedText style={styles.roomName}>{name ?? ''}</ThemedText>
+        <ThemedText style={styles.roomName}>{title}</ThemedText>
       </View>
     );
   }
@@ -367,35 +420,83 @@ function AddPeopleRow({
   );
 }
 
+/**
+ * One person in the conversation.
+ *
+ * It used to draw `member.displayName ?? member.userId` as the name and
+ * `member.userId` underneath it, so a room on Allo's homeserver — where nobody
+ * has a Matrix display name — was a column of `@<hex>:allo.you` with `@` for an
+ * avatar. Both lines come from {@link ChatPerson} now, which is never an
+ * identifier: their name, their handle, their face.
+ *
+ * A bridged contact is drawn from what Matrix says about them and from nothing
+ * else — a mautrix bridge names its puppets, and that name is the only one that
+ * exists — so they get no handle line. Which network carries the conversation is
+ * a fact about the room, not about the row, and `roomOrigin.ts` already puts it
+ * where it belongs.
+ */
 function MemberRow({
   member,
+  person,
   isViewer,
   trust,
   showTrust,
 }: {
   readonly member: AlloRoomMember;
+  /** `undefined` for the moment before the lookup has been set up. */
+  readonly person: ChatPerson | undefined;
   readonly isViewer: boolean;
   readonly trust: AlloIdentityTrust | undefined;
   readonly showTrust: boolean;
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
-  const name = member.displayName ?? member.userId;
+
+  // Empty while the lookup is in flight, and the row draws a nameless avatar for
+  // that moment rather than an id it would have to take back.
+  const name = person?.displayName ?? '';
+  const detail = memberDetail(person, member.membership === 'invited', t);
 
   return (
     <View style={styles.row}>
-      <Avatar size={40} label={name.charAt(0).toUpperCase()} />
+      <Avatar
+        size={40}
+        source={person?.avatarUrl === undefined ? undefined : { uri: person.avatarUrl }}
+        label={name === '' ? undefined : name.charAt(0).toUpperCase()}
+      />
       <View style={styles.rowText}>
         <ThemedText style={styles.rowLabel} numberOfLines={1}>
-          {isViewer ? t('{{name}} (you)', { name }) : name}
+          {isViewer && name !== '' ? t('{{name}} (you)', { name }) : name}
         </ThemedText>
-        <ThemedText style={styles.rowDetail} numberOfLines={1}>
-          {member.membership === 'invited' ? t('Invited') : member.userId}
-        </ThemedText>
+        {detail !== undefined && (
+          <ThemedText style={styles.rowDetail} numberOfLines={1}>
+            {detail}
+          </ThemedText>
+        )}
         {showTrust && <TrustLine trust={trust} />}
       </View>
     </View>
   );
+}
+
+/**
+ * The second line of a member row, or nothing.
+ *
+ * "Invited" first, because whether somebody has actually joined is what the
+ * reader is looking for; then their handle, which is how they would find that
+ * person anywhere else in Oxy. Nothing at all otherwise — this line used to be
+ * `member.userId`, and a row with no second line says strictly more than a row
+ * with an identifier on it.
+ */
+function memberDetail(
+  person: ChatPerson | undefined,
+  isInvited: boolean,
+  t: (key: string) => string,
+): string | undefined {
+  if (isInvited) {
+    return t('Invited');
+  }
+  return person?.handle === undefined ? undefined : `@${person.handle}`;
 }
 
 /**

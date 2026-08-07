@@ -26,6 +26,16 @@ export interface MessageInfoScreenProps {
   visible: boolean;
   message: Message | null;
   senderName?: string;
+  /**
+   * The sender's handle, without its `@`.
+   *
+   * What this line used to hold was `message.senderId`, printed as `ID: …` — an
+   * Oxy account id on the Express backend and a Matrix user id on the other. A
+   * handle is the identifier a reader can actually use: it is how they would
+   * find the same person anywhere else in Oxy. When there is none, the line is
+   * absent rather than filled with the id it replaced.
+   */
+  senderHandle?: string;
   senderAvatar?: string;
   onClose: () => void;
 }
@@ -51,6 +61,7 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
   visible,
   message,
   senderName,
+  senderHandle,
   senderAvatar,
   onClose,
 }) => {
@@ -206,7 +217,9 @@ export const MessageInfoScreen = memo<MessageInfoScreenProps>(({
                   />
                   <View style={styles.senderInfo}>
                     <Text style={styles.senderName}>{senderName || 'Unknown'}</Text>
-                    <Text style={styles.senderId}>ID: {message.senderId}</Text>
+                    {senderHandle ? (
+                      <Text style={styles.senderId}>@{senderHandle}</Text>
+                    ) : null}
                   </View>
                 </View>
               </View>

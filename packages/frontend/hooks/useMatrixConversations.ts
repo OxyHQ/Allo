@@ -2,10 +2,17 @@ import { useMemo, useSyncExternalStore } from 'react';
 
 import type { Conversation } from '@/app/(chat)/index';
 import { useBridgeGhostNamespaces } from '@/hooks/useBridges';
+import { useChatPeople } from '@/hooks/useChatPeople';
 import { useEphemeralPolicies } from '@/hooks/useEphemeralPolicy';
 import { useMatrixEventLabels } from '@/hooks/useMatrixEventLabels';
+import { useMatrixRuntime } from '@/hooks/useMatrixRuntime';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { toConversation } from '@/lib/chat/matrixViewModel';
+import {
+  NO_CHAT_PERSON_REQUESTS,
+  peopleInConversationTitles,
+  viewerServerNameOf,
+} from '@/lib/chat/people';
 import { roomListSource } from '@/lib/chat/roomListSource';
 import type { AlloRoomSummary, AlloUnsubscribe } from '@/lib/matrix/types';
 
@@ -50,6 +57,31 @@ export function useMatrixConversations(): readonly Conversation[] | undefined {
   // loaded, which `roomOrigin.ts` treats as "nothing is known to be bridged".
   const namespaces = useBridgeGhostNamespaces();
 
+  /**
+   * The people the rows have to be named after.
+   *
+   * A room with no `m.room.name` is titled after its members by both SDKs, and
+   * on Allo's homeserver a member has no Matrix display name — so the title of a
+   * one-to-one conversation is an MXID and the title of an unnamed group is
+   * several. Collected across the whole list and deduplicated before anything is
+   * asked, so a person in four conversations is one lookup and the list as a
+   * whole is one request. See `lib/chat/people.ts`.
+   */
+  const requests = useMemo(
+    () =>
+      enabled
+        ? peopleInConversationTitles(rooms.map((room) => room.displayName))
+        : NO_CHAT_PERSON_REQUESTS,
+    [rooms],
+  );
+  const people = useChatPeople(requests);
+
+  const runtime = useMatrixRuntime();
+  const naming = useMemo(
+    () => ({ serverName: viewerServerNameOf(runtime.userId), people }),
+    [runtime.userId, people],
+  );
+
   // Derived during render, as a mapping of the snapshot should be. An Effect that
   // mirrored this into state would render one frame of the previous list every
   // time a message arrived.
@@ -57,9 +89,9 @@ export function useMatrixConversations(): readonly Conversation[] | undefined {
     () =>
       enabled
         ? rooms.map((room) =>
-            toConversation(room, labels, policies.has(room.roomId), namespaces),
+            toConversation(room, labels, policies.has(room.roomId), namespaces, naming),
           )
         : undefined,
-    [rooms, labels, policies, namespaces],
+    [rooms, labels, policies, namespaces, naming],
   );
 }

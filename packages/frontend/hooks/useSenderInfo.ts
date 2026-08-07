@@ -2,12 +2,22 @@ import { useCallback, useEffect } from 'react';
 import { useUsersStore } from '@/stores/usersStore';
 import { useOxy } from '@oxyhq/services';
 import { Conversation } from '@/app/(chat)/index';
+import type { SenderInfo } from '@/hooks/useMatrixSenderInfo';
+import { logger } from '@/utils/logger';
 
+/**
+ * Who sent each message, on the Express backend.
+ *
+ * Every id here is an **Oxy account id**. `useMatrixSenderInfo` is the other
+ * half, for the backend where they are Matrix user ids, and the two answer the
+ * same {@link SenderInfo} shape so that `ConversationView` picks between them
+ * with a `??` and nothing else changes.
+ */
 export function useSenderInfo(
   conversation: Conversation | null | undefined,
   isGroup: boolean,
   conversationMetadata: { contactAvatar?: string }
-) {
+): SenderInfo {
   const usersStore = useUsersStore();
   const { user, oxyServices } = useOxy();
 
@@ -59,6 +69,22 @@ export function useSenderInfo(
   }, [conversation, user, usersStore]);
 
   /**
+   * The sender's handle, without its `@`.
+   *
+   * Drawn by `MessageInfoScreen`, where the line used to be the raw account id.
+   */
+  const getSenderHandle = useCallback((senderId: string): string | undefined => {
+    const senderUser = usersStore.getCachedById(senderId);
+    if (senderUser?.username || senderUser?.handle) {
+      return senderUser.username || senderUser.handle;
+    }
+    if (senderId === user?.id) {
+      return user.username;
+    }
+    return conversation?.participants?.find((p) => p.id === senderId)?.username;
+  }, [conversation, user, usersStore]);
+
+  /**
    * Get sender avatar for incoming messages using Oxy user data
    */
   const getSenderAvatar = useCallback((senderId: string): string | undefined => {
@@ -90,13 +116,15 @@ export function useSenderInfo(
     if (avatar && oxyServices && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
       try {
         return oxyServices.getFileDownloadUrl(avatar, 'thumb');
-      } catch (e) {
-        // Ignore error
+      } catch (error: unknown) {
+        // The id is kept and handed on: an image that fails to load is a missing
+        // face, and swallowing the reason leaves nothing to explain it by.
+        logger.error(`[chat] no avatar URL could be built for ${senderId}`, error);
       }
     }
 
     return avatar;
   }, [conversation, conversationMetadata.contactAvatar, isGroup, usersStore, oxyServices]);
 
-  return { getSenderName, getSenderAvatar };
+  return { getSenderName, getSenderHandle, getSenderAvatar };
 }

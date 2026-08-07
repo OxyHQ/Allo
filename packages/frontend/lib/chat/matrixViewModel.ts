@@ -11,10 +11,33 @@ import type {
   MessageAttachment,
   MessageAttachmentKind,
 } from '@/stores/messagesStore';
+import { matrixUserIdsIn } from './matrixIdentity';
+import {
+  conversationTitleFrom,
+  NO_CHAT_PEOPLE,
+  type ChatPeopleLookup,
+} from './people';
 import { roomSummarySecurity, type GhostNamespace } from './roomOrigin';
 
 /** Shared so that the default argument is one identity and not a new array per row. */
 const NO_NAMESPACES: readonly GhostNamespace[] = [];
+
+/**
+ * What is needed to draw a room's title as people rather than as identifiers.
+ *
+ * One argument and not two, because the pair is meaningless apart: a lookup
+ * without the viewer's server name cannot tell one of this account's people from
+ * a string somebody typed into a group's name, and a server name without a
+ * lookup has nobody to name. See {@link conversationTitleFrom}.
+ */
+export interface ConversationNaming {
+  /** The viewer's own homeserver, from their session. */
+  readonly serverName: string | undefined;
+  readonly people: ChatPeopleLookup;
+}
+
+/** Nobody, as one identity, for a caller that has no people yet. */
+const NO_NAMING: ConversationNaming = { serverName: undefined, people: NO_CHAT_PEOPLE };
 
 /**
  * The port's view model, translated into the one Allo's chat components draw.
@@ -104,19 +127,37 @@ export function toConversation(
    * "not bridged", which is both correct there and the answer that says less.
    */
   namespaces: readonly GhostNamespace[] = NO_NAMESPACES,
+  /**
+   * Who the people named in the room's title are.
+   *
+   * Defaulted to nobody, which yields a room with no title rather than a wrong
+   * one. See {@link ConversationNaming}.
+   */
+  naming: ConversationNaming = NO_NAMING,
 ): Conversation {
   const latest = summary.latestMessage;
   return {
     id: summary.roomId,
     type: summary.isDirect ? 'direct' : 'group',
-    // The room id is a poor name and a better one than nothing: it is what the
-    // user sees while sync has not yet delivered the room's name or enough
-    // members to compute one.
-    name: summary.displayName ?? summary.roomId,
+    /**
+     * The people in it, when the room has no name of its own.
+     *
+     * It used to be `summary.displayName ?? summary.roomId`, and both halves of
+     * that were an identifier on screen. A room with no `m.room.name` is named
+     * by both SDKs after its members, and nobody on Allo's homeserver has a
+     * Matrix display name — Matrix Authentication Service knows the Oxy subject
+     * only as a localpart — so what the title bar said was `@<hex>:allo.you`,
+     * and a room whose name had not arrived said `!room:allo.you`.
+     *
+     * An empty string while the people in it are still being looked up. A row
+     * with no title still has its message and its time; a row with somebody
+     * else's name on it has nothing to recover from.
+     */
+    name: conversationTitleFrom(summary.displayName, naming.serverName, naming.people),
     lastMessage: latest === undefined ? '' : previewOf(latest.content, labels),
     timestamp: latest === undefined ? '' : new Date(latest.sentAt).toISOString(),
     unreadCount: summary.unreadCount,
-    avatar: summary.avatarUrl,
+    avatar: conversationAvatarFrom(summary, naming),
     // An invitation is in the list because the port's definition of a
     // conversation is everything the viewer has not left, and it is not a
     // conversation yet: there is nothing to read in it and accepting comes first.
@@ -134,6 +175,35 @@ export function toConversation(
      */
     security: roomSummarySecurity(summary, namespaces),
   };
+}
+
+/**
+ * The picture beside a conversation, or nothing.
+ *
+ * **A room's own avatar is not usable here and never was.** Both halves of the
+ * port report it as the `mxc://` URI Matrix stores, and `getConversationAvatar`
+ * hands anything that is not an `http(s)`/`file` URL to
+ * `oxyServices.getFileDownloadUrl` — so every Matrix room with an avatar drew a
+ * broken image pointing at Oxy's CDN for a file id that is not one. Fetching the
+ * real bytes needs `AlloChatClient.downloadMedia`, which a pure mapping cannot
+ * call, so this reports nothing rather than something wrong.
+ *
+ * What it does have is the other person. A one-to-one conversation named after
+ * exactly one member is that member, and their Oxy avatar is a URL a view can
+ * fetch today.
+ */
+function conversationAvatarFrom(
+  summary: AlloRoomSummary,
+  naming: ConversationNaming,
+): string | undefined {
+  if (!summary.isDirect || summary.displayName === undefined) {
+    return undefined;
+  }
+  const userIds = matrixUserIdsIn(summary.displayName);
+  if (userIds.length !== 1) {
+    return undefined;
+  }
+  return naming.people(userIds[0])?.avatarUrl;
 }
 
 /**

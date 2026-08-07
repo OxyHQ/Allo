@@ -670,6 +670,8 @@
   "Everyone here has an identity this device recognises, so messages can be sent.": "Todas las personas de aquí tienen una identidad que este dispositivo reconoce, así que se puede enviar.",
   "Allo will not send here until this device is verified with your Oxy recovery phrase, in Settings.": "Allo no enviará aquí hasta que este dispositivo esté verificado con tu frase de recuperación de Oxy, en Ajustes.",
   "Allo will not send here: it does not recognise the identity of {{people}}. Ask them to open Allo and finish setting up their account.": "Allo no enviará aquí: no reconoce la identidad de {{people}}. Pídeles que abran Allo y terminen de configurar su cuenta.",
+  "chat.person.unknown": "Persona desconocida",
+  "Allo will not send here: it does not recognise the identity of everybody in this conversation. Ask them to open Allo and finish setting up their account.": "Allo no enviará aquí: no reconoce la identidad de todas las personas de esta conversación. Pídeles que abran Allo y terminen de configurar su cuenta.",
   "Allo could not change this setting": "Allo no ha podido cambiar este ajuste",
   "Messages disappear from this device after {{duration}}. Your own are deleted for everyone.": "Los mensajes desaparecen de este dispositivo tras {{duration}}. Los tuyos se borran para todo el mundo.",
   "Identity verified by you": "Identidad verificada por ti",

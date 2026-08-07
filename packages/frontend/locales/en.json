@@ -702,6 +702,8 @@
   "Everyone here has an identity this device recognises, so messages can be sent.": "Everyone here has an identity this device recognises, so messages can be sent.",
   "Allo will not send here until this device is verified with your Oxy recovery phrase, in Settings.": "Allo will not send here until this device is verified with your Oxy recovery phrase, in Settings.",
   "Allo will not send here: it does not recognise the identity of {{people}}. Ask them to open Allo and finish setting up their account.": "Allo will not send here: it does not recognise the identity of {{people}}. Ask them to open Allo and finish setting up their account.",
+  "chat.person.unknown": "Unknown person",
+  "Allo will not send here: it does not recognise the identity of everybody in this conversation. Ask them to open Allo and finish setting up their account.": "Allo will not send here: it does not recognise the identity of everybody in this conversation. Ask them to open Allo and finish setting up their account.",
   "Allo could not change this setting": "Allo could not change this setting",
   "Messages disappear from this device after {{duration}}. Your own are deleted for everyone.": "Messages disappear from this device after {{duration}}. Your own are deleted for everyone.",
   "Identity verified by you": "Identity verified by you",
