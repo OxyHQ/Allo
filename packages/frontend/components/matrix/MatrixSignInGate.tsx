@@ -121,6 +121,57 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // ANOTHER WINDOW OF ALLO IS IN THE WAY, AND ONLY THE READER CAN MOVE IT.
+  //
+  // Before this screen existed the app drew "Connecting…" and kept drawing it:
+  // the launch has to empty the chat data on this device before it opens it, a
+  // second window holding that data open makes the deletion wait, and the wait
+  // had nowhere to appear. What it looked like from the outside was an app that
+  // had stopped, with the reason in a console line nobody was reading.
+  //
+  // A spinner is still right here, because this really is still working and it
+  // really does finish by itself — closing the other window completes the
+  // deletion and the phase moves on with nothing else asked of anybody. What
+  // was missing was the sentence next to it.
+  if (runtime.phase === 'blocked') {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator style={styles.spinner} color={theme.colors.primary} />
+        <ThemedText style={styles.title}>{t('Allo is open in another tab')}</ThemedText>
+        <ThemedText style={styles.detail}>
+          {t('Close the other Allo tab and this one will carry on by itself.')}
+        </ThemedText>
+      </View>
+    );
+  }
+
+  // The same request, after the app has stopped waiting for it.
+  //
+  // No spinner: nothing is running any more, and a spinner over a stopped launch
+  // is the lie this whole screen was written to stop telling. The button is the
+  // way out, and it is honest — pressing it starts the launch again, which tries
+  // the deletion again, which works the moment the other window is gone.
+  //
+  // What is deliberately NOT here is a way to continue anyway. The data that
+  // could not be deleted is the last account's synced state and keys.
+  if (runtime.phase === 'blocked-timed-out') {
+    return (
+      <View style={styles.container}>
+        <ThemedText style={styles.title}>{t('Allo is still open in another tab')}</ThemedText>
+        <ThemedText style={styles.detail}>
+          {t('Close every other Allo tab or window, then try again.')}
+        </ThemedText>
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={styles.button}
+          onPress={signInToMatrix}
+        >
+          <ThemedText style={styles.buttonLabel}>{t('Try again')}</ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (runtime.phase === 'authorizing') {
     return (
       <View style={styles.container}>

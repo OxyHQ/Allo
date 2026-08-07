@@ -57,6 +57,14 @@ export function resolveAlloChatStore(): AlloClientStore {
  * next account opening the last account's keys. Both directories are attempted
  * before anything is raised, so a state store that cannot go does not also leave
  * the event cache behind.
+ *
+ * It takes no `onBlocked` and would have nothing to say through one. The web
+ * half can be made to wait indefinitely by a second browsing context holding a
+ * database open; a directory has no such state. `delete()` here either removes
+ * the files or throws, and it does so before it returns — there is no third
+ * outcome to report and no wait for anybody to be told about. An app is one
+ * process on a phone, and the second copy of Allo that would hold these paths
+ * open does not exist.
  */
 export const eraseAlloChatStore: AlloChatStoreEraser = async (store) => {
   if (store.kind === 'in-memory') {

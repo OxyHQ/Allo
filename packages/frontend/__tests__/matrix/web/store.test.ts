@@ -1,4 +1,8 @@
-import { MatrixPortError, MatrixStoreNotErasedError } from '@/lib/matrix/errors';
+import {
+  MatrixPortError,
+  MatrixStoreEraseBlockedError,
+  MatrixStoreNotErasedError,
+} from '@/lib/matrix/errors';
 import {
   cryptoDatabasePrefix,
   eraseWebStore,
@@ -29,20 +33,62 @@ class FakeIndexedDB {
   readonly present: string[] = [];
   /** Databases that answer with an error, as a private window's do. */
   refuse = new Set<string>();
+  /**
+   * Databases another connection still has open.
+   *
+   * The browser answers `onblocked` and then nothing at all: the request stays
+   * pending until that connection closes, which is what {@link release} is. A
+   * name left in here is a second window of Allo that nobody ever closes.
+   */
+  block = new Set<string>();
   /** Whether this browser offers `databases()` at all. */
   listable = true;
 
+  /** Every deletion this factory has handed out, by name. */
+  readonly #requests = new Map<string, Record<string, unknown>>();
+
   deleteDatabase(name: string): IDBOpenDBRequest {
     const request: Record<string, unknown> = { error: new Error('refused') };
+    this.#requests.set(name, request);
     queueMicrotask(() => {
       if (this.refuse.has(name)) {
         callHandler(request.onerror);
+        return;
+      }
+      if (this.block.has(name)) {
+        callHandler(request.onblocked);
         return;
       }
       this.deleted.push(name);
       callHandler(request.onsuccess);
     });
     return request as unknown as IDBOpenDBRequest;
+  }
+
+  /** The other connection closes: the pending deletion completes on its own. */
+  release(name: string): void {
+    this.block.delete(name);
+    this.deleted.push(name);
+    callHandler(this.#request(name).onsuccess);
+  }
+
+  /**
+   * The browser reports `onblocked` again on a request it has already answered.
+   *
+   * Allowed by the specification — "the implementation may fire it more than
+   * once" — and the reason the deletion keeps a `settled` of its own rather than
+   * relying on the promise's, which is idempotent and would swallow it silently.
+   */
+  blockAgain(name: string): void {
+    callHandler(this.#request(name).onblocked);
+  }
+
+  #request(name: string): Record<string, unknown> {
+    const request = this.#requests.get(name);
+    if (request === undefined) {
+      throw new Error(`${name} was never asked to be deleted`);
+    }
+    return request;
   }
 
   databases(): Promise<IDBDatabaseInfo[]> {
@@ -202,5 +248,242 @@ describe('eraseWebStore', () => {
     // Reporting success would let the client open a store this could not have
     // cleared.
     await expect(eraseWebStore(STORE, undefined)).rejects.toThrow(MatrixPortError);
+  });
+
+  it('says nothing about waiting when nothing is in the way', async () => {
+    // The ordinary launch. A report here would put "Allo is open in another tab"
+    // in front of somebody for whom it is not true.
+    const indexedDB = new FakeIndexedDB();
+    const reports: boolean[] = [];
+
+    await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+    });
+
+    expect(reports).toEqual([]);
+  });
+});
+
+/**
+ * A DELETION ANOTHER WINDOW IS HOLDING UP.
+ *
+ * The state the owner met in production: the crypto database was open in a
+ * second tab, IndexedDB left the deletion pending, and the launch waited behind
+ * it with nothing on screen but "Connecting…". Waiting was right — it is the
+ * only answer that does not open somebody else's keys, and it ends by itself —
+ * but waiting in silence, with no bound, is a hang.
+ *
+ * So there are three things to keep true here, and each of them is a case: the
+ * wait is announced, it ends by itself when the other window goes, and it is
+ * bounded. What must never be true is the fourth: that giving up resolves. A
+ * resolution is read by `matrixRuntime` as "the store is empty" and is followed
+ * immediately by opening it.
+ */
+describe('eraseWebStore, blocked by another connection', () => {
+  /**
+   * Short enough that the bound is reached inside a test, not a coffee break.
+   *
+   * Every case that reaches it also waits {@link reachTheBlock} first, which
+   * costs a macrotask; the gap between the two is what keeps the ordering
+   * deterministic without fake timers.
+   */
+  const BOUND_MS = 60;
+
+  /** Lets the deletion start and the browser answer `onblocked`. */
+  const reachTheBlock = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('reports the wait as soon as the browser reports it', async () => {
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    const erasing = eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    }).catch(() => undefined);
+    // Long enough for the browser to answer `onblocked`, far short of the bound.
+    // What is being asserted is that the report does not wait for the outcome —
+    // one that only arrived at the end would be a screen that only appeared once
+    // there was nothing left to say.
+    await reachTheBlock();
+
+    expect(reports).toEqual([true]);
+
+    await erasing;
+  });
+
+  it('finishes on its own when the other window closes, and says the wait is over', async () => {
+    // The common ending, and the one that must not need a reload: the pending
+    // request completes the moment the other connection goes, so the erase
+    // resolves and the launch carries on from where it was.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    const erasing = eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    });
+    await reachTheBlock();
+    indexedDB.release('matrix-js-sdk:allo-matrix');
+
+    await expect(erasing).resolves.toBeUndefined();
+    expect(reports).toEqual([true, false]);
+    expect(indexedDB.deleted).toEqual(['matrix-js-sdk:allo-matrix']);
+  });
+
+  it('gives up at the bound, and gives up by throwing', async () => {
+    // THE ONE THAT MATTERS. Resolving here would tell the runtime the store was
+    // empty and the runtime would open it — which is a client reading the last
+    // account's synced state, out of a database this could not delete.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+
+    const failure = await eraseWebStore(STORE, indexedDB.factory(), {
+      blockedTimeoutMs: BOUND_MS,
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(MatrixStoreEraseBlockedError);
+    expect((failure as MatrixStoreEraseBlockedError).names).toEqual([
+      'matrix-js-sdk:allo-matrix',
+    ]);
+    expect((failure as MatrixStoreEraseBlockedError).waitedMs).toBe(BOUND_MS);
+    expect(indexedDB.deleted).toEqual([]);
+  });
+
+  it('is not a MatrixStoreNotErasedError, because the reader can fix one of them', async () => {
+    // A refused store cannot be deleted at all; a blocked one deletes itself the
+    // moment a window closes. The screens differ, so the types have to.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+
+    const failure = await eraseWebStore(STORE, indexedDB.factory(), {
+      blockedTimeoutMs: BOUND_MS,
+    }).catch((error: unknown) => error);
+
+    expect(failure).not.toBeInstanceOf(MatrixStoreNotErasedError);
+  });
+
+  it('does not report the wait as over when it is giving up', async () => {
+    // The screen would flick back to a spinner for one tick and then stop on a
+    // failure. Worse than either state on its own.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    }).catch(() => undefined);
+
+    expect(reports).toEqual([true]);
+  });
+
+  it('says nothing more once it has given up, however late the browser answers', async () => {
+    // IndexedDB has no way to cancel a deletion, so the request outlives the
+    // failure and may complete minutes later. It still deletes the database,
+    // which is what the next attempt wants — but it must not report to a caller
+    // that has already stopped.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    }).catch(() => undefined);
+    indexedDB.release('matrix-js-sdk:allo-matrix');
+    await reachTheBlock();
+
+    expect(reports).toEqual([true]);
+  });
+
+  it('does not announce a second wait after it has given up on the first', async () => {
+    // A browser is allowed to fire `onblocked` again, and one arriving after the
+    // bound would announce a wait nobody is waiting through — the screen would
+    // go back to "another window has your data" over a launch that has already
+    // stopped — and would arm a timer with nothing left to reject.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    }).catch(() => undefined);
+    indexedDB.blockAgain('matrix-js-sdk:allo-matrix');
+
+    expect(reports).toEqual([true]);
+  });
+
+  it('does not announce a wait on a deletion that has already finished', async () => {
+    // The same guard from the other side: the deletion succeeded, the erase
+    // resolved, and a stray report here would reach a runtime that has moved on
+    // to building a client.
+    const indexedDB = new FakeIndexedDB();
+    const reports: boolean[] = [];
+
+    await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    });
+    indexedDB.blockAgain('matrix-js-sdk:allo-matrix');
+
+    expect(reports).toEqual([]);
+  });
+
+  it('announces the wait once when the browser reports it twice', async () => {
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+    const reports: boolean[] = [];
+
+    const erasing = eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    });
+    await reachTheBlock();
+    indexedDB.blockAgain('matrix-js-sdk:allo-matrix');
+    indexedDB.release('matrix-js-sdk:allo-matrix');
+
+    await expect(erasing).resolves.toBeUndefined();
+    expect(reports).toEqual([true, false]);
+  });
+
+  it('stops rather than waiting out every database in turn', async () => {
+    // Collecting blocks the way refusals are collected would multiply the bound
+    // by the number of databases, and the reader would be looking at a screen
+    // that cannot change for minutes. One window is holding all of them anyway.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.present.push('allo-matrix:DEVICE1::matrix-sdk-crypto');
+    indexedDB.block.add('matrix-js-sdk:allo-matrix');
+
+    await eraseWebStore(STORE, indexedDB.factory(), { blockedTimeoutMs: BOUND_MS }).catch(
+      () => undefined,
+    );
+
+    expect(indexedDB.deleted).toEqual([]);
+  });
+
+  it('waits out the crypto database too, which is the one the owner met', async () => {
+    // The name in his console was `allo-matrix:FNgFkAe4aZ::matrix-sdk-crypto`.
+    // The synced state went; this one was open in another tab.
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.present.push('allo-matrix:DEVICE1::matrix-sdk-crypto');
+    indexedDB.block.add('allo-matrix:DEVICE1::matrix-sdk-crypto');
+    const reports: boolean[] = [];
+
+    const failure = await eraseWebStore(STORE, indexedDB.factory(), {
+      onBlocked: (blocked) => reports.push(blocked),
+      blockedTimeoutMs: BOUND_MS,
+    }).catch((error: unknown) => error);
+
+    expect(reports).toEqual([true]);
+    expect(failure).toBeInstanceOf(MatrixStoreEraseBlockedError);
+    expect((failure as MatrixStoreEraseBlockedError).names).toEqual([
+      'allo-matrix:DEVICE1::matrix-sdk-crypto',
+    ]);
+    // The one that did go, went.
+    expect(indexedDB.deleted).toEqual(['matrix-js-sdk:allo-matrix']);
   });
 });

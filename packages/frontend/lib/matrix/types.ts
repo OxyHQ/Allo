@@ -766,6 +766,27 @@ export type AlloClientStore =
   | { readonly kind: 'filesystem'; readonly dataPath: string; readonly cachePath: string };
 
 /**
+ * Told when an erase starts waiting on something else that has the store open,
+ * and told again when it stops.
+ *
+ * The one thing an erase has to say while it is still running, and it is here
+ * rather than in a platform's own module because the caller is the runtime and
+ * the runtime is what draws a screen. An erase that waits is indistinguishable
+ * from one that is slow, and the difference is the difference between a launch
+ * that is working and a launch that is waiting on a person to close a window.
+ *
+ * Deliberately a boolean and not a reason: *why* a store cannot be deleted yet
+ * is the platform's business — an IndexedDB deletion refused by a second
+ * browsing context on web, and nothing at all on a phone — and the port would
+ * have to invent a vocabulary that only one implementation could ever speak.
+ * What crosses the boundary is the only part the caller can act on.
+ *
+ * It may be called more than once in each direction: an erase deletes several
+ * databases in turn and any of them can wait.
+ */
+export type AlloStoreEraseObserver = (blocked: boolean) => void;
+
+/**
  * Deletes what a client built on a store would otherwise inherit.
  *
  * Separate from {@link AlloChatClient.logout} because it has to be callable when
@@ -775,9 +796,16 @@ export type AlloClientStore =
  * session". Handing a new session a store that belongs to an older one is the
  * failure that does not look like its cause.
  *
- * Erasing a store nothing has written is not an error.
+ * Erasing a store nothing has written is not an error. Failing to erase one that
+ * is there IS: it is raised, and the caller must not open the store afterwards.
+ *
+ * {@link AlloStoreEraseObserver} is optional because a caller with no screen to
+ * draw — the native client's own sign-out — has nothing to do with the answer.
  */
-export type AlloChatStoreEraser = (store: AlloClientStore) => Promise<void>;
+export type AlloChatStoreEraser = (
+  store: AlloClientStore,
+  onBlocked?: AlloStoreEraseObserver,
+) => Promise<void>;
 
 export interface AlloChatClientConfig {
   readonly homeserverUrl: string;
