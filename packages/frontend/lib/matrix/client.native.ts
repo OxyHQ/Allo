@@ -282,6 +282,21 @@ class NativeAlloChatClient implements AlloChatClient {
     return new NativeOidcLoginRequest(this.#client, authorizationData);
   }
 
+  /**
+   * Always nothing, and not because it is unimplemented.
+   *
+   * A login on iOS or Android happens in an in-app browser tab that hands control
+   * back to a running app: `WebBrowser.openAuthSessionAsync` resolves with the
+   * callback URL in the same process that asked for it, and the request object is
+   * still in memory to finish it. Nothing here outlives the app, so there is
+   * never anything to pick up.
+   *
+   * The web half is where this means something. See `client.web.ts`.
+   */
+  async resumeOidcLogin(): Promise<undefined> {
+    return undefined;
+  }
+
   async restoreSession(session: AlloSession): Promise<void> {
     await this.#client.restoreSession(toSdkSession(session));
   }

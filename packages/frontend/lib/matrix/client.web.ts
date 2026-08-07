@@ -118,6 +118,7 @@ import {
   readAttachmentBytes,
   toObjectUrl,
 } from './web/mediaTransfer';
+import { sessionPendingWebLoginStore, type PendingWebLoginStore } from './web/oidcContext';
 import {
   WebOidcLoginRequest,
   generateAuthorizationState,
@@ -262,6 +263,14 @@ class WebAlloChatClient implements AlloChatClient {
     policies: () => this.ephemeralPolicies(),
     trust: (roomId) => this.roomTrust(roomId),
   });
+  /**
+   * Where a login waits out the navigation to the authorization server.
+   *
+   * Only web has one to wait out: the authorization is a top-level redirect, so
+   * the page that started the login is destroyed before the code comes back. See
+   * `web/oidcContext.ts`.
+   */
+  readonly #pendingLogins: PendingWebLoginStore = sessionPendingWebLoginStore;
 
   #client: MatrixClient | undefined;
   #session: AlloSession | undefined;
@@ -312,8 +321,78 @@ class WebAlloChatClient implements AlloChatClient {
     const state = generateAuthorizationState();
     const authorizationUrl = await this.#buildAuthorizationUrl(authorization, state, options);
 
+    // Before the URL is handed back, because the caller's next act is to leave.
+    // A write that fails has to stop the login here rather than after the
+    // browser has gone: the alternative is a user who signs in on the
+    // authorization server and comes back to an app with no way to finish.
+    this.#pendingLogins.write({
+      state,
+      authorizationUrl,
+      clientId,
+      deviceId: authorization.context.deviceId,
+      codeVerifier: authorization.context.codeVerifier,
+      redirectUri: this.#config.oidc.redirectUri,
+      homeserverUrl: this.#config.homeserverUrl,
+      authMetadata: metadata,
+    });
+
     return new WebOidcLoginRequest(authorization, authorizationUrl, state, (grant) =>
       this.#startFromGrant(grant, authorization, metadata, clientId),
+    );
+  }
+
+  /**
+   * Rebuilds the login this browser left the page for, if it left for one.
+   *
+   * Everything it needs was written down by {@link beginOidcLogin} and is taken —
+   * read and removed — here, because the authorization code that arrives with it
+   * is spent by the exchange whether or not the exchange works.
+   *
+   * The `authorizationUrl` of the request this returns is the one that was
+   * already opened. It is carried so the type is honest about which
+   * authorization this is; opening it again would start a second one.
+   */
+  async resumeOidcLogin(): Promise<AlloOidcLoginRequest | undefined> {
+    this.#requireNoSession('resume a login');
+
+    const pending = this.#pendingLogins.take();
+    if (pending === undefined) {
+      return undefined;
+    }
+    if (pending.homeserverUrl !== this.#config.homeserverUrl) {
+      // This build is pointed somewhere else than the one that left. The code in
+      // the URL was issued by that homeserver's authorization server and means
+      // nothing to this one.
+      logger.warn(
+        `${LOG_TAG} a sign-in started against ${pending.homeserverUrl} was dropped: ` +
+          `this build talks to ${this.#config.homeserverUrl}`,
+      );
+      return undefined;
+    }
+    if (!isValidAuthMetadata(pending.authMetadata)) {
+      logger.warn(
+        `${LOG_TAG} a sign-in was dropped: the authorization server metadata it was ` +
+          'started with is not valid',
+      );
+      return undefined;
+    }
+
+    const metadata = pending.authMetadata;
+    const authorization = new OAuth2(metadata, {
+      clientId: pending.clientId,
+      redirectUri: pending.redirectUri,
+      deviceId: pending.deviceId,
+      // The PKCE secret this authorization's code challenge was derived from.
+      // Without the same one the token endpoint refuses the exchange, which is
+      // the whole point of PKCE.
+      codeVerifier: pending.codeVerifier,
+    });
+
+    return new WebOidcLoginRequest(
+      authorization,
+      pending.authorizationUrl,
+      pending.state,
+      (grant) => this.#startFromGrant(grant, authorization, metadata, pending.clientId),
     );
   }
 

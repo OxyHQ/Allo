@@ -1,6 +1,7 @@
 import { MatrixOidcCallbackError, MatrixOidcLoginSettledError } from '@/lib/matrix/errors';
 import {
   WebOidcLoginRequest,
+  carriesAuthorizationResponse,
   generateAuthorizationState,
   readAuthorizationResponse,
   type OidcAuthorization,
@@ -102,6 +103,44 @@ describe('readAuthorizationResponse', () => {
 
   it('refuses something that is not a URL', () => {
     expect(() => readAuthorizationResponse('code=abc&state=xyz')).toThrow(MatrixOidcCallbackError);
+  });
+});
+
+describe('carriesAuthorizationResponse', () => {
+  /**
+   * What decides whether a launch of Allo is the second half of a login that
+   * left the page. On web the answer arrives as an ordinary page load, so
+   * something has to tell one from the other before anything else happens.
+   */
+
+  it('recognises a response in the fragment', () => {
+    expect(carriesAuthorizationResponse(`https://allo.you/#code=abc&state=${STATE}`)).toBe(true);
+  });
+
+  it('recognises a response in the query', () => {
+    expect(carriesAuthorizationResponse(`https://allo.you/?code=abc&state=${STATE}`)).toBe(true);
+  });
+
+  it('recognises a refusal as a response', () => {
+    // A launch carrying `error=access_denied` is a login that has to end at an
+    // explanation. Calling it an ordinary launch would let the automatic sign-in
+    // start another one, and another, which is the loop.
+    expect(carriesAuthorizationResponse('https://allo.you/#error=access_denied')).toBe(true);
+  });
+
+  it('says no to an ordinary launch', () => {
+    expect(carriesAuthorizationResponse('https://allo.you/')).toBe(false);
+    expect(carriesAuthorizationResponse('https://allo.you/@nate?invite=1#/deep/link')).toBe(false);
+  });
+
+  it('says no to a state with no code, which finishes nothing', () => {
+    // Half a response is not a response. Reading it would only produce a refusal
+    // one step later, and this is a question about which path to take.
+    expect(carriesAuthorizationResponse(`https://allo.you/#state=${STATE}`)).toBe(false);
+  });
+
+  it('says no rather than throwing at something that is not a URL', () => {
+    expect(carriesAuthorizationResponse('code=abc')).toBe(false);
   });
 });
 

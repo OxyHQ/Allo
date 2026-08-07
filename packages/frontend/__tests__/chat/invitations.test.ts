@@ -66,6 +66,10 @@ class FakeChatClient implements AlloChatClient {
     throw new Error('not used by these tests');
   }
 
+  async resumeOidcLogin(): Promise<undefined> {
+    return undefined;
+  }
+
   async restoreSession(): Promise<void> {
     throw new Error('not used by these tests');
   }

@@ -1,5 +1,3 @@
-import * as WebBrowser from 'expo-web-browser';
-
 import { eraseAlloChatStore } from '@/lib/matrix/store';
 import type {
   AlloChatClient,
@@ -13,6 +11,12 @@ import type {
 } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
+import { authorize, pendingAuthorization } from './matrixAuthorizer';
+import type {
+  AuthorizationOutcome,
+  MatrixAuthorizer,
+  MatrixPendingAuthorization,
+} from './matrixAuthorization';
 import { readMatrixClientConfig } from './matrixConfig';
 import { decodeStoredSession, encodeStoredSession } from './matrixSession';
 import { matrixSessionStorage, type MatrixSessionStorage } from './matrixSessionStorage';
@@ -69,6 +73,28 @@ export type MatrixPhase =
   | 'signed-out'
   /** An authorization is in flight in the browser. */
   | 'authorizing'
+  /**
+   * The browser is being sent to the authorization server, and this page is
+   * going away.
+   *
+   * Web only, and the honest end of a web sign-in: the authorization is a
+   * top-level navigation, so there is no returning to this runtime. What
+   * finishes the login is the next launch of the app, at the redirect URI. A
+   * promise that never resolved would have left the phase on `authorizing`
+   * forever, which is a state machine claiming to wait for something that can no
+   * longer arrive.
+   */
+  | 'leaving'
+  /**
+   * An authorization has been granted and is being turned into a session.
+   *
+   * Web only, and the other end of `leaving`: the browser is back on Allo with a
+   * code in its URL, and what is happening is the token exchange, the crypto
+   * stack coming up and the first sync. Distinct from `authorizing` because
+   * nothing is waiting on a browser any more — a screen that said so would be
+   * telling somebody to go and finish something they have already finished.
+   */
+  | 'finishing'
   /** Signed in, sync running: the room list and timelines can be opened. */
   | 'ready'
   /** Something failed. {@link MatrixRuntimeState.error} says what. */
@@ -87,11 +113,6 @@ export interface MatrixRuntimeState {
   /** Why the runtime failed, in words a user could be shown. */
   readonly error: string | undefined;
 }
-
-/** What the browser came back with, if it came back. */
-export type AuthorizationOutcome =
-  | { readonly kind: 'returned'; readonly callbackUrl: string }
-  | { readonly kind: 'dismissed' };
 
 /**
  * Everything the runtime does that is not its own logic.
@@ -112,14 +133,18 @@ export interface MatrixRuntimeDependencies {
   /** Where the session is kept between launches. */
   readonly sessionStorage: MatrixSessionStorage;
   /**
-   * Opens the authorization page and reports the URL the browser was redirected
-   * back to. The middle of OIDC's three steps, which the port deliberately does
-   * not own.
+   * Opens the authorization page and reports what the browser did. The middle of
+   * OIDC's three steps, which the port deliberately does not own.
    */
-  readonly authorize: (
-    authorizationUrl: string,
-    redirectUri: string,
-  ) => Promise<AuthorizationOutcome>;
+  readonly authorize: MatrixAuthorizer;
+  /**
+   * The authorization response this launch arrived with, if it arrived with one.
+   *
+   * Web's half of {@link authorize}: there, the authorization leaves the page and
+   * the answer comes back as a fresh launch of the app carrying a code in its
+   * URL. Consulted on every build, on every platform, and only web ever answers.
+   */
+  readonly pendingAuthorization: MatrixPendingAuthorization;
   /**
    * Tells the homeserver whether to notify this device.
    *
@@ -316,10 +341,36 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       return;
     }
 
+    if (outcome.kind === 'left') {
+      // Web. The page is being replaced by the authorization server's, so there
+      // is nothing left for this runtime to do and nothing to abort: the request
+      // is about to be destroyed along with everything else here. What finishes
+      // the login is {@link #resume}, on the next launch, from the context the
+      // port wrote down before handing over the URL.
+      this.#publish({ phase: 'leaving', error: undefined });
+      return;
+    }
+
+    await this.#finishLogin(client, request, outcome.callbackUrl);
+  }
+
+  /**
+   * The half of a sign-in that happens after the browser has answered.
+   *
+   * Shared by the two ways of getting here, which differ only in whether the app
+   * survived the authorization: {@link #signIn} on a platform whose browser hands
+   * control back, and {@link #resume} on web, where it is a different launch of
+   * the app that arrives holding the code.
+   */
+  async #finishLogin(
+    client: AlloChatClient,
+    request: AlloOidcLoginRequest,
+    callbackUrl: string,
+  ): Promise<void> {
     let session: AlloSession;
     try {
       // The callback URL carries the authorization code, so it is never logged.
-      session = await request.complete(outcome.callbackUrl);
+      session = await request.complete(callbackUrl);
       this.#clientHoldsSession = true;
     } catch (error) {
       this.#fail('Allo could not finish the sign-in', error);
@@ -351,6 +402,47 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     }
 
     this.#registerForNotifications(client);
+  }
+
+  /**
+   * Finishes the login this launch of the app arrived holding.
+   *
+   * The second half of a web sign-in. The first half ended by replacing the
+   * page, so what is here is a brand new client, an empty store, and an
+   * authorization code in the URL that belongs to a request the port wrote down
+   * before it let go.
+   *
+   * A failure ends at {@link MatrixPhase.failed}, which is what stops this from
+   * becoming a loop: the screen explains itself and offers a button, and nothing
+   * starts another authorization on its own. The alternative — falling back to
+   * `signed-out` — would put the automatic sign-in back in charge of a page that
+   * has just come back from a failed one, and the browser would ping-pong
+   * between Allo and the authorization server until somebody killed the tab.
+   */
+  async #resume(client: AlloChatClient, callbackUrl: string): Promise<void> {
+    this.#publish({ phase: 'finishing', error: undefined });
+
+    let request: AlloOidcLoginRequest | undefined;
+    try {
+      request = await client.resumeOidcLogin();
+    } catch (error) {
+      this.#fail('Allo could not finish the sign-in', error);
+      return;
+    }
+
+    if (request === undefined) {
+      // A code with no request behind it: a callback URL opened in a new tab, a
+      // page restored from a bookmark, a second load of a callback whose context
+      // the first one used up. None of them can be completed, and none of them is
+      // this browser's login.
+      this.#fail(
+        'Allo could not finish the sign-in',
+        new Error('this browser has no record of the sign-in that was started'),
+      );
+      return;
+    }
+
+    await this.#finishLogin(client, request, callbackUrl);
   }
 
   async #signOut(): Promise<void> {
@@ -484,6 +576,11 @@ export class MatrixRuntime implements MatrixRuntimeLike {
   async #build(): Promise<AlloChatClient | undefined> {
     try {
       const config = this.#dependencies.config();
+      // Taken before anything else can decide this is an ordinary launch, and
+      // taken whether or not it turns out to be usable: leaving a spent
+      // authorization code in the address bar is what makes a reload resubmit
+      // it. On every platform but web this is always `undefined`.
+      const callbackUrl = this.#dependencies.pendingAuthorization.take();
       const stored = await this.#readStoredSession(config.homeserverUrl);
 
       if (stored === undefined) {
@@ -507,10 +604,16 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       // this file.
       this.#sessionSubscription = client.observeSession(this.#onSessionRotated);
 
-      if (stored === undefined) {
-        this.#publish({ phase: 'signed-out', error: undefined });
-      } else {
+      if (stored !== undefined) {
+        // A session already on this device wins over a callback. The two
+        // together mean a login that finished and a stale URL — a bookmarked
+        // callback, a restored tab — and reopening the session that exists is
+        // both what the user wants and the only one of the two that can work.
         await this.#restore(client, stored);
+      } else if (callbackUrl !== undefined) {
+        await this.#resume(client, callbackUrl);
+      } else {
+        this.#publish({ phase: 'signed-out', error: undefined });
       }
       return client;
     } catch (error) {
@@ -698,12 +801,11 @@ const defaultDependencies: MatrixRuntimeDependencies = {
   eraseStore: eraseAlloChatStore,
   sessionStorage: matrixSessionStorage,
   pushRegistration: new MatrixPushRegistrar(defaultPushRegistrationDependencies()),
-  authorize: async (authorizationUrl, redirectUri) => {
-    const result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
-    return result.type === 'success'
-      ? { kind: 'returned', callbackUrl: result.url }
-      : { kind: 'dismissed' };
-  },
+  // Platform-split, because the two platforms do genuinely different things: an
+  // in-app browser tab that returns control on iOS and Android, a top-level
+  // redirect that destroys this page on web. See `matrixAuthorization.ts`.
+  authorize,
+  pendingAuthorization,
 };
 
 /** The app's runtime. Built here and nowhere else. */

@@ -115,6 +115,26 @@ export class MatrixOidcCallbackError extends MatrixPortError {
 }
 
 /**
+ * A login that has to leave the page has nowhere to write down what finishing it
+ * will need.
+ *
+ * Raised before the browser is sent anywhere, and that is the point. On web the
+ * authorization is a top-level navigation, so the code verifier and the `state`
+ * have to outlive the page; a browser that refuses `sessionStorage` — sandboxed
+ * frames do, and so do a few embedded webviews — would otherwise send the user
+ * to the authorization server and be unable to finish when they came back, which
+ * looks to them like a sign-in that silently does nothing.
+ */
+export class MatrixOidcContextUnavailableError extends MatrixPortError {
+  constructor(detail: string) {
+    super(
+      'Allo cannot start a sign-in that leaves this page, because it has ' +
+        `nowhere to keep what finishing it needs: ${detail}`,
+    );
+  }
+}
+
+/**
  * A persisted session could not be read back.
  *
  * `AlloSession.authData` is written by one implementation and only that

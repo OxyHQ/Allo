@@ -55,27 +55,60 @@ export interface AuthorizationResponse {
 }
 
 /**
- * Reads the authorization response out of the URL the browser was redirected to.
+ * Reads one parameter of an authorization response, wherever it was put.
  *
  * Both the fragment and the query are read. The request asks for the response in
  * the fragment, which is the SDK's default and keeps the authorization code out
  * of the server logs of whatever serves Allo, but an authorization server is free
  * to answer in the query and a response that arrives is better read than dropped.
  *
- * Every failure here is a refusal, never a `null` the caller might carry on with:
- * a callback with no code in it is not a login that half worked.
+ * `undefined` rather than a throw for a URL that is not one, because the two
+ * callers want opposite things from that case: {@link readAuthorizationResponse}
+ * refuses it, and {@link carriesAuthorizationResponse} answers no.
  */
-export function readAuthorizationResponse(callbackUrl: string): AuthorizationResponse {
+function authorizationParameters(callbackUrl: string): ((name: string) => string | null) | undefined {
   let url: URL;
   try {
     url = new URL(callbackUrl);
   } catch {
-    throw new MatrixOidcCallbackError(`"${callbackUrl}" is not a URL`);
+    return undefined;
   }
-
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ''));
   const query = url.searchParams;
-  const read = (name: string): string | null => fragment.get(name) ?? query.get(name);
+  return (name) => fragment.get(name) ?? query.get(name);
+}
+
+/**
+ * Whether this URL is an authorization server answering, of any kind.
+ *
+ * What it decides is whether a launch of Allo is the second half of a login that
+ * left the page — so a refusal counts. A URL carrying `error=access_denied` is a
+ * login that has to end at an explanation, and treating it as an ordinary launch
+ * would start another one, which is the loop.
+ *
+ * Deliberately not a partial parse: what it means is "somebody should read this
+ * with {@link readAuthorizationResponse}", and that function owns every judgement
+ * about whether the response is usable.
+ */
+export function carriesAuthorizationResponse(callbackUrl: string): boolean {
+  const read = authorizationParameters(callbackUrl);
+  if (read === undefined) {
+    return false;
+  }
+  return read('code') !== null || read('error') !== null;
+}
+
+/**
+ * Reads the authorization response out of the URL the browser was redirected to.
+ *
+ * Every failure here is a refusal, never a `null` the caller might carry on with:
+ * a callback with no code in it is not a login that half worked.
+ */
+export function readAuthorizationResponse(callbackUrl: string): AuthorizationResponse {
+  const read = authorizationParameters(callbackUrl);
+  if (read === undefined) {
+    throw new MatrixOidcCallbackError(`"${callbackUrl}" is not a URL`);
+  }
 
   const error = read('error');
   if (error !== null) {
