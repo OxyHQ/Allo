@@ -23,6 +23,10 @@ import pushRoutes from "./src/routes/push";
 import { createCrowdSourceWebhookRoutes } from "./src/routes/crowdSourceWebhook";
 import { createBridgeInternalRoutes } from "./src/routes/bridgesInternal";
 import { createPushGatewayRoutes } from "./src/routes/pushGateway";
+import { createDirectoryRoutes } from "./src/routes/directory";
+import { createOxyDirectoryService } from "./src/services/oxy/OxyDirectoryService";
+import { configureOxyServiceAuth } from "./src/config/oxyService";
+import { createMatrixAuthMiddleware } from "./src/middleware/matrixAuth";
 import { PUSH_GATEWAY_MOUNT_PATH } from "./src/config/push";
 import { startModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
 import { startBridgeStatusSweep } from "./src/services/bridges/BridgeStatusService";
@@ -51,6 +55,16 @@ const app = express();
 
 // Initialize Oxy client for authentication
 export const oxy = oxyClient;
+
+/**
+ * The same client, additionally configured to call Oxy AS ALLO when a service
+ * credential is present.
+ *
+ * A no-op without one, and the directory still works — every Oxy route it uses
+ * is public. See `src/config/oxyService.ts` for what a credential changes and
+ * for the human step that mints it.
+ */
+configureOxyServiceAuth(oxy);
 
 // --- Middleware ---
 
@@ -315,10 +329,27 @@ authenticatedApiRouter.use("/devices", devicesRoutes);
 authenticatedApiRouter.use("/reports", reportsRoutes);
 authenticatedApiRouter.use("/bridges", bridgesRoutes);
 authenticatedApiRouter.use("/push", pushRoutes);
+authenticatedApiRouter.use("/directory", createDirectoryRoutes({ service: createOxyDirectoryService(oxy) }));
 
 // Mount public and authenticated API routers
 app.use("/api", publicApiRouter);
-app.use("/api", createOxyAuthMiddleware(oxy), authenticatedApiRouter);
+
+/**
+ * Two ways to be signed in, one shape of `req.user`.
+ *
+ * `createMatrixAuthMiddleware` runs FIRST and answers only requests whose
+ * `Authorization` header uses the `MatrixBearer` scheme; every other request —
+ * which today is every request, because the app still sends an Oxy `Bearer` —
+ * passes straight through to `createOxyAuthMiddleware`, unchanged.
+ *
+ * The order is what makes the composition safe rather than merely convenient.
+ * `oxy.auth()` reads a token only from a header beginning with the exact string
+ * `"Bearer "`, so a MatrixBearer credential is INVISIBLE to it; and the Matrix
+ * middleware never calls `next()` after refusing one, so a token can never be
+ * offered to both validators. See `src/middleware/matrixAuth.ts` for the rest
+ * of the reasoning, including why this cannot sit ahead of the rate limiter.
+ */
+app.use("/api", createMatrixAuthMiddleware(), createOxyAuthMiddleware(oxy), authenticatedApiRouter);
 
 // --- Root API Welcome Route ---
 app.get("/", async (req, res) => {

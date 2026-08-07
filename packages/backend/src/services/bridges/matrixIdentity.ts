@@ -30,6 +30,73 @@ import { bridgesConfig } from "../../config/bridges";
 const LOCALPART_PATTERN = /^[a-z0-9._=/+-]+$/;
 
 /**
+ * The grammar of an Oxy account id: a 24-character lowercase hexadecimal
+ * MongoDB ObjectId.
+ *
+ * Separate from {@link LOCALPART_PATTERN} because they answer different
+ * questions, and conflating them is the bug this constant exists to prevent.
+ * `LOCALPART_PATTERN` asks "could a homeserver hold this string?" — to which
+ * `whatsapp_447700900000` and `telegrambot` both answer yes. This one asks "is
+ * this an account on Allo?", to which they answer no: nobody behind a bridge
+ * ghost ever signed up, and there is no Oxy user whose id that is.
+ */
+const OXY_USER_ID_PATTERN = /^[0-9a-f]{24}$/;
+
+/**
+ * Whether a string is an Oxy account id.
+ *
+ * The single place the shape is written down, so that the authentication
+ * boundary in `middleware/matrixAuth.ts` and the moderation and bridge paths
+ * cannot come to different conclusions about the same string.
+ */
+export function isOxyUserId(candidate: string): boolean {
+  return OXY_USER_ID_PATTERN.test(candidate);
+}
+
+/**
+ * The Oxy account named by a Matrix localpart, or `undefined` for a localpart
+ * that names no Oxy account.
+ *
+ * This is the direction that has to REFUSE rather than repair. Coming the other
+ * way, {@link matrixUserIdForOxyUser} refuses an id it cannot express because
+ * two ids mangled into one localpart would provision one user's bridge account
+ * for another. Coming this way the same mistake is larger: a localpart accepted
+ * as an account id is a request AUTHENTICATED AS that account. A bridge ghost's
+ * `whatsapp_447700900000` is not a person on this platform, and neither is the
+ * bridge's own `whatsappbot`; the hexadecimal grammar refuses both, along with
+ * every other localpart a homeserver might legally hold.
+ *
+ * Note that {@link oxyUserIdFromMatrixUserId} deliberately does NOT apply this
+ * check. Its caller in `services/moderation/subjectIdentity.ts` needs the raw
+ * localpart precisely so it can recognise a bridge ghost and say which network
+ * it came from, and a refusal there would replace a specific, useful reason
+ * with "this homeserver does not own that identifier", which is false.
+ */
+export function oxyUserIdFromMatrixLocalpart(localpart: string): string | undefined {
+  if (!LOCALPART_PATTERN.test(localpart)) return undefined;
+  if (!isOxyUserId(localpart)) return undefined;
+  return localpart;
+}
+
+/**
+ * The Oxy account named by a full Matrix user id, or `undefined`.
+ *
+ * {@link oxyUserIdFromMatrixUserId} composed with
+ * {@link oxyUserIdFromMatrixLocalpart}: this homeserver must own the identifier
+ * AND the localpart must be an Oxy account id. Use this wherever the answer
+ * decides what somebody is allowed to do; use the looser pair where the answer
+ * only decides what to tell them.
+ */
+export function oxyAccountIdFromMatrixUserId(
+  matrixUserId: string,
+  serverName: string = requireMatrixServerName(),
+): string | undefined {
+  const localpart = oxyUserIdFromMatrixUserId(matrixUserId, serverName);
+  if (localpart === undefined) return undefined;
+  return oxyUserIdFromMatrixLocalpart(localpart);
+}
+
+/**
  * Matrix user ids are capped at 255 bytes including the sigil and server name,
  * so the localpart budget depends on the server name's length.
  */

@@ -18,3 +18,6 @@ export * from "./conversation";
 
 // Device / Signal Protocol key DTOs
 export * from "./device";
+
+// People directory DTOs (the Oxy lookups, projected)
+export * from "./directory";
