@@ -78,6 +78,8 @@ import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useSenderInfo } from '@/hooks/useSenderInfo';
+import { useMatrixSenderInfo, useMessageSenderRequests } from '@/hooks/useMatrixSenderInfo';
+import { useChatPeople } from '@/hooks/useChatPeople';
 // Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { useMatrixTimeline } from '@/hooks/useMatrixTimeline';
@@ -194,10 +196,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Whether this conversation's messages disappear, and after how long. Answers
   // `undefined` on the Express backend, which has no such thing.
   const ephemeralPolicy = useEphemeralPolicy(conversationId);
-  // An ephemeral conversation refuses to send when it cannot account for who is
-  // in it. That is a rule and not a fault, so it is said in the reader's own
-  // language rather than passed through as the port's English.
-  const ephemeralRefusalMessage = useEphemeralRefusalMessage();
 
   // Use conversation-specific theme (falls back to global theme if no conversation theme set)
   const theme = useConversationTheme(conversation?.theme);
@@ -364,6 +362,31 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Use custom hook for conversation metadata
   const conversationMetadata = useConversationMetadata(conversation, currentUserId);
   const { isGroup } = conversationMetadata;
+
+  /**
+   * Who sent each incoming message, from whichever backend this build talks to.
+   *
+   * Both hooks are called because hooks must be; only one of them answers.
+   * `useMatrixSenderInfo` is `undefined` on the Express path, and on the Matrix
+   * path `useSenderInfo` has nothing to do — a Matrix `Conversation` carries no
+   * participants, so its Effect iterates nothing and it fetches nobody.
+   *
+   * The lookup is built here rather than inside `useMatrixSenderInfo` because
+   * the refusal below needs the same people, and asking twice would be two sets
+   * of queries for one answer.
+   */
+  const senderRequests = useMessageSenderRequests(messages);
+  const chatPeople = useChatPeople(senderRequests);
+  const alloApiSenderInfo = useSenderInfo(conversation, isGroup, conversationMetadata);
+  const matrixSenderInfo = useMatrixSenderInfo(chatPeople);
+  const { getSenderName, getSenderHandle, getSenderAvatar } =
+    matrixSenderInfo ?? alloApiSenderInfo;
+
+  // An ephemeral conversation refuses to send when it cannot account for who is
+  // in it. That is a rule and not a fault, so it is said in the reader's own
+  // language rather than passed through as the port's English — and it names the
+  // people rather than their Matrix ids, which is what the lookup above is for.
+  const ephemeralRefusalMessage = useEphemeralRefusalMessage(chatPeople);
 
   /**
    * Handle header press to show contact/group details
@@ -861,9 +884,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleEmoji = useCallback(() => {
     // Placeholder for emoji picker functionality
   }, []);
-
-  // Use the new hook for sender info
-  const { getSenderName, getSenderAvatar } = useSenderInfo(conversation, isGroup, conversationMetadata);
 
   /**
    * Toggle timestamp visibility for a message
@@ -1446,6 +1466,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             visible={infoScreenVisible}
             message={selectedMessage}
             senderName={selectedMessage ? getSenderName(selectedMessage.senderId) : undefined}
+            senderHandle={selectedMessage ? getSenderHandle(selectedMessage.senderId) : undefined}
             senderAvatar={selectedMessage ? getSenderAvatar(selectedMessage.senderId) : undefined}
             onClose={() => {
               setInfoScreenVisible(false);

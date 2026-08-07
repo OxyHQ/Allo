@@ -198,6 +198,23 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
   profile here is who somebody is plus a button to talk to them, not a feed:
   `components/profile/ProfileIdentity.tsx` draws the person and is shared with
   the conversation-details pane.
+- **Who somebody in a conversation is:** `lib/chat/people.ts`, and nothing else
+  in chat asks Oxy about a person. It exists because **the homeserver knows
+  nobody's name**: MAS knows the Oxy subject only as a localpart and Allo never
+  sets a Matrix `displayname`, so every title a client computes from a room's
+  members is an MXID and every `displayName` the port reports is `undefined`.
+  `matrixIdentity.ts` goes both ways now — `oxyUserIdFrom` is the exact inverse
+  of `matrixUserIdFor` and **as strict**, because a coerced lookup succeeds
+  against a stranger; a bridge puppet, a foreign user and a malformed localpart
+  are all refused, and `roomOrigin.ts` is asked about the first before the
+  localpart is examined at all. `hooks/useChatPeople.ts` binds it to React
+  Query: one cache entry per person, and `ChatPeopleDirectory` coalesces a tick's
+  worth of ids into one `getUsersByIds`, so a group of thirty is one request. A
+  person still being looked up draws NOTHING and one that could not be resolved
+  draws `chat.person.unknown` — never the id.
+  `__tests__/chat/noMatrixIdsOnScreen.test.ts` is a source scan that fails if an
+  identifier can reach a screen again; there is no render test in this repo, and
+  the regression is the shape of the expression rather than one screen.
 - **Privacy settings:** five rows, and the shapes differ on purpose — one switch
   in the list (online status), one chooser screen (visibility), three list
   screens (blocked, restricted, hidden words, the first two sharing

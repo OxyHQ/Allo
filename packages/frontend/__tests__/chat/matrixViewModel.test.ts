@@ -71,18 +71,28 @@ describe('toConversation', () => {
       type: 'direct',
       name: 'Alice',
       unreadCount: 3,
-      avatar: 'mxc://a',
     });
+  });
+
+  it("drops the room's own avatar, which is an mxc URI nothing here can fetch", () => {
+    // It used to be passed straight through, and `getConversationAvatar` hands
+    // anything that is not an http(s)/file URL to `oxyServices.getFileDownloadUrl`
+    // — so every Matrix room with an avatar drew a broken image pointing at Oxy's
+    // CDN for a file id that is not one.
+    expect(toConversation(room({ avatarUrl: 'mxc://a' }), LABELS, false).avatar).toBeUndefined();
   });
 
   it('calls a room that is not a direct message a group', () => {
     expect(toConversation(room({ isDirect: false }), LABELS, false).type).toBe('group');
   });
 
-  it('falls back to the room id while the name has not synced', () => {
-    // A blank row is worse than an ugly one: the user can still tell two
-    // unnamed conversations apart by their ids, and cannot tell two blanks apart.
-    expect(toConversation(room({ displayName: undefined }), LABELS, false).name).toBe('!room:allo.you');
+  it('has no name at all while the room has not synced, rather than a room id', () => {
+    // It used to fall back to `summary.roomId`, on the reasoning that two unnamed
+    // conversations can at least be told apart by their ids. They cannot: nobody
+    // knows which of their conversations is `!AbCdEf:allo.you`, and the row
+    // already carries a message and a time to tell them apart by. A row with no
+    // title is a row missing one; a row titled with an identifier looks broken.
+    expect(toConversation(room({ displayName: undefined }), LABELS, false).name).toBe('');
   });
 
   it('shows the last message and the time it was sent', () => {

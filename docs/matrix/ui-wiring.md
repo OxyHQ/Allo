@@ -827,13 +827,17 @@ no cumple. Tampoco borra nada — la sala sigue ahí para quien se queda — y v
 sólo es posible si alguien invita otra vez, porque una sala de Allo es sólo por
 invitación.
 
-### 10.5 Los miembros no tienen cara
+### 10.5 Los miembros no tienen cara *en Matrix*
 
 `AlloRoomMember` no lleva avatar, y es una decisión. Lo que los dos SDK tienen de
 un miembro es un `mxc://`, que no es algo que una vista pueda pedir — el mismo
 problema por el que existe `AlloMediaRef` (§7.1) — así que un campo ahí sería una
 URL que dibuja una imagen rota en todas las filas. Hasta que los avatares de
-miembro pasen por `downloadMedia`, la lista honesta son los nombres.
+miembro pasen por `downloadMedia`, el puerto no da cara.
+
+La cara que sí se dibuja no es la de Matrix: es la de la cuenta Oxy, resuelta por
+`lib/chat/people.ts` (§12). Son dos cosas distintas y la de Matrix sigue sin
+existir.
 
 ---
 
@@ -905,3 +909,64 @@ en cuanto el runtime deja de querer conservarla. Todo lo que espera y luego
 escribe lo lee antes y lo vuelve a comprobar después —dentro de la operación
 encolada, no sólo al encolarla, porque una escritura espera detrás de lo que ya
 hubiera en la cola.
+
+---
+
+## 12. Quién es cada persona
+
+### 12.1 El problema: el homeserver no sabe el nombre de nadie
+
+MAS conoce el sujeto de Oxy solo como *localpart*, y nada en Allo escribe nunca
+un `displayname` ni un `avatar_url` de Matrix. **Así que en `allo.you` nadie
+tiene nombre**, y todo lo que Matrix calcula a partir de un nombre de miembro
+sale como un identificador:
+
+- el título de una sala sin `m.room.name` — que es toda conversación de dos, y
+  todo grupo creado sin nombre — se calcula a partir de los miembros, y sale
+  `@<hex>:allo.you`, o varios unidos por lo que una y otra SDK usen para unirlos;
+- `AlloRoomMember.displayName` sale `undefined`;
+- `AlloTimelineItem.senderDisplayName` sale `undefined`.
+
+El dueño abrió una conversación y leyó `@<hex>:allo.you` donde va un nombre.
+
+### 12.2 La costura
+
+`lib/chat/matrixIdentity.ts` va ahora en las dos direcciones. `oxyUserIdFrom` es
+el inverso exacto de `matrixUserIdFor` y **es igual de estricto**: un localpart
+que no sea un id de Oxy bien formado se rechaza en vez de repararse, porque una
+búsqueda forzada acierta — con otra persona, cuyo nombre y cuya cara acabarían
+sobre los mensajes de un desconocido. Rechaza tres casos, y los tres son
+corrientes: el fantasma de un puente, alguien de otro homeserver, y un localpart
+que no es un id.
+
+`lib/chat/people.ts` es **la única puerta** por la que el chat pregunta a Oxy
+quién es alguien. Está así porque las cinco llamadas `oxyServices.*` del frontend
+se van detrás de `api.allo.you`: un módulo que las hace es una mudanza, veinte
+sitios son veinte. Clasifica primero (`bridged` → `oxy` → `foreign`, y el orden
+importa: la regla del puente se pregunta antes de mirar el localpart), y solo
+para `oxy` busca en Oxy.
+
+`hooks/useChatPeople.ts` lo ata a React con React Query, **una entrada de caché
+por persona y una petición por lote**: `ChatPeopleDirectory` junta todo lo que se
+pide en un mismo tick en un solo `getUsersByIds`, así que un grupo de treinta es
+una petición, y la segunda vez ninguna.
+
+### 12.3 Qué se dibuja cuando no se sabe
+
+Tres estados, y son distintos a propósito:
+
+| estado | qué se dibuja |
+|---|---|
+| `resolved` | su nombre, su handle y su cara |
+| `pending` | **nada**. Un nombre que aparece y cambia dice algo falso mientras tanto |
+| `unresolved` | `chat.person.unknown` — "Persona desconocida" |
+
+Un contacto de un puente se dibuja con lo que diga Matrix y **nunca** se busca en
+Oxy: mautrix pone nombre a sus fantasmas, y ese es el único que hay. Si el puente
+no puso ninguno, lee como cualquier otra persona sin resolver.
+
+**En ningún estado sale un identificador.**
+`__tests__/chat/noMatrixIdsOnScreen.test.ts` lo vigila leyendo el código fuente,
+porque no hay ningún test de render en el repositorio y porque la regresión es la
+*forma* de la expresión — `displayName ?? userId` — idéntica en los cinco sitios
+donde estaba.

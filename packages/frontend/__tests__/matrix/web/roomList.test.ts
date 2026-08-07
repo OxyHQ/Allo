@@ -55,7 +55,7 @@ function event(
     getRelation: () => relation,
     replacingEvent: () => null,
     status: null,
-    sender: { name: 'Alice' },
+    sender: { rawDisplayName: 'Alice' },
   };
 }
 

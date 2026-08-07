@@ -58,7 +58,7 @@ function event(overrides: Partial<TimelineEventFields> = {}): TimelineEventField
     getRelation: () => null,
     replacingEvent: () => null,
     status: null,
-    sender: { name: 'Alice' },
+    sender: { rawDisplayName: 'Alice' },
     ...overrides,
   };
 }
@@ -288,6 +288,24 @@ describe('toTimelineItem', () => {
 
   it('leaves the sender nameless until the SDK has resolved one', () => {
     expect(toTimelineItem(event({ sender: null }), VIEWER, [])?.senderDisplayName).toBe(undefined);
+  });
+
+  it('leaves the sender nameless when they have set no display name', () => {
+    // `rawDisplayName` and not the SDK's `name`, which answers with the user id
+    // for a member who has set none and appends it to disambiguate a duplicate —
+    // so the port would report `@alice:allo.you`, or `Alice (@alice:allo.you)`,
+    // in a field whose whole contract is that it holds a name or nothing. On
+    // Allo's homeserver nobody has one, so that was every sender.
+    expect(
+      toTimelineItem(event({ sender: { rawDisplayName: undefined } }), VIEWER, [])
+        ?.senderDisplayName,
+    ).toBe(undefined);
+    // An empty string is not a name either: a member whose `m.room.member` event
+    // carries `displayname: ""` would otherwise be drawn as nobody rather than
+    // resolved through `lib/chat/people.ts`.
+    expect(
+      toTimelineItem(event({ sender: { rawDisplayName: '' } }), VIEWER, [])?.senderDisplayName,
+    ).toBe(undefined);
   });
 
   it('reports an edited message with the content that replaced it', () => {
