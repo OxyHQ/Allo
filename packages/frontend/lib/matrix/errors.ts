@@ -161,6 +161,34 @@ export class MatrixStoreUnavailableError extends MatrixPortError {
 }
 
 /**
+ * The client's data was still on disk after it was asked to go.
+ *
+ * The one failure in this file that is a privacy control rather than a guard
+ * against a bug, and the reason it is an error at all rather than a warning: the
+ * store is erased so that the identity signing in next cannot open the identity
+ * before it, and a store that could not be erased must therefore stop the launch
+ * rather than be opened by somebody it does not belong to. Resolving instead —
+ * which is what this used to do on web — turns "I could not delete a database"
+ * into "the next account reads the last account's synced state and holds its
+ * decryption keys".
+ *
+ * {@link names} is what is still there, so the failure says which piece rather
+ * than only that there was one. They are database names and directory paths, not
+ * anything in them.
+ */
+export class MatrixStoreNotErasedError extends MatrixPortError {
+  readonly names: readonly string[];
+
+  constructor(names: readonly string[]) {
+    super(
+      'The Matrix client\'s data could not be erased, so it must not be ' +
+        `reopened by a different account: ${names.join(', ')}`,
+    );
+    this.names = names;
+  }
+}
+
+/**
  * A recovery phrase that is not a BIP-39 mnemonic.
  *
  * The message names no words and quotes nothing back: the phrase is the whole

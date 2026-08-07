@@ -1,4 +1,4 @@
-import { MatrixStoreUnavailableError } from '@/lib/matrix/errors';
+import { MatrixStoreNotErasedError, MatrixStoreUnavailableError } from '@/lib/matrix/errors';
 import type { AlloChatStoreEraser, AlloClientStore } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 
@@ -23,6 +23,14 @@ import { logger } from '@/utils/logger';
  * Both are deleted here, and neither is deleted while a client is using it. Allo
  * on web is safe in one tab and untested in two (`client.web.ts`), and a second
  * tab holding a live session is one of the things that is untested.
+ *
+ * **A deletion that is refused is a failure, and it is raised.** Erasing is how
+ * `matrixRuntime.ts` keeps one identity's synced state and keys away from the
+ * next one, so reporting success for a database that is still there would hand
+ * the next account exactly what this exists to take away. Every candidate is
+ * still attempted before the failure is raised — stopping at the first refusal
+ * would leave behind databases that could have gone — and what is raised names
+ * the ones that did not.
  */
 
 const LOG_TAG = '[matrix]';
@@ -94,8 +102,14 @@ export async function eraseWebStore(
     names.add(name);
   }
 
+  const remaining: string[] = [];
   for (const name of names) {
-    await deleteDatabase(name, indexedDB);
+    if (!(await deleteDatabase(name, indexedDB))) {
+      remaining.push(name);
+    }
+  }
+  if (remaining.length > 0) {
+    throw new MatrixStoreNotErasedError(remaining);
   }
 }
 
@@ -133,25 +147,31 @@ async function cryptoDatabaseNames(
 }
 
 /**
- * Deletes one database, and does not let a refusal stop the others.
+ * Deletes one database, and says whether it went.
+ *
+ * `false` rather than a throw, so that a refusal does not stop the databases
+ * after it from being attempted. The caller collects the refusals and raises one
+ * failure naming all of them.
  *
  * A deletion can be *blocked* rather than refused, which is a connection
  * somewhere else still holding the database open — another tab. It is reported
  * and waited out rather than treated as an error, because the request stays
- * pending and completes when the other connection closes.
+ * pending and completes when the other connection closes. Waiting is the right
+ * answer and it is also the safe one: the caller is holding off a client that
+ * would otherwise open this database, and a launch that hangs with a line in the
+ * log beats one that proceeds into somebody else's keys.
  */
-function deleteDatabase(name: string, indexedDB: IDBFactory): Promise<void> {
+function deleteDatabase(name: string, indexedDB: IDBFactory): Promise<boolean> {
   return new Promise((resolve) => {
     const request = indexedDB.deleteDatabase(name);
     request.onsuccess = () => {
-      resolve();
+      resolve(true);
     };
     request.onerror = () => {
-      // Firefox in a private window has an `indexedDB` that refuses every
-      // mutation, including deleting a database that does not exist. There is
-      // nothing to do about it and nothing the user can do about it.
+      // A browser whose `indexedDB` refuses mutations — some private windows do
+      // — cannot have its store erased, and cannot be allowed to reopen one.
       logger.warn(`${LOG_TAG} the database ${name} could not be deleted`, request.error);
-      resolve();
+      resolve(false);
     };
     request.onblocked = () => {
       logger.warn(

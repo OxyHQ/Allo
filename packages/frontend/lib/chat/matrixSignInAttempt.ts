@@ -18,11 +18,11 @@ import { logger } from '@/utils/logger';
  * trip to the authorization server, it is scoped to the one tab making the trip,
  * and it dies with that tab. A new tab is a new run and may try again.
  *
- * It is never cleared, and that is deliberate on both platforms. Clearing it
- * after a successful login would let the automatic sign-in fire again the moment
- * somebody deliberately signed out, which is the second thing this decision
- * exists to prevent. The button on the sign-in screen does not consult it: a
- * person asking to sign in is not an automatic retry.
+ * A successful login does not clear it, and neither does a sign-out. That is
+ * deliberate on both platforms: clearing it after a login would let the automatic
+ * sign-in fire again the moment somebody deliberately signed out, which is the
+ * second thing this decision exists to prevent. The button on the sign-in screen
+ * does not consult it: a person asking to sign in is not an automatic retry.
  */
 
 export interface MatrixSignInAttempt {
@@ -30,6 +30,22 @@ export interface MatrixSignInAttempt {
   started(): boolean;
   /** Records that one has been. Called before the sign-in, never after. */
   record(): void;
+  /**
+   * Forgets the attempt, so the next render may start a fresh one.
+   *
+   * There is exactly one caller and it is not "the login finished": it is
+   * `matrixRuntime.ts` refusing a stored session because the store on disk is
+   * not that session's, which is what an account switch looks like from
+   * underneath. The attempt being forgotten there is not the retry the paragraph
+   * above refuses — the run that recorded it was signing somebody else in, and
+   * the app has just thrown away everything of theirs. Leaving the marker set
+   * would show whoever is here now a button offering to do the thing the app
+   * could have done by itself.
+   *
+   * It is NOT called for an ordinary sign-out, where there is a session to
+   * discard but no foreign store: that case is the one the marker is for.
+   */
+  forget(): void;
 }
 
 /** The one key. Namespaced so it cannot collide with anything else on the origin. */
@@ -48,6 +64,9 @@ export function createProcessAttempt(): MatrixSignInAttempt {
     started: () => attempted,
     record: () => {
       attempted = true;
+    },
+    forget: () => {
+      attempted = false;
     },
   };
 }
@@ -86,6 +105,14 @@ export function createTabAttempt(): MatrixSignInAttempt {
         return;
       }
       storage.setItem(SIGN_IN_ATTEMPT_KEY, 'true');
+    },
+    forget: () => {
+      process.forget();
+      // Both halves, and the in-memory one first: a browser with no
+      // `sessionStorage` still has the mirror set, and forgetting only the half
+      // that can be written would leave the tab refusing to try again for a
+      // reason nothing on screen could explain.
+      globalThis.sessionStorage?.removeItem(SIGN_IN_ATTEMPT_KEY);
     },
   };
 }

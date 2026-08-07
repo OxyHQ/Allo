@@ -1,6 +1,6 @@
 import { Directory, Paths } from 'expo-file-system';
 
-import { MatrixStoreUnavailableError } from '@/lib/matrix/errors';
+import { MatrixStoreNotErasedError, MatrixStoreUnavailableError } from '@/lib/matrix/errors';
 import type { AlloChatStoreEraser, AlloClientStore } from '@/lib/matrix/types';
 
 /**
@@ -49,11 +49,20 @@ export function resolveAlloChatStore(): AlloClientStore {
  * filesystem immediately, and whatever still holds it writes to something no path
  * leads to. What must not happen is the directory surviving, because a client
  * built afterwards would open it.
+ *
+ * So the directory is checked again afterwards rather than assumed gone, and a
+ * survivor is raised as {@link MatrixStoreNotErasedError}. `delete()` throwing is
+ * the loud failure and is left to propagate; this is the quiet one — a delete
+ * that reports nothing and removes nothing — and it is the one that ends with the
+ * next account opening the last account's keys. Both directories are attempted
+ * before anything is raised, so a state store that cannot go does not also leave
+ * the event cache behind.
  */
 export const eraseAlloChatStore: AlloChatStoreEraser = async (store) => {
   if (store.kind === 'in-memory') {
     return;
   }
+  const remaining: string[] = [];
   // A set, because a deployment is free to point both at one directory: the SDK
   // allows it, and deleting the same directory twice would throw on the second.
   for (const path of new Set([store.dataPath, store.cachePath])) {
@@ -61,6 +70,12 @@ export const eraseAlloChatStore: AlloChatStoreEraser = async (store) => {
     if (directory.exists) {
       directory.delete();
     }
+    if (directory.exists) {
+      remaining.push(path);
+    }
+  }
+  if (remaining.length > 0) {
+    throw new MatrixStoreNotErasedError(remaining);
   }
 };
 

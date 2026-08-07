@@ -5,6 +5,12 @@ import type {
 import { MatrixRuntime, type MatrixRuntimeDependencies } from '@/lib/chat/matrixRuntime';
 import { encodeStoredSession } from '@/lib/chat/matrixSession';
 import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
+import type { MatrixSignInAttempt } from '@/lib/chat/matrixSignInAttempt';
+import {
+  storeOwnerOf,
+  type MatrixStoreOwner,
+  type MatrixStoreOwnerStorage,
+} from '@/lib/chat/matrixStoreOwner';
 import type { MatrixPushRegistration } from '@/lib/chat/pushRegistration';
 import type {
   AlloChatClient,
@@ -134,6 +140,72 @@ class FakeSessionStorage implements MatrixSessionStorage {
     return this.value === undefined
       ? undefined
       : (JSON.parse(this.value) as { session: AlloSession }).session;
+  }
+}
+
+/**
+ * The record of whose the store on disk is.
+ *
+ * Its own fake rather than a field on {@link FakeSessionStorage}, because the two
+ * being separate is the point: they are written at different moments and either
+ * can be there without the other, and every one of those combinations is a case
+ * below. Its calls go into the same event log, so the ORDER the runtime clears,
+ * erases and claims in can be asserted — that order is what makes an interrupted
+ * launch converge instead of leaving a half-deleted store recorded as intact.
+ */
+class FakeStoreOwnerStorage implements MatrixStoreOwnerStorage {
+  readonly events: string[];
+
+  value: MatrixStoreOwner | undefined;
+  readFails: Error | undefined;
+  writeFails: Error | undefined;
+  clearFails: Error | undefined;
+
+  constructor(events: string[] = []) {
+    this.events = events;
+  }
+
+  async read(): Promise<MatrixStoreOwner | undefined> {
+    this.events.push('readOwner');
+    if (this.readFails !== undefined) {
+      throw this.readFails;
+    }
+    return this.value;
+  }
+
+  async write(owner: MatrixStoreOwner): Promise<void> {
+    this.events.push('writeOwner');
+    if (this.writeFails !== undefined) {
+      throw this.writeFails;
+    }
+    this.value = owner;
+  }
+
+  async clear(): Promise<void> {
+    this.events.push('clearOwner');
+    if (this.clearFails !== undefined) {
+      throw this.clearFails;
+    }
+    this.value = undefined;
+  }
+}
+
+/** The one-automatic-sign-in-per-run marker, as much of it as the runtime touches. */
+class FakeSignInAttempt implements MatrixSignInAttempt {
+  attempted = false;
+  forgets = 0;
+
+  started(): boolean {
+    return this.attempted;
+  }
+
+  record(): void {
+    this.attempted = true;
+  }
+
+  forget(): void {
+    this.forgets += 1;
+    this.attempted = false;
   }
 }
 
@@ -421,6 +493,10 @@ interface Harness {
   /** Every client ever built, oldest first. */
   readonly clients: FakeChatClient[];
   readonly storage: FakeSessionStorage;
+  /** The record of whose the store on disk is. */
+  readonly owner: FakeStoreOwnerStorage;
+  /** The one-automatic-sign-in-per-run marker. */
+  readonly signInAttempt: FakeSignInAttempt;
   /**
    * Everything the runtime did, in order, across storage, the store and the
    * client. What most of these tests are actually about is this sequence.
@@ -439,12 +515,33 @@ function harness(
     createClientFails?: () => Error | undefined;
     storage?: FakeSessionStorage;
     eraseStoreFails?: Error;
+    /**
+     * The store on disk is recorded as belonging to nobody.
+     *
+     * Every store written before ownership was recorded, and the state an
+     * interrupted erase leaves. Without this the harness records the store as
+     * belonging to whatever session was left in storage, because that is what a
+     * previous launch of the real app leaves behind and it is what the tests
+     * written before this rule existed were describing.
+     */
+    unownedStore?: boolean;
+    /** The store on disk is recorded as belonging to this session's identity. */
+    storeOwnedBy?: AlloSession;
     /** The authorization response this launch arrives with. Web only. */
     callbackUrl?: string;
   } = {},
 ): Harness {
   const storage = overrides.storage ?? new FakeSessionStorage();
   const events = storage.events;
+  const owner = new FakeStoreOwnerStorage(events);
+  const previousSession = storage.storedSession();
+  owner.value =
+    overrides.storeOwnedBy !== undefined
+      ? storeOwnerOf(overrides.storeOwnedBy)
+      : overrides.unownedStore === true || previousSession === undefined
+        ? undefined
+        : storeOwnerOf(previousSession);
+  const signInAttempt = new FakeSignInAttempt();
   // One client up front, so a test can arm its failures before the runtime asks
   // for it. Every rebuild after that gets a new one.
   const clients: FakeChatClient[] = [new FakeChatClient(events)];
@@ -465,6 +562,8 @@ function harness(
     },
     clients,
     storage,
+    owner,
+    signInAttempt,
     events,
     opened,
     erased,
@@ -492,6 +591,8 @@ function harness(
         }
       },
       sessionStorage: storage,
+      storeOwner: owner,
+      signInAttempt,
       pushRegistration,
       pendingAuthorization,
       authorize: async (url) => {
@@ -1151,6 +1252,262 @@ describe('MatrixRuntime session persistence', () => {
     await settle();
 
     expect(JSON.stringify(context.runtime.getState())).not.toContain('secret-');
+  });
+});
+
+describe('MatrixRuntime store ownership', () => {
+  /**
+   * The rule: a stored session may only be reinstated when the store on disk is
+   * recorded as belonging to exactly that session.
+   *
+   * This is the identity boundary, and it is here rather than in a React
+   * provider because the store and the session are on disk and React is not.
+   * What it exists to stop is a client authenticating as one account while
+   * reading the last account's synced state and holding its decryption keys.
+   */
+
+  /** The account that comes second on a shared device. */
+  const OTHER_SESSION: AlloSession = {
+    ...SESSION,
+    userId: '@lena:matrix.example',
+    deviceId: 'OTHERDEVICE',
+  };
+
+  it('reinstates a session whose store is recorded as its own', async () => {
+    // The ordinary launch, and the case every other one is measured against.
+    const context = harness({ storage: stored() });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().restoredWith).toEqual(SESSION);
+    expect(context.erased).toEqual([]);
+  });
+
+  it('refuses a session whose store belongs to another account, and erases both', async () => {
+    // The defect, in one case. Somebody signed in, somebody else's session is
+    // what is in storage, and the data on disk is the first one's. Restoring
+    // would hand the second account the first account's keys.
+    const context = harness({ storage: stored(), storeOwnedBy: OTHER_SESSION });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().restoredWith).toBeUndefined();
+    expect(context.storage.value).toBeUndefined();
+    expect(context.erased).toEqual([STORE]);
+    expect(context.runtime.getState().phase).toBe('signed-out');
+  });
+
+  it('refuses a session whose store nobody claimed', async () => {
+    // Every store written before ownership was recorded, which is everything
+    // already on disk. It is not given to the session sitting next to it: the
+    // two being next to each other is exactly what the old code assumed and
+    // exactly what was not true. One extra sign-in, once.
+    const context = harness({ storage: stored(), unownedStore: true });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().restoredWith).toBeUndefined();
+    expect(context.storage.value).toBeUndefined();
+    expect(context.erased).toEqual([STORE]);
+  });
+
+  it('refuses a session whose store belongs to the same person on another device', async () => {
+    // One account, two devices, and the keys are the device's. A store recorded
+    // for DEVICE cannot serve a session for OTHERDEVICE even though the user id
+    // matches, which is why the device id is part of the owner and not just the
+    // user id.
+    const context = harness({
+      storage: stored(),
+      storeOwnedBy: { ...SESSION, deviceId: 'OTHERDEVICE' },
+    });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().restoredWith).toBeUndefined();
+    expect(context.erased).toEqual([STORE]);
+  });
+
+  it('makes the store nobody’s before it starts deleting it', async () => {
+    // Order, and it is the part that makes an interrupted erase converge. Killed
+    // between the two, the next launch finds a store recorded as nobody's and
+    // erases it again. Recorded first and erased second, a half-deleted store
+    // would carry a marker saying it was intact.
+    const context = harness({ storage: stored(), storeOwnedBy: OTHER_SESSION });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.events.indexOf('clearOwner')).toBeLessThan(
+      context.events.indexOf('eraseStore'),
+    );
+  });
+
+  it('claims the store for the session a sign-in produced', async () => {
+    const context = harness();
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.owner.value).toEqual(storeOwnerOf(SESSION));
+  });
+
+  it('claims the store before it writes the session down', async () => {
+    // Interrupted between them, the next launch finds a store belonging to a
+    // session nobody wrote down and erases it: no device. The other order leaves
+    // a session whose store the next launch erases underneath it, which is a
+    // device that exists on the homeserver and cannot decrypt anything.
+    const context = harness();
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.events.lastIndexOf('writeOwner')).toBeLessThan(
+      context.events.lastIndexOf('write'),
+    );
+  });
+
+  it('reinstates the session a previous run signed in and claimed', async () => {
+    // The two halves meeting: what a sign-in writes is what the next launch
+    // accepts. A test for each side separately would pass with two different
+    // notions of what an owner is.
+    const first = harness();
+    first.runtime.subscribe(() => {});
+    await settle();
+    await first.runtime.signIn();
+    await settle();
+
+    const second = harness({ storage: first.storage });
+    second.owner.value = first.owner.value;
+    second.runtime.subscribe(() => {});
+    await settle();
+
+    expect(second.opened).toEqual([]);
+    expect(second.client().restoredWith).toEqual(SESSION);
+    expect(second.erased).toEqual([]);
+  });
+
+  it('does not build a client on a store it could not erase', async () => {
+    // The whole reason the erasers were made to throw. Carrying on here is
+    // "I could not delete the last account's keys, so I will open them".
+    const context = harness({
+      storage: stored(),
+      storeOwnedBy: OTHER_SESSION,
+      eraseStoreFails: new Error('the database is still open in another tab'),
+    });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.createClientCalls).toBe(0);
+    expect(context.runtime.getState().phase).toBe('failed');
+  });
+
+  it('does not build a client when it cannot even record that the store is nobody’s', async () => {
+    const context = harness({ storage: stored(), storeOwnedBy: OTHER_SESSION });
+    context.owner.clearFails = new Error('storage is full');
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.createClientCalls).toBe(0);
+    expect(context.erased).toEqual([]);
+    expect(context.runtime.getState().phase).toBe('failed');
+  });
+
+  it('gives the device back rather than keep a session it could not claim a store for', async () => {
+    // A sign-in whose store cannot be claimed is a device that the next launch
+    // will not recognise, and the launch after that would mint another.
+    const context = harness();
+    context.runtime.subscribe(() => {});
+    await settle();
+    context.owner.writeFails = new Error('storage is full');
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.clients[0]?.logouts).toBe(1);
+    expect(context.storage.value).toBeUndefined();
+    expect(context.runtime.getState().phase).toBe('failed');
+  });
+
+  it('lets the run try signing in again after it refuses somebody else’s session', async () => {
+    // The marker says "this run already started a sign-in". The run that started
+    // it was signing a different identity in, and the app has just thrown away
+    // everything of theirs — so leaving it set would show whoever is here now a
+    // button offering to do what the app could have done by itself.
+    const context = harness({ storage: stored(), storeOwnedBy: OTHER_SESSION });
+    context.signInAttempt.record();
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.signInAttempt.forgets).toBe(1);
+    expect(context.signInAttempt.started()).toBe(false);
+  });
+
+  it('leaves the marker alone on an ordinary launch with nothing stored', async () => {
+    // Nothing was refused. Forgetting here is what would send a browser that
+    // came back from the authorization server with no usable code straight back
+    // to it, and again, forever — the loop the marker exists for.
+    const context = harness();
+    context.signInAttempt.record();
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.signInAttempt.forgets).toBe(0);
+    expect(context.signInAttempt.started()).toBe(true);
+  });
+
+  it('does not let a token rotation put the session back after a sign-out cleared it', async () => {
+    // In-flight work crossing the boundary, in the one place Allo actually has
+    // any. The client is not let go of until the end of `signOut`, so between
+    // the session being cleared and that moment the runtime is still subscribed
+    // to the SDK's rotations — `pushRegistration.remove` and `logout` are the two
+    // awaits in the gap, and the first of them is a round trip. A rotation
+    // landing there wrote the session back after it had been cleared, and the
+    // next launch reinstated a session the user had ended.
+    const holder: { context?: Harness } = {};
+    const rotateMidSignOut: MatrixPushRegistration = {
+      apply: async () => {},
+      remove: async () => {
+        holder.context?.clients[0]?.rotateSession(REFRESHED_SESSION);
+      },
+    };
+    const context = harness({ storage: stored(), pushRegistration: rotateMidSignOut });
+    holder.context = context;
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.storage.value).toBeUndefined();
+  });
+
+  it('leaves the marker alone after a deliberate sign-out', async () => {
+    // A sign-out leaves no session and a store still recorded as the old
+    // session's, so the next build erases. That is not a refusal of anybody's
+    // session, and forgetting the marker there would drag somebody who has just
+    // signed out straight back into signing in.
+    const context = harness({ storage: stored() });
+    context.runtime.subscribe(() => {});
+    await settle();
+    context.signInAttempt.record();
+
+    await context.runtime.signOut();
+    await settle();
+
+    expect(context.signInAttempt.forgets).toBe(0);
+    expect(context.erased).toEqual([STORE]);
   });
 });
 
