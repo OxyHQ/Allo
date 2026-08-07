@@ -25,16 +25,26 @@ const CLIENT_NAME = 'Allo';
 const CLIENT_URI = 'https://allo.you';
 
 /**
- * The path the browser is sent back to on web.
+ * The path the browser is sent back to on web: the app itself.
  *
- * A static file in `public/`, deliberately not a route of the app. The web export
- * serves `index.html` for unknown paths, so a redirect at an app route would boot
- * a second copy of Allo in the popup — and a second copy means a second
- * `MatrixClient` on one IndexedDB, which the SDK says corrupts the crypto store
- * (`lib/matrix/client.web.ts`, the note at the top). A page that is not the app
- * cannot do that.
+ * It used to be a static file in `public/`, because the authorization ran in a
+ * popup and the web export answers unknown paths with `index.html` — so a
+ * redirect at an app route would have booted a second copy of Allo *inside the
+ * popup*, and two `MatrixClient`s on one IndexedDB corrupts the crypto store
+ * (`lib/matrix/client.web.ts`, the note at the top).
+ *
+ * There is no popup any more. The authorization is a top-level navigation
+ * (`matrixAuthorizer.web.ts`), which replaces this page rather than adding one,
+ * so there is never a second copy of Allo and the app can be its own redirect
+ * target — which it has to be, because the login is finished by the app on the
+ * way back in and a static file cannot do that.
+ *
+ * The root and not a route of its own: a dedicated `/matrix-oidc-callback` route
+ * would still be answered by `index.html`, so it would be the same app under a
+ * name that suggests otherwise, and it would need registering with the
+ * authorization server all the same.
  */
-const WEB_CALLBACK_PATH = '/matrix-oidc-callback.html';
+const WEB_CALLBACK_PATH = '/';
 
 /** The deep link the browser is sent back to on iOS and Android. */
 const NATIVE_CALLBACK_PATH = 'matrix/oidc';

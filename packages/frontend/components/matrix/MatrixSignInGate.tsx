@@ -8,6 +8,7 @@ import { useMatrixRuntime, signInToMatrix } from '@/hooks/useMatrixRuntime';
 import { useTheme } from '@/hooks/useTheme';
 import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { shouldAutoSignIn } from '@/lib/chat/matrixAutoSignIn';
+import { matrixSignInAttempt } from '@/lib/chat/matrixSignInAttempt';
 
 /**
  * Stands between the chat UI and a Matrix client that is not ready yet.
@@ -27,7 +28,14 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
   const { user } = useOxy();
   // A ref, not state: starting the sign-in must not itself cause a render, and
   // nothing on screen depends on whether it has been tried.
-  const attempted = useRef(false);
+  //
+  // It answers a narrower question than `matrixSignInAttempt` below — "did THIS
+  // component start one", not "has this run started one" — and the two are not
+  // interchangeable. On web the run outlives the page, so a browser that comes
+  // back from the authorization server with nothing usable finds the marker set;
+  // reading that as "starting right now" would draw a spinner over a screen that
+  // owes the person a button.
+  const startedHere = useRef(false);
 
   // Read during render rather than from an Effect, because this is a decision
   // about the state just computed — not a synchronisation with anything
@@ -38,10 +46,14 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
     shouldAutoSignIn({
       phase: runtime.phase,
       hasOxySession: user?.id !== undefined,
-      alreadyAttempted: attempted.current,
+      alreadyAttempted: matrixSignInAttempt.started(),
     })
   ) {
-    attempted.current = true;
+    // Recorded before the sign-in starts, so that a second render — StrictMode's,
+    // or another gate mounting — sees the attempt rather than starting a second
+    // one.
+    matrixSignInAttempt.record();
+    startedHere.current = true;
     signInToMatrix();
   }
 
@@ -49,9 +61,9 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
   // pass that begins the sign-in still draws the screen offering to begin it —
   // the exact screen the automatic start exists to remove, shown for as long as
   // the runtime takes to react. The phase leaves `signed-out` on its own, to
-  // `authorizing` when the browser opens or `failed` when it cannot, and both
-  // are handled below.
-  const startingItself = attempted.current && runtime.phase === 'signed-out';
+  // `authorizing` or `leaving` when the browser opens or `failed` when it cannot,
+  // and all three are handled below.
+  const startingItself = startedHere.current && runtime.phase === 'signed-out';
 
   const styles = useMemo(
     () =>
@@ -121,16 +133,52 @@ export function MatrixSignInGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Web, and the two ends of the redirect. `leaving` is drawn for the moment
+  // between asking the browser to navigate and the browser doing it, and then it
+  // goes with the page; `finishing` is the page that comes back, exchanging the
+  // code for a session. Neither is `authorizing`: nothing here is waiting on a
+  // browser, and a screen telling somebody to go and finish something they have
+  // already finished is worse than no screen at all.
+  if (runtime.phase === 'leaving') {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator style={styles.spinner} color={theme.colors.primary} />
+        <ThemedText style={styles.title}>{t('Taking you to sign in…')}</ThemedText>
+      </View>
+    );
+  }
+
+  if (runtime.phase === 'finishing') {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator style={styles.spinner} color={theme.colors.primary} />
+        <ThemedText style={styles.title}>{t('Finishing your sign-in…')}</ThemedText>
+      </View>
+    );
+  }
+
+  // WHAT IS MISSING HERE IS THE CHAT, NOT THE PERSON.
+  //
+  // Whoever reads this is signed in: the Oxy session is live, their avatar is
+  // drawn in the sidebar, and everything the app knows about them it already
+  // knows. The one thing absent is a Matrix access token. "Allo could not sign
+  // you in" said the opposite, and next to their own face it read as a second
+  // account they were being asked to keep — which is not what this is. The
+  // Matrix identity is derived from the Oxy one; there is only ever one account.
+  //
+  // The detail names the hop rather than hiding it. The browser genuinely leaves
+  // Allo for Oxy and comes back, so copy promising something instant would be a
+  // lie one redirect later.
   const failed = runtime.phase === 'failed';
   return (
     <View style={styles.container}>
       <ThemedText style={styles.title}>
-        {failed ? t('Allo could not sign you in') : t('Connect your chat')}
+        {failed ? t('Allo could not connect your chat') : t('Connect your chat')}
       </ThemedText>
       <ThemedText style={styles.detail}>
         {failed
           ? (runtime.error ?? t('Something went wrong. Try again.'))
-          : t('One more step and your conversations are here.')}
+          : t('Allo will take you to Oxy for a moment and bring you straight back.')}
       </ThemedText>
       <TouchableOpacity
         accessibilityRole="button"

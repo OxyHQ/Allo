@@ -47,7 +47,7 @@ Sólo se leen cuando la bandera está en `matrix`
 |---|---|---|
 | `EXPO_PUBLIC_MATRIX_HOMESERVER` | el homeserver | **ninguno; lanza** |
 | `EXPO_PUBLIC_MATRIX_OIDC_CLIENT_ID` | client id acordado de antemano con MAS | registro dinámico |
-| `EXPO_PUBLIC_MATRIX_OIDC_REDIRECT_URI` | a dónde vuelve el navegador | `allo://matrix/oidc` en nativo, `/matrix-oidc-callback.html` en web |
+| `EXPO_PUBLIC_MATRIX_OIDC_REDIRECT_URI` | a dónde vuelve el navegador | `allo://matrix/oidc` en nativo, `/` —la propia app— en web |
 
 No hay homeserver por defecto a propósito: tendría que ser el de producción de
 Allo, que no existe, o el de otro, y una build que habla en silencio con un
@@ -323,13 +323,40 @@ Por orden de cuánto se nota:
 
 ## 6. Web
 
-El redirect de OIDC apunta a `public/matrix-oidc-callback.html`, un fichero
-estático que **no** es una ruta de la app. El export web responde `index.html` a
-las rutas desconocidas (`public/_redirects`), así que un redirect a una ruta de
-la app arrancaría una segunda copia de Allo dentro del popup — y dos copias son
-dos `MatrixClient` sobre un IndexedDB, que es la corrupción del almacén de cripto
-que avisa el SDK. Sigue en pie lo que dice `client.web.ts`: Allo en web es segura
-en una pestaña y no está probada en dos.
+**La autorización es una navegación de primer nivel, no un popup.**
+`expo-web-browser` implementa `openAuthSessionAsync` en web como `window.open`, y
+un popup sin un gesto del usuario detrás lo bloquea el navegador. Allo empieza
+este login sola —hay sesión de Oxy que heredar y pedir un segundo login es
+justamente lo que eso quita—, así que no hay gesto que tener: en producción se
+bloqueaba **siempre**, y en web no podía entrar nadie. Lo que hay ahora es
+`location.assign()` (`lib/chat/matrixAuthorizer.web.ts`), que no necesita gesto y
+es el flujo sobre el que está especificado OpenID Connect.
+
+Eso obliga a que el login sobreviva a la página. El contexto que hace falta para
+terminarlo —`client_id`, `device_id`, el verificador PKCE, el `redirect_uri` y el
+`state` que se envió— se escribe en `sessionStorage` antes de irse
+(`lib/matrix/web/oidcContext.ts`): misma pestaña, mismo origen, sobrevive al viaje
+y muere con la pestaña, donde `localStorage` dejaría un verificador rondando en
+cada pestaña futura. Al volver, `AlloChatClient.resumeOidcLogin()` reconstruye la
+petición y **la comprobación del `state` es la misma**: el `state` del callback
+tiene que ser el del único registro que hay.
+
+El redirect apunta ya a la propia app (`/`) y no a un fichero estático. La razón
+para no apuntar a una ruta era el popup —el export web responde `index.html` a
+las rutas desconocidas (`public/_redirects`), así que se habría arrancado una
+segunda copia de Allo **dentro del popup**, y dos copias son dos `MatrixClient`
+sobre un IndexedDB, la corrupción del almacén de cripto que avisa el SDK—, y una
+navegación de primer nivel sustituye la página en vez de añadir otra. Sigue en pie
+lo que dice `client.web.ts`: Allo en web es segura en una pestaña y no está
+probada en dos.
+
+Lo que cuesta: el navegador vuelve a `/` y no a la pantalla en la que estaba
+quien firmaba. Y el bucle, que es el peligro de verdad: si la página vuelve sin
+nada utilizable —alguien le da a Atrás, un redirect que rebota— la copia nueva de
+la app no recuerda haberlo intentado. Por eso la marca de «ya se intentó» también
+vive en `sessionStorage` (`lib/chat/matrixSignInAttempt.ts`) y no en una
+variable, y por eso un fallo termina en la explicación y el botón, nunca en otro
+redirect.
 
 La sesión vive en `localStorage`, no en un llavero, porque un navegador no tiene
 ninguno: lo que la protege es el origen, la misma protección de la que ya depende

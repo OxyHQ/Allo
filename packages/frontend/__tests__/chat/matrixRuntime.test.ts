@@ -1,8 +1,8 @@
-import {
-  MatrixRuntime,
-  type AuthorizationOutcome,
-  type MatrixRuntimeDependencies,
-} from '@/lib/chat/matrixRuntime';
+import type {
+  AuthorizationOutcome,
+  MatrixPendingAuthorization,
+} from '@/lib/chat/matrixAuthorization';
+import { MatrixRuntime, type MatrixRuntimeDependencies } from '@/lib/chat/matrixRuntime';
 import { encodeStoredSession } from '@/lib/chat/matrixSession';
 import type { MatrixSessionStorage } from '@/lib/chat/matrixSessionStorage';
 import type { MatrixPushRegistration } from '@/lib/chat/pushRegistration';
@@ -153,8 +153,23 @@ class FakeLoginRequest implements AlloOidcLoginRequest {
   }
 }
 
+/**
+ * The URL the browser is sent back to, as the app finds it on the way in.
+ *
+ * Web only: on a phone the authorization never outlives the app. The `state` in
+ * it is not checked here — that is `WebOidcLoginRequest`'s job and it has its own
+ * tests — so what these cases are about is which of the runtime's paths runs.
+ */
+const CALLBACK_URL = 'https://allo.you/#code=abc&state=xyz';
+
 class FakeChatClient implements AlloChatClient {
   readonly request = new FakeLoginRequest();
+  /** The request a login picked up after a redirect completes through. */
+  readonly resumedRequest = new FakeLoginRequest();
+  /** Whether this client has a login written down to pick up. */
+  canResume = false;
+  resumeOidcLoginCalls = 0;
+  resumeOidcLoginFails: Error | undefined;
   /** Every call the runtime made, shared with the rest of the harness. */
   readonly events: string[];
   beginOidcLoginCalls = 0;
@@ -181,6 +196,15 @@ class FakeChatClient implements AlloChatClient {
       throw this.beginOidcLoginFails;
     }
     return this.request;
+  }
+
+  async resumeOidcLogin(): Promise<AlloOidcLoginRequest | undefined> {
+    this.resumeOidcLoginCalls += 1;
+    this.events.push('resumeOidcLogin');
+    if (this.resumeOidcLoginFails !== undefined) {
+      throw this.resumeOidcLoginFails;
+    }
+    return this.canResume ? this.resumedRequest : undefined;
   }
 
   async restoreSession(session: AlloSession): Promise<void> {
@@ -356,9 +380,36 @@ class FakePushRegistration implements MatrixPushRegistration {
   }
 }
 
+/**
+ * The address bar of a browser that has just come back from the authorization
+ * server, or of one that has not.
+ *
+ * `take` empties itself, because the real one does: it removes the response from
+ * the URL as it reads it, so that a reload cannot resubmit an authorization code
+ * that has already been spent.
+ */
+class FakePendingAuthorization implements MatrixPendingAuthorization {
+  takes = 0;
+
+  #callbackUrl: string | undefined;
+
+  constructor(callbackUrl?: string) {
+    this.#callbackUrl = callbackUrl;
+  }
+
+  take(): string | undefined {
+    this.takes += 1;
+    const url = this.#callbackUrl;
+    this.#callbackUrl = undefined;
+    return url;
+  }
+}
+
 interface Harness {
   readonly runtime: MatrixRuntime;
   readonly pushRegistration: FakePushRegistration;
+  /** What this launch of the app arrived holding, if anything. */
+  readonly pendingAuthorization: FakePendingAuthorization;
   /**
    * The client this launch is on.
    *
@@ -388,6 +439,8 @@ function harness(
     createClientFails?: () => Error | undefined;
     storage?: FakeSessionStorage;
     eraseStoreFails?: Error;
+    /** The authorization response this launch arrives with. Web only. */
+    callbackUrl?: string;
   } = {},
 ): Harness {
   const storage = overrides.storage ?? new FakeSessionStorage();
@@ -398,9 +451,11 @@ function harness(
   const opened: string[] = [];
   const erased: AlloClientStore[] = [];
   const pushRegistration = new FakePushRegistration(events);
+  const pendingAuthorization = new FakePendingAuthorization(overrides.callbackUrl);
   let builds = 0;
   const result: Harness = {
     pushRegistration,
+    pendingAuthorization,
     client: () => {
       const client = clients[Math.max(builds - 1, 0)];
       if (client === undefined) {
@@ -438,6 +493,7 @@ function harness(
       },
       sessionStorage: storage,
       pushRegistration,
+      pendingAuthorization,
       authorize: async (url) => {
         opened.push(url);
         return (await overrides.outcome?.()) ?? { kind: 'returned', callbackUrl: 'allo://matrix/oidc?code=abc' };
@@ -643,6 +699,196 @@ describe('MatrixRuntime sign-in', () => {
     await context.runtime.signIn();
 
     expect(JSON.stringify(context.runtime.getState())).not.toContain('code=abc');
+  });
+});
+
+describe('MatrixRuntime sign-in that leaves the page', () => {
+  /** What the web authorizer answers: the browser is being navigated away. */
+  const leaves = async (): Promise<AuthorizationOutcome> => ({ kind: 'left' });
+
+  it('says it is leaving instead of waiting for a page that will not come back', async () => {
+    // The bug this whole path exists for was a popup, and a popup is blocked
+    // without a gesture. A top-level redirect needs none — but it also never
+    // resolves anything, so a runtime that kept waiting would sit on
+    // `authorizing` forever, telling the screen to draw a spinner for an answer
+    // that cannot arrive.
+    const context = harness({ outcome: leaves });
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.opened).toEqual(['https://auth.example/authorize?state=xyz']);
+    expect(context.runtime.getState().phase).toBe('leaving');
+    expect(context.runtime.getState().error).toBeUndefined();
+  });
+
+  it('leaves the authorization intact for the page that comes back', async () => {
+    // Aborting would be the same as abandoning a login that is about to be
+    // finished by the next launch. There is nothing local to release either: what
+    // completes it is the context the port wrote down, not this object.
+    const context = harness({ outcome: leaves });
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.client().request.aborts).toBe(0);
+    expect(context.client().request.completedWith).toBeUndefined();
+  });
+
+  it('finishes the login the next launch arrives holding', async () => {
+    // The other half. A fresh page, a fresh client, an empty store, and an
+    // authorization code in the URL that belongs to a request the port wrote
+    // down before the page went away.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.client().resumeOidcLoginCalls).toBe(1);
+    expect(context.client().resumedRequest.completedWith).toBe(CALLBACK_URL);
+    expect(context.client().beginOidcLoginCalls).toBe(0);
+    expect(context.opened).toEqual([]);
+    expect(context.runtime.getState()).toMatchObject({
+      phase: 'ready',
+      userId: '@nate:matrix.example',
+    });
+  });
+
+  it('says it is finishing, not that it is waiting for a browser', async () => {
+    // The screen for `authorizing` tells the person to go and finish signing in
+    // in their browser. On the way back they have already done that, and it is
+    // Allo that is busy — with the token exchange, the crypto stack and the
+    // first sync.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+    const phases: string[] = [];
+    context.runtime.subscribe(() => {
+      phases.push(context.runtime.getState().phase);
+    });
+
+    await settle();
+
+    expect(phases).toContain('finishing');
+    expect(phases).not.toContain('authorizing');
+  });
+
+  it('remembers a session it finished on the way in', async () => {
+    // Same guarantee as any other sign-in: the Matrix device exists on the
+    // homeserver the moment the exchange returns, and a launch that did not write
+    // it down would mint another one next time.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.storage.storedSession()).toEqual(SESSION);
+    expect(context.events.indexOf('write')).toBeLessThan(context.events.indexOf('startSync'));
+  });
+
+  it('takes the response out of the address bar exactly once', async () => {
+    // Taking is removing. A code left in the URL is resubmitted by a reload, and
+    // the second submission always fails — which would report a failed sign-in
+    // for a code that worked.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+
+    context.runtime.subscribe(() => {});
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.pendingAuthorization.takes).toBe(1);
+    expect(context.pendingAuthorization.take()).toBeUndefined();
+  });
+
+  it('clears the address bar even on a launch that has a session already', async () => {
+    // A bookmarked callback, or a tab restored days later. The session wins — it
+    // is the only one of the two that can work — but the spent code still has no
+    // business staying in the URL.
+    const context = harness({ callbackUrl: CALLBACK_URL, storage: stored() });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.pendingAuthorization.takes).toBe(1);
+    expect(context.client().resumeOidcLoginCalls).toBe(0);
+    expect(context.client().restoredWith).toEqual(SESSION);
+    expect(context.runtime.getState().phase).toBe('ready');
+  });
+
+  it('refuses a callback it has no record of starting', async () => {
+    // A callback URL opened in a different tab, or a second load of one whose
+    // context the first load used up. There is no code verifier for it here and
+    // no `state` to check it against, so it is not this browser's login.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = false;
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.storage.storedSession()).toBeUndefined();
+  });
+
+  it('ends a failed completion at the explanation, never at another redirect', async () => {
+    // The dangerous one. Coming back from the authorization server and failing
+    // must not put the runtime back in the state the automatic sign-in acts on,
+    // because the page would leave again immediately and keep doing it.
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+    context.client().resumedRequest.completion = async () => {
+      throw new Error('the authorization server rejected the code');
+    };
+    const phases: string[] = [];
+    context.runtime.subscribe(() => {
+      phases.push(context.runtime.getState().phase);
+    });
+
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(phases).not.toContain('signed-out');
+    expect(context.opened).toEqual([]);
+    expect(context.client().beginOidcLoginCalls).toBe(0);
+  });
+
+  it('reports a client that could not even look for the login', async () => {
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().resumeOidcLoginFails = new Error('sessionStorage is not available');
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.runtime.getState().error).toContain('sessionStorage is not available');
+  });
+
+  it('starts an ordinary launch signed out, having asked', async () => {
+    // The common case on every platform: nothing in the URL, nothing stored. The
+    // question is still asked, which is what keeps the boot path the same
+    // everywhere.
+    const context = harness();
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.pendingAuthorization.takes).toBe(1);
+    expect(context.client().resumeOidcLoginCalls).toBe(0);
+    expect(context.runtime.getState().phase).toBe('signed-out');
+  });
+
+  it('registers for notifications after a login it finished on the way in', async () => {
+    const context = harness({ callbackUrl: CALLBACK_URL });
+    context.client().canResume = true;
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.pushRegistration.applies).toBe(1);
+    expect(context.events.indexOf('startSync')).toBeLessThan(
+      context.events.indexOf('registerPusher'),
+    );
   });
 });
 

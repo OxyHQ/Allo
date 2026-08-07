@@ -52,11 +52,11 @@ jobs:
           # No OIDC client id: MAS advertises a registration_endpoint and the
           # client registers itself, holding no secret. The one secret in this
           # system belongs to MAS, which is a confidential client of Oxy and
-          # runs in ECS. The redirect URI defaults to
-          # https://allo.you/matrix-oidc-callback.html, a real file in public/
-          # and deliberately not a route of the app — a route would boot a
-          # second copy of Allo in the popup, and two MatrixClients on one
-          # IndexedDB is the crypto-store corruption the SDK warns about.
+          # runs in ECS. The redirect URI defaults to https://allo.you/ — the
+          # app itself, because the authorization is a top-level redirect and
+          # it is the app that finishes the login on the way back in. It used
+          # to be a static file in public/, for a popup that no longer exists;
+          # see lib/chat/matrixAuthorizer.web.ts.
           #
           # If you change either value, verify the OUTPUT rather than the exit
           # code: Metro caches transforms and will happily produce a bundle

@@ -29,12 +29,26 @@ describe('shouldAutoSignIn', () => {
     expect(shouldAutoSignIn({ ...base, phase: 'failed' })).toBe(false);
   });
 
-  it.each<AutoSignInPhase>(['idle', 'starting', 'authorizing', 'ready'])(
+  it.each<AutoSignInPhase>(['idle', 'starting', 'authorizing', 'leaving', 'finishing', 'ready'])(
     'does not start from %s',
     (phase) => {
       expect(shouldAutoSignIn({ ...base, phase })).toBe(false);
     },
   );
+
+  it('does not start one while the browser is being sent away', () => {
+    // `leaving` is web's: the page has asked the browser to navigate and is about
+    // to be replaced. Starting a second authorization in the moments before that
+    // happens would replace the URL the first one is going to.
+    expect(shouldAutoSignIn({ ...base, phase: 'leaving' })).toBe(false);
+  });
+
+  it('does not start one over the login that is being finished', () => {
+    // `finishing` is the other end of the same redirect: the browser is back,
+    // holding a code that is being exchanged. A second authorization here would
+    // race the first and one of them would lose.
+    expect(shouldAutoSignIn({ ...base, phase: 'finishing' })).toBe(false);
+  });
 
   it('needs every condition, not any of them', () => {
     // Guards against the predicate degrading into an OR, which would start a

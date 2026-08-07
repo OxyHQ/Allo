@@ -614,8 +614,9 @@
   "Connecting…": "Connecting…",
   "Finish signing in": "Finish signing in",
   "Allo is waiting for the sign-in page in your browser.": "Allo is waiting for the sign-in page in your browser.",
-  "Allo could not sign you in": "Allo could not sign you in",
-  "Sign in to start chatting": "Sign in to start chatting",
+  "Allo could not connect your chat": "Allo could not connect your chat",
+  "Taking you to sign in…": "Taking you to sign in…",
+  "Finishing your sign-in…": "Finishing your sign-in…",
   "Something went wrong. Try again.": "Something went wrong. Try again.",
   "Your conversations live on your Matrix homeserver. Sign in to load them.": "Your conversations live on your Matrix homeserver. Sign in to load them.",
   "Try again": "Try again",
@@ -708,6 +709,6 @@
   "Their identity has changed": "Their identity has changed",
   "No identity published yet": "No identity published yet",
   "Connect your chat": "Connect your chat",
-  "One more step and your conversations are here.": "One more step and your conversations are here.",
+  "Allo will take you to Oxy for a moment and bring you straight back.": "Allo will take you to Oxy for a moment and bring you straight back.",
   "Continue": "Continue"
 }

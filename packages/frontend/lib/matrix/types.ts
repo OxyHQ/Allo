@@ -961,6 +961,28 @@ export interface AlloChatClient {
    * that follow.
    */
   beginOidcLogin(options?: AlloOidcLoginOptions): Promise<AlloOidcLoginRequest>;
+  /**
+   * Picks up an authorization that outlived the app, if this platform's sign-in
+   * can produce one.
+   *
+   * On web the authorization is a top-level navigation: the page that called
+   * {@link beginOidcLogin} is gone by the time the authorization server answers,
+   * and what comes back is a fresh load of Allo carrying a code in its URL. The
+   * request object that would have completed it went with the old page, so the
+   * web implementation writes down what completing needs — the client id, the
+   * device id, the PKCE code verifier, the redirect URI and the `state` it sent
+   * — and rebuilds the request here.
+   *
+   * `undefined` means there is nothing to pick up, which is the only answer the
+   * native implementation ever gives: its browser is an in-app tab that hands
+   * control back to a running app, so a login there never survives the app.
+   *
+   * The `state` in the callback is still checked against the one the stored
+   * request sent, by {@link AlloOidcLoginRequest.complete} and exactly as it
+   * would be for a login that never left. Rebuilding a request must not become a
+   * way to accept a `state` the app never sent.
+   */
+  resumeOidcLogin(): Promise<AlloOidcLoginRequest | undefined>;
   /** Reinstates a session persisted from a previous run. */
   restoreSession(session: AlloSession): Promise<void>;
   /** The current session. Throws if nobody has logged in. */

@@ -577,8 +577,9 @@
   "Connecting…": "Connessione…",
   "Finish signing in": "Completa l'accesso",
   "Allo is waiting for the sign-in page in your browser.": "Allo sta aspettando la pagina di accesso nel tuo browser.",
-  "Allo could not sign you in": "Allo non è riuscito a farti accedere",
-  "Sign in to start chatting": "Accedi per iniziare a chattare",
+  "Allo could not connect your chat": "Allo non è riuscito a collegare la tua chat",
+  "Taking you to sign in…": "Ti stiamo portando all’accesso…",
+  "Finishing your sign-in…": "Sto completando il tuo accesso…",
   "Something went wrong. Try again.": "Qualcosa è andato storto. Riprova.",
   "Your conversations live on your Matrix homeserver. Sign in to load them.": "Le tue conversazioni vivono sul tuo homeserver Matrix. Accedi per caricarle.",
   "Try again": "Riprova",
@@ -670,6 +671,6 @@
   "Their identity has changed": "La sua identità è cambiata",
   "No identity published yet": "Non ha ancora pubblicato alcuna identità",
   "Connect your chat": "Collega la chat",
-  "One more step and your conversations are here.": "Ancora un passaggio e le tue conversazioni sono qui.",
+  "Allo will take you to Oxy for a moment and bring you straight back.": "Allo ti porterà un momento su Oxy e ti riporterà subito indietro.",
   "Continue": "Continua"
 }

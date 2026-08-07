@@ -16,6 +16,12 @@
  * screen can say what went wrong and offer the button — an automatic retry there
  * would replace an explanation with a spinner.
  *
+ * "Per run" is load-bearing on web, where the authorization is a top-level
+ * redirect and the page that started it does not survive it. The caller supplies
+ * `alreadyAttempted` from a marker that outlives the navigation
+ * (`matrixSignInAttempt.ts`); a flag that reset when the page reloaded would turn
+ * a callback with nothing usable in it into an endless round trip.
+ *
  * Oxy refuses OIDC `prompt=none` on purpose (`packages/auth/src/pages/authorize.tsx`
  * in OxyHQServices): every gesture-less lane was removed, because a silent
  * redirect from the sign-in origin to an arbitrary target is what those lanes
@@ -24,7 +30,15 @@
  */
 
 /** The runtime phases this decision reads. Narrower than the runtime's own union. */
-export type AutoSignInPhase = 'idle' | 'starting' | 'authorizing' | 'signed-out' | 'ready' | 'failed';
+export type AutoSignInPhase =
+  | 'idle'
+  | 'starting'
+  | 'authorizing'
+  | 'leaving'
+  | 'finishing'
+  | 'signed-out'
+  | 'ready'
+  | 'failed';
 
 export interface AutoSignInInput {
   readonly phase: AutoSignInPhase;
@@ -56,6 +70,7 @@ export function shouldAutoSignIn({
     return false;
   }
   // `idle` and `starting` have not finished deciding; `authorizing` is already
-  // in the browser; `ready` needs nothing; `failed` owes an explanation.
+  // in the browser, `leaving` is on its way there and `finishing` is on its way
+  // back; `ready` needs nothing; `failed` owes an explanation.
   return phase === 'signed-out';
 }
