@@ -70,6 +70,7 @@ lib/chat/
   matrixRuntime.ts       el cliente y su ciclo de vida, fuera de React
   matrixSession.ts       la sesión guardada: versión, validación, homeserver
   matrixSessionStorage.ts dónde vive: llavero en nativo, localStorage en web
+  matrixStoreOwner.ts    de quién es el almacén del disco, apuntado fuera de él
   roomListSource.ts      la lista de salas como external store
   timelineSource.ts      un timeline por sala, ídem, más paginar y enviar
   mediaCache.ts          adjuntos ya bajados y descifrados, ídem
@@ -143,6 +144,13 @@ el historial de los demás. Lo que lo evita son dos hechos, ambos en
   que se escribió en el login caduca en menos de una hora. `observeSession` es
   cómo el puerto lo cuenta —delegado del constructor en nativo, callback del
   `TokenRefresher` en web— y el runtime está suscrito mientras el cliente viva.
+- **y el almacén dice de quién es.** Los dos puntos de arriba no decían nada del
+  arranque que *sí* encuentra sesión, y ahí estaba el fallo: la sesión y el
+  almacén se escriben en momentos distintos y se abrían juntos sólo porque los
+  dos estaban ahí. Ahora una sesión sólo se reinstala si el almacén está apuntado
+  como suyo, y si no se borran los dos. **Ver §11**, que es donde está la regla
+  entera, qué pasa con lo que ya había en el disco y por qué un borrado que falla
+  para el arranque.
 
 **El vocabulario no cambió: `Conversation` y `Message`.** `MessageBubble`,
 `DaySeparator`, las filas de la lista, el layout de tres paneles y los temas por
@@ -826,3 +834,74 @@ un miembro es un `mxc://`, que no es algo que una vista pueda pedir — el mismo
 problema por el que existe `AlloMediaRef` (§7.1) — así que un campo ahí sería una
 URL que dibuja una imagen rota en todas las filas. Hasta que los avatares de
 miembro pasen por `downloadMedia`, la lista honesta son los nombres.
+
+---
+
+## 11. De quién es lo que hay en el disco
+
+Un dispositivo lo usa más de una persona, y una cuenta se cambia. Lo que había
+hasta ahora no lo tenía en cuenta: la sesión vivía bajo una clave fija
+(`allo.matrix.session`), el almacén sincronizado y el almacén de cripto bajo un
+nombre fijo, y el runtime abría los dos juntos con el único argumento de que
+ambos estaban ahí. Cambia la cuenta y eso es un cliente autenticado como una
+identidad leyendo el estado sincronizado de la anterior y con sus claves de
+descifrado en la mano. No es una pantalla que no se refresca: es un fallo de
+privacidad.
+
+### 11.1 La regla
+
+`matrixStoreOwner.ts` apunta de quién es el almacén —MXID, id de dispositivo y
+homeserver— **fuera** del almacén, porque decidir si se abre es justo lo que hay
+que hacer antes de abrirlo. Y `matrixRuntime.ts` aplica una sola regla al
+principio de cada arranque:
+
+> Una sesión guardada sólo se reinstala si el almacén del disco está apuntado
+> como de esa misma sesión. Si no, se borran los dos.
+
+Una rama, y todos los casos caen en ella: un almacén que no es de nadie, un
+almacén de otra cuenta, una sesión sin almacén, un almacén sin sesión, y un
+cierre de sesión que se quedó a medias. Se borran **los dos** y no sólo el
+almacén: un dispositivo de Matrix sin sus claves no descifra nada y no se puede
+volver a verificar, así que reinstalar la sesión sólo daría un dispositivo roto
+en vez de uno nuevo.
+
+### 11.2 Lo que ya estaba en el disco no es de nadie
+
+Todo almacén escrito antes de esta regla no lleva dueño, y **no se le adjudica a
+la siguiente identidad que entre** — eso es exactamente el fallo. Tampoco se
+adivina a partir de la sesión que esté guardada al lado, porque que estén al lado
+es precisamente lo que se daba por hecho y no era cierto. Se borra, y la sesión
+que estaba junto a él se va con él. El coste es un inicio de sesión, una vez,
+para quien ya estuviera usando el backend de Matrix.
+
+Lo mismo vale en iOS por otro motivo: el llavero puede sobrevivir a desinstalar
+la app y el directorio de documentos no. Una Allo reinstalada encontraba una
+sesión válida de un dispositivo cuyas claves ya no existían en ninguna parte.
+Ahora encuentra una sesión cuyo almacén no es de nadie, que es un estado que el
+runtime sabe resolver.
+
+### 11.3 Un borrado que falla para el arranque
+
+`store.web.ts` y `store.native.ts` lanzan `MatrixStoreNotErasedError` en vez de
+dar por bueno un borrado que no ocurrió — en web una base que IndexedDB se niega
+a borrar, en nativo un directorio que sigue ahí después de `delete()`. Los dos
+intentan todo lo que tenían que borrar antes de lanzar, y lo que lanzan nombra lo
+que quedó.
+
+El runtime no lo captura: el arranque termina en `failed` y **sin cliente**. Un
+almacén que no se ha podido vaciar no puede abrirlo la identidad siguiente; para
+eso se vaciaba.
+
+### 11.4 El trabajo en vuelo tampoco cruza la frontera
+
+El cliente no se suelta hasta el final de `signOut`, así que entre borrar la
+sesión y soltarlo el runtime sigue suscrito a las rotaciones de token del SDK —
+dos `await`, uno de ellos un viaje al homeserver. Una rotación que aterrizaba ahí
+volvía a escribir la sesión **después** de que el cierre la hubiera borrado, y el
+arranque siguiente reinstalaba una sesión que la persona había terminado.
+
+`#sessionEpoch` es la respuesta: se abre cuando se instala una sesión y se cierra
+en cuanto el runtime deja de querer conservarla. Todo lo que espera y luego
+escribe lo lee antes y lo vuelve a comprobar después —dentro de la operación
+encolada, no sólo al encolarla, porque una escritura espera detrás de lo que ya
+hubiera en la cola.

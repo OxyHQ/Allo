@@ -20,6 +20,13 @@ import type {
 import { readMatrixClientConfig } from './matrixConfig';
 import { decodeStoredSession, encodeStoredSession } from './matrixSession';
 import { matrixSessionStorage, type MatrixSessionStorage } from './matrixSessionStorage';
+import { matrixSignInAttempt, type MatrixSignInAttempt } from './matrixSignInAttempt';
+import {
+  matrixStoreOwnerStorage,
+  sameStoreOwner,
+  storeOwnerOf,
+  type MatrixStoreOwnerStorage,
+} from './matrixStoreOwner';
 import {
   defaultPushRegistrationDependencies,
   MatrixPushRegistrar,
@@ -58,6 +65,36 @@ import {
  *   what was written at login is stale within the hour;
  *   `AlloChatClient.observeSession` is subscribed to for exactly as long as the
  *   client lives, and every version it reports is written down.
+ *
+ * ## One identity per store, proven rather than assumed
+ *
+ * The two facts above were both true and together they were still not enough,
+ * because "a launch that finds no session erases the store" says nothing about
+ * the launch that finds one. A session in storage and a store on disk are two
+ * separate things written at two separate moments, and the app used to open them
+ * together on the strength of their both being there. Switch the account signed
+ * in on the device and that is a client authenticating as one identity while
+ * reading the last identity's synced state and holding its decryption keys.
+ *
+ * So the store now records whose it is, outside itself, in `matrixStoreOwner.ts`,
+ * and this class enforces one rule at the top of every build:
+ *
+ * > **A stored session may only be reinstated when the store on disk is recorded
+ * > as belonging to exactly that session. Otherwise both are erased.**
+ *
+ * One branch, and every case falls into it: a store nobody claimed, which is
+ * every store written before this rule existed; a store claimed by a different
+ * account; a session with no store; a store with no session; a sign-out that was
+ * interrupted halfway. Erasing both rather than keeping the session is
+ * deliberate — a Matrix device whose keys have gone cannot decrypt anything and
+ * cannot be re-verified, so reinstating it would only produce a broken device
+ * instead of a new one.
+ *
+ * **An erase that fails stops the launch.** It is raised by the store modules, it
+ * is not caught here, and {@link MatrixRuntime} ends at {@link
+ * MatrixPhase.failed} with no client. A store that could not be emptied must not
+ * be opened by the identity that comes next; that is the whole point of emptying
+ * it.
  */
 
 /** How far along the runtime is. */
@@ -133,6 +170,22 @@ export interface MatrixRuntimeDependencies {
   /** Where the session is kept between launches. */
   readonly sessionStorage: MatrixSessionStorage;
   /**
+   * Where the answer to "whose is the store on disk" is kept.
+   *
+   * Separate from {@link sessionStorage} because it has to be readable when the
+   * session is not, and writable when there is no session to attach it to. See
+   * `matrixStoreOwner.ts`.
+   */
+  readonly storeOwner: MatrixStoreOwnerStorage;
+  /**
+   * Whether this run has already started an automatic sign-in.
+   *
+   * The runtime does not read it — the gate does — but it is the one place that
+   * knows when the attempt stopped describing the person using the app, which is
+   * the moment a session belonging to somebody else is refused.
+   */
+  readonly signInAttempt: MatrixSignInAttempt;
+  /**
    * Opens the authorization page and reports what the browser did. The middle of
    * OIDC's three steps, which the port deliberately does not own.
    */
@@ -180,6 +233,26 @@ export class MatrixClientNotStartedError extends Error {
   }
 }
 
+/**
+ * Work that started on a session the runtime has since stopped keeping.
+ *
+ * Raised rather than allowed to finish, and the case it is really for is the
+ * quiet one: a token rotation queued for storage while the app was signing out,
+ * landing after the sign-out cleared the session and putting it back. On disk
+ * that is indistinguishable from the defect this class was reworked to remove —
+ * a session belonging to somebody who is no longer using the app, waiting to be
+ * reinstated on the next launch.
+ */
+export class MatrixRuntimeSupersededError extends Error {
+  constructor(operation: string) {
+    super(
+      `${operation} was abandoned: it belongs to a Matrix session this runtime ` +
+        'has already stopped keeping.',
+    );
+    this.name = 'MatrixRuntimeSupersededError';
+  }
+}
+
 /** Nothing has happened yet. Also what a build with the flag off always reports. */
 export const IDLE_RUNTIME_STATE: MatrixRuntimeState = {
   phase: 'idle',
@@ -210,6 +283,29 @@ export class MatrixRuntime implements MatrixRuntimeLike {
    * new login goes through, so a sign-in from here starts over with a fresh one.
    */
   #clientHoldsSession = false;
+  /**
+   * Which session the runtime is currently keeping, or `undefined` for none.
+   *
+   * A number that is never reused, opened when a session is installed in the
+   * client and closed the moment the runtime stops intending to keep it — the
+   * top of a sign-out, the top of a start-over, and every detach. Everything
+   * that awaits and then writes reads it first and checks it again afterwards.
+   *
+   * It is checked rather than assumed because the gap between an await and the
+   * write after it is not short, and the client stays subscribed across it. A
+   * sign-out is two awaits and a round trip to the homeserver, and the SDK is
+   * free to rotate its tokens the whole way through: a rotation landing in that
+   * gap wrote the session back AFTER the sign-out had cleared it, and the next
+   * launch reinstated a session the user had ended. A `#startOver` has the same
+   * shape against the sign-in that asked for it.
+   *
+   * Closing it — rather than counting client rebuilds — is what makes the check
+   * work at all. During a sign-out the client has not been let go of yet, so
+   * anything that asked "is this still the current client" would be told yes.
+   */
+  #sessionEpoch: number | undefined;
+  /** Source of {@link #sessionEpoch}. Only ever moves forward. */
+  #nextSessionEpoch = 0;
   /**
    * The tail of the queue of storage operations.
    *
@@ -376,13 +472,23 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       this.#fail('Allo could not finish the sign-in', error);
       return;
     }
+    // There is a session, and from here the runtime intends to keep it.
+    const epoch = this.#openSessionEpoch();
 
     try {
-      // Written down before sync starts, and before anything is drawn. The
-      // Matrix device exists on the homeserver the moment the line above
-      // returned; from here until the session is stored there is a device this
-      // installation would not recognise on its next launch, and the way to make
-      // that window not matter is to make it as short as the code allows.
+      // The store is claimed first and the session written second, and an
+      // interruption between them is why. Stopping after the claim leaves a store
+      // belonging to a session nobody wrote down, which the next launch erases;
+      // stopping after the reverse would leave a session whose store the next
+      // launch erases underneath it, which is a device with no keys rather than
+      // no device.
+      //
+      // Both happen before sync starts and before anything is drawn. The Matrix
+      // device exists on the homeserver the moment `complete` returned; from here
+      // until these two lines are done there is a device this installation would
+      // not recognise on its next launch, and the way to make that window not
+      // matter is to make it as short as the code allows.
+      await this.#dependencies.storeOwner.write(storeOwnerOf(session));
       await this.#remember(session);
     } catch (error) {
       // A sign-in that cannot be remembered is a device minted for one run of the
@@ -395,12 +501,20 @@ export class MatrixRuntime implements MatrixRuntimeLike {
 
     try {
       await client.startSync();
-      this.#publish({ phase: 'ready', userId: session.userId, error: undefined });
     } catch (error) {
       this.#fail('Allo could not finish the sign-in', error);
       return;
     }
 
+    if (epoch !== this.#sessionEpoch) {
+      // Signed out, or started over, while this login was finishing. The session
+      // it produced is already gone from storage and the client it produced is
+      // not this runtime's any more, so announcing it ready would put a phase on
+      // screen that nothing behind it can serve.
+      return;
+    }
+
+    this.#publish({ phase: 'ready', userId: session.userId, error: undefined });
     this.#registerForNotifications(client);
   }
 
@@ -450,6 +564,16 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     if (client === undefined) {
       return;
     }
+
+    // Before anything else, and this line is a fix rather than bookkeeping. The
+    // client is not let go of until the end of this method, so between clearing
+    // the session below and `#detach` at the bottom the runtime is still
+    // subscribed to the SDK's token rotations and the SDK is still free to
+    // rotate — two awaits' worth of window, one of them a round trip to the
+    // homeserver. A rotation landing in there used to write the session back
+    // AFTER the sign-out had cleared it, leaving the next launch to reinstate a
+    // session the user had ended.
+    this.#sessionEpoch = undefined;
 
     // The stored session goes first, and everything else is allowed to fail
     // afterwards. The worst state this can be interrupted in is a store with no
@@ -549,6 +673,9 @@ export class MatrixRuntime implements MatrixRuntimeLike {
    * client that cannot be reused.
    */
   async #startOver(): Promise<AlloChatClient | undefined> {
+    // Same window as {@link #signOut}: the old client is still subscribed until
+    // `#detach` below, and what is being discarded is a session.
+    this.#sessionEpoch = undefined;
     try {
       await this.#forget();
     } catch (error) {
@@ -581,17 +708,10 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       // authorization code in the address bar is what makes a reload resubmit
       // it. On every platform but web this is always `undefined`.
       const callbackUrl = this.#dependencies.pendingAuthorization.take();
-      const stored = await this.#readStoredSession(config.homeserverUrl);
-
-      if (stored === undefined) {
-        // Nothing is being restored, so nothing on disk belongs to this launch.
-        // What may be there is the store of a session that is gone — a sign-out
-        // the app did not live long enough to finish, a record written by an
-        // Allo that stored them differently — and the SDKs' stores hold one user
-        // each. Erasing here is what makes every one of those endings look the
-        // same to the client that opens next.
-        await this.#dependencies.eraseStore(config.store);
-      }
+      const stored = await this.#reinstatable(
+        await this.#readStoredSession(config.homeserverUrl),
+        config,
+      );
 
       const client = await this.#dependencies.createClient(config);
       this.#config = config;
@@ -626,6 +746,60 @@ export class MatrixRuntime implements MatrixRuntimeLike {
   }
 
   /**
+   * Decides whether the stored session may be reinstated, and makes the answer
+   * true on disk.
+   *
+   * The one place the store is erased, and the one place that decides it. It
+   * answers the session when the store on disk is recorded as that session's, and
+   * `undefined` in every other case — having first emptied the store and thrown
+   * the session away, so that the client built next opens something that is
+   * nobody's rather than somebody else's.
+   *
+   * The order inside is the part worth reading. The marker is cleared BEFORE the
+   * erase, never after: a launch killed midway through deleting a database then
+   * comes back to a store recorded as nobody's, which is a state this method
+   * erases again. Recording first and erasing second would leave a half-deleted
+   * store carrying a marker that says it is intact.
+   *
+   * A failure at any step propagates to {@link #build}, which is what stops the
+   * launch. That is deliberate for all three: a marker that cannot be cleared
+   * cannot be trusted, a store that cannot be emptied must not be reopened, and a
+   * session that cannot be forgotten would be reinstated by the next launch
+   * against the store this one just erased.
+   */
+  async #reinstatable(
+    stored: AlloSession | undefined,
+    config: AlloChatClientConfig,
+  ): Promise<AlloSession | undefined> {
+    const recorded = await this.#dependencies.storeOwner.read();
+    if (sameStoreOwner(recorded, stored === undefined ? undefined : storeOwnerOf(stored))) {
+      return stored;
+    }
+
+    await this.#dependencies.storeOwner.clear();
+    await this.#dependencies.eraseStore(config.store);
+
+    if (stored === undefined) {
+      // The ordinary signed-out launch, and the tail of a sign-out. Nothing was
+      // refused, so the run's sign-in attempt still describes the person here and
+      // is left alone: forgetting it is what would drag somebody who has just
+      // deliberately signed out straight back into a sign-in.
+      return undefined;
+    }
+
+    // A usable session, refused, because the data on this device is not its own.
+    // The log line names no account: a Matrix user id is not a secret, but
+    // nothing is gained by writing one into a log a support ticket may carry.
+    logger.warn(
+      '[chat] the stored Matrix session was not reinstated: the chat data on this ' +
+        'device was not written by it, so both have been erased',
+    );
+    await this.#forget();
+    this.#dependencies.signInAttempt.forget();
+    return undefined;
+  }
+
+  /**
    * Puts a stored session back into a fresh client and starts syncing.
    *
    * A failure here is reported and the stored session is **kept**. The reasons a
@@ -637,11 +811,18 @@ export class MatrixRuntime implements MatrixRuntimeLike {
    */
   async #restore(client: AlloChatClient, session: AlloSession): Promise<void> {
     this.#clientHoldsSession = true;
+    const epoch = this.#openSessionEpoch();
     try {
       await client.restoreSession(session);
       await client.startSync();
     } catch (error) {
       this.#fail('Allo could not reopen your last session', error);
+      return;
+    }
+    if (epoch !== this.#sessionEpoch) {
+      // Let go of while it was coming up. Whatever replaced it publishes its own
+      // phase; this one would only overwrite it with a session that is no longer
+      // the runtime's.
       return;
     }
     this.#publish({ phase: 'ready', userId: session.userId, error: undefined });
@@ -683,10 +864,30 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     });
   };
 
+  /** Starts keeping a session, and says which one this is. */
+  #openSessionEpoch(): number {
+    this.#sessionEpoch = this.#nextSessionEpoch;
+    this.#nextSessionEpoch += 1;
+    return this.#sessionEpoch;
+  }
+
+  /**
+   * Writes a session down, unless the runtime has stopped keeping it.
+   *
+   * The epoch is read here and checked again *inside* the queued operation, not
+   * only before queueing: a write waits behind whatever is already in the queue,
+   * and a sign-out is exactly the kind of thing that can be that "whatever".
+   * Asking the question once, on the way in, would ask it at the one moment the
+   * answer is still the old one.
+   */
   #remember(session: AlloSession): Promise<void> {
-    return this.#sequence(() =>
-      this.#dependencies.sessionStorage.write(encodeStoredSession(session)),
-    );
+    const epoch = this.#sessionEpoch;
+    return this.#sequence(async () => {
+      if (epoch === undefined || epoch !== this.#sessionEpoch) {
+        throw new MatrixRuntimeSupersededError('Storing a Matrix session');
+      }
+      await this.#dependencies.sessionStorage.write(encodeStoredSession(session));
+    });
   }
 
   #forget(): Promise<void> {
@@ -715,6 +916,8 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     this.#sessionSubscription?.();
     this.#sessionSubscription = undefined;
     this.#clientHoldsSession = false;
+    // Everything still in flight for the client being let go is now stale.
+    this.#sessionEpoch = undefined;
 
     const client = this.#client;
     this.#client = undefined;
@@ -800,6 +1003,10 @@ const defaultDependencies: MatrixRuntimeDependencies = {
   // name directories and databases, and neither of them loads a Matrix SDK.
   eraseStore: eraseAlloChatStore,
   sessionStorage: matrixSessionStorage,
+  storeOwner: matrixStoreOwnerStorage,
+  // The same object the sign-in gate reads. It has to be: a marker forgotten in
+  // one copy and read from another is a marker that does nothing.
+  signInAttempt: matrixSignInAttempt,
   pushRegistration: new MatrixPushRegistrar(defaultPushRegistrationDependencies()),
   // Platform-split, because the two platforms do genuinely different things: an
   // in-app browser tab that returns control on iOS and Android, a top-level

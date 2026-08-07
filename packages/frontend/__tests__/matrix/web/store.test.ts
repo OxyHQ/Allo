@@ -1,4 +1,4 @@
-import { MatrixPortError } from '@/lib/matrix/errors';
+import { MatrixPortError, MatrixStoreNotErasedError } from '@/lib/matrix/errors';
 import {
   cryptoDatabasePrefix,
   eraseWebStore,
@@ -148,17 +148,46 @@ describe('eraseWebStore', () => {
     expect(indexedDB.deleted).toEqual(['matrix-js-sdk:allo-matrix']);
   });
 
-  it('carries on past a database it is refused', async () => {
-    // A private window can have an `indexedDB` that refuses every mutation,
-    // including deleting a database that is not there. Stopping would leave the
-    // rest behind.
+  it('carries on past a database it is refused, and then refuses to report success', async () => {
+    // Two halves of one rule, and they only make sense together.
+    //
+    // It carries on, because stopping at the first refusal would leave behind
+    // databases that could have gone.
+    //
+    // And it throws, because this is how one account's synced state and keys are
+    // kept away from the next one. Resolving here — which is what this used to do
+    // — told `matrixRuntime` the store was empty, and the runtime opened it and
+    // put the next identity in it. A private window whose `indexedDB` refuses
+    // every mutation now ends at an explanation instead.
     const indexedDB = new FakeIndexedDB();
     indexedDB.present.push('allo-matrix:DEVICE1::matrix-sdk-crypto');
     indexedDB.refuse.add('matrix-js-sdk:allo-matrix');
 
-    await eraseWebStore(STORE, indexedDB.factory());
+    await expect(eraseWebStore(STORE, indexedDB.factory())).rejects.toThrow(
+      MatrixStoreNotErasedError,
+    );
 
     expect(indexedDB.deleted).toEqual(['allo-matrix:DEVICE1::matrix-sdk-crypto']);
+  });
+
+  it('names what is still there, so the failure says which piece', async () => {
+    const indexedDB = new FakeIndexedDB();
+    indexedDB.present.push(
+      'allo-matrix:DEVICE1::matrix-sdk-crypto',
+      'allo-matrix:DEVICE2::matrix-sdk-crypto',
+    );
+    indexedDB.refuse.add('allo-matrix:DEVICE1::matrix-sdk-crypto');
+    indexedDB.refuse.add('allo-matrix:DEVICE2::matrix-sdk-crypto');
+
+    const failure = await eraseWebStore(STORE, indexedDB.factory()).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(MatrixStoreNotErasedError);
+    expect((failure as MatrixStoreNotErasedError).names).toEqual([
+      'allo-matrix:DEVICE1::matrix-sdk-crypto',
+      'allo-matrix:DEVICE2::matrix-sdk-crypto',
+    ]);
   });
 
   it('does nothing for a store that was never on disk', async () => {

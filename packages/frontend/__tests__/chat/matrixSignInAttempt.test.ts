@@ -58,6 +58,18 @@ describe('createProcessAttempt', () => {
 
     expect(attempt.started()).toBe(true);
   });
+
+  it('can be forgotten, so the run may try once more', () => {
+    // One caller: `matrixRuntime` refusing a stored session because the chat data
+    // on this device is not that session's. The run that recorded the attempt was
+    // signing somebody else in.
+    const attempt = createProcessAttempt();
+    attempt.record();
+
+    attempt.forget();
+
+    expect(attempt.started()).toBe(false);
+  });
 });
 
 describe('selectSignInAttempt', () => {
@@ -127,6 +139,35 @@ describe('createTabAttempt', () => {
     createTabAttempt().record();
 
     expect(entries.get(SIGN_IN_ATTEMPT_KEY)).toBe('true');
+  });
+
+  it('forgets the attempt across the page as well as within it', () => {
+    // Both halves, or none. Forgetting only the variable would leave the tab's
+    // record intact, and the next page load would still refuse to try — which is
+    // the state this call exists to get out of.
+    const entries = installStorage();
+    const attempt = createTabAttempt();
+    attempt.record();
+
+    attempt.forget();
+
+    expect(attempt.started()).toBe(false);
+    expect(entries.has(SIGN_IN_ATTEMPT_KEY)).toBe(false);
+    installStorage(entries);
+    expect(createTabAttempt().started()).toBe(false);
+  });
+
+  it('forgets in a browser with no sessionStorage without reaching for it', () => {
+    // The mirror is the only half that exists there. Reaching for the other one
+    // anyway is how this would throw in a sandboxed frame.
+    const attempt = createTabAttempt();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    attempt.record();
+
+    expect(() => {
+      attempt.forget();
+    }).not.toThrow();
+    expect(attempt.started()).toBe(false);
   });
 
   it('still refuses a second attempt in a browser with no sessionStorage', () => {
