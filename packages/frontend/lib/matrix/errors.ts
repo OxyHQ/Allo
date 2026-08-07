@@ -189,6 +189,43 @@ export class MatrixStoreNotErasedError extends MatrixPortError {
 }
 
 /**
+ * The client's data was still open somewhere else after the erase had waited as
+ * long as it is willing to.
+ *
+ * Its own type rather than a {@link MatrixStoreNotErasedError}, because the two
+ * are different situations wearing the same outcome. A store that was *refused*
+ * cannot be deleted at all and nothing the reader does will change that; a store
+ * that is *blocked* is one another window of Allo still has open, it deletes
+ * itself the moment that window goes, and the reader is the only person who can
+ * make that happen. The screen for the second one is a request, not an
+ * apology — which it can only be if the runtime can tell them apart.
+ *
+ * What it shares with its neighbour is the part that matters: it is raised, so
+ * the launch stops. A blocked erase is an erase that did not happen, and the
+ * store must not be opened by whoever comes next. Waiting longer instead is not
+ * the safer option it looks like — a wait with no end is the hang this type
+ * exists to replace.
+ *
+ * {@link names} is what was still open, so the failure says which database
+ * rather than only that there was one.
+ */
+export class MatrixStoreEraseBlockedError extends MatrixPortError {
+  readonly names: readonly string[];
+  /** How long the erase waited before it gave up, in milliseconds. */
+  readonly waitedMs: number;
+
+  constructor(names: readonly string[], waitedMs: number) {
+    super(
+      `The Matrix client's data is still open somewhere else after ${waitedMs}ms, ` +
+        'so it could not be erased and must not be reopened by a different ' +
+        `account: ${names.join(', ')}`,
+    );
+    this.names = names;
+    this.waitedMs = waitedMs;
+  }
+}
+
+/**
  * A recovery phrase that is not a BIP-39 mnemonic.
  *
  * The message names no words and quotes nothing back: the phrase is the whole

@@ -788,9 +788,27 @@ En orden de cuánto duele si sale mal:
 
    La implementación no lo resuelve ni lo disimula: el hueco está señalado en la
    cabecera de `packages/frontend/lib/matrix/client.web.ts` y en la llamada a
-   `initRustCrypto()`, que es donde el propio SDK cuelga el aviso **[V]**. Nada
-   en el puerto detecta una segunda pestaña. En una pestaña la web es segura; en
-   dos, no está probada.
+   `initRustCrypto()`, que es donde el propio SDK cuelga el aviso **[V]**. En una
+   pestaña la web es segura; en dos, no está probada.
+
+   Lo que sí hay, y no es lo mismo, es que **una segunda pestaña ya no puede
+   colgar el arranque en silencio**. El arranque borra el store antes de abrirlo,
+   IndexedDB deja el `deleteDatabase` pendiente mientras otra conexión lo tenga
+   abierto, y eso se quedaba dentro de la fase `starting`: la pantalla ponía
+   «Connecting…» indefinidamente y la única pista era una línea de consola. El
+   dueño se lo encontró en producción. Ahora `store.web.ts` lo anuncia
+   (`AlloStoreEraseObserver`), `matrixRuntime` lo publica como fase `blocked`, la
+   pantalla dice qué pestaña cerrar, la espera termina sola en cuanto se cierra —
+   sin recargar nada — y a los 30 s se rinde en `blocked-timed-out` **sin abrir el
+   store**, que es la regla de #104 intacta.
+
+   Eso detecta el síntoma, no la pestaña. No hay `navigator.locks` ni
+   `BroadcastChannel`: ambas exigen un participante vivo *en la otra pestaña*, que
+   es justamente la barandilla que sigue sin presupuestarse. La atribución
+   («otra pestaña») es una inferencia — IndexedDB es por origen y esos nombres de
+   base de datos son de Allo — y el único caso en que falla es un cliente que esta
+   misma pestaña acaba de cerrar, porque `stopClient()` no cierra su
+   `IndexedDBStore`. Está anotado en la cabecera de `store.web.ts`.
 
 ---
 

@@ -612,6 +612,10 @@
     }
   },
   "Connecting…": "Connecting…",
+  "Allo is open in another tab": "Allo is open in another tab",
+  "Close the other Allo tab and this one will carry on by itself.": "Close the other Allo tab and this one will carry on by itself.",
+  "Allo is still open in another tab": "Allo is still open in another tab",
+  "Close every other Allo tab or window, then try again.": "Close every other Allo tab or window, then try again.",
   "Finish signing in": "Finish signing in",
   "Allo is waiting for the sign-in page in your browser.": "Allo is waiting for the sign-in page in your browser.",
   "Allo could not connect your chat": "Allo could not connect your chat",

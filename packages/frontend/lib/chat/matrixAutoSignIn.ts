@@ -33,6 +33,8 @@
 export type AutoSignInPhase =
   | 'idle'
   | 'starting'
+  | 'blocked'
+  | 'blocked-timed-out'
   | 'authorizing'
   | 'leaving'
   | 'finishing'
@@ -69,7 +71,10 @@ export function shouldAutoSignIn({
   if (alreadyAttempted) {
     return false;
   }
-  // `idle` and `starting` have not finished deciding; `authorizing` is already
+  // `idle` and `starting` have not finished deciding; `blocked` is waiting on
+  // another window of Allo to close and `blocked-timed-out` has stopped waiting,
+  // and starting a sign-in in front of either would put a browser hop on top of
+  // a screen that is asking the reader for something; `authorizing` is already
   // in the browser, `leaving` is on its way there and `finishing` is on its way
   // back; `ready` needs nothing; `failed` owes an explanation.
   return phase === 'signed-out';

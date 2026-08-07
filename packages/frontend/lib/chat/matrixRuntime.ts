@@ -1,3 +1,4 @@
+import { MatrixStoreEraseBlockedError } from '@/lib/matrix/errors';
 import { eraseAlloChatStore } from '@/lib/matrix/store';
 import type {
   AlloChatClient,
@@ -95,6 +96,23 @@ import {
  * MatrixPhase.failed} with no client. A store that could not be emptied must not
  * be opened by the identity that comes next; that is the whole point of emptying
  * it.
+ *
+ * ## An erase that is waiting says so
+ *
+ * The one case where stopping the launch was right and saying nothing was not.
+ * On web a second window of Allo holding the database open makes the deletion
+ * wait, and waiting is correct — it completes the moment that window closes. But
+ * the wait used to happen inside a phase called `starting`, so the screen drew
+ * "Connecting…" and kept drawing it, for as long as a tab nobody remembered
+ * opening stayed open. There was no way to learn that from inside the app and no
+ * way out but closing windows at random.
+ *
+ * So the erase reports itself (`AlloStoreEraseObserver`) and the two states it
+ * can be in are two phases here: `blocked` while it waits, which leaves by
+ * itself in either direction, and `blocked-timed-out` when the wait has been
+ * given up on. Neither builds a client. The second one especially: a bound that
+ * fell through into `createClient` would be this class opening a store it has
+ * just admitted it could not empty.
  */
 
 /** How far along the runtime is. */
@@ -106,6 +124,29 @@ export type MatrixPhase =
    * the session of a previous launch if there is one.
    */
   | 'starting'
+  /**
+   * The data this launch has to erase is open somewhere else, and the erase is
+   * waiting for it to be let go of.
+   *
+   * Web only, and always somebody else's browsing context: it is what IndexedDB
+   * reports when a second window of Allo still has the database open. Nothing is
+   * wrong and nothing has failed — the deletion completes on its own the moment
+   * that window closes, and this phase goes back to `starting` by itself when it
+   * does. It exists so the screen can say which window to close, which is the
+   * only thing anybody can do about it and the one thing the app used to keep to
+   * itself.
+   */
+  | 'blocked'
+  /**
+   * The wait above was given up on.
+   *
+   * Terminal, and distinct from `failed` in what it can honestly ask for: this
+   * is not something that went wrong, it is a window that is still open, so the
+   * screen asks again and offers to retry rather than apologising. **No client
+   * is built and no store is opened** — the store this launch could not empty is
+   * exactly the store the next identity must not inherit.
+   */
+  | 'blocked-timed-out'
   /** There is a client, and nobody has signed in. */
   | 'signed-out'
   /** An authorization is in flight in the browser. */
@@ -740,6 +781,19 @@ export class MatrixRuntime implements MatrixRuntimeLike {
       // Cleared so that the next attempt — a user pressing sign in again —
       // rebuilds instead of handing back this failure forever.
       this.#starting = undefined;
+      if (error instanceof MatrixStoreEraseBlockedError) {
+        // Not a defect and not the app's fault, so it is neither logged as an
+        // error nor drawn as one. The store was not erased, which is why this
+        // returns without a client like every other failure here: the phase is
+        // different, the guarantee is the same.
+        logger.warn(
+          '[chat] the chat data on this device is still open in another window, so ' +
+            'this one stopped rather than open it',
+          error,
+        );
+        this.#publish({ phase: 'blocked-timed-out', error: undefined });
+        return undefined;
+      }
       this.#fail('Allo could not start its Matrix client', error);
       return undefined;
     }
@@ -766,6 +820,15 @@ export class MatrixRuntime implements MatrixRuntimeLike {
    * cannot be trusted, a store that cannot be emptied must not be reopened, and a
    * session that cannot be forgotten would be reinstated by the next launch
    * against the store this one just erased.
+   *
+   * The erase is watched rather than only awaited, and what comes out of it is a
+   * phase. A deletion another window of Allo is holding up completes when that
+   * window closes, so the wait is kept — but it is announced, and it is announced
+   * from here because this is where the app is between two states and can say
+   * which. Coming back from `blocked` is the same publish in reverse: the store
+   * modules report the end of the wait as well as its start, so a person who
+   * closes the other window sees the app carry on rather than a screen that has
+   * to be reloaded.
    */
   async #reinstatable(
     stored: AlloSession | undefined,
@@ -777,7 +840,9 @@ export class MatrixRuntime implements MatrixRuntimeLike {
     }
 
     await this.#dependencies.storeOwner.clear();
-    await this.#dependencies.eraseStore(config.store);
+    await this.#dependencies.eraseStore(config.store, (blocked) => {
+      this.#publish({ phase: blocked ? 'blocked' : 'starting', error: undefined });
+    });
 
     if (stored === undefined) {
       // The ordinary signed-out launch, and the tail of a sign-out. Nothing was

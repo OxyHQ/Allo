@@ -33,6 +33,14 @@ const LOCALES: readonly (readonly [string, Record<string, unknown>])[] = [
 /** Every string the gate can put on screen. */
 const REQUIRED_KEYS: readonly string[] = [
   'Connecting…',
+  // The two halves of a launch held up by a second window of Allo: the one that
+  // is still working and finishes by itself, and the one that has stopped and
+  // needs the reader. Both name the thing to close, because closing it is the
+  // only action there is.
+  'Allo is open in another tab',
+  'Close the other Allo tab and this one will carry on by itself.',
+  'Allo is still open in another tab',
+  'Close every other Allo tab or window, then try again.',
   'Finish signing in',
   'Allo is waiting for the sign-in page in your browser.',
   'Taking you to sign in…',
@@ -79,8 +87,22 @@ describe('the sign-in gate does not tell a signed-in person to sign in', () => {
     // above by never being a key at all, and would ship English to all three.
     const asked = Array.from(source.matchAll(/\bt\(\s*'([^']+)'/g), ([, key]) => key);
 
-    expect(asked.length).toBeGreaterThanOrEqual(REQUIRED_KEYS.length);
     expect(asked.filter((key) => !REQUIRED_KEYS.includes(key))).toEqual([]);
+  });
+
+  it('still asks for every string this list says it can show', () => {
+    // THE OTHER DIRECTION, and the one that was missing. The check above reads
+    // the source and asks whether each key is allowed; a screen that stopped
+    // saying something — a `t()` call replaced by a literal, a whole branch
+    // deleted — is invisible to it, and the bundles keep the string on file so
+    // the two checks above stay green as well. Measured: replacing the blocked
+    // screen's title with a bare "Connecting…" survived all three. It does not
+    // survive this one.
+    const asked = new Set(
+      Array.from(source.matchAll(/\bt\(\s*'([^']+)'/g), ([, key]) => key),
+    );
+
+    expect(REQUIRED_KEYS.filter((key) => !asked.has(key))).toEqual([]);
   });
 
   it('does not name the person as the thing that failed', () => {

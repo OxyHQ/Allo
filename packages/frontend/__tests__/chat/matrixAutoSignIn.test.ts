@@ -29,12 +29,29 @@ describe('shouldAutoSignIn', () => {
     expect(shouldAutoSignIn({ ...base, phase: 'failed' })).toBe(false);
   });
 
-  it.each<AutoSignInPhase>(['idle', 'starting', 'authorizing', 'leaving', 'finishing', 'ready'])(
-    'does not start from %s',
-    (phase) => {
-      expect(shouldAutoSignIn({ ...base, phase })).toBe(false);
-    },
-  );
+  it.each<AutoSignInPhase>([
+    'idle',
+    'starting',
+    'blocked',
+    'blocked-timed-out',
+    'authorizing',
+    'leaving',
+    'finishing',
+    'ready',
+  ])('does not start from %s', (phase) => {
+    expect(shouldAutoSignIn({ ...base, phase })).toBe(false);
+  });
+
+  it('does not send a browser away from a screen that is asking for something', () => {
+    // Both halves of a launch held up by another window of Allo. `blocked` is
+    // waiting for that window to close and `blocked-timed-out` has stopped
+    // waiting and is asking the reader to close it — and in neither case is
+    // there a client for a sign-in to go through, because the store was never
+    // opened. An authorization started over either would put a browser hop on
+    // top of the request and come back to the same screen.
+    expect(shouldAutoSignIn({ ...base, phase: 'blocked' })).toBe(false);
+    expect(shouldAutoSignIn({ ...base, phase: 'blocked-timed-out' })).toBe(false);
+  });
 
   it('does not start one while the browser is being sent away', () => {
     // `leaving` is web's: the page has asked the browser to navigate and is about

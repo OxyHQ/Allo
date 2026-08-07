@@ -12,9 +12,11 @@ import {
   type MatrixStoreOwnerStorage,
 } from '@/lib/chat/matrixStoreOwner';
 import type { MatrixPushRegistration } from '@/lib/chat/pushRegistration';
+import { MatrixStoreEraseBlockedError } from '@/lib/matrix/errors';
 import type {
   AlloChatClient,
   AlloChatClientConfig,
+  AlloChatStoreEraser,
   AlloClientStore,
   AlloEncryptionState,
   AlloEphemeralPolicy,
@@ -25,6 +27,7 @@ import type {
   AlloRoomListHandle,
   AlloRoomTrust,
   AlloSession,
+  AlloStoreEraseObserver,
   AlloSyncState,
   AlloTimelineHandle,
   AlloUnsubscribe,
@@ -1508,6 +1511,205 @@ describe('MatrixRuntime store ownership', () => {
 
     expect(context.signInAttempt.forgets).toBe(0);
     expect(context.erased).toEqual([STORE]);
+  });
+});
+
+describe('MatrixRuntime store held open by another window', () => {
+  /**
+   * WHAT A BLOCKED ERASE LOOKS LIKE FROM WHERE THE PERSON IS SITTING.
+   *
+   * The launch has to empty the chat data on this device before it opens it. On
+   * web a second window of Allo holding that data open makes the deletion wait —
+   * correctly, and it completes on its own the moment that window closes. What
+   * was wrong was that the wait had nowhere to appear: the phase stayed
+   * `starting`, the gate drew "Connecting…", and there was no way to learn why
+   * and no way out but closing windows at random. The owner met exactly that.
+   *
+   * So the erase reports itself and this class turns the report into a phase.
+   * The rule that must survive all of it is the one #104 established: **a store
+   * that could not be erased is never opened.** Every case below that reaches
+   * the bound also asserts that no client was built.
+   */
+
+  /** The port's own error for a wait that was given up on. */
+  const blockedTooLong = (): Error =>
+    new MatrixStoreEraseBlockedError(['matrix-js-sdk:allo-matrix'], 30_000);
+
+  /**
+   * An erase that reports itself blocked and then waits for the test.
+   *
+   * Returns the ending, so a case can choose between the two the app has: the
+   * other window closes, or the wait is given up on.
+   */
+  function heldErase(): {
+    readonly eraseStore: AlloChatStoreEraser;
+    /** The other window closes. The pending deletion completes. */
+    otherWindowCloses(): void;
+    /** The bound is reached. The erase raises, and nothing opens the store. */
+    giveUp(): void;
+  } {
+    let report: AlloStoreEraseObserver | undefined;
+    let finish: ((error?: Error) => void) | undefined;
+    return {
+      eraseStore: async (_store, onBlocked) => {
+        report = onBlocked;
+        onBlocked?.(true);
+        await new Promise<void>((resolve, reject) => {
+          finish = (error) => (error === undefined ? resolve() : reject(error));
+        });
+      },
+      otherWindowCloses: () => {
+        report?.(false);
+        finish?.();
+      },
+      giveUp: () => {
+        // Deliberately without reporting the wait as over: the screen is about
+        // to say the launch has stopped, and a "carry on" one tick before that
+        // is a spinner it would never leave.
+        finish?.(blockedTooLong());
+      },
+    };
+  }
+
+  it('says another window has the data, instead of a spinner that means nothing', async () => {
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('blocked');
+    // Nothing has failed. It is a window that is open, and the screen for it
+    // asks rather than apologises.
+    expect(context.runtime.getState().error).toBeUndefined();
+
+    held.otherWindowCloses();
+    await settle();
+  });
+
+  it('does not open the store while it is still waiting for it', async () => {
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.createClientCalls).toBe(0);
+
+    held.otherWindowCloses();
+    await settle();
+  });
+
+  it('carries on by itself when the other window closes, with nothing reloaded', async () => {
+    // The common ending. The pending deletion completes, the erase resolves, and
+    // this same runtime finishes the launch it had started — no reload, nothing
+    // asked of anybody, and the phase goes back through `starting` on the way.
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+    const phases: string[] = [];
+    context.runtime.subscribe(() => {
+      phases.push(context.runtime.getState().phase);
+    });
+    await settle();
+
+    held.otherWindowCloses();
+    await settle();
+
+    expect(phases).toEqual(['starting', 'blocked', 'starting', 'signed-out']);
+    expect(context.createClientCalls).toBe(1);
+    expect(context.runtime.getState().phase).toBe('signed-out');
+  });
+
+  it('stops at its own phase when the wait is given up on, not at a failure', async () => {
+    // `failed` says something went wrong and offers an apology. Nothing went
+    // wrong: a window is open, and the reader is the only person who can close
+    // it. The screen has to be able to say so.
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    held.giveUp();
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('blocked-timed-out');
+    expect(context.runtime.getState().error).toBeUndefined();
+  });
+
+  it('does not open the store it has just given up on erasing', async () => {
+    // THE ONE THE BOUND EXISTS UNDER. Waiting forever was safe and unusable;
+    // the danger in making it stop is that stopping falls through into the
+    // ordinary path, which opens the store — the last account's synced state
+    // and its decryption keys, handed to whoever is here now.
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    held.giveUp();
+    await settle();
+
+    expect(context.createClientCalls).toBe(0);
+    expect(() => context.runtime.client('Observing the conversation list')).toThrow();
+  });
+
+  it('never passes through a phase that would draw the chat', async () => {
+    // Every phase, not only the last one. `ready` is what the room list and the
+    // timelines open against, and one notification of it is enough for them to
+    // ask a runtime that has no client.
+    const held = heldErase();
+    const context = harness({ eraseStore: held.eraseStore });
+    const phases: string[] = [];
+    context.runtime.subscribe(() => {
+      phases.push(context.runtime.getState().phase);
+    });
+    await settle();
+
+    held.giveUp();
+    await settle();
+
+    expect(phases).toEqual(['starting', 'blocked', 'blocked-timed-out']);
+  });
+
+  it('lets the reader try again once the other window is gone', async () => {
+    // What makes the bounded screen a way out rather than a dead end: the button
+    // rebuilds, the deletion is attempted again, and it works the moment nothing
+    // is holding the database.
+    const held = heldErase();
+    let blocking = true;
+    const context = harness({
+      eraseStore: async (store, onBlocked) => {
+        if (!blocking) {
+          return;
+        }
+        blocking = false;
+        await held.eraseStore(store, onBlocked);
+      },
+    });
+    context.runtime.subscribe(() => {});
+    await settle();
+    held.giveUp();
+    await settle();
+    expect(context.runtime.getState().phase).toBe('blocked-timed-out');
+
+    await context.runtime.signIn();
+    await settle();
+
+    expect(context.createClientCalls).toBe(1);
+    expect(context.runtime.getState().phase).toBe('ready');
+  });
+
+  it('reports a store it could not erase at all as a failure, as it always did', async () => {
+    // The neighbouring case, kept apart on purpose. A refused deletion — a
+    // private window whose IndexedDB takes no mutations — is not something
+    // closing a tab fixes, so it is still `failed` and still says so.
+    const context = harness({ eraseStoreFails: new Error('this window refuses IndexedDB') });
+
+    context.runtime.subscribe(() => {});
+    await settle();
+
+    expect(context.runtime.getState().phase).toBe('failed');
+    expect(context.createClientCalls).toBe(0);
   });
 });
 

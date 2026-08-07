@@ -575,6 +575,10 @@
     }
   },
   "Connecting…": "Connessione…",
+  "Allo is open in another tab": "Allo è aperto in un’altra scheda",
+  "Close the other Allo tab and this one will carry on by itself.": "Chiudi l’altra scheda di Allo e questa proseguirà da sola.",
+  "Allo is still open in another tab": "Allo è ancora aperto in un’altra scheda",
+  "Close every other Allo tab or window, then try again.": "Chiudi tutte le altre schede e finestre di Allo, poi riprova.",
   "Finish signing in": "Completa l'accesso",
   "Allo is waiting for the sign-in page in your browser.": "Allo sta aspettando la pagina di accesso nel tuo browser.",
   "Allo could not connect your chat": "Allo non è riuscito a collegare la tua chat",
