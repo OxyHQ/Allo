@@ -138,12 +138,17 @@ Not implemented. `EncryptedMediaItem` exists as a type in `@allo/shared-types` a
 
 ## Device-first + cloud sync
 
-By default `UserSettings.security.cloudSyncEnabled` is `false`. That means:
+**The app runs with cloud sync ON, and the two ends of this setting do not agree.** `UserSettings.security.cloudSyncEnabled` defaults to `false` in the backend schema, and the default is written rather than notional: `ensureUserSettings` creates the document on the first `GET`, so every account has a stored `false` that nobody chose. The client has always run with `true` (`stores/messagesStore.ts`), and the disagreement stayed invisible because the boot-time read asked the Oxy API for an Allo document and got a 404 on every launch.
 
-- The client does not POST to `/api/messages` while cloud sync is off (`stores/messagesStore.ts` gates the network calls on `cloudSyncEnabled`); messages stay device-local.
-- When cloud sync is on, encrypted messages land on the server so other devices the same user owns can fetch them after a fresh install.
+The read now goes to Allo's backend (`lib/security/cloudSync.ts`), and the rule it applies is deliberately asymmetric: **the document is trusted to turn cloud sync on, not to turn it off, and an absent field leaves it on.** Acting on those stored falses would have switched cloud sync off for every account at boot, as a side effect of a URL fix. When the backend's schema default no longer writes a value nobody asked for, a `false` from the server becomes somebody's decision and the rule becomes a plain "a boolean wins".
+
+What the setting actually changes, which is narrower than "messages stay on the device":
+
+- With cloud sync **off**, `stores/messagesStore.ts` does not fetch from `/api/messages` and does not POST directly. It queues the send instead — and `lib/offlineQueue/queueManager.ts` drains that queue to `POST /api/messages` regardless of the setting, so the message still reaches the server. Incoming messages still arrive over Socket.IO while the app is open.
+- So off does not keep messages off the server. What it removes is the **backfill**: a message that arrived while the app was closed is never fetched, and a reinstalled device opens to empty conversations.
+- When cloud sync is **on**, encrypted messages land on the server so other devices the same user owns can fetch them after a fresh install.
 - The server holds only ciphertext (or, in the plaintext-fallback case below, plaintext) — see [Threats this does NOT defend against](#threats-this-does-not-defend-against).
-- The user can flip `cloudSyncEnabled` in `Settings -> Security & Encryption`.
+- The user can flip `cloudSyncEnabled` in `Settings -> Security & Encryption`. That switch wrote to the Oxy API until the same fix; turning it **off** still does not survive a relaunch, because of the asymmetry above.
 
 ## Peer-to-peer
 

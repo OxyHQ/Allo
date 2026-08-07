@@ -17,6 +17,7 @@ import {
 } from '@/utils/notifications';
 import { initializeI18n } from './i18n';
 import { INITIALIZATION_TIMEOUT } from './constants';
+import { fetchMyCloudSyncEnabled } from '@/lib/security/cloudSync';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { useMessagesStore } from '@/stores/messagesStore';
 import { p2pManager } from './p2pMessaging';
@@ -192,14 +193,17 @@ async function initializeSignalProtocol(): Promise<void> {
       await deviceKeysStore.initialize();
     }
 
-    // Load cloud sync setting from backend
+    // What this account's document says about cloud sync, from Allo's backend
+    // and not Oxy's — see `lib/security/cloudSync.ts`, which also holds the rule
+    // for reading the field and why an absent one leaves cloud sync on.
+    //
+    // A launch is not blocked on the answer. The store already holds the value
+    // this settles on in every case but one, so a settings endpoint having a bad
+    // day costs nothing here.
     try {
-      const response = await oxyClient.getClient().get<{ data?: { security?: { cloudSyncEnabled?: boolean } } }>('/profile/settings/me');
-      const settings = response.data;
-      const cloudSyncEnabled = settings?.security?.cloudSyncEnabled || false;
-      useMessagesStore.getState().setCloudSyncEnabled(cloudSyncEnabled);
+      useMessagesStore.getState().setCloudSyncEnabled(await fetchMyCloudSyncEnabled());
     } catch (error) {
-      console.warn('[AppInitializer] Failed to load security settings:', error);
+      logger.warn('[AppInitializer] the cloud sync setting could not be loaded', error);
     }
 
     // Initialize P2P manager. It re-mints its own access token on each
@@ -208,7 +212,7 @@ async function initializeSignalProtocol(): Promise<void> {
       await p2pManager.initialize(user.id);
     }
   } catch (error) {
-    console.error('[AppInitializer] Error initializing Signal Protocol:', error);
+    logger.error('[AppInitializer] Error initializing Signal Protocol', error);
     // Don't throw - encryption initialization shouldn't block app startup
   }
 }

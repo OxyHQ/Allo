@@ -12,6 +12,7 @@ import {
   addToSyncQueue,
 } from '@/lib/offlineStorage';
 import { p2pManager } from '@/lib/p2pMessaging';
+import { CLOUD_SYNC_ENABLED_BY_DEFAULT } from '@/lib/security/cloudSync';
 import { logger } from '@/utils/logger';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -179,7 +180,13 @@ export const useMessagesStore = create<MessagesState>()(
     loadingByConversation: {},
     errorByConversation: {},
     lastUpdatedByConversation: {},
-    cloudSyncEnabled: true, // Enable cloud sync by default for reliable messaging
+    // What the app runs with until a launch reads the account's document, and
+    // what that read settles on when the document does not decide it. Imported
+    // rather than written twice: the two used to be a `true` here and a
+    // `|| false` there, and only a 404 kept them from disagreeing out loud. See
+    // `lib/security/cloudSync.ts` for the rule and for why `false` on the server
+    // is not yet anybody's decision.
+    cloudSyncEnabled: CLOUD_SYNC_ENABLED_BY_DEFAULT,
 
     // Actions
     setMessages: async (conversationId, messages) => {

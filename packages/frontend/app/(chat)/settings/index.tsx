@@ -21,6 +21,8 @@ import { getData, storeData } from "@/utils/storage";
 import { hasNotificationPermission, requestNotificationPermissions } from "@/utils/notifications";
 import { isPushEnabled, NOTIFICATION_PREFERENCE_KEY } from "@/lib/chat/pushRegistration";
 import { matrixRuntime } from "@/lib/chat/matrixRuntime";
+import { updateMyCloudSyncEnabled } from "@/lib/security/cloudSync";
+import { logger } from "@/utils/logger";
 import { signOutOfMatrix } from "@/hooks/useMatrixRuntime";
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
@@ -89,16 +91,16 @@ export default function SettingsScreen() {
             : 'Not initialized'
     );
 
+    // The switch moves the store first so the row answers immediately, and then
+    // writes to Allo's own backend — which is where this document lives, and
+    // which the write used to miss for the same reason the boot-time read did.
+    // See `lib/security/cloudSync.ts`.
     const onToggleCloudSync = useCallback(async (enabled: boolean) => {
         useMessagesStore.getState().setCloudSyncEnabled(enabled);
         try {
-            await authenticatedClient.put('/profile/settings', {
-                security: {
-                    cloudSyncEnabled: enabled,
-                },
-            });
+            await updateMyCloudSyncEnabled(enabled);
         } catch (error) {
-            console.error('Error updating cloud sync setting:', error);
+            logger.error('[Settings] the cloud sync setting could not be saved', error);
         }
     }, []);
 
