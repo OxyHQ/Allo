@@ -20,7 +20,8 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern chat 
 
 - Node.js with TypeScript
 - Express.js for REST API
-- MongoDB with Mongoose for data storage
+- PostgreSQL with drizzle-orm for the social, moderation and bridge domains
+- MongoDB with Mongoose for the messaging domain (conversations, devices, messages) — the last one still to switch
 - Socket.IO for real-time messaging
 - Oxy Services for authentication (users managed by Oxy platform)
 
@@ -29,7 +30,8 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern chat 
 ### Prerequisites
 
 - Node.js 20.19+ and Bun 1.3+
-- MongoDB instance
+- A PostgreSQL instance (the social, moderation and bridge domains, and the schema suite)
+- A MongoDB instance (the messaging domain, and the moderation suite's replica set)
 - Git
 
 ### Development Setup
@@ -64,7 +66,10 @@ bun run dev
 Create a `.env` file in this package directory with the following variables:
 
 ```env
-# Database
+# Databases — BOTH are required; the port is not finished.
+# Postgres: social, moderation and bridges.
+DATABASE_URL=postgres://allo:allo@127.0.0.1:5432/allo_dev
+# Mongo: messaging (conversations, devices, messages).
 MONGODB_URI=your_mongodb_connection_string
 
 # Authentication
@@ -146,7 +151,15 @@ bun run start
 
 ### Database Setup
 
-The API uses MongoDB with Mongoose. Make sure your MongoDB instance is running and accessible.
+The API uses BOTH stores while the Mongo→Postgres port finishes: PostgreSQL via
+drizzle for the social, moderation and bridge domains, and MongoDB via Mongoose
+for messaging. Both must be running and reachable — with only one configured the
+server starts and then fails on the first request into the other domain.
+
+Apply the Postgres schema with `bun run db:migrate -- --target-database=<name>
+--phase=all`; see "Migrations" below. **The AWS deploy does not do this for you**
+(`RUN_MIGRATIONS` defaults to `false`), so a migration reaches an environment only
+when somebody applies it deliberately.
 
 ## Deployment
 
