@@ -14,16 +14,22 @@
  * somebody think about it. There is deliberately no deletion path here; the
  * registry owns that, and a second one would race it.
  *
- * The two reads below therefore differ ON PURPOSE, and the difference is the
- * whole reason they are two functions:
+ * {@link findLinkSessionForUser} is therefore deliberately UNFILTERED by
+ * `expires_at`: it answers "WHICH attempt is this?", and the caller has to be
+ * able to tell an expired attempt (410) from one that never existed (404).
+ * Filtering here would collapse those into "no such attempt", which is exactly
+ * the distinction the `expired` outcome exists to preserve.
  *
- * - {@link findLinkSessionForUser} answers "WHICH attempt is this?" and does not
- *   filter, so the caller can tell an expired attempt (410) from one that never
- *   existed (404). Filtering here would collapse those into "no such attempt",
- *   which is exactly the distinction the `expired` outcome exists to preserve.
- * - {@link findOpenLinkSessions} answers "does this user have an attempt OPEN?"
- *   and filters on both `outcome` and `expires_at`, because a `pending` row past
- *   its deadline is not open — the remote login process behind it is gone.
+ * ## There is no "does this user have an attempt OPEN?" read, and there never was
+ *
+ * One landed here unused, alongside the index it would have used — both ported
+ * faithfully from a Mongoose schema that declared `{oxyUserId, network, outcome}`
+ * and from application code that never queried it. Nothing in Mongo asked that
+ * question and nothing in Postgres does: the only guard at link start counts
+ * LINKED ACCOUNTS (`countAccounts`), not open attempts. A repository function
+ * with no caller is indistinguishable from a forgotten one, so it is gone, and
+ * the index went with it — keeping an index to serve a query nobody makes is
+ * paying for it on every write.
  *
  * ## Nothing the user typed is ever written here
  *
@@ -32,7 +38,7 @@
  * and no function below takes one.
  */
 
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { publicColumns } from "@oxyhq/db/assert";
 import type { SelectedRow } from "@oxyhq/db";
 import type { BridgeNetworkId } from "../../config/bridges";
@@ -149,37 +155,6 @@ export async function findLinkSessionForUser(
     )
     .limit(1);
   return rows[0];
-}
-
-/**
- * The attempts this user still has open on a network, oldest first.
- *
- * The question `bridge_link_sessions_oxy_user_id_network_outcome_idx` exists to
- * serve, and the read where a lagging sweep would change the ANSWER rather than
- * merely the row count — so `expires_at` is part of the predicate and not left
- * to the reaper. Public columns only: knowing an attempt is open needs no
- * ability to drive it.
- */
-export async function findOpenLinkSessions(
-  db: AlloDatabase,
-  input: {
-    readonly oxyUserId: string;
-    readonly network: BridgeNetworkId;
-    readonly now: Date;
-  },
-): Promise<BridgeLinkSessionRow[]> {
-  return await db
-    .select(SESSION_PUBLIC_COLUMNS)
-    .from(bridgeLinkSessions)
-    .where(
-      and(
-        eq(bridgeLinkSessions.oxyUserId, input.oxyUserId),
-        eq(bridgeLinkSessions.network, input.network),
-        eq(bridgeLinkSessions.outcome, "pending"),
-        gt(bridgeLinkSessions.expiresAt, input.now),
-      ),
-    )
-    .orderBy(asc(bridgeLinkSessions.createdAt));
 }
 
 /**

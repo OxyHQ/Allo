@@ -4,13 +4,22 @@ import {
   type BridgeNetworkId,
   type EnabledBridgeNetwork,
 } from "../../config/bridges";
-import BridgeAccount, {
-  type LeanBridgeAccount,
-} from "../../models/BridgeAccount";
-import BridgeLinkSession, {
-  type BridgeLoginStepType,
-  type LeanBridgeLinkSession,
-} from "../../models/BridgeLinkSession";
+import { uuidv7 } from "@oxyhq/db";
+import { getDb } from "../../db";
+import {
+  countAccounts,
+  upsertLinkedAccount,
+  type BridgeAccountDetails,
+  type BridgeAccountRow,
+} from "../../db/bridges/accounts";
+import {
+  closeLinkSession,
+  completeLinkSession,
+  insertLinkSession,
+  recordLinkSessionStep,
+  type BridgeLinkSessionRelayRow,
+} from "../../db/bridges/linkSessions";
+import type { BridgeLoginStepType } from "../../db/schema/bridges";
 import { logger } from "../../utils/logger";
 import {
   createBridgeProvisioningClient,
@@ -79,7 +88,7 @@ export interface AlloLinkState {
   readonly expiresAt: Date;
   readonly step: AlloLoginStep;
   /** Present once the attempt completed: the account it produced. */
-  readonly account?: LeanBridgeAccount;
+  readonly account?: BridgeAccountRow;
 }
 
 /**
@@ -175,7 +184,7 @@ export async function startLink(
     );
   }
 
-  const linked = await BridgeAccount.countDocuments({
+  const linked = await countAccounts(getDb(), {
     oxyUserId: input.oxyUserId,
     network: input.network.id,
   });
@@ -210,7 +219,8 @@ export async function startLink(
   const step = translateStep(started.step);
   const expiresAt = expiryFor(step.type);
 
-  const session = await BridgeLinkSession.create({
+  const session = await insertLinkSession(getDb(), {
+    id: uuidv7(),
     linkId: newLinkId(),
     oxyUserId: input.oxyUserId,
     network: input.network.id,
@@ -219,7 +229,6 @@ export async function startLink(
     currentStepId: step.stepId,
     currentStepType: step.type,
     expiresAt,
-    outcome: "pending",
   });
 
   return { linkId: session.linkId, network: input.network.id, expiresAt, step };
@@ -228,7 +237,7 @@ export async function startLink(
 export interface SubmitStepInput {
   readonly oxyUserId: string;
   readonly network: EnabledBridgeNetwork;
-  readonly session: LeanBridgeLinkSession;
+  readonly session: BridgeLinkSessionRelayRow;
   /** What the user typed. Relayed and forgotten — never written to Mongo. */
   readonly values: Record<string, string>;
 }
@@ -268,7 +277,7 @@ export async function submitStep(
 export async function awaitStep(
   oxyUserId: string,
   network: EnabledBridgeNetwork,
-  session: LeanBridgeLinkSession,
+  session: BridgeLinkSessionRelayRow,
   timeoutMs: number,
   client: BridgeProvisioningClient = createBridgeProvisioningClient(network),
 ): Promise<AlloLinkState | undefined> {
@@ -291,7 +300,7 @@ export async function awaitStep(
 export async function cancelLink(
   oxyUserId: string,
   network: EnabledBridgeNetwork,
-  session: LeanBridgeLinkSession,
+  session: BridgeLinkSessionRelayRow,
   client: BridgeProvisioningClient = createBridgeProvisioningClient(network),
 ): Promise<void> {
   const matrixUserId = matrixUserIdForOxyUser(oxyUserId);
@@ -308,10 +317,11 @@ export async function cancelLink(
       error: error instanceof Error ? error.name : "unknown",
     });
   }
-  await BridgeLinkSession.updateOne(
-    { _id: session._id },
-    { $set: { outcome: "cancelled" } },
-  );
+  await closeLinkSession(getDb(), {
+    id: session.id,
+    outcome: "cancelled",
+    at: new Date(),
+  });
 }
 
 /**
@@ -320,7 +330,7 @@ export async function cancelLink(
 async function advance(
   oxyUserId: string,
   network: EnabledBridgeNetwork,
-  session: LeanBridgeLinkSession,
+  session: BridgeLinkSessionRelayRow,
   next: BridgeLoginStep,
   client: BridgeProvisioningClient,
 ): Promise<AlloLinkState> {
@@ -328,25 +338,29 @@ async function advance(
 
   if (step.type !== "complete") {
     const expiresAt = expiryFor(step.type);
-    await BridgeLinkSession.updateOne(
-      { _id: session._id },
-      { $set: { currentStepId: step.stepId, currentStepType: step.type, expiresAt } },
-    );
+    await recordLinkSessionStep(getDb(), {
+      id: session.id,
+      currentStepId: step.stepId,
+      currentStepType: step.type,
+      expiresAt,
+      at: new Date(),
+    });
     return { linkId: session.linkId, network: network.id, expiresAt, step };
   }
 
+  /**
+   * The account is recorded BEFORE the session is closed, and the order is now
+   * load-bearing rather than incidental: `bridge_link_sessions.result_account_id`
+   * is a real foreign key where Mongo had a bare `ObjectId` nothing checked, so
+   * closing first would fail on a row that does not exist yet.
+   */
   const account = await recordCompletedLogin(oxyUserId, network, next, client);
-  await BridgeLinkSession.updateOne(
-    { _id: session._id },
-    {
-      $set: {
-        currentStepId: step.stepId,
-        currentStepType: "complete",
-        outcome: "completed",
-        resultAccountId: account._id,
-      },
-    },
-  );
+  await completeLinkSession(getDb(), {
+    id: session.id,
+    currentStepId: step.stepId,
+    resultAccountId: account.id,
+    at: new Date(),
+  });
   return {
     linkId: session.linkId,
     network: network.id,
@@ -361,7 +375,7 @@ async function recordCompletedLogin(
   network: EnabledBridgeNetwork,
   step: BridgeLoginStep,
   client: BridgeProvisioningClient,
-): Promise<LeanBridgeAccount> {
+): Promise<BridgeAccountRow> {
   const remoteLoginId = step.complete?.user_login_id ?? step.complete?.login_id;
   if (!remoteLoginId) {
     throw new BridgeLinkError(
@@ -380,18 +394,21 @@ async function recordCompletedLogin(
   const details = await readLoginDetails(oxyUserId, remoteLoginId, client);
   const now = new Date();
 
-  const account = await BridgeAccount.findOneAndUpdate(
-    { oxyUserId, network: network.id, remoteLoginId },
-    {
-      $set: {
-        state: "connecting",
-        lastStateAt: now,
-        ...details,
-      },
-      $setOnInsert: { linkedAt: now },
-    },
-    { new: true, upsert: true },
-  ).lean<LeanBridgeAccount>();
+  /**
+   * `linked_at` is set on insert only — it is when this user FIRST linked this
+   * remote account, and a re-link is not a new one. The `id` is likewise
+   * discarded by the database when the row already exists, which is what makes
+   * two concurrent completions of one login produce ONE account rather than a
+   * duplicate-key error somebody has to catch.
+   */
+  const account = await upsertLinkedAccount(getDb(), {
+    id: uuidv7(),
+    oxyUserId,
+    network: network.id,
+    remoteLoginId,
+    at: now,
+    ...details,
+  });
 
   logger.info("[Bridges] account linked", { network: network.id });
   return account;
@@ -401,23 +418,25 @@ async function readLoginDetails(
   oxyUserId: string,
   remoteLoginId: string,
   client: BridgeProvisioningClient,
-): Promise<Record<string, unknown>> {
+): Promise<BridgeAccountDetails> {
   try {
     const logins = await client.whoami(matrixUserIdForOxyUser(oxyUserId));
     const login = logins.find((candidate) => candidate.id === remoteLoginId);
     if (!login) return {};
+    /**
+     * Flat, because the columns are. The nested `remoteProfile` Mongo stored is
+     * composed back in whichever serializer owes a client that shape; building it
+     * here and flattening it again in the repository would be two mappings of one
+     * fact.
+     */
     return {
       ...(login.name ? { remoteName: login.name } : {}),
       ...(login.space_room ? { spaceRoomId: login.space_room } : {}),
-      ...(login.profile
-        ? {
-            remoteProfile: {
-              ...(login.profile.name ? { name: login.profile.name } : {}),
-              ...(login.profile.username ? { username: login.profile.username } : {}),
-              ...(login.profile.phone ? { phone: login.profile.phone } : {}),
-              ...(login.profile.avatar_url ? { avatarUrl: login.profile.avatar_url } : {}),
-            },
-          }
+      ...(login.profile?.name ? { remoteProfileName: login.profile.name } : {}),
+      ...(login.profile?.username ? { remoteProfileUsername: login.profile.username } : {}),
+      ...(login.profile?.phone ? { remoteProfilePhone: login.profile.phone } : {}),
+      ...(login.profile?.avatar_url
+        ? { remoteProfileAvatarUrl: login.profile.avatar_url }
         : {}),
     };
   } catch (error) {
@@ -482,7 +501,7 @@ function expiryFor(stepType: BridgeLoginStepType): Date {
   return new Date(Date.now() + seconds * 1_000);
 }
 
-function assertLive(session: LeanBridgeLinkSession): void {
+function assertLive(session: BridgeLinkSessionRelayRow): void {
   if (session.outcome !== "pending") {
     throw new BridgeLinkError("this attempt is already finished", "link_not_found");
   }

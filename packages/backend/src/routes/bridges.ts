@@ -7,10 +7,15 @@ import {
   enabledBridgeNetworks,
   type EnabledBridgeNetwork,
 } from "../config/bridges";
-import BridgeAccount, { type LeanBridgeAccount } from "../models/BridgeAccount";
-import BridgeLinkSession, {
-  type LeanBridgeLinkSession,
-} from "../models/BridgeLinkSession";
+import { getDb } from "../db";
+import {
+  deleteAccount,
+  findAccountForUser,
+  listAccountsForUser,
+  reconcileAccount,
+  type BridgeAccountRow,
+} from "../db/bridges/accounts";
+import { findLinkSessionForUser, type BridgeLinkSessionRelayRow } from "../db/bridges/linkSessions";
 import {
   awaitStep,
   BridgeLinkError,
@@ -70,13 +75,25 @@ function resolveNetwork(
   return network;
 }
 
-function publicAccount(account: LeanBridgeAccount) {
+function publicAccount(account: BridgeAccountRow) {
   return {
-    id: account._id.toString(),
+    id: account.id,
     network: account.network,
     state: account.state,
     remoteName: account.remoteName,
-    remoteProfile: account.remoteProfile,
+    /**
+     * Composed back into the nested object clients read, from the four flat
+     * columns the table stores. `schema/bridges.ts` flattened it because every
+     * field is read on its own; this is the ONE place that shape is rebuilt, so
+     * the wire contract is unchanged and there is no second mapping to keep in
+     * step.
+     */
+    remoteProfile: {
+      name: account.remoteProfileName,
+      username: account.remoteProfileUsername,
+      phone: account.remoteProfilePhone,
+      avatarUrl: account.remoteProfileAvatarUrl,
+    },
     spaceRoomId: account.spaceRoomId,
     linkedAt: account.linkedAt,
     lastStateAt: account.lastStateAt,
@@ -89,7 +106,7 @@ function publicAccount(account: LeanBridgeAccount) {
      * written for an operator, changes between releases, and is the field most
      * likely to name internal hosts.
      */
-    errorCode: account.rawState?.error,
+    errorCode: account.rawStateError,
   };
 }
 
@@ -207,9 +224,7 @@ router.get("/networks", async (req: AuthRequest, res: Response) => {
 router.get("/accounts", async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const accounts = await BridgeAccount.find({ oxyUserId })
-      .sort({ linkedAt: 1 })
-      .lean<LeanBridgeAccount[]>();
+    const accounts = await listAccountsForUser(getDb(), oxyUserId);
 
     return sendSuccessResponse(res, 200, { accounts: accounts.map(publicAccount) });
   } catch (error) {
@@ -377,10 +392,10 @@ router.delete("/accounts/:accountId", async (req: AuthRequest, res: Response) =>
 
     const client = createBridgeProvisioningClient(network);
     await client.logout(matrixUserIdForOxyUser(oxyUserId), account.remoteLoginId);
-    await BridgeAccount.deleteOne({ _id: account._id });
+    await deleteAccount(getDb(), account.id);
 
     logger.info("[Bridges] account unlinked", { network: network.id });
-    return sendSuccessResponse(res, 200, { id: account._id.toString(), unlinked: true });
+    return sendSuccessResponse(res, 200, { id: account.id, unlinked: true });
   } catch (error) {
     return sendBridgeFailure(res, error, "Failed to unlink an account");
   }
@@ -419,32 +434,30 @@ router.post("/accounts/:accountId/reconnect", async (req: AuthRequest, res: Resp
        * gone on the remote side. `action_required` is the honest state: nothing
        * we do here will bring it back, and only the user can re-link.
        */
-      await BridgeAccount.updateOne(
-        { _id: account._id },
-        { $set: { state: "action_required", lastStateAt: new Date() } },
-      );
-      return sendSuccessResponse(res, 200, { id: account._id.toString(), state: "action_required" });
+      await reconcileAccount(getDb(), {
+        id: account.id,
+        state: "action_required",
+        at: new Date(),
+      });
+      return sendSuccessResponse(res, 200, { id: account.id, state: "action_required" });
     }
 
     const state = login.state ? accountStateForBridgeState(login.state) : account.state;
-    const now = new Date();
-    await BridgeAccount.updateOne(
-      { _id: account._id },
-      {
-        $set: {
-          state,
-          lastStateAt: now,
-          ...(login.name ? { remoteName: login.name } : {}),
-          ...(login.space_room ? { spaceRoomId: login.space_room } : {}),
-          ...(state === "connected" ? { lastConnectedAt: now } : {}),
-        },
-        ...(state === "connected"
-          ? { $unset: { lastNotifiedState: "", lastNotifiedAt: "" } }
-          : {}),
-      },
-    );
+    /**
+     * `reconcileAccount`, not `applyReportedState`: `whoami` answers what the
+     * bridge BELIEVES, not what it last announced, so writing `raw_state_*` here
+     * would invent a report no bridge sent. Clearing the notification marker on
+     * recovery is shared between the two and lives on the row.
+     */
+    await reconcileAccount(getDb(), {
+      id: account.id,
+      state,
+      at: new Date(),
+      ...(login.name ? { remoteName: login.name } : {}),
+      ...(login.space_room ? { spaceRoomId: login.space_room } : {}),
+    });
 
-    return sendSuccessResponse(res, 200, { id: account._id.toString(), state });
+    return sendSuccessResponse(res, 200, { id: account.id, state });
   } catch (error) {
     return sendBridgeFailure(res, error, "Failed to reconnect an account");
   }
@@ -454,17 +467,26 @@ router.post("/accounts/:accountId/reconnect", async (req: AuthRequest, res: Resp
 async function findSession(
   oxyUserId: string,
   linkId: string,
-): Promise<LeanBridgeLinkSession | null> {
-  if (typeof linkId !== "string" || linkId.length === 0) return null;
-  return await BridgeLinkSession.findOne({ oxyUserId, linkId }).lean<LeanBridgeLinkSession | null>();
+): Promise<BridgeLinkSessionRelayRow | undefined> {
+  if (typeof linkId !== "string" || linkId.length === 0) return undefined;
+  return await findLinkSessionForUser(getDb(), { oxyUserId, linkId });
 }
 
+/**
+ * The ObjectId shape check is GONE, and its absence is not an oversight.
+ *
+ * It existed because Mongo throws a `CastError` on a malformed `_id` rather than
+ * matching nothing — so a client sending `../../etc` got a 500 instead of a 404.
+ * `bridge_accounts.id` is a `text` primary key: an unmatched string is simply an
+ * unmatched string, and the lookup answers `undefined`. Keeping a 24-hex regex
+ * would now REFUSE the uuid v7 ids this table actually holds.
+ */
 async function findAccount(
   oxyUserId: string,
   accountId: string,
-): Promise<LeanBridgeAccount | null> {
-  if (!/^[a-f0-9]{24}$/.test(accountId)) return null;
-  return await BridgeAccount.findOne({ oxyUserId, _id: accountId }).lean<LeanBridgeAccount | null>();
+): Promise<BridgeAccountRow | undefined> {
+  if (typeof accountId !== "string" || accountId.length === 0) return undefined;
+  return await findAccountForUser(getDb(), { oxyUserId, id: accountId });
 }
 
 function readStringValues(candidate: unknown): Record<string, string> | undefined {

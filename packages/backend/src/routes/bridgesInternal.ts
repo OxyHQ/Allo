@@ -5,7 +5,8 @@ import {
   enabledBridgeNetworks,
   type EnabledBridgeNetwork,
 } from "../config/bridges";
-import BridgeAccount from "../models/BridgeAccount";
+import { getDb } from "../db";
+import { findSlotOwner } from "../db/bridges/accounts";
 import {
   applyBridgeState,
   parseBridgeStateReport,
@@ -126,14 +127,9 @@ export function createBridgeInternalRoutes(): Router {
       }
 
       try {
-        const proxyUrl = await proxyUrlForSlot(slotId, async (slot) => {
-          const account = await BridgeAccount.findOne({ slotId: slot })
-            .select("oxyUserId network")
-            .lean();
-          return account
-            ? { oxyUserId: account.oxyUserId, network: account.network }
-            : undefined;
-        });
+        const proxyUrl = await proxyUrlForSlot(slotId, (slot) =>
+          findSlotOwner(getDb(), slot),
+        );
 
         if (!proxyUrl) {
           /**

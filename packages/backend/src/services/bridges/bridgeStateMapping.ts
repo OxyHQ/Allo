@@ -2,7 +2,7 @@ import {
   isBridgeStateEvent,
   type BridgeAccountState,
   type BridgeStateEvent,
-} from "../../models/BridgeAccount";
+} from "../../db/schema/bridges";
 
 /**
  * Collapsing the bridge's eleven connection states into the six a user sees

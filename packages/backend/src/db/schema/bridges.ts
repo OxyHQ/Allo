@@ -46,6 +46,20 @@ export const BRIDGE_STATE_EVENTS = [
 ] as const;
 export type BridgeStateEvent = (typeof BRIDGE_STATE_EVENTS)[number];
 
+/**
+ * Narrows a string the bridge sent to a state event it declares.
+ *
+ * Beside the tuple, so the guard and the vocabulary cannot drift. Note what it
+ * is NOT beside: `raw_state_event` carries no CHECK, deliberately — the bridge's
+ * vocabulary is the bridge's, and refusing a value this deployment has not
+ * caught up with would drop precisely the status update telling an operator
+ * something changed. This guard is how `bridgeStateMapping` decides what a
+ * KNOWN event means; an unknown one is still recorded.
+ */
+export function isBridgeStateEvent(value: string): value is BridgeStateEvent {
+  return (BRIDGE_STATE_EVENTS as readonly string[]).includes(value);
+}
+
 export const BRIDGE_LOGIN_STEP_TYPES = [
   "user_input",
   "cookies",
@@ -55,6 +69,15 @@ export const BRIDGE_LOGIN_STEP_TYPES = [
   "complete",
 ] as const;
 export type BridgeLoginStepType = (typeof BRIDGE_LOGIN_STEP_TYPES)[number];
+
+/**
+ * Narrows a step type the bridge sent. Beside the tuple that renders
+ * `bridge_link_sessions_current_step_type_check`, so the guard, the TypeScript
+ * union and the database constraint are three views of one list.
+ */
+export function isBridgeLoginStepType(value: string): value is BridgeLoginStepType {
+  return (BRIDGE_LOGIN_STEP_TYPES as readonly string[]).includes(value);
+}
 
 export const BRIDGE_LINK_OUTCOMES = [
   "pending",
@@ -89,6 +112,22 @@ export const bridgeAccounts = pgTable(
     oxyUserId: text().notNull(),
     network: text({ enum: BRIDGE_NETWORK_IDS }).notNull(),
     remoteLoginId: text().notNull(),
+    /**
+     * The four remote-profile columns and the three `raw_state_*` text columns
+     * carried Mongoose `maxlength` bounds (200, 200, 50, 2 000 and 200, 1 000,
+     * 200) and NONE of them is a CHECK here — because none of those bounds ever
+     * ran. There is no `BridgeAccount.create()` in this service outside its own
+     * tests: every write is `updateOne`, `findOneAndUpdate` or `updateMany`, and
+     * Mongoose does not run validators on those without `runValidators: true`,
+     * which appears nowhere.
+     *
+     * That makes reviving them a NEW restriction on values this table has always
+     * stored — and they are the least suitable values to restrict, because they
+     * come from the remote network. A WhatsApp display name over 200 characters
+     * or a Telegram avatar URL over 2 000 would start failing an account write
+     * that has succeeded for as long as the feature has existed, and the failure
+     * would surface as a bridge that silently stops updating.
+     */
     remoteName: text(),
     remoteProfileName: text(),
     remoteProfileUsername: text(),
@@ -139,6 +178,28 @@ export const bridgeAccounts = pgTable(
 );
 
 /**
+ * The Mongoose `maxlength` bounds that were ACTUALLY IN FORCE, and only those.
+ *
+ * Mongoose runs a `maxlength` validator on `.create()`/`.save()` and NOT on
+ * `updateOne`/`findOneAndUpdate`/`updateMany` unless `runValidators: true` —
+ * which appears nowhere in this repository. So of the sixteen bounds the three
+ * bridge models declared, only these five ever refused a value: the three
+ * written by `BridgeLinkSession.create` and the two written by
+ * `BridgeProxyLease.create`.
+ *
+ * The other eleven are listed on their columns below with the reason they get no
+ * CHECK. Reviving a bound that never held would be a restriction this port
+ * invented, and the values behind most of them come from a remote network — a
+ * WhatsApp display name over 200 characters would start failing an account write
+ * that has always succeeded.
+ */
+export const MAX_LINK_SESSION_FLOW_ID_LENGTH = 200;
+export const MAX_LINK_SESSION_PROCESS_ID_LENGTH = 200;
+export const MAX_LINK_SESSION_STEP_ID_LENGTH = 200;
+export const MAX_PROXY_LEASE_PROVIDER_LENGTH = 100;
+export const MAX_PROXY_LEASE_SESSION_SEED_LENGTH = 100;
+
+/**
  * An in-flight linking attempt.
  *
  * `resultAccountId` was a bare `ObjectId` with no `ref` — a pointer Mongo never
@@ -163,16 +224,16 @@ export const bridgeLinkSessions = pgTable(
     expiresAt: timestamptz().notNull(),
     outcome: text({ enum: BRIDGE_LINK_OUTCOMES }).notNull().default("pending"),
     resultAccountId: text().references(() => bridgeAccounts.id, { onDelete: "set null" }),
+    /**
+     * `maxlength: 200` in Mongoose, and NO CHECK here: it is written only by an
+     * update, so the validator never ran on it. The value is the bridge's own
+     * error code.
+     */
     failureCode: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("bridge_link_sessions_oxy_user_id_network_outcome_idx").on(
-      t.oxyUserId,
-      t.network,
-      t.outcome,
-    ),
     index("bridge_link_sessions_expires_at_idx").on(t.expiresAt),
     checkOneOf("bridge_link_sessions_network_check", t.network, BRIDGE_NETWORK_IDS),
     checkOneOf(
@@ -181,6 +242,28 @@ export const bridgeLinkSessions = pgTable(
       BRIDGE_LOGIN_STEP_TYPES,
     ),
     checkOneOf("bridge_link_sessions_outcome_check", t.outcome, BRIDGE_LINK_OUTCOMES),
+    /**
+     * `sql.raw` for each bound, so the constant is rendered as migration TEXT.
+     * Interpolating it normally writes a bound-parameter placeholder (`$1`) into
+     * the generated DDL, which generates cleanly and fails at APPLY time.
+     *
+     * `current_step_id` is also written by an UPDATE, which the validator never
+     * covered — but it carries the same value from the same source as the create
+     * that did, so a step id too long to store was already refused at the moment
+     * the session was opened.
+     */
+    check(
+      "bridge_link_sessions_flow_id_length_check",
+      sql.raw(`length(flow_id) <= ${MAX_LINK_SESSION_FLOW_ID_LENGTH}`),
+    ),
+    check(
+      "bridge_link_sessions_remote_login_process_id_length_check",
+      sql.raw(`length(remote_login_process_id) <= ${MAX_LINK_SESSION_PROCESS_ID_LENGTH}`),
+    ),
+    check(
+      "bridge_link_sessions_current_step_id_length_check",
+      sql.raw(`length(current_step_id) <= ${MAX_LINK_SESSION_STEP_ID_LENGTH}`),
+    ),
   ],
 );
 
@@ -193,9 +276,20 @@ export const bridgeProxyLeases = pgTable(
     network: text({ enum: BRIDGE_NETWORK_IDS }).notNull(),
     provider: text().notNull(),
     countryCode: text().notNull(),
+    /**
+     * `maxlength: 10` in Mongoose, and NO CHECK here — this column has no writer
+     * at all. `ProxyLeaseService` reads it when composing a provider URL and
+     * nothing has ever set it, so the validator never saw a value either.
+     */
     regionCode: text(),
     sessionSeed: text().notNull(),
     state: text({ enum: BRIDGE_PROXY_LEASE_STATES }).notNull().default("active"),
+    /**
+     * `maxlength: 64` and `maxlength: 2` in Mongoose, and NO CHECKs here: both
+     * are written only by updates, so neither bound ever ran. They hold what the
+     * proxy's echo endpoint reported, and a CHECK would turn a vendor answering
+     * `USA` into a failed lease verification rather than the mismatch it is.
+     */
     lastExitIp: text(),
     lastExitCountry: text(),
     lastVerifiedAt: timestamptz(),
@@ -209,6 +303,15 @@ export const bridgeProxyLeases = pgTable(
     checkOneOf("bridge_proxy_leases_state_check", t.state, BRIDGE_PROXY_LEASE_STATES),
     /** Mongoose's `match: /^[A-Z]{2}$/`, kept as a constraint rather than a convention. */
     check("bridge_proxy_leases_country_code_check", sql`${t.countryCode} ~ '^[A-Z]{2}$'`),
+    /** Both written by `BridgeProxyLease.create`, so both bounds were in force. */
+    check(
+      "bridge_proxy_leases_provider_length_check",
+      sql.raw(`length(provider) <= ${MAX_PROXY_LEASE_PROVIDER_LENGTH}`),
+    ),
+    check(
+      "bridge_proxy_leases_session_seed_length_check",
+      sql.raw(`length(session_seed) <= ${MAX_PROXY_LEASE_SESSION_SEED_LENGTH}`),
+    ),
   ],
 );
 

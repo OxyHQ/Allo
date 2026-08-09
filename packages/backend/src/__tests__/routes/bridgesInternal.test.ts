@@ -1,11 +1,13 @@
 import express from "express";
-import mongoose from "mongoose";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { uuidv7 } from "@oxyhq/db";
 
 import { resetBridgesConfigForTests } from "../../config/bridges";
-import BridgeAccount from "../../models/BridgeAccount";
-import BridgeProxyLease from "../../models/BridgeProxyLease";
+import { closePostgres, connectPostgres, getDb } from "../../db";
+import * as schema from "../../db/schema";
+import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
 import { createBridgeInternalRoutes } from "../../routes/bridgesInternal";
 import { resetProxyProviderForTests } from "../../services/bridges/proxy/proxyProvider";
 import { resetProxyUrlCacheForTests } from "../../services/bridges/proxy/ProxyLeaseService";
@@ -58,19 +60,38 @@ function clearEnvironment(): void {
   }
 }
 
+/**
+ * ONE throwaway database for the whole file, at file scope. Both describe blocks
+ * write these tables, and a describe-scoped `afterAll` would drop the database
+ * out from under the second one.
+ */
+let handle: TestDatabaseHandle;
+
+beforeAll(async () => {
+  handle = await setUpTestDatabase();
+  connectPostgres(handle.databaseUrl);
+}, 180_000);
+
+afterAll(async () => {
+  await closePostgres();
+  await handle?.drop();
+});
+
+async function storedAccount(id: string) {
+  const [row] = await getDb()
+    .select()
+    .from(schema.bridgeAccounts)
+    .where(eq(schema.bridgeAccounts.id, id));
+  return row;
+}
+
+async function clearBridgeTables(): Promise<void> {
+  // Leases first only for symmetry; there is no FK between the two.
+  await getDb().delete(schema.bridgeProxyLeases);
+  await getDb().delete(schema.bridgeAccounts);
+}
+
 describe("the bridge status webhook", () => {
-  beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    await mongoose.connect(uri, { dbName: "allo_bridge_internal_test" });
-    await BridgeAccount.init();
-    await BridgeProxyLease.init();
-  });
-
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
-
   beforeEach(() => {
     enableTelegramAndSlack();
     resetBridgesConfigForTests();
@@ -83,20 +104,27 @@ describe("the bridge status webhook", () => {
     resetBridgesConfigForTests();
     resetProxyProviderForTests();
     resetProxyUrlCacheForTests();
-    await BridgeAccount.deleteMany({});
-    await BridgeProxyLease.deleteMany({});
+    await clearBridgeTables();
   });
 
-  async function linkedAccount(overrides: Record<string, unknown> = {}) {
-    return await BridgeAccount.create({
-      oxyUserId: USER,
-      network: "telegram",
-      remoteLoginId: "remote-login-1",
-      state: "connecting",
-      linkedAt: new Date(),
-      lastStateAt: new Date(),
-      ...overrides,
-    });
+  async function linkedAccount(
+    overrides: Partial<typeof schema.bridgeAccounts.$inferInsert> = {},
+  ) {
+    const [row] = await getDb()
+      .insert(schema.bridgeAccounts)
+      .values({
+        id: uuidv7(),
+        oxyUserId: USER,
+        network: "telegram",
+        remoteLoginId: "remote-login-1",
+        state: "connecting",
+        linkedAt: new Date(),
+        lastStateAt: new Date(),
+        ...overrides,
+      })
+      .returning();
+    if (!row) throw new Error("bridge account fixture returned no row");
+    return row;
   }
 
   it("refuses a report with no bearer token", async () => {
@@ -134,7 +162,7 @@ describe("the bridge status webhook", () => {
       });
 
     expect(response.status).toBe(200);
-    const stored = await BridgeAccount.findById(account._id).lean();
+    const stored = await storedAccount(account.id);
     expect(stored?.state).toBe("connected");
     expect(stored?.lastConnectedAt).toBeInstanceOf(Date);
   });
@@ -158,7 +186,7 @@ describe("the bridge status webhook", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.matched).toBe(false);
-    const stored = await BridgeAccount.findById(account._id).lean();
+    const stored = await storedAccount(account.id);
     expect(stored?.state).toBe("connecting");
   });
 
@@ -181,7 +209,7 @@ describe("the bridge status webhook", () => {
       });
 
     expect(response.body.matched).toBe(false);
-    const stored = await BridgeAccount.findById(account._id).lean();
+    const stored = await storedAccount(account.id);
     expect(stored?.state).toBe("connecting");
   });
 
@@ -238,9 +266,9 @@ describe("the bridge status webhook", () => {
       );
 
     expect(response.status).toBe(200);
-    const stored = await BridgeAccount.findById(account._id).lean();
+    const stored = await storedAccount(account.id);
     expect(stored?.state).toBe("action_required");
-    expect(stored?.rawState?.stateEvent).toBe("BAD_CREDENTIALS");
+    expect(stored?.rawStateEvent).toBe("BAD_CREDENTIALS");
   });
 
   it("keeps the bridge's own state alongside the collapsed one", async () => {
@@ -262,28 +290,14 @@ describe("the bridge status webhook", () => {
         ttl: 3600,
       });
 
-    const stored = await BridgeAccount.findById(account._id).lean();
+    const stored = await storedAccount(account.id);
     expect(stored?.state).toBe("action_required");
-    expect(stored?.rawState?.stateEvent).toBe("LOGGED_OUT");
-    expect(stored?.rawState?.ttl).toBe(3600);
+    expect(stored?.rawStateEvent).toBe("LOGGED_OUT");
+    expect(stored?.rawStateTtl).toBe(3600);
   });
 });
 
 describe("the proxy endpoint the bridge asks on every connect", () => {
-  beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(uri, { dbName: "allo_bridge_internal_test" });
-    }
-    await BridgeAccount.init();
-    await BridgeProxyLease.init();
-  });
-
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
-
   beforeEach(async () => {
     enableTelegramAndSlack();
     enableProxyProvider();
@@ -291,7 +305,8 @@ describe("the proxy endpoint the bridge asks on every connect", () => {
     resetProxyProviderForTests();
     resetProxyUrlCacheForTests();
 
-    await BridgeAccount.create({
+    await getDb().insert(schema.bridgeAccounts).values({
+      id: uuidv7(),
       oxyUserId: USER,
       network: "telegram",
       remoteLoginId: "remote-login-1",
@@ -300,14 +315,14 @@ describe("the proxy endpoint the bridge asks on every connect", () => {
       linkedAt: new Date(),
       lastStateAt: new Date(),
     });
-    await BridgeProxyLease.create({
+    await getDb().insert(schema.bridgeProxyLeases).values({
+      id: uuidv7(),
       oxyUserId: USER,
       network: "telegram",
       provider: "provider-a",
       countryCode: "ES",
       sessionSeed: "seed-abc123",
       state: "active",
-      rotations: [],
     });
   });
 
@@ -316,8 +331,7 @@ describe("the proxy endpoint the bridge asks on every connect", () => {
     resetBridgesConfigForTests();
     resetProxyProviderForTests();
     resetProxyUrlCacheForTests();
-    await BridgeAccount.deleteMany({});
-    await BridgeProxyLease.deleteMany({});
+    await clearBridgeTables();
   });
 
   it("answers with a field called exactly proxy_url", async () => {
@@ -375,10 +389,15 @@ describe("the proxy endpoint the bridge asks on every connect", () => {
      * through a country we know is wrong. The bridge failing to connect is the
      * intended outcome.
      */
-    await BridgeProxyLease.updateOne(
-      { oxyUserId: USER, network: "telegram" },
-      { $set: { state: "quarantined" } },
-    );
+    await getDb()
+      .update(schema.bridgeProxyLeases)
+      .set({ state: "quarantined" })
+      .where(
+        and(
+          eq(schema.bridgeProxyLeases.oxyUserId, USER),
+          eq(schema.bridgeProxyLeases.network, "telegram"),
+        ),
+      );
     resetProxyUrlCacheForTests();
 
     const response = await request(internalApp())
