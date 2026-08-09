@@ -21,8 +21,23 @@ against the live server rather than the URI.
 
 `text` primary keys, supplied by the application. A row that existed before the
 cutover keeps its 24-character Mongo ObjectId hex verbatim, which is what lets
-every existing reference survive the copy; a row created after it gets a uuid v7
-from `generatedId()`. There is no surrogate integer key anywhere.
+every existing reference survive the copy; a row created after it gets a uuid v7.
+There is no surrogate integer key anywhere.
+
+**Every table declares a bare `text().primaryKey()` with NO database default, so
+every repository must generate the id itself** — call `uuidv7()` from
+`@oxyhq/db` at the insert. `@oxyhq/db` also exports a `generatedId()` column
+builder that attaches that generator as a runtime default; this schema
+deliberately does not use it, because a backfill supplies the ORIGINAL id
+verbatim and a column-level default is one more thing that has to be overridden
+correctly on every one of those inserts.
+
+An earlier revision of this sentence said a post-cutover row "gets a uuid v7 from
+`generatedId()`", which no table does. Two agents independently hit it on their
+first insert, which is the good case — the bad case is a reader who believes it
+and never inserts anything. Recorded here rather than quietly fixed: `docs/` and
+this ledger are the one place a wrong statement survives indefinitely, because
+nothing executes them.
 
 Every `oxyUserId`, `senderId`, `reporter`, `createdBy` and `userId` is a foreign
 SERVICE's primary key — Oxy owns identity — so none of them carries a foreign
@@ -174,6 +189,28 @@ deadline and is not the sweep's job.
 Every swept column carries a leading btree index, checked against the real
 catalogue by `findUnsupportedExpiryColumns`: without one the sweep is a full
 table scan on every run — the cost Mongo's TTL index hid.
+
+## Concurrency tests here are prone to passing vacuously
+
+Two domains hit this independently while building their repositories, with
+different mechanisms and the same symptom — a test that looks like the
+concurrency test, and does not discriminate:
+
+- **postgres.js opens connections on demand**, so the FIRST concurrent burst
+  after a run of sequential queries queues onto the single open connection and
+  executes strictly in order. That is exactly where a racing case sits in a test
+  file. Measured: warm-pool first burst caught a read-then-write race 0/1,
+  subsequent bursts 4/4, cold pool 4/5. Prime the pool before the burst, and
+  prefer a deterministic detector (count statements through postgres.js's `debug`
+  hook) over a race you have to win.
+- **Dropping `SKIP LOCKED` leaves an N-way claim race GREEN.** Under READ
+  COMMITTED a plain `FOR UPDATE` serialises concurrent claimers and each re-reads
+  onto a different row, so every claimer still gets distinct work. Only a case
+  that holds a lock while another claimer runs tells the two apart.
+
+Both suites keep the discriminating case AND say why, so neither gets deleted
+later as redundant. Before trusting a concurrency assertion, break the thing it
+guards and confirm it goes red.
 
 ## Protected columns
 
