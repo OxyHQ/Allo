@@ -12,7 +12,8 @@
     "test": "vitest run",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "ts-node --transpile-only src/db/migrate.ts"
+    "db:migrate": "ts-node --transpile-only src/db/migrate.ts",
+    "db:backfill": "ts-node --transpile-only scripts/backfillFromMongo.ts"
   },
   "dependencies": {
     "@allo/shared-types": "file:../shared-types",
