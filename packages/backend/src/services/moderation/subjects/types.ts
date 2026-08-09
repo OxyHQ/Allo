@@ -47,7 +47,6 @@
  */
 
 import type { ContextInput, ReportSubjectInput, ResourceInput } from "@oxyhq/crowdsource";
-import type { ReportedType } from "../../../models/Report";
 
 /**
  * The reported types a provider may be registered for: the ones whose identifier
@@ -67,7 +66,7 @@ import type { ReportedType } from "../../../models/Report";
  * which is a deliberate act and a reviewable one. The three standing reasons are in
  * `registry.ts`; the two extra sentences a bridge adds are there too.
  */
-export type AccountReportedType = ReportedType.USER;
+export type AccountReportedType = "user";
 
 /**
  * §5.4's subject types Allo may emit: the identity realm, and nothing else.

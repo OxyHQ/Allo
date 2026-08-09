@@ -1,4 +1,4 @@
-import { ReportStatus, type ModerationLocalStatus } from "../../models/Report";
+import type { ModerationLocalStatus, ReportStatus } from "../../db/schema/moderation";
 
 /**
  * The one place a report's two status axes are decided.
@@ -33,11 +33,11 @@ import { ReportStatus, type ModerationLocalStatus } from "../../models/Report";
 export function legacyStatusForOutcome(outcome: string): ReportStatus {
   switch (outcome) {
     case "violation":
-      return ReportStatus.RESOLVED;
+      return "resolved";
     case "no_violation":
-      return ReportStatus.DISMISSED;
+      return "dismissed";
     default:
-      return ReportStatus.REVIEWED;
+      return "reviewed";
   }
 }
 

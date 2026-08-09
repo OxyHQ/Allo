@@ -1,17 +1,18 @@
-import mongoose, { type ClientSession } from "mongoose";
-import Report, {
-  isReportedType,
-  ReportCategory,
-  ReportStatus,
-  ReportedType,
-  type IReport,
-  type LeanReport,
-  type ModerationLocalStatus,
-} from "../../models/Report";
+import { isUniqueViolation } from "@oxyhq/db";
+import { getDb } from "../../db";
 import {
-  enqueueModerationOutboxEvent,
-  reportSubmitEventId,
-} from "./ModerationOutboxService";
+  findReportBySubject,
+  insertReport,
+  type ModerationReport,
+} from "../../db/moderation/reportRepository";
+import {
+  isReportedType,
+  type ModerationLocalStatus,
+  type ReportCategory,
+  type ReportedType,
+} from "../../db/schema/moderation";
+import { enqueueModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
+import { reportSubmitEventId } from "./ModerationOutboxService";
 import { reportedIdentifierProblem, resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
 
@@ -55,16 +56,10 @@ import { subjectProviderFor } from "./subjects/registry";
  * and that is what turns an indistinguishable silence into a row somebody can read.
  */
 
-const TRANSACTION_OPTIONS = {
-  readPreference: "primary" as const,
-  readConcern: { level: "snapshot" as const },
-  writeConcern: { w: "majority" as const },
-};
-
 export class DuplicateReportError extends Error {
-  readonly existing: LeanReport;
+  readonly existing: ModerationReport;
 
-  constructor(existing: LeanReport) {
+  constructor(existing: ModerationReport) {
     super("This item has already been reported by this reporter.");
     this.name = "DuplicateReportError";
     this.existing = existing;
@@ -108,7 +103,7 @@ export interface CreateReportInput {
 }
 
 export interface CreateReportResult {
-  report: IReport;
+  report: ModerationReport;
   /**
    * The durable delivery event.
    *
@@ -184,24 +179,6 @@ function routeReport(reportedType: ReportedType, reportedId: string): ReportRout
   return { reportedId: subject.reportedId, deliverable: true };
 }
 
-async function inTransaction<T>(
-  operation: (session: ClientSession) => Promise<T>,
-): Promise<T> {
-  const session = await mongoose.startSession();
-  let result: T | undefined;
-  try {
-    await session.withTransaction(async () => {
-      result = await operation(session);
-    }, TRANSACTION_OPTIONS);
-    if (result === undefined) {
-      throw new Error("Report intake transaction completed without a result");
-    }
-    return result;
-  } finally {
-    await session.endSession();
-  }
-}
-
 /**
  * Store the report, and queue its delivery in the same transaction.
  *
@@ -271,40 +248,65 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
   );
   const localStatus: ModerationLocalStatus = deliverable ? "queued" : "received";
 
-  return await inTransaction(async (session) => {
-    const existing = await Report.findOne({ reporter, reportedId, reportedType })
-      .session(session)
-      .lean<LeanReport | null>();
-    if (existing) throw new DuplicateReportError(existing);
+  const db = getDb();
+  try {
+    return await db.transaction(async (tx) => {
+      const existing = await findReportBySubject({ reporter, reportedId, reportedType }, tx);
+      if (existing) throw new DuplicateReportError(existing);
 
-    const [report] = await Report.create(
-      [
+      const report = await insertReport(
         {
           reportedType,
           reportedId,
           reporter,
           categories: input.categories,
-          details: input.details,
-          status: ReportStatus.PENDING,
+          ...(input.details === undefined ? {} : { details: input.details }),
+          status: "pending",
           localStatus,
           ...(localStatusReason === undefined ? {} : { localStatusReason }),
         },
-      ],
-      { session },
-    );
+        tx,
+      );
 
-    if (!deliverable) return { report };
+      if (!deliverable) return { report };
 
-    const reportId = report._id.toString();
-    const outboxEventId = await enqueueModerationOutboxEvent(
-      {
-        eventId: reportSubmitEventId(reportId),
-        kind: "report.submit",
-        payload: { reportId },
-      },
-      session,
-    );
+      const outboxEventId = await enqueueModerationOutboxEvent(
+        {
+          eventId: reportSubmitEventId(report.id),
+          kind: "report.submit",
+          payload: { reportId: report.id },
+        },
+        tx,
+      );
 
-    return { report, outboxEventId };
-  });
+      return { report, outboxEventId };
+    });
+  } catch (error: unknown) {
+    /**
+     * The race the read above cannot close, answered from OUTSIDE the transaction.
+     *
+     * `findReportBySubject` and the insert are two statements, so two concurrent
+     * first submissions both see nothing and both insert;
+     * `reports_reporter_reported_id_reported_type_key` decides which one wins and
+     * the loser gets a `23505`. Recognised with `isUniqueViolation` rather than a
+     * message regex — the message is the server's to reword.
+     *
+     * The recovery read is deliberately NOT attempted inside the transaction. In
+     * Postgres a failed statement aborts the whole transaction (`25P02`), so a
+     * read there would fail with an error about the transaction rather than
+     * return the row — turning a 200 "you already reported this" into a 500. By
+     * the time the conflict is raised the winner has COMMITTED (a conflicting
+     * insert blocks until the other transaction ends, and only a commit produces
+     * the violation), so the row is readable the moment this one has rolled back.
+     *
+     * A conflict with nothing to read afterwards is left to propagate: that is
+     * not a duplicate, it is a constraint nobody expected, and answering 200 to
+     * it would tell a reporter their report is on file when it is not.
+     */
+    if (!isUniqueViolation(error)) throw error;
+
+    const existing = await findReportBySubject({ reporter, reportedId, reportedType });
+    if (!existing) throw error;
+    throw new DuplicateReportError(existing);
+  }
 }

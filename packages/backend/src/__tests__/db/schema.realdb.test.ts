@@ -26,6 +26,11 @@ import {
   startExpirySweep,
   stopExpirySweep,
 } from "../../db/expiry";
+import {
+  MAX_REPORT_DELIVERY_ERROR_LENGTH,
+  MAX_REPORT_DETAILS_LENGTH,
+  MAX_REPORT_LOCAL_STATUS_REASON_LENGTH,
+} from "../../db/schema/moderation";
 import * as schema from "../../db/schema";
 
 let handle: TestDatabaseHandle;
@@ -450,22 +455,71 @@ describe("closed value sets are enforced by the database, not just by TypeScript
     expect(constraintNameOf(error)).toBe("reports_categories_non_empty_check");
   });
 
+  /**
+   * Through RAW SQL, and that is the honest way to test this one.
+   *
+   * `categories` is declared `text({ enum: REPORT_CATEGORIES }).array()`, so
+   * drizzle refuses an unknown member at COMPILE time — which is the first line
+   * of defence and is why this insert can no longer be written through the query
+   * builder without a cast. The CHECK exists for everything that is not this
+   * application: a migration, a repair script, `psql`. Reaching the server the
+   * way those do is the only way to find out whether it is really enforced.
+   */
   it("refuses a report category outside the tuple", async () => {
-    const error = await db
-      .insert(schema.reports)
-      .values({
-        id: id("report"),
-        reportedType: "user",
-        reportedId: "oxy-user-9",
-        reporter: "oxy-user-7",
-        categories: ["spam", "not_a_category"],
-      })
-      .then(
+    const error = await client`
+      insert into reports (id, reported_type, reported_id, reporter, categories)
+      values (${id("report")}, 'user', 'oxy-user-9', 'oxy-user-7', array['spam', 'not_a_category'])
+    `.then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).not.toBeNull();
+    expect(constraintNameOf(error)).toBe("reports_categories_within_check");
+  });
+
+  /**
+   * The three Mongoose `maxlength` bounds, now CHECKs.
+   *
+   * `reportRepository` truncates to the same three lengths at every write, so
+   * these constraints are unreachable through it by construction — which is the
+   * point of having both. The repository decides what a REPORTER experiences (a
+   * 201 with the tail trimmed, exactly as the route and the delivery worker
+   * already did); the CHECK decides what is STORABLE, for the writer that does
+   * not exist yet.
+   */
+  it.each([
+    ["details", "reports_details_length_check", MAX_REPORT_DETAILS_LENGTH],
+    [
+      "local_status_reason",
+      "reports_local_status_reason_length_check",
+      MAX_REPORT_LOCAL_STATUS_REASON_LENGTH,
+    ],
+    [
+      "last_delivery_error",
+      "reports_last_delivery_error_length_check",
+      MAX_REPORT_DELIVERY_ERROR_LENGTH,
+    ],
+  ])("bounds %s at its Mongoose maxlength", async (column, constraint, limit) => {
+    // A distinct (reporter, subject) per insert: every row here is a REPORT, and
+    // `reports_reporter_reported_id_reported_type_key` would otherwise reject the
+    // second one for a reason that has nothing to do with the bound under test.
+    const insert = (length: number) =>
+      client`
+        insert into reports (id, reported_type, reported_id, reporter, categories, ${client(column)})
+        values (
+          ${id("report")}, 'user', ${id("subject")}, ${id("reporter")},
+          array['spam'], ${"x".repeat(length)}
+        )
+      `.then(
         () => null,
         (caught: unknown) => caught,
       );
-    expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("reports_categories_within_check");
+
+    // Exactly at the bound is allowed — an off-by-one CHECK would refuse the
+    // value the repository's own truncation produces, which is the failure that
+    // would only appear on a report whose details ran long.
+    expect(await insert(limit)).toBeNull();
+    expect(constraintNameOf(await insert(limit + 1))).toBe(constraint);
   });
 });
 

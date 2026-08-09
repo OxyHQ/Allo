@@ -5,7 +5,7 @@ import {
   recordDecisionEvent,
   recordIgnoredEvent,
 } from "../services/moderation/ModerationInboundService";
-import { mongoProcessedEventStore } from "../services/moderation/moderationEventStore";
+import { postgresProcessedEventStore } from "../services/moderation/moderationEventStore";
 import { logger } from "../utils/logger";
 
 /**
@@ -133,7 +133,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
         : { previousSecret: config.webhookPreviousSecret }),
       // Shared across ECS tasks: the in-process default would dedupe only the
       // instance that happened to receive both copies of a redelivery.
-      store: mongoProcessedEventStore(),
+      store: postgresProcessedEventStore(),
       on: {
         /**
          * A decision, provisional or final. Both are queued: a provisional decision

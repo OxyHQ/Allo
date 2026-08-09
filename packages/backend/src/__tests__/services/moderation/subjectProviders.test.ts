@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import path from "path";
 import { describe, expect, it, vi } from "vitest";
-import { ReportedType } from "../../../models/Report";
+import { REPORTED_TYPES } from "../../../db/schema/moderation";
 import {
   deliverableTypes,
   localOnlyTypes,
@@ -38,8 +38,8 @@ describe("moderation subject registry", () => {
      * break a report surface instead of protecting one.
      */
     expect(localOnlyTypes().sort()).toEqual(["conversation", "message"]);
-    expect(subjectProviderFor(ReportedType.MESSAGE)).toBeUndefined();
-    expect(subjectProviderFor(ReportedType.CONVERSATION)).toBeUndefined();
+    expect(subjectProviderFor("message")).toBeUndefined();
+    expect(subjectProviderFor("conversation")).toBeUndefined();
   });
 
   it("covers every reported type as either deliverable or explicitly local-only", () => {
@@ -49,14 +49,14 @@ describe("moderation subject registry", () => {
      * for the wrong reason. Every enum member must be accounted for by exactly one
      * of the two lists.
      */
-    const all = Object.values(ReportedType).sort();
+    const all = [...REPORTED_TYPES].sort();
     const accounted = [...deliverableTypes(), ...localOnlyTypes()].sort();
     expect(accounted).toEqual(all);
     expect(all.length).toBeGreaterThan(1);
   });
 
   it("resolves the user provider to the identity.profile subject type", () => {
-    const provider = subjectProviderFor(ReportedType.USER);
+    const provider = subjectProviderFor("user");
     expect(provider?.subjectType).toBe("identity.profile");
   });
 });
@@ -99,7 +99,17 @@ describe("what the subject providers are allowed to reach", () => {
    * about absence has to be checked against something.
    */
   const ALLOWED_FIRST_PARTY = [
-    "models/Report.ts",
+    /**
+     * The reportable-type tuple, which `localOnlyTypes()` subtracts the registry
+     * from. It replaces `models/Report.ts`, and the swap is a WIDENING worth
+     * reading rather than a rename: this module declares three tables, and one of
+     * them is `reports`. What it still cannot reach is any table describing a
+     * room, a conversation, a message or an encryption state — those live in
+     * sibling schema files this closure never touches, and the pattern below
+     * fails loudly if a barrel import ever brings them in.
+     */
+    "db/schema/columns.ts",
+    "db/schema/moderation.ts",
     "services/moderation/subjects/registry.ts",
     "services/moderation/subjects/types.ts",
     "services/moderation/subjects/userSubject.ts",
@@ -111,7 +121,9 @@ describe("what the subject providers are allowed to reach", () => {
     "@allo/shared-types",
     "@oxyhq/core",
     "@oxyhq/crowdsource",
-    "mongoose",
+    "@oxyhq/db",
+    "drizzle-orm",
+    "drizzle-orm/pg-core",
   ];
 
   /**

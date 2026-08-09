@@ -1,8 +1,13 @@
-import Report, { type LeanReport } from "../../models/Report";
+import {
+  closeUndeliverableReport,
+  findReportById,
+  markReportDeliveryFailed,
+  markReportSubmitted,
+} from "../../db/moderation/reportRepository";
+import type { ModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
 import { logger } from "../../utils/logger";
 import { getCrowdSourceClient } from "./crowdSourceClient";
 import { buildModerationReportInput } from "./EvidenceSnapshotService";
-import type { ModerationOutboxEvent } from "./ModerationOutboxService";
 
 /**
  * Delivering a stored report to CrowdSource.
@@ -29,8 +34,6 @@ import type { ModerationOutboxEvent } from "./ModerationOutboxService";
  * - **Anything else** is the SDK's `retryable` to answer, and the outbox obeys it.
  */
 
-const MAX_ERROR_LENGTH = 2_000;
-
 /** Thrown when there is nowhere to deliver to yet. Always retryable. */
 export class CrowdSourceUnavailableError extends Error {
   readonly retryable = true;
@@ -56,14 +59,6 @@ export class ModerationDeliveryRejectedError extends Error {
   }
 }
 
-/** Close a report there is genuinely nothing left to do about. */
-async function closeUndeliverable(reportId: string, reason: string): Promise<void> {
-  await Report.updateOne(
-    { _id: reportId },
-    { $set: { localStatus: "closed", localStatusReason: reason } },
-  );
-}
-
 /** Handle one `report.submit` outbox event. */
 export async function deliverReportOutboxEvent(
   event: ModerationOutboxEvent,
@@ -73,7 +68,7 @@ export async function deliverReportOutboxEvent(
     throw new ModerationDeliveryRejectedError("A report.submit event carried no reportId.");
   }
 
-  const report = await Report.findById(reportId).lean<LeanReport | null>();
+  const report = await findReportById(reportId);
   if (!report) {
     /**
      * The report is gone but its delivery event survived. Nothing to deliver and
@@ -94,18 +89,10 @@ export async function deliverReportOutboxEvent(
    * Catching either and writing a local state would put the report in the same
    * place as every deliberately local-only report, which in Allo is most of them.
    */
-  const input = await buildModerationReportInput({
-    id: String(report._id),
-    reportedType: report.reportedType,
-    reportedId: report.reportedId,
-    reporter: report.reporter,
-    categories: report.categories,
-    details: report.details,
-    createdAt: report.createdAt,
-  });
+  const input = await buildModerationReportInput(report);
 
   if (input === null) {
-    await closeUndeliverable(
+    await closeUndeliverableReport(
       reportId,
       "The reported account no longer exists, so there is nothing to review.",
     );
@@ -121,38 +108,26 @@ export async function deliverReportOutboxEvent(
      * The failure is visible on the report itself, not only in the outbox row.
      * `delivery_failed` is a state §14.3 defines and it is what the reconciliation
      * sweep reads; leaving the report at `queued` while the outbox quietly backed
-     * off would hide the problem in a collection nobody looks at. Written before
+     * off would hide the problem in a table nobody looks at. Written before
      * rethrowing so the outbox still applies its own backoff or dead-letters.
+     *
+     * The message is bounded by the repository rather than sliced here — one
+     * length, applied to every writer, instead of one each caller remembers.
      */
-    await Report.updateOne(
-      { _id: reportId },
-      {
-        $set: {
-          localStatus: "delivery_failed",
-          lastDeliveryError: (error instanceof Error ? error.message : String(error)).slice(
-            0,
-            MAX_ERROR_LENGTH,
-          ),
-        },
-      },
+    await markReportDeliveryFailed(
+      reportId,
+      error instanceof Error ? error.message : String(error),
     );
     throw error;
   }
 
-  await Report.updateOne(
-    { _id: reportId },
-    {
-      $set: {
-        localStatus: "submitted",
-        crowdSourceReportId: receipt.reportId,
-        crowdSourceCaseId: receipt.caseId,
-        crowdSourceMerged: receipt.merged,
-        contentSnapshotHash: input.snapshotHash,
-        submittedAt: new Date(),
-      },
-      $unset: { lastDeliveryError: "", localStatusReason: "" },
-    },
-  );
+  await markReportSubmitted({
+    reportId,
+    crowdSourceReportId: receipt.reportId,
+    crowdSourceCaseId: receipt.caseId,
+    crowdSourceMerged: receipt.merged,
+    contentSnapshotHash: input.snapshotHash,
+  });
 
   logger.info("[CrowdSource] report delivered", {
     reportId,

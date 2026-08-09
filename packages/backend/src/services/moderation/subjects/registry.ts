@@ -1,4 +1,4 @@
-import { ReportedType } from "../../../models/Report";
+import { REPORTED_TYPES } from "../../../db/schema/moderation";
 import { createUserSubjectProvider } from "./userSubject";
 import type { AccountReportedType, ModerationSubjectProvider } from "./types";
 
@@ -161,14 +161,14 @@ import type { AccountReportedType, ModerationSubjectProvider } from "./types";
  * CLOSED rather than merely short.
  *
  * A `readonly ModerationSubjectProvider[]` accepts a second element; this record
- * does not accept a second key. `[ReportedType.MESSAGE]: …` here is an excess
+ * does not accept a second key. A `message: …` key here is an excess
  * property and does not compile, and omitting `user` is a missing one — the
  * registry cannot silently become empty either, which is the failure the vacuity
  * assertion in `subjectProviders.test.ts` was written to catch.
  */
 const PROVIDERS: Readonly<Record<AccountReportedType, ModerationSubjectProvider>> =
   Object.freeze({
-    [ReportedType.USER]: createUserSubjectProvider(),
+    user: createUserSubjectProvider(),
   });
 
 const BY_REPORTED_TYPE: ReadonlyMap<string, ModerationSubjectProvider> = new Map(
@@ -212,9 +212,12 @@ export function deliverableTypes(): string[] {
 /**
  * The types Allo accepts but never delivers, with the reason recorded on the row.
  *
- * Derived from the enum minus the registry, so adding a `ReportedType` without a
- * provider cannot silently become an undocumented local-only type.
+ * Derived from the reportable-type tuple minus the registry, so adding a
+ * `ReportedType` without a provider cannot silently become an undocumented
+ * local-only type. The tuple is the same one `reports_reported_type_check` is
+ * rendered from, which is what keeps "every accepted type" here equal to every
+ * type the database will store.
  */
 export function localOnlyTypes(): string[] {
-  return Object.values(ReportedType).filter((type) => !BY_REPORTED_TYPE.has(type));
+  return REPORTED_TYPES.filter((type) => !BY_REPORTED_TYPE.has(type));
 }

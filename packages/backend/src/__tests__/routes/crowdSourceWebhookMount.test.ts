@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 vi.mock("../../services/moderation/moderationEventStore", () => ({
-  mongoProcessedEventStore: () => ({
+  postgresProcessedEventStore: () => ({
     claim: vi.fn(async () => true),
     release: vi.fn(async () => undefined),
   }),

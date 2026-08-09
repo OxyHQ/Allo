@@ -4,7 +4,7 @@ import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from "./reportTaxon
 import { resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
 import type { ModerationSubjectSnapshot } from "./subjects/types";
-import type { IReport } from "../../models/Report";
+import type { ModerationReport } from "../../db/moderation/reportRepository";
 
 /**
  * Turning a stored report into the thing the SDK delivers.
@@ -126,9 +126,9 @@ export interface ModerationReportInput {
  */
 export async function buildModerationReportInput(
   report: Pick<
-    IReport,
-    "reportedType" | "reportedId" | "reporter" | "categories" | "details" | "createdAt"
-  > & { id: string },
+    ModerationReport,
+    "id" | "reportedType" | "reportedId" | "reporter" | "categories" | "details" | "createdAt"
+  >,
 ): Promise<ModerationReportInput | null> {
   const provider = subjectProviderFor(report.reportedType);
   if (!provider) throw new ModerationSubjectUnsupportedError(report.reportedType);

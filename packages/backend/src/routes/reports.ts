@@ -1,12 +1,14 @@
 import { Router, Response } from "express";
 import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
 import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
-import Report, {
+import { getDb } from "../db";
+import { listReportsByReporter } from "../db/moderation/reportRepository";
+import {
   isReportedType,
-  ReportCategory,
-  ReportedType,
-  type LeanReport,
-} from "../models/Report";
+  REPORT_CATEGORIES,
+  REPORTED_TYPES,
+  type ReportCategory,
+} from "../db/schema/moderation";
 import {
   createReport,
   DuplicateReportError,
@@ -31,7 +33,7 @@ function parseCategories(value: unknown): ReportCategory[] | null {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CATEGORIES) {
     return null;
   }
-  const allowed = new Set<string>(Object.values(ReportCategory));
+  const allowed = new Set<string>(REPORT_CATEGORIES);
   const parsed: ReportCategory[] = [];
   for (const entry of value) {
     if (typeof entry !== "string" || !allowed.has(entry)) return null;
@@ -84,7 +86,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       res,
       400,
       "Bad Request",
-      `reportedType must be one of: ${Object.values(ReportedType).join(", ")}`,
+      `reportedType must be one of: ${REPORTED_TYPES.join(", ")}`,
     );
   }
 
@@ -111,7 +113,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       res,
       400,
       "Bad Request",
-      `categories must be a non-empty array of at most ${MAX_CATEGORIES} values from: ${Object.values(ReportCategory).join(", ")}`,
+      `categories must be a non-empty array of at most ${MAX_CATEGORIES} values from: ${REPORT_CATEGORIES.join(", ")}`,
     );
   }
 
@@ -141,7 +143,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
      */
     const subject = resolveModerationSubject(reportedId);
     if (
-      reportedType === ReportedType.USER &&
+      reportedType === "user" &&
       subject.kind === "oxy-account" &&
       subject.reportedId === reporter
     ) {
@@ -165,7 +167,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     return sendSuccessResponse(
       res,
       201,
-      { id: report._id.toString(), createdAt: report.createdAt },
+      { id: report.id, createdAt: report.createdAt },
       "Report received",
     );
   } catch (error) {
@@ -178,7 +180,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return sendSuccessResponse(
         res,
         200,
-        { id: error.existing._id.toString(), createdAt: error.existing.createdAt },
+        { id: error.existing.id, createdAt: error.existing.createdAt },
         "You have already reported this",
       );
     }
@@ -210,25 +212,17 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 router.get("/mine", async (req: AuthRequest, res: Response) => {
   try {
     const reporter = getAuthenticatedUserId(req);
-    const reports = await Report.find({ reporter })
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .select("_id reportedType reportedId categories details status createdAt")
-      .lean<LeanReport[]>();
-
-    return sendSuccessResponse(
-      res,
-      200,
-      reports.map((report) => ({
-        id: report._id.toString(),
-        reportedType: report.reportedType,
-        reportedId: report.reportedId,
-        categories: report.categories,
-        details: report.details,
-        status: report.status,
-        createdAt: report.createdAt,
-      })),
-    );
+    /**
+     * The projection, the ordering and the cap all live in the repository — it is
+     * a user-facing read, so an unbounded page size would be a parameter deciding
+     * how much work an authenticated request can ask for.
+     *
+     * `details` comes back as `string | null` where Mongo left the key absent.
+     * Both serialise to a field a client reads with `??`, and `null` is what every
+     * other nullable column on this row already emits, so it is not normalised
+     * back into `undefined` for this one field.
+     */
+    return sendSuccessResponse(res, 200, await listReportsByReporter(reporter, getDb()));
   } catch (error) {
     logger.error("[Reports] Failed to list reports", error);
     return sendErrorResponse(

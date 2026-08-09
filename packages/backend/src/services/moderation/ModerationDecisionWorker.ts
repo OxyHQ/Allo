@@ -1,8 +1,11 @@
 import { DecisionSchema } from "@oxyhq/crowdsource-contracts";
-import Report, { type LeanReport } from "../../models/Report";
+import {
+  applyReportDecision,
+  findReportByCaseId,
+} from "../../db/moderation/reportRepository";
+import type { ModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
 import { crowdSourceConfig } from "../../config/crowdsource";
 import { logger } from "../../utils/logger";
-import type { ModerationOutboxEvent } from "./ModerationOutboxService";
 import { reportStateForDecision } from "./reportStatus";
 
 /**
@@ -33,8 +36,9 @@ import { reportStateForDecision } from "./reportStatus";
  * they are having by reading a stale comment. Two things would have to be built
  * before it could be had honestly: the code that calls the admin API, and a real
  * reversal path for `restore` — which exists in `ModerationEnforcementAction` and
- * `models/Report.ts` and has no implementation anywhere. A worker that could
- * suspend an account but not un-suspend one is not an enforcement mechanism.
+ * in the `reports.enforced_action` CHECK, and has no implementation anywhere. A
+ * worker that could suspend an account but not un-suspend one is not an
+ * enforcement mechanism.
  *
  * So this worker still records the decision and stops. Manufacturing an enforcement
  * path — writing `Block` rows on behalf of users who did not ask, or calling an
@@ -107,7 +111,7 @@ export async function applyDecisionOutboxEvent(
   }
   const decision = parsed.data;
 
-  const report = await Report.findOne({ crowdSourceCaseId: caseId }).lean<LeanReport | null>();
+  const report = await findReportByCaseId(caseId);
   if (!report) {
     /**
      * A decision about a case this deployment has no report for. Not an error: a
@@ -141,26 +145,30 @@ export async function applyDecisionOutboxEvent(
   const plannedAction = plannedActionForOutcome(decision.outcome);
   const mode = crowdSourceConfig().enforcementMode;
 
-  await Report.updateOne(
-    { _id: report._id, decisionRevision: report.decisionRevision ?? null },
-    {
-      $set: {
-        status: state.status,
-        localStatus: state.localStatus,
-        decisionId: decision.id,
-        decisionRevision: decision.revision,
-        decisionOutcome: decision.outcome,
-        decisionStatus: decision.status,
-        decidedAt: new Date(),
-        /**
-         * The action Allo would take. Written in every mode, acted on in none —
-         * see this file's header. When an enforcement mechanism exists, it reads
-         * this field; until then it is the record of what was decided.
-         */
-        enforcedAction: plannedAction,
-      },
-    },
-  );
+  await applyReportDecision({
+    reportId: report.id,
+    /**
+     * The compare-and-set guard, against what is STORED rather than against
+     * arrival order. `null` for a report never decided before, which is why the
+     * repository compares with `is not distinct from` — `decision_revision = NULL`
+     * is NULL, so an `=` here would match no row and the FIRST decision about
+     * every report would be dropped in silence.
+     */
+    expectedRevision: report.decisionRevision,
+    status: state.status,
+    localStatus: state.localStatus,
+    decisionId: decision.id,
+    decisionRevision: decision.revision,
+    decisionOutcome: decision.outcome,
+    decisionStatus: decision.status,
+    decidedAt: new Date(),
+    /**
+     * The action Allo would take. Written in every mode, acted on in none — see
+     * this file's header. When an enforcement mechanism exists, it reads this
+     * field; until then it is the record of what was decided.
+     */
+    enforcedAction: plannedAction,
+  });
 
   logger.info("[CrowdSource] decision recorded", {
     caseId,

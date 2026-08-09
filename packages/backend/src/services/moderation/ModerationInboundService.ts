@@ -1,9 +1,10 @@
-import mongoose, { type ClientSession } from "mongoose";
-import ModerationEvent from "../../models/ModerationEvent";
+import { getDb } from "../../db";
 import {
-  decisionApplyEventId,
-  enqueueModerationOutboxEvent,
-} from "./ModerationOutboxService";
+  markModerationEventIgnored,
+  markModerationEventQueued,
+} from "../../db/moderation/moderationEventRepository";
+import { enqueueModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
+import { decisionApplyEventId } from "./ModerationOutboxService";
 
 /**
  * What happens between "a signed decision arrived" and "2xx".
@@ -19,26 +20,11 @@ import {
  * a decision silently lost, with a row that says it arrived. Committing both
  * together means the only two possible outcomes are "recorded and queued" or
  * "neither", and "neither" releases the claim and gets redelivered.
+ *
+ * BOTH halves refuse the root connection, not just the outbox one. Guarding only
+ * the enqueue would leave the same lost decision reachable through the other
+ * order: queue inside a transaction, complete the audit row outside it.
  */
-
-const TRANSACTION_OPTIONS = {
-  readPreference: "primary" as const,
-  readConcern: { level: "snapshot" as const },
-  writeConcern: { w: "majority" as const },
-};
-
-async function inTransaction(
-  operation: (session: ClientSession) => Promise<void>,
-): Promise<void> {
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      await operation(session);
-    }, TRANSACTION_OPTIONS);
-  } finally {
-    await session.endSession();
-  }
-}
 
 export interface RecordDecisionEventInput {
   eventId: string;
@@ -58,21 +44,15 @@ export interface RecordDecisionEventInput {
 
 /** Record a decision-bearing event and queue its application. */
 export async function recordDecisionEvent(input: RecordDecisionEventInput): Promise<void> {
-  await inTransaction(async (session) => {
-    const now = new Date();
-    await ModerationEvent.updateOne(
-      { _id: input.eventId },
+  await getDb().transaction(async (tx) => {
+    await markModerationEventQueued(
       {
-        $set: {
-          type: input.type,
-          caseId: input.caseId,
-          payload: { caseId: input.caseId, decision: input.decision },
-          state: "queued",
-          queuedAt: now,
-          updatedAt: now,
-        },
+        eventId: input.eventId,
+        type: input.type,
+        caseId: input.caseId,
+        payload: { caseId: input.caseId, decision: input.decision },
       },
-      { session },
+      tx,
     );
 
     await enqueueModerationOutboxEvent(
@@ -85,7 +65,7 @@ export async function recordDecisionEvent(input: RecordDecisionEventInput): Prom
           decision: input.decision,
         },
       },
-      session,
+      tx,
     );
   });
 }
@@ -94,25 +74,15 @@ export async function recordDecisionEvent(input: RecordDecisionEventInput): Prom
  * Record an event there is nothing to do about.
  *
  * `case.created`, `case.escalated`, `case.closed` and any type a newer CrowdSource
- * introduces. No outbox row, because no work — but the row is kept, because "did
- * CrowdSource tell us about this case, and when" is the first question asked when
- * a report looks stuck, and it has to be answerable.
+ * introduces. No outbox row, because no work — and therefore no transaction, this
+ * being the one write of the pair with no partner. But the row is kept, because
+ * "did CrowdSource tell us about this case, and when" is the first question asked
+ * when a report looks stuck, and it has to be answerable.
  */
 export async function recordIgnoredEvent(input: {
   eventId: string;
   type: string;
   caseId?: string;
 }): Promise<void> {
-  const now = new Date();
-  await ModerationEvent.updateOne(
-    { _id: input.eventId },
-    {
-      $set: {
-        type: input.type,
-        ...(input.caseId === undefined ? {} : { caseId: input.caseId }),
-        state: "ignored",
-        updatedAt: now,
-      },
-    },
-  );
+  await markModerationEventIgnored(input);
 }

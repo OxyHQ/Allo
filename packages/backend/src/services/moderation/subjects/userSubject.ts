@@ -1,6 +1,5 @@
 import { oxyClient } from "@oxyhq/core";
 import type { User } from "@oxyhq/core";
-import { ReportedType } from "../../../models/Report";
 import { isOxyUserNotFound } from "../../../utils/oxyUserDisplay";
 import type { ModerationSubjectProvider, ModerationSubjectSnapshot } from "./types";
 
@@ -43,7 +42,7 @@ export function createUserSubjectProvider(
   },
 ): ModerationSubjectProvider {
   return {
-    reportedType: ReportedType.USER,
+    reportedType: "user",
     subjectType: "identity.profile",
 
     async snapshot(reportedId: string): Promise<ModerationSubjectSnapshot | null> {
