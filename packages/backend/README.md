@@ -749,10 +749,34 @@ const socket = io('http://localhost:4140/messaging', {
 - `bun run start` — Start production server
 - `bun run test` — Run the vitest suite
 - `bun run clean` — Clean build artifacts
+- `bun run db:generate` — Generate a migration from `src/db/schema/`
+- `bun run db:migrate -- --target-database=<name> --phase=pre|post|all` — Apply
+  migrations. The only migrator; never `drizzle-kit migrate`.
 
 This package declares no `lint` script. The suite in `src/__tests__/` runs
 against a real MongoDB replica set started by `vitest.globalSetup.ts`. CI runs it
 on every PR (`.github/workflows/ci.yml`).
+
+### The Postgres schema suite needs a Postgres
+
+The Mongo → Postgres port lands its destination schema first, so the suite now
+needs BOTH servers: a Mongo replica set (as before) and a real Postgres, on which
+each run creates its own throwaway, fully-migrated database.
+
+```bash
+docker compose -f docker-compose.postgres.yml up -d
+TEST_DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/postgres bun run test
+```
+
+Without `TEST_DATABASE_URL` (or `DATABASE_URL`) the schema suite fails with a
+message naming this command. That is deliberate: a database test that skips
+itself when no server is present is a test nobody notices has stopped running.
+
+Nothing in the running service reads Postgres yet — `src/db/` has no importer.
+The schema, its migration, the expiry sweep and this harness are the destination;
+the call-site port is a separate change. See `src/db/schema/CONVENTIONS.md` for
+the decisions the port is bound by, including what happened to the two Mongoose
+hooks and to the three TTL indexes.
 
 ### Running the tests without a downloaded binary
 

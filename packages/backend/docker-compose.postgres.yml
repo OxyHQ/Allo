@@ -1,0 +1,29 @@
+# Local Postgres for the Allo backend test suite.
+#
+# Plain `postgres:17-alpine`: this schema needs no PostGIS, no pgvector and no
+# pg_trgm. Port 5440 rather than 5432 so it cannot collide with a system
+# Postgres or with a sibling Oxy service's compose file on the same machine.
+#
+#   docker compose -f docker-compose.postgres.yml up -d
+#   TEST_DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/postgres npm test
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: allo-backend-postgres
+    environment:
+      POSTGRES_USER: allo
+      POSTGRES_PASSWORD: allo
+      # The suite creates its own throwaway database per run; this is only the
+      # maintenance database it connects to in order to do that.
+      POSTGRES_DB: postgres
+    ports:
+      - '5440:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U allo -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      # Throwaway by design — no volume, so a stale local database cannot
+      # silently outlive the schema that created it.
+      - /var/lib/postgresql/data

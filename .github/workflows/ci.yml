@@ -49,6 +49,34 @@ jobs:
       # Pinned rather than left to float, so the binary cache key below is stable
       # and a new upstream default cannot change what CI runs without a commit.
       MONGOMS_VERSION: 8.2.6
+      # The server the schema suite creates its throwaway database ON. Plain
+      # `postgres`, the maintenance database — never a database the suite writes
+      # to, which is why `dropTestDatabase` can refuse anything outside its own
+      # generated name pattern.
+      TEST_DATABASE_URL: postgres://allo:allo@127.0.0.1:5432/postgres
+    # The backend now needs BOTH: a Mongo replica set for the moderation suite
+    # (booted in-process by vitest.globalSetup.ts) and a real Postgres for the
+    # schema suite. Postgres is a service container rather than another
+    # in-process server because there is no memory-server equivalent, and a
+    # mocked insert accepts statements the server rejects outright — which is
+    # precisely the class of defect this port introduces.
+    #
+    # Plain `postgres:17-alpine`: this schema needs no PostGIS, no pgvector and
+    # no pg_trgm, so nothing here requires a runner that can host one.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: allo
+          POSTGRES_PASSWORD: allo
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U allo -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
