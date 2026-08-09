@@ -313,7 +313,7 @@ Only three event categories ever trigger client-side side effects beyond updatin
 | `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
 | `404` | Resource not found, or you are not a participant |
 | `429` | Rate limited by `createOxyRateLimit` (`@oxyhq/core/server`), applied per resolved user |
-| `503` | Matrix authentication is temporarily unavailable — retry after `Retry-After`. **Not** returned for database outages: there is no database-availability guard, so a store being unreachable surfaces as a `500`. |
+| `503` | Matrix authentication is temporarily unavailable — retry after `Retry-After`. Also returned by the connect middleware in `server.ts` when the initial database connection cannot be ESTABLISHED (`Database temporarily unavailable`). **Not** returned for an outage that starts after the process has connected: `connectToDatabase()` returns early once connected, so a store that dies mid-life surfaces as a `500`. |
 
 All error bodies are JSON.
 

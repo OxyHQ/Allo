@@ -91,11 +91,20 @@ looks like their own mistake.
 | `docs/architecture.mdx` §tree | `models/  Mongoose schemas (messaging only…)` | delete the directory line with the directory |
 | `docs/architecture.mdx` §Matrix | "the Mongoose models now back only the messaging domain" | |
 
-**4.2 — a documented behaviour that does not exist.** Both docs used to describe
-a guard answering `503 Database temporarily unavailable` when Mongo was
-disconnected. There is no such guard: the only 503s in the backend come from
-`middleware/matrixAuth.ts` and `routes/push.ts`, and `isDatabaseConnected()` has
-no callers. The docs now say so. If a readiness guard is added, it must cover
+**4.2 — a documented behaviour that is real, and narrower than either claim.**
+Both docs originally described a guard answering `503 Database temporarily
+unavailable` when Mongo was disconnected; the correction then over-shot and said
+no such guard existed. Both were half right. `server.ts` DOES mount a connect
+middleware that answers exactly that 503 — but only when the initial connection
+cannot be ESTABLISHED, because `connectToDatabase()` returns early on
+`readyState === 1` and caches its promise, so it never throws once connected. A
+store that dies mid-life is the case that produces a 500.
+
+`isDatabaseConnected()` genuinely has no callers; it is the vestige of a
+state-based check the middleware does not use. **The reliable question was never
+"does it exist" but "what exactly does it cover"** — the same shape as an expiry
+registry documenting a caller that was absent, and a wait loop believed unable to
+distinguish two cases whose discriminating data it was already fetching. If a readiness guard is added, it must cover
 **both** stores while both exist — a Mongo-only check would 503 the
 Postgres-backed social, moderation and bridge routes during a Mongo outage, and
 stay silent during a Postgres one.
