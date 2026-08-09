@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ReportCategory, ReportedType } from "../../../models/Report";
+import { REPORT_CATEGORIES } from "../../../db/schema/moderation";
 import {
   loadCrowdSourceConfig,
   resetCrowdSourceConfigForTests,
@@ -34,27 +34,27 @@ describe("allegation mapping", () => {
      * into a permanent 409 — days later, as a report silently stuck in a queue.
      */
     const forward = allegationsForCategories([
-      ReportCategory.SPAM,
-      ReportCategory.HARASSMENT,
-      ReportCategory.HATE_SPEECH,
+      "spam",
+      "harassment",
+      "hate_speech",
     ]);
     const reversed = allegationsForCategories([
-      ReportCategory.HATE_SPEECH,
-      ReportCategory.HARASSMENT,
-      ReportCategory.SPAM,
+      "hate_speech",
+      "harassment",
+      "spam",
     ]);
     expect(forward).toEqual(reversed);
     expect(forward).toEqual([...forward].sort());
   });
 
   it("deduplicates codes that share a mapping", () => {
-    const codes = allegationsForCategories([ReportCategory.OTHER, ReportCategory.OTHER]);
+    const codes = allegationsForCategories(["other", "other"]);
     expect(codes).toEqual(["other.unclassifiable"]);
   });
 
   it("maps every category to a real taxonomy code", () => {
     /** The vacuity floor: a mapping that silently returned nothing is not a report. */
-    for (const category of Object.values(ReportCategory)) {
+    for (const category of REPORT_CATEGORIES) {
       const codes = allegationsForCategories([category]);
       expect(codes).toHaveLength(1);
       expect(codes[0]).toMatch(/^[a-z_]+\.[a-z_]+$/);
@@ -67,7 +67,7 @@ describe("allegation mapping", () => {
      * or intent to defraud. Forcing it into `integrity.*` would tell a jury the
      * reporter alleged something they did not.
      */
-    expect(allegationsForCategories([ReportCategory.MISINFORMATION])).toEqual([
+    expect(allegationsForCategories(["misinformation"])).toEqual([
       "other.policy_specific",
     ]);
   });
@@ -76,10 +76,10 @@ describe("allegation mapping", () => {
 describe("report envelope input", () => {
   const report = {
     id: "report-1",
-    reportedType: ReportedType.USER,
+    reportedType: "user",
     reportedId: "user-1",
     reporter: "reporter-1",
-    categories: [ReportCategory.HARASSMENT, ReportCategory.SPAM],
+    categories: ["harassment", "spam"],
     details: "  they keep messaging me  ",
     createdAt: new Date("2026-07-30T10:00:00.000Z"),
   } as unknown as Parameters<typeof buildModerationReportInput>[0];
@@ -96,7 +96,7 @@ describe("report envelope input", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: ReportedType.USER,
+      reportedType: "user",
       subjectType: "identity.profile",
       snapshot: async () => snapshot,
     });
@@ -153,7 +153,7 @@ describe("report envelope input", () => {
 
   it("returns null when the account is gone", async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: ReportedType.USER,
+      reportedType: "user",
       subjectType: "identity.profile",
       snapshot: async () => null,
     });
@@ -220,7 +220,7 @@ describe("report envelope input", () => {
        */
       const snapshotFn = vi.fn().mockResolvedValue(snapshot);
       vi.mocked(subjectProviderFor).mockReturnValue({
-        reportedType: ReportedType.USER,
+        reportedType: "user",
         subjectType: "identity.profile",
         snapshot: snapshotFn,
       });
@@ -256,7 +256,7 @@ describe("report envelope input", () => {
        */
       const snapshotFn = vi.fn().mockResolvedValue(snapshot);
       vi.mocked(subjectProviderFor).mockReturnValue({
-        reportedType: ReportedType.USER,
+        reportedType: "user",
         subjectType: "identity.profile",
         snapshot: snapshotFn,
       });

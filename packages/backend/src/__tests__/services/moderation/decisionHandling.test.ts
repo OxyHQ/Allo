@@ -1,6 +1,7 @@
 import { DecisionSchema } from "@oxyhq/crowdsource-contracts";
-import mongoose from "mongoose";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { uuidv7 } from "@oxyhq/db";
 
 /**
  * What Allo does when a decision comes back — and, just as importantly, what it
@@ -14,15 +15,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * discover from a user report.
  */
 
-vi.mock("../../../models/Report", async () => {
-  const actual = await vi.importActual<typeof import("../../../models/Report")>(
-    "../../../models/Report",
-  );
-  return { ...actual, default: { findOne: vi.fn(), updateOne: vi.fn() } };
-});
-
-import Report from "../../../models/Report";
 import { resetCrowdSourceConfigForTests } from "../../../config/crowdsource";
+import { closePostgres, connectPostgres, getDb } from "../../../db";
+import type { ModerationOutboxEvent } from "../../../db/moderation/moderationOutboxRepository";
+import * as schema from "../../../db/schema";
+import { setUpTestDatabase, type TestDatabaseHandle } from "../../../db/testDatabase";
 import {
   applyDecisionOutboxEvent,
   plannedActionForOutcome,
@@ -31,11 +28,8 @@ import {
   legacyStatusForOutcome,
   reportStateForDecision,
 } from "../../../services/moderation/reportStatus";
-import { ReportStatus } from "../../../models/Report";
-import type { ModerationOutboxEvent } from "../../../services/moderation/ModerationOutboxService";
 
 const CASE_ID = "case_1";
-const REPORT_ID = new mongoose.Types.ObjectId();
 
 /**
  * A decision that actually satisfies `DecisionSchema`.
@@ -124,7 +118,7 @@ function assertValidDecision(candidate: Record<string, unknown>): Record<string,
 
 function event(decisionPayload: unknown): ModerationOutboxEvent {
   return {
-    _id: "moderation:decision.apply:evt_1",
+    id: "moderation:decision.apply:evt_1",
     kind: "decision.apply",
     payload: { eventId: "evt_1", caseId: CASE_ID, decision: decisionPayload },
     attempts: 1,
@@ -134,63 +128,102 @@ function event(decisionPayload: unknown): ModerationOutboxEvent {
   };
 }
 
+/**
+ * Against a REAL Postgres server, where this file used to mock the model.
+ *
+ * The claims are about what ends up ON the report — an outcome recorded, a
+ * revision guard that holds, and above all a column that must stay NULL — and a
+ * mocked `updateOne` accepts any statement, including ones the server refuses.
+ * The revision guard in particular is a compare-and-set written as
+ * `is not distinct from`, which no mock can evaluate: against a mock, an `=`
+ * would look identical and would silently drop the FIRST decision about every
+ * report ever filed.
+ */
 describe("decision application", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  let handle: TestDatabaseHandle;
+  let reportId: string;
+
+  beforeAll(async () => {
+    handle = await setUpTestDatabase();
+    connectPostgres(handle.databaseUrl);
+  }, 180_000);
+
+  afterAll(async () => {
+    await closePostgres();
+    await handle?.drop();
+  });
+
+  beforeEach(async () => {
     resetCrowdSourceConfigForTests();
-    vi.mocked(Report.updateOne).mockResolvedValue(
-      {} as unknown as Awaited<ReturnType<typeof Report.updateOne>>,
-    );
+    await getDb().delete(schema.reports);
+    reportId = uuidv7();
   });
 
   afterEach(() => {
     delete process.env.CROWDSOURCE_ENFORCEMENT_MODE;
     resetCrowdSourceConfigForTests();
-    vi.restoreAllMocks();
   });
 
-  function stubReport(stored: { decisionRevision?: number } = {}) {
-    vi.mocked(Report.findOne).mockReturnValue({
-      lean: async () => ({ _id: REPORT_ID, ...stored }),
-    } as unknown as ReturnType<typeof Report.findOne>);
+  /** A submitted report awaiting a decision on {@link CASE_ID}. */
+  async function seedReport(stored: { decisionRevision?: number } = {}): Promise<void> {
+    await getDb()
+      .insert(schema.reports)
+      .values({
+        id: reportId,
+        reportedType: "user",
+        reportedId: "oxy-user-1",
+        reporter: "oxy-reporter-1",
+        categories: ["harassment"],
+        localStatus: "submitted",
+        crowdSourceCaseId: CASE_ID,
+        ...(stored.decisionRevision === undefined
+          ? {}
+          : { decisionRevision: stored.decisionRevision }),
+      });
+  }
+
+  async function storedReport() {
+    const [row] = await getDb()
+      .select()
+      .from(schema.reports)
+      .where(eq(schema.reports.id, reportId));
+    return row;
   }
 
   it("records the outcome and the action it WOULD take, never one it did", async () => {
-    stubReport();
+    await seedReport();
     await applyDecisionOutboxEvent(event(decision()));
 
-    const update = vi.mocked(Report.updateOne).mock.calls[0]?.[1];
-    expect(update).toMatchObject({
-      $set: expect.objectContaining({
-        decisionOutcome: "violation",
-        decisionRevision: 2,
-        enforcedAction: "restrict",
-        status: ReportStatus.RESOLVED,
-        localStatus: "closed",
-      }),
+    const row = await storedReport();
+    expect(row).toMatchObject({
+      decisionOutcome: "violation",
+      decisionRevision: 2,
+      enforcedAction: "restrict",
+      status: "resolved",
+      localStatus: "closed",
     });
 
     /**
-     * The load-bearing negative. `enforcedAt` is what would distinguish "we
-     * decided this" from "we did this", and nothing in Allo may set it until an
-     * enforcement mechanism actually exists.
+     * The load-bearing negative, and it is stronger read off the row than off an
+     * update document: `enforced_at` is NULL because nothing has ever written it,
+     * not because one statement happened to omit it. It is what would distinguish
+     * "we decided this" from "we did this", and nothing in Allo may set it until
+     * an enforcement mechanism actually exists.
      */
-    const setFields = (update as { $set: Record<string, unknown> }).$set;
-    expect(setFields).not.toHaveProperty("enforcedAt");
+    expect(row?.enforcedAt).toBeNull();
   });
 
   it("does not act even in automatic mode, because there is nothing to act with", async () => {
     process.env.CROWDSOURCE_ENFORCEMENT_MODE = "automatic";
     resetCrowdSourceConfigForTests();
-    stubReport();
+    await seedReport();
 
     await applyDecisionOutboxEvent(event(decision()));
 
-    const update = vi.mocked(Report.updateOne).mock.calls[0]?.[1];
-    const setFields = (update as { $set: Record<string, unknown> }).$set;
-    expect(setFields).not.toHaveProperty("enforcedAt");
-    // Only the report row is touched. No Block, no Restrict, no user write.
-    expect(Report.updateOne).toHaveBeenCalledTimes(1);
+    expect((await storedReport())?.enforcedAt).toBeNull();
+    // Only the report row is touched. No block, no restrict, no user write.
+    expect(await getDb().select().from(schema.blocks)).toHaveLength(0);
+    expect(await getDb().select().from(schema.restricts)).toHaveLength(0);
   });
 
   it("ignores a revision that is not newer than the one already stored", async () => {
@@ -199,18 +232,34 @@ describe("decision application", () => {
      * must never overwrite a newer one. Compared against what is STORED, not
      * against arrival order.
      */
-    stubReport({ decisionRevision: 5 });
+    await seedReport({ decisionRevision: 5 });
+
     await applyDecisionOutboxEvent(event(decision({ revision: 3 })));
-    expect(Report.updateOne).not.toHaveBeenCalled();
+    expect((await storedReport())?.decisionRevision).toBe(5);
+    expect((await storedReport())?.decisionOutcome).toBeNull();
 
     await applyDecisionOutboxEvent(event(decision({ revision: 5 })));
-    expect(Report.updateOne).not.toHaveBeenCalled();
+    expect((await storedReport())?.decisionRevision).toBe(5);
+    expect((await storedReport())?.decisionOutcome).toBeNull();
   });
 
   it("applies a strictly newer revision", async () => {
-    stubReport({ decisionRevision: 5 });
+    await seedReport({ decisionRevision: 5 });
     await applyDecisionOutboxEvent(event(decision({ revision: 6 })));
-    expect(Report.updateOne).toHaveBeenCalledTimes(1);
+    expect((await storedReport())?.decisionRevision).toBe(6);
+  });
+
+  it("applies the FIRST decision, whose stored revision is NULL", async () => {
+    /**
+     * The case an `=` comparison drops in silence, and the reason the repository
+     * compares with `is not distinct from`: `decision_revision = NULL` is NULL, so
+     * an equality guard matches no row — and most reports have never been decided,
+     * which makes this the common path rather than an edge one. Only a real server
+     * can tell the two spellings apart.
+     */
+    await seedReport();
+    await applyDecisionOutboxEvent(event(decision({ revision: 2 })));
+    expect((await storedReport())?.decisionRevision).toBe(2);
   });
 
   it("retries — never dead-letters — a decision it cannot parse", async () => {
@@ -221,24 +270,20 @@ describe("decision application", () => {
      * apply itself; dead-lettering would discard a real decision because this
      * deployment was behind.
      */
-    stubReport();
+    await seedReport();
     const thrown = await applyDecisionOutboxEvent(event({ nonsense: true })).catch(
       (error: unknown) => error,
     );
 
     expect(thrown).toBeInstanceOf(Error);
     expect(thrown).not.toHaveProperty("retryable", false);
-    expect(Report.updateOne).not.toHaveBeenCalled();
+    expect((await storedReport())?.decisionOutcome).toBeNull();
   });
 
   it("is a no-op when no local report matches the case", async () => {
     // A merged case (§7.3) can name a case another report opened. Nothing to apply.
-    vi.mocked(Report.findOne).mockReturnValue({
-      lean: async () => null,
-    } as unknown as ReturnType<typeof Report.findOne>);
-
     await expect(applyDecisionOutboxEvent(event(decision()))).resolves.toBeUndefined();
-    expect(Report.updateOne).not.toHaveBeenCalled();
+    expect(await getDb().select().from(schema.reports)).toHaveLength(0);
   });
 
   it("dead-letters an event with no caseId", async () => {
@@ -255,8 +300,8 @@ describe("decision application", () => {
 
 describe("outcome mapping", () => {
   it("maps only real verdicts to verdict statuses", () => {
-    expect(legacyStatusForOutcome("violation")).toBe(ReportStatus.RESOLVED);
-    expect(legacyStatusForOutcome("no_violation")).toBe(ReportStatus.DISMISSED);
+    expect(legacyStatusForOutcome("violation")).toBe("resolved");
+    expect(legacyStatusForOutcome("no_violation")).toBe("dismissed");
   });
 
   it("never turns 'we could not tell' into 'nothing was wrong'", () => {
@@ -273,7 +318,7 @@ describe("outcome mapping", () => {
       "escalated",
       "an_outcome_from_the_future",
     ]) {
-      expect(legacyStatusForOutcome(outcome)).toBe(ReportStatus.REVIEWED);
+      expect(legacyStatusForOutcome(outcome)).toBe("reviewed");
     }
   });
 

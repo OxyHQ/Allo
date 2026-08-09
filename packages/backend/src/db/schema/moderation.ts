@@ -21,8 +21,34 @@ import {
 import { createdAt, timestamptz, updatedAt } from "@oxyhq/db";
 import { checkArrayWithin, checkNonEmptyArray, checkOneOf } from "./columns";
 
+/**
+ * The objects Allo accepts reports about.
+ *
+ * All three are ACCEPTED. Only `user` is ever delivered — see
+ * `services/moderation/subjects/registry.ts`. The other two are stored locally
+ * with a recorded reason, which is a different claim from "delivery failed" and
+ * is kept distinguishable on purpose.
+ */
 export const REPORTED_TYPES = ["user", "message", "conversation"] as const;
 export type ReportedType = (typeof REPORTED_TYPES)[number];
+
+/**
+ * Narrows an arbitrary string to a reportable type.
+ *
+ * A type guard rather than a membership check at each call site: the compiler
+ * has to KNOW the value is a `ReportedType` before it reaches a query or an
+ * insert, and an `includes` that returns a plain boolean leaves it a `string` —
+ * which is the point at which somebody reaches for a cast.
+ *
+ * It lives beside the tuple, and the tuple is what renders
+ * `reports_reported_type_check`. So the guard, the TypeScript union and the
+ * database constraint are three views of ONE list: adding a reportable type is a
+ * single edit that a migration then has to catch up with, rather than three
+ * edits of which two can be forgotten.
+ */
+export function isReportedType(value: string): value is ReportedType {
+  return (REPORTED_TYPES as readonly string[]).includes(value);
+}
 
 export const REPORT_CATEGORIES = [
   "spam",
@@ -69,12 +95,37 @@ export const MODERATION_OUTBOX_STATUSES = [
 export type ModerationOutboxStatus = (typeof MODERATION_OUTBOX_STATUSES)[number];
 
 /**
+ * The three Mongoose `maxlength` bounds this table carried.
+ *
+ * Exported because `db/moderation/reportRepository.ts` truncates to them at every
+ * write and the two must not be able to disagree — a truncation to 501 characters
+ * against a CHECK of 500 is a write that fails for a reason nobody would look for.
+ */
+export const MAX_REPORT_DETAILS_LENGTH = 500;
+export const MAX_REPORT_LOCAL_STATUS_REASON_LENGTH = 300;
+export const MAX_REPORT_DELIVERY_ERROR_LENGTH = 2_000;
+
+/**
  * One person's report of one thing.
  *
  * `categories` stays an ARRAY. Mongoose declared it `[String]` with an `enum`
  * AND a separate "at least one" validator, so the port keeps both as separate
  * constraints — containment alone is satisfied by an empty array, which is
  * precisely the case the validator existed to reject.
+ *
+ * ## The three length bounds are CHECKs as well as truncations
+ *
+ * Mongoose's `maxlength` REJECTED an over-long value; `reportRepository`
+ * TRUNCATES it, which is what every existing caller already did to these three
+ * values before handing them over — the route slices `details`, the delivery
+ * worker slices its error — so a 201 does not become a 500 for a report whose
+ * details ran one character long.
+ *
+ * That is a guard at one chokepoint, and the database can express the bound
+ * itself, so it does both: the repository decides what a REPORTER experiences,
+ * and the CHECK decides what is STORABLE. The constraint is therefore
+ * unreachable through the repository by construction — which is the point. It
+ * exists for the writer that does not exist yet, and for `psql`.
  */
 export const reports = pgTable(
   "reports",
@@ -83,7 +134,15 @@ export const reports = pgTable(
     reportedType: text({ enum: REPORTED_TYPES }).notNull(),
     reportedId: text().notNull(),
     reporter: text().notNull(),
-    categories: text().array().notNull(),
+    /**
+     * `enum:` narrows the ELEMENT type only — the DDL is still `text[]`, and
+     * `reports_categories_within_check` below is what the server enforces. Naming
+     * the tuple here means a row READ back is typed as the values that CHECK
+     * already guarantees, so a consumer like `allegationsForCategories` receives
+     * `ReportCategory[]` rather than `string[]` and needs no cast to look up a
+     * code.
+     */
+    categories: text({ enum: REPORT_CATEGORIES }).array().notNull(),
     details: text(),
     status: text({ enum: REPORT_STATUSES }).notNull().default("pending"),
     localStatus: text({ enum: REPORT_LOCAL_STATUSES }).notNull().default("received"),
@@ -127,6 +186,24 @@ export const reports = pgTable(
     checkArrayWithin("reports_categories_within_check", t.categories, REPORT_CATEGORIES),
     checkNonEmptyArray("reports_categories_non_empty_check", t.categories),
     check("reports_decision_revision_check", sql`${t.decisionRevision} >= 1`),
+    /**
+     * `sql.raw` for the bound, so the constant is rendered as migration TEXT.
+     * Interpolating it normally writes a bound-parameter placeholder (`$1`) into
+     * the generated DDL, which generates cleanly and fails at APPLY time — DDL
+     * cannot carry a parameter.
+     */
+    check(
+      "reports_details_length_check",
+      sql.raw(`length(details) <= ${MAX_REPORT_DETAILS_LENGTH}`),
+    ),
+    check(
+      "reports_local_status_reason_length_check",
+      sql.raw(`length(local_status_reason) <= ${MAX_REPORT_LOCAL_STATUS_REASON_LENGTH}`),
+    ),
+    check(
+      "reports_last_delivery_error_length_check",
+      sql.raw(`length(last_delivery_error) <= ${MAX_REPORT_DELIVERY_ERROR_LENGTH}`),
+    ),
   ],
 );
 

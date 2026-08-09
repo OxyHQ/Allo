@@ -6,9 +6,9 @@ import { deliverReportOutboxEvent } from "./ModerationDeliveryWorker";
 import {
   claimModerationOutboxEvent,
   completeModerationOutboxEvent,
-  failModerationOutboxEvent,
   type ModerationOutboxEvent,
-} from "./ModerationOutboxService";
+} from "../../db/moderation/moderationOutboxRepository";
+import { failModerationOutboxEvent } from "./ModerationOutboxService";
 
 /**
  * The loop that drains the outbox.
@@ -76,7 +76,7 @@ export async function dispatchModerationOutbox(options?: {
 
     try {
       await handle(event);
-      await completeModerationOutboxEvent(event._id, leaseOwner);
+      await completeModerationOutboxEvent(event.id, leaseOwner);
       result.processed += 1;
     } catch (error: unknown) {
       const { deadLettered } = await failModerationOutboxEvent(event, leaseOwner, error);
@@ -86,7 +86,7 @@ export async function dispatchModerationOutbox(options?: {
        * about an account, and an operational log is not where that belongs.
        */
       logger.warn("[CrowdSource] outbox event failed", {
-        eventId: event._id,
+        eventId: event.id,
         kind: event.kind,
         attempts: event.attempts,
         deadLettered,

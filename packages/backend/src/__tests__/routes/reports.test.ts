@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from "mongoose";
+import { uuidv7 } from "@oxyhq/db";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,7 @@ vi.mock("../../services/moderation/ReportIntakeService", async () => {
 });
 
 import { resetBridgesConfigForTests } from "../../config/bridges";
-import { ReportCategory, ReportedType } from "../../models/Report";
+import type { ReportedType } from "../../db/schema/moderation";
 import reportsRouter from "../../routes/reports";
 import { createReport } from "../../services/moderation/ReportIntakeService";
 import { MAX_REPORTED_IDENTIFIER_BYTES } from "../../services/moderation/subjectIdentity";
@@ -51,10 +51,10 @@ function appWithAuth(): express.Express {
   return app;
 }
 
-function post(reportedId: string, reportedType: ReportedType = ReportedType.USER) {
+function post(reportedId: string, reportedType: ReportedType = "user") {
   return request(appWithAuth())
     .post("/api/reports")
-    .send({ reportedType, reportedId, categories: [ReportCategory.HARASSMENT] });
+    .send({ reportedType, reportedId, categories: ["harassment"] });
 }
 
 describe("POST /api/reports", () => {
@@ -69,7 +69,7 @@ describe("POST /api/reports", () => {
     resetBridgesConfigForTests();
     vi.mocked(createReport).mockResolvedValue({
       report: {
-        _id: new mongoose.Types.ObjectId(),
+        id: uuidv7(),
         createdAt: new Date("2026-08-02T10:00:00.000Z"),
       },
     } as unknown as Awaited<ReturnType<typeof createReport>>);
@@ -197,7 +197,7 @@ describe("POST /api/reports", () => {
         expect.objectContaining({
           reporter: REPORTER,
           reportedId: `@${OTHER_USER}:${SERVER_NAME}`,
-          reportedType: ReportedType.USER,
+          reportedType: "user",
         }),
       );
     });

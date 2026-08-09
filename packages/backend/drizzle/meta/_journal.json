@@ -8,6 +8,13 @@
       "when": 1786301401830,
       "tag": "0000_sloppy_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786311844570,
+      "tag": "0001_fantastic_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

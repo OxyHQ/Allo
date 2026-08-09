@@ -1,5 +1,5 @@
 import type { TaxonomyCode } from "@oxyhq/crowdsource-contracts";
-import { ReportCategory } from "../../models/Report";
+import type { ReportCategory } from "../../db/schema/moderation";
 
 /**
  * Allo's report categories, translated into CrowdSource's universal taxonomy.
@@ -33,9 +33,9 @@ import { ReportCategory } from "../../models/Report";
 export const REPORT_TAXONOMY_VERSION = "2026.07";
 
 const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = Object.freeze({
-  [ReportCategory.SPAM]: "integrity.spam",
-  [ReportCategory.HATE_SPEECH]: "hate.protected_targeting",
-  [ReportCategory.HARASSMENT]: "harassment.targeted_abuse",
+  spam: "integrity.spam",
+  hate_speech: "hate.protected_targeting",
+  harassment: "harassment.targeted_abuse",
   /**
    * `misinformation` has no home in §6.3's eleven families — the closest are
    * `integrity.coordinated_manipulation` (a claim about organised behaviour) and
@@ -45,7 +45,7 @@ const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = O
    * taxonomy has no name for it". Forcing it into `integrity.*` would tell a jury
    * the reporter alleged something they did not.
    */
-  [ReportCategory.MISINFORMATION]: "other.policy_specific",
+  misinformation: "other.policy_specific",
   /**
    * The activity code, not the nudity code. They are different claims and Allo
    * offers one category for both; the stronger code is the honest reading of what
@@ -53,8 +53,8 @@ const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = O
    * Alleging nudity when explicit activity was reported would understate the report
    * and could route it to a lighter review.
    */
-  [ReportCategory.EXPLICIT_CONTENT]: "sexual_content.explicit_activity",
-  [ReportCategory.OTHER]: "other.unclassifiable",
+  explicit_content: "sexual_content.explicit_activity",
+  other: "other.unclassifiable",
 });
 
 /**

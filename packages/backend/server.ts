@@ -365,15 +365,13 @@ db.on("error", (error: Error) => {
 });
 db.once("open", () => {
   logger.info("Connected to MongoDB successfully");
-  // Load the models still backed by Mongo. Social settings, blocks, restricts
-  // and behaviour are gone from this list because they are gone from the
-  // service: those four routes now read and write Postgres.
+  // Load the models still backed by Mongo. Social settings and the whole
+  // CrowdSource moderation domain — reports, the inbound event log and the
+  // outbox — are gone from this list because they are gone from the service:
+  // those routes and workers now read and write Postgres.
   require("./src/models/Conversation");
   require("./src/models/Message");
   require("./src/models/Device");
-  require("./src/models/Report");
-  require("./src/models/ModerationOutbox");
-  require("./src/models/ModerationEvent");
   require("./src/models/BridgeAccount");
   require("./src/models/BridgeLinkSession");
   require("./src/models/BridgeProxyLease");

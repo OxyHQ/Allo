@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BRIDGE_NETWORK_IDS, resetBridgesConfigForTests } from "../../../config/bridges";
-import Report from "../../../models/Report";
+import { MAX_REPORT_LOCAL_STATUS_REASON_LENGTH } from "../../../db/schema/moderation";
 import {
   moderationSubjectReasons,
   resolveModerationSubject,
@@ -216,25 +216,25 @@ describe("a deployment with no Matrix configured", () => {
 
 describe("the reasons written onto a report", () => {
   /**
-   * `Report.localStatusReason` is bounded by the schema, and intake writes the
+   * `reports.local_status_reason` is bounded by a CHECK, and intake writes the
    * reason INSIDE the transaction that stores the report. A reason one character
-   * too long is therefore not a cosmetic problem: Mongoose rejects the document,
-   * the transaction aborts, and `POST /reports` answers 500 for exactly the reports
-   * this feature was written to record properly.
+   * too long is therefore not a cosmetic problem — but WHAT it costs changed with
+   * the port, and both halves are worth stating.
+   *
+   * Under Mongoose the schema REJECTED it, the transaction aborted, and
+   * `POST /reports` answered 500 for exactly the reports this feature exists to
+   * record properly. `reportRepository` now TRUNCATES to the same bound, so an
+   * over-long reason is stored with its tail cut instead — which means the
+   * failure this test prevents is no longer a 500 but a reason that stops making
+   * sense halfway through, in the one place an operator reads to find out why a
+   * report never left. That is quieter and therefore worth a test rather than
+   * less.
+   *
+   * The bound is read from the constant the CHECK and the truncation are both
+   * rendered from, so there is one number here, not a third copy of it.
    */
-  function localStatusReasonLimit(): number {
-    const configured = Report.schema.path("localStatusReason").options.maxlength;
-    if (typeof configured !== "number") {
-      throw new Error(
-        "Report.localStatusReason has no numeric maxlength; this test can no longer " +
-          "check what it claims to check.",
-      );
-    }
-    return configured;
-  }
-
   it("every reason fits the field it is stored in", () => {
-    const limit = localStatusReasonLimit();
+    const limit = MAX_REPORT_LOCAL_STATUS_REASON_LENGTH;
     for (const reason of moderationSubjectReasons()) {
       expect(reason.length).toBeLessThanOrEqual(limit);
     }
