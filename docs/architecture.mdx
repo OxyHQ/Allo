@@ -161,7 +161,11 @@ Allo writes none of its own. `server.ts` applies three middlewares from `@oxyhq/
 - `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.
 - `createOxyAuthMiddleware(oxyClient)` — described above.
 
-There is **no** database-availability guard, despite `utils/database.ts` still exporting `isDatabaseConnected()` — that function has no callers, and the only 503s the backend returns come from Matrix authentication (`middleware/matrixAuth.ts`) and push. A request that arrives while a store is unreachable fails as a 500, so a client cannot distinguish "retry shortly" from a real fault. Worth fixing when the messaging switch touches `utils/database.ts`, and worth covering both stores rather than only Mongo.
+There **is** a database guard, and what it covers is narrower than its name suggests. `server.ts` mounts a connect middleware ahead of every route which answers `503 Database temporarily unavailable` when `connectToDatabase()` throws — so a deployment whose Mongo was never reachable does return 503. But `connectToDatabase()` returns early on `readyState === 1` and caches its promise, so **after a successful connect it never throws again**: a store that dies mid-life produces a `500`, and a client still cannot distinguish "retry shortly" from a real fault for the outage that actually happens in production.
+
+Two things follow. It covers cold start only, and it covers MONGO only — which matters now that social, moderation and bridges read Postgres, since a Postgres that is unreachable at boot gets no guard at all. And `utils/database.ts` still exports `isDatabaseConnected()` with **no callers**: that is the vestige of a state-based check, and it is not what the middleware uses.
+
+A previous revision of this page said there was no guard at all. That was half right — right about the steady state, wrong about cold start — and it is corrected here rather than quietly, because a corrected document carrying a new inaccuracy is what makes the next reader stop checking.
 
 ### Push notifications
 
