@@ -1,12 +1,13 @@
 /**
  * Shared message transport DTOs for Allo.
  *
- * Mirrors the serialized shape of the `Message` mongoose model
- * (`packages/backend/src/models/Message.ts`) as returned by the
- * messages routes (`packages/backend/src/routes/messages.ts`).
+ * The wire shape the messages routes return, composed by
+ * `packages/backend/src/utils/messageDto.ts` from the Postgres rows.
  *
- * Mongoose `Map` fields serialize to JSON objects, so `readBy` and
- * `reactions` are modeled as `Record<string, ...>` on the wire.
+ * `readBy` and `reactions` are `Record<string, ...>` on the wire because that
+ * is what they have always been; the rows behind them are now
+ * `message_reads` and `message_reactions`, folded back into keyed collections
+ * by the serializer.
  */
 
 export type MediaKind = "image" | "video" | "audio" | "file";
@@ -49,12 +50,23 @@ export interface EncryptedMediaItem {
 /**
  * Serialized message returned by the messages API.
  *
- * The backend serves lean mongoose documents; `Date` fields are typed
- * as `Date` to match the lean document shape the backend assigns from,
- * while clients accept the JSON-serialized ISO string at runtime.
+ * `Date` fields are typed as `Date` because that is what the backend assigns
+ * from; clients receive the JSON-serialized ISO string at runtime.
+ *
+ * ## `_id` is the v1 spelling of `id`, and it is a VERSIONED CONTRACT
+ *
+ * Same rule, and same reason, as `ConversationDto`: `id` is canonical and
+ * `_id` is derived from it by the one serializer, so they cannot disagree.
+ * `stores/messagesStore.ts` reads `String(msg._id)` with no fallback — which
+ * on absence yields the literal string `"undefined"` rather than an empty one
+ * — so a shipped build needs `_id` to keep addressing messages at all. It
+ * retires when every supported client reads `id`; `hooks/useRealtimeMessaging.ts`
+ * already falls back correctly, so that one store is the condition.
  */
 export interface MessageDto {
-  _id?: unknown;
+  id: string;
+  /** The v1 spelling of {@link MessageDto.id}. See the note above. */
+  _id: string;
   conversationId: string;
   senderId: string;
   senderDeviceId: number;

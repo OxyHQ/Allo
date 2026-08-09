@@ -319,13 +319,20 @@ All error bodies are JSON.
 
 ## Schemas
 
-The messaging models are still Mongoose, in `packages/backend/src/models/` (the social, moderation and bridge domains moved to PostgreSQL — see `packages/backend/src/db/schema/`):
+Every table is drizzle, in `packages/backend/src/db/schema/`. There are no Mongoose models.
 
-- `Conversation.ts` — direct / group, participants[], unreadCounts, archivedBy, lastMessage
-- `Message.ts` — ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo
-- `Device.ts` — userId + deviceId (unique), identityKeyPublic, signedPreKey, preKeys[], registrationId
-- `UserSettings.ts` — appearance / privacy / security / profileCustomization
-- `Block.ts`, `Restrict.ts`, `PushToken.ts`, `UserBehavior.ts`
+- `conversations.ts` — `conversations` (direct / group, plus the `last_message_*` preview) and `conversation_participants` (one membership per person, carrying `unread_count` and `archived_at`)
+- `messages.ts` — `messages` (ciphertext, `sender_device_id`, `encryption_version`, `encrypted_media`) plus `message_reads`, `message_deliveries` and `message_reactions`
+- `devices.ts` — `devices` (unique on `(user_id, device_id)`, identity key and signed pre-key) and `device_pre_keys`
+- `social.ts` — `user_settings`, `blocks`, `restricts`, `user_behavior`
+- `moderation.ts`, `bridges.ts`
+
+Two wire shapes are NOT stored the way they are served, and `packages/backend/src/utils/` is where they are composed:
+
+- **`unreadCounts`** is a `{userId: count}` object rebuilt per response from each participant row's `unread_count`. It is not a column.
+- **`archivedBy` is gone.** Archival is one participant's `archived_at`, applied as a filter on the conversation list, and is never reported to the other participants.
+
+Conversations and messages carry both `id` and `_id`, with `_id` derived from `id` so the two cannot disagree; `_id` is the v1 spelling kept for shipped clients that read it with no fallback. Row ids are text and come in two shapes — a uuid v7 for rows created since the Postgres cutover, and the original Mongo ObjectId hex for rows the backfill carried over — so nothing may assume a format.
 - `Report.ts`, `ModerationEvent.ts`, `ModerationOutbox.ts` — the moderation pipeline
 
 TypeScript shapes are re-exported from `@allo/shared-types` for the frontend.

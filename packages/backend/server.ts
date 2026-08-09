@@ -1,8 +1,6 @@
 // --- Imports ---
 import express from "express";
 import http from "http";
-import mongoose from "mongoose";
-import { connectToDatabase } from "./src/utils/database";
 import { Server as SocketIOServer } from "socket.io";
 import type { DisconnectReason, Namespace } from "socket.io";
 import dotenv from "dotenv";
@@ -10,8 +8,8 @@ import { oxyClient } from "@oxyhq/core";
 import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxyhq/core/server";
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
-import Conversation from "./src/models/Conversation";
-import { connectPostgres } from "./src/db";
+import { connectPostgres, ensurePostgresReachable, getDb } from "./src/db";
+import { isConversationParticipant } from "./src/db/messaging/conversationRepository";
 import { startExpirySweep } from "./src/db/expiry";
 
 // Routers
@@ -123,13 +121,22 @@ app.use(PUSH_GATEWAY_MOUNT_PATH, createPushGatewayRoutes());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection middleware
+/**
+ * Database availability, at cold start only.
+ *
+ * The same guard this replaced, one store over: `ensurePostgresReachable()`
+ * probes ONCE and caches the result, so this costs a round trip on the first
+ * request after boot and nothing on every request after it. A database that
+ * dies mid-life is NOT covered here and never was — that is a 500 from whichever
+ * handler touches it. See `src/db/index.ts` for why it is deliberately not a
+ * per-request check.
+ */
 app.use(async (req, res, next) => {
   try {
-    await connectToDatabase();
+    await ensurePostgresReachable();
     next();
   } catch (error) {
-    logger.error("MongoDB connection unavailable", error);
+    logger.error("Postgres connection unavailable", error);
     if (res.headersSent) {
       return;
     }
@@ -151,6 +158,15 @@ app.use((req, res, next) => {
 });
 
 const server = http.createServer(app);
+
+/**
+ * Longest conversation id worth taking from a socket client.
+ *
+ * Generous against both shapes this schema stores — a uuid v7 is 36 characters
+ * and an ObjectId hex is 24 — so it bounds the input without encoding either
+ * format as a rule.
+ */
+const MAX_CONVERSATION_ID_LENGTH = 64;
 
 const SOCKET_CONFIG = {
   PING_TIMEOUT: 60000,
@@ -238,15 +254,25 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
   // scope a room without an ownership check (these rooms carry message ciphertext,
   // edits, reactions, deletions and typing indicators).
   socket.on("joinConversation", async (conversationId: string) => {
-    if (typeof conversationId !== "string" || !mongoose.isValidObjectId(conversationId)) {
+    /**
+     * A bound on the input, not a format check. `mongoose.isValidObjectId` used
+     * to stand here, and it cannot survive the port for a reason worth stating:
+     * conversation ids are `text` and come in TWO shapes — a uuid v7 for rows
+     * created since, and the ObjectId hex the backfill carried over verbatim —
+     * so an ObjectId-shaped test would now reject every conversation created
+     * after the cutover. The authorization was never the format anyway; it is
+     * the participant lookup below.
+     */
+    if (
+      typeof conversationId !== "string" ||
+      conversationId.length === 0 ||
+      conversationId.length > MAX_CONVERSATION_ID_LENGTH
+    ) {
       return;
     }
 
     try {
-      const isParticipant = await Conversation.exists({
-        _id: conversationId,
-        "participants.userId": userId,
-      });
+      const isParticipant = await isConversationParticipant(getDb(), conversationId, userId);
 
       if (!isParticipant) {
         logger.warn(`Client ${socket.id} denied joinConversation (not a participant)`, {
@@ -358,25 +384,9 @@ app.get("/", async (req, res) => {
   res.json({ message: "Welcome to Allo API", version: "1.0.0" });
 });
 
-// --- MongoDB Connection ---
-const db = mongoose.connection;
-db.on("error", (error: Error) => {
-  logger.error("MongoDB connection error", error);
-});
-db.once("open", () => {
-  logger.info("Connected to MongoDB successfully");
-  // The last three models still backed by Mongo. Social settings, the whole
-  // CrowdSource moderation domain and the whole bridges domain are gone from
-  // this list because they are gone from the service: those routes, workers and
-  // sweeps now read and write Postgres. Messaging is what remains.
-  require("./src/models/Conversation");
-  require("./src/models/Message");
-  require("./src/models/Device");
-});
-
 /**
- * The Postgres connection string. REQUIRED — this service has routes that cannot
- * answer without it.
+ * The Postgres connection string. REQUIRED — this service stores everything it
+ * owns there and no route can answer without it.
  *
  * Read and validated at boot rather than on first use, so a deployment with a
  * missing or malformed URL dies immediately and visibly instead of serving 500s
@@ -386,8 +396,8 @@ function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url || url.trim().length === 0) {
     throw new Error(
-      "DATABASE_URL is not set. The profile settings, blocks and restricts routes " +
-        "run on Postgres and cannot answer without it.",
+      "DATABASE_URL is not set. Every route in this service runs on Postgres and " +
+        "cannot answer without it.",
     );
   }
   return url;
@@ -406,7 +416,6 @@ const bootServer = async () => {
      * happens to touch a table.
      */
     const postgres = connectPostgres(requireDatabaseUrl());
-    await connectToDatabase();
     /**
      * The replacement for three Mongo TTL indexes (`db/expiry.ts`). Started here
      * because Mongo's TTL monitor was never something this codebase started
@@ -414,8 +423,8 @@ const bootServer = async () => {
      * invisible until a table has grown for months.
      */
     startExpirySweep(postgres, logger);
-    // Started after the database is reachable: the dispatcher's first act is a
-    // claim query, and a drain against a disconnected Mongo would only log noise.
+    // Started after the pool is open: the dispatcher's first act is a claim
+    // query, and a drain with nothing to query would only log noise.
     // A no-op unless CROWDSOURCE_ENABLED=true.
     startModerationOutboxDispatcher();
     /**
@@ -428,7 +437,7 @@ const bootServer = async () => {
       logger.info(`Allo backend server running on port ${PORT}`);
     });
   } catch (error) {
-    logger.error("Failed to start server: a database is unreachable or misconfigured", error);
+    logger.error("Failed to start server: the database is unreachable or misconfigured", error);
     process.exit(1);
   }
 };

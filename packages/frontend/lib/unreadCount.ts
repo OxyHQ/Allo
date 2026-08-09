@@ -1,5 +1,3 @@
-import type { ConversationDto } from '@allo/shared-types';
-
 /**
  * A conversation's unread count for ONE viewer.
  *
@@ -13,17 +11,25 @@ import type { ConversationDto } from '@allo/shared-types';
  * A viewer we cannot name yet has no entry to read, so the count is 0 rather
  * than a guess; the list refetches once the id arrives.
  *
- * The backend serializes the field as a JSON object but types it as
- * `Map | Record` to match its lean/`toObject()` shapes, so both are handled.
+ * ## Why the parameter is typed here rather than as `ConversationDto['unreadCounts']`
+ *
+ * That field is REQUIRED on the DTO, which is a claim about what the server
+ * sends — true, and worth stating there, because the count is reassembled per
+ * response and an omission would otherwise be invisible. It is NOT a claim about
+ * what this function is handed: conversations also arrive from the AsyncStorage
+ * cache written by an older build, where the field can simply be absent. So the
+ * guard below is real, and coupling the signature to the DTO would type the
+ * absent case out of existence while it still happens at runtime.
+ *
+ * There is deliberately no `Map` branch. `unreadCounts` reached this function as
+ * a `Map` only in the type — JSON has no such shape and the wire never carried
+ * one; the union existed because the backend typed its Mongoose `Map` into the
+ * transport DTO, and that is exactly what the Postgres port removed.
  */
 export function viewerUnreadCount(
-  unreadCounts: ConversationDto['unreadCounts'],
+  unreadCounts: Record<string, number> | undefined,
   viewerId: string | undefined
 ): number {
   if (!unreadCounts || !viewerId) return 0;
-  const count =
-    unreadCounts instanceof Map
-      ? unreadCounts.get(viewerId)
-      : unreadCounts[viewerId];
-  return count || 0;
+  return unreadCounts[viewerId] || 0;
 }

@@ -1,11 +1,15 @@
 /**
  * Shared conversation transport DTOs for Allo.
  *
- * Mirrors the serialized shape of the `Conversation` mongoose model
- * (`packages/backend/src/models/Conversation.ts`) and the enriched
- * participant shape produced by `oxyUserDisplay`
- * (`packages/backend/src/utils/oxyUserDisplay.ts`) as returned by
- * `GET /api/conversations`.
+ * The wire shape `GET /api/conversations` returns, composed by
+ * `packages/backend/src/utils/conversationDto.ts` from the Postgres rows and
+ * the enriched participant shape produced by `oxyUserDisplay`
+ * (`packages/backend/src/utils/oxyUserDisplay.ts`).
+ *
+ * This is a TRANSPORT type, not a mirror of a table: `unreadCounts` is
+ * reassembled from a column on the participant rows, and `archivedBy` is gone
+ * because archival is now one participant's `archivedAt` rather than a list on
+ * the conversation.
  */
 
 export type ConversationType = "direct" | "group";
@@ -59,24 +63,39 @@ export interface ConversationLastMessage {
  * Serialized conversation returned by the conversations API, with
  * participants enriched via Oxy.
  *
- * `unreadCounts` is a mongoose `Map` on the model; it serializes to a
- * JSON object on the wire but is typed as `Map | Record` to match the
- * lean / `toObject()` shapes the backend assigns from without a cast.
+ * ## `_id` is the v1 spelling of `id`, and it is a VERSIONED CONTRACT
+ *
+ * The rows carry `id`, so `id` is canonical and `_id` is derived from it by
+ * the one serializer — they cannot disagree. `_id` is kept because shipped
+ * clients read it with NO fallback (`stores/conversationsStore.ts` composes
+ * `String(conv._id ?? '')` in two places), and a build already on a phone
+ * cannot be recalled: serving `id` alone would give every conversation an
+ * empty id, collapse the whole list onto one key, and do it with 200s and
+ * valid JSON. It retires when every supported client reads `id` — four other
+ * call sites already do (`app/(chat)/c/[id].tsx`, `hooks/useRealtimeMessaging.ts`,
+ * `lib/chat/alloApiConversations.ts`), so the remaining two are the condition.
+ *
+ * `unreadCounts` is REASSEMBLED per response from each participant row's own
+ * `unreadCount`. It is required rather than optional precisely because a
+ * missing one is invisible: `viewerUnreadCount` returns 0 on absence, so
+ * every unread badge in the app would silently read zero.
  */
 export interface ConversationDto {
-  _id?: unknown;
-  type?: ConversationType;
+  id: string;
+  /** The v1 spelling of {@link ConversationDto.id}. See the note above. */
+  _id: string;
+  type: ConversationType;
   participants: EnrichedConversationParticipant[];
   name?: string;
   description?: string;
   avatar?: string;
   /** Color theme ID shared with all participants. */
   theme?: string;
-  createdBy?: string;
+  createdBy: string;
   lastMessageAt?: Date;
   lastMessage?: ConversationLastMessage;
-  unreadCounts?: Map<string, number> | Record<string, number>;
-  archivedBy?: string[];
-  createdAt?: Date;
-  updatedAt?: Date;
+  /** userId -> that participant's unread count. */
+  unreadCounts: Record<string, number>;
+  createdAt: Date;
+  updatedAt: Date;
 }

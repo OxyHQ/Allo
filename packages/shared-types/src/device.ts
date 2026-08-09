@@ -1,9 +1,13 @@
 /**
  * Shared device / Signal Protocol key transport DTOs for Allo.
  *
- * Mirrors the serialized shape of the `Device` mongoose model
- * (`packages/backend/src/models/Device.ts`) as exchanged by the
- * devices routes (`packages/backend/src/routes/devices.ts`).
+ * The wire shape the devices routes exchange, composed by
+ * `packages/backend/src/utils/deviceDto.ts` from the Postgres rows.
+ *
+ * These carry `id` and NOT the `_id` alias its conversation and message
+ * siblings keep: no client reads a device's own row id under either spelling
+ * (they address a device by Signal's `deviceId`), so there is no shipped
+ * reader to keep working and the rename is a clean cut.
  */
 
 /**
@@ -27,17 +31,18 @@ export interface PreKey {
  * Serialized device record returned by the devices API.
  */
 export interface DeviceDto {
-  _id?: unknown;
+  id: string;
   userId: string;
+  /** Signal's own device number, 1-based and unique only within a user. */
   deviceId: number;
   /** Base64 encoded public identity key. */
   identityKeyPublic: string;
   signedPreKey: SignedPreKey;
   preKeys?: PreKey[];
   registrationId: number;
-  lastSeen?: Date;
-  createdAt?: Date;
-  updatedAt?: Date;
+  lastSeen: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /**
@@ -45,7 +50,7 @@ export interface DeviceDto {
  * (`GET /api/devices/user/:userId`) — excludes one-time pre-keys.
  */
 export interface PublicDeviceBundle {
-  _id?: unknown;
+  id: string;
   deviceId: number;
   identityKeyPublic: string;
   signedPreKey: SignedPreKey;

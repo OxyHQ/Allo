@@ -31,6 +31,18 @@
  * not run at service boot. A migration that runs on start is a migration that
  * runs on every scaling event.
  *
+ * ## This file is the last thing in the repo that opens Mongo
+ *
+ * Nothing under `src/` or in `server.ts` imports `mongoose` any more — the three
+ * models, the connection helper and the 503 guard that used it all went with the
+ * messaging switch. `mongoose` stays in `package.json` for THIS script alone,
+ * which is why the manifest still lists it: read it as "the backfill has not run
+ * for the last time yet", not as "messaging is still on Mongo".
+ *
+ * The script and the dependency come out together, in one follow-up, once the
+ * second pass has run and reported. Removing either earlier would leave the pass
+ * that closes the switchover window unrunnable from the deployed image.
+ *
  * ## Verification is part of the run, not a separate step
  *
  * `--verify` re-reads every row it claims to have copied and compares it against
@@ -54,7 +66,16 @@ import {
 } from "../src/db/schema/messages";
 import { userSettings } from "../src/db/schema/social";
 
-/** Mongo's database name, as `utils/database.ts` composes it. */
+/**
+ * Mongo's database name.
+ *
+ * Composed here rather than read off the URI, and this file is now the ONLY
+ * place that knows the rule: `utils/database.ts`, which used to own it, is gone
+ * with the rest of the Mongo connection. The production `MONGODB_URI` ends in
+ * `/allo` while the live database is `allo-production`, so anything trusting the
+ * URI connects to a database that does not exist and reports zero rows — which
+ * reads as "nothing to migrate" rather than as an error.
+ */
 const MONGO_DB_NAME = `allo-${process.env.NODE_ENV ?? "development"}`;
 
 interface TableReport {

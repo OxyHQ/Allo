@@ -5,13 +5,18 @@ The binding ledger for Allo's Mongo → Postgres port. Read this before touching
 sibling Oxy service, the difference is stated with its reason rather than left to
 look like drift.
 
-## The database is `allo-production`, and the URI does not say so
+## The SOURCE Mongo database is `allo-production`, and the URI does not say so
 
-`utils/database.ts` overrides the connection string's database with
-`allo-${NODE_ENV}`. The production `MONGODB_URI` ends in `/allo`, so **anything
-that trusts the URI connects to a database that does not exist** — the live
-server has `allo-production` and no `allo` at all. A probe written the obvious
-way reports zero collections and reads as "nothing to migrate".
+Kept because the backfill still reads that server. The service no longer opens a
+Mongo connection at all, and `utils/database.ts` — which is what used to override
+the connection string's database with `allo-${NODE_ENV}` — is deleted;
+`scripts/backfillFromMongo.ts` now composes that name itself, and it is the only
+thing left that needs to.
+
+The production `MONGODB_URI` ends in `/allo`, so **anything that trusts the URI
+connects to a database that does not exist** — the live server has
+`allo-production` and no `allo` at all. A probe written the obvious way reports
+zero collections and reads as "nothing to migrate".
 
 Every probe, backfill and verification pass must pass the database name
 explicitly. This cost nothing to discover only because the census was checked

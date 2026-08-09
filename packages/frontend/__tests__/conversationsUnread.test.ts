@@ -48,16 +48,17 @@ describe('viewerUnreadCount', () => {
     });
   });
 
-  describe('accepts both wire shapes the backend is typed for', () => {
-    it('reads a Map, not just a plain object', () => {
-      const counts = new Map([
-        [VIEWER, 2],
-        [OTHER, 5],
-      ]);
-      expect(viewerUnreadCount(counts, VIEWER)).toBe(2);
-    });
-
-    it('reads a plain object, the shape that actually arrives over the wire', () => {
+  describe('reads the shape that actually arrives over the wire', () => {
+    /**
+     * There used to be a case here asserting a `Map` was read too. It went with
+     * the Postgres port, and it is worth saying why rather than leaving its
+     * absence to look like a gap: JSON has no Map, so one never crossed the
+     * wire. The backend had typed its Mongoose `Map` into the transport DTO, the
+     * helper grew an `instanceof Map` branch to satisfy that type, and the test
+     * pinned a branch that could only ever be reached by calling the function
+     * directly — which is what the deleted case did.
+     */
+    it('reads a plain object keyed by user id', () => {
       expect(viewerUnreadCount({ [VIEWER]: 2, [OTHER]: 5 }, VIEWER)).toBe(2);
     });
   });

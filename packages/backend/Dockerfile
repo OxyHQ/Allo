@@ -1,13 +1,20 @@
 # Backend Dockerfile (Express API).
 #
 # Runs on AWS Graviton (linux/arm64) as well as x86_64; base node:22-alpine.
-# Node 22 (LTS) is required: mongoose 9 / mongodb 7 / bson 6 declare
-# engines.node >= 20.19.0 and the MongoDB driver's SCRAM auth now uses the
-# Web Crypto global (crypto.getRandomValues). Node 18 (EOL 2025-04) does NOT
-# expose globalThis.crypto when executing a script file, so @oxyhq/core's
-# crypto polyfill installed an RN-only getRandomValues stub that throws on
-# Node — crashing every task on Mongo connect. Node >= 20 exposes the global,
-# so the polyfill's guard is skipped and native crypto is used.
+#
+# Node 22 (LTS), and the pin outlives the reason it was written for. It was
+# originally justified entirely in terms of the MongoDB driver — mongoose 9 /
+# mongodb 7 / bson 6 declaring engines.node >= 20.19.0, and SCRAM auth reaching
+# for the Web Crypto global. Mongo is gone from the service, so that specific
+# crash is not reachable any more; the underlying hazard is NOT Mongo's and is
+# why this stays >= 20:
+#
+# Node 18 (EOL 2025-04) does not expose globalThis.crypto when executing a
+# script file, so @oxyhq/core's crypto polyfill installs an RN-only
+# getRandomValues stub that throws on Node. Node >= 20 exposes the global, the
+# polyfill's guard is skipped, and native crypto is used. That is a property of
+# @oxyhq/core, which every Oxy backend loads, and it is unrelated to which
+# database is underneath.
 # The repo is a Bun workspaces monorepo with a committed bun.lock, so we use
 # Bun for a deterministic install instead of npm. npm's strict ERESOLVE
 # resolver fails here because @oxyhq/services declares OPTIONAL peer deps
