@@ -1,12 +1,63 @@
+/**
+ * Messages — on Postgres.
+ *
+ * Every handler reads and writes through `db/messaging/messageRepository`, and
+ * `utils/messageDto.ts` composes both the HTTP response and the socket payload
+ * so the two cannot disagree.
+ *
+ * ## What the port removes rather than reproduces
+ *
+ * - **The two-save send.** Creating the message and updating the conversation
+ *   (preview, `lastMessageAt`, everyone else's unread count) were independent
+ *   `save()`s, so a failure between them left a stored message the conversation
+ *   list never showed. `createMessage` commits all of it in one transaction.
+ *
+ * - **A lost unread count.** The increment is evaluated in SQL. A
+ *   read-modify-write here would write `stale + 1` over the zero that
+ *   `markConversationRead` had just committed, making the badge reappear on a
+ *   conversation the user has read.
+ *
+ * - **Two check-then-write windows.** Editing and deleting read the document,
+ *   mutated it and saved, so a delete landing in between could resurrect a
+ *   message's text. Both are now single statements whose `WHERE` carries the
+ *   ownership and not-deleted conditions, and a `null` result is the single 404
+ *   covering "no such message", "not yours" and "already deleted" — which
+ *   deliberately tells an unauthorized caller which of the three it was.
+ *
+ * - **Reactions read whole and written whole.** The `Map<emoji, userId[]>` was
+ *   edited in memory and saved back, so two people reacting at once wrote over
+ *   each other and one reaction simply vanished. `toggleReaction` deletes or
+ *   inserts a single row against a unique index.
+ *
+ * One behaviour genuinely differs, and it is forced rather than chosen:
+ * removing the last reactor for an emoji now drops that emoji's key instead of
+ * leaving it as `[]`, because the table's grain is (message, user, emoji) and
+ * "zero reactors" has no row to be. A client must treat a missing key and an
+ * empty array as the same thing.
+ */
+
 import { Router, Response } from "express";
-import type { QueryFilter } from "mongoose";
-import type { EncryptedMediaItem, MediaItem } from "@allo/shared-types";
-import Message, { type IMessage } from "../models/Message";
-import Conversation from "../models/Conversation";
+import type { EncryptedMediaItem, MediaItem, MessageKind } from "@allo/shared-types";
 import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
 import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { logger } from "../utils/logger";
+import { getDb } from "../db";
+import {
+  findConversationForParticipant,
+  isConversationParticipant,
+} from "../db/messaging/conversationRepository";
+import {
+  createMessage,
+  editMessageText,
+  findMessageById,
+  listConversationMessages,
+  markMessageDelivered,
+  markMessageRead,
+  softDeleteMessage,
+  toggleReaction,
+} from "../db/messaging/messageRepository";
+import { toMessageDto } from "../utils/messageDto";
 
 const router = Router();
 
@@ -16,7 +67,6 @@ const MESSAGE_CONTENT_ERROR = "Message must have either encrypted content or leg
 
 type RequestBody = Record<string, unknown>;
 type MediaKind = MediaItem["type"];
-type MessageKind = NonNullable<IMessage["messageType"]>;
 
 function isRecord(value: unknown): value is RequestBody {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -194,18 +244,6 @@ function getMessageKind(value: unknown, encryptedMedia: EncryptedMediaItem[] | u
   return hasItems(encryptedMedia) ? "media" : "text";
 }
 
-function mapToRecord<T>(map: Map<string, T>): Record<string, T> {
-  const record: Record<string, T> = {};
-  map.forEach((value, key) => {
-    record[key] = value;
-  });
-  return record;
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * Messages API
  * All routes require authentication
@@ -232,37 +270,23 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, "Bad Request", "before must be a valid date");
     }
 
-    // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      "participants.userId": userId,
-    });
-
-    if (!conversation) {
+    // Verify user is a participant. "Not found" and "not yours" are the same
+    // answer, so neither confirms the conversation exists.
+    if (!(await isConversationParticipant(getDb(), conversationId, userId))) {
       return sendErrorResponse(res, 404, "Not Found", "Conversation not found");
     }
 
-    // Build query
-    const query: QueryFilter<IMessage> = {
+    // Oldest-first, soft-deleted excluded — the repository does the reversing
+    // the route used to do by hand.
+    const messages = await listConversationMessages(getDb(), {
       conversationId,
-      deletedAt: { $exists: false },
-    };
-
-    if (beforeDate) {
-      query.createdAt = { $lt: beforeDate };
-    }
-
-    const messages = await Message.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-
-    // Reverse to get chronological order
-    messages.reverse();
+      limit,
+      ...(beforeDate ? { before: beforeDate } : {}),
+    });
 
     // Return messages as-is (encrypted or plaintext)
     // Client is responsible for decryption
-    return sendSuccessResponse(res, 200, { messages });
+    return sendSuccessResponse(res, 200, { messages: messages.map(toMessageDto) });
   } catch (err) {
     logger.error("[Messages] Error fetching messages", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch messages");
@@ -278,23 +302,20 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
 
-    const message = await Message.findById(id).lean();
+    // Soft-deleted messages included, as `findById` was: the row is fetched to
+    // learn its `conversationId` before deciding whether the caller may see it.
+    const message = await findMessageById(getDb(), id);
 
     if (!message) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found");
     }
 
     // Verify user is a participant in the conversation
-    const conversation = await Conversation.findOne({
-      _id: message.conversationId,
-      "participants.userId": userId,
-    });
-
-    if (!conversation) {
+    if (!(await isConversationParticipant(getDb(), message.conversationId, userId))) {
       return sendErrorResponse(res, 403, "Forbidden", "Access denied");
     }
 
-    return sendSuccessResponse(res, 200, message);
+    return sendSuccessResponse(res, 200, toMessageDto(message));
   } catch (err) {
     logger.error("[Messages] Error fetching message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to fetch message");
@@ -336,11 +357,9 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, "Bad Request", "media must contain valid media items");
     }
 
-    // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      "participants.userId": userId,
-    });
+    // The full record rather than the boolean: this is the one path that emits
+    // to every participant's own room, so it needs the membership list.
+    const conversation = await findConversationForParticipant(getDb(), conversationId, userId);
 
     if (!conversation) {
       return sendErrorResponse(res, 404, "Not Found", "Conversation not found");
@@ -354,57 +373,44 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, "Bad Request", MESSAGE_CONTENT_ERROR);
     }
 
-    // Create message (encrypted or plaintext)
-    const message = await Message.create({
+    /**
+     * The conversation-list preview, composed HERE because what it may contain
+     * is a privacy decision: an encrypted message stores a placeholder and never
+     * its plaintext. The repository takes it rather than deriving it, so that
+     * policy is not made once per future caller.
+     */
+    const lastMessagePreview = ciphertext
+      ? "[Encrypted]"
+      : text || (hasItems(media) ? `Sent ${media.length} media file(s)` : "");
+
+    // The message row, the sender's own delivery receipt, the conversation
+    // preview and everyone else's unread count — one transaction.
+    const message = await createMessage(getDb(), {
       conversationId,
       senderId: userId,
       senderDeviceId,
-      // Encrypted content
-      ciphertext,
+      ciphertext: ciphertext ?? null,
       encryptedMedia,
       encryptionVersion: encryptionVersion ?? 1,
       messageType: getMessageKind(body.messageType, encryptedMedia),
       // Legacy plaintext (deprecated)
-      text,
+      text: text ?? null,
       media,
-      replyTo,
-      fontSize,
-      deliveredTo: [userId], // Sender has received their own message
+      replyTo: replyTo ?? null,
+      fontSize: fontSize ?? null,
+      lastMessagePreview,
     });
 
-    // Update conversation's last message
-    conversation.lastMessageAt = new Date();
-    // For encrypted messages, don't store plaintext preview
-    const lastMessageText = ciphertext
-      ? "[Encrypted]"
-      : text || (hasItems(media) ? `Sent ${media.length} media file(s)` : "");
-    conversation.lastMessage = {
-      text: lastMessageText,
-      senderId: userId,
-      timestamp: new Date(),
-    };
-
-    // Increment unread counts for all participants except sender
-    conversation.participants.forEach((participant) => {
-      if (participant.userId !== userId) {
-        const currentCount = conversation.unreadCounts.get(participant.userId) || 0;
-        conversation.unreadCounts.set(participant.userId, currentCount + 1);
-      }
-    });
-
-    await conversation.save();
+    const messageData = toMessageDto(message);
 
     // Emit real-time event to both conversation room AND all participant user rooms
     // This ensures users receive messages even when not viewing that conversation (like WhatsApp)
     const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
     if (messagingNamespace) {
-      // Convert message to plain object for socket emission
-      const messageData = message.toObject();
-      
       // Emit to conversation room (for active viewers)
       messagingNamespace.to(`conversation:${conversationId}`).emit("newMessage", messageData);
       logger.info(`[Messages] Emitted newMessage to conversation:${conversationId}`);
-      
+
       // Also emit to all participant user rooms (so users receive messages globally)
       // This allows messages to appear in conversation list even when not viewing that conversation
       conversation.participants.forEach((participant) => {
@@ -415,13 +421,9 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       logger.error("[Messages] Socket.IO unavailable; realtime message emit skipped");
     }
 
-    return sendSuccessResponse(res, 201, message);
+    return sendSuccessResponse(res, 201, messageData);
   } catch (err) {
     logger.error("[Messages] Error sending message", err);
-    const errorMessage = getErrorMessage(err);
-    if (errorMessage.includes("must have either text or media") || errorMessage.includes(MESSAGE_CONTENT_ERROR)) {
-      return sendErrorResponse(res, 400, "Bad Request", errorMessage);
-    }
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to send message");
   }
 });
@@ -441,27 +443,23 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, "Bad Request", "Text is required");
     }
 
-    const message = await Message.findOne({
-      _id: id,
-      senderId: userId,
-      deletedAt: { $exists: false },
-    });
+    // Ownership and not-deleted are in the UPDATE's own WHERE, so there is no
+    // window between checking and writing.
+    const message = await editMessageText(getDb(), { messageId: id, senderId: userId, text });
 
     if (!message) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found or you don't have permission to edit it");
     }
 
-    message.text = text;
-    message.editedAt = new Date();
-    await message.save();
+    const messageData = toMessageDto(message);
 
     // Emit real-time event
     const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
     if (messagingNamespace) {
-      messagingNamespace.to(`conversation:${message.conversationId}`).emit("messageUpdated", message);
+      messagingNamespace.to(`conversation:${message.conversationId}`).emit("messageUpdated", messageData);
     }
 
-    return sendSuccessResponse(res, 200, message);
+    return sendSuccessResponse(res, 200, messageData);
   } catch (err) {
     logger.error("[Messages] Error editing message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to edit message");
@@ -484,45 +482,20 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, "Bad Request", validationError ?? "Missing emoji parameter");
     }
 
-    const message = await Message.findById(id);
+    const message = await findMessageById(getDb(), id);
     if (!message) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found");
     }
 
     // Verify user is a participant in the conversation
-    const conversation = await Conversation.findOne({
-      _id: message.conversationId,
-      "participants.userId": userId,
-    });
-
-    if (!conversation) {
+    if (!(await isConversationParticipant(getDb(), message.conversationId, userId))) {
       return sendErrorResponse(res, 403, "Forbidden", "You are not a participant in this conversation");
     }
 
-    // Initialize reactions if not exists
-    if (!message.reactions) {
-      message.reactions = new Map<string, string[]>();
-    }
-    const reactions = message.reactions;
-
-    const currentReactions = reactions.get(emoji) || [];
-    const hasReacted = currentReactions.includes(userId);
-
-    if (hasReacted) {
-      // Remove reaction
-      reactions.set(
-        emoji,
-        currentReactions.filter((uid: string) => uid !== userId)
-      );
-    } else {
-      // Add reaction
-      reactions.set(emoji, [...currentReactions, userId]);
-    }
-
-    await message.save();
-
-    // Convert Map to plain object for socket emission
-    const reactionsObj = mapToRecord(reactions);
+    // The toggle and the re-read run in one transaction, so the map returned is
+    // the state this toggle produced rather than one a concurrent reaction has
+    // already moved past.
+    const { hasReacted, reactions } = await toggleReaction(getDb(), id, userId, emoji);
 
     // Emit real-time event
     const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
@@ -530,19 +503,19 @@ router.post("/:id/reactions", async (req: AuthRequest, res: Response) => {
       messagingNamespace
         .to(`conversation:${message.conversationId}`)
         .emit("messageReactionUpdated", {
-          messageId: message._id,
+          messageId: message.id,
           emoji,
           userId,
-          hasReacted: !hasReacted,
-          reactions: reactionsObj,
+          hasReacted,
+          reactions,
         });
     }
 
     return sendSuccessResponse(res, 200, {
-      messageId: message._id,
+      messageId: message.id,
       emoji,
-      hasReacted: !hasReacted,
-      reactions: reactionsObj,
+      hasReacted,
+      reactions,
     });
   } catch (err) {
     logger.error("[Messages] Error updating reaction", err);
@@ -559,26 +532,21 @@ router.delete("/:id", async (req: AuthRequest, res: Response) => {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
 
-    const message = await Message.findOne({
-      _id: id,
-      senderId: userId,
-      deletedAt: { $exists: false },
-    });
+    // `isNull(deletedAt)` in the same statement is what makes a second delete a
+    // 404 rather than a silent success that moves the tombstone's timestamp.
+    const deleted = await softDeleteMessage(getDb(), id, userId);
 
-    if (!message) {
+    if (!deleted) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found or already deleted");
     }
-
-    message.deletedAt = new Date();
-    await message.save();
 
     // Emit real-time event
     const messagingNamespace = req.app.locals.realtime?.messagingNamespace;
     if (messagingNamespace) {
-      messagingNamespace.to(`conversation:${message.conversationId}`).emit("messageDeleted", { id: message._id });
+      messagingNamespace.to(`conversation:${deleted.conversationId}`).emit("messageDeleted", { id: deleted.id });
     }
 
-    return sendSuccessResponse(res, 200, { id: message._id, deleted: true });
+    return sendSuccessResponse(res, 200, { id: deleted.id, deleted: true });
   } catch (err) {
     logger.error("[Messages] Error deleting message", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to delete message");
@@ -594,27 +562,26 @@ router.post("/:id/read", async (req: AuthRequest, res: Response) => {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
 
-    const message = await Message.findById(id);
+    const message = await findMessageById(getDb(), id);
 
     if (!message) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found");
     }
 
     // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: message.conversationId,
-      "participants.userId": userId,
-    });
-
-    if (!conversation) {
+    if (!(await isConversationParticipant(getDb(), message.conversationId, userId))) {
       return sendErrorResponse(res, 403, "Forbidden", "Access denied");
     }
 
-    // Mark as read
-    message.readBy.set(userId, new Date());
-    await message.save();
+    // The timestamp is overwritten on a repeat, which is what
+    // `readBy.set(userId, new Date())` did.
+    const updated = await markMessageRead(getDb(), id, userId);
 
-    return sendSuccessResponse(res, 200, message);
+    if (!updated) {
+      return sendErrorResponse(res, 404, "Not Found", "Message not found");
+    }
+
+    return sendSuccessResponse(res, 200, toMessageDto(updated));
   } catch (err) {
     logger.error("[Messages] Error marking message as read", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to mark message as read");
@@ -630,29 +597,26 @@ router.post("/:id/delivered", async (req: AuthRequest, res: Response) => {
     const userId = getAuthenticatedUserId(req);
     const { id } = req.params;
 
-    const message = await Message.findById(id);
+    const message = await findMessageById(getDb(), id);
 
     if (!message) {
       return sendErrorResponse(res, 404, "Not Found", "Message not found");
     }
 
     // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: message.conversationId,
-      "participants.userId": userId,
-    });
-
-    if (!conversation) {
+    if (!(await isConversationParticipant(getDb(), message.conversationId, userId))) {
       return sendErrorResponse(res, 403, "Forbidden", "Access denied");
     }
 
-    // Mark as delivered
-    if (!message.deliveredTo.includes(userId)) {
-      message.deliveredTo.push(userId);
-      await message.save();
+    // First delivery wins, which is what pushing only `if (!includes(userId))`
+    // did — deliberately different from the read receipt above.
+    const updated = await markMessageDelivered(getDb(), id, userId);
+
+    if (!updated) {
+      return sendErrorResponse(res, 404, "Not Found", "Message not found");
     }
 
-    return sendSuccessResponse(res, 200, message);
+    return sendSuccessResponse(res, 200, toMessageDto(updated));
   } catch (err) {
     logger.error("[Messages] Error marking message as delivered", err);
     return sendErrorResponse(res, 500, "Internal Server Error", "Failed to mark message as delivered");

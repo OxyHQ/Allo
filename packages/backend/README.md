@@ -20,8 +20,7 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern chat 
 
 - Node.js with TypeScript
 - Express.js for REST API
-- PostgreSQL with drizzle-orm for the social, moderation and bridge domains
-- MongoDB with Mongoose for the messaging domain (conversations, devices, messages) — the last one still to switch
+- PostgreSQL with drizzle-orm — the only store, for every domain
 - Socket.IO for real-time messaging
 - Oxy Services for authentication (users managed by Oxy platform)
 
@@ -30,8 +29,7 @@ This is the **backend package** of the **Allo** monorepo. Allo is a modern chat 
 ### Prerequisites
 
 - Node.js 20.19+ and Bun 1.3+
-- A PostgreSQL instance (the social, moderation and bridge domains, and the schema suite)
-- A MongoDB instance (the messaging domain, and the moderation suite's replica set)
+- A PostgreSQL instance (the service, and the `*.realdb.test.ts` suites)
 - Git
 
 ### Development Setup
@@ -66,11 +64,8 @@ bun run dev
 Create a `.env` file in this package directory with the following variables:
 
 ```env
-# Databases — BOTH are required; the port is not finished.
-# Postgres: social, moderation and bridges.
+# Database. REQUIRED — the server refuses to boot without it.
 DATABASE_URL=postgres://allo:allo@127.0.0.1:5432/allo_dev
-# Mongo: messaging (conversations, devices, messages).
-MONGODB_URI=your_mongodb_connection_string
 
 # Authentication
 # WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
@@ -123,10 +118,10 @@ ALLO_MAS_INTROSPECTION_TIMEOUT_MS=
 ALLO_OXY_SERVICE_API_KEY=
 ALLO_OXY_SERVICE_API_SECRET=
 
-# Tests only: point the vitest suite at an existing MongoDB replica set instead
-# of downloading a mongodb-memory-server binary. Honoured when already set —
-# see "Running the tests without a downloaded binary" below.
-ALLO_TEST_MONGODB_URI=
+# Tests only: the Postgres server each run creates its throwaway database ON.
+# Point it at a maintenance database, never one holding anything. Falls back to
+# DATABASE_URL when unset — see "Running the tests" below.
+TEST_DATABASE_URL=
 ```
 
 There is no `FRONTEND_URL`: the CORS allowlist is not read from the environment.
@@ -151,15 +146,14 @@ bun run start
 
 ### Database Setup
 
-The API uses BOTH stores while the Mongo→Postgres port finishes: PostgreSQL via
-drizzle for the social, moderation and bridge domains, and MongoDB via Mongoose
-for messaging. Both must be running and reachable — with only one configured the
-server starts and then fails on the first request into the other domain.
+PostgreSQL is the only store, for every domain. `DATABASE_URL` is required at
+boot: the server refuses to start without it rather than serving 500s from
+whichever route is hit first.
 
-Apply the Postgres schema with `bun run db:migrate -- --target-database=<name>
---phase=all`; see "Migrations" below. **The AWS deploy does not do this for you**
-(`RUN_MIGRATIONS` defaults to `false`), so a migration reaches an environment only
-when somebody applies it deliberately.
+Apply the schema with `bun run db:migrate -- --target-database=<name>
+--phase=all`; see "Migrations" below. **The AWS deploy does this for you** —
+`deploy-aws.yml` sets `RUN_MIGRATIONS: "true"` and runs `--phase=pre` before the
+rollout and `--phase=post` after it, so merging a schema change ships it.
 
 ## Deployment
 
@@ -766,15 +760,14 @@ const socket = io('http://localhost:4140/messaging', {
 - `bun run db:migrate -- --target-database=<name> --phase=pre|post|all` — Apply
   migrations. The only migrator; never `drizzle-kit migrate`.
 
-This package declares no `lint` script. The suite in `src/__tests__/` runs
-against a real MongoDB replica set started by `vitest.globalSetup.ts`. CI runs it
-on every PR (`.github/workflows/ci.yml`).
+This package declares no `lint` script. CI runs the suite on every PR
+(`.github/workflows/ci.yml`).
 
-### The Postgres schema suite needs a Postgres
+### Running the tests
 
-The Mongo → Postgres port lands its destination schema first, so the suite now
-needs BOTH servers: a Mongo replica set (as before) and a real Postgres, on which
-each run creates its own throwaway, fully-migrated database.
+The suite in `src/__tests__/` needs a real PostgreSQL server and nothing else.
+Each `*.realdb.test.ts` file creates its own throwaway, fully-migrated database
+on it, named `oxydb_test_<hex>`, and drops it afterwards.
 
 ```bash
 docker compose -f docker-compose.postgres.yml up -d
@@ -785,30 +778,12 @@ Without `TEST_DATABASE_URL` (or `DATABASE_URL`) the schema suite fails with a
 message naming this command. That is deliberate: a database test that skips
 itself when no server is present is a test nobody notices has stopped running.
 
-Nothing in the running service reads Postgres yet — `src/db/` has no importer.
-The schema, its migration, the expiry sweep and this harness are the destination;
-the call-site port is a separate change. See `src/db/schema/CONVENTIONS.md` for
-the decisions the port is bound by, including what happened to the two Mongoose
-hooks and to the three TTL indexes.
-
-### Running the tests without a downloaded binary
-
-`mongodb-memory-server` fetches a `mongod` build on first run, and on **arm64
-Linux there is none to fetch** — the download 403s, because no
-`mongodb-linux-aarch64-debian12-<version>.tgz` is published. Because the fetch
-happens in `globalSetup`, that failure takes down the whole suite, including the
-tests that never open a database. Two ways round it:
-
-```bash
-# Use a mongod that is already installed. Still an in-memory replica set.
-MONGOMS_SYSTEM_BINARY=/usr/bin/mongod bun run test
-
-# Or point the suite at a replica set that is already running.
-ALLO_TEST_MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0 bun run test
-```
-
-Both need a *replica set*, not a standalone: the suite rests on multi-document
-transactions and on unique indexes, and neither behaves the same without one.
+A real server rather than a mock, because the properties under test only exist
+on one: a deferred constraint trigger judged at COMMIT, `ON CONFLICT` against a
+unique index, `xmax`, `nulls last`, an increment evaluated in SQL, and two levels
+of `ON DELETE CASCADE`. A mocked `insert` accepts statements the server rejects
+outright. See `src/db/schema/CONVENTIONS.md` for the decisions the port is bound
+by, including what happened to the Mongoose hooks and to the three TTL indexes.
 
 ## Monorepo Integration
 

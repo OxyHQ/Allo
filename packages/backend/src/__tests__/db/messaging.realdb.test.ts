@@ -50,6 +50,8 @@ import {
   registerDevice,
   updateDeviceKeys,
 } from "../../db/messaging/deviceRepository";
+import { toConversationDto, toConversationParticipant } from "../../utils/conversationDto";
+import { toMessageDto } from "../../utils/messageDto";
 
 let handle: TestDatabaseHandle;
 let db: ReturnType<typeof createDatabase<typeof schema>>["db"];
@@ -1121,5 +1123,125 @@ describe("updating and removing a device", () => {
     `;
     expect(orphans[0].count).toBe("0");
     expect(await deleteDevice(db, userId, 1)).toBe(false);
+  });
+});
+
+/**
+ * The DTOs, against rows a real conversation produced.
+ *
+ * These belong beside the repositories rather than in a unit test over a
+ * hand-built record, and the reason is the failure they exist to catch. The
+ * whole risk in `unreadCounts` is that the number stops coming from
+ * `conversation_participants.unread_count` — because the repository stopped
+ * selecting it, because the column stopped being incremented, or because the
+ * serializer stopped reading it. A fabricated `ConversationRecord` would carry
+ * whatever the test author typed and would keep passing through all three.
+ */
+describe("the conversation DTO, which reassembles what the schema took apart", () => {
+  it("rebuilds unreadCounts from the participant rows, keyed by user id", async () => {
+    const alice = uid("alice");
+    const bob = uid("bob");
+    const carol = uid("carol");
+
+    const group = await createConversation(db, {
+      type: "group",
+      createdBy: alice,
+      participants: [
+        { userId: alice, role: "admin" },
+        { userId: bob, role: "member" },
+        { userId: carol, role: "member" },
+      ],
+    });
+
+    for (const preview of ["first", "second"]) {
+      await createMessage(db, {
+        conversationId: group.id,
+        senderId: alice,
+        senderDeviceId: 1,
+        ciphertext: `cipher-${preview}`,
+        messageType: "text",
+        lastMessagePreview: "[Encrypted]",
+      });
+    }
+
+    // Bob reads; Carol does not. Alice never had a count to begin with.
+    await markConversationRead(db, group.id, bob);
+
+    const record = await findConversationForParticipant(db, group.id, alice);
+    if (!record) throw new Error("the conversation vanished");
+
+    const dto = toConversationDto(record, record.participants.map(toConversationParticipant));
+
+    /**
+     * THREE distinct values, deliberately. With every participant on the same
+     * number this assertion could not tell "read each person's own row" from
+     * "give everyone the same total" or "give everyone zero" — the exact
+     * mistakes that make every unread badge in the app read zero while the
+     * response stays a valid 200.
+     */
+    expect(dto.unreadCounts).toEqual({ [alice]: 0, [bob]: 0, [carol]: 2 });
+  });
+
+  it("drops archivedBy entirely, rather than reporting who archived", async () => {
+    const { conversationId, alice, bob } = await directConversation();
+
+    expect(await setConversationArchived(db, conversationId, bob, true)).toBe(true);
+
+    const record = await findConversationForParticipant(db, conversationId, alice);
+    if (!record) throw new Error("the conversation vanished");
+
+    const dto = toConversationDto(record, record.participants.map(toConversationParticipant));
+
+    // Not merely absent from the type — absent from the emitted object, so
+    // Bob's archival is not disclosed to Alice under any key.
+    expect("archivedBy" in dto).toBe(false);
+    expect(JSON.stringify(dto)).not.toContain("archived");
+  });
+
+  it("emits id and the _id its shipped clients read, and they agree", async () => {
+    const { conversationId, alice } = await directConversation();
+
+    const record = await findConversationForParticipant(db, conversationId, alice);
+    if (!record) throw new Error("the conversation vanished");
+
+    const dto = toConversationDto(record, record.participants.map(toConversationParticipant));
+
+    expect(dto.id).toBe(conversationId);
+    expect(dto._id).toBe(conversationId);
+  });
+});
+
+describe("the message DTO", () => {
+  it("emits id and _id, and carries the keyed collections even when empty", async () => {
+    const { conversationId, alice, bob } = await directConversation();
+
+    const message = await createMessage(db, {
+      conversationId,
+      senderId: alice,
+      senderDeviceId: 1,
+      ciphertext: "cipher",
+      messageType: "text",
+      lastMessagePreview: "[Encrypted]",
+    });
+
+    const fresh = toMessageDto(message);
+    expect(fresh.id).toBe(message.id);
+    expect(fresh._id).toBe(message.id);
+    // Empty rather than absent: a receipt collection that changes shape when it
+    // reaches zero is not something a client should have to handle.
+    expect(fresh.readBy).toEqual({});
+    expect(fresh.reactions).toEqual({});
+    // The sender's own delivery, written with the message in one transaction.
+    expect(fresh.deliveredTo).toEqual([alice]);
+
+    await markMessageRead(db, message.id, bob);
+    await toggleReaction(db, message.id, bob, "🎉");
+
+    const hydrated = await findMessageById(db, message.id);
+    if (!hydrated) throw new Error("the message vanished");
+    const dto = toMessageDto(hydrated);
+
+    expect(Object.keys(dto.readBy ?? {})).toEqual([bob]);
+    expect(dto.reactions).toEqual({ "🎉": [bob] });
   });
 });

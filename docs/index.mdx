@@ -58,7 +58,7 @@ Build order matters: `shared-types` -> `backend` + `frontend` (in parallel).
 - **Recovery:** there is no server-side reset. Messages stored only on-device are gone if the device is lost without cloud sync enabled.
 - **Important caveats:** encryption has no forward secrecy (a leaked identity key decrypts that pair's entire message history), group conversations with more than two participants aren't correctly encrypted for every member, a second device belonging to the same user generally cannot decrypt messages sent to that user, and the client falls back to sending plaintext when it can't encrypt rather than blocking the send. See [Encryption](./encryption) for the full picture.
 
-Cloud sync is **opt-in** per user in `Settings -> Security & Encryption`. Until they enable it, the server's `Message` collection is the only off-device copy — and even that is ciphertext.
+Cloud sync is **opt-in** per user in `Settings -> Security & Encryption`. Until they enable it, the server's `messages` table is the only off-device copy — and even that is ciphertext.
 
 ## Install
 
@@ -75,7 +75,7 @@ bun install
 ### Prerequisites
 
 - Node.js 20.19+ and Bun 1.3+
-- MongoDB (local or hosted) — connection string goes into `packages/backend/.env`
+- PostgreSQL (local or hosted) — connection string goes into `packages/backend/.env`. `packages/backend/docker-compose.postgres.yml` brings up a local one.
 - For iOS: macOS + Xcode. For Android: Android Studio.
 
 ### Environment
@@ -83,7 +83,8 @@ bun install
 `packages/backend/.env`:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/allo
+# REQUIRED — the server refuses to boot without it.
+DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/allo_dev
 # Read by @oxyhq/core, not by this package. Defaults to https://api.oxy.so.
 OXY_API_URL=https://api.oxy.so
 # 4140 is Allo's slot in the Oxy per-app port map; ECS injects PORT=8080.
@@ -109,6 +110,20 @@ for the full list. `EXPO_PUBLIC_WS_URL` and `EXPO_PUBLIC_POSTHOG_KEY` were
 documented here previously and are read nowhere.
 
 ## Quick start
+
+Apply the schema once before the first run — a fresh database has no tables, and
+the backend will start and then fail on the first query rather than at boot:
+
+```sh
+cd packages/backend
+docker compose -f docker-compose.postgres.yml up -d   # if you have no Postgres
+bun run db:migrate -- --target-database=allo_dev --phase=all
+```
+
+`--target-database` is mandatory and is checked against the database
+`DATABASE_URL` actually points at, so a connection string left over from another
+project cannot be migrated by accident. `--phase=all` is right for a local
+database; the deploy runs `pre` and `post` around the rollout instead.
 
 ```sh
 # Start everything (frontend + backend)

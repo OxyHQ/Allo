@@ -44,6 +44,19 @@ function id(prefix: string): string {
 }
 
 /**
+ * Advance past the current millisecond, for a case that asserts creation ORDER.
+ *
+ * `created_at` is `date_trunc('milliseconds', now())` and the tiebreak below it
+ * is a uuid v7, which does not encode sub-millisecond order — so two rows
+ * written inside one millisecond come back in an arbitrary order. Anything
+ * asserting an exact sequence has to put the writes in different milliseconds
+ * or it is asserting the generator's luck.
+ */
+function nextMillisecond(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 2));
+}
+
+/**
  * Open eight pool connections before a case races on them.
  *
  * Not ceremony — measured. postgres.js opens connections on demand, so the FIRST
@@ -196,8 +209,26 @@ describe("blocks converge on the unique index instead of reading first", () => {
     const second = id("blocked");
     const third = id("blocked");
 
+    /**
+     * Spaced across milliseconds, and that is load-bearing rather than
+     * defensive padding.
+     *
+     * `listBlockedUserIds` orders by `created_at DESC, id DESC`, and
+     * `@oxyhq/db`'s `createdAt` is `date_trunc('milliseconds', now())` — so
+     * three blocks written in one millisecond carry the SAME `created_at` and
+     * fall through to the id. That id is a uuid v7, which is not monotonic
+     * within a millisecond (RFC 9562's counter is optional and this generator
+     * does not use it), so the tiebreak is arbitrary and an exact-sequence
+     * assertion is testing the generator's luck.
+     *
+     * Measured before this was added: 4 failures in 8 runs of this file, on code
+     * byte-identical to `main`. Sub-millisecond creation order is simply not a
+     * property this schema has, so the test asks only at the resolution it does.
+     */
     await blockUser(db, { userId: owner, blockedId: first });
+    await nextMillisecond();
     await blockUser(db, { userId: owner, blockedId: second });
+    await nextMillisecond();
     await blockUser(db, { userId: owner, blockedId: third });
     // Anti-vacuity for the scoping half: a query missing its `where` would
     // return this too, and an assertion on the owner's rows alone could not see it.

@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>A cross platform chat app with end to end encrypted direct messages.</b><br>
-  One Expo codebase for iOS, Android and web, an Express backend on PostgreSQL and MongoDB, and identity from Oxy.
+  One Expo codebase for iOS, Android and web, an Express backend on PostgreSQL, and identity from Oxy.
 </p>
 
 <p align="center">
@@ -63,7 +63,7 @@ The repo is a Bun workspace monorepo. Everything lives under `packages/`.
 | Package | What it is |
 |---|---|
 | [`@allo/frontend`](packages/frontend/) | The Expo app for iOS, Android and web. Expo Router, NativeWind, Zustand, TanStack Query |
-| [`@allo/backend`](packages/backend/) | Express API and Socket.IO server — PostgreSQL via drizzle (social, moderation, bridges) and MongoDB via Mongoose (messaging) |
+| [`@allo/backend`](packages/backend/) | Express API and Socket.IO server — PostgreSQL via drizzle, for every domain |
 | [`@allo/shared-types`](packages/shared-types/) | TypeScript types shared by both |
 
 Identity and sessions come from the Oxy platform rather than from a login system in this
@@ -76,7 +76,7 @@ hold their own handlers and the Socket.IO wiring sits directly in `server.ts`.
 
 ## Quick start
 
-You need Node 20.19+, Bun, a PostgreSQL instance AND a MongoDB instance — the Mongo→Postgres port is partway through, so both stores are live. The root `engines` field pins Node
+You need Node 20.19+, Bun and a PostgreSQL instance. The root `engines` field pins Node
 `>=20.19.0` and Bun `>=1.0.0`.
 
 ```bash
@@ -126,18 +126,18 @@ bun run typecheck && bun run test
 `test` (Jest), `lint` (`expo lint`), `clean`, plus `copy-matrix-wasm`, `clear-cache` and
 `reset-project`. The dev, start, web and build scripts run `copy-matrix-wasm` first.
 
-**`@allo/backend`**: `dev`, `start`, `build`, `test` (Vitest, which starts a real MongoDB
-replica set and needs a real Postgres for the schema suite), `clean`, plus
-`db:generate` and `db:migrate`.
+**`@allo/backend`**: `dev`, `start`, `build`, `test` (Vitest, which needs a real Postgres
+server — each `*.realdb.test.ts` suite creates its own throwaway, fully-migrated
+database on it), `clean`, plus `db:generate` and `db:migrate`.
 
 **`@allo/shared-types`**: `build`, `dev` (watch), `lint`, `clean`.
 
-**Postgres migrations exist and are NOT applied automatically.** `packages/backend/drizzle/`
-holds them and `bun run db:migrate -- --target-database=<name> --phase=all` is the only
-migrator. The AWS deploy does not run it — `.github/scripts/deploy-ecs-image.sh` defaults
-`RUN_MIGRATIONS` to `false` and no workflow sets it — so merging a schema change does not
-ship it. The Mongoose schemas backing the messaging domain are still applied on connect,
-which is why this sentence used to say there were no migrations at all.
+**Postgres migrations ARE applied by the deploy, in two phases.** `packages/backend/drizzle/`
+holds them and `bun run db:migrate -- --target-database=<name> --phase=<pre|post|all>` is the
+only migrator. `deploy-aws.yml` sets `RUN_MIGRATIONS: "true"` and runs `--phase=pre` before
+the rollout and `--phase=post` after it, each as a one-shot ECS task — so merging a schema
+change ships it, and the `-- oxy:deploy-phase=` marker on each `.sql` decides which side of
+the rollout it lands on.
 
 </details>
 

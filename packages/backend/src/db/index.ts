@@ -54,7 +54,52 @@ export function getDb(): AlloDatabase {
   return handle.db;
 }
 
+/**
+ * Whether the pool has been proven to reach the server. `null` means "not yet,
+ * or the last attempt failed" — cleared on failure so the next caller retries.
+ */
+let reachability: Promise<void> | null = null;
+
+async function probe(): Promise<void> {
+  if (!handle) {
+    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+  }
+  await handle.client`select 1`;
+}
+
+/**
+ * Prove the pool can reach the server — ONCE, on cold start.
+ *
+ * This is the shape `connectToDatabase()` had, and the shape matters more than
+ * the mechanism. That function returned early once connected and otherwise
+ * awaited a CACHED promise, clearing it on failure so the next request could
+ * retry; the middleware in `server.ts` turned a rejection into
+ * `503 Database temporarily unavailable`. So the 503 only ever covered a
+ * database that was unreachable at COLD START, never one that died mid-life —
+ * that case was, and still is, a 500 from whichever handler touched it.
+ *
+ * Reproduced rather than improved on, deliberately:
+ *
+ * - **Not a per-request `select 1`.** That would put a Postgres round trip in
+ *   front of every request including those that never touch a table, and if it
+ *   ever backed a load-balancer health check it would convert a brief Postgres
+ *   hiccup into the whole service being marked unhealthy and pulled out.
+ * - **Not a per-route or per-store guard.** After this change there is exactly
+ *   one store, so machinery keyed on which one a route reads would be dead code
+ *   in the same commit that introduced it.
+ *
+ * A real readiness endpoint is a separate decision; it is NOT this.
+ */
+export function ensurePostgresReachable(): Promise<void> {
+  reachability ??= probe().catch((error: unknown) => {
+    reachability = null;
+    throw error;
+  });
+  return reachability;
+}
+
 export async function closePostgres(): Promise<void> {
+  reachability = null;
   if (!handle) return;
   await handle.client.end();
   handle = null;

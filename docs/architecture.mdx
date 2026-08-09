@@ -14,7 +14,7 @@ Allo is a three-workspace monorepo managed with Bun. The split is intentional an
 packages/
   shared-types/   @allo/shared-types   TS-only, built first via postinstall
   frontend/       @allo/frontend       Expo Router app (iOS / Android / Web)
-  backend/        @allo/backend        Express + Socket.IO + PostgreSQL/MongoDB
+  backend/        @allo/backend        Express + Socket.IO + PostgreSQL
 ```
 
 Root `package.json` declares `workspaces: ["packages/*"]` and orchestrates with `bun run --filter`:
@@ -101,29 +101,35 @@ State that needs to survive launch goes through Zustand's persist middleware ove
 ```
 src/
   config/       CrowdSource moderation configuration
-  models/       Mongoose schemas (messaging only; see db/schema/ for Postgres)
+  db/           drizzle schema (db/schema/) and one repository per domain
   routes/       Express routers mounted under /api
   services/     the moderation pipeline (CrowdSource intake, outbox, workers)
   types/        backend-only TS types
-  utils/        helpers (database connect, logger, push, etc.)
-  __tests__/    vitest suites, run against a real MongoDB replica set
+  utils/        helpers (row → DTO serializers, logger, push, etc.)
+  __tests__/    vitest suites; the *.realdb.test.ts ones need a real Postgres
 ```
 
 There is no `middleware/` directory: auth, CORS and rate limiting all come from `@oxyhq/core/server`.
 
-### Mongoose models
+### Tables
 
-| Model | What it stores |
+Defined in `packages/backend/src/db/schema/`, one file per domain. There are no
+Mongoose models; the three that remained (`Conversation`, `Message`, `Device`)
+went with the messaging switch.
+
+| Table | What it stores |
 |-------|---------------|
-| `Conversation` | `direct` or `group`, participants[], unreadCounts, lastMessage, archivedBy |
-| `Message` | Ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo |
-| `Device` | Public key bundle (identity key, signed pre-key, one-time pre-keys) per `(userId, deviceId)` — unique index |
-| `UserSettings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
-| `Block` / `Restrict` | Per-user block + restrict lists |
-| `PushToken` | Expo / FCM tokens for push delivery. Nothing writes to it — see [Push](#push-notifications). |
-| `UserBehavior` | Per-user UX preferences / analytics counters |
-| `Report` | Account reports filed by users |
-| `ModerationEvent` / `ModerationOutbox` | The CrowdSource moderation pipeline's event log and transactional outbox |
+| `conversations` | `direct` or `group`, plus the denormalised `last_message_*` preview |
+| `conversation_participants` | One membership per person: `role`, `joined_at`, `last_read_at`, `unread_count`, `archived_at` — the last two are Mongo's `unreadCounts` map and `archivedBy` list, moved onto the row they were always keyed by |
+| `messages` | Ciphertext, `sender_device_id`, `encryption_version`, `encrypted_media`, and the legacy plaintext columns |
+| `message_reads` / `message_deliveries` / `message_reactions` | The three Mongo `Map`s / arrays, as rows with unique indexes that give them idempotency the Maps got from their keys |
+| `devices` / `device_pre_keys` | Public key bundle per `(user_id, device_id)`; one-time pre-keys are a child table, so nothing joins them by accident |
+| `user_settings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
+| `blocks` / `restricts` | Per-user block + restrict lists |
+| `user_behavior` | Per-user UX preferences / analytics counters |
+| `abuse_reports` | Account reports filed by users |
+| `moderation_events` / `moderation_outbox` / `moderation_enforcements` | The CrowdSource moderation pipeline's event log, transactional outbox and applied enforcement |
+| `bridge_*` | The Matrix bridge accounts, link sessions and proxy leases |
 
 There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxyhq/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
 
@@ -161,11 +167,11 @@ Allo writes none of its own. `server.ts` applies three middlewares from `@oxyhq/
 - `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.
 - `createOxyAuthMiddleware(oxyClient)` — described above.
 
-There **is** a database guard, and what it covers is narrower than its name suggests. `server.ts` mounts a connect middleware ahead of every route which answers `503 Database temporarily unavailable` when `connectToDatabase()` throws — so a deployment whose Mongo was never reachable does return 503. But `connectToDatabase()` returns early on `readyState === 1` and caches its promise, so **after a successful connect it never throws again**: a store that dies mid-life produces a `500`, and a client still cannot distinguish "retry shortly" from a real fault for the outage that actually happens in production.
+There **is** a database guard, and what it covers is narrower than its name suggests. `server.ts` mounts a middleware ahead of every route which answers `503 Database temporarily unavailable` when `ensurePostgresReachable()` rejects. That function probes the pool once and caches the result, so **after a successful probe it never rejects again**: a database that dies mid-life produces a `500`, and a client still cannot distinguish "retry shortly" from a real fault for the outage that actually happens in production.
 
-Two things follow. It covers cold start only, and it covers MONGO only — which matters now that social, moderation and bridges read Postgres, since a Postgres that is unreachable at boot gets no guard at all. And `utils/database.ts` still exports `isDatabaseConnected()` with **no callers**: that is the vestige of a state-based check, and it is not what the middleware uses.
+So it covers COLD START only. That is deliberate rather than an omission: a per-request `select 1` would put a round trip in front of every request including those that never touch a table, and if it ever backed a load-balancer health check it would turn a brief Postgres hiccup into the whole service being pulled out of the pool. A real readiness endpoint is a separate decision and does not exist yet.
 
-A previous revision of this page said there was no guard at all. That was half right — right about the steady state, wrong about cold start — and it is corrected here rather than quietly, because a corrected document carrying a new inaccuracy is what makes the next reader stop checking.
+It now covers the only store there is. Two earlier revisions of this page were each half right — one said no guard existed, the other described one covering Mongo, which by then was not the store most routes read. Both are corrected here rather than quietly, because a corrected document carrying a new inaccuracy is what makes the next reader stop checking.
 
 ### Push notifications
 
@@ -179,9 +185,8 @@ implementation.
 
 The REST + Socket.IO transport and the encryption in [Encryption](./encryption)
 are still what runs, and no Matrix code serves traffic. The storage layer HAS
-moved, separately from the Matrix work: the social, moderation and bridge
-domains are on PostgreSQL via drizzle, and the Mongoose models now back only the
-messaging domain.
+moved, separately from the Matrix work: every domain is on PostgreSQL via
+drizzle, and the Mongoose models are gone.
 
 The one piece of Matrix code in the tree is `packages/frontend/lib/matrix/`, a
 client port: an interface (`types.ts`) that may not import a Matrix SDK, a
