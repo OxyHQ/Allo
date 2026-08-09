@@ -15,6 +15,19 @@ CONTAINER_NAME="${CONTAINER_NAME:-$APP}"
 MAX_WAIT_SECS="${MAX_WAIT_SECS:-1200}"
 POLL_INTERVAL="${POLL_INTERVAL:-15}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
+# What the pre-rollout migration one-shot actually runs.
+#
+# It was hardcoded to a compiled `dist/` path, which is only correct for a
+# service whose image ships build output. Allo's container runs TypeScript
+# directly (`bun run --cwd packages/backend start`), so that path does not exist
+# in its image and its migrator additionally REQUIRES `--target-database` and
+# `--phase` — a run with neither throws by design. Setting `RUN_MIGRATIONS=true`
+# without also setting this would therefore fail every deploy, which is the
+# two-halves-of-one-fact shape: the flag and the command have to travel together.
+#
+# The default is the previous hardcoded value, so every caller that does not set
+# it behaves exactly as before.
+MIGRATION_TASK_COMMAND_JSON="${MIGRATION_TASK_COMMAND_JSON:-[\"bun\",\"packages/backend/dist/scripts/migrate.js\"]}"
 INTERNAL_METRICS_PARAMETER="${INTERNAL_METRICS_PARAMETER:-}"
 TASK_SECRET_OVERRIDES_JSON="${TASK_SECRET_OVERRIDES_JSON:-}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
@@ -43,6 +56,16 @@ if ! [[ "$POLL_INTERVAL" =~ ^[0-9]+$ ]] || (( POLL_INTERVAL < 1 )); then
 fi
 if [[ "$RUN_MIGRATIONS" != "true" && "$RUN_MIGRATIONS" != "false" ]]; then
   echo "::error::RUN_MIGRATIONS must be either 'true' or 'false'."
+  exit 1
+fi
+# Validated HERE rather than at the run, so a malformed command fails the deploy
+# before it has registered a task definition or touched the service — a bad JSON
+# array discovered at the one-shot leaves a new revision registered and the
+# service mid-flight.
+if [[ "$RUN_MIGRATIONS" == "true" ]] &&
+   ! jq -e 'type == "array" and length > 0 and all(.[]; type == "string")' \
+     <<<"$MIGRATION_TASK_COMMAND_JSON" >/dev/null 2>&1; then
+  echo "::error::MIGRATION_TASK_COMMAND_JSON must be a non-empty JSON array of strings."
   exit 1
 fi
 if [[ -n "$POST_DEPLOY_SMOKE_SCRIPT" && ! -f "$POST_DEPLOY_SMOKE_SCRIPT" ]]; then
@@ -189,6 +212,28 @@ wait_for_service_rollout() {
     fi
 
     if [[ -z "$deployment_state" ]]; then
+      # Our revision is not PRIMARY. Two very different reasons look identical
+      # from here, and only one of them may be rolled back.
+      #
+      # Ordinarily ECS simply has not promoted it yet, and waiting is right. But
+      # if the service is now pointing at a revision that is neither ours nor the
+      # one captured at the start of this run, somebody MOVED it — and the
+      # defensive rollback below would revert their change to a revision this run
+      # captured minutes or hours ago. That is not a hypothetical: it happened
+      # three times on 2026-08-09 and twice put a secret-less task definition back
+      # into production, because a manual roll to a fixed revision was undone by
+      # an in-flight deploy that had captured the broken one.
+      #
+      # So this refuses rather than waiting out the clock into a rollback. The
+      # cost of stopping is a red job; the cost of continuing is reverting
+      # somebody's repair.
+      live_task_definition="$(jq -r '.services[0].taskDefinition // empty' <<<"$deployment_json")"
+      if [[ -n "$live_task_definition" &&
+            "$live_task_definition" != "$task_definition" &&
+            "$live_task_definition" != "$current_task_definition" ]]; then
+        echo "::error::ECS service $APP is on $live_task_definition, which is neither the revision this run is deploying ($task_definition) nor the one it started from ($current_task_definition). Somebody changed the service while this deploy was in flight; refusing to roll back over their change."
+        return 2
+      fi
       echo "($elapsed s) waiting for the $label PRIMARY deployment"
     else
       IFS=$'\t' read -r rollout_state running desired service_desired <<<"$deployment_state"
@@ -331,6 +376,29 @@ run_one_shot_command() {
   echo "$label completed successfully"
 }
 
+# Restore the revision captured at the START of this run.
+#
+# Two things about this are counter-intuitive enough to have caused an incident,
+# and neither is visible from the call sites:
+#
+#  1. `current_task_definition` is read ONCE, from `service_json` at the top of
+#     the script. It is the revision the service was running when this run began
+#     — not the one it is running now. If anything moved the service in between,
+#     rolling back moves it BACK, silently.
+#
+#  2. **Cancelling the workflow run does not stop this.** Measured on
+#     2026-08-09: `gh run cancel` on a stuck deploy was immediately followed by
+#     the service reverting to the captured revision. Reaching for cancel as a
+#     safety measure does the opposite of what it looks like. The guard in
+#     `wait_for_service_rollout` above is what now prevents the worst version of
+#     this, by refusing when somebody else owns the current revision.
+#
+# There is a SECOND, independent path to the same revert that this function does
+# not control: `update-service` below enables
+# `deploymentCircuitBreaker: {rollback: true}`, so ECS itself reverts a
+# deployment that never stabilises, without asking this script. Fixing only this
+# function would leave that one, and it reverts to whatever ECS considers the
+# previous deployment — which after a manual roll may be a third thing again.
 rollback_service() {
   echo "::warning::Rolling $APP back to $current_task_definition."
   if ! aws ecs update-service \
@@ -480,10 +548,17 @@ if [[ "$RUN_MIGRATIONS" == "true" || -n "$POST_DEPLOY_TASK_COMMAND_JSON" ]]; the
   fi
 fi
 
+# Runs from the NEWLY REGISTERED task definition, before the service is updated.
+#
+# That ordering is not incidental — it is the only one that works when a
+# migration ships inside the image it belongs to. The migrations for a release
+# exist only in that release's image, so they cannot be applied ahead of the
+# deploy from the revision currently running, and applying them after the
+# rollout leaves a window where the new code queries tables that do not exist.
 if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   if ! run_one_shot_command \
     "Migration" \
-    '["bun","packages/backend/dist/scripts/migrate.js"]'; then
+    "$MIGRATION_TASK_COMMAND_JSON"; then
     exit 1
   fi
 fi
@@ -513,7 +588,14 @@ fi
 
 echo "Deploying immutable image $IMAGE_URI with task definition $new_task_definition"
 
-if ! wait_for_service_rollout "$new_task_definition" "deployment"; then
+rollout_status=0
+wait_for_service_rollout "$new_task_definition" "deployment" || rollout_status=$?
+if (( rollout_status == 2 )); then
+  # Somebody else owns the service now. Rolling back would revert their change;
+  # the release stands where they put it and this job goes red for a human.
+  echo "::error::$APP was moved by something outside this deploy. Nothing was rolled back."
+  exit 1
+elif (( rollout_status != 0 )); then
   if ! rollback_service; then
     echo "::error::Deployment and explicit rollback both failed; manual intervention is required."
   fi

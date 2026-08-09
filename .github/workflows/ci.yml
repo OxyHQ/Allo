@@ -27,9 +27,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Gates the rollout logic deploy-aws.yml runs against production. The script
-  # and this harness are byte-identical copies of Mention's, so they share its
-  # test rather than growing a second, drifting one.
+  # Gates the rollout logic deploy-aws.yml runs against production.
+  #
+  # The script and this harness STARTED as copies of Mention's. They are no
+  # longer byte-identical and the claim that they were is removed rather than
+  # softened: measured, the two differ by 163 lines — Mention has a
+  # zero-desired-count escape hatch Allo does not, and Allo now has a
+  # configurable migration command Mention does not need. Believing they are the
+  # same file is worse than knowing they diverged, because it invites a fix in
+  # one to be assumed present in the other.
   deploy-script-test:
     name: Deploy Script Tests
     runs-on: ubuntu-latest

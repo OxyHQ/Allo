@@ -223,7 +223,24 @@ aws() {
       printf '{}\n'
       ;;
     "ecs run-task")
+      # The ordering log keeps its opaque marker, so every existing expected.log
+      # still diffs cleanly — what a one-shot RAN was not observable before, and
+      # a test asserting on the command had nothing to read.
       printf 'reconcile\n' >>"$DEPLOY_TEST_LOG"
+      # The command itself goes to a sidecar file. Extracted from `--overrides`
+      # rather than from an environment variable, so the assertion is about what
+      # would reach ECS.
+      local overrides_json="" previous_override_argument="" override_argument
+      for override_argument in "$@"; do
+        if [[ "$previous_override_argument" == "--overrides" ]]; then
+          overrides_json="$override_argument"
+        fi
+        previous_override_argument="$override_argument"
+      done
+      if [[ -n "$overrides_json" ]]; then
+        jq -r '[.containerOverrides[0].command // [] | .[]] | join(" ")' \
+          <<<"$overrides_json" >>"${DEPLOY_TEST_LOG}.commands" 2>/dev/null || true
+      fi
       printf '%s\n' '{
         "failures": [],
         "tasks": [{"taskArn": "arn:aws:ecs:test:task/deploy-test-reconcile"}]
@@ -305,6 +322,7 @@ run_release() {
     MAX_WAIT_SECS=5
     POLL_INTERVAL=1
     RUN_MIGRATIONS="$run_migrations"
+    MIGRATION_TASK_COMMAND_JSON='["migrate","--phase=pre"]'
     POST_DEPLOY_SMOKE_SCRIPT="$smoke_script"
     POST_DEPLOY_TASK_COMMAND_JSON='["reconcile"]'
   )
@@ -500,5 +518,38 @@ grep -F \
   "Nothing was rolled back; this release needs a human." \
   "$test_directory/smoke-no-rollback-failure/output.log" \
   >/dev/null
+
+# The migration command is CONFIGURABLE, and the deploy runs what it was given.
+#
+# It used to be hardcoded to a compiled `dist/` path. A service whose image runs
+# TypeScript directly — or whose migrator needs arguments — cannot use that, and
+# setting `RUN_MIGRATIONS=true` without a matching command fails every deploy.
+# The fake `aws` records each one-shot's `--overrides`, so this asserts on what
+# would actually be sent to ECS rather than on the variable being set.
+run_release configurable-migration-command true true false 0 false 1 healthy 0
+if ! grep -qF 'migrate --phase=pre' \
+  "$test_directory/configurable-migration-command/aws.log.commands"; then
+  echo "The migration one-shot did not run the command it was configured with." >&2
+  cat "$test_directory/configurable-migration-command/aws.log.commands" >&2
+  exit 1
+fi
+# Anti-vacuity: the OLD hardcoded command must be gone, or the assertion above
+# could pass on a run that also still issues the default.
+if grep -qF 'dist/scripts/migrate.js' \
+  "$test_directory/configurable-migration-command/aws.log.commands"; then
+  echo "The hardcoded migration command is still being issued." >&2
+  exit 1
+fi
+
+# A malformed command is refused BEFORE anything is registered or updated.
+if env \
+  AWS_REGION=test AWS_ACCOUNT_ID=123456789012 CLUSTER=deploy-test APP=deploy-test \
+  CONTAINER_NAME=deploy-test \
+  IMAGE_URI="example.invalid/deploy-test@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  RUN_MIGRATIONS=true MIGRATION_TASK_COMMAND_JSON='not json' \
+  bash "$repository_root/.github/scripts/deploy-ecs-image.sh" >/dev/null 2>&1; then
+  echo "A malformed MIGRATION_TASK_COMMAND_JSON was accepted." >&2
+  exit 1
+fi
 
 echo "Deployment script transaction tests passed."

@@ -67,6 +67,7 @@ jobs:
       - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
         env:
           APP_MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SHARED_REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
           sync_secret() {
@@ -80,6 +81,13 @@ jobs:
           }
 
           sync_secret MONGODB_URI "$APP_MONGODB_URI" "/oxy/$APP/MONGODB_URI"
+
+          # Postgres. Required at boot — `src/index.ts` refuses to start without
+          # it — and it was live in SSM and on the task definition while being
+          # enumerated NOWHERE, so a rotation of the GitHub secret would never
+          # have reached the running service. Its terraform declaration landed in
+          # oxy-infra #44; this is the other half.
+          sync_secret DATABASE_URL "$APP_DATABASE_URL" "/oxy/$APP/DATABASE_URL"
 
           # Valkey vive en la región del clúster; una URL de otra región deja al
           # servicio sin caché de forma silenciosa, así que se rechaza.
@@ -132,6 +140,30 @@ jobs:
       - name: Register immutable task definition and deploy
         env:
           IMAGE_URI: ${{ env.ECR_REGISTRY }}/oxy/${{ env.APP }}@${{ steps.build.outputs.digest }}
+          # The deploy applies this release's schema. Until now it shipped the
+          # image and left the migrations behind, so `0000` and `0001` had to be
+          # applied by hand — and for ten minutes the service served code whose
+          # tables did not exist, behind a health check that never touches the
+          # database.
+          #
+          # It has to be the deploy rather than a preceding manual step: a
+          # release's migrations exist only inside that release's IMAGE, so they
+          # cannot be applied from the revision currently running. The script
+          # registers the new task definition, runs this one-shot FROM it, and
+          # only then updates the service — which is the sole ordering that works.
+          RUN_MIGRATIONS: "true"
+          # The container runs TypeScript directly (see the Dockerfile's CMD), so
+          # there is no `dist/`; and this migrator refuses to run without both
+          # arguments rather than guessing a target or a phase.
+          MIGRATION_TASK_COMMAND_JSON: >-
+            ["bun","run","--cwd","packages/backend","db:migrate","--target-database=allo","--phase=pre"]
+          # `post` runs AFTER the rollout, which is what the phase means: it
+          # carries drops, renames and narrowings that the previous image cannot
+          # tolerate. `0003` is the first `post` migration in this repo, so
+          # without this step a clean cut would land half-finished with nothing
+          # complaining — the additive half applied, the narrowing half never.
+          POST_DEPLOY_TASK_COMMAND_JSON: >-
+            ["bun","run","--cwd","packages/backend","db:migrate","--target-database=allo","--phase=post"]
         run: |
           STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].status' --output text 2>/dev/null || echo NONE)
           if [ "$STATUS" != "ACTIVE" ]; then
