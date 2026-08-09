@@ -1,0 +1,15 @@
+-- oxy:deploy-phase=post
+--
+-- Drops the index that served `findOpenLinkSessions`, which this change deletes.
+--
+-- Both were ported faithfully from a Mongoose schema that declared
+-- `{oxyUserId, network, outcome}` and from application code that never queried
+-- it: nothing in Mongo asked "does this user have an attempt OPEN?" and nothing
+-- in Postgres does either — the only guard at link start counts LINKED ACCOUNTS.
+-- Keeping an index to serve a query nobody makes is paying for it on every
+-- write to the table.
+--
+-- `post` because a DROP is: the previous image must be gone before an index it
+-- might plan against disappears. Nothing plans against this one, so the phase is
+-- the rule rather than a risk.
+DROP INDEX "bridge_link_sessions_oxy_user_id_network_outcome_idx";

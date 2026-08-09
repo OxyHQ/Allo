@@ -15,6 +15,20 @@
       "when": 1786311844570,
       "tag": "0001_fantastic_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786313352180,
+      "tag": "0002_silky_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786313363025,
+      "tag": "0003_regular_iron_patriot",
+      "breakpoints": true
     }
   ]
 }

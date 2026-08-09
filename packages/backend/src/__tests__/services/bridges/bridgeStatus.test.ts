@@ -1,12 +1,16 @@
-import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { uuidv7 } from "@oxyhq/db";
 
 import { loadBridgesConfig, resetBridgesConfigForTests } from "../../../config/bridges";
-import BridgeAccount, {
+import { closePostgres, connectPostgres, getDb } from "../../../db";
+import * as schema from "../../../db/schema";
+import {
   BRIDGE_STATE_EVENTS,
   type BridgeAccountState,
   type BridgeStateEvent,
-} from "../../../models/BridgeAccount";
+} from "../../../db/schema/bridges";
+import { setUpTestDatabase, type TestDatabaseHandle } from "../../../db/testDatabase";
 import {
   accountStateForBridgeState,
   bridgeStateTtlSeconds,
@@ -33,6 +37,26 @@ const TELEGRAM = loadBridgesConfig({
 }).networks.get("telegram");
 
 if (!TELEGRAM) throw new Error("the telegram fixture failed to build");
+
+/**
+ * ONE throwaway database for the whole file, at file scope.
+ *
+ * Both describe blocks below write `bridge_accounts`, and a describe-scoped
+ * `afterAll` would drop the database out from under the second one — a failure
+ * that reads as "the sweep cannot see its own rows" rather than as a harness
+ * problem.
+ */
+let handle: TestDatabaseHandle;
+
+beforeAll(async () => {
+  handle = await setUpTestDatabase();
+  connectPostgres(handle.databaseUrl);
+}, 180_000);
+
+afterAll(async () => {
+  await closePostgres();
+  await handle?.drop();
+});
 
 describe("collapsing the bridge's eleven states into six", () => {
   /**
@@ -94,17 +118,6 @@ describe("collapsing the bridge's eleven states into six", () => {
 describe("applying a state, and telling the user only when it helps", () => {
   const notify = vi.fn(async () => undefined);
 
-  beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    await mongoose.connect(uri, { dbName: "allo_bridge_status_test" });
-    await BridgeAccount.init();
-  });
-
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
-
   beforeEach(() => {
     /**
      * The server name is deployment-wide rather than per network, so the service
@@ -121,19 +134,35 @@ describe("applying a state, and telling the user only when it helps", () => {
     vi.clearAllMocks();
     delete process.env.ALLO_MATRIX_SERVER_NAME;
     resetBridgesConfigForTests();
-    await BridgeAccount.deleteMany({});
+    await getDb().delete(schema.bridgeAccounts);
   });
 
-  async function account(overrides: Record<string, unknown> = {}) {
-    return await BridgeAccount.create({
-      oxyUserId: USER,
-      network: "telegram",
-      remoteLoginId: "remote-login-1",
-      state: "connected",
-      linkedAt: new Date(),
-      lastStateAt: new Date(),
-      ...overrides,
-    });
+  async function account(
+    overrides: Partial<typeof schema.bridgeAccounts.$inferInsert> = {},
+  ) {
+    const [row] = await getDb()
+      .insert(schema.bridgeAccounts)
+      .values({
+        id: uuidv7(),
+        oxyUserId: USER,
+        network: "telegram",
+        remoteLoginId: "remote-login-1",
+        state: "connected",
+        linkedAt: new Date(),
+        lastStateAt: new Date(),
+        ...overrides,
+      })
+      .returning();
+    if (!row) throw new Error("bridge account fixture returned no row");
+    return row;
+  }
+
+  async function storedAccount(id: string) {
+    const [row] = await getDb()
+      .select()
+      .from(schema.bridgeAccounts)
+      .where(eq(schema.bridgeAccounts.id, id));
+    return row;
   }
 
   const report = (stateEvent: string) => ({
@@ -202,25 +231,12 @@ describe("applying a state, and telling the user only when it helps", () => {
       applyBridgeState(TELEGRAM, report("BAD_CREDENTIALS"), failing),
     ).resolves.toMatchObject({ matched: true });
 
-    const stored = await BridgeAccount.findById(created._id).lean();
+    const stored = await storedAccount(created.id);
     expect(stored?.state).toBe("action_required");
   });
 });
 
 describe("the sweep that notices silence", () => {
-  beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(uri, { dbName: "allo_bridge_status_test" });
-    }
-    await BridgeAccount.init();
-  });
-
-  afterAll(async () => {
-    await mongoose.disconnect();
-  });
-
   beforeEach(() => {
     process.env.ALLO_BRIDGES_STALE_MARGIN_SECONDS = "300";
     resetBridgesConfigForTests();
@@ -229,7 +245,7 @@ describe("the sweep that notices silence", () => {
   afterEach(async () => {
     delete process.env.ALLO_BRIDGES_STALE_MARGIN_SECONDS;
     resetBridgesConfigForTests();
-    await BridgeAccount.deleteMany({});
+    await getDb().delete(schema.bridgeAccounts);
   });
 
   const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
@@ -240,19 +256,31 @@ describe("the sweep that notices silence", () => {
     state: BridgeAccountState = "connected",
     remoteLoginId = `remote-${minutes}-${ttlSeconds ?? "none"}-${state}`,
   ) {
-    return await BridgeAccount.create({
-      oxyUserId: USER,
-      network: "telegram",
-      remoteLoginId,
-      state,
-      linkedAt: minutesAgo(minutes),
-      lastStateAt: minutesAgo(minutes),
-      rawState: {
-        stateEvent: "CONNECTED",
-        ...(ttlSeconds === undefined ? {} : { ttl: ttlSeconds }),
-        at: minutesAgo(minutes),
-      },
-    });
+    const [row] = await getDb()
+      .insert(schema.bridgeAccounts)
+      .values({
+        id: uuidv7(),
+        oxyUserId: USER,
+        network: "telegram",
+        remoteLoginId,
+        state,
+        linkedAt: minutesAgo(minutes),
+        lastStateAt: minutesAgo(minutes),
+        rawStateEvent: "CONNECTED",
+        ...(ttlSeconds === undefined ? {} : { rawStateTtl: ttlSeconds }),
+        rawStateAt: minutesAgo(minutes),
+      })
+      .returning();
+    if (!row) throw new Error("bridge account fixture returned no row");
+    return row;
+  }
+
+  async function storedAccount(id: string) {
+    const [row] = await getDb()
+      .select()
+      .from(schema.bridgeAccounts)
+      .where(eq(schema.bridgeAccounts.id, id));
+    return row;
   }
 
   it("marks an account failed once it outlives its own TTL plus the margin", async () => {
@@ -266,9 +294,9 @@ describe("the sweep that notices silence", () => {
     const result = await sweepStaleBridgeAccounts();
 
     expect(result.markedFailed).toBe(1);
-    const stored = await BridgeAccount.findById(silent._id).lean();
+    const stored = await storedAccount(silent.id);
     expect(stored?.state).toBe("failed");
-    expect(stored?.rawState?.reason).toBe("stale");
+    expect(stored?.rawStateReason).toBe("stale");
   });
 
   it("leaves an account alone while it is still within its TTL", async () => {
@@ -281,7 +309,7 @@ describe("the sweep that notices silence", () => {
     const result = await sweepStaleBridgeAccounts();
 
     expect(result.markedFailed).toBe(0);
-    const stored = await BridgeAccount.findById(fresh._id).lean();
+    const stored = await storedAccount(fresh.id);
     expect(stored?.state).toBe("connected");
   });
 
@@ -298,8 +326,8 @@ describe("the sweep that notices silence", () => {
     const result = await sweepStaleBridgeAccounts();
 
     expect(result.markedFailed).toBe(1);
-    expect((await BridgeAccount.findById(shortTtl._id).lean())?.state).toBe("failed");
-    expect((await BridgeAccount.findById(longTtl._id).lean())?.state).toBe("connected");
+    expect((await storedAccount(shortTtl.id))?.state).toBe("failed");
+    expect((await storedAccount(longTtl.id))?.state).toBe("connected");
   });
 
   it("holds an account that never reported a TTL to the healthy default", async () => {
@@ -313,8 +341,8 @@ describe("the sweep that notices silence", () => {
 
     await sweepStaleBridgeAccounts();
 
-    expect((await BridgeAccount.findById(silent._id).lean())?.state).toBe("failed");
-    expect((await BridgeAccount.findById(recent._id).lean())?.state).toBe("connected");
+    expect((await storedAccount(silent.id))?.state).toBe("failed");
+    expect((await storedAccount(recent.id))?.state).toBe("connected");
   });
 
   it("does not touch an attempt that is still linking", async () => {
@@ -327,7 +355,7 @@ describe("the sweep that notices silence", () => {
 
     await sweepStaleBridgeAccounts();
 
-    expect((await BridgeAccount.findById(linking._id).lean())?.state).toBe("linking");
+    expect((await storedAccount(linking.id))?.state).toBe("linking");
   });
 
   it("does not keep re-marking accounts it already marked", async () => {

@@ -3,7 +3,7 @@ import { bridgesConfig, type EnabledBridgeNetwork } from "../../config/bridges";
 import {
   isBridgeLoginStepType,
   type BridgeLoginStepType,
-} from "../../models/BridgeLinkSession";
+} from "../../db/schema/bridges";
 import { logger } from "../../utils/logger";
 
 /**

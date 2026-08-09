@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -41,10 +40,12 @@ vi.mock("../../../services/bridges/proxy/proxyProvider", async () => {
   };
 });
 
-import BridgeAccount from "../../../models/BridgeAccount";
-import BridgeProxyLease, {
-  type LeanBridgeProxyLease,
-} from "../../../models/BridgeProxyLease";
+import { and, asc, eq } from "drizzle-orm";
+import { uuidv7, isUniqueViolation } from "@oxyhq/db";
+import { closePostgres, connectPostgres, getDb } from "../../../db";
+import { listLeaseRotations } from "../../../db/bridges/proxyLeases";
+import * as schema from "../../../db/schema";
+import { setUpTestDatabase, type TestDatabaseHandle } from "../../../db/testDatabase";
 import {
   ensureProxyLease,
   LeaseCountryUnresolvedError,
@@ -61,18 +62,34 @@ const USER = "oxy-user-1";
 const OTHER_USER = "oxy-user-2";
 
 describe("the proxy allocator", () => {
+  let handle: TestDatabaseHandle;
+
   beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    await mongoose.connect(uri, { dbName: "allo_bridges_test" });
-    // The unique index is what several assertions below actually test.
-    await BridgeProxyLease.init();
-    await BridgeAccount.init();
-  });
+    // The unique index is what several assertions below actually test, and the
+    // migration is what creates it.
+    handle = await setUpTestDatabase();
+    connectPostgres(handle.databaseUrl);
+  }, 180_000);
 
   afterAll(async () => {
-    await mongoose.disconnect();
+    await closePostgres();
+    await handle?.drop();
   });
+
+  async function leasesForUser() {
+    return await getDb()
+      .select()
+      .from(schema.bridgeProxyLeases)
+      .where(eq(schema.bridgeProxyLeases.oxyUserId, USER));
+  }
+
+  async function storedLease(id: string) {
+    const [row] = await getDb()
+      .select()
+      .from(schema.bridgeProxyLeases)
+      .where(eq(schema.bridgeProxyLeases.id, id));
+    return row;
+  }
 
   beforeEach(() => {
     verifyExit.mockResolvedValue({ ip: "203.0.113.7", country: "ES" });
@@ -81,8 +98,9 @@ describe("the proxy allocator", () => {
   afterEach(async () => {
     vi.clearAllMocks();
     resetProxyUrlCacheForTests();
-    await BridgeProxyLease.deleteMany({});
-    await BridgeAccount.deleteMany({});
+    await getDb().delete(schema.bridgeProxyLeaseRotations);
+    await getDb().delete(schema.bridgeProxyLeases);
+    await getDb().delete(schema.bridgeAccounts);
   });
 
   describe("rule 2 — the country is frozen at creation", () => {
@@ -111,8 +129,8 @@ describe("the proxy allocator", () => {
 
       expect(second.countryCode).toBe("ES");
       expect(second.sessionSeed).toBe(first.sessionSeed);
-      expect(second._id.toString()).toBe(first._id.toString());
-      expect(await BridgeProxyLease.countDocuments({})).toBe(1);
+      expect(second.id).toBe(first.id);
+      expect(await getDb().select().from(schema.bridgeProxyLeases)).toHaveLength(1);
     });
 
     it("resolves the country from the profile, then the phone, then the request", async () => {
@@ -157,7 +175,7 @@ describe("the proxy allocator", () => {
         }),
       ).rejects.toBeInstanceOf(LeaseCountryUnresolvedError);
 
-      expect(await BridgeProxyLease.countDocuments({})).toBe(0);
+      expect(await getDb().select().from(schema.bridgeProxyLeases)).toHaveLength(0);
     });
 
     it("refuses a country the provider does not serve, before anything is written", async () => {
@@ -169,7 +187,7 @@ describe("the proxy allocator", () => {
         }),
       ).rejects.toBeInstanceOf(LeaseCountryUnsupportedError);
 
-      expect(await BridgeProxyLease.countDocuments({})).toBe(0);
+      expect(await getDb().select().from(schema.bridgeProxyLeases)).toHaveLength(0);
     });
   });
 
@@ -188,10 +206,10 @@ describe("the proxy allocator", () => {
         candidates: { profileCountry: "ES" },
       });
 
-      await BridgeProxyLease.updateOne(
-        { _id: original._id },
-        { $set: { state: "released", releasedAt: new Date() } },
-      );
+      await getDb()
+        .update(schema.bridgeProxyLeases)
+        .set({ state: "released", releasedAt: new Date() })
+        .where(eq(schema.bridgeProxyLeases.id, original.id));
 
       const revived = await ensureProxyLease({
         oxyUserId: USER,
@@ -202,7 +220,9 @@ describe("the proxy allocator", () => {
       expect(revived.state).toBe("active");
       expect(revived.countryCode).toBe("ES");
       expect(revived.sessionSeed).toBe(original.sessionSeed);
-      expect(revived.releasedAt).toBeUndefined();
+      // NULL, not absent: Postgres stores "cleared" as a value, and the revival
+      // sets it back rather than unsetting a path.
+      expect(revived.releasedAt).toBeNull();
     });
   });
 
@@ -240,7 +260,7 @@ describe("the proxy allocator", () => {
       });
 
       expect(whatsapp.sessionSeed).not.toBe(instagram.sessionSeed);
-      expect(await BridgeProxyLease.countDocuments({ oxyUserId: USER })).toBe(2);
+      expect(await leasesForUser()).toHaveLength(2);
     });
 
     it("converges on ONE lease when two link attempts race", async () => {
@@ -271,7 +291,7 @@ describe("the proxy allocator", () => {
         }),
       ]);
 
-      expect(await BridgeProxyLease.countDocuments({ oxyUserId: USER })).toBe(1);
+      expect(await leasesForUser()).toHaveLength(1);
       expect(a.sessionSeed).toBe(b.sessionSeed);
       expect(b.sessionSeed).toBe(c.sessionSeed);
     });
@@ -289,17 +309,24 @@ describe("the proxy allocator", () => {
         candidates: { profileCountry: "ES" },
       });
 
-      await expect(
-        BridgeProxyLease.create({
+      const error = await getDb()
+        .insert(schema.bridgeProxyLeases)
+        .values({
+          id: uuidv7(),
           oxyUserId: USER,
           network: "whatsapp",
           provider: "provider-a",
           countryCode: "ES",
           sessionSeed: "a-second-seed-for-the-same-pair",
           state: "active",
-          rotations: [],
-        }),
-      ).rejects.toMatchObject({ code: 11000 });
+        })
+        .then(
+          () => null,
+          (caught: unknown) => caught,
+        );
+      // Recognised by SQLSTATE rather than by a message: the text is the
+      // server's to reword, and `11000` was Mongo's number for the same fact.
+      expect(isUniqueViolation(error)).toBe(true);
     });
   });
 
@@ -310,7 +337,10 @@ describe("the proxy allocator", () => {
         network: "whatsapp",
         candidates: { profileCountry: "ES" },
       });
-      await BridgeProxyLease.updateOne({ _id: original._id }, { $set: { regionCode: "MD" } });
+      await getDb()
+        .update(schema.bridgeProxyLeases)
+        .set({ regionCode: "MD" })
+        .where(eq(schema.bridgeProxyLeases.id, original.id));
 
       const rotated = await rotateProxyLease({
         oxyUserId: USER,
@@ -322,11 +352,27 @@ describe("the proxy allocator", () => {
       expect(rotated.regionCode).toBe("MD");
       expect(rotated.sessionSeed).not.toBe(original.sessionSeed);
       expect(rotated.state).toBe("active");
-      expect(rotated.rotations).toHaveLength(1);
-      expect(rotated.rotations[0]).toMatchObject({
+      // `rotations[]` was an embedded array and is now a child table, so the
+      // history is READ rather than carried on the lease. Same evidence, and it
+      // no longer grows the row it hangs off.
+      const rotations = await listLeaseRotations(getDb(), rotated.id);
+      expect(rotations).toHaveLength(1);
+      expect(rotations[0]).toMatchObject({ reason: "ban_quarantine" });
+
+      /**
+       * The seeds are read from the TABLE, because `listLeaseRotations`
+       * deliberately withholds them: what an operator needs is when the exit
+       * identity changed and why, and a seed IS that identity. Asserted here
+       * both ways, so the projection cannot quietly start carrying them.
+       */
+      expect(Object.keys(rotations[0] ?? {})).not.toContain("fromSeed");
+      const [stored] = await getDb()
+        .select()
+        .from(schema.bridgeProxyLeaseRotations)
+        .where(eq(schema.bridgeProxyLeaseRotations.leaseId, rotated.id));
+      expect(stored).toMatchObject({
         fromSeed: original.sessionSeed,
         toSeed: rotated.sessionSeed,
-        reason: "ban_quarantine",
       });
     });
 
@@ -348,12 +394,19 @@ describe("the proxy allocator", () => {
         reason: "operator_forced",
       });
 
-      expect(twice.rotations.map((entry) => entry.reason)).toEqual([
+      const rotations = await listLeaseRotations(getDb(), twice.id);
+      expect(rotations.map((entry) => entry.reason)).toEqual([
         "provider_retired",
         "operator_forced",
       ]);
       // The chain has to join up: each rotation starts where the last one ended.
-      expect(twice.rotations[1].fromSeed).toBe(twice.rotations[0].toSeed);
+      // Read from the table, since the seeds are withheld from the public read.
+      const chain = await getDb()
+        .select()
+        .from(schema.bridgeProxyLeaseRotations)
+        .where(eq(schema.bridgeProxyLeaseRotations.leaseId, twice.id))
+        .orderBy(asc(schema.bridgeProxyLeaseRotations.rotatedAt));
+      expect(chain[1]?.fromSeed).toBe(chain[0]?.toSeed);
     });
   });
 
@@ -377,7 +430,7 @@ describe("the proxy allocator", () => {
 
       await expect(verifyLeaseExit(lease)).rejects.toBeInstanceOf(ProxyExitMismatchError);
 
-      const stored = await BridgeProxyLease.findById(lease._id).lean<LeanBridgeProxyLease>();
+      const stored = await storedLease(lease.id);
       expect(stored?.state).toBe("quarantined");
       expect(stored?.lastExitCountry).toBe("DE");
       expect(logger.error).toHaveBeenCalledWith(
@@ -400,7 +453,7 @@ describe("the proxy allocator", () => {
       const observation = await verifyLeaseExit(lease);
 
       expect(observation.country).toBe("ES");
-      const stored = await BridgeProxyLease.findById(lease._id).lean<LeanBridgeProxyLease>();
+      const stored = await storedLease(lease.id);
       expect(stored?.state).toBe("active");
       expect(stored?.lastExitIp).toBe("203.0.113.7");
       expect(stored?.lastVerifiedAt).toBeInstanceOf(Date);
@@ -425,7 +478,8 @@ describe("the proxy allocator", () => {
 
   describe("rule 6 — serving the composed URL to a slot", () => {
     async function accountWithSlot(slotId: string): Promise<void> {
-      await BridgeAccount.create({
+      await getDb().insert(schema.bridgeAccounts).values({
+        id: uuidv7(),
         oxyUserId: USER,
         network: "whatsapp",
         remoteLoginId: "remote-1",
@@ -437,10 +491,14 @@ describe("the proxy allocator", () => {
     }
 
     const lookup = async (slotId: string) => {
-      const account = await BridgeAccount.findOne({ slotId }).lean();
-      return account
-        ? { oxyUserId: account.oxyUserId, network: account.network }
-        : undefined;
+      const [account] = await getDb()
+        .select({
+          oxyUserId: schema.bridgeAccounts.oxyUserId,
+          network: schema.bridgeAccounts.network,
+        })
+        .from(schema.bridgeAccounts)
+        .where(eq(schema.bridgeAccounts.slotId, slotId));
+      return account;
     };
 
     it("composes a URL carrying the lease's country and session", async () => {
@@ -469,7 +527,10 @@ describe("the proxy allocator", () => {
         candidates: { profileCountry: "ES" },
       });
       await accountWithSlot("allo-wa-0042");
-      await BridgeProxyLease.updateOne({ _id: lease._id }, { $set: { state: "quarantined" } });
+      await getDb()
+        .update(schema.bridgeProxyLeases)
+        .set({ state: "quarantined" })
+        .where(eq(schema.bridgeProxyLeases.id, lease.id));
 
       await expect(proxyUrlForSlot("allo-wa-0042", lookup)).resolves.toBeUndefined();
     });

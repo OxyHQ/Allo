@@ -17,8 +17,28 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDatabase, constraintNameOf, isCheckViolation, uuidv7 } from "@oxyhq/db";
 import type postgres from "postgres";
+import { publicColumns } from "@oxyhq/db/assert";
+import {
+  MAX_LINK_SESSION_FLOW_ID_LENGTH,
+  MAX_LINK_SESSION_PROCESS_ID_LENGTH,
+  MAX_LINK_SESSION_STEP_ID_LENGTH,
+  MAX_PROXY_LEASE_PROVIDER_LENGTH,
+  MAX_PROXY_LEASE_SESSION_SEED_LENGTH,
+} from "../../db/schema/bridges";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
+import { PROTECTED_COLUMNS } from "../../db/protectedColumns";
 import * as schema from "../../db/schema";
+
+/**
+ * The same projection `linkSessions.ts` builds, derived the same way rather than
+ * imported — the module keeps it private, and a hand-written list here would be
+ * a second answer to "which columns are public" that could agree with the first
+ * only by luck.
+ */
+const SESSION_PUBLIC_COLUMNS_FOR_TEST = publicColumns(
+  schema.bridgeLinkSessions,
+  PROTECTED_COLUMNS,
+);
 import {
   applyReportedState,
   countAccounts,
@@ -37,7 +57,6 @@ import {
   closeLinkSession,
   completeLinkSession,
   findLinkSessionForUser,
-  findOpenLinkSessions,
   insertLinkSession,
   recordLinkSessionStep,
 } from "../../db/bridges/linkSessions";
@@ -506,48 +525,14 @@ describe("bridge_link_sessions — expiry is the query's business, not the sweep
     expect(found?.expiresAt.getTime()).toBeLessThan(Date.now());
   });
 
-  it("excludes an expired attempt from the OPEN-attempt question", async () => {
-    // The read where a lagging sweep changes the ANSWER rather than the row
-    // count, so the deadline is part of the predicate.
-    const oxyUserId = unique("user");
-    await insertLinkSession(db, {
-      id: uuidv7(),
-      linkId: unique("lnk"),
-      oxyUserId,
-      network: "telegram",
-      flowId: "phone",
-      remoteLoginProcessId: unique("proc"),
-      expiresAt: new Date(Date.now() - 60_000),
-    });
-    const live = await insertLinkSession(db, {
-      id: uuidv7(),
-      linkId: unique("lnk"),
-      oxyUserId,
-      network: "telegram",
-      flowId: "phone",
-      remoteLoginProcessId: unique("proc"),
-      expiresAt: new Date(Date.now() + 3_600_000),
-    });
-    const cancelled = await insertLinkSession(db, {
-      id: uuidv7(),
-      linkId: unique("lnk"),
-      oxyUserId,
-      network: "telegram",
-      flowId: "phone",
-      remoteLoginProcessId: unique("proc"),
-      expiresAt: new Date(Date.now() + 3_600_000),
-    });
-    await closeLinkSession(db, { id: cancelled.id, outcome: "cancelled", at: new Date() });
-
-    const open = await findOpenLinkSessions(db, {
-      oxyUserId,
-      network: "telegram",
-      now: new Date(),
-    });
-    expect(open.map((row) => row.id)).toEqual([live.id]);
-  });
-
-  it("withholds the bridge's login-process handle from the open-attempt read", async () => {
+  /**
+   * The two cases that lived here — "excludes an expired attempt from the
+   * OPEN-attempt question" and its projection twin — are gone with
+   * `findOpenLinkSessions`, which had no caller in Postgres and no ancestor in
+   * Mongo either. What they were really pinning about the PROJECTION is covered
+   * by the relay opt-in below, which is the read that actually exists.
+   */
+  it("withholds the bridge's login-process handle unless the relay read asks for it", async () => {
     const oxyUserId = unique("user");
     const linkId = unique("lnk");
     await insertLinkSession(db, {
@@ -562,24 +547,124 @@ describe("bridge_link_sessions — expiry is the query's business, not the sweep
       expiresAt: new Date(Date.now() + 3_600_000),
     });
 
-    const open = await findOpenLinkSessions(db, {
-      oxyUserId,
-      network: "telegram",
-      now: new Date(),
-    });
-    expect(open).toHaveLength(1);
-    const keys = Object.keys(open[0]);
-    // Positive floor first: an empty projection would satisfy the exclusions
-    // below without withholding anything.
-    expect(keys).toContain("linkId");
-    expect(keys).toContain("outcome");
-    expect(keys).not.toContain("remoteLoginProcessId");
-    expect(keys).not.toContain("currentStepId");
-
-    // The relay read is the ONE opt-in, and it really does carry them.
+    // The relay read is the ONE opt-in, and it really does carry both handles.
     const relay = await findLinkSessionForUser(db, { oxyUserId, linkId });
     expect(relay?.remoteLoginProcessId).toBeTruthy();
     expect(relay?.currentStepId).toBe("step-1");
+
+    // Positive floor first: an empty projection would satisfy any exclusion.
+    const publicKeys = Object.keys(
+      (await db
+        .select(SESSION_PUBLIC_COLUMNS_FOR_TEST)
+        .from(schema.bridgeLinkSessions)
+        .where(eq(schema.bridgeLinkSessions.linkId, linkId)))[0] ?? {},
+    );
+    expect(publicKeys).toContain("linkId");
+    expect(publicKeys).toContain("outcome");
+    expect(publicKeys).not.toContain("remoteLoginProcessId");
+    expect(publicKeys).not.toContain("currentStepId");
+  });
+});
+
+describe("the five Mongoose maxlength bounds that were actually in force", () => {
+  /**
+   * Sixteen bounds were declared across the three bridge models; these five are
+   * the ones that ever refused a value. Mongoose runs a `maxlength` validator on
+   * `.create()`/`.save()` and NOT on an update without `runValidators: true`,
+   * which appears nowhere in this service — so only the three columns written by
+   * `BridgeLinkSession.create` and the two written by `BridgeProxyLease.create`
+   * were ever enforced. The other eleven get no CHECK, and `db/schema/bridges.ts`
+   * says so on each column.
+   *
+   * ## Why this reads the CONSTANT and inserts through raw SQL
+   *
+   * The bound is written in two places that cannot see each other: the exported
+   * constant, and the literal drizzle-kit rendered into the migration. The test
+   * database is built from the MIGRATION, so a constant changed without a
+   * regeneration would leave the two disagreeing — and nothing else in the suite
+   * would notice, because no repository here truncates to these lengths. Reading
+   * the constant and asserting against the applied DDL is what turns that drift
+   * into a red test rather than a comment nobody re-checks.
+   *
+   * Raw SQL because these columns are plain `text` with no TypeScript narrowing
+   * to work around — the point is to reach the server the way a migration or a
+   * repair script would.
+   */
+  it.each([
+    [
+      "bridge_link_sessions",
+      "flow_id",
+      "bridge_link_sessions_flow_id_length_check",
+      MAX_LINK_SESSION_FLOW_ID_LENGTH,
+    ],
+    [
+      "bridge_link_sessions",
+      "remote_login_process_id",
+      "bridge_link_sessions_remote_login_process_id_length_check",
+      MAX_LINK_SESSION_PROCESS_ID_LENGTH,
+    ],
+    [
+      "bridge_link_sessions",
+      "current_step_id",
+      "bridge_link_sessions_current_step_id_length_check",
+      MAX_LINK_SESSION_STEP_ID_LENGTH,
+    ],
+    [
+      "bridge_proxy_leases",
+      "provider",
+      "bridge_proxy_leases_provider_length_check",
+      MAX_PROXY_LEASE_PROVIDER_LENGTH,
+    ],
+    [
+      "bridge_proxy_leases",
+      "session_seed",
+      "bridge_proxy_leases_session_seed_length_check",
+      MAX_PROXY_LEASE_SESSION_SEED_LENGTH,
+    ],
+  ])("bounds %s.%s at the length the model declared", async (table, column, constraint, limit) => {
+    /**
+     * The row is built as an object and inserted with `client(row)`, so the
+     * TARGET column appears exactly once however it overlaps the defaults —
+     * naming it twice is a duplicate-column error, which reads like a failing
+     * CHECK and is not one.
+     */
+    const insert = (length: number) => {
+      const defaults: Record<string, unknown> =
+        table === "bridge_link_sessions"
+          ? {
+              id: uuidv7(),
+              link_id: unique("lnk"),
+              oxy_user_id: unique("user"),
+              network: "telegram",
+              flow_id: "phone",
+              remote_login_process_id: unique("proc"),
+              /**
+               * An ISO string, not a `Date` — the same postgres.js trap
+               * `proxyLeases.ts` documents: a `Date` inside a raw template has
+               * no column mapper to encode it and the driver throws
+               * `ERR_INVALID_ARG_TYPE` before the server sees the statement.
+               */
+              expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            }
+          : {
+              id: uuidv7(),
+              oxy_user_id: unique("user"),
+              network: "telegram",
+              provider: "provider-a",
+              country_code: "ES",
+              session_seed: unique("seed"),
+            };
+      const row = { ...defaults, [column]: "x".repeat(length) };
+      return client`insert into ${client(table)} ${client(row)}`.then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+    };
+
+    // Exactly at the bound is allowed. An off-by-one CHECK would refuse the
+    // longest value the model always accepted, and only under load.
+    expect(await insert(limit)).toBeNull();
+    expect(constraintNameOf(await insert(limit + 1))).toBe(constraint);
   });
 });
 

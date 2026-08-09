@@ -1,9 +1,15 @@
 import * as z from "zod";
 import { bridgesConfig, type EnabledBridgeNetwork } from "../../config/bridges";
-import BridgeAccount, {
-  type BridgeAccountState,
-  type LeanBridgeAccount,
-} from "../../models/BridgeAccount";
+import { getDb } from "../../db";
+import {
+  applyReportedState,
+  findAccountByNetworkRemoteLogin,
+  findAccountByRemoteLogin,
+  markAccountNotified,
+  markStaleAccountsFailed,
+  type BridgeAccountRow,
+} from "../../db/bridges/accounts";
+import type { BridgeAccountState } from "../../db/schema/bridges";
 import { logger } from "../../utils/logger";
 import {
   accountStateForBridgeState,
@@ -67,7 +73,7 @@ export function parseBridgeStateReport(payload: unknown): BridgeStateReport | un
 /** Sends the "you need to re-link" nudge. Injected so tests do not import the server. */
 export type BridgeStateNotifier = (
   oxyUserId: string,
-  account: LeanBridgeAccount,
+  account: BridgeAccountRow,
 ) => Promise<void>;
 
 /**
@@ -124,45 +130,38 @@ export async function applyBridgeState(
   const state = accountStateForBridgeState(report.state_event);
   const at = report.timestamp ? new Date(report.timestamp * 1_000) : new Date();
 
-  await BridgeAccount.updateOne(
-    { _id: account._id },
-    {
-      $set: {
-        state,
-        lastStateAt: at,
-        rawState: {
-          stateEvent: report.state_event,
-          ...(report.error ? { error: report.error } : {}),
-          ...(report.message ? { message: report.message } : {}),
-          ...(report.reason ? { reason: report.reason } : {}),
-          ...(typeof report.ttl === "number" ? { ttl: report.ttl } : {}),
-          at,
-        },
-        ...(report.remote_name ? { remoteName: report.remote_name } : {}),
-        ...(report.remote_profile
-          ? {
-              remoteProfile: {
-                ...(report.remote_profile.name ? { name: report.remote_profile.name } : {}),
-                ...(report.remote_profile.username
-                  ? { username: report.remote_profile.username }
-                  : {}),
-                ...(report.remote_profile.phone ? { phone: report.remote_profile.phone } : {}),
-                ...(report.remote_profile.avatar_url
-                  ? { avatarUrl: report.remote_profile.avatar_url }
-                  : {}),
-              },
-            }
-          : {}),
-        ...(state === "connected" ? { lastConnectedAt: at } : {}),
-      },
-      /**
-       * Recovery clears the notification marker, so a SECOND genuine failure
-       * after a recovery notifies again. Without this, a user who reconnects and
-       * later gets logged out again would never be told the second time.
-       */
-      ...(state === "connected" ? { $unset: { lastNotifiedState: "", lastNotifiedAt: "" } } : {}),
-    },
-  );
+  /**
+   * The five `raw_state_*` columns are written TOGETHER, absent ones as NULL,
+   * because Mongo's `$set: { rawState: {…} }` replaced the whole sub-document — a
+   * report carrying no `error` means there is no longer an error, not that the
+   * previous one still stands. The detail columns are the opposite: absent means
+   * "the bridge did not mention it", and the repository keeps what is on file.
+   *
+   * Clearing the notification marker on recovery is the repository's job now, not
+   * this caller's. Both writers of this row did it, in two places, and it belongs
+   * to the row: a third writer that forgot would leave a user who reconnects and
+   * is later logged out again permanently un-notifiable, and nothing would report
+   * it.
+   */
+  await applyReportedState(getDb(), {
+    id: account.id,
+    state,
+    at,
+    rawStateEvent: report.state_event,
+    ...(report.error ? { rawStateError: report.error } : {}),
+    ...(report.message ? { rawStateMessage: report.message } : {}),
+    ...(report.reason ? { rawStateReason: report.reason } : {}),
+    ...(typeof report.ttl === "number" ? { rawStateTtl: report.ttl } : {}),
+    ...(report.remote_name ? { remoteName: report.remote_name } : {}),
+    ...(report.remote_profile?.name ? { remoteProfileName: report.remote_profile.name } : {}),
+    ...(report.remote_profile?.username
+      ? { remoteProfileUsername: report.remote_profile.username }
+      : {}),
+    ...(report.remote_profile?.phone ? { remoteProfilePhone: report.remote_profile.phone } : {}),
+    ...(report.remote_profile?.avatar_url
+      ? { remoteProfileAvatarUrl: report.remote_profile.avatar_url }
+      : {}),
+  });
 
   /**
    * §5.4 step 4's deduplication. `BAD_CREDENTIALS` is re-sent every time its TTL
@@ -172,10 +171,7 @@ export async function applyBridgeState(
   if (shouldNotifyUser(state) && account.lastNotifiedState !== state) {
     try {
       await notify(account.oxyUserId, account);
-      await BridgeAccount.updateOne(
-        { _id: account._id },
-        { $set: { lastNotifiedState: state, lastNotifiedAt: new Date() } },
-      );
+      await markAccountNotified(getDb(), { id: account.id, state, at: new Date() });
     } catch (error) {
       /**
        * A failed push must not fail the webhook. The state change is already
@@ -204,7 +200,7 @@ export async function applyBridgeState(
 async function findAccount(
   network: EnabledBridgeNetwork,
   report: BridgeStateReport,
-): Promise<LeanBridgeAccount | null> {
+): Promise<BridgeAccountRow | undefined> {
   const remoteLoginId = report.remote_id;
 
   /**
@@ -218,19 +214,19 @@ async function findAccount(
   if (report.user_id) {
     const oxyUserId = oxyUserIdFromMatrixUserId(report.user_id);
     if (oxyUserId) {
-      return await BridgeAccount.findOne({
+      return await findAccountByRemoteLogin(getDb(), {
         oxyUserId,
         network: network.id,
         remoteLoginId,
-      }).lean<LeanBridgeAccount | null>();
+      });
     }
-    return null;
+    return undefined;
   }
 
-  return await BridgeAccount.findOne({
+  return await findAccountByNetworkRemoteLogin(getDb(), {
     network: network.id,
     remoteLoginId,
-  }).lean<LeanBridgeAccount | null>();
+  });
 }
 
 export interface SweepResult {
@@ -249,39 +245,24 @@ export interface SweepResult {
  * its own expiry is what governs it.
  */
 export async function sweepStaleBridgeAccounts(now: Date = new Date()): Promise<SweepResult> {
-  const marginMs = bridgesConfig().staleMarginSeconds * 1_000;
 
-  const result = await BridgeAccount.updateMany(
-    {
-      state: { $nin: ["failed", "linking"] },
-      $expr: {
-        $lt: [
-          {
-            $add: [
-              "$lastStateAt",
-              { $multiply: [{ $ifNull: ["$rawState.ttl", DEFAULT_SWEEP_TTL_SECONDS] }, 1_000] },
-              marginMs,
-            ],
-          },
-          now,
-        ],
-      },
-    },
-    {
-      $set: {
-        state: "failed",
-        "rawState.reason": "stale",
-        lastStateAt: now,
-      },
-    },
-  );
+  /**
+   * Mongo needed an `$expr` aggregation to compare a stored field against a
+   * computed deadline. In SQL it is the predicate it always was, which is why the
+   * arithmetic moved into the repository rather than being rebuilt here.
+   */
+  const markedFailed = await markStaleAccountsFailed(getDb(), {
+    now,
+    marginSeconds: bridgesConfig().staleMarginSeconds,
+    defaultTtlSeconds: DEFAULT_SWEEP_TTL_SECONDS,
+  });
 
-  if (result.modifiedCount > 0) {
+  if (markedFailed > 0) {
     logger.warn("[Bridges] accounts went silent past their TTL and were marked failed", {
-      count: result.modifiedCount,
+      count: markedFailed,
     });
   }
-  return { markedFailed: result.modifiedCount };
+  return { markedFailed };
 }
 
 /**

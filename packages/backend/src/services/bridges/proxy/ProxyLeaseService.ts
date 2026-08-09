@@ -1,10 +1,15 @@
 import { randomBytes } from "crypto";
+import { uuidv7 } from "@oxyhq/db";
 import type { BridgeNetworkId } from "../../../config/bridges";
-import BridgeProxyLease, {
-  type BridgeProxyRotationReason,
-  type LeanBridgeProxyLease,
-} from "../../../models/BridgeProxyLease";
-import { isDuplicateKeyError } from "../../../utils/error";
+import { getDb } from "../../../db";
+import {
+  acquireLease,
+  findLease,
+  recordLeaseExit,
+  rotateLease,
+  type BridgeProxyLeaseRow,
+} from "../../../db/bridges/proxyLeases";
+import type { BridgeProxyRotationReason } from "../../../db/schema/bridges";
 import { logger } from "../../../utils/logger";
 import {
   resolveLeaseCountry,
@@ -102,69 +107,50 @@ export interface EnsureProxyLeaseInput {
  */
 export async function ensureProxyLease(
   input: EnsureProxyLeaseInput,
-): Promise<LeanBridgeProxyLease> {
+): Promise<BridgeProxyLeaseRow> {
   const provider = proxyProvider();
   if (!provider) throw new ProxyProviderNotConfiguredError();
 
-  const existing = await BridgeProxyLease.findOne({
-    oxyUserId: input.oxyUserId,
-    network: input.network,
-  }).lean<LeanBridgeProxyLease | null>();
-
-  if (existing) {
-    /**
-     * A released lease is revived rather than replaced, keeping its country and
-     * its seed. Releasing is an operational act; it does not make the user's
-     * home country a different country.
-     */
-    if (existing.state === "released") {
-      const revived = await BridgeProxyLease.findOneAndUpdate(
-        { _id: existing._id },
-        { $set: { state: "active" }, $unset: { releasedAt: "" } },
-        { new: true },
-      ).lean<LeanBridgeProxyLease | null>();
-      if (revived) return revived;
-    }
-    return existing;
-  }
-
+  /**
+   * A country is resolved BEFORE the acquisition, on every call, even though it
+   * is used only when the row does not exist yet — and the reason is worth
+   * stating because the Mongo version read first and could skip this.
+   *
+   * `acquireLease` is ONE statement that both creates and returns the existing
+   * row, which is what removes the read-then-write race two concurrent link
+   * attempts used to run. The price is that its inputs must be ready before it
+   * is called. That costs a pure, in-process country resolution on a path that
+   * will discard it, and buys away a duplicate-key error that had to be caught
+   * and re-read.
+   *
+   * The refusals still happen first, so a user in an unsupported country is
+   * refused rather than given a lease: rule 2 and rule 3 are unchanged, because
+   * the only value that decides a country is the one handed to a create.
+   */
   const resolved = resolveLeaseCountry(input.candidates);
   if (!resolved) throw new LeaseCountryUnresolvedError();
   if (!provider.supportsCountry(resolved.countryCode)) {
     throw new LeaseCountryUnsupportedError(resolved.countryCode);
   }
 
-  try {
-    const created = await BridgeProxyLease.create({
-      oxyUserId: input.oxyUserId,
-      network: input.network,
-      provider: provider.id,
-      countryCode: resolved.countryCode,
-      sessionSeed: newSessionSeed(),
-      state: "active",
-      rotations: [],
-    });
+  const { lease, created } = await acquireLease(getDb(), {
+    id: uuidv7(),
+    oxyUserId: input.oxyUserId,
+    network: input.network,
+    provider: provider.id,
+    countryCode: resolved.countryCode,
+    sessionSeed: newSessionSeed(),
+    at: new Date(),
+  });
+
+  if (created) {
     logger.info("[Bridges] proxy lease created", {
       network: input.network,
       countryCode: resolved.countryCode,
       countrySource: resolved.source,
     });
-    return created.toObject<LeanBridgeProxyLease>();
-  } catch (error) {
-    /**
-     * Two concurrent link attempts from the same user race here, and the unique
-     * index decides. The loser re-reads instead of failing: both callers wanted
-     * the same lease, and there is exactly one.
-     */
-    if (isDuplicateKeyError(error)) {
-      const raced = await BridgeProxyLease.findOne({
-        oxyUserId: input.oxyUserId,
-        network: input.network,
-      }).lean<LeanBridgeProxyLease | null>();
-      if (raced) return raced;
-    }
-    throw error;
   }
+  return lease;
 }
 
 /**
@@ -178,7 +164,7 @@ export async function ensureProxyLease(
  * at.
  */
 export async function verifyLeaseExit(
-  lease: LeanBridgeProxyLease,
+  lease: BridgeProxyLeaseRow,
 ): Promise<ProxyExitObservation> {
   const provider = proxyProvider();
   if (!provider) throw new ProxyProviderNotConfiguredError();
@@ -200,17 +186,13 @@ export async function verifyLeaseExit(
   };
 
   if (observation.country !== lease.countryCode.toUpperCase()) {
-    await BridgeProxyLease.updateOne(
-      { _id: lease._id },
-      {
-        $set: {
-          state: "quarantined",
-          lastExitIp: observation.ip,
-          lastExitCountry: observation.country,
-          lastVerifiedAt: new Date(),
-        },
-      },
-    );
+    await recordLeaseExit(getDb(), {
+      id: lease.id,
+      observedIp: observation.ip,
+      observedCountry: observation.country,
+      at: new Date(),
+      quarantine: true,
+    });
     invalidateComposedProxyUrls(lease.oxyUserId, lease.network);
     /**
      * Logged at error level with a stable prefix because this is the alert.
@@ -225,16 +207,13 @@ export async function verifyLeaseExit(
     throw new ProxyExitMismatchError(lease.countryCode, observation.country);
   }
 
-  await BridgeProxyLease.updateOne(
-    { _id: lease._id },
-    {
-      $set: {
-        lastExitIp: observation.ip,
-        lastExitCountry: observation.country,
-        lastVerifiedAt: new Date(),
-      },
-    },
-  );
+  await recordLeaseExit(getDb(), {
+    id: lease.id,
+    observedIp: observation.ip,
+    observedCountry: observation.country,
+    at: new Date(),
+    quarantine: false,
+  });
   return observation;
 }
 
@@ -247,7 +226,7 @@ export async function verifyLeaseExit(
  * swallowed those too, §8.3 rule 5 would be a comment.
  */
 export async function verifyLeaseExitIfPossible(
-  lease: LeanBridgeProxyLease,
+  lease: BridgeProxyLeaseRow,
 ): Promise<ProxyExitObservation | undefined> {
   try {
     return await verifyLeaseExit(lease);
@@ -280,46 +259,35 @@ export interface RotateProxyLeaseInput {
  */
 export async function rotateProxyLease(
   input: RotateProxyLeaseInput,
-): Promise<LeanBridgeProxyLease> {
-  const existing = await BridgeProxyLease.findOne({
+): Promise<BridgeProxyLeaseRow> {
+  /**
+   * No read-then-write. `rotateLease` locks the row and reads `from_seed` under
+   * that lock in the same transaction that writes the replacement, so two
+   * concurrent rotations serialize into a chain each naming its true
+   * predecessor. The Mongo version read the previous seed OUTSIDE the update, so
+   * two rotations could both record the same `fromSeed` and leave a gap in the
+   * evidence an operator reads during a ban investigation.
+   */
+  const rotated = await rotateLease(getDb(), {
     oxyUserId: input.oxyUserId,
     network: input.network,
-  }).lean<LeanBridgeProxyLease | null>();
-
-  if (!existing) {
-    throw new ProxyLeaseError(
-      `no proxy lease to rotate for ${input.network}`,
-    );
-  }
-
-  const toSeed = newSessionSeed();
-  const rotated = await BridgeProxyLease.findOneAndUpdate(
-    { _id: existing._id },
-    {
-      $set: { sessionSeed: toSeed, state: "active" },
-      $push: {
-        rotations: {
-          at: new Date(),
-          fromSeed: existing.sessionSeed,
-          toSeed,
-          reason: input.reason,
-        },
-      },
-    },
-    { new: true },
-  ).lean<LeanBridgeProxyLease | null>();
+    rotationId: uuidv7(),
+    toSeed: newSessionSeed(),
+    reason: input.reason,
+    at: new Date(),
+  });
 
   if (!rotated) {
-    throw new ProxyLeaseError(`proxy lease for ${input.network} disappeared while rotating`);
+    throw new ProxyLeaseError(`no proxy lease to rotate for ${input.network}`);
   }
 
   invalidateComposedProxyUrls(input.oxyUserId, input.network);
   logger.info("[Bridges] proxy lease rotated", {
     network: input.network,
-    countryCode: rotated.countryCode,
+    countryCode: rotated.lease.countryCode,
     reason: input.reason,
   });
-  return rotated;
+  return rotated.lease;
 }
 
 interface CachedProxyUrl {
@@ -386,10 +354,10 @@ export async function proxyUrlForSlot(
   const owner = await lookup(slotId);
   if (!owner) return undefined;
 
-  const lease = await BridgeProxyLease.findOne({
+  const lease = await findLease(getDb(), {
     oxyUserId: owner.oxyUserId,
     network: owner.network,
-  }).lean<LeanBridgeProxyLease | null>();
+  });
 
   if (!lease || lease.state !== "active") return undefined;
 
@@ -402,7 +370,7 @@ export async function proxyUrlForSlot(
   return url;
 }
 
-function descriptorFor(lease: LeanBridgeProxyLease): ProxyLeaseDescriptor {
+function descriptorFor(lease: BridgeProxyLeaseRow): ProxyLeaseDescriptor {
   return {
     countryCode: lease.countryCode,
     ...(lease.regionCode ? { regionCode: lease.regionCode } : {}),

@@ -1,16 +1,15 @@
 import express from "express";
 import http from "http";
 import type { AddressInfo } from "net";
-import mongoose from "mongoose";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { uuidv7 } from "@oxyhq/db";
 
 import { resetBridgesConfigForTests } from "../../config/bridges";
-import BridgeAccount from "../../models/BridgeAccount";
-import BridgeLinkSession, {
-  type LeanBridgeLinkSession,
-} from "../../models/BridgeLinkSession";
-import BridgeProxyLease from "../../models/BridgeProxyLease";
+import { closePostgres, connectPostgres, getDb } from "../../db";
+import * as schema from "../../db/schema";
+import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
 import bridgesRouter from "../../routes/bridges";
 import { resetBridgeFlowCacheForTests } from "../../services/bridges/BridgeLinkService";
 
@@ -183,20 +182,44 @@ function appWithAuth(): express.Express {
 let bridge: StubBridge;
 
 describe("the bridge orchestration API", () => {
+  let handle: TestDatabaseHandle;
+
   beforeAll(async () => {
-    const uri = process.env.ALLO_TEST_MONGODB_URI;
-    if (!uri) throw new Error("ALLO_TEST_MONGODB_URI is not set by vitest.globalSetup.ts");
-    await mongoose.connect(uri, { dbName: "allo_bridge_routes_test" });
-    await BridgeAccount.init();
-    await BridgeLinkSession.init();
-    await BridgeProxyLease.init();
+    handle = await setUpTestDatabase();
+    connectPostgres(handle.databaseUrl);
     bridge = await startStubBridge();
-  });
+  }, 180_000);
 
   afterAll(async () => {
     await bridge.close();
-    await mongoose.disconnect();
+    await closePostgres();
+    await handle?.drop();
   });
+
+  /** A linked account, as the routes expect to find one. */
+  async function linkedAccount(
+    overrides: Partial<typeof schema.bridgeAccounts.$inferInsert> = {},
+  ) {
+    const [row] = await getDb()
+      .insert(schema.bridgeAccounts)
+      .values({
+        id: uuidv7(),
+        oxyUserId: USER,
+        network: "telegram",
+        remoteLoginId: "remote-login-1",
+        state: "connected",
+        linkedAt: new Date(),
+        lastStateAt: new Date(),
+        ...overrides,
+      })
+      .returning();
+    if (!row) throw new Error("bridge account fixture returned no row");
+    return row;
+  }
+
+  async function allAccounts() {
+    return await getDb().select().from(schema.bridgeAccounts);
+  }
 
   beforeEach(() => {
     process.env.ALLO_BRIDGES_ENABLED = "telegram";
@@ -230,9 +253,11 @@ describe("the bridge orchestration API", () => {
     delete process.env.ALLO_BRIDGE_PROXY_PASSWORD;
     resetBridgesConfigForTests();
     resetBridgeFlowCacheForTests();
-    await BridgeAccount.deleteMany({});
-    await BridgeLinkSession.deleteMany({});
-    await BridgeProxyLease.deleteMany({});
+    // Sessions first: `result_account_id` references an account.
+    await getDb().delete(schema.bridgeLinkSessions);
+    await getDb().delete(schema.bridgeProxyLeaseRotations);
+    await getDb().delete(schema.bridgeProxyLeases);
+    await getDb().delete(schema.bridgeAccounts);
   });
 
   describe("a disabled network does not exist", () => {
@@ -532,9 +557,10 @@ describe("the bridge orchestration API", () => {
         "fi.mau.telegram.login.phone_number": "+34600111222",
       });
 
-      const stored = await BridgeLinkSession.findOne({
-        linkId,
-      }).lean<LeanBridgeLinkSession>();
+      const [stored] = await getDb()
+        .select()
+        .from(schema.bridgeLinkSessions)
+        .where(eq(schema.bridgeLinkSessions.linkId, linkId));
       expect(JSON.stringify(stored)).not.toContain("+34600111222");
       expect(JSON.stringify(stored)).not.toContain("600111222");
     });
@@ -564,7 +590,10 @@ describe("the bridge orchestration API", () => {
         state: "connecting",
       });
 
-      const account = await BridgeAccount.findOne({ oxyUserId: USER }).lean();
+      const [account] = await getDb()
+        .select()
+        .from(schema.bridgeAccounts)
+        .where(eq(schema.bridgeAccounts.oxyUserId, USER));
       expect(account?.remoteLoginId).toBe("remote-login-1");
       expect(account?.spaceRoomId).toBe("!space:allo.you");
     });
@@ -600,52 +629,41 @@ describe("the bridge orchestration API", () => {
        * country the next time they linked — which is precisely the between-session
        * jump the whole design exists to avoid.
        */
-      const account = await BridgeAccount.create({
-        oxyUserId: USER,
-        network: "telegram",
-        remoteLoginId: "remote-login-1",
-        state: "connected",
-        linkedAt: new Date(),
-        lastStateAt: new Date(),
-      });
-      await BridgeProxyLease.create({
+      const account = await linkedAccount();
+      await getDb().insert(schema.bridgeProxyLeases).values({
+        id: uuidv7(),
         oxyUserId: USER,
         network: "telegram",
         provider: "provider-a",
         countryCode: "ES",
         sessionSeed: "seed-abc",
         state: "active",
-        rotations: [],
       });
 
       const response = await request(appWithAuth()).delete(
-        `/api/bridges/accounts/${account._id.toString()}`,
+        `/api/bridges/accounts/${account.id}`,
       );
 
       expect(response.status).toBe(200);
-      expect(await BridgeAccount.countDocuments({})).toBe(0);
+      expect(await allAccounts()).toHaveLength(0);
 
-      const lease = await BridgeProxyLease.findOne({ oxyUserId: USER }).lean();
+      const [lease] = await getDb()
+        .select()
+        .from(schema.bridgeProxyLeases)
+        .where(eq(schema.bridgeProxyLeases.oxyUserId, USER));
       expect(lease?.sessionSeed).toBe("seed-abc");
       expect(lease?.countryCode).toBe("ES");
     });
 
     it("does not let one user unlink another's account", async () => {
-      const account = await BridgeAccount.create({
-        oxyUserId: USER,
-        network: "telegram",
-        remoteLoginId: "remote-login-1",
-        state: "connected",
-        linkedAt: new Date(),
-        lastStateAt: new Date(),
-      });
+      const account = await linkedAccount();
 
       const response = await request(appWithAuth())
-        .delete(`/api/bridges/accounts/${account._id.toString()}`)
+        .delete(`/api/bridges/accounts/${account.id}`)
         .set("x-test-user", OTHER_USER);
 
       expect(response.status).toBe(404);
-      expect(await BridgeAccount.countDocuments({})).toBe(1);
+      expect(await allAccounts()).toHaveLength(1);
     });
   });
 
@@ -657,28 +675,14 @@ describe("the bridge orchestration API", () => {
        * machine-readable `error` code is surfaced instead, because the app can
        * act on that one.
        */
-      await BridgeAccount.create({
-        oxyUserId: USER,
-        network: "telegram",
-        remoteLoginId: "remote-login-1",
+      await linkedAccount({
         state: "action_required",
-        linkedAt: new Date(),
-        lastStateAt: new Date(),
-        rawState: {
-          stateEvent: "BAD_CREDENTIALS",
-          error: "FI.MAU.TELEGRAM.AUTH_KEY_UNREGISTERED",
-          message: "session terminated on host bridge-telegram-7.internal",
-          at: new Date(),
-        },
+        rawStateEvent: "BAD_CREDENTIALS",
+        rawStateError: "FI.MAU.TELEGRAM.AUTH_KEY_UNREGISTERED",
+        rawStateMessage: "session terminated on host bridge-telegram-7.internal",
+        rawStateAt: new Date(),
       });
-      await BridgeAccount.create({
-        oxyUserId: OTHER_USER,
-        network: "telegram",
-        remoteLoginId: "remote-login-2",
-        state: "connected",
-        linkedAt: new Date(),
-        lastStateAt: new Date(),
-      });
+      await linkedAccount({ oxyUserId: OTHER_USER, remoteLoginId: "remote-login-2" });
 
       const response = await request(appWithAuth()).get("/api/bridges/accounts");
 
