@@ -192,15 +192,27 @@ describe('the boot path no longer asks Oxy for an Allo document', () => {
 });
 
 describe('the backend fact this rule rests on', () => {
-  const MODEL = join(
+  /**
+   * The backend's own settings schema, which moved from Mongoose to drizzle when
+   * this domain was ported to Postgres.
+   *
+   * The FACT is unchanged and so is this test's job — only the file that states
+   * it moved, along with the spelling. That is exactly why the assertion is
+   * pinned to the default rather than to a file existing: a port that had
+   * quietly flipped the default to `true` (which reads as the friendlier
+   * choice) would have had to change this line, and changing it means reading
+   * the paragraph below.
+   */
+  const SCHEMA = join(
     __dirname,
     '..',
     '..',
     '..',
     'backend',
     'src',
-    'models',
-    'UserSettings.ts',
+    'db',
+    'schema',
+    'social.ts',
   );
 
   it('still defaults cloudSyncEnabled to false in the stored schema', () => {
@@ -209,8 +221,25 @@ describe('the backend fact this rule rests on', () => {
     // decision, and `readCloudSyncEnabled` should become a plain "a boolean
     // wins, absent means on". The test is here so that change is noticed by the
     // rule that depends on it rather than by a user losing messages.
-    const source = readFileSync(MODEL, 'utf8');
+    const source = readFileSync(SCHEMA, 'utf8');
 
-    expect(source).toMatch(/cloudSyncEnabled:\s*\{\s*type:\s*Boolean,\s*default:\s*false\s*\}/);
+    expect(source).toMatch(
+      /securityCloudSyncEnabled:\s*boolean\(\)\.notNull\(\)\.default\(false\)/,
+    );
+  });
+
+  /**
+   * The neighbouring two, asserted TOGETHER with it.
+   *
+   * The whole point of the rule above is that cloud sync is opt-IN while
+   * encryption and P2P are opt-OUT, and a flattening that had read one column
+   * where it meant another would most plausibly show all three the same way —
+   * which the single assertion above cannot see.
+   */
+  it('still defaults encryption and peer-to-peer to true, which is what makes the asymmetry real', () => {
+    const source = readFileSync(SCHEMA, 'utf8');
+
+    expect(source).toMatch(/securityEncryptionEnabled:\s*boolean\(\)\.notNull\(\)\.default\(true\)/);
+    expect(source).toMatch(/securityPeerToPeerEnabled:\s*boolean\(\)\.notNull\(\)\.default\(true\)/);
   });
 });
