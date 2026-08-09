@@ -313,13 +313,13 @@ Only three event categories ever trigger client-side side effects beyond updatin
 | `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
 | `404` | Resource not found, or you are not a participant |
 | `429` | Rate limited by `createOxyRateLimit` (`@oxyhq/core/server`), applied per resolved user |
-| `503` | MongoDB temporarily unavailable — retry with backoff |
+| `503` | Matrix authentication is temporarily unavailable — retry after `Retry-After`. **Not** returned for database outages: there is no database-availability guard, so a store being unreachable surfaces as a `500`. |
 
 All error bodies are JSON.
 
 ## Schemas
 
-The full Mongoose models are in `packages/backend/src/models/`:
+The messaging models are still Mongoose, in `packages/backend/src/models/` (the social, moderation and bridge domains moved to PostgreSQL — see `packages/backend/src/db/schema/`):
 
 - `Conversation.ts` — direct / group, participants[], unreadCounts, archivedBy, lastMessage
 - `Message.ts` — ciphertext, senderDeviceId, encryptionVersion, encryptedMedia[], readBy, deliveredTo

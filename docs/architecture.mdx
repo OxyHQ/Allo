@@ -14,7 +14,7 @@ Allo is a three-workspace monorepo managed with Bun. The split is intentional an
 packages/
   shared-types/   @allo/shared-types   TS-only, built first via postinstall
   frontend/       @allo/frontend       Expo Router app (iOS / Android / Web)
-  backend/        @allo/backend        Express + Socket.IO + MongoDB
+  backend/        @allo/backend        Express + Socket.IO + PostgreSQL/MongoDB
 ```
 
 Root `package.json` declares `workspaces: ["packages/*"]` and orchestrates with `bun run --filter`:
@@ -101,7 +101,7 @@ State that needs to survive launch goes through Zustand's persist middleware ove
 ```
 src/
   config/       CrowdSource moderation configuration
-  models/       Mongoose schemas
+  models/       Mongoose schemas (messaging only; see db/schema/ for Postgres)
   routes/       Express routers mounted under /api
   services/     the moderation pipeline (CrowdSource intake, outbox, workers)
   types/        backend-only TS types
@@ -161,7 +161,7 @@ Allo writes none of its own. `server.ts` applies three middlewares from `@oxyhq/
 - `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.
 - `createOxyAuthMiddleware(oxyClient)` — described above.
 
-Separately, a guard early in the chain answers requests with `503 Database temporarily unavailable` when Mongo is not connected, rather than letting them fail as 500s, so clients can retry.
+There is **no** database-availability guard, despite `utils/database.ts` still exporting `isDatabaseConnected()` — that function has no callers, and the only 503s the backend returns come from Matrix authentication (`middleware/matrixAuth.ts`) and push. A request that arrives while a store is unreachable fails as a 500, so a client cannot distinguish "retry shortly" from a real fault. Worth fixing when the messaging switch touches `utils/database.ts`, and worth covering both stores rather than only Mongo.
 
 ### Push notifications
 
@@ -173,8 +173,11 @@ Allo is migrating to Matrix, and this architecture is what it migrates off. The
 design lives in [`docs/matrix/`](./matrix/data-model) and deliberately precedes
 implementation.
 
-Nothing above has changed yet. The REST + Socket.IO transport, the Mongoose
-models, and the encryption in [Encryption](./encryption) are all still what runs.
+The REST + Socket.IO transport and the encryption in [Encryption](./encryption)
+are still what runs, and no Matrix code serves traffic. The storage layer HAS
+moved, separately from the Matrix work: the social, moderation and bridge
+domains are on PostgreSQL via drizzle, and the Mongoose models now back only the
+messaging domain.
 
 The one piece of Matrix code in the tree is `packages/frontend/lib/matrix/`, a
 client port: an interface (`types.ts`) that may not import a Matrix SDK, a
