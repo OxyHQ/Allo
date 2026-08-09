@@ -1,13 +1,42 @@
+/**
+ * Profile settings, blocks and restricts — on Postgres.
+ *
+ * Every handler here reads and writes through `db/social/*`. The shape a client
+ * receives is unchanged; `utils/userSettings.ts` is where the flat row becomes
+ * the nested document and where a request body becomes a column patch.
+ *
+ * ## Two things the port removes rather than reproduces
+ *
+ * - **The duplicate-key `catch`.** `POST /blocks` used to read, insert, and keep
+ *   a `code === 11000` handler behind both as a net — three places deciding one
+ *   answer, with a window between the read and the write where two concurrent
+ *   requests both saw nothing. `blockUser` is one statement converging on
+ *   `blocks_user_id_blocked_id_key`, and the boolean it returns IS the 201-vs-200
+ *   distinction. A real failure still throws instead of being read as a duplicate.
+ *
+ * - **`$set: { appearance: … }` replacing the whole sub-document.** Mongoose
+ *   assigned an `appearance` object, so a request carrying only `primaryColor`
+ *   silently reset `themeMode` to its default — and the app sends exactly that
+ *   (`stores/appearanceStore.ts` PUTs `partial.appearance`, one field at a time).
+ *   Columns are patched individually, so an unmentioned setting is now left
+ *   alone. This is a deliberate divergence, not an oversight: the alternative is
+ *   re-implementing a data-losing side effect of a document store on purpose.
+ */
+
 import { Router, Response } from 'express';
-import UserSettings from '../models/UserSettings';
-import UserBehavior from '../models/UserBehavior';
-import Block from '../models/Block';
-import Restrict from '../models/Restrict';
 import { requireOxyAuth as requireAuth, type OxyAuthRequest as AuthRequest } from '@oxyhq/core/server';
-import { ensureUserSettings } from '../utils/userSettings';
-import { sendErrorResponse, sendSuccessResponse, validateRequired } from '../utils/apiHelpers';
 import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxyhq/core/server';
-import { isDuplicateKeyError } from '../utils/error';
+import { getDb } from '../db';
+import { blockUser, listBlockedUserIds, unblockUser } from '../db/social/blockRepository';
+import {
+  listRestrictedUserIds,
+  restrictUser,
+  unrestrictUser,
+} from '../db/social/restrictRepository';
+import { deleteUserBehavior } from '../db/social/userBehaviorRepository';
+import { ensureUserSettings, updateUserSettings } from '../db/social/userSettingsRepository';
+import { readUserSettingsPatch, toUserSettingsDto } from '../utils/userSettings';
+import { sendErrorResponse, sendSuccessResponse, validateRequired } from '../utils/apiHelpers';
 
 const router = Router();
 
@@ -26,8 +55,8 @@ router.use(requireAuth);
 router.get('/settings/me', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const doc = await ensureUserSettings(oxyUserId);
-    return sendSuccessResponse(res, 200, doc);
+    const row = await ensureUserSettings(getDb(), oxyUserId);
+    return sendSuccessResponse(res, 200, toUserSettingsDto(row));
   } catch (err) {
     console.error('[ProfileSettings] Error fetching my settings:', err);
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to fetch settings');
@@ -41,14 +70,14 @@ router.get('/settings/me', async (req: AuthRequest, res: Response) => {
 router.get('/settings/:userId', async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.params;
-    
+
     const validationError = validateRequired(userId, 'userId');
     if (validationError) {
       return sendErrorResponse(res, 400, 'Bad Request', validationError);
     }
 
-    const doc = await ensureUserSettings(userId);
-    return sendSuccessResponse(res, 200, doc);
+    const row = await ensureUserSettings(getDb(), userId);
+    return sendSuccessResponse(res, 200, toUserSettingsDto(row));
   } catch (err) {
     console.error('[ProfileSettings] Error fetching user settings:', err);
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to fetch settings');
@@ -62,96 +91,8 @@ router.get('/settings/:userId', async (req: AuthRequest, res: Response) => {
 router.put('/settings', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const { appearance, profileHeaderImage, privacy, profileCustomization } = req.body || {};
-
-    const update: Record<string, unknown> = {};
-
-    if (appearance) {
-      const appearanceUpdate: { themeMode?: string; primaryColor?: string } = {};
-      if (appearance.themeMode && ['light', 'dark', 'system'].includes(appearance.themeMode)) {
-        appearanceUpdate.themeMode = appearance.themeMode;
-      }
-      if (typeof appearance.primaryColor === 'string' && appearance.primaryColor.trim()) {
-        appearanceUpdate.primaryColor = appearance.primaryColor.trim();
-      } else if (appearance.primaryColor === null) {
-        appearanceUpdate.primaryColor = undefined;
-      }
-      update['appearance'] = appearanceUpdate;
-    }
-    
-    if (typeof profileHeaderImage === 'string') {
-      update.profileHeaderImage = profileHeaderImage;
-    }
-    
-    if (profileCustomization) {
-      if (typeof profileCustomization.coverPhotoEnabled === 'boolean') {
-        update['profileCustomization.coverPhotoEnabled'] = profileCustomization.coverPhotoEnabled;
-      }
-      if (typeof profileCustomization.minimalistMode === 'boolean') {
-        update['profileCustomization.minimalistMode'] = profileCustomization.minimalistMode;
-      }
-      if (typeof profileCustomization.displayName === 'string') {
-        update['profileCustomization.displayName'] = profileCustomization.displayName.trim() || undefined;
-      } else if (profileCustomization.displayName === null) {
-        update['profileCustomization.displayName'] = undefined;
-      }
-      if (typeof profileCustomization.coverImage === 'string') {
-        update['profileCustomization.coverImage'] = profileCustomization.coverImage.trim() || undefined;
-      } else if (profileCustomization.coverImage === null) {
-        update['profileCustomization.coverImage'] = undefined;
-      }
-    }
-    
-    if (privacy) {
-      const privacyFields = [
-        'profileVisibility',
-        'showContactInfo',
-        'allowTags',
-        'allowallos',
-        'showOnlineStatus',
-        'hideLikeCounts',
-        'hideShareCounts',
-        'hideReplyCounts',
-        'hideSaveCounts',
-      ] as const;
-      
-      privacyFields.forEach(field => {
-        if (typeof privacy[field] === 'boolean') {
-          update[`privacy.${field}`] = privacy[field];
-        }
-      });
-      
-      if (privacy.profileVisibility && ['public', 'private', 'followers_only'].includes(privacy.profileVisibility)) {
-        update['privacy.profileVisibility'] = privacy.profileVisibility;
-      }
-      if (Array.isArray(privacy.hiddenWords)) {
-        update['privacy.hiddenWords'] = privacy.hiddenWords;
-      }
-      if (Array.isArray(privacy.restrictedUsers)) {
-        update['privacy.restrictedUsers'] = privacy.restrictedUsers;
-      }
-    }
-    
-    if (req.body.security) {
-      const { security } = req.body;
-      if (typeof security.cloudSyncEnabled === 'boolean') {
-        update['security.cloudSyncEnabled'] = security.cloudSyncEnabled;
-      }
-      if (typeof security.encryptionEnabled === 'boolean') {
-        update['security.encryptionEnabled'] = security.encryptionEnabled;
-      }
-      if (typeof security.peerToPeerEnabled === 'boolean') {
-        update['security.peerToPeerEnabled'] = security.peerToPeerEnabled;
-      }
-    }
-
-    const doc = await UserSettings.findOneAndUpdate(
-      { oxyUserId },
-      { $set: update },
-      { upsert: true, new: true }
-    ).lean();
-
-    return sendSuccessResponse(res, 200, doc);
+    const row = await updateUserSettings(getDb(), oxyUserId, readUserSettingsPatch(req.body));
+    return sendSuccessResponse(res, 200, toUserSettingsDto(row));
   } catch (err) {
     console.error('[ProfileSettings] Error updating settings:', err);
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to update settings');
@@ -165,13 +106,13 @@ router.put('/settings', async (req: AuthRequest, res: Response) => {
 router.delete('/settings/behavior', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const result = await UserBehavior.findOneAndDelete({ oxyUserId });
+    const deleted = await deleteUserBehavior(getDb(), oxyUserId);
 
     return sendSuccessResponse(
       res,
       200,
       { success: true },
-      result ? 'Personalization data reset successfully' : 'No personalization data to reset'
+      deleted ? 'Personalization data reset successfully' : 'No personalization data to reset'
     );
   } catch (err) {
     console.error('[ProfileSettings] Error resetting user behavior:', err);
@@ -186,13 +127,9 @@ router.delete('/settings/behavior', async (req: AuthRequest, res: Response) => {
 router.get('/blocks', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const blocks = await Block.find({ userId: oxyUserId })
-      .sort({ createdAt: -1 })
-      .lean();
+    const blockedUsers = await listBlockedUserIds(getDb(), oxyUserId);
 
-    return sendSuccessResponse(res, 200, {
-      blockedUsers: blocks.map(b => b.blockedId),
-    });
+    return sendSuccessResponse(res, 200, { blockedUsers });
   } catch (err) {
     console.error('[ProfileSettings] Error fetching blocked users:', err);
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to fetch blocked users');
@@ -203,7 +140,7 @@ router.post('/blocks', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
     const { blockedId } = req.body;
-    
+
     const validationError = validateRequired(blockedId, 'blockedId');
     if (validationError || typeof blockedId !== 'string') {
       return sendErrorResponse(res, 400, 'Bad Request', 'Missing or invalid blockedId');
@@ -213,18 +150,14 @@ router.post('/blocks', async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, 'Bad Request', 'Cannot block yourself');
     }
 
-    const existing = await Block.findOne({ userId: oxyUserId, blockedId });
-    if (existing) {
+    const created = await blockUser(getDb(), { userId: oxyUserId, blockedId });
+    if (!created) {
       return sendSuccessResponse(res, 200, { success: true }, 'User already blocked');
     }
 
-    await Block.create({ userId: oxyUserId, blockedId });
     return sendSuccessResponse(res, 201, { success: true }, 'User blocked successfully');
   } catch (err: unknown) {
     console.error('[ProfileSettings] Error blocking user:', err);
-    if (isDuplicateKeyError(err)) {
-      return sendSuccessResponse(res, 200, { success: true }, 'User already blocked');
-    }
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to block user');
   }
 });
@@ -233,15 +166,15 @@ router.delete('/blocks/:blockedId', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
     const { blockedId } = req.params;
-    
+
     const validationError = validateRequired(blockedId, 'blockedId');
     if (validationError) {
       return sendErrorResponse(res, 400, 'Bad Request', validationError);
     }
 
-    const result = await Block.findOneAndDelete({ userId: oxyUserId, blockedId });
+    const removed = await unblockUser(getDb(), { userId: oxyUserId, blockedId });
 
-    if (!result) {
+    if (!removed) {
       return sendErrorResponse(res, 404, 'Not Found', 'Block not found');
     }
 
@@ -259,13 +192,9 @@ router.delete('/blocks/:blockedId', async (req: AuthRequest, res: Response) => {
 router.get('/restricts', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
-    const restricts = await Restrict.find({ userId: oxyUserId })
-      .sort({ createdAt: -1 })
-      .lean();
+    const restrictedUsers = await listRestrictedUserIds(getDb(), oxyUserId);
 
-    return sendSuccessResponse(res, 200, {
-      restrictedUsers: restricts.map(r => r.restrictedId),
-    });
+    return sendSuccessResponse(res, 200, { restrictedUsers });
   } catch (err) {
     console.error('[ProfileSettings] Error fetching restricted users:', err);
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to fetch restricted users');
@@ -276,7 +205,7 @@ router.post('/restricts', async (req: AuthRequest, res: Response) => {
   try {
     const oxyUserId = getAuthenticatedUserId(req);
     const { restrictedId } = req.body;
-    
+
     const validationError = validateRequired(restrictedId, 'restrictedId');
     if (validationError || typeof restrictedId !== 'string') {
       return sendErrorResponse(res, 400, 'Bad Request', 'Missing or invalid restrictedId');
@@ -286,18 +215,14 @@ router.post('/restricts', async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, 'Bad Request', 'Cannot restrict yourself');
     }
 
-    const existing = await Restrict.findOne({ userId: oxyUserId, restrictedId });
-    if (existing) {
+    const created = await restrictUser(getDb(), { userId: oxyUserId, restrictedId });
+    if (!created) {
       return sendSuccessResponse(res, 200, { success: true }, 'User already restricted');
     }
 
-    await Restrict.create({ userId: oxyUserId, restrictedId });
     return sendSuccessResponse(res, 201, { success: true }, 'User restricted successfully');
   } catch (err: unknown) {
     console.error('[ProfileSettings] Error restricting user:', err);
-    if (isDuplicateKeyError(err)) {
-      return sendSuccessResponse(res, 200, { success: true }, 'User already restricted');
-    }
     return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to restrict user');
   }
 });
@@ -306,15 +231,15 @@ router.delete('/restricts/:restrictedId', async (req: AuthRequest, res: Response
   try {
     const oxyUserId = getAuthenticatedUserId(req);
     const { restrictedId } = req.params;
-    
+
     const validationError = validateRequired(restrictedId, 'restrictedId');
     if (validationError) {
       return sendErrorResponse(res, 400, 'Bad Request', validationError);
     }
 
-    const result = await Restrict.findOneAndDelete({ userId: oxyUserId, restrictedId });
+    const removed = await unrestrictUser(getDb(), { userId: oxyUserId, restrictedId });
 
-    if (!result) {
+    if (!removed) {
       return sendErrorResponse(res, 404, 'Not Found', 'Restrict not found');
     }
 

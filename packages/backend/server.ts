@@ -11,6 +11,8 @@ import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
 import Conversation from "./src/models/Conversation";
+import { connectPostgres } from "./src/db";
+import { startExpirySweep } from "./src/db/expiry";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -363,13 +365,11 @@ db.on("error", (error: Error) => {
 });
 db.once("open", () => {
   logger.info("Connected to MongoDB successfully");
-  // Load models
+  // Load the models still backed by Mongo. Social settings, blocks, restricts
+  // and behaviour are gone from this list because they are gone from the
+  // service: those four routes now read and write Postgres.
   require("./src/models/Conversation");
   require("./src/models/Message");
-  require("./src/models/UserSettings");
-  require("./src/models/Block");
-  require("./src/models/Restrict");
-  require("./src/models/UserBehavior");
   require("./src/models/Device");
   require("./src/models/Report");
   require("./src/models/ModerationOutbox");
@@ -379,6 +379,25 @@ db.once("open", () => {
   require("./src/models/BridgeProxyLease");
 });
 
+/**
+ * The Postgres connection string. REQUIRED — this service has routes that cannot
+ * answer without it.
+ *
+ * Read and validated at boot rather than on first use, so a deployment with a
+ * missing or malformed URL dies immediately and visibly instead of serving 500s
+ * from whichever endpoint a user happens to hit first.
+ */
+function requireDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url || url.trim().length === 0) {
+    throw new Error(
+      "DATABASE_URL is not set. The profile settings, blocks and restricts routes " +
+        "run on Postgres and cannot answer without it.",
+    );
+  }
+  return url;
+}
+
 // --- Server Listen ---
 // Local dev default only — ECS injects PORT explicitly (oxy-infra
 // terraform-uswest2/app-allo.tf sets it to 8080). 4140 is Allo's slot in the
@@ -386,7 +405,20 @@ db.once("open", () => {
 const PORT = process.env.PORT || 4140;
 const bootServer = async () => {
   try {
+    /**
+     * Postgres first, and not lazily: `createDatabase` opens the pool here so a
+     * bad connection string fails the boot rather than the first request that
+     * happens to touch a table.
+     */
+    const postgres = connectPostgres(requireDatabaseUrl());
     await connectToDatabase();
+    /**
+     * The replacement for three Mongo TTL indexes (`db/expiry.ts`). Started here
+     * because Mongo's TTL monitor was never something this codebase started
+     * either — it was the server's, and dropping it on the way to Postgres is
+     * invisible until a table has grown for months.
+     */
+    startExpirySweep(postgres, logger);
     // Started after the database is reachable: the dispatcher's first act is a
     // claim query, and a drain against a disconnected Mongo would only log noise.
     // A no-op unless CROWDSOURCE_ENABLED=true.
@@ -401,7 +433,7 @@ const bootServer = async () => {
       logger.info(`Allo backend server running on port ${PORT}`);
     });
   } catch (error) {
-    logger.error("Failed to start server: unable to connect to MongoDB", error);
+    logger.error("Failed to start server: a database is unreachable or misconfigured", error);
     process.exit(1);
   }
 };

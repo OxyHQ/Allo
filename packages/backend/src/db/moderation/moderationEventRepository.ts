@@ -29,9 +29,9 @@
  */
 
 import { eq } from "drizzle-orm";
-import { getDb } from "../index";
+import { getDb, type AlloDatabaseOrTransaction } from "../index";
 import { moderationEvents } from "../schema/moderation";
-import { requireTransaction, type AlloDatabaseOrTransaction } from "./transactionGuard";
+import { requireTransaction } from "./transactionGuard";
 
 /**
  * Retention.
