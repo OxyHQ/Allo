@@ -32,7 +32,7 @@
 
 import { and, desc, eq, sql } from "drizzle-orm";
 import { uuidv7 } from "@oxyhq/db";
-import { getDb } from "../index";
+import { getDb, type AlloDatabaseOrTransaction } from "../index";
 import {
   reports,
   type ModerationEnforcementAction,
@@ -41,7 +41,6 @@ import {
   type ReportStatus,
   type ReportedType,
 } from "../schema/moderation";
-import type { AlloDatabaseOrTransaction } from "./transactionGuard";
 
 /** A stored report, exactly as the table holds it. */
 export type ModerationReport = typeof reports.$inferSelect;

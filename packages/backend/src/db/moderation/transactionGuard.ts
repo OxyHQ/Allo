@@ -41,19 +41,7 @@
  * restriction the port invented rather than one it preserved.
  */
 
-import type { AlloDatabase } from "../index";
-
-/**
- * The handle `db.transaction(...)` hands its callback.
- *
- * Derived from the database type rather than named as `PgTransaction<…>` so it
- * cannot disagree with what drizzle actually passes, and so a drizzle upgrade that
- * reshapes those generics is a compile error here rather than a silent widening.
- */
-export type AlloTransaction = Parameters<Parameters<AlloDatabase["transaction"]>[0]>[0];
-
-/** What every repository in this domain accepts: the pool, or a live transaction. */
-export type AlloDatabaseOrTransaction = AlloDatabase | AlloTransaction;
+import type { AlloDatabaseOrTransaction, AlloTransaction } from "../index";
 
 /**
  * Raised when a write that must commit with its domain row is handed the root

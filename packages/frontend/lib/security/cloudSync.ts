@@ -48,10 +48,10 @@
  *
  * **The exit condition, stated so nobody has to guess it.** This rule is
  * asymmetric because the server's `false` is undecidable, not because off is a
- * worse answer than on. When `SecuritySchema.cloudSyncEnabled` in
- * `packages/backend/src/models/UserSettings.ts` no longer writes a value nobody
- * asked for, a `false` from the server becomes a decision and this becomes a
- * plain "a boolean wins, absent means on".
+ * worse answer than on. When `securityCloudSyncEnabled` in
+ * `packages/backend/src/db/schema/social.ts` no longer defaults to a value
+ * nobody asked for, a `false` from the server becomes a decision and this
+ * becomes a plain "a boolean wins, absent means on".
  */
 
 import { api } from '@/utils/api';

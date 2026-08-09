@@ -12,13 +12,20 @@
  * server enforces it.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, getTableName, sql } from "drizzle-orm";
 import { createDatabase, isCheckViolation, isUniqueViolation, constraintNameOf } from "@oxyhq/db";
 import { findUnsupportedExpiryColumns } from "@oxyhq/db/assert";
 import type postgres from "postgres";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import { EXPIRY_SWEEP_TARGETS, runExpirySweep } from "../../db/expiry";
+import {
+  EXPIRY_SWEEP_TARGETS,
+  runExpirySweep,
+  startExpirySweep,
+  stopExpirySweep,
+} from "../../db/expiry";
 import * as schema from "../../db/schema";
 
 let handle: TestDatabaseHandle;
@@ -307,6 +314,74 @@ describe("the expiry sweep, which replaces three Mongo TTL indexes", () => {
       .from(schema.moderationEvents)
       .where(eq(schema.moderationEvents.id, expiredId));
     expect(gone).toHaveLength(0);
+  });
+
+  /**
+   * The registry and the schedule are two halves of one fact, and only one of
+   * them is visible in a diff.
+   *
+   * A registry nothing calls reaps exactly as much as no registry at all, and it
+   * fails the same way Mongo's TTL monitor would if it stopped: no error, no
+   * failing test, no symptom until a table has grown for months. So the wiring is
+   * asserted from `server.ts`'s own source — there is nothing in the module graph
+   * to observe, because the thing being checked is that a call EXISTS.
+   *
+   * Reading the file rather than importing it because importing `server.ts` boots
+   * an HTTP listener and opens two database connections.
+   */
+  it("is actually started by server.ts", () => {
+    const source = readFileSync(join(__dirname, "..", "..", "..", "server.ts"), "utf8");
+
+    // Vacuity floor: if the path were wrong or the file empty, every `toContain`
+    // below would fail rather than pass, but this says so directly.
+    expect(source.length).toBeGreaterThan(5_000);
+    expect(source).toContain("bootServer");
+
+    expect(source).toContain('from "./src/db/expiry"');
+    expect(source).toContain("startExpirySweep(");
+  });
+
+  it("sweeps once immediately on start, and says so even when it reaped nothing", async () => {
+    const lines: { level: string; message: string }[] = [];
+    const log = {
+      info: (message: string) => lines.push({ level: "info", message }),
+      debug: (message: string) => lines.push({ level: "debug", message }),
+      error: (message: string) => lines.push({ level: "error", message }),
+    };
+
+    const expiredId = id("evt-start-expired");
+    await db
+      .insert(schema.moderationEvents)
+      .values({ id: expiredId, expiresAt: new Date(Date.now() - 60_000) });
+
+    try {
+      startExpirySweep(db, log);
+      // The immediate pass is fire-and-forget by design, so wait for the row to
+      // go rather than for a promise this function deliberately does not return.
+      await expect
+        .poll(async () => {
+          const rows = await db
+            .select()
+            .from(schema.moderationEvents)
+            .where(eq(schema.moderationEvents.id, expiredId));
+          return rows.length;
+        })
+        .toBe(0);
+    } finally {
+      stopExpirySweep();
+    }
+
+    // "Reaped nothing" and "never ran" must be distinguishable in the log, which
+    // is the whole reason the summary is emitted unconditionally.
+    const swept = lines.find((line) => line.message.includes("expiry sweep:"));
+    expect(swept?.level).toBe("info");
+    expect(swept?.message).toContain("tablesSwept=3");
+
+    lines.length = 0;
+    await runExpirySweep(db, log);
+    expect(lines).toEqual([
+      { level: "debug", message: "expiry sweep: tablesSwept=3 deleted=0" },
+    ]);
   });
 });
 

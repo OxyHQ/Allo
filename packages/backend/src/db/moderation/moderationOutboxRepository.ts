@@ -49,13 +49,13 @@
  */
 
 import { and, asc, eq, gt, lte, or, sql } from "drizzle-orm";
-import { getDb } from "../index";
+import { getDb, type AlloDatabaseOrTransaction } from "../index";
 import {
   moderationOutbox,
   type ModerationOutboxKind,
   type ModerationOutboxStatus,
 } from "../schema/moderation";
-import { requireTransaction, type AlloDatabaseOrTransaction } from "./transactionGuard";
+import { requireTransaction } from "./transactionGuard";
 
 /**
  * Retention ceiling, so a stalled dispatcher cannot turn the outbox into an

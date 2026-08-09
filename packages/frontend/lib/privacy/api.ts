@@ -1,14 +1,15 @@
 /**
  * THE PRIVACY SETTINGS ALLO ACTUALLY HAS.
  *
- * The stored document (`packages/backend/src/models/UserSettings.ts`,
- * `PrivacySchema`) is inherited from Mention and carries fields that mean
- * nothing in a messenger: `allowTags`, `allowallos`, `hideLikeCounts`,
- * `hideShareCounts`, `hideReplyCounts`, `hideSaveCounts`. Allo has no posts, no
- * likes and no shares, so there is nothing for a reader to turn off. Those
- * fields are left in the schema — other apps share it, and it is the backend's
- * business — and simply not named here. What this module names is what Allo can
- * honestly offer:
+ * The stored row (`packages/backend/src/db/schema/social.ts`, the `privacy*`
+ * columns) is inherited from Mention and carries fields that mean nothing in a
+ * messenger: `allowTags`, `allowallos`, `hideLikeCounts`, `hideShareCounts`,
+ * `hideReplyCounts`, `hideSaveCounts`. Allo has no posts, no likes and no
+ * shares, so there is nothing for a reader to turn off. Those fields are left in
+ * the schema — other apps share it, and it is the backend's business — and
+ * simply not named here. The API still nests them under `privacy`, which is a
+ * wire shape the backend preserves; only where they are stored has changed.
+ * What this module names is what Allo can honestly offer:
  *
  *   - who may see the profile,
  *   - whether this account's presence is published,
