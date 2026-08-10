@@ -40,13 +40,15 @@ const OXY_USER_ID = "507f1f77bcf86cd799439011";
 const MATRIX_TOKEN = "mct_aVeryOpaqueMatrixAccessToken";
 
 /**
- * An Oxy access token, in the shape `oxy.auth()` looks for: a JWT.
+ * A well-formed Oxy access token in the shape `oxy.auth()` looks for — a JWT —
+ * carrying no `sessionId`.
  *
- * The signature is invented, and `oxy.auth()` DOES NOT CARE — see the last
- * test in this file. That is a defect in `@oxyhq/core`, not a property this
- * change relies on; it is used here only because it is the cheapest way to
- * produce a header the Oxy validator engages with, and every assertion that
- * uses it is about ROUTING rather than about the Oxy verdict.
+ * On the core Allo now rides (>= 20.1.0) this is REFUSED: a session-less user
+ * token is no longer trusted on its claims. It once was — that was the bypass
+ * this file's last test now locks closed. It is used here only to drive the Oxy
+ * path to a verdict; every assertion that uses it is about ROUTING — that the
+ * Matrix middleware hands a `Bearer` request to Oxy untouched — rather than
+ * about the verdict itself.
  */
 const OXY_TOKEN = [
   Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
@@ -407,17 +409,24 @@ describe("a deployment that accepts no Matrix token", () => {
     expect(routeHits).toBe(0);
   });
 
-  it("leaves the Oxy path exactly as it was", async () => {
+  it("hands a Bearer credential to the Oxy validator, whatever the verdict", async () => {
     /**
-     * The whole promise of this change: a build where the app still sends Oxy
-     * tokens keeps working, which is what is deployed.
+     * The promise of this change is that the Matrix middleware does not touch a
+     * `Bearer` request: it reaches the Oxy validator and gets the Oxy verdict.
+     * On the fixed core Allo now rides (>= 20.1.0) that verdict is a REFUSAL for
+     * this token — `OXY_TOKEN` carries no `sessionId`, and a session-less user
+     * token is no longer authenticated on its claims. The property under test is
+     * the routing, not the verdict: the request is answered by the Oxy path
+     * (`Unauthorized`), never by this middleware (which would send a `MATRIX_*`
+     * code), and never reaches the route.
      */
     const response = await request(api({ config: DISABLED_CONFIG }))
       .get("/api/whoami")
       .set("Authorization", `Bearer ${OXY_TOKEN}`);
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ userId: OXY_USER_ID });
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("Unauthorized");
+    expect(routeHits).toBe(0);
   });
 
   it("leaves an unauthenticated request exactly as it was", async () => {
@@ -443,35 +452,30 @@ describe("a deployment that accepts no Matrix token", () => {
   });
 });
 
-describe("the Oxy path's own hole, recorded rather than relied on", () => {
-  it("accepts a FORGED, UNSIGNED Oxy JWT — a defect in @oxyhq/core, not in this change", async () => {
+describe("the @oxyhq/core auth bypass is closed on the version Allo rides", () => {
+  it("refuses a FORGED, UNSIGNED Oxy JWT instead of authenticating it", async () => {
     /**
-     * ## Read this before touching the assertion below
+     * ## This test was a tripwire, and it just tripped — read before touching it
      *
-     * `oxy.auth()` in `@oxyhq/core@19.1.2` decodes the bearer JWT with
-     * `jwtDecode`, which verifies NOTHING, and then — for a payload carrying no
-     * `sessionId` — takes its "non-session token: use local validation only"
-     * branch and trusts the `userId` claim outright. Service tokens are
-     * signature-checked and session tokens are validated against the Oxy API;
-     * a user token with no `sessionId` is checked against nothing at all.
+     * On the core Allo used to ship (`@oxyhq/core@17.0.2`), `oxy.auth()` decoded
+     * the bearer JWT with `jwtDecode`, which verifies NOTHING, and then — for a
+     * payload carrying no `sessionId` — trusted the `userId` claim outright. The
+     * token below, whose signature is a made-up string, authenticated as whoever
+     * it named: an account takeover on `api.allo.you` as deployed.
      *
-     * So the token below, whose signature is the literal string
-     * `not-a-real-signature`, authenticates as whoever it names. That is an
-     * account takeover on `api.allo.you` as deployed, and it exists on the OXY
-     * path — the path this change does not touch. It is reported to
-     * `@oxyhq/core` for a fix at the source and is deliberately NOT patched
-     * around here; a local workaround would leave every other Oxy backend
-     * exposed while making this one look fine.
+     * `@oxyhq/core@20.1.0` fixed it at the source — a session-less user token is
+     * refused (`SESSION_REQUIRED`) and never reaches the local-claims branch —
+     * and this migration puts Allo on that line. So the forged token is now
+     * refused: it arrives through the Oxy path's optional-auth + `requireOxyAuth`
+     * as an ordinary `Unauthorized`, and the route is never reached.
      *
-     * The assertion is written the way it is on purpose. When core is fixed and
-     * the dependency bumped, this test goes RED, and whoever bumps it reads
-     * this comment and deletes the test. A test that tolerated both answers
-     * would let the fix land unnoticed and this note rot in place.
+     * Kept as a REGRESSION LOCK rather than deleted: if a future change ever
+     * drops Allo back onto a vulnerable core, this goes red at the exact
+     * assertion, with this comment next to it.
      *
-     * Note what it also demonstrates about the Matrix path: a MAS token is
-     * opaque and is checked against MAS on every request inside a bounded
-     * window, so there is no local-claims branch here for the same mistake to
-     * be made in.
+     * The Matrix path never had this branch to begin with: a MAS token is opaque
+     * and is checked against MAS on every request inside a bounded window, so
+     * there is no local-claims path for the same mistake to be made in.
      */
     const forged = [
       Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
@@ -485,7 +489,8 @@ describe("the Oxy path's own hole, recorded rather than relied on", () => {
       .get("/api/whoami")
       .set("Authorization", `Bearer ${forged}`);
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ userId: "aaaaaaaaaaaaaaaaaaaaaaaa" });
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("Unauthorized");
+    expect(routeHits).toBe(0);
   });
 });
