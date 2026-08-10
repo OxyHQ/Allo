@@ -5,9 +5,9 @@ backend (`@allo/backend`).
 
 This package models the **wire / transport layer** only: the HTTP response
 envelope and the serialized DTOs the backend returns. It deliberately does
-*not* contain the frontend's presentation-shaped store types, nor mongoose
-schema types — the models import the primitives from here and layer their own
-document types on top.
+*not* contain the frontend's presentation-shaped store types, nor the backend's
+drizzle table types — the schema imports the primitives from here, and the
+serializers in `packages/backend/src/utils/` map rows onto these DTOs.
 
 ## Package Structure
 
@@ -99,7 +99,9 @@ When adding types:
 1. Only add what crosses the frontend/backend boundary. Types used by a single
    package belong in that package.
 2. Document which model / route the DTO mirrors, so drift is easy to spot.
-3. Model mongoose `Map` fields as `Record<string, …>` — that is their JSON shape.
+3. A keyed collection is a `Record<string, …>` on the wire even when the backend
+   stores it as rows — `readBy` and `reactions` are child tables, folded up by the
+   serializer, because that is the shape clients have always received.
 4. Export the module from `index.ts`.
 
 ## License

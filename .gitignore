@@ -109,3 +109,5 @@ temp/
 
 # Local development
 .local/ 
+# Agent worktrees (see AGENTS.md) — one per agent, never in /tmp.
+.worktrees/

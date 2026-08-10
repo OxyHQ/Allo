@@ -12,8 +12,7 @@
     "test": "vitest run",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "ts-node --transpile-only src/db/migrate.ts",
-    "db:backfill": "ts-node --transpile-only scripts/backfillFromMongo.ts"
+    "db:migrate": "ts-node --transpile-only src/db/migrate.ts"
   },
   "dependencies": {
     "@allo/shared-types": "file:../shared-types",
@@ -29,7 +28,6 @@
     "express-rate-limit": "^8.0.0",
     "firebase-admin": "^14.1.0",
     "helmet": "^8.0.0",
-    "mongoose": "^9.7.4",
     "postgres": "3.4.9",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3"
