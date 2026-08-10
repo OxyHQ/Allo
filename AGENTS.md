@@ -107,12 +107,16 @@ luck; space the writes across milliseconds or assert only at the resolution the
 schema guarantees. Measured: one such assertion in `social.realdb.test.ts` failed
 4 runs in 8 before it was spaced.
 
-**One Mongo dependency is deliberately still here.**
-`scripts/backfillFromMongo.ts` reads the old database, so `mongoose` remains in
-`packages/backend/package.json` for it alone — nothing under `src/` or
-`server.ts` imports it. The script and the dependency come out together once the
-final backfill pass has run; until then, do not read `mongoose` in the manifest
-as "messaging is still on Mongo".
+**There is no Mongo anywhere, and a test enforces it.** The final backfill pass
+ran and reported `totalInserted=0` — an empty switchover window — so the script
+and `mongoose` came out together. `src/__tests__/noMongo.test.ts` now fails the
+build on a Mongo dependency, import, connection string or `MONGODB_URI`
+reference in any source or manifest file, so this cannot regress by accident.
+
+The guard deliberately exempts comments and markdown, which is where the last
+residue survived three separate passes. That exemption is why prose may still
+mention Mongo — to explain why a column is `text`, or why a shape is what it is —
+and why such a mention is not evidence that anything connects to it.
 
 ## Migration to Matrix
 

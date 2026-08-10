@@ -5,22 +5,21 @@ The binding ledger for Allo's Mongo → Postgres port. Read this before touching
 sibling Oxy service, the difference is stated with its reason rather than left to
 look like drift.
 
-## The SOURCE Mongo database is `allo-production`, and the URI does not say so
+## The port is finished, and what it left behind
 
-Kept because the backfill still reads that server. The service no longer opens a
-Mongo connection at all, and `utils/database.ts` — which is what used to override
-the connection string's database with `allo-${NODE_ENV}` — is deleted;
-`scripts/backfillFromMongo.ts` now composes that name itself, and it is the only
-thing left that needs to.
+The migration is done: the final backfill pass reported `totalInserted=0`, the
+script and `mongoose` are gone, and nothing in this repo connects to Mongo. What
+remains below is the set of decisions the port BOUND this schema to — they are
+not history, they are why the columns look the way they do, and changing one
+means changing data that already exists.
 
-The production `MONGODB_URI` ends in `/allo`, so **anything that trusts the URI
-connects to a database that does not exist** — the live server has
-`allo-production` and no `allo` at all. A probe written the obvious way reports
-zero collections and reads as "nothing to migrate".
-
-Every probe, backfill and verification pass must pass the database name
-explicitly. This cost nothing to discover only because the census was checked
-against the live server rather than the URI.
+One finding is retired rather than deleted, because it explains a habit worth
+keeping: the source database was `allo-production` while the connection string
+ended in `/allo`, so anything that trusted the URI connected to a database that
+did not exist and reported zero rows — which reads as "nothing to migrate" rather
+than as an error. Every probe and verification pass had to name the database
+explicitly. The general form applies to any store: **a connection string is not
+a statement about which database you are reading.**
 
 ## Ids
 

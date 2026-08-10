@@ -255,13 +255,13 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
   // edits, reactions, deletions and typing indicators).
   socket.on("joinConversation", async (conversationId: string) => {
     /**
-     * A bound on the input, not a format check. `mongoose.isValidObjectId` used
-     * to stand here, and it cannot survive the port for a reason worth stating:
-     * conversation ids are `text` and come in TWO shapes — a uuid v7 for rows
-     * created since, and the ObjectId hex the backfill carried over verbatim —
-     * so an ObjectId-shaped test would now reject every conversation created
-     * after the cutover. The authorization was never the format anyway; it is
-     * the participant lookup below.
+     * A bound on the input, and deliberately NOT a format check.
+     *
+     * Conversation ids are `text` and come in two shapes — a uuid v7 for rows
+     * created since the Postgres cutover, and a 24-character hex id for rows
+     * that predate it — so any single-format test would reject one of the two
+     * outright. The authorization is not the format anyway; it is the
+     * participant lookup below, which answers for both.
      */
     if (
       typeof conversationId !== "string" ||

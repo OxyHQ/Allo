@@ -88,11 +88,11 @@ export interface MessageDto {
   editedAt?: Date;
   deletedAt?: Date;
 
-  /** userId -> read timestamp (mongoose Map serialized to an object). */
+  /** userId -> read timestamp. One `message_reads` row per person, folded up. */
   readBy?: Record<string, Date>;
   /** User IDs who received the message. */
   deliveredTo?: string[];
-  /** emoji -> array of userIds who reacted (mongoose Map serialized to an object). */
+  /** emoji -> the userIds who reacted, oldest first. From `message_reactions`. */
   reactions?: Record<string, string[]>;
 
   createdAt?: Date;
