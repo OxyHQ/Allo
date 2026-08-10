@@ -79,6 +79,30 @@ const MONGO_CODE_TOKENS = [
 const CODE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
 /**
+ * The ONE file exempt from the source scan: this one.
+ *
+ * It has to contain the offending tokens as STRING LITERALS, because the
+ * predicate cases at the bottom pin the check against text that really contains
+ * them — that is what stops the whole suite passing with a stripper that removes
+ * everything. Those literals are not comments, so the stripper correctly keeps
+ * them, and the scan correctly flags the file. The exemption is the resolution.
+ *
+ * It is a single literal path rather than a pattern, and the cases below assert
+ * the list has exactly one entry and that the entry is a test file — so this
+ * cannot quietly grow into a hole, and can never be pointed at production code.
+ * A rename makes the exemption dead and the renamed file gets scanned, which
+ * fails loudly rather than silently widening anything.
+ *
+ * Found by CI rather than locally, and the reason is worth keeping: `git
+ * ls-files` reads the INDEX, and this file was untracked while it was being
+ * written, so the run that "passed" had never scanned it. **A new file must be
+ * staged before a run of this suite means anything.** That is the same trap
+ * documented above for mutation probes, met from the other direction.
+ */
+const SELF = "packages/backend/src/__tests__/noMongo.test.ts";
+const SOURCE_SCAN_EXEMPTIONS = [SELF];
+
+/**
  * Strip `//` and block comments, leaving string literals intact.
  *
  * String-aware because `"mongodb://"` inside a connection string IS the thing
@@ -221,6 +245,17 @@ describe("the repo cannot reach MongoDB", () => {
     expect(files.length).toBeGreaterThan(600);
   });
 
+  it("exempts exactly one file from the source scan, and it is a test", () => {
+    // The exemption is the only hole in the source scan, so it is pinned by
+    // size and by kind. Adding a second entry, or pointing this one at
+    // production code, fails here rather than passing quietly.
+    expect(SOURCE_SCAN_EXEMPTIONS).toEqual([SELF]);
+    expect(SELF.endsWith(".test.ts")).toBe(true);
+    // And it must really be tracked — an exemption for a path git does not
+    // carry is an exemption that has drifted off its file.
+    expect(files).toContain(SELF);
+  });
+
   it("declares no Mongo dependency in any manifest", () => {
     const manifests = files.filter(
       (path) => path === "package.json" || path.endsWith("/package.json"),
@@ -263,8 +298,10 @@ describe("the repo cannot reach MongoDB", () => {
   });
 
   it("imports nothing Mongo-shaped from any source file", () => {
-    const sources = files.filter((path) =>
-      CODE_EXTENSIONS.some((extension) => path.endsWith(extension)),
+    const sources = files.filter(
+      (path) =>
+        CODE_EXTENSIONS.some((extension) => path.endsWith(extension)) &&
+        !SOURCE_SCAN_EXEMPTIONS.includes(path),
     );
     // Every language present must be in CODE_EXTENSIONS: a `require()` in a
     // .js file is invisible to a .ts-only scan, and that gap reads as a pass.
