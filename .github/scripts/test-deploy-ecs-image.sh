@@ -445,13 +445,31 @@ fi
 # than what it does. The first `reconcile` is the migration one-shot; compare
 # `reconciliation-failure` above, the same release at desired=1, where `service:`
 # is followed by `smoke` and a SECOND `reconcile` for the post-deploy task. Here
-# the log must STOP at `service:`, because neither is real when nothing is
-# running -- a smoke check against a service with zero tasks is the plausible
-# green this case exists to refuse. `diff -u` fails if either appears.
+# `smoke` must be ABSENT and the second `reconcile` PRESENT.
+#
+# THE ASYMMETRY, because an earlier version of this case got it wrong: it
+# asserted the log STOPS at `service:`, excluding the post one-shot ALONG WITH
+# the smoke check, on the reasoning that "neither is real when nothing is
+# running". That is true of the smoke check and false of the one-shot.
+#
+#   - A smoke script asserts HTTP against the service's own origin. Zero tasks,
+#     so it can only fail on an empty target group or "pass" against something
+#     that is not this image. Not real. Skipped.
+#   - `run_one_shot_command` calls `ecs run-task`: its own task, on the new
+#     revision, independent of the service. The pre-phase line directly above in
+#     this same expected log is the positive control -- it launches and succeeds
+#     at desired=0 by exactly that mechanism. Real. Run.
+#
+# Excluding the one-shot DEADLOCKS a parked service: it is the `post` migration
+# phase, @oxyhq/db's ledger is a high-water mark, and the next release's `pre`
+# run is refused behind an unapplied `post` one -- so the deploy that was
+# supposed to "catch up later" fails at its migration step instead. Measured in
+# alia: four consecutive merges deployed red behind an unapplied 0016.
 run_release zero-desired-count true true false 0 false 0
 printf '%s\n' \
   reconcile \
   'service:arn:aws:ecs:test:task-definition/deploy-test:2:desired=0' \
+  reconcile \
   >"$test_directory/zero-desired-count/expected.log"
 diff -u \
   "$test_directory/zero-desired-count/expected.log" \
@@ -470,6 +488,21 @@ grep -F \
   >/dev/null
 grep -F \
   "NO ROLLOUT PERFORMED: the task definition WAS registered and the service now points at it: arn:aws:ecs:test:task-definition/deploy-test:2" \
+  "$test_directory/zero-desired-count/output.log" \
+  >/dev/null
+# The smoke script is skipped, and SAID to be skipped. An omitted line and a
+# deliberate skip look identical in a log, which is how the post phase went
+# missing in the first place.
+if grep -qF 'smoke' "$test_directory/zero-desired-count/aws.log"; then
+  echo "A zero-capacity release ran smoke checks against a service with no tasks." >&2
+  exit 1
+fi
+grep -F \
+  "post-deploy smoke checks were SKIPPED" \
+  "$test_directory/zero-desired-count/output.log" \
+  >/dev/null
+grep -F \
+  "MIGRATIONS DID RUN — the pre-rollout migration ran before the repoint and the post-deploy one-shot after it" \
   "$test_directory/zero-desired-count/output.log" \
   >/dev/null
 # The success line of an ordinary release. If it ever appears here, a reader of
