@@ -13,7 +13,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from './Avatar';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useParticipantFullName } from '@/utils/conversationUtils';

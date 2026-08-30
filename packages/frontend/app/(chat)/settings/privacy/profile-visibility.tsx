@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 
 import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';

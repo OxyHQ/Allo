@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'rea
 import { ActivityIndicator, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { TextFieldInput } from '@oxyhq/bloom';
 import { toast } from '@oxyhq/bloom/toast';
 

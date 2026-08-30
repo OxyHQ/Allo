@@ -16,7 +16,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '@/hooks/useTheme';
 import { colors } from '@/styles/colors';
 import Avatar from '@/components/Avatar';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { FontAwesome6 } from '@expo/vector-icons';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
 import { ThemedText } from '@/components/ThemedText';
 import { networkBrandGlyph } from '@/lib/bridges/networkPresentation';

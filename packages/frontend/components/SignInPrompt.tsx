@@ -4,7 +4,7 @@ import {
     StyleSheet,
     Text,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { OxySignInButton, useAuth } from '@oxyhq/services';
 import { Logo } from './Logo';
 import { colors } from '../styles/colors';

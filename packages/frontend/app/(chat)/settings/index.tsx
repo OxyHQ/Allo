@@ -9,7 +9,7 @@ import { BackArrowIcon } from "@/assets/icons/back-arrow-icon";
 import { useOxy } from "@oxyhq/services";
 import { useTranslation } from "react-i18next";
 
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { SettingsListGroup, SettingsListItem } from "@oxyhq/bloom/settings-list";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";

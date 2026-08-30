@@ -148,3 +148,15 @@ jobs:
       # enum values at runtime does run under both.
       - name: Test frontend
         run: bun run --filter @allo/frontend test
+
+      - name: Guard bundle imports
+        run: bun run check:bundle-imports
+
+      - name: Export frontend
+        run: bun run build:frontend
+
+      - name: Enforce web bundle budget
+        run: bun run check:web-bundle-budget
+
+      - name: Mutation-test performance gates
+        run: bun run test:performance-gates
