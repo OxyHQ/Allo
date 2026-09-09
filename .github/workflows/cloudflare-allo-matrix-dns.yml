@@ -9,8 +9,8 @@
 # other `api.*` record in this account is DNS-only for the same reason.
 #
 # `check` reads and writes nothing — it is also how you find out whether the
-# token can edit DNS at all, since CLOUDFLARE_API_TOKEN is shared with the Pages
-# deployments and may be scoped to them. `apply` creates what is missing, leaves
+# token can edit DNS at all, since CLOUDFLARE_API_TOKEN is shared with the
+# frontend Worker deployment and may be scoped to it. `apply` creates what is missing, leaves
 # anything already correct alone, and refuses to touch a record whose value
 # disagrees rather than overwriting it.
 #
@@ -19,11 +19,17 @@
 # organisation secrets are not served to private repositories. oxy-infra is
 # private, so CLOUDFLARE_API_TOKEN arrives there as an empty string and the
 # failure looks like a scope problem. This repository is public, which is also
-# why its Pages deployment has always worked with the same secret.
+# why its Cloudflare deployment has always worked with the same secret.
 #
 # That is not an accident of convenience: allo.you's DNS-adjacent configuration
-# already lives in this repository — `public/_redirects`, `public/_headers`, and
-# the `.well-known/matrix/server` delegation that federation will need.
+# already lives in this repository — `packages/frontend/wrangler.toml`,
+# `public/_headers`, and the `.well-known/matrix/server` delegation that
+# federation will need.
+#
+# NOTE: this reconciler manages `matrix.allo.you` and `auth.allo.you` only. The
+# apex `allo.you` is claimed by the Worker's custom domain and must NOT be given
+# a hand-written record here — a Worker custom domain refuses a hostname that
+# already has externally managed records (`code: 100117`).
 name: Cloudflare DNS (Allo Matrix)
 
 on:

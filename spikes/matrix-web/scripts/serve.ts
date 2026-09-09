@@ -46,8 +46,8 @@ const server = Bun.serve({
       return new Response(file, { headers });
     }
 
-    // Single-page fallback, mirroring the `_redirects` rule the real frontend
-    // ships in packages/frontend/public/.
+    // Single-page fallback, mirroring `not_found_handling =
+    // "single-page-application"` in packages/frontend/wrangler.toml.
     const index = Bun.file(DIST + 'index.html');
     if (await index.exists()) {
       console.log(`200 ${pathname} -> index.html (fallback)`);

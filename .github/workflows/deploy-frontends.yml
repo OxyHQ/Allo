@@ -62,9 +62,20 @@ jobs:
           # code: Metro caches transforms and will happily produce a bundle
           # where neither was substituted. CI installs from scratch so it has
           # no such cache; a local `bun run build` does, and needs `--clear`.
-      - name: Deploy to Cloudflare Pages
+      # A WORKER, not a Pages project. A Pages project always serves
+      # `<project>.pages.dev` with no way to turn it off, which put a second copy
+      # of Allo on the internet at `allo-frontend.pages.dev` — an origin the
+      # backend's `APP_ORIGINS` does not admit, so it rendered the shell and
+      # failed every call. `workers_dev = false` in
+      # `packages/frontend/wrangler.toml` leaves `allo.you` as the only way in.
+      #
+      # The action stays on `@v4`, the pin this workflow already carried: its
+      # major is unrelated to Pages-versus-Worker, and moving it would be a
+      # separate, unexplained change.
+      - name: Deploy the Worker
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/frontend/dist --project-name=allo-frontend --branch=main
+          workingDirectory: packages/frontend
+          command: deploy

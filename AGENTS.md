@@ -162,9 +162,9 @@ registration was exercised with Allo's own payload shape. The trade (foreign
 MXIDs, no Oxy SSO, and conversations that cannot be migrated later) is set out in
 `docs/matrix/interim-homeserver.md`.
 
-As for ours: `matrix.allo.you` does not resolve, and
-`allo.you/.well-known/matrix/client` answers 200 only because the SPA fallback
-serves `index.html` for every unknown path. The Terraform exists in `oxy-infra`
+As for ours: `matrix.allo.you` does not resolve. `allo.you/.well-known/matrix/client`
+is now a real file in `packages/frontend/public/`, served ahead of the SPA
+fallback; before it existed the fallback answered that path 200 with `index.html`. The Terraform exists in `oxy-infra`
 (`terraform-uswest2/app-allo-matrix.tf`) and has never been applied.
 
 Two spikes back the decisions. Both live outside the workspaces, so a root
@@ -336,7 +336,7 @@ config plugin entry in `app.config.js` yet.
 **`@matrix-org/matrix-sdk-crypto-wasm`.** Its `.wasm` is several megabytes and
 cannot be resolved by Metro the way the package expects: it uses
 `import.meta.url`, which under the web export points at a path that does not
-exist, and the SPA fallback in `public/_redirects` answers that path with
+exist, and the Worker's SPA fallback (`not_found_handling`) answers that path with
 `index.html`, so **the failure reads as a WebAssembly MIME type error rather than
 a missing file**. Every web script (`start`, `dev`, `web`, `build*`) therefore
 runs `scripts/copy-matrix-wasm.js` first, which copies the module into `public/`

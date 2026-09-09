@@ -351,7 +351,7 @@ tiene que ser el del único registro que hay.
 
 El redirect apunta ya a la propia app (`/`) y no a un fichero estático. La razón
 para no apuntar a una ruta era el popup —el export web responde `index.html` a
-las rutas desconocidas (`public/_redirects`), así que se habría arrancado una
+las rutas desconocidas (el `not_found_handling` del Worker), así que se habría arrancado una
 segunda copia de Allo **dentro del popup**, y dos copias son dos `MatrixClient`
 sobre un IndexedDB, la corrupción del almacén de cripto que avisa el SDK—, y una
 navegación de primer nivel sustituye la página en vez de añadir otra. Sigue en pie

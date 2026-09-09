@@ -206,7 +206,7 @@ committed, so the Android run it performed cannot be reproduced from the repo.
 
 | Target | Command | Output |
 |--------|---------|--------|
-| Web | `bun run build:frontend` | `packages/frontend/dist/`, published to Cloudflare Pages (project `allo-frontend`) by `.github/workflows/deploy-frontends.yml` |
+| Web | `bun run build:frontend` | `packages/frontend/dist/`, uploaded as the static assets of the Cloudflare **Worker** `allo-frontend` (`packages/frontend/wrangler.toml`) by `.github/workflows/deploy-frontends.yml`. Not a Pages project: `workers_dev = false` is what keeps `allo.you` the only hostname serving it. |
 | iOS | `eas build --platform ios` in `packages/frontend/` | EAS-managed `.ipa` |
 | Android | `eas build --platform android` in `packages/frontend/` | EAS-managed `.aab` |
 | Backend | `bun run build:backend` | `packages/backend/dist/`. Shipped as a `linux/arm64` image built from `packages/backend/Dockerfile`, pushed to ECR and rolled out on AWS ECS by `.github/workflows/deploy-aws.yml` — see [the backend README](https://github.com/OxyHQ/Allo/blob/main/packages/backend/README.md#deployment). |

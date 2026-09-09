@@ -1,11 +1,11 @@
 // Copies the Matrix crypto WebAssembly module into `public/`, from where Expo
-// copies it verbatim into the web export and Cloudflare Pages serves it.
+// copies it verbatim into the web export and the Cloudflare Worker serves it.
 //
 // This exists because the package's own loader resolves the .wasm through
 // `import.meta.url`, which under Metro points at a path the export does not
-// contain — and the SPA fallback in `public/_redirects` answers that path with
-// `index.html` rather than a 404, so the failure surfaces as a WebAssembly MIME
-// type error. `lib/matrix/web/cryptoWasm.ts` passes the URL below to
+// contain — and the SPA fallback (`not_found_handling` in `../wrangler.toml`)
+// answers that path with `index.html` rather than a 404, so the failure surfaces
+// as a WebAssembly MIME type error. `lib/matrix/web/cryptoWasm.ts` passes the URL below to
 // `initAsync()` explicitly instead; the two have to agree, and this script is
 // what makes the file exist at it.
 //

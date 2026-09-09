@@ -1,0 +1,60 @@
+# The Allo web app is a Worker, not a Pages project.
+#
+# WHY: a Pages project ALWAYS serves `<project>.pages.dev` and Cloudflare offers
+# no way to switch it off — `wrangler pages project` has only `list`, `create`
+# and `delete`. So `allo-frontend.pages.dev` was a second, byte-identical copy of
+# this app on the internet, and `packages/backend/server.ts` admits exactly one
+# app origin, `https://allo.you` (`APP_ORIGINS`; `createOxyCors` adds only the
+# `*.oxy.so` family). That second copy therefore rendered the shell and failed
+# every request it made. Alia measured the same pair before migrating —
+# `alia.onl` and `alia-app.pages.dev`, identical md5. `workers_dev = false`
+# leaves `allo.you` as the only name that reaches this deployment.
+name = "allo-frontend"
+compatibility_date = "2026-09-09"
+
+workers_dev = false
+
+# Static assets with no `main`: no Worker script runs, every request is served
+# from the uploaded directory.
+[assets]
+directory = "./dist"
+
+# `expo export --platform web` emits ONE `index.html` plus hashed assets — a
+# client-routed SPA, not per-route static HTML — so this is what makes a deep
+# link work. It replaces `public/_redirects` (`/*  /index.html  200`), deleted in
+# the same change, and behaves the same way: real assets are matched first, and
+# only a genuine miss gets the shell.
+#
+# That ordering is load-bearing for two files here, and BOTH still exist under
+# `public/`:
+#
+#   .well-known/matrix/server   the federation delegation for `server_name`
+#                               allo.you, pointing at matrix.allo.you
+#   .well-known/matrix/client   client discovery
+#
+# Delete either and this fallback answers its path with `index.html` and status
+# **200**, which is worse than serving nothing: server-server resolution falls
+# through to the `_matrix-fed._tcp` SRV record only when the well-known request
+# *fails*, and a 200 carrying HTML is a success that happens not to be the JSON
+# anyone wanted. There is no SRV record to fall through to.
+#
+# The other, unchanged wart: a stale hashed bundle is a miss too, so a `.js` URL
+# from a previous deploy is answered with `index.html`. That is what shipped
+# under Pages, and it is what ships here.
+not_found_handling = "single-page-application"
+
+# `public/_headers` survives the move. Workers static assets read it exactly as
+# Pages did: wrangler excludes `_headers` and `_redirects` from the asset
+# manifest and uploads each as a deployment module instead
+# (`createAssetsIgnoreFunction` in wrangler 4). It is what gives the two
+# extensionless delegation files `Content-Type: application/json` and what keeps
+# the un-hashed crypto WebAssembly module revalidating.
+
+# The only way in. `allo.you` is the zone apex; Cloudflare writes the flattened
+# record for a custom domain, so no CNAME is declared by hand. This is also why
+# the apex must carry no pre-existing DNS record at the moment of the first
+# deploy: a Worker custom domain refuses a hostname that already has externally
+# managed records (`code: 100117`).
+[[routes]]
+pattern = "allo.you"
+custom_domain = true
