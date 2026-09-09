@@ -67,10 +67,11 @@ jobs:
       # of Allo on the internet at `allo-frontend.pages.dev` — an origin the
       # backend's `APP_ORIGINS` does not admit, so it rendered the shell and
       # failed every call. `workers_dev = false` in
-      # `packages/frontend/wrangler.toml` leaves the two DECLARED custom domains,
-      # `allo.you` and `allo.oxy.so`, as the only ways in. Both are claimed by
-      # `[[routes]]` there; the Pages project served both, and a change to how
-      # this app is deployed must not retire one of them by omission.
+      # `packages/frontend/wrangler.toml` leaves `allo.you` as the only way in.
+      # The Pages project also served `allo.oxy.so`; that alias is retired by
+      # owner decision in the same change, so it is detached and its DNS record
+      # deleted at cutover and it is deliberately left not resolving. This does
+      # NOT touch `api.allo.oxy.so`, a different host that is not served here.
       #
       # wrangler is invoked DIRECTLY, not through `cloudflare/wrangler-action`.
       # The action installs its own wrangler and chooses the package manager by

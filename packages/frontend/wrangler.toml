@@ -50,40 +50,41 @@ not_found_handling = "single-page-application"
 # extensionless delegation files `Content-Type: application/json` and what keeps
 # the un-hashed crypto WebAssembly module revalidating.
 
-# TWO custom domains, because the Pages project this replaces serves two and a
-# migration must not retire a live hostname by omission. Measured:
+# ONE custom domain, and that is a change from what the Pages project served.
+#
+# `allo-frontend` served three names: `allo-frontend.pages.dev`, `allo.oxy.so`
+# and `allo.you`. The first goes because Cloudflare will not let a Pages project
+# switch it off — that is what this whole file is for. The second is RETIRED, on
+# 2026-09-09, by an explicit decision of the owner relayed through the team lead.
+# It is not being dropped by omission and it is not collateral of the migration:
+# it was a working alias.
 #
 #   allo.you      200  29507 bytes  md5 e9a9da0addbcd774
-#   allo.oxy.so   200  29507 bytes  md5 e9a9da0addbcd774
+#   allo.oxy.so   200  29507 bytes  md5 e9a9da0addbcd774   <- retired, was live
 #
-# `allo.oxy.so` is the product's ORIGINAL domain and is deliberately still up.
-# `280b0a4` cut over to `allo.you` "additive, keeps allo.oxy.so", and `1247c80`
-# ("mover la app a allo.you, el dominio del producto") finished moving the client
-# while stating in as many words what it does not do: *"Lo que este commit NO
-# hace: retirar el DNS viejo."* Nothing since has decided otherwise, and this
-# change is about how the app is DEPLOYED, not about which names it answers to.
+# Why retiring it is safe, and why that needed checking. `allo.oxy.so` really
+# worked: `createOxyCors` admits the `*.oxy.so` apex family automatically, which
+# is exactly why `allo.you` — outside that apex — is the one `APP_ORIGINS` in
+# `packages/backend/server.ts` has to list explicitly. So this is a deliberate
+# cleanup of a working alias, NOT the removal of a broken duplicate.
 #
-# That is not in tension with `workers_dev = false` above. The defect being
-# removed is a name Cloudflare creates and will not let anyone switch off; these
-# two are declared here, and either can be dropped by deleting its block. Note
-# also that `allo.oxy.so` is not the same failure class as
-# `allo-frontend.pages.dev` was: `createOxyCors` admits the `*.oxy.so` apex
-# family automatically, so the app actually WORKS from it — see the comment on
-# `APP_ORIGINS` in `packages/backend/server.ts`, which is why `allo.you`, being
-# outside that apex, is the one that had to be listed explicitly.
+# The one recorded reason for keeping the old DNS does not cover it. `1247c80`
+# ("mover la app a allo.you, el dominio del producto") says *"Lo que este commit
+# NO hace: retirar el DNS viejo"* — and the reason it gives is installed clients
+# carrying a compiled-in URL, which is an argument about `api.allo.oxy.so`, the
+# API HOST. That is a different name, it is not served from here, it is not part
+# of this migration, and it stays. Do not read this retirement as touching it.
 #
-# Retiring `allo.oxy.so` is a separate, deliberate decision. When it is taken,
-# delete the second block and detach the domain; do not let it lapse.
+# `allo.oxy.so` still has to be cleaned up at cutover even though it is not
+# claimed here: its DNS record is deleted (zone `oxy.so`) and it is detached from
+# the Pages project, or deleting that project orphans it. After the cutover it
+# should NOT resolve. That is the intended end state — do not "fix" it.
 #
 # Cloudflare writes the flattened record for a custom domain, so no CNAME is
-# declared by hand — and BOTH hostnames must carry no pre-existing DNS record at
-# the moment of the first deploy, because a Worker custom domain refuses one that
-# already has externally managed records (`code: 100117`). They are in different
-# zones: `allo.you` is its own apex, `allo.oxy.so` lives in `oxy.so`.
+# declared by hand. `allo.you` is the zone apex, and it must carry no
+# pre-existing DNS record at the moment of the first deploy: a Worker custom
+# domain refuses a hostname that already has externally managed records
+# (`code: 100117`).
 [[routes]]
 pattern = "allo.you"
-custom_domain = true
-
-[[routes]]
-pattern = "allo.oxy.so"
 custom_domain = true
