@@ -120,7 +120,7 @@ prerrequisitos de la Fase 2.
 
 1. **El WASM pesa.** `matrix_sdk_crypto_wasm_bg.wasm` son 7 820 736 bytes sin
    comprimir y 2 093 185 comprimido con gzip -9 **[T]** (medido sobre el tarball de
-   `18.4.0` descargado del registro). Cloudflare Pages sirve Brotli, así que el coste
+   `18.4.0` descargado del registro). Cloudflare sirve Brotli, así que el coste
    real de red estará por debajo de esa cifra, pero el coste de compilación en el
    cliente no desaparece. Se carga una vez, en diferido, con `initAsync()`.
 2. **Metro no es Vite.** El cargador por defecto hace
@@ -136,7 +136,7 @@ prerrequisitos de la Fase 2.
    (`spikes/matrix-web/RESULTS.md`): resuelve limpio y el `.wasm` carga desde el
    export de producción. Con un matiz que aquí se daba por opcional y no lo es —
    `initAsync(url)` **hay que** llamarlo, porque si se deja el cargador por defecto
-   el `_redirects` de `public/` sirve el `index.html` en lugar de un 404 y el fallo
+   el fallback SPA del Worker sirve el `index.html` en lugar de un 404 y el fallo
    aparece como error de MIME de WebAssembly, no como fichero ausente.
 
    El spike midió además que el `.wasm` **no se descarga al abrir la app** —tres
@@ -222,8 +222,9 @@ meses y donde aparecen los bugs de decrypción fantasma.
   `data-model.md`, y su validación.
 - El cliente del registry de moderación, i18n, y **toda la UI**, porque
   `packages/frontend` ya construye web con `expo export --platform web` **[V]**
-  (`packages/frontend/package.json`) y se despliega a Cloudflare Pages con ese `dist`
-  **[V]** (`.github/workflows/deploy-frontends.yml`).
+  (`packages/frontend/package.json`) y ese `dist` se despliega como los assets
+  estáticos de un Worker de Cloudflare **[V]**
+  (`packages/frontend/wrangler.toml`, `.github/workflows/deploy-frontends.yml`).
 
 **La forma del puerto.** **[C]** Un módulo con dos implementaciones resueltas por
 Metro vía extensión, exportando un tipo único. Concretamente, y a propósito corto:
@@ -741,7 +742,7 @@ En orden de cuánto duele si sale mal:
    Confirmó también la escotilla, y de paso que no era opcional: `initAsync(url)`
    hay que llamarlo **explícitamente**, porque el cargador por defecto resuelve el
    `.wasm` por `import.meta.url` a una ruta que el export no tiene, y el fallback
-   SPA de `packages/frontend/public/_redirects` responde con el `index.html` en vez
+   SPA del Worker (`not_found_handling`) responde con el `index.html` en vez
    de un 404 — así que el error que se ve es de tipo MIME y no de fichero ausente.
    `RESULTS.md` lista esa y otras cuatro restricciones que la implementación tiene
    que respetar.

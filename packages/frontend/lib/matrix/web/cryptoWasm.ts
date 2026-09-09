@@ -6,8 +6,9 @@
  * **Where the module comes from.** The package's default loader resolves its
  * `.wasm` through `import.meta.url`, which under Expo's web export points at
  * `/_expo/static/js/web/pkg/matrix_sdk_crypto_wasm_bg.wasm` — a path the export
- * does not contain. It does not even fail as a 404: the SPA fallback in
- * `public/_redirects` answers it with `index.html`, so the error that surfaces is
+ * does not contain. It does not even fail as a 404: the SPA fallback
+ * (`not_found_handling` in `wrangler.toml`) answers it with `index.html`, so the
+ * error that surfaces is
  * a WebAssembly MIME type error and sends whoever reads it looking for a server
  * misconfiguration. `initAsync(url)` with an explicit URL is therefore not a
  * nicety, it is the only way this works. `scripts/copy-matrix-wasm.js` is what

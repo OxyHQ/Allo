@@ -1,0 +1,90 @@
+# The Allo web app is a Worker, not a Pages project.
+#
+# WHY: a Pages project ALWAYS serves `<project>.pages.dev` and Cloudflare offers
+# no way to switch it off — `wrangler pages project` has only `list`, `create`
+# and `delete`. So `allo-frontend.pages.dev` was a second, byte-identical copy of
+# this app on the internet, and `packages/backend/server.ts` admits exactly one
+# app origin, `https://allo.you` (`APP_ORIGINS`; `createOxyCors` adds only the
+# `*.oxy.so` family). That second copy therefore rendered the shell and failed
+# every request it made. Alia measured the same pair before migrating —
+# `alia.onl` and `alia-app.pages.dev`, identical md5. `workers_dev = false`
+# leaves `allo.you` as the only name that reaches this deployment.
+name = "allo-frontend"
+compatibility_date = "2026-09-09"
+
+workers_dev = false
+
+# Static assets with no `main`: no Worker script runs, every request is served
+# from the uploaded directory.
+[assets]
+directory = "./dist"
+
+# `expo export --platform web` emits ONE `index.html` plus hashed assets — a
+# client-routed SPA, not per-route static HTML — so this is what makes a deep
+# link work. It replaces `public/_redirects` (`/*  /index.html  200`), deleted in
+# the same change, and behaves the same way: real assets are matched first, and
+# only a genuine miss gets the shell.
+#
+# That ordering is load-bearing for two files here, and BOTH still exist under
+# `public/`:
+#
+#   .well-known/matrix/server   the federation delegation for `server_name`
+#                               allo.you, pointing at matrix.allo.you
+#   .well-known/matrix/client   client discovery
+#
+# Delete either and this fallback answers its path with `index.html` and status
+# **200**, which is worse than serving nothing: server-server resolution falls
+# through to the `_matrix-fed._tcp` SRV record only when the well-known request
+# *fails*, and a 200 carrying HTML is a success that happens not to be the JSON
+# anyone wanted. There is no SRV record to fall through to.
+#
+# The other, unchanged wart: a stale hashed bundle is a miss too, so a `.js` URL
+# from a previous deploy is answered with `index.html`. That is what shipped
+# under Pages, and it is what ships here.
+not_found_handling = "single-page-application"
+
+# `public/_headers` survives the move. Workers static assets read it exactly as
+# Pages did: wrangler excludes `_headers` and `_redirects` from the asset
+# manifest and uploads each as a deployment module instead
+# (`createAssetsIgnoreFunction` in wrangler 4). It is what gives the two
+# extensionless delegation files `Content-Type: application/json` and what keeps
+# the un-hashed crypto WebAssembly module revalidating.
+
+# ONE custom domain, and that is a change from what the Pages project served.
+#
+# `allo-frontend` served three names: `allo-frontend.pages.dev`, `allo.oxy.so`
+# and `allo.you`. The first goes because Cloudflare will not let a Pages project
+# switch it off — that is what this whole file is for. The second is RETIRED, on
+# 2026-09-09, by an explicit decision of the owner relayed through the team lead.
+# It is not being dropped by omission and it is not collateral of the migration:
+# it was a working alias.
+#
+#   allo.you      200  29507 bytes  md5 e9a9da0addbcd774
+#   allo.oxy.so   200  29507 bytes  md5 e9a9da0addbcd774   <- retired, was live
+#
+# Why retiring it is safe, and why that needed checking. `allo.oxy.so` really
+# worked: `createOxyCors` admits the `*.oxy.so` apex family automatically, which
+# is exactly why `allo.you` — outside that apex — is the one `APP_ORIGINS` in
+# `packages/backend/server.ts` has to list explicitly. So this is a deliberate
+# cleanup of a working alias, NOT the removal of a broken duplicate.
+#
+# The one recorded reason for keeping the old DNS does not cover it. `1247c80`
+# ("mover la app a allo.you, el dominio del producto") says *"Lo que este commit
+# NO hace: retirar el DNS viejo"* — and the reason it gives is installed clients
+# carrying a compiled-in URL, which is an argument about `api.allo.oxy.so`, the
+# API HOST. That is a different name, it is not served from here, it is not part
+# of this migration, and it stays. Do not read this retirement as touching it.
+#
+# `allo.oxy.so` still has to be cleaned up at cutover even though it is not
+# claimed here: its DNS record is deleted (zone `oxy.so`) and it is detached from
+# the Pages project, or deleting that project orphans it. After the cutover it
+# should NOT resolve. That is the intended end state — do not "fix" it.
+#
+# Cloudflare writes the flattened record for a custom domain, so no CNAME is
+# declared by hand. `allo.you` is the zone apex, and it must carry no
+# pre-existing DNS record at the moment of the first deploy: a Worker custom
+# domain refuses a hostname that already has externally managed records
+# (`code: 100117`).
+[[routes]]
+pattern = "allo.you"
+custom_domain = true

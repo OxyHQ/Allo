@@ -1,5 +1,6 @@
-# Cloudflare Pages reads this file from the export root, the same way it reads
-# _redirects.
+# Cloudflare reads this file from the export root. It kept working when the app
+# left Pages for a Worker: wrangler keeps `_headers` out of the asset manifest
+# and uploads it as a deployment module, so the rules below still apply.
 #
 # The Matrix crypto WebAssembly module is served from a fixed path with no
 # content hash in it — unlike the JS bundles, which Metro fingerprints — because
@@ -15,9 +16,10 @@
 # federating server that cannot parse the answer falls through to the SRV
 # record — which does not exist here.
 #
-# `_redirects` sends unmatched paths to index.html, but real assets are served
-# before that rule is consulted, so these files win. They did not exist until
-# now, which is why that path used to answer 200 with HTML.
+# `not_found_handling = "single-page-application"` in `../wrangler.toml` sends
+# unmatched paths to index.html, but real assets are matched first, so these
+# files win. They did not exist until recently, which is why that path used to
+# answer 200 with HTML.
 /.well-known/matrix/server
   Content-Type: application/json
   Access-Control-Allow-Origin: *
