@@ -203,6 +203,7 @@ const io = new SocketIOServer(server, {
       "Content-MD5",
       "Date",
       "X-Api-Version",
+      "X-Oxy-Edge-Region",
     ],
   },
   perMessageDeflate: {
