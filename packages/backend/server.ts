@@ -204,6 +204,7 @@ const io = new SocketIOServer(server, {
       "Date",
       "X-Api-Version",
       "X-Oxy-Edge-Region",
+      "X-Oxy-Activity-Id",
     ],
   },
   perMessageDeflate: {
