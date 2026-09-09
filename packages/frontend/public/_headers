@@ -29,3 +29,22 @@
   Content-Type: application/json
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=3600
+
+# EVERY response, and the reason this rule has to exist at all: Cloudflare Pages
+# added these two headers to every response it served, automatically, with
+# nothing in this repository asking for them. Workers Static Assets does not, so
+# moving allo.you to a Worker dropped both — silently, because no build, deploy
+# or test looks at response headers. Measured on a Pages hostname that has no
+# `_headers` rule for them either:
+#
+#   oxy-auth.pages.dev  referrer-policy: strict-origin-when-cross-origin
+#                       x-content-type-options: nosniff
+#
+# `nosniff` is the one that matters: without it a browser may disregard a
+# declared Content-Type and sniff the bytes instead, which turns any response
+# carrying attacker-influenced content into a possible script. Declaring both
+# here makes them a property of this deployment rather than of the platform it
+# happens to be running on.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
