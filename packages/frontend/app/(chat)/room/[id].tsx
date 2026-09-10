@@ -3,8 +3,8 @@ import { ActivityIndicator, FlatList, StyleSheet, TouchableOpacity, View } from 
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { TextFieldInput } from '@oxyhq/bloom';
-import { toast } from '@oxyhq/bloom/toast';
+import { TextFieldInput } from '@oxy.so/bloom';
+import { toast } from '@oxy.so/bloom/toast';
 
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';

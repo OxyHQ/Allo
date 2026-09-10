@@ -2,7 +2,7 @@
  * `moderation_events` — the inbound webhook dedupe claim, shared across tasks, and
  * the audit trail of what CrowdSource told this deployment to do.
  *
- * `@oxyhq/crowdsource-express` defaults to an IN-PROCESS store and says exactly
+ * `@oxy.so/crowdsource-express` defaults to an IN-PROCESS store and says exactly
  * when that is not enough: two instances behind a load balancer each keep their
  * own, so a redelivery landing on the OTHER instance is not deduplicated. Allo runs
  * on ECS Fargate behind one ALB, so this is that case.

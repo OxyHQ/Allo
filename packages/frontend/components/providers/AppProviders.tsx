@@ -11,9 +11,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { MenuProvider } from 'react-native-popup-menu';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { OxyProvider, useOxy } from '@oxyhq/services';
-import { ImageResolverProvider, type ImageResolver } from '@oxyhq/bloom/image-resolver';
-import { ConnectionStatusToasts } from '@oxyhq/bloom/connection-status';
+import { OxyProvider, useOxy } from '@oxy.so/services';
+import { ImageResolverProvider, type ImageResolver } from '@oxy.so/bloom/image-resolver';
+import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { BottomSheetProvider } from '@/context/BottomSheetContext';

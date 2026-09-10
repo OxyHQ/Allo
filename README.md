@@ -67,9 +67,9 @@ The repo is a Bun workspace monorepo. Everything lives under `packages/`.
 | [`@allo/shared-types`](packages/shared-types/) | TypeScript types shared by both |
 
 Identity and sessions come from the Oxy platform rather than from a login system in this
-repo: [`@oxyhq/services`](https://github.com/OxyHQ/oxy) on the frontend,
-`@oxyhq/core/server` for the backend's auth, CORS and rate limit middleware, and
-`@oxyhq/bloom` for shared UI.
+repo: [`@oxy.so/services`](https://github.com/OxyHQ/oxy) on the frontend,
+`@oxy.so/core/server` for the backend's auth, CORS and rate limit middleware, and
+`@oxy.so/bloom` for shared UI.
 
 There is no `controllers/`, `middleware/` or `sockets/` directory in the backend. Routes
 hold their own handlers and the Socket.IO wiring sits directly in `server.ts`.

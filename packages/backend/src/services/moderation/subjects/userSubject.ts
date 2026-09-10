@@ -1,5 +1,5 @@
-import { oxyClient } from "@oxyhq/core";
-import type { User } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
+import type { User } from "@oxy.so/core";
 import { isOxyUserNotFound } from "../../../utils/oxyUserDisplay";
 import type { ModerationSubjectProvider, ModerationSubjectSnapshot } from "./types";
 

@@ -1,4 +1,4 @@
-import type { User } from "@oxyhq/core";
+import type { User } from "@oxy.so/core";
 import type {
   ConversationParticipant,
   EnrichedConversationParticipant,

@@ -25,8 +25,8 @@
  */
 
 import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
-import { uuidv7, type SelectedRow } from "@oxyhq/db";
-import { publicColumns } from "@oxyhq/db/assert";
+import { uuidv7, type SelectedRow } from "@oxy.so/db";
+import { publicColumns } from "@oxy.so/db/assert";
 import type {
   EncryptedMediaItem,
   MediaItem,

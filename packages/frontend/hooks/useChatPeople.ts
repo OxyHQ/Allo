@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 import { useBridgeGhostNamespaces } from '@/hooks/useBridges';
 import { useMatrixRuntime } from '@/hooks/useMatrixRuntime';

@@ -4,7 +4,7 @@
 
 import { Conversation } from '@/app/(chat)/index';
 import { useUserById } from '@/stores/usersStore';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 /**
  * Get conversation ID from multiple sources (prop > pathname > segments)

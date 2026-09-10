@@ -15,9 +15,9 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { createDatabase, constraintNameOf, isCheckViolation, uuidv7 } from "@oxyhq/db";
+import { createDatabase, constraintNameOf, isCheckViolation, uuidv7 } from "@oxy.so/db";
 import type postgres from "postgres";
-import { publicColumns } from "@oxyhq/db/assert";
+import { publicColumns } from "@oxy.so/db/assert";
 import {
   MAX_LINK_SESSION_FLOW_ID_LENGTH,
   MAX_LINK_SESSION_PROCESS_ID_LENGTH,

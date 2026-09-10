@@ -1,5 +1,5 @@
 import { Conversation } from '@/app/(chat)/index';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import { useUserById } from '@/stores/usersStore';
 
 /**

@@ -37,7 +37,7 @@
 
 import { Router, Response } from "express";
 import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
-import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxy.so/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { oxy } from "../../server";
 import { logger } from "../utils/logger";

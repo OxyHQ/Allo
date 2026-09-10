@@ -100,7 +100,7 @@ app/
 ### `components/shared/`
 - **EmptyState.tsx**: Reusable empty state component
 
-Loading placeholders come from `@oxyhq/bloom`'s `Skeleton` primitives, composed
+Loading placeholders come from `@oxy.so/bloom`'s `Skeleton` primitives, composed
 at the call site (see the conversation list in `app/(chat)/index.tsx`).
 
 ## Performance Optimizations

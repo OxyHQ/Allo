@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 /**
  * Hook for typing indicators in a conversation

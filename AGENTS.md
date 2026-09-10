@@ -100,7 +100,7 @@ agreed on. So nothing may assume a format — an ObjectId-shaped validator would
 reject every row written since, and a uuid-shaped one every row written before.
 
 **Sub-millisecond creation order is not a property this schema has.**
-`@oxyhq/db`'s `createdAt` is `date_trunc('milliseconds', now())`, and the uuid v7
+`@oxy.so/db`'s `createdAt` is `date_trunc('milliseconds', now())`, and the uuid v7
 tiebreak below it does not encode order within a millisecond. A test asserting an
 exact sequence for rows written in a tight loop is asserting the generator's
 luck; space the writes across milliseconds or assert only at the resolution the
@@ -312,15 +312,15 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
 `appearanceStore`.
 
 Components use `useTheme()` from `@/hooks/useTheme`, a thin wrapper over
-`@oxyhq/bloom`'s theme hook that adds Allo-specific chat-bubble colors
+`@oxy.so/bloom`'s theme hook that adds Allo-specific chat-bubble colors
 (`messageBubble*`, `chatBackground`) from the user's conversation theme in
 `styles/colorThemes.ts`. Never hardcode colors; always use `theme.colors.*`.
 `styles/colors.ts` is reserved for SVG icon defaults only.
 
 ## Dependency gotchas
 
-**Root `overrides` plus `resolutions` for the Oxy SDK.** `@oxyhq/services`
-declares `@oxyhq/core` as a peer. Without explicit root `overrides` AND
+**Root `overrides` plus `resolutions` for the Oxy SDK.** `@oxy.so/services`
+declares `@oxy.so/core` as a peer. Without explicit root `overrides` AND
 `resolutions`, Bun may hoist a different core build inside the services package,
 giving type mismatches and runtime errors. The root `package.json` must carry
 BOTH entries pointing at the current target.

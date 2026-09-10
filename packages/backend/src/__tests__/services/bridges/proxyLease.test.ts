@@ -41,7 +41,7 @@ vi.mock("../../../services/bridges/proxy/proxyProvider", async () => {
 });
 
 import { and, asc, eq } from "drizzle-orm";
-import { uuidv7, isUniqueViolation } from "@oxyhq/db";
+import { uuidv7, isUniqueViolation } from "@oxy.so/db";
 import { closePostgres, connectPostgres, getDb } from "../../../db";
 import { listLeaseRotations } from "../../../db/bridges/proxyLeases";
 import * as schema from "../../../db/schema";

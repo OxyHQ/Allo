@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 import { createAlloApiConversation } from '@/lib/chat/alloApiConversations';
 import { CHAT_BACKEND } from '@/lib/chat/backend';

@@ -25,7 +25,7 @@ import {
  *
  * The second test recomputes it anyway, from the primitives and through a
  * *different* copy of HKDF than the one the code uses: the frontend resolves
- * `@noble/hashes` at version 2, and `hkdfSha256` inside `@oxyhq/core` resolves
+ * `@noble/hashes` at version 2, and `hkdfSha256` inside `@oxy.so/core` resolves
  * its own version 1. Two independent implementations agreeing on RFC 5869 is
  * worth more than one agreeing with itself.
  */

@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SearchProfilesResponse, User } from "@oxyhq/core";
+import type { SearchProfilesResponse, User } from "@oxy.so/core";
 
 import { createDirectoryRoutes } from "../../routes/directory";
 import {

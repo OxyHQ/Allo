@@ -26,10 +26,10 @@ import Animated, {
     type SharedValue,
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { toast } from '@oxyhq/bloom/toast';
+import { toast } from '@oxy.so/bloom/toast';
 
 // Components
-import { Search, Skeleton } from '@oxyhq/bloom';
+import { Search, Skeleton } from '@oxy.so/bloom';
 import { useTranslation } from 'react-i18next';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -41,7 +41,7 @@ import type { ConversationSecurity } from '@/lib/chat/roomOrigin';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import {
     useConversationsStore,
     useConversationSwipePreferencesStore,

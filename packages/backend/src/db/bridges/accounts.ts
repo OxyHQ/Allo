@@ -32,8 +32,8 @@
 
 import { and, asc, eq, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { publicColumns } from "@oxyhq/db/assert";
-import { qualified, sqlColumnName, type SelectedRow } from "@oxyhq/db";
+import { publicColumns } from "@oxy.so/db/assert";
+import { qualified, sqlColumnName, type SelectedRow } from "@oxy.so/db";
 import type { BridgeNetworkId } from "../../config/bridges";
 import type { AlloDatabase } from "../index";
 import { PROTECTED_COLUMNS } from "../protectedColumns";

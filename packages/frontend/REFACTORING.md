@@ -80,9 +80,9 @@ components/
 - Fixed all TypeScript import errors
 - Verified build succeeds (all 25 routes successfully exported)
 
-### 5. Use of @oxyhq/services ✅
+### 5. Use of @oxy.so/services ✅
 
-Verified that all user data access properly uses the `@oxyhq/services` package:
+Verified that all user data access properly uses the `@oxy.so/services` package:
 - ✅ All components use `useOxy` hook for user authentication
 - ✅ Proper use of `oxyServices` for API calls
 - ✅ Consistent pattern throughout the codebase

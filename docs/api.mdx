@@ -6,7 +6,7 @@ order: 3
 
 # API
 
-The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `createOxyAuthMiddleware` from `@oxyhq/core/server`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
+The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `createOxyAuthMiddleware` from `@oxy.so/core/server`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
 
 `GET /api/health` is the only public route under `/api`. `POST /webhooks/crowdsource` sits outside it entirely and authenticates by signature instead.
 
@@ -312,7 +312,7 @@ Only three event categories ever trigger client-side side effects beyond updatin
 | `401` | Missing or invalid Oxy bearer token |
 | `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
 | `404` | Resource not found, or you are not a participant |
-| `429` | Rate limited by `createOxyRateLimit` (`@oxyhq/core/server`), applied per resolved user |
+| `429` | Rate limited by `createOxyRateLimit` (`@oxy.so/core/server`), applied per resolved user |
 | `503` | Matrix authentication is temporarily unavailable — retry after `Retry-After`. Also returned by the connect middleware in `server.ts` when the initial database connection cannot be ESTABLISHED (`Database temporarily unavailable`). **Not** returned for an outage that starts after the process has connected: `connectToDatabase()` returns early once connected, so a store that dies mid-life surfaces as a `500`. |
 
 All error bodies are JSON.

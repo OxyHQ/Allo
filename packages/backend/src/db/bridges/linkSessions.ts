@@ -39,8 +39,8 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { publicColumns } from "@oxyhq/db/assert";
-import type { SelectedRow } from "@oxyhq/db";
+import { publicColumns } from "@oxy.so/db/assert";
+import type { SelectedRow } from "@oxy.so/db";
 import type { BridgeNetworkId } from "../../config/bridges";
 import type { AlloDatabase } from "../index";
 import { PROTECTED_COLUMNS } from "../protectedColumns";

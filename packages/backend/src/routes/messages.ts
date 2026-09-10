@@ -39,7 +39,7 @@
 import { Router, Response } from "express";
 import type { EncryptedMediaItem, MediaItem, MessageKind } from "@allo/shared-types";
 import type { AlloAuthRequest as AuthRequest } from "../types/realtime";
-import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxy.so/core/server";
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from "../utils/apiHelpers";
 import { logger } from "../utils/logger";
 import { getDb } from "../db";

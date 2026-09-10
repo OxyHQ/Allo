@@ -1,8 +1,8 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { oxyClient } from "@oxyhq/core";
-import { createOxyAuthMiddleware, getOxyUserId } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { createOxyAuthMiddleware, getOxyUserId } from "@oxy.so/core/server";
 
 import { loadMatrixAuthConfig, type MatrixAuthConfig } from "../../config/matrixAuth";
 import {
@@ -452,18 +452,18 @@ describe("a deployment that accepts no Matrix token", () => {
   });
 });
 
-describe("the @oxyhq/core auth bypass is closed on the version Allo rides", () => {
+describe("the @oxy.so/core auth bypass is closed on the version Allo rides", () => {
   it("refuses a FORGED, UNSIGNED Oxy JWT instead of authenticating it", async () => {
     /**
      * ## This test was a tripwire, and it just tripped — read before touching it
      *
-     * On the core Allo used to ship (`@oxyhq/core@17.0.2`), `oxy.auth()` decoded
+     * On the core Allo used to ship (`@oxy.so/core@17.0.2`), `oxy.auth()` decoded
      * the bearer JWT with `jwtDecode`, which verifies NOTHING, and then — for a
      * payload carrying no `sessionId` — trusted the `userId` claim outright. The
      * token below, whose signature is a made-up string, authenticated as whoever
      * it named: an account takeover on `api.allo.you` as deployed.
      *
-     * `@oxyhq/core@20.1.0` fixed it at the source — a session-less user token is
+     * `@oxy.so/core@20.1.0` fixed it at the source — a session-less user token is
      * refused (`SESSION_REQUIRED`) and never reaches the local-claims branch —
      * and this migration puts Allo on that line. So the forged token is now
      * refused: it arrives through the Oxy path's optional-auth + `requireOxyAuth`

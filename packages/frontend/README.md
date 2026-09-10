@@ -196,7 +196,7 @@ This package is part of the Allo monorepo and integrates with:
 
 ### Shared Dependencies
 - Uses `@allo/shared-types` for type safety across packages
-- Integrates with `@oxyhq/services` for common functionality
+- Integrates with `@oxy.so/services` for common functionality
 
 ## Security & Encryption
 

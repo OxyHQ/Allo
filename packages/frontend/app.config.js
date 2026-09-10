@@ -1,7 +1,7 @@
 const pkg = require('./package.json')
 const fs = require('fs')
 const path = require('path')
-const { oxySplashScreenPlugin } = require('@oxyhq/expo-splash/config')
+const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config')
 
 module.exports = function(_config) {
 
@@ -128,14 +128,14 @@ return {
                 "expo-router",
                 // Oxy-standard native splash: Allo's own paper-plane logo centered on
                 // the shared dark brand background (#0B0B0F), with the Oxy "from Oxy"
-                // bottom branding added by the "@oxyhq/expo-splash" string plugin below.
+                // bottom branding added by the "@oxy.so/expo-splash" string plugin below.
                 // The branding string MUST stay immediately after the splash tuple.
                 oxySplashScreenPlugin({
                     image: './assets/images/splash-logo.png',
                     imageWidth: 176,
                     backgroundColor: '#0B0B0F'
                 }),
-                "@oxyhq/expo-splash",
+                "@oxy.so/expo-splash",
                 [
                     "expo-camera",
                     {
@@ -187,15 +187,15 @@ return {
                 // session across installed Oxy apps.
                 './plugins/withSharedUserId',
                 // Reader side of the shared-identity native module (ships in
-                // @oxyhq/services): request the signature permission + <queries>
+                // @oxy.so/services): request the signature permission + <queries>
                 // so cold boot can silently read the Commons-hosted shared
                 // identity (silent "Sign in with Oxy").
-                '@oxyhq/services/plugins/withSharedIdentityReader',
+                '@oxy.so/services/plugins/withSharedIdentityReader',
             ];
 
             // Only include expo-notifications for native builds (android/ios).
             // Insert at index 3 (after 'expo-router', the splash tuple, and the
-            // "@oxyhq/expo-splash" branding string) so the splash tuple and its
+            // "@oxy.so/expo-splash" branding string) so the splash tuple and its
             // branding string stay contiguous at indices 1 and 2.
             if (PLATFORM !== 'web') {
                 base.splice(3, 0, [

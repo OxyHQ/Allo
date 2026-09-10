@@ -42,11 +42,11 @@ A root `lint` script exists but is not usable: the backend declares no `lint`, a
 
 External shared deps both halves pull from npm:
 
-- `@oxyhq/core` — auth client + types. Its `/server` entry point supplies the backend's auth, CORS and rate-limit middleware.
-- `@oxyhq/contracts` — shared API contracts
-- `@oxyhq/services` — RN auth context (frontend only)
-- `@oxyhq/bloom` — UI primitives (frontend only)
-- `@oxyhq/crowdsource*` — moderation pipeline (backend only)
+- `@oxy.so/core` — auth client + types. Its `/server` entry point supplies the backend's auth, CORS and rate-limit middleware.
+- `@oxy.so/contracts` — shared API contracts
+- `@oxy.so/services` — RN auth context (frontend only)
+- `@oxy.so/bloom` — UI primitives (frontend only)
+- `@oxy.so/crowdsource*` — moderation pipeline (backend only)
 
 ## Frontend
 
@@ -109,7 +109,7 @@ src/
   __tests__/    vitest suites; the *.realdb.test.ts ones need a real Postgres
 ```
 
-There is no `middleware/` directory: auth, CORS and rate limiting all come from `@oxyhq/core/server`.
+There is no `middleware/` directory: auth, CORS and rate limiting all come from `@oxy.so/core/server`.
 
 ### Tables
 
@@ -131,13 +131,13 @@ went with the messaging switch.
 | `moderation_events` / `moderation_outbox` / `moderation_enforcements` | The CrowdSource moderation pipeline's event log, transactional outbox and applied enforcement |
 | `bridge_*` | The Matrix bridge accounts, link sessions and proxy leases |
 
-There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxyhq/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
+There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxy.so/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
 
 ### Authentication
 
 ```ts
-import { oxyClient } from "@oxyhq/core";
-import { createOxyAuthMiddleware } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { createOxyAuthMiddleware } from "@oxy.so/core/server";
 
 // Public routes
 publicApiRouter.get("/health", (req, res) => res.json({ status: "ok" }));
@@ -161,7 +161,7 @@ Each authenticated socket auto-joins `user:<userId>`. The client then sends `joi
 
 ### Security middleware
 
-Allo writes none of its own. `server.ts` applies three middlewares from `@oxyhq/core/server`:
+Allo writes none of its own. `server.ts` applies three middlewares from `@oxy.so/core/server`:
 
 - `createOxyCors({ appOrigins })` — the Oxy apex family (`*.oxy.so`) is admitted automatically; `appOrigins` adds the two local dev origins. The allowlist is a literal in `server.ts`, not an environment variable.
 - `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.

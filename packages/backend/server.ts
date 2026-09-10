@@ -4,8 +4,8 @@ import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import type { DisconnectReason, Namespace } from "socket.io";
 import dotenv from "dotenv";
-import { oxyClient } from "@oxyhq/core";
-import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
 import { connectPostgres, ensurePostgresReachable, getDb } from "./src/db";
@@ -73,7 +73,7 @@ configureOxyServiceAuth(oxy);
  *
  * A CrowdSource webhook signature covers the bytes that arrived, and once a JSON
  * parser has consumed the stream those bytes no longer exist.
- * `@oxyhq/crowdsource-express` reads the raw stream itself and REFUSES if
+ * `@oxy.so/crowdsource-express` reads the raw stream itself and REFUSES if
  * something upstream already consumed it, rather than verifying a signature over a
  * re-serialisation — so mounting this after the parser does not silently verify
  * the wrong bytes, it fails every delivery. The route adds its own assertion on top

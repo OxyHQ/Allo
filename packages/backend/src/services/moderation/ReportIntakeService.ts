@@ -1,4 +1,4 @@
-import { isUniqueViolation } from "@oxyhq/db";
+import { isUniqueViolation } from "@oxy.so/db";
 import { getDb } from "../../db";
 import {
   findReportBySubject,

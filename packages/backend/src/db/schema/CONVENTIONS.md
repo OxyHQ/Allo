@@ -30,7 +30,7 @@ There is no surrogate integer key anywhere.
 
 **Every table declares a bare `text().primaryKey()` with NO database default, so
 every repository must generate the id itself** — call `uuidv7()` from
-`@oxyhq/db` at the insert. `@oxyhq/db` also exports a `generatedId()` column
+`@oxy.so/db` at the insert. `@oxy.so/db` also exports a `generatedId()` column
 builder that attaches that generator as a runtime default; this schema
 deliberately does not use it, because a backfill supplies the ORIGINAL id
 verbatim and a column-level default is one more thing that has to be overridden

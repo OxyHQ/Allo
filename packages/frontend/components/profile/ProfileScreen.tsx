@@ -3,10 +3,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
-import { Button } from '@oxyhq/bloom/button';
-import { Skeleton } from '@oxyhq/bloom';
-import { toast } from '@oxyhq/bloom/toast';
-import { useOxy } from '@oxyhq/services';
+import { Button } from '@oxy.so/bloom/button';
+import { Skeleton } from '@oxy.so/bloom';
+import { toast } from '@oxy.so/bloom/toast';
+import { useOxy } from '@oxy.so/services';
 
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { Header } from '@/components/layout/Header';

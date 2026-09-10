@@ -15,7 +15,7 @@ import { CallIcon, CallIconActive } from '@/assets/icons/call-icon';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
-import { useOxy, useAuth } from '@oxyhq/services';
+import { useOxy, useAuth } from '@oxy.so/services';
 import { useHomeRefresh } from '@/context/HomeRefreshContext';
 
 // Utils

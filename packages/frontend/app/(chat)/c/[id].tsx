@@ -4,10 +4,10 @@ import ConversationView from "@/components/conversation/ConversationView";
 import { MatrixInvitationCard } from "@/components/matrix/MatrixInvitationCard";
 import { useConversation } from "@/hooks/useConversation";
 import { useConversationsStore } from "@/stores";
-import { useOxy } from "@oxyhq/services";
+import { useOxy } from "@oxy.so/services";
 import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
-import { toast } from "@oxyhq/bloom/toast";
+import { toast } from "@oxy.so/bloom/toast";
 import { CHAT_BACKEND } from "@/lib/chat/backend";
 
 /** Participant shape returned by the backend conversations API. */

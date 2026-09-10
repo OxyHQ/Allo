@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Platform, type ViewStyle, type TextStyle } from 'react-native';
 import { Pressable } from 'react-native-web-hover';
 import { useRouter, type Href } from 'expo-router';
-import { fontFamilies } from '@oxyhq/bloom/fonts';
+import { fontFamilies } from '@oxy.so/bloom/fonts';
 import { useTheme } from '@/hooks/useTheme';
 
 /** Press + hover handlers forwarded to react-native-web-hover's Pressable. */

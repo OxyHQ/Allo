@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { SettingsListItem } from '@oxyhq/bloom/settings-list';
+import { SettingsListItem } from '@oxy.so/bloom/settings-list';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 

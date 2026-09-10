@@ -1,4 +1,4 @@
-import { CrowdSource } from "@oxyhq/crowdsource";
+import { CrowdSource } from "@oxy.so/crowdsource";
 import { crowdSourceConfig } from "../../config/crowdsource";
 import { logger } from "../../utils/logger";
 

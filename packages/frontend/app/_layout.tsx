@@ -1,7 +1,7 @@
 // Guarantees globalThis.crypto.getRandomValues (expo-crypto-backed on RN) is
 // installed before any crypto runs — @noble's randomBytes in lib/signalProtocol.ts needs it.
-import '@oxyhq/core';
-// Required polyfill for @oxyhq/services - must be imported first
+import '@oxy.so/core';
+// Required polyfill for @oxy.so/services - must be imported first
 import 'react-native-url-polyfill/auto';
 // Import Reanimated early to ensure proper initialization before other modules
 import 'react-native-reanimated';
@@ -9,8 +9,8 @@ import 'react-native-reanimated';
 import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
-import { BloomProvider } from '@oxyhq/bloom/provider';
-import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxyhq/expo-splash';
+import { BloomProvider } from '@oxy.so/bloom/provider';
+import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack, usePathname } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
@@ -28,7 +28,7 @@ import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 // Hooks
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 // Utils
 import { routeMatchers } from '@/utils/routeUtils';
@@ -44,7 +44,7 @@ import '../styles/global.css';
 // running init, then hide it in `RootLayout` once `appIsReady`
 // flips. This makes the native OS splash the SINGLE splash on native (Allo's
 // paper-plane logo centered on #0B0B0F + the Oxy branding pinned to the bottom,
-// configured via `@oxyhq/expo-splash` in app.config.js). The custom
+// configured via `@oxy.so/expo-splash` in app.config.js). The custom
 // `AppSplashScreen` React overlay is gated to web only. The helper is a no-op on
 // web internally, so no Platform guard is needed here.
 preventNativeSplashAutoHide();

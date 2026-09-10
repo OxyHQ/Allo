@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useMatrixRuntime, signInToMatrix } from '@/hooks/useMatrixRuntime';

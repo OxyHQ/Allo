@@ -1,7 +1,7 @@
 import React, { ErrorInfo, ReactNode, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { ErrorBoundary as BloomErrorBoundary } from '@oxyhq/bloom/error-boundary';
-import type { ErrorBoundaryFallbackContext } from '@oxyhq/bloom/error-boundary';
+import { ErrorBoundary as BloomErrorBoundary } from '@oxy.so/bloom/error-boundary';
+import type { ErrorBoundaryFallbackContext } from '@oxy.so/bloom/error-boundary';
 import { colors } from '@/styles/colors';
 import { withTranslation } from 'react-i18next';
 
@@ -12,7 +12,7 @@ import { withTranslation } from 'react-i18next';
  * Shows user-friendly error UI and allows recovery
  *
  * The catching machinery (getDerivedStateFromError, componentDidCatch, the
- * retry reset) lives in @oxyhq/bloom/error-boundary. What stays here is only
+ * retry reset) lives in @oxy.so/bloom/error-boundary. What stays here is only
  * what is Allo's: the wording, the translations and the look of the two
  * fallbacks below.
  */

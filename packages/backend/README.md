@@ -69,7 +69,7 @@ DATABASE_URL=postgres://allo:allo@127.0.0.1:5432/allo_dev
 
 # Authentication
 # WE USE OXY FOR AUTHENTICATION - users are managed by Oxy platform
-# Read by @oxyhq/core (OxyServices.ts), not by this package directly.
+# Read by @oxy.so/core (OxyServices.ts), not by this package directly.
 # Defaults to https://api.oxy.so when unset.
 OXY_API_URL=https://api.oxy.so
 
@@ -129,7 +129,7 @@ There is no `FRONTEND_URL`: the CORS allowlist is not read from the environment.
 extra development origins are the literal list at the top of `server.ts`.
 
 `FRONTEND_URL` and `JWT_SECRET` appear in older deployment docs but are read
-neither by this package nor by `@oxyhq/core`. Setting them changes nothing.
+neither by this package nor by `@oxy.so/core`. Setting them changes nothing.
 
 ### Running the API
 
@@ -198,7 +198,7 @@ Authorization: MatrixBearer <MAS access token>    ← opt-in, see below
 ```
 
 The Oxy half is unchanged: `createOxyAuthMiddleware(oxy)` from
-`@oxyhq/core/server`, mounted on `/api` in `server.ts`, alongside
+`@oxy.so/core/server`, mounted on `/api` in `server.ts`, alongside
 `createOxyCors` and `createOxyRateLimit` from the same package.
 
 The Matrix half is `src/middleware/matrixAuth.ts`, mounted immediately ahead of
@@ -794,10 +794,10 @@ This package is part of the Allo monorepo and integrates with:
 
 ### Shared Dependencies
 - Uses `@allo/shared-types` for type safety across packages
-- Integrates with `@oxyhq/core` for authentication, CORS and rate limiting. This
-  package does not depend on `@oxyhq/services` — that is the React Native SDK
+- Integrates with `@oxy.so/core` for authentication, CORS and rate limiting. This
+  package does not depend on `@oxy.so/services` — that is the React Native SDK
   and is a frontend dependency only.
-- Uses `@oxyhq/crowdsource*` for the moderation pipeline
+- Uses `@oxy.so/crowdsource*` for the moderation pipeline
 
 ## Security & Encryption
 

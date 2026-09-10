@@ -14,7 +14,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, getTableColumns } from "drizzle-orm";
-import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from "@oxyhq/db";
+import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from "@oxy.so/db";
 import type postgres from "postgres";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
 import * as schema from "../../db/schema";
@@ -214,7 +214,7 @@ describe("blocks converge on the unique index instead of reading first", () => {
      * defensive padding.
      *
      * `listBlockedUserIds` orders by `created_at DESC, id DESC`, and
-     * `@oxyhq/db`'s `createdAt` is `date_trunc('milliseconds', now())` — so
+     * `@oxy.so/db`'s `createdAt` is `date_trunc('milliseconds', now())` — so
      * three blocks written in one millisecond carry the SAME `created_at` and
      * fall through to the id. That id is a uuid v7, which is not monotonic
      * within a millisecond (RFC 9562's counter is optional and this generator

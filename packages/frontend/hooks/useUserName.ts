@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useUserById } from '@/stores/usersStore';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 /**
  * Hook to get a user's canonical display name from Oxy user data.

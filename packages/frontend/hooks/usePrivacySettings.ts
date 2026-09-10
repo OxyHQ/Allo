@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { useOxy } from '@oxyhq/services';
-import type { User } from '@oxyhq/core';
+import { useOxy } from '@oxy.so/services';
+import type { User } from '@oxy.so/core';
 
 import {
   addModeratedUser,

@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
-import type { OxyAuthRequest as AuthRequest } from "@oxyhq/core/server";
-import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxyhq/core/server";
+import type { OxyAuthRequest as AuthRequest } from "@oxy.so/core/server";
+import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxy.so/core/server";
 import { getDb } from "../db";
 import { listReportsByReporter } from "../db/moderation/reportRepository";
 import {

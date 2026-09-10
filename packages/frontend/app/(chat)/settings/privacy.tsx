@@ -4,9 +4,9 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 
-import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';
-import { Switch } from '@oxyhq/bloom/switch';
-import { toast } from '@oxyhq/bloom/toast';
+import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { Switch } from '@oxy.so/bloom/switch';
+import { toast } from '@oxy.so/bloom/toast';
 
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { Header } from '@/components/layout/Header';

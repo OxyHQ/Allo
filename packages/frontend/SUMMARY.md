@@ -18,7 +18,7 @@
 ✅ **Bad organization** - Created feature-based folder structure
 ✅ **Optimize /c/:id and /u/:id** - Now share single ConversationView component
 ✅ **Security bugs** - Fixed all 7 npm vulnerabilities
-✅ **Use @oxyhq/services** - Verified proper usage throughout
+✅ **Use @oxy.so/services** - Verified proper usage throughout
 
 ## 📁 New Component Structure
 

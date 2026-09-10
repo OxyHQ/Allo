@@ -7,7 +7,7 @@
  */
 
 import { boolean, index, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, updatedAt } from "@oxyhq/db";
+import { createdAt, updatedAt } from "@oxy.so/db";
 import { checkOneOf } from "./columns";
 
 export const THEME_MODES = ["light", "dark", "system"] as const;

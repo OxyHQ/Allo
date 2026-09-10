@@ -1,14 +1,14 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Admonition } from '@oxyhq/bloom/admonition';
+import { Admonition } from '@oxy.so/bloom/admonition';
 import {
   SegmentedControl,
   SegmentedControlItem,
   SegmentedControlItemText,
-} from '@oxyhq/bloom/segmented-control';
-import { Switch } from '@oxyhq/bloom/switch';
-import { toast } from '@oxyhq/bloom/toast';
+} from '@oxy.so/bloom/segmented-control';
+import { Switch } from '@oxy.so/bloom/switch';
+import { toast } from '@oxy.so/bloom/toast';
 
 import { useEphemeralLifetimes } from '@/components/matrix/ephemeralLifetimes';
 import { ThemedText } from '@/components/ThemedText';

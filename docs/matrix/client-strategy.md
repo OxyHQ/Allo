@@ -216,7 +216,7 @@ meses y donde aparecen los bugs de decrypción fantasma.
 
 - La derivación de claves desde Oxy (§3). Es HKDF con `@noble/hashes`, TypeScript
   puro, idéntico en las tres plataformas — el propio `kdf.ts` de Oxy lo dice
-  explícitamente **[V]** (`node_modules/@oxyhq/core/src/crypto/kdf.ts:1-11`).
+  explícitamente **[V]** (`node_modules/@oxy.so/core/src/crypto/kdf.ts:1-11`).
 - El mapeo identidad Oxy → identidad Matrix.
 - Los esquemas de los eventos propios de Allo (`so.oxy.allo.*`) definidos en
   `data-model.md`, y su validación.
@@ -532,7 +532,7 @@ paridad XOR, alfabeto Bitcoin, grupos de cuatro. Son el mismo formato.
 
 ```ts
 // Derivación — TypeScript puro, idéntica en nativo y web.
-// Reutiliza el HKDF que Oxy ya tiene: node_modules/@oxyhq/core/src/crypto/kdf.ts
+// Reutiliza el HKDF que Oxy ya tiene: node_modules/@oxy.so/core/src/crypto/kdf.ts
 const seed = await bip39.mnemonicToSeed(oxyPhrase);        // 64 bytes [V] recoveryPhrase.ts:231
 const raw  = hkdfSha256(
   seed,
@@ -545,7 +545,7 @@ const passphrase = base64url(raw);  // 43 chars ASCII, sin padding
 
 La separación de dominio no es decorativa: Oxy ya usa `oxy-backup-encryption-key` y
 `oxy-backup-lookup-id` sobre el salt `oxy-identity-backup-v1` **[V]**
-(`node_modules/@oxyhq/core/src/crypto/recoveryPhrase.ts:36-40`). Una etiqueta nueva
+(`node_modules/@oxy.so/core/src/crypto/recoveryPhrase.ts:36-40`). Una etiqueta nueva
 garantiza que filtrar el passphrase de Matrix no revela la clave de backup de Oxy ni
 al revés. Y el `-v1` deja la puerta abierta a rotar el esquema sin ambigüedad.
 
@@ -685,7 +685,7 @@ podía saber:
 1. **De dónde sale la frase de Oxy, y dónde no sale.** El diseño da por hecho el
    `oxyPhrase` como entrada disponible. La única vía es
    `KeyManager.getRecoveryMnemonic()` **[V]**
-   (`node_modules/@oxyhq/core/src/crypto/keyManager.ts:1828-1853`), y **devuelve
+   (`node_modules/@oxy.so/core/src/crypto/keyManager.ts:1828-1853`), y **devuelve
    `null` en web sin consultar ningún almacenamiento**: la primera línea del
    método es `if (isWebPlatform()) return null`, porque Oxy guarda identidades
    sólo en el llavero nativo. También devuelve `null` en nativo para cualquier
@@ -698,7 +698,7 @@ podía saber:
    `readOxyRecoveryPhrase` distingue `absent` (no hay frase aquí; hace falta que
    el usuario la escriba) de `unavailable` (llavero bloqueado; reintentar), y
    `ensureMatrixRecovery` responde `skipped` con el motivo. Lo que falta para
-   cerrar web es una pantalla que pida la frase, o que `@oxyhq/core` ofrezca la
+   cerrar web es una pantalla que pida la frase, o que `@oxy.so/core` ofrezca la
    frase en web — decisión que no es de Allo.
 
 2. **`deriveRecoveryKeyFromPassphrase` no se exporta de la raíz**, como ya

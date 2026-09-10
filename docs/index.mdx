@@ -14,9 +14,9 @@ A modern, cross-platform chat app built with Expo, React Native, and a Node.js /
 
 Allo is the Oxy ecosystem's encrypted messenger. The frontend is an Expo Router app that targets iOS, Android, and Web from one codebase. The backend is a stateless Express service that brokers conversations, device keys, and Socket.IO traffic — it never holds plaintext.
 
-Identity is delegated to the Oxy platform: users sign in with their Oxy account through `@oxyhq/services`, the backend trusts the resulting JWT, and there is no separate user database in Allo. The only per-user records the server holds are conversation membership, device keys, encrypted message blobs, and a small `UserSettings` document.
+Identity is delegated to the Oxy platform: users sign in with their Oxy account through `@oxy.so/services`, the backend trusts the resulting JWT, and there is no separate user database in Allo. The only per-user records the server holds are conversation membership, device keys, encrypted message blobs, and a small `UserSettings` document.
 
-For account management UI see [MyAccount](/developers/docs/accounts). For the underlying RN SDK see [@oxyhq/services](/developers/docs/services).
+For account management UI see [MyAccount](/developers/docs/accounts). For the underlying RN SDK see [@oxy.so/services](/developers/docs/services).
 
 **Migrating to Matrix.** Allo will stop carrying its own transport; the design
 work is under [Matrix](#documentation-map) at the bottom of this page and
@@ -45,7 +45,7 @@ Inside `packages/`:
 | Package | Role |
 |---------|------|
 | `frontend` (`@allo/frontend`) | Expo + Expo Router app. NativeWind for styling, Zustand for local state, TanStack-style stores around the encrypted message cache. |
-| `backend` (`@allo/backend`) | Express + Socket.IO. Mongoose models for conversations, messages, devices, settings, blocks, restricts, push tokens. Auth via `@oxyhq/core`'s `oxy.auth()`. |
+| `backend` (`@allo/backend`) | Express + Socket.IO. Mongoose models for conversations, messages, devices, settings, blocks, restricts, push tokens. Auth via `@oxy.so/core`'s `oxy.auth()`. |
 | `shared-types` (`@allo/shared-types`) | TypeScript-only package built ahead of the others (a `postinstall` script runs `build:shared-types`). |
 
 Build order matters: `shared-types` -> `backend` + `frontend` (in parallel).
@@ -85,7 +85,7 @@ bun install
 ```env
 # REQUIRED — the server refuses to boot without it.
 DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/allo_dev
-# Read by @oxyhq/core, not by this package. Defaults to https://api.oxy.so.
+# Read by @oxy.so/core, not by this package. Defaults to https://api.oxy.so.
 OXY_API_URL=https://api.oxy.so
 # 4140 is Allo's slot in the Oxy per-app port map; ECS injects PORT=8080.
 PORT=4140
@@ -93,7 +93,7 @@ NODE_ENV=development
 ```
 
 There is no `FRONTEND_URL` and no `JWT_SECRET`. Both appear in older deployment
-docs and are read by neither this package nor `@oxyhq/core`; the CORS allowlist
+docs and are read by neither this package nor `@oxy.so/core`; the CORS allowlist
 is a literal in `server.ts` plus whatever `createOxyCors` admits automatically.
 
 `packages/frontend/.env` — optional. `config.ts` hardcodes production and

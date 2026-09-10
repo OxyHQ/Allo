@@ -31,7 +31,7 @@
  */
 
 import { and, asc, eq, sql } from "drizzle-orm";
-import { uuidv7, type SelectedRow } from "@oxyhq/db";
+import { uuidv7, type SelectedRow } from "@oxy.so/db";
 import type { PreKey, SignedPreKey } from "@allo/shared-types";
 import type { AlloDatabase } from "../index";
 import { devicePreKeys, devices } from "../schema/devices";

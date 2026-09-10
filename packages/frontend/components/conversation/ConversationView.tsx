@@ -16,7 +16,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
-import { toast } from '@oxyhq/bloom/toast';
+import { toast } from '@oxy.so/bloom/toast';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -72,7 +72,7 @@ import {
 import { getConversationId, useSenderName } from '@/utils/conversationHelpers';
 import { logger } from '@/utils/logger';
 import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import { useUserById } from '@/stores/usersStore';
 import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';

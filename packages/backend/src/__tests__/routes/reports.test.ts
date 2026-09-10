@@ -1,5 +1,5 @@
 import express from "express";
-import { uuidv7 } from "@oxyhq/db";
+import { uuidv7 } from "@oxy.so/db";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

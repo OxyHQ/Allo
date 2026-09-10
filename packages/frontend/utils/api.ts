@@ -1,4 +1,4 @@
-import { oxyClient } from '@oxyhq/core';
+import { oxyClient } from '@oxy.so/core';
 import { Platform } from 'react-native';
 import { API_URL } from '@/config';
 import { CircuitBreaker } from '@/lib/api/retryLogic';

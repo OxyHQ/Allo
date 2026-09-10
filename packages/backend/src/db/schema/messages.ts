@@ -8,7 +8,7 @@
 
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxyhq/db";
+import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
 import { checkOneOf } from "./columns";
 import { conversations } from "./conversations";
 

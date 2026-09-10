@@ -1,6 +1,6 @@
 import { Conversation, ConversationType, ConversationParticipant } from '@/app/(chat)/index';
 import { useUserById, useUsersStore, type UserEntity } from '@/stores/usersStore';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import { useEffect } from 'react';
 
 /**

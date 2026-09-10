@@ -10,7 +10,7 @@ import ConversationsList from './index';
 import RoomAdminRoute from './room/[id]';
 import { useConversationsStore } from '@/stores';
 import { useUserById } from '@/stores/usersStore';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';

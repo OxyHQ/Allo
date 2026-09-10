@@ -8,8 +8,8 @@ module.exports = {
       './hooks/**/*.{js,ts,tsx}',
       './stores/**/*.{js,ts,tsx}',
       './utils/**/*.{js,ts,tsx}',
-      '../../node_modules/@oxyhq/services/lib/**/*.{js,jsx}',
-      '../../node_modules/@oxyhq/bloom/lib/**/*.{js,jsx}',
+      '../../node_modules/@oxy.so/services/lib/**/*.{js,jsx}',
+      '../../node_modules/@oxy.so/bloom/lib/**/*.{js,jsx}',
     ],
     theme: {
       extend: {

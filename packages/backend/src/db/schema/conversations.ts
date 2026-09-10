@@ -7,7 +7,7 @@
  */
 
 import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxyhq/db";
+import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
 import { checkOneOf } from "./columns";
 
 export const CONVERSATION_TYPES = ["direct", "group"] as const;

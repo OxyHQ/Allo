@@ -1,5 +1,5 @@
 import { Router, type Response } from "express";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 import * as z from "zod";
 
 import { isOxyUserId } from "../services/bridges/matrixIdentity";
@@ -52,7 +52,7 @@ const oxyUserIdSchema = z
   .refine(isOxyUserId, "must be a 24-character hexadecimal Oxy account id");
 
 /**
- * The same ceiling `@oxyhq/core` chunks at, so one request here is one request
+ * The same ceiling `@oxy.so/core` chunks at, so one request here is one request
  * upstream. Asking for more would not fail — it would quietly become several
  * upstream calls, of which one can drop out.
  */
@@ -74,7 +74,7 @@ const searchSchema = z.object({
 /**
  * An Oxy asset id, bounded and with no path characters in it.
  *
- * The id is interpolated into a CDN URL. `@oxyhq/core` percent-encodes it, so
+ * The id is interpolated into a CDN URL. `@oxy.so/core` percent-encodes it, so
  * this is not the thing standing between us and a traversal — it is what stops
  * this endpoint from minting a URL for any string a caller invents, which is
  * how an avatar endpoint becomes an open redirect generator.

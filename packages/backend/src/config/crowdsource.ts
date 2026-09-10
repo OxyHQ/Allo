@@ -12,9 +12,9 @@ import * as z from "zod";
  * ## `CROWDSOURCE_APP_ID` is absent on purpose
  *
  * The variable names come from the packages, not from §14.6's table.
- * `@oxyhq/crowdsource` reads `CROWDSOURCE_SERVICE_KEY` — the applicationId,
+ * `@oxy.so/crowdsource` reads `CROWDSOURCE_SERVICE_KEY` — the applicationId,
  * credentialId and secret as ONE opaque value — and `CROWDSOURCE_BASE_URL`;
- * `@oxyhq/crowdsource-express` reads `CROWDSOURCE_WEBHOOK_SECRET` and
+ * `@oxy.so/crowdsource-express` reads `CROWDSOURCE_WEBHOOK_SECRET` and
  * `CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`.
  *
  * §14.6's `CROWDSOURCE_APP_ID` is deliberately NOT defined here. The applicationId

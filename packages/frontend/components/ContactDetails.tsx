@@ -20,7 +20,7 @@ import { useParticipantFullName } from '@/utils/conversationUtils';
 import { COLOR_THEMES } from '@/styles/colorThemes';
 import { useConversationsStore } from '@/stores';
 import { api } from '@/utils/api';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 
 import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';

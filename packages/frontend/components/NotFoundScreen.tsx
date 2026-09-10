@@ -6,7 +6,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { NoUpdatesIllustration } from '@/assets/illustrations/NoUpdates';
-import { Button } from '@oxyhq/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
 
 export default function NotFoundScreen() {
     const router = useRouter();

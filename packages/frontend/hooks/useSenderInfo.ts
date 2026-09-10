@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useUsersStore } from '@/stores/usersStore';
-import { useOxy } from '@oxyhq/services';
+import { useOxy } from '@oxy.so/services';
 import { Conversation } from '@/app/(chat)/index';
 import type { SenderInfo } from '@/hooks/useMatrixSenderInfo';
 import { logger } from '@/utils/logger';

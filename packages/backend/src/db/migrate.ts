@@ -19,7 +19,7 @@
  *
  * ## `--target-database` is required
  *
- * `@oxyhq/db` makes the guard optional so a service can adopt the runner without
+ * `@oxy.so/db` makes the guard optional so a service can adopt the runner without
  * rewriting every invocation. This service adopts it from day one, so there is
  * no legacy invocation to protect: a `DATABASE_URL` pointing somewhere
  * unexpected fails loudly instead of migrating another tenant's database on the
@@ -32,7 +32,7 @@ import {
   type MigrationRun,
   readTargetDatabase,
   runMigrations,
-} from "@oxyhq/db/migrate";
+} from "@oxy.so/db/migrate";
 
 const PACKAGE_ROOT = join(__dirname, "..", "..");
 

@@ -33,8 +33,8 @@
  */
 
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { constraintNameOf, uuidv7, type SelectedRow } from "@oxyhq/db";
-import { publicColumns } from "@oxyhq/db/assert";
+import { constraintNameOf, uuidv7, type SelectedRow } from "@oxy.so/db";
+import { publicColumns } from "@oxy.so/db/assert";
 import type { ConversationParticipantRole, ConversationType } from "@allo/shared-types";
 import type { AlloDatabase } from "../index";
 import { PROTECTED_COLUMNS } from "../protectedColumns";

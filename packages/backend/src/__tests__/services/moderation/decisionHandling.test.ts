@@ -1,7 +1,7 @@
-import { DecisionSchema } from "@oxyhq/crowdsource-contracts";
+import { DecisionSchema } from "@oxy.so/crowdsource-contracts";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { uuidv7 } from "@oxyhq/db";
+import { uuidv7 } from "@oxy.so/db";
 
 /**
  * What Allo does when a decision comes back — and, just as importantly, what it
@@ -86,7 +86,7 @@ function decision(overrides: Record<string, unknown> = {}) {
 /**
  * Fail where the fixture is BUILT, not somewhere downstream.
  *
- * `DecisionSchema` belongs to `@oxyhq/crowdsource-contracts`, not to this
+ * `DecisionSchema` belongs to `@oxy.so/crowdsource-contracts`, not to this
  * repository, so a fixture written to match "what a decision looks like" is a
  * guess that stops being true the moment the contract adds a required field or
  * another cross-field invariant. When that happens the tests do not fail — they

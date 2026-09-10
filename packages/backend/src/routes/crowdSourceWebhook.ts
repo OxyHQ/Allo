@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { crowdsourceWebhooks } from "@oxyhq/crowdsource-express";
+import { crowdsourceWebhooks } from "@oxy.so/crowdsource-express";
 import { crowdSourceConfig } from "../config/crowdsource";
 import {
   recordDecisionEvent,
@@ -15,7 +15,7 @@ import { logger } from "../utils/logger";
  *
  * This router MUST be mounted before `express.json()` in `server.ts`. The
  * signature covers `timestamp + "." + rawBody` — the bytes that arrived — and once
- * a JSON parser has run, those bytes are gone. `@oxyhq/crowdsource-express` looks
+ * a JSON parser has run, those bytes are gone. `@oxy.so/crowdsource-express` looks
  * for the raw stream, finds a parsed `req.body` instead, and REFUSES rather than
  * verifying a signature over a re-serialisation. That refusal is the correct
  * behaviour and it is also why the mount order cannot be got wrong silently.
@@ -64,7 +64,7 @@ function stringField(source: unknown, key: string): string | undefined {
  *
  * ## The SDK's protection is conditional on middleware this file does not own
  *
- * `readRawBody` in `@oxyhq/crowdsource-express` resolves the signed bytes in a
+ * `readRawBody` in `@oxy.so/crowdsource-express` resolves the signed bytes in a
  * fixed order: a Buffer on `req.rawBody` FIRST, then a Buffer `req.body`, then a
  * throw if `req.body` is anything else, and only then the request stream. So the
  * failure mode of a late mount is decided entirely by how `express.json()` was

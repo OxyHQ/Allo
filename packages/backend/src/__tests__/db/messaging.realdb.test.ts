@@ -14,7 +14,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDatabase, constraintNameOf, isCheckViolation } from "@oxyhq/db";
+import { createDatabase, constraintNameOf, isCheckViolation } from "@oxy.so/db";
 import type postgres from "postgres";
 import { and, eq } from "drizzle-orm";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";

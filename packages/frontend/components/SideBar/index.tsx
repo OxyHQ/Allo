@@ -23,7 +23,7 @@ import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
 
 // Hooks
 import { useTheme } from "@/hooks/useTheme";
-import { useOxy, useAuth, ProfileButton } from "@oxyhq/services";
+import { useOxy, useAuth, ProfileButton } from "@oxy.so/services";
 import { useMyAvatarShape } from "@/hooks/useAvatarShape";
 
 // Utils

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { uuidv7 } from "@oxyhq/db";
+import { uuidv7 } from "@oxy.so/db";
 
 import { loadBridgesConfig, resetBridgesConfigForTests } from "../../../config/bridges";
 import { closePostgres, connectPostgres, getDb } from "../../../db";

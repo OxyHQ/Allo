@@ -10,17 +10,17 @@
 # why this stays >= 20:
 #
 # Node 18 (EOL 2025-04) does not expose globalThis.crypto when executing a
-# script file, so @oxyhq/core's crypto polyfill installs an RN-only
+# script file, so @oxy.so/core's crypto polyfill installs an RN-only
 # getRandomValues stub that throws on Node. Node >= 20 exposes the global, the
 # polyfill's guard is skipped, and native crypto is used. That is a property of
-# @oxyhq/core, which every Oxy backend loads, and it is unrelated to which
+# @oxy.so/core, which every Oxy backend loads, and it is unrelated to which
 # database is underneath.
 # The repo is a Bun workspaces monorepo with a committed bun.lock, so we use
 # Bun for a deterministic install instead of npm. npm's strict ERESOLVE
-# resolver fails here because @oxyhq/services declares OPTIONAL peer deps
+# resolver fails here because @oxy.so/services declares OPTIONAL peer deps
 # (expo-font ~55, expo >=55, ...) that conflict with the expo 56 tree pulled
 # in by the frontend workspace; Bun honours peerDependenciesMeta.optional and
-# resolves the workspace cleanly. The backend itself only needs @oxyhq/core
+# resolves the workspace cleanly. The backend itself only needs @oxy.so/core
 # (a shared root dependency) and never imports any expo/frontend package.
 
 FROM node:22-alpine
@@ -57,7 +57,7 @@ COPY patches ./patches/
 COPY packages/shared-types ./packages/shared-types/
 
 # Install only the backend + shared-types workspaces (and shared root deps such
-# as @oxyhq/core). --frozen-lockfile guarantees the committed bun.lock is used
+# as @oxy.so/core). --frozen-lockfile guarantees the committed bun.lock is used
 # verbatim, so the build is fully deterministic.
 RUN bun install --frozen-lockfile \
         --filter '@allo/backend' \

@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 
 import { matrixAuthConfig, type MatrixAuthConfig } from "../config/matrixAuth";
 import {
@@ -38,7 +38,7 @@ import { logger } from "../utils/logger";
  *
  * Three separate reasons, and each alone would be enough:
  *
- * 1. **The prefixes are disjoint.** `@oxyhq/core`'s `oxy.auth()` extracts a
+ * 1. **The prefixes are disjoint.** `@oxy.so/core`'s `oxy.auth()` extracts a
  *    token only from a header starting with the exact string `"Bearer "`; a
  *    `MatrixBearer` header does not, so it is invisible to the Oxy validator —
  *    a structural property of the composition, not a check anybody has to
@@ -75,7 +75,7 @@ import { logger } from "../utils/logger";
  * overwrites `req.userId` with `null` when it finds no `Bearer` header. A
  * MatrixBearer request is therefore counted against the anonymous per-IP
  * bucket rather than a per-user one. Nothing sends MatrixBearer today, so
- * nothing is affected yet; it has to be resolved in `@oxyhq/core` (by making
+ * nothing is affected yet; it has to be resolved in `@oxy.so/core` (by making
  * the limiter's session resolution idempotent, which its own doc comment
  * already claims it is) before the frontend switches over.
  */

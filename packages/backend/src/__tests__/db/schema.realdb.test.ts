@@ -16,8 +16,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, getTableName, sql } from "drizzle-orm";
-import { createDatabase, isCheckViolation, isUniqueViolation, constraintNameOf } from "@oxyhq/db";
-import { findUnsupportedExpiryColumns } from "@oxyhq/db/assert";
+import { createDatabase, isCheckViolation, isUniqueViolation, constraintNameOf } from "@oxy.so/db";
+import { findUnsupportedExpiryColumns } from "@oxy.so/db/assert";
 import type postgres from "postgres";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
 import {

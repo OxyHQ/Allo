@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useOxy } from '@oxyhq/services';
-import { oxyClient } from '@oxyhq/core';
+import { useOxy } from '@oxy.so/services';
+import { oxyClient } from '@oxy.so/core';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
 import { CHAT_BACKEND } from '@/lib/chat/backend';

@@ -1,4 +1,4 @@
-import { hkdfSha256 } from '@oxyhq/core';
+import { hkdfSha256 } from '@oxy.so/core';
 import { base64urlnopad } from '@scure/base';
 import { mnemonicToSeed, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';

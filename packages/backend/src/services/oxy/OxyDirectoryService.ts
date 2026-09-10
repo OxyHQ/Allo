@@ -1,5 +1,5 @@
 import type { DirectoryUser } from "@allo/shared-types";
-import type { SearchProfilesResponse, User } from "@oxyhq/core";
+import type { SearchProfilesResponse, User } from "@oxy.so/core";
 
 /**
  * The five Oxy lookups the app makes today, moved behind this backend.

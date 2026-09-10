@@ -4,7 +4,7 @@ import {
   type BridgeNetworkId,
   type EnabledBridgeNetwork,
 } from "../../config/bridges";
-import { uuidv7 } from "@oxyhq/db";
+import { uuidv7 } from "@oxy.so/db";
 import { getDb } from "../../db";
 import {
   countAccounts,

@@ -52,7 +52,7 @@ describe('the URL the SDK builds from it', () => {
   /**
    * `getFileDownloadUrl` appends `?variant=` only when a variant is passed, so
    * the composition — not just the name — is what decides whether the request
-   * 404s. This mirrors the builder in @oxyhq/core 17.0.2 rather than importing
+   * 404s. This mirrors the builder in @oxy.so/core 17.0.2 rather than importing
    * the SDK, which would drag the whole client into a unit test.
    */
   const buildUrl = (fileId: string, variant?: string) =>

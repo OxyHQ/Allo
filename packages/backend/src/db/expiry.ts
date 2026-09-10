@@ -25,8 +25,8 @@
  * file, rather than only that the list is well formed.
  */
 
-import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxyhq/db/expiry";
-import type { SqlExecutor } from "@oxyhq/db";
+import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxy.so/db/expiry";
+import type { SqlExecutor } from "@oxy.so/db";
 import { bridgeLinkSessions } from "./schema/bridges";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
 

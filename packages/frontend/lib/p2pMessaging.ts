@@ -20,7 +20,7 @@ const getSocketUrl = () => {
 import { encryptMessage, decryptMessage, getDeviceKeys } from './signalProtocol';
 import { Message } from '@/stores/messagesStore';
 import { logger } from '@/utils/logger';
-import { oxyClient } from '@oxyhq/core';
+import { oxyClient } from '@oxy.so/core';
 
 export interface P2PConnection {
   userId: string;

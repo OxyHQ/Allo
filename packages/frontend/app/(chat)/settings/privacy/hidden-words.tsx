@@ -4,10 +4,10 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 
-import { TextFieldInput } from '@oxyhq/bloom';
-import { Button } from '@oxyhq/bloom/button';
-import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';
-import { toast } from '@oxyhq/bloom/toast';
+import { TextFieldInput } from '@oxy.so/bloom';
+import { Button } from '@oxy.so/bloom/button';
+import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { toast } from '@oxy.so/bloom/toast';
 
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import { Header } from '@/components/layout/Header';

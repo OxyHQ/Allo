@@ -10,8 +10,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { toast } from '@oxyhq/bloom/toast';
-import { TextFieldInput } from '@oxyhq/bloom';
+import { toast } from '@oxy.so/bloom/toast';
+import { TextFieldInput } from '@oxy.so/bloom';
 import { useTranslation } from 'react-i18next';
 
 // Components
@@ -26,8 +26,8 @@ import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 import { useTheme } from '@/hooks/useTheme';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { roomAdminSource } from '@/lib/chat/roomAdmin';
-import { useOxy } from '@oxyhq/services';
-import type { User as OxyUser } from '@oxyhq/core';
+import { useOxy } from '@oxy.so/services';
+import type { User as OxyUser } from '@oxy.so/core';
 import type { Href } from 'expo-router';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';

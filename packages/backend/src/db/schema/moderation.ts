@@ -18,7 +18,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxyhq/db";
+import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
 import { checkArrayWithin, checkNonEmptyArray, checkOneOf } from "./columns";
 
 /**

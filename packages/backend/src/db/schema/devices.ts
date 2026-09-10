@@ -7,7 +7,7 @@
  */
 
 import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxyhq/db";
+import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
 
 /**
  * One device belonging to one Oxy user.

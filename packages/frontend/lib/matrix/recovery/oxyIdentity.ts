@@ -1,4 +1,4 @@
-import { KeyManager } from '@oxyhq/core';
+import { KeyManager } from '@oxy.so/core';
 
 /**
  * Getting the Oxy recovery phrase off this device.

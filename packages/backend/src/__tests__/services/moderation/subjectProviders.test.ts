@@ -119,9 +119,9 @@ describe("what the subject providers are allowed to reach", () => {
   /** The packages that closure imports. Also pinned: a new one is a new capability. */
   const ALLOWED_PACKAGES = [
     "@allo/shared-types",
-    "@oxyhq/core",
-    "@oxyhq/crowdsource",
-    "@oxyhq/db",
+    "@oxy.so/core",
+    "@oxy.so/crowdsource",
+    "@oxy.so/db",
     "drizzle-orm",
     "drizzle-orm/pg-core",
   ];

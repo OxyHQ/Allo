@@ -6,9 +6,9 @@
 import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { oxyClient } from '@oxyhq/core';
+import { oxyClient } from '@oxy.so/core';
 import { logger } from '@/utils/logger';
-import type { User } from '@oxyhq/core';
+import type { User } from '@oxy.so/core';
 
 import { useAppearanceStore } from '@/stores/appearanceStore';
 import {

@@ -1,6 +1,6 @@
 import type { Application } from "express";
 import type { Namespace, Server, Socket } from "socket.io";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 
 export interface AuthenticatedSocketUser {
   id: string;

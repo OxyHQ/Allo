@@ -1,4 +1,4 @@
-import { WebhookEventEnvelopeSchema } from "@oxyhq/crowdsource-contracts";
+import { WebhookEventEnvelopeSchema } from "@oxy.so/crowdsource-contracts";
 import { createHmac } from "crypto";
 import express from "express";
 import request from "supertest";
@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * The webhook signature covers the bytes that arrived, so a body parser mounted
  * ahead of this router destroys the only thing that can be verified.
  *
- * `@oxyhq/crowdsource-express` already refuses rather than re-serialising, which
+ * `@oxy.so/crowdsource-express` already refuses rather than re-serialising, which
  * makes the mistake loud but not LEGIBLE: what an operator sees is a signature
  * failure, which reads like a secret problem and sends the next person to rotate a
  * secret that was fine. The route's own `assertRawBody` turns that into a message
@@ -73,7 +73,7 @@ function appWith(mode: ParserMode): express.Express {
 /**
  * Fail where the fixture is BUILT, not somewhere downstream.
  *
- * `WebhookEventEnvelopeSchema` belongs to `@oxyhq/crowdsource-contracts`, not to
+ * `WebhookEventEnvelopeSchema` belongs to `@oxy.so/crowdsource-contracts`, not to
  * this repository, so a fixture written to match "what an event looks like" is a
  * guess that stops being true the moment the contract adds a required field.
  * When that happens these tests do not fail — the SDK refuses the envelope at
@@ -204,7 +204,7 @@ describe("crowdsource webhook mount order", () => {
      * The case where the SDK's own protection DISAPPEARS, and therefore the case
      * `assertRawBody` exists for.
      *
-     * `readRawBody` in `@oxyhq/crowdsource-express` resolves the signed bytes in
+     * `readRawBody` in `@oxy.so/crowdsource-express` resolves the signed bytes in
      * order: a Buffer on `req.rawBody` FIRST, then a Buffer `req.body`, then a
      * throw if `req.body` is anything else, and only then the stream. With
      * `express.json({ verify })` the first branch hits — so a router mounted
@@ -407,7 +407,7 @@ describe("crowdsource webhook secret rotation", () => {
      * The four tests above do not test what they appear to test, and this one
      * exists because deleting Allo's plumbing entirely left all of them green.
      *
-     * `configuredSecrets` in `@oxyhq/crowdsource-express` is
+     * `configuredSecrets` in `@oxy.so/crowdsource-express` is
      * `options.previousSecret ?? process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`,
      * evaluated PER REQUEST. So with the env var set, the SDK finds the secret on
      * its own whether or not the route passed it — and every rotation assertion

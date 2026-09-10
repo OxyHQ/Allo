@@ -4,11 +4,11 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 
-import { Search } from '@oxyhq/bloom';
-import { Button } from '@oxyhq/bloom/button';
-import { SettingsListGroup, SettingsListItem } from '@oxyhq/bloom/settings-list';
-import { toast } from '@oxyhq/bloom/toast';
-import { useOxy } from '@oxyhq/services';
+import { Search } from '@oxy.so/bloom';
+import { Button } from '@oxy.so/bloom/button';
+import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { toast } from '@oxy.so/bloom/toast';
+import { useOxy } from '@oxy.so/services';
 
 import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
 import Avatar from '@/components/Avatar';
