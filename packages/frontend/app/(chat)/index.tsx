@@ -66,7 +66,7 @@ import {
 } from '@/utils/conversationUtils';
 import { formatConversationTimestamp } from '@/utils/dateUtils';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
-import { useBottomBarClearance } from '@/hooks/useBottomBarClearance';
+import { useBottomChrome } from '@/context/BottomChromeContext';
 
 // Skeleton dimension lookup tables (module-level to avoid re-allocation per render)
 const SKELETON_NAME_WIDTHS = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125] as const;
@@ -527,7 +527,7 @@ function ConversationsSkeleton({ theme }: { theme: ReturnType<typeof useTheme> }
  */
 export default function ConversationsList() {
     const theme = useTheme();
-    const bottomBarClearance = useBottomBarClearance();
+    const { contentClearance: bottomBarClearance } = useBottomChrome();
     const pathname = usePathname();
     const router = useRouter();
     const { width: windowWidth } = useWindowDimensions();

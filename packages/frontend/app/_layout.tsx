@@ -23,12 +23,14 @@ import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
 import { SideBar } from "@/components/SideBar";
 import { BottomBar } from "@/components/layout/BottomBar";
+import { BottomChromeProvider } from '@/context/BottomChromeContext';
 import { ThemedView } from "@/components/ThemedView";
 import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 
 // Hooks
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
+import { useKeyboardVisibility } from '@/hooks/useKeyboardVisibility';
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxy.so/services';
 import { useTranslation } from 'react-i18next';
@@ -73,11 +75,12 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   const router = useRouter();
   const { user: currentUser } = useOxy();
   const { t } = useTranslation();
+  const keyboardVisible = useKeyboardVisibility();
 
   const needsAuth = !currentUser;
   const isConversationRoute = routeMatchers.isConversationRoute(pathname);
-  const shouldShowBottomBar = !isScreenNotMobile && !isConversationRoute;
-  const shouldShowComposeFab = shouldShowBottomBar && routeMatchers.isHomeRoute(pathname) && !needsAuth;
+  const bottomChromeVisible = !isScreenNotMobile && !isConversationRoute && !keyboardVisible;
+  const shouldShowComposeFab = bottomChromeVisible && routeMatchers.isHomeRoute(pathname) && !needsAuth;
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -107,10 +110,11 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   }), [isScreenNotMobile, theme.colors.background, theme.colors.border]);
 
   return (
-    <View style={styles.container}>
-      {isScreenNotMobile && <SideBar />}
-      <View style={styles.mainContent}>
-        <ThemedView style={styles.mainContentWrapper}>
+    <BottomChromeProvider visible={bottomChromeVisible}>
+      <View style={styles.container}>
+        {isScreenNotMobile && <SideBar />}
+        <View style={styles.mainContent}>
+          <ThemedView style={styles.mainContentWrapper}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(chat)" redirect={needsAuth} />
             <Stack.Screen name="(auth)" redirect={!needsAuth} />
@@ -126,10 +130,11 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
               variant="tertiary"
             />
           )}
-        </ThemedView>
+          </ThemedView>
+        </View>
+        <BottomBar />
       </View>
-      {shouldShowBottomBar && <BottomBar />}
-    </View>
+    </BottomChromeProvider>
   );
 });
 

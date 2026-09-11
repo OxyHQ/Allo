@@ -10,8 +10,8 @@ import { CallIcon, CallIconActive } from '@/assets/icons/call-icon';
 import { Gear, GearActive } from '@/assets/icons/gear-icon';
 import { Home, HomeActive } from '@/assets/icons/home-icon';
 import { StatusIcon, StatusIconActive } from '@/assets/icons/status-icon';
+import { useBottomChrome } from '@/context/BottomChromeContext';
 import { useHomeRefresh } from '@/context/HomeRefreshContext';
-import { useKeyboardVisibility } from '@/hooks/useKeyboardVisibility';
 import { useTheme } from '@/hooks/useTheme';
 import { isAuthCancellation } from '@/utils/errors';
 import { ROUTES, routeMatchers } from '@/utils/routeUtils';
@@ -23,7 +23,7 @@ export function BottomBar() {
   const pathname = usePathname();
   const router = useRouter();
   const theme = useTheme();
-  const keyboardVisible = useKeyboardVisibility();
+  const { visible } = useBottomChrome();
   const { user, isAuthenticated, oxyServices } = useOxy();
   const { signIn } = useAuth();
   const { triggerHomeRefresh } = useHomeRefresh();
@@ -110,7 +110,7 @@ export function BottomBar() {
     [isAuthenticated],
   );
 
-  if (keyboardVisible) return null;
+  if (!visible) return null;
 
   return (
     <View pointerEvents="box-none" style={styles.host}>
