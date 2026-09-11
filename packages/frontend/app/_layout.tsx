@@ -10,9 +10,11 @@ import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
+import { Fab } from '@oxy.so/bloom/fab';
+import { Pencil_Stroke2_Corner0_Rounded } from '@oxy.so/bloom/icons';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
-import { Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
 
@@ -29,6 +31,7 @@ import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxy.so/services';
+import { useTranslation } from 'react-i18next';
 
 // Utils
 import { routeMatchers } from '@/utils/routeUtils';
@@ -67,11 +70,14 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   const theme = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const { user: currentUser } = useOxy();
+  const { t } = useTranslation();
 
   const needsAuth = !currentUser;
   const isConversationRoute = routeMatchers.isConversationRoute(pathname);
   const shouldShowBottomBar = !isScreenNotMobile && !isConversationRoute;
+  const shouldShowComposeFab = shouldShowBottomBar && routeMatchers.isHomeRoute(pathname) && !needsAuth;
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -90,6 +96,7 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
     },
     mainContentWrapper: {
       flex: isScreenNotMobile ? 2.2 : 1,
+      position: 'relative',
       ...(isScreenNotMobile ? {
         borderLeftWidth: 0.5,
         borderRightWidth: 0.5,
@@ -110,6 +117,15 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
             <Stack.Screen name="calls" />
             <Stack.Screen name="+not-found" />
           </Stack>
+          {shouldShowComposeFab && (
+            <Fab
+              accessibilityLabel={t('New Chat')}
+              icon={<Pencil_Stroke2_Corner0_Rounded />}
+              onPress={() => router.push('/new')}
+              placement="bottom-right"
+              variant="tertiary"
+            />
+          )}
         </ThemedView>
       </View>
       {shouldShowBottomBar && <BottomBar />}
