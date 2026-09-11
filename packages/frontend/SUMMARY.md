@@ -28,7 +28,6 @@ components/
 │   ├── Header.tsx
 │   ├── HeaderIconButton.tsx
 │   ├── BottomBar.tsx
-│   └── FloatingActionButton.tsx
 │
 ├── notifications/       ⭐ NEW - Notification system
 │   ├── NotificationItem.tsx

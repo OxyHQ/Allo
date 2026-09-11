@@ -10,9 +10,11 @@ import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
+import { Fab } from '@oxy.so/bloom/fab';
+import { Pencil_Stroke2_Corner0_Rounded } from '@oxy.so/bloom/icons';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
-import { Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
 
@@ -21,14 +23,17 @@ import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
 import { SideBar } from "@/components/SideBar";
 import { BottomBar } from "@/components/layout/BottomBar";
+import { BottomChromeProvider } from '@/context/BottomChromeContext';
 import { ThemedView } from "@/components/ThemedView";
 import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 
 // Hooks
 import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
+import { useKeyboardVisibility } from '@/hooks/useKeyboardVisibility';
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxy.so/services';
+import { useTranslation } from 'react-i18next';
 
 // Utils
 import { routeMatchers } from '@/utils/routeUtils';
@@ -67,11 +72,15 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   const theme = useTheme();
   const pathname = usePathname();
+  const router = useRouter();
   const { user: currentUser } = useOxy();
+  const { t } = useTranslation();
+  const keyboardVisible = useKeyboardVisibility();
 
   const needsAuth = !currentUser;
   const isConversationRoute = routeMatchers.isConversationRoute(pathname);
-  const shouldShowBottomBar = !isScreenNotMobile && !isConversationRoute;
+  const bottomChromeVisible = !isScreenNotMobile && !isConversationRoute && !keyboardVisible;
+  const shouldShowComposeFab = bottomChromeVisible && routeMatchers.isHomeRoute(pathname) && !needsAuth;
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -90,6 +99,7 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
     },
     mainContentWrapper: {
       flex: isScreenNotMobile ? 2.2 : 1,
+      position: 'relative',
       ...(isScreenNotMobile ? {
         borderLeftWidth: 0.5,
         borderRightWidth: 0.5,
@@ -100,20 +110,31 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
   }), [isScreenNotMobile, theme.colors.background, theme.colors.border]);
 
   return (
-    <View style={styles.container}>
-      {isScreenNotMobile && <SideBar />}
-      <View style={styles.mainContent}>
-        <ThemedView style={styles.mainContentWrapper}>
+    <BottomChromeProvider visible={bottomChromeVisible}>
+      <View style={styles.container}>
+        {isScreenNotMobile && <SideBar />}
+        <View style={styles.mainContent}>
+          <ThemedView style={styles.mainContentWrapper}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(chat)" redirect={needsAuth} />
             <Stack.Screen name="(auth)" redirect={!needsAuth} />
             <Stack.Screen name="calls" />
             <Stack.Screen name="+not-found" />
           </Stack>
-        </ThemedView>
+          {shouldShowComposeFab && (
+            <Fab
+              accessibilityLabel={t('New Chat')}
+              icon={<Pencil_Stroke2_Corner0_Rounded />}
+              onPress={() => router.push('/new')}
+              placement="bottom-right"
+              variant="tertiary"
+            />
+          )}
+          </ThemedView>
+        </View>
+        <BottomBar />
       </View>
-      {shouldShowBottomBar && <BottomBar />}
-    </View>
+    </BottomChromeProvider>
   );
 });
 

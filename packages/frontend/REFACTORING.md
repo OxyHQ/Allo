@@ -40,7 +40,6 @@ components/
 │   ├── Header.tsx
 │   ├── HeaderIconButton.tsx
 │   ├── BottomBar.tsx
-│   └── FloatingActionButton.tsx
 ├── notifications/       # Notification components
 │   ├── NotificationItem.tsx
 │   ├── NotificationPermissionGate.tsx
@@ -100,7 +99,6 @@ If you're working on feature branches, here's how to update your imports:
 "@/components/Header" → "@/components/layout/Header"
 "@/components/HeaderIconButton" → "@/components/layout/HeaderIconButton"
 "@/components/BottomBar" → "@/components/layout/BottomBar"
-"@/components/FloatingActionButton" → "@/components/layout/FloatingActionButton"
 
 // Notification components
 "@/components/NotificationItem" → "@/components/notifications/NotificationItem"
