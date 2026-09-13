@@ -1,3 +1,4 @@
+import { startEcosystemActivity, stopEcosystemActivity, observeEcosystemSocket, ecosystemActivityMiddleware } from './src/ecosystemActivity';
 // --- Imports ---
 import express from "express";
 import http from "http";
@@ -8,9 +9,9 @@ import { oxyClient } from "@oxy.so/core";
 import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { logger } from "./src/utils/logger";
 import type { AlloRealtimeServer, AuthenticatedSocket } from "./src/types/realtime";
-import { connectPostgres, ensurePostgresReachable, getDb } from "./src/db";
+import { closePostgres, connectPostgres, ensurePostgresReachable, getDb } from "./src/db";
 import { isConversationParticipant } from "./src/db/messaging/conversationRepository";
-import { startExpirySweep } from "./src/db/expiry";
+import { startExpirySweep, stopExpirySweep } from "./src/db/expiry";
 
 // Routers
 import profileSettingsRoutes from "./src/routes/profileSettings";
@@ -28,8 +29,8 @@ import { createOxyDirectoryService } from "./src/services/oxy/OxyDirectoryServic
 import { configureOxyServiceAuth } from "./src/config/oxyService";
 import { createMatrixAuthMiddleware } from "./src/middleware/matrixAuth";
 import { PUSH_GATEWAY_MOUNT_PATH } from "./src/config/push";
-import { startModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
-import { startBridgeStatusSweep } from "./src/services/bridges/BridgeStatusService";
+import { startModerationOutboxDispatcher, stopModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
+import { startBridgeStatusSweep, stopBridgeStatusSweep } from "./src/services/bridges/BridgeStatusService";
 
 // Middleware
 
@@ -52,6 +53,7 @@ const APP_ORIGINS = [
 ];
 
 const app = express();
+  app.use(ecosystemActivityMiddleware);
 
 // Initialize Oxy client for authentication
 export const oxy = oxyClient;
@@ -234,6 +236,7 @@ const authenticateSocket = oxy.authSocket();
 
 // Configure messaging namespace
 messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
+    observeEcosystemSocket(socket);
   logger.info("Client connected to messaging namespace");
 
   if (!socket.user?.id) {
@@ -320,6 +323,7 @@ messagingNamespace.on("connection", (socket: AuthenticatedSocket) => {
 
 // Configure main namespace
 io.on("connection", (socket: AuthenticatedSocket) => {
+    observeEcosystemSocket(socket);
   logger.info("Client connected");
 
   socket.on("error", (error: Error) => {
@@ -411,6 +415,23 @@ function requireDatabaseUrl(): string {
 // per-app port map so several Oxy backends can run side by side.
 const PORT = process.env.PORT || 4140;
 const bootServer = async () => {
+  startEcosystemActivity(() => server.listening);
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    stopExpirySweep();
+    stopModerationOutboxDispatcher();
+    stopBridgeStatusSweep();
+    io.close(() => {
+      void stopEcosystemActivity().finally(() => closePostgres()).catch(() => {
+        logger.error('Failed to close activity publisher or database');
+        process.exitCode = 1;
+      });
+    });
+  };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
   try {
     /**
      * Postgres first, and not lazily: `createDatabase` opens the pool here so a
