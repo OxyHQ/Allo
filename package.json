@@ -54,7 +54,8 @@
     "install:all": "bun install",
     "start:frontend": "bun run --filter @allo/frontend start",
     "start:backend": "bun run --filter @allo/backend start",
-    "postinstall": "bun run build:shared-types"
+    "postinstall": "bun run build:shared-types",
+    "test:edge": "bun test scripts/edge-activity.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.9.2",
