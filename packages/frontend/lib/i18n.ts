@@ -3,7 +3,7 @@
  * Separated from _layout.tsx for better testability and maintainability
  */
 
-import i18n, { init as i18nInit, use as i18nUse } from 'i18next';
+import i18n, { changeLanguage, init as i18nInit, use as i18nUse } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import enUS from '@/locales/en.json';
@@ -24,6 +24,19 @@ export interface I18nConfig {
   lng: string;
   fallbackLng: string;
   interpolation: { escapeValue: boolean };
+}
+
+/**
+ * Switches the app's UI language. This is the `onChange` target for
+ * `OxyProvider`'s `language` config: Oxy resolves WHICH locale (the account's
+ * primary locale when signed in, else the device/guest locale) and calls this
+ * whenever it changes — the app just follows. Every catalog Allo ships
+ * (`en-US`/`es-ES`/`it-IT`) is already bundled into `i18nResources` above, so
+ * there is no lazy chunk to fetch first, unlike apps that code-split their
+ * translations.
+ */
+export async function setLanguage(language: string): Promise<void> {
+  await changeLanguage(language);
 }
 
 /**
