@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useCallback } from 'react';
+import { ScrollView } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { Header } from '@/components/layout/Header';
 import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
@@ -9,68 +9,34 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from 'react-i18next';
-import i18n from 'i18next';
-import { storeData, getData } from '@/utils/storage';
+import { useOxy } from '@oxy.so/services';
+import { getNativeLanguageName } from '@oxy.so/core';
 
 const IconComponent = Ionicons;
 
-const LANGUAGE_OPTIONS = [
-    { code: 'en-US', name: 'English', nativeName: 'English', flag: '🇺🇸' },
-    { code: 'es-ES', name: 'Spanish', nativeName: 'Español', flag: '🇪🇸' },
-    { code: 'it-IT', name: 'Italian', nativeName: 'Italiano', flag: '🇮🇹' },
-];
-
-const LANGUAGE_STORAGE_KEY = 'user_language_preference';
-
+/**
+ * The app's UI language is an Oxy-account concern, not Allo's: Oxy already
+ * resolves it (account locales when signed in, a device/guest locale
+ * otherwise) and ships the picker that reads and writes it
+ * (`LanguageSelectorScreen`, opened here the same way every other Oxy-owned
+ * surface is — `showBottomSheet('LanguageSelector')`, exactly like
+ * `ManageAccount`/`FileManagement` elsewhere in Settings). This screen was
+ * purely that picker, so it now just opens the shared sheet.
+ */
 export default function LanguageSettingsScreen() {
     const { t } = useTranslation();
     const theme = useTheme();
-    const [currentLanguage, setCurrentLanguage] = useState<string>('en-US');
-    const [saving, setSaving] = useState(false);
+    const { showBottomSheet, currentLanguage, currentLanguages } = useOxy();
 
-    const loadLanguage = useCallback(async () => {
-        try {
-            const savedLanguage = await getData<string>(LANGUAGE_STORAGE_KEY);
-            const language = savedLanguage || i18n.language || 'en-US';
-            setCurrentLanguage(language);
-        } catch (error) {
-            console.error('Error loading language:', error);
-            setCurrentLanguage(i18n.language || 'en-US');
-        }
-    }, []);
+    const openLanguageSelector = useCallback(() => {
+        showBottomSheet?.('LanguageSelector');
+    }, [showBottomSheet]);
 
-    // Reads the stored preference, which lives outside React.
-    useEffect(() => {
-        void loadLanguage();
-    }, [loadLanguage]);
-
-    const handleLanguageChange = useCallback(async (languageCode: string) => {
-        if (languageCode === currentLanguage) return;
-
-        try {
-            setSaving(true);
-            setCurrentLanguage(languageCode);
-            
-            // Save to storage
-            await storeData(LANGUAGE_STORAGE_KEY, languageCode);
-            
-            // Change i18n language
-            await i18n.changeLanguage(languageCode);
-            
-            // Small delay to show feedback
-            await new Promise(resolve => setTimeout(resolve, 300));
-        } catch (error) {
-            console.error('Error changing language:', error);
-            // Revert on error
-            setCurrentLanguage(i18n.language || 'en-US');
-        } finally {
-            setSaving(false);
-        }
-    }, [currentLanguage]);
-
-    const getLanguageDisplayName = (option: typeof LANGUAGE_OPTIONS[0]) => {
-        return `${option.flag} ${option.nativeName} (${option.name})`;
-    };
+    // Account locales when there are any (signed in, or a guest override was
+    // set), else the single resolved device/fallback locale — the same
+    // fallback `LanguageSelectorScreen` itself uses.
+    const selectedLanguages = currentLanguages.length > 0 ? currentLanguages : [currentLanguage];
+    const languageDescription = selectedLanguages.map((code) => getNativeLanguageName(code)).join(', ');
 
     return (
         <ThemedView className="flex-1">
@@ -95,39 +61,13 @@ export default function LanguageSettingsScreen() {
                 contentContainerClassName="px-4 pt-5 pb-6"
                 showsVerticalScrollIndicator={false}
             >
-                {saving && (
-                    <View className="flex-row items-center justify-center py-3 mb-4 gap-2">
-                        <ActivityIndicator size="small" color={theme.colors.primary} />
-                        <Text className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                            {t('common.saving')}
-                        </Text>
-                    </View>
-                )}
-
                 <SettingsListGroup title={t('settings.language.selectLanguage')}>
-                    {LANGUAGE_OPTIONS.map((option) => {
-                        const isSelected = currentLanguage === option.code;
-                        const isChanging = saving && isSelected;
-
-                        return (
-                            <SettingsListItem
-                                key={option.code}
-                                title={getLanguageDisplayName(option)}
-                                onPress={() => handleLanguageChange(option.code)}
-                                disabled={saving}
-                                showChevron={false}
-                                rightElement={
-                                    isSelected ? (
-                                        isChanging ? (
-                                            <ActivityIndicator size="small" color={theme.colors.primary} />
-                                        ) : (
-                                            <IconComponent name="checkmark-circle" size={24} color={theme.colors.primary} />
-                                        )
-                                    ) : null
-                                }
-                            />
-                        );
-                    })}
+                    <SettingsListItem
+                        icon={<IconComponent name="language" size={20} color={theme.colors.textSecondary} />}
+                        title={t('Language')}
+                        description={languageDescription}
+                        onPress={openLanguageSelector}
+                    />
                 </SettingsListGroup>
             </ScrollView>
         </ThemedView>
