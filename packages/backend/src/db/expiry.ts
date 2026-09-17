@@ -21,6 +21,8 @@
 
 import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxy.so/db/expiry";
 import type { SqlExecutor } from "@oxy.so/db";
+import { blobs } from "./schema/blobs";
+import { instanceDeliveries } from "./schema/deliveries";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
 
 export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
@@ -45,6 +47,31 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
       "silently loses the reports it never delivered. The ceiling exists to stop " +
       "the table growing without bound; alerting on outbox age is what has to " +
       "fire long before it, and that alerting is not this sweep's job.",
+  },
+  {
+    table: instanceDeliveries,
+    column: instanceDeliveries.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Per-instance delivery stream entries, dated 30 days out at insert. A " +
+      "delivery still unacked at its deadline is dropped from the STREAM " +
+      "(`GET /v1/sync` will not return it again); the event itself stays in " +
+      "`conversation_events` and a client that was away that long refetches " +
+      "through `GET /v1/conversations/:id/events`. The row is what makes the " +
+      "cursor dense, so the deadline is the bound on how far behind a device " +
+      "may fall before it has to resync rather than catch up.",
+  },
+  {
+    table: blobs,
+    column: blobs.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Uploaded blobs nobody referenced within seven days. `expires_at` is " +
+      "cleared to NULL the moment an event names the blob in its `blobIds`, so " +
+      "a dated row is by definition one no message points at. Deleting it " +
+      "cascades to `blob_bytes`. The blob collector (`workers/blobGc.ts`) " +
+      "covers the case this sweep cannot see: an unreferenced blob whose " +
+      "uploader instance was revoked before the seven days ran out.",
   },
 ];
 

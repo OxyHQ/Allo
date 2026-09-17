@@ -241,8 +241,10 @@ describe("the repo cannot reach MongoDB", () => {
 
   it("enumerates the repository, so the scans below are not vacuous", () => {
     // A floor, not the exact count: it fails a broken traversal without
-    // needing an edit every time a file is added.
-    expect(files.length).toBeGreaterThan(600);
+    // needing an edit every time a file is added. Lowered from 600 when the
+    // clean break (issue #139) removed the Matrix port and bridges: measured
+    // 531 tracked files at 3a6e825.
+    expect(files.length).toBeGreaterThan(400);
   });
 
   it("exempts exactly one file from the source scan, and it is a test", () => {
@@ -305,7 +307,8 @@ describe("the repo cannot reach MongoDB", () => {
     );
     // Every language present must be in CODE_EXTENSIONS: a `require()` in a
     // .js file is invisible to a .ts-only scan, and that gap reads as a pass.
-    expect(sources.length).toBeGreaterThan(500);
+    // 401 sources at 3a6e825, after the clean break; see the file floor above.
+    expect(sources.length).toBeGreaterThan(300);
 
     const failures: Failure[] = [];
     for (const path of sources) {

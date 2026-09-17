@@ -23,6 +23,15 @@ it gets a uuid v7. There is no surrogate integer key except where a table's
 design names one on purpose and documents why (a dense-ordered sync cursor is
 the one legitimate case).
 
+That case exists: `instance_deliveries.id` is a `bigserial`. It is the cursor
+`GET /v1/sync` hands a client (base64url of the integer) and the position
+`POST /v1/sync/ack` acks up to, so it has to be totally ordered and monotonic
+for one instance and cheap to range-scan with `WHERE id > $cursor`. A uuid v7
+is neither — it is not monotonic within a millisecond — and a text comparison
+of one is not the integer range the client meant. Guessability does not
+matter: every read of the table is scoped to the calling instance. It is the
+only integer key in the schema; a second one needs its own paragraph here.
+
 **Every table declares a bare `text().primaryKey()` with NO database default, so
 every repository must generate the id itself** — call `uuidv7()` from
 `@oxy.so/db` at the insert. `@oxy.so/db` also exports a `generatedId()` column

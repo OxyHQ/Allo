@@ -98,6 +98,29 @@ export function ensurePostgresReachable(): Promise<void> {
   return reachability;
 }
 
+/**
+ * A real `select 1`, for `/health/ready` and the boot probe. False rather
+ * than a throw: readiness is a yes/no, and a pool object survives a server
+ * that has gone away, which is exactly the case this exists to catch.
+ */
+export async function checkPostgresHealth(): Promise<boolean> {
+  if (!handle) return false;
+  try {
+    await handle.client`select 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The raw postgres.js client, for the migration-ledger check at boot. */
+export function getPostgresClient(): postgres.Sql {
+  if (!handle) {
+    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+  }
+  return handle.client;
+}
+
 export async function closePostgres(): Promise<void> {
   reachability = null;
   if (!handle) return;

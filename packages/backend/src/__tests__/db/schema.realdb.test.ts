@@ -94,7 +94,7 @@ describe("the expiry sweep", () => {
     // Named, not counted: a count alone passes if someone registers the same
     // table twice, and the whole point is that no deadline table is missing.
     const tables = EXPIRY_SWEEP_TARGETS.map((target) => getTableName(target.table)).sort();
-    expect(tables).toEqual(["moderation_events", "moderation_outbox"]);
+    expect(tables).toEqual(["blobs", "instance_deliveries", "moderation_events", "moderation_outbox"]);
   });
 
   it("every registered column has a supporting index", async () => {

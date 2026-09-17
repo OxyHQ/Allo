@@ -25,4 +25,15 @@ export const PROTECTED_COLUMNS = {
    */
   moderation_events: ["payload"],
   moderation_outbox: ["payloadDecision"],
+  /**
+   * Messaging platform material. Ciphertext, MLS public material meant for
+   * exactly one claimer, and a third party's push credential. Each has ONE
+   * legitimate reader, named at the opt-in: `GET /v1/blobs/:id` for the bytes,
+   * `GET …/events` and `GET /v1/sync` for the payload, the claim for a key
+   * package, the delivery worker for the token.
+   */
+  key_packages: ["data"],
+  conversation_events: ["payload"],
+  blob_bytes: ["data"],
+  client_instances: ["pushToken"],
 } as const;

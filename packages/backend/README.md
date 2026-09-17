@@ -78,8 +78,15 @@ OXY_API_URL=https://api.oxy.so
 PORT=4140
 NODE_ENV=development
 
+# Redis for the Socket.IO adapter (optional; unset or unreachable means
+# single-instance mode, never a boot failure).
+REDIS_URL=
+
+# Largest accepted blob upload, in bytes (optional; default 25 MiB).
+ALLO_BLOB_MAX_BYTES=
+
 # Push providers (optional; each platform is all-or-nothing, see
-# src/config/push.ts).
+# src/config/push.ts). Used by the delivery worker only.
 FIREBASE_PROJECT_ID=
 FIREBASE_SERVICE_ACCOUNT_BASE64=
 ALLO_APNS_KEY_ID=
@@ -180,14 +187,15 @@ One way to be signed in: an Oxy access token.
 Authorization: Bearer <oxy access token>
 ```
 
-`createOxyAuthMiddleware(oxy)` from `@oxy.so/core/server`, mounted on `/api` in
-`server.ts`, alongside `createOxyCors` and `createOxyRateLimit` from the same
-package. It produces `req.userId` / `req.user` for every route behind it.
+`createOxyAuthMiddleware(oxy)` from `@oxy.so/core/server`, mounted on `/api`
+and `/v1` in `src/app.ts`, alongside `createOxyCors` and `createOxyRateLimit`
+from the same package. It produces `req.userId` / `req.user` for every route
+behind it. The `/v1` routes that act as one installation additionally require
+the instance signature (see "Messaging platform" below).
 
-Routes are split into two routers: `publicApiRouter` (health only) and
-`authenticatedApiRouter`, which carries `/profile`, `/reports` and `/directory`.
-The CrowdSource webhook is mounted separately at `/webhooks/crowdsource`, ahead
-of the JSON body parser, because it needs the raw body to verify its signature.
+`/api` carries `/profile`, `/reports` and `/directory`. The CrowdSource webhook
+is mounted at `/webhooks/crowdsource`, ahead of the JSON body parser, because it
+needs the raw body to verify its signature; so is `POST /v1/blobs`.
 
 ### People directory
 
@@ -221,11 +229,59 @@ No service credential is required, for the same reason. Setting
 bulk lookup authenticates; see `src/config/oxyService.ts`, which also documents
 the console.oxy.so step that mints them.
 
-### Health Check
+### Health
 
-#### GET /api/health
-- Public endpoint
-- Returns: `{ status: "ok", service: "allo-backend" }`
+- `GET /health/live` — always 200 `{ status: "alive" }`. A draining task is
+  still alive; draining is reported by readiness only.
+- `GET /health/ready` — 200 once the process has booted, verified the migration
+  ledger (production) and can `select 1` against Postgres; 503 otherwise, with
+  `phase` and `dependencies: { postgres, migrations }`. Drops to 503 on the
+  first SIGTERM, before anything else closes.
+- `GET /api/health` — an alias of `/health/ready`, kept for the existing ALB
+  target group.
+
+Redis is deliberately absent from readiness: the Socket.IO adapter is optional
+and a task without it serves correctly in single-instance mode.
+
+### Messaging platform (`/v1`)
+
+The route-by-route contract is [docs/platform/api-v1.md](../../docs/platform/api-v1.md);
+every request and response shape is a zod schema in `@allo/shared-types`, and
+the backend validates with the same schemas the SDK parses with. In short:
+
+| Area | Routes | Auth |
+| --- | --- | --- |
+| Instances | `POST/GET /v1/instances`, `GET /v1/accounts/:accountId/instances` | Oxy |
+| Enrollment | `GET /v1/instances/pending`, `POST /v1/instances/:id/{approve,reject,revoke}`, `PUT/DELETE /v1/instances/me/push` | instance-signed |
+| Key packages | `PUT /v1/key-packages`, `POST /v1/key-packages/claim` | instance-signed |
+| Conversations | `POST/GET /v1/conversations`, `GET /v1/conversations/:id`, `POST /v1/conversations/:id/leave` | instance-signed |
+| Events | `POST/GET /v1/conversations/:id/events` | instance-signed |
+| Sync | `GET /v1/sync`, `POST /v1/sync/ack` | instance-signed |
+| Blobs | `POST /v1/blobs` (raw octet-stream), `GET /v1/blobs/:id` | instance-signed |
+
+"Instance-signed" means the Oxy bearer PLUS `X-Allo-Instance`,
+`X-Allo-Timestamp` and `X-Allo-Signature`: an Ed25519 signature by the
+installation's key over the method, the request target, the timestamp and the
+SHA-256 of the raw body (`src/middleware/instanceAuth.ts`). The raw body is
+captured by `express.json({ verify })`, which is why the blob upload — raw
+bytes, size-capped by `ALLO_BLOB_MAX_BYTES` — is mounted ahead of the JSON
+parser in `src/app.ts` with its own chain.
+
+Socket.IO namespace `/v1` takes the same three fields in `handshake.auth`
+(path `/socket`, empty body) after `oxy.authSocket()`. A socket joins
+`instance:<id>` and `account:<accountId>`; the server emits `sync.nudge`,
+`instance.approved`, `instance.revoked`, `keypackages.low` and `presence`, and
+relays `typing` ciphertext to a conversation's other active leaves without
+storing it (`src/runtime/socket.ts`).
+
+Every non-2xx answer on `/v1` is `{ error: { code, message, details? } }` with
+`code` from `ALLO_ERROR_CODES`; the one place that shape is written is the error
+handler in `src/app.ts`, and routes throw `AlloHttpError` (`src/utils/httpErrors.ts`).
+
+The server never sees plaintext: every `payload` is MLS ciphertext, a `typing`
+frame is ciphertext, a push says only "New message" with the conversation and
+event ids, and `__tests__/platform/noPlaintextPaths.test.ts` scans the routers'
+TypeScript AST to keep it that way.
 
 ### Profile Settings
 
@@ -327,7 +383,43 @@ providers can reach, so no provider can describe a conversation.
 of `{ platform, token }` devices through FCM and APNs (`sendPush` in
 `dispatch.ts`). APNs is HTTP/2 plus an ES256 provider token, with no library.
 The senders never see message content; what a notification says and who is
-notified is decided by the platform's delivery worker.
+notified is decided by `src/workers/deliveryWorker.ts`: title "Allo", body
+"New message", `data = { conversationId, eventId }`, sent only for an
+`app_message` to an instance with no live socket and a registered token. A
+token lives on the `client_instances` row (`PUT /v1/instances/me/push`), is a
+protected column, and is cleared when a provider rejects it.
+
+### Workers
+
+All started by `server.ts` after Postgres is verified, all stopped in the
+shutdown drain before the pool closes, none leader-gated (every claim is
+`FOR UPDATE SKIP LOCKED`, so every task may run one):
+
+| Worker | Interval | What it does |
+| --- | --- | --- |
+| `workers/deliveryWorker.ts` | 1 s, batch 100 | Claims `pending` `instance_deliveries` under a lease; nudges a connected instance over the socket, pushes otherwise (app messages only), backs off transient failures (`min(2^attempts s, 1h)`) |
+| `db/expiry.ts` | 60 s | Deletes rows past `expires_at`: moderation tables, deliveries older than 30 days, blobs unreferenced for 7 days |
+| `workers/blobGc.ts` | 1 h | The blob delete the sweep cannot express: unreferenced blobs of a revoked uploader |
+| `services/moderation/ModerationOutboxDispatcher.ts` | configured | CrowdSource report delivery and decision application |
+
+## Module map
+
+```
+server.ts                       bootstrap only: env → Postgres → ledger → sockets → workers → listen → ready
+src/app.ts                      createApp(deps): pure HTTP assembly, middleware order, error handler
+src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
+src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
+src/middleware/                 instanceAuth (Ed25519 request signature), requestObservability
+src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs
+src/routes/                     kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
+src/services/platform/          the rules: instance lifecycle, key packages, conversations, events + sync, blobs, wire projections
+src/db/schema/                  one file per domain; CONVENTIONS.md is binding
+src/db/platform/                repositories; appendClientEvent is the event-log transaction
+src/workers/                    deliveryWorker, blobGc
+src/services/push/              FCM and APNs senders
+src/services/moderation/        CrowdSource pipeline
+drizzle/                        generated migrations, one phase marker each
+```
 
 ## Development Scripts
 
