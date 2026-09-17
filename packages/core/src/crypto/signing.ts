@@ -12,16 +12,17 @@
  *    is either a server fault or an injected key;
  *  - every other instance must name an approver and carry a signature;
  *    naming itself, or an instance of another account, is refused;
- *  - when the verifier KNOWS the approval challenge (it approved the instance
- *    itself, or it is the instance) the signature is verified under the
- *    approver's key and a mismatch is refused. The challenge is not on the
- *    wire for third parties (`PublicInstance` has no such field), so across
- *    accounts the signature is attested by the server rather than checked
- *    here. That is a contract limitation and it is reported as such;
- *  - a REVOKED approver invalidates nothing already approved: revocation is
- *    not in the listing, and an instance that was legitimately approved does
- *    not become illegitimate because its approver was later lost. Trust flows
- *    from the approval event, not from the approver's current status.
+ *  - every other instance's `approvalSignature` is verified over
+ *    `enrollmentApprovalMessage` with the `enrollmentChallenge` the server
+ *    publishes once the instance is approved, under the approver's key, and
+ *    the approver's own approval is verified the same way, recursively up to
+ *    the root. Nothing is taken on the server's word;
+ *  - a REVOKED approver invalidates nothing already approved: its signature
+ *    still verifies when its key is in the listing (an own-account listing
+ *    carries revoked instances), so trust flows from the approval event, not
+ *    from the approver's current status. Another account's listing carries
+ *    active instances only, so from outside, an instance whose approver was
+ *    revoked cannot be verified and is refused (contract gap, reported).
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { enrollmentApprovalMessage, signedRequestMessage, type PublicInstance, type SignedRequestInput } from "@allo/shared-types";
@@ -69,7 +70,10 @@ export function verifyEd25519(publicKeyB64: string, message: string, signatureB6
 }
 
 /** The subset of an instance listing the chain check reads; both `ClientInstance` and `PublicInstance` satisfy it. */
-export type ChainInstance = Pick<PublicInstance, "id" | "accountId" | "signingPublicKey" | "status" | "approvedByInstanceId" | "approvalSignature"> & {
+export type ChainInstance = Pick<
+  PublicInstance,
+  "id" | "accountId" | "signingPublicKey" | "status" | "approvedByInstanceId" | "approvalSignature" | "enrollmentChallenge"
+> & {
   createdAt?: string;
 };
 
@@ -80,10 +84,14 @@ export interface ChainVerdict {
 }
 
 /**
- * Which instances of ONE account are trusted. `knownChallenges` maps an
- * instance id to the enrollment challenge the verifier holds for it.
+ * Which instances of ONE account are trusted. Every non-root instance's
+ * `approvalSignature` is verified over `enrollmentApprovalMessage` with its
+ * published `enrollmentChallenge` under its approver's key, and the approver
+ * must itself be trusted, recursively up to the bootstrap root. An approver
+ * that is not in the listing cannot be verified and its approvals are
+ * refused: the listing the caller holds is the whole evidence.
  */
-export function verifyInstanceChain(instances: ChainInstance[], knownChallenges?: Map<string, string>): ChainVerdict {
+export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
   const trusted = new Set<string>();
   const refused = new Map<string, string>();
   const active = instances.filter((i) => i.status === "active");
@@ -95,7 +103,8 @@ export function verifyInstanceChain(instances: ChainInstance[], knownChallenges?
     if (a.createdAt && b.createdAt && a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
     return 0;
   });
-  const byId = new Map(ordered.map((i) => [i.id, i] as const));
+  // Approvers may be revoked and still in an own-account listing: their keys count, their status does not.
+  const byId = new Map(instances.map((i) => [i.id, i] as const));
 
   let rootSeen = false;
   for (const i of ordered) {
@@ -113,49 +122,81 @@ export function verifyInstanceChain(instances: ChainInstance[], knownChallenges?
   }
 
   // Non-roots: iterate to a fixpoint so listing order does not matter.
+  const verified = new Set<string>(trusted); // instances whose own approval is verified (roots by definition)
+  const chainRefused = new Set<string>(); // refused for a chain reason, as opposed to merely not active
   let progressed = true;
   while (progressed) {
     progressed = false;
     for (const i of ordered) {
       if (trusted.has(i.id) || refused.has(i.id) || i.approvedByInstanceId === null) continue;
+      const refuse = (why: string) => {
+        refused.set(i.id, why);
+        chainRefused.add(i.id);
+      };
       if (i.approvedByInstanceId === i.id) {
-        refused.set(i.id, "approved by itself");
+        refuse("approved by itself");
         continue;
       }
-      if (i.approvalSignature === null) {
-        refused.set(i.id, "approved without a signature");
+      if (i.approvalSignature === null || i.enrollmentChallenge === null) {
+        refuse("approved without a signature or a challenge");
         continue;
       }
       const approver = byId.get(i.approvedByInstanceId);
-      if (approver && !trusted.has(approver.id)) {
-        if (refused.has(approver.id)) {
-          refused.set(i.id, `approver ${approver.id} is refused`);
-        }
-        continue; // approver not decided yet
+      if (!approver) {
+        refuse(`approver ${i.approvedByInstanceId} is not in the listing`);
+        continue;
       }
-      const challenge = knownChallenges?.get(i.id);
-      if (challenge !== undefined) {
-        const approverKey = approver?.signingPublicKey ?? knownChallenges?.get(`key:${i.approvedByInstanceId}`);
-        if (approverKey === undefined) {
-          // Approver revoked and its key unknown: attested only (see the header).
-        } else {
-          const ok = verifyEd25519(
-            approverKey,
-            enrollmentApprovalMessage({ accountId, newInstanceId: i.id, newSigningPublicKey: i.signingPublicKey, challenge }),
-            i.approvalSignature,
-          );
-          if (!ok) {
-            refused.set(i.id, "approval signature does not verify");
-            continue;
-          }
-        }
+      if (approver.accountId !== accountId) {
+        refuse("approved by another account's instance");
+        continue;
       }
+      if (chainRefused.has(approver.id)) {
+        refuse(`approver ${approver.id} is refused`);
+        continue;
+      }
+      if (!verified.has(approver.id)) continue; // approver not decided yet
+      const ok = verifyEd25519(
+        approver.signingPublicKey,
+        enrollmentApprovalMessage({ accountId, newInstanceId: i.id, newSigningPublicKey: i.signingPublicKey, challenge: i.enrollmentChallenge }),
+        i.approvalSignature,
+      );
+      if (!ok) {
+        refuse("approval signature does not verify");
+        continue;
+      }
+      verified.add(i.id);
       trusted.add(i.id);
       progressed = true;
     }
+    // A revoked approver with a verified chain lets its approvals through: verify revoked ones too, without trusting them.
+    for (const i of instances) {
+      if (i.status === "active" || verified.has(i.id) || i.approvedByInstanceId === null || i.accountId !== accountId) continue;
+      const approver = byId.get(i.approvedByInstanceId);
+      if (!approver || !verified.has(approver.id) || i.approvalSignature === null || i.enrollmentChallenge === null) continue;
+      const ok = verifyEd25519(
+        approver.signingPublicKey,
+        enrollmentApprovalMessage({ accountId, newInstanceId: i.id, newSigningPublicKey: i.signingPublicKey, challenge: i.enrollmentChallenge }),
+        i.approvalSignature,
+      );
+      if (ok) {
+        verified.add(i.id);
+        progressed = true;
+      }
+    }
+    for (const i of instances) {
+      // a revoked bootstrap root is verified (not trusted) so what it approved can still chain to it
+      if (i.status !== "active" && i.approvedByInstanceId === null && i.accountId === accountId && !verified.has(i.id) && !rootSeen) {
+        verified.add(i.id);
+        rootSeen = true;
+        progressed = true;
+      }
+    }
   }
   for (const i of ordered) {
-    if (!trusted.has(i.id) && !refused.has(i.id)) refused.set(i.id, "approval chain does not reach a root");
+    if (!trusted.has(i.id) && !refused.has(i.id)) {
+      const approver = i.approvedByInstanceId ? byId.get(i.approvedByInstanceId) : undefined;
+      refused.set(i.id, approver && chainRefused.has(approver.id) ? `approver ${approver.id} is refused` : "approval chain does not reach a verified root");
+    }
   }
   return { trusted, refused };
 }

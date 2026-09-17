@@ -146,24 +146,39 @@ export class InstanceManager {
       secret = fresh.secretKey;
     }
     const key = signingKeyFromSecret(secret);
-    const res = await this.deps.http.request({
-      method: "POST",
-      path: "/v1/instances",
-      body: { appId, platform: this.deps.platform, displayName: this.deps.displayName, signingPublicKey: publicKeyBase64(key) },
-      schema: registerInstanceResponseSchema,
-    });
+    const publicKey = publicKeyBase64(key);
+    let instance: ClientInstance;
+    let challenge: string | null = null;
+    try {
+      const res = await this.deps.http.request({
+        method: "POST",
+        path: "/v1/instances",
+        body: { appId, platform: this.deps.platform, displayName: this.deps.displayName, signingPublicKey: publicKey },
+        schema: registerInstanceResponseSchema,
+      });
+      instance = res.instance;
+      challenge = res.challenge ?? null;
+    } catch (error) {
+      // The key is already enrolled on the account (storage wiped, secret kept): adopt that instance.
+      if (!(error instanceof TransportError && error.status === 409 && error.serverCode === "idempotency_conflict")) throw error;
+      const listed = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+      const mine = listed.instances.find((i) => i.signingPublicKey === publicKey && i.status !== "revoked");
+      if (!mine) throw new InvalidStateError("the signing key is enrolled but no live instance carries it; clear the secret store and start again");
+      instance = mine;
+      this.deps.log.info?.("adopted an already-enrolled instance", { status: mine.status });
+    }
     const record: InstanceRecord = {
-      id: res.instance.id,
-      accountId: res.instance.accountId,
-      appId: res.instance.appId,
-      platform: res.instance.platform,
-      displayName: res.instance.displayName,
-      signingPublicKey: res.instance.signingPublicKey,
-      status: res.instance.status,
-      challenge: res.challenge ?? null,
-      approvedByInstanceId: res.instance.approvedByInstanceId,
-      approvalSignature: res.instance.approvalSignature,
-      createdAt: res.instance.createdAt,
+      id: instance.id,
+      accountId: instance.accountId,
+      appId: instance.appId,
+      platform: instance.platform,
+      displayName: instance.displayName,
+      signingPublicKey: instance.signingPublicKey,
+      status: instance.status,
+      challenge,
+      approvedByInstanceId: instance.approvedByInstanceId,
+      approvalSignature: instance.approvalSignature,
+      createdAt: instance.createdAt,
     };
     await rootStore.setSelf(record);
     this.record = record;
@@ -227,7 +242,7 @@ export class InstanceManager {
     if (expectedChallenge !== undefined && expectedChallenge !== pending.challenge) {
       throw new InvalidStateError("the challenge shown is not the challenge on record");
     }
-    const { key, instanceId: me } = this.signer;
+    const { key } = this.signer;
     const approvalSignature = signEnrollmentApproval(key, {
       accountId: this.deps.accountId,
       newInstanceId: pending.instance.id,
@@ -241,10 +256,6 @@ export class InstanceManager {
       schema: instanceResponseSchema,
       signer: this.signer,
     });
-    // Keep the challenge so this instance can verify the chain it just extended.
-    const approval = { instanceId, challenge: pending.challenge, approverInstanceId: me, approverPublicKey: publicKeyBase64(key) };
-    await this.instanceStore.putJson("approval", instanceId, approval);
-    this.model?.approvals.set(instanceId, approval);
     this.pendingList = this.pendingList.filter((p) => p.instance.id !== instanceId);
     this.pendingView = null;
     await this.refresh();
@@ -265,21 +276,23 @@ export class InstanceManager {
     else await this.refresh();
   }
 
-  // ---- trust ---------------------------------------------------------------
+  // ---- push ----------------------------------------------------------------
 
-  private knownChallenges(): Map<string, string> {
-    const m = new Map<string, string>();
-    if (this.record?.challenge) m.set(this.record.id, this.record.challenge);
-    for (const a of this.model?.approvals.values() ?? []) {
-      m.set(a.instanceId, a.challenge);
-      m.set(`key:${a.approverInstanceId}`, a.approverPublicKey);
-    }
-    return m;
+  async setPushToken(provider: "fcm" | "apns", token: string): Promise<void> {
+    this.assertActive();
+    await this.deps.http.request({ method: "PUT", path: "/v1/instances/me/push", body: { provider, token }, signer: this.signer });
   }
+
+  async clearPushToken(): Promise<void> {
+    this.assertActive();
+    await this.deps.http.request({ method: "DELETE", path: "/v1/instances/me/push", signer: this.signer });
+  }
+
+  // ---- trust ---------------------------------------------------------------
 
   /** Own instances (cached listing) that pass the chain check. */
   trustedOwnInstances(): { trusted: ClientInstance[]; refused: Map<string, string> } {
-    const verdict = verifyInstanceChain(this.own, this.knownChallenges());
+    const verdict = verifyInstanceChain(this.own);
     return { trusted: this.own.filter((i) => verdict.trusted.has(i.id)), refused: verdict.refused };
   }
 
@@ -455,6 +468,7 @@ function toPublic(i: ClientInstance): PublicInstance {
     signingPublicKey: i.signingPublicKey,
     approvedByInstanceId: i.approvedByInstanceId,
     approvalSignature: i.approvalSignature,
+    enrollmentChallenge: i.enrollmentChallenge,
     status: i.status,
   };
 }

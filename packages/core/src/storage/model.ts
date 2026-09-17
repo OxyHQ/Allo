@@ -7,14 +7,12 @@
 import { INITIAL_CURSOR } from "@allo/shared-types";
 import type { InstanceStore } from "./store";
 import {
-  approvalRecordSchema,
   conversationRecordSchema,
   cursorRecordSchema,
   eventRecordSchema,
   mediaKeyRecordSchema,
   outboxItemRecordSchema,
   queuedEventRecordSchema,
-  type ApprovalRecord,
   type ConversationRecord,
   type EventRecord,
   type MediaKeyRecord,
@@ -31,7 +29,6 @@ export class Model {
   /** conversationId → queued deliveries in arrival order */
   readonly queued = new Map<string, QueuedEventRecord[]>();
   readonly mediaKeys = new Map<string, MediaKeyRecord>();
-  readonly approvals = new Map<string, ApprovalRecord>();
   cursor: string = INITIAL_CURSOR;
 
   async load(store: InstanceStore): Promise<void> {
@@ -40,7 +37,6 @@ export class Model {
     for (const { value } of await store.listJson("outbox", outboxItemRecordSchema)) this.outbox.set(value.id, value);
     for (const { value } of await store.listJson("queued", queuedEventRecordSchema)) this.pushQueued(value);
     for (const { value } of await store.listJson("mediaKey", mediaKeyRecordSchema)) this.mediaKeys.set(value.blobId, value);
-    for (const { value } of await store.listJson("approval", approvalRecordSchema)) this.approvals.set(value.instanceId, value);
     const cursor = await store.getJson("cursor", "sync", cursorRecordSchema);
     if (cursor) this.cursor = cursor.cursor;
   }

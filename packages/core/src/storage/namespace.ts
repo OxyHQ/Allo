@@ -33,8 +33,7 @@ export type RecordKind =
   | "cursor"
   | "keyPackage"
   | "mediaKey"
-  | "queued"
-  | "approval";
+  | "queued";
 
 export class InstanceNamespace {
   constructor(

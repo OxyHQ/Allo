@@ -65,6 +65,8 @@ export interface AlloClient {
     approve(instanceId: string, expectedChallenge?: string): Promise<void>;
     reject(instanceId: string): Promise<void>;
     revoke(instanceId: string): Promise<void>;
+    setPushToken(provider: "fcm" | "apns", token: string): Promise<void>;
+    clearPushToken(): Promise<void>;
   };
   conversations: {
     list(): ConversationView[];
@@ -274,6 +276,8 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       },
       reject: (id) => requireCtx().instance.reject(id),
       revoke: (id) => requireCtx().instance.revoke(id),
+      setPushToken: (provider, token) => requireCtx().instance.setPushToken(provider, token),
+      clearPushToken: () => requireCtx().instance.clearPushToken(),
     },
     conversations: {
       list: () => ctx?.conversations.list() ?? [],

@@ -50,8 +50,10 @@ import { FakeSession } from "./memoryAdapters";
 import { FakeSocket, type SocketHost } from "./fakeSocket";
 
 export interface FakeInstance extends ClientInstance {
+  /** The challenge while PENDING; moves to `enrollmentChallenge` once approved. */
   challenge: string | null;
   pushToken: string | null;
+  pushProvider: "fcm" | "apns" | null;
 }
 
 export interface FakeConversation {
@@ -155,8 +157,10 @@ export class FakeAlloServer implements SocketHost {
       approvedByInstanceId: instance.approvedByInstanceId ?? null,
       approvalSignature: instance.approvalSignature ?? null,
       createdAt: instance.createdAt ?? now,
+      enrollmentChallenge: instance.enrollmentChallenge ?? null,
       challenge: instance.challenge ?? null,
       pushToken: null,
+      pushProvider: null,
     };
     this.instances.set(record.id, record);
     return record;
@@ -312,11 +316,15 @@ export class FakeAlloServer implements SocketHost {
     }
     if (method === "PUT" && path === "/v1/instances/me/push") {
       const me = signed();
-      me.pushToken = this.parse(setPushTokenRequestSchema, body).token;
+      const req = this.parse(setPushTokenRequestSchema, body);
+      me.pushToken = req.token;
+      me.pushProvider = req.provider;
       return new Response(null, { status: 204 });
     }
     if (method === "DELETE" && path === "/v1/instances/me/push") {
-      signed().pushToken = null;
+      const me = signed();
+      me.pushToken = null;
+      me.pushProvider = null;
       return new Response(null, { status: 204 });
     }
     if (method === "POST" && (m = path.match(/^\/v1\/instances\/([^/]+)\/(approve|reject|revoke)$/))) {
@@ -443,9 +451,9 @@ export class FakeAlloServer implements SocketHost {
 
   private register(accountId: string, body: Uint8Array): Response {
     const req = this.parse(registerInstanceRequestSchema, body);
-    const existing = this.instancesOf(accountId).find((i) => i.signingPublicKey === req.signingPublicKey && i.status !== "revoked");
-    if (existing) {
-      return json(200, { instance: toClient(existing), enrollment: existing.status === "active" ? "active" : "pending", ...(existing.status === "pending" ? { challenge: existing.challenge } : {}) });
+    // Unique (account_id, signing_public_key): the backend answers 409 and the client adopts the listed instance.
+    if (this.instancesOf(accountId).some((i) => i.signingPublicKey === req.signingPublicKey)) {
+      throw new HttpError(409, "idempotency_conflict", "signing key already enrolled on this account");
     }
     const bootstrap = !this.instancesOf(accountId).some((i) => i.status === "active");
     const now = this.iso();
@@ -463,8 +471,10 @@ export class FakeAlloServer implements SocketHost {
       approvedByInstanceId: null,
       approvalSignature: null,
       createdAt: now,
+      enrollmentChallenge: null,
       challenge: bootstrap ? null : base64UrlEncode(randomBytes(32)),
       pushToken: null,
+      pushProvider: null,
     };
     this.instances.set(inst.id, inst);
     return json(201, { instance: toClient(inst), enrollment: inst.status === "active" ? "active" : "pending", ...(inst.challenge ? { challenge: inst.challenge } : {}) });
@@ -481,6 +491,7 @@ export class FakeAlloServer implements SocketHost {
     target.enrolledAt = this.iso();
     target.approvedByInstanceId = approver.id;
     target.approvalSignature = req.approvalSignature;
+    target.enrollmentChallenge = target.challenge; // published once signed
     target.challenge = null;
     this.emitTo(target.id, "instance.approved", { instanceId: target.id });
     return json(200, { instance: toClient(target) });
@@ -659,14 +670,15 @@ function forbiddenOr(_t: FakeInstance): number {
 }
 
 function toClient(i: FakeInstance): ClientInstance {
-  const { challenge: _c, pushToken: _p, ...rest } = i;
+  const { challenge: _c, pushToken: _p, pushProvider: _q, ...rest } = i;
   void _c;
   void _p;
+  void _q;
   return rest;
 }
 
 function toPublic(i: FakeInstance): PublicInstance {
-  return { id: i.id, accountId: i.accountId, appId: i.appId, platform: i.platform, signingPublicKey: i.signingPublicKey, approvedByInstanceId: i.approvedByInstanceId, approvalSignature: i.approvalSignature, status: i.status };
+  return { id: i.id, accountId: i.accountId, appId: i.appId, platform: i.platform, signingPublicKey: i.signingPublicKey, approvedByInstanceId: i.approvedByInstanceId, approvalSignature: i.approvalSignature, enrollmentChallenge: i.enrollmentChallenge, status: i.status };
 }
 
 function json(status: number, body: unknown): Response {

@@ -132,13 +132,4 @@ export const queuedEventRecordSchema = z.object({
 });
 export type QueuedEventRecord = z.infer<typeof queuedEventRecordSchema>;
 
-/** The challenge this instance approved for another, kept to verify its chain later. */
-export const approvalRecordSchema = z.object({
-  instanceId: z.string(),
-  challenge: z.string(),
-  approverInstanceId: z.string(),
-  approverPublicKey: b64,
-});
-export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
-
 export type { AppMessage };

@@ -25,56 +25,65 @@ function instance(p: Partial<ChainInstance> & { id: string }): ChainInstance {
     status: "active",
     approvedByInstanceId: null,
     approvalSignature: null,
+    enrollmentChallenge: null,
     ...p,
   };
 }
 
+function approve(approverKey: ReturnType<typeof generateSigningKey>, approverId: string, id: string, p: Partial<ChainInstance> = {}): { inst: ChainInstance; key: ReturnType<typeof generateSigningKey> } {
+  const key = generateSigningKey();
+  const challenge = `chal-${id}`;
+  const sig = signEnrollmentApproval(approverKey, { accountId: "acc", newInstanceId: id, newSigningPublicKey: publicKeyBase64(key), challenge });
+  return { inst: instance({ id, signingPublicKey: publicKeyBase64(key), approvedByInstanceId: approverId, approvalSignature: sig, enrollmentChallenge: challenge, ...p }), key };
+}
+
 describe("approval chain", () => {
-  it("trusts the bootstrap root and instances it approved; refuses forged signatures and second roots", () => {
+  it("verifies every signature up to the root; refuses forged, unsigned, self-approved, second-root and dangling instances", () => {
     const rootKey = generateSigningKey();
     const root = instance({ id: "i1", signingPublicKey: publicKeyBase64(rootKey), createdAt: "2026-01-01T00:00:00.000Z" });
-    const secondKey = generateSigningKey();
-    const challenge = "Y2hhbGxlbmdl";
-    const secondPub = publicKeyBase64(secondKey);
-    const sig = signEnrollmentApproval(rootKey, { accountId: "acc", newInstanceId: "i2", newSigningPublicKey: secondPub, challenge });
-    expect(enrollmentApprovalMessage({ accountId: "acc", newInstanceId: "i2", newSigningPublicKey: secondPub, challenge })).toBe(`allo-enroll-v1\nacc\ni2\n${secondPub}\n${challenge}`);
-    const second = instance({ id: "i2", signingPublicKey: secondPub, approvedByInstanceId: "i1", approvalSignature: sig, createdAt: "2026-01-02T00:00:00.000Z" });
-    const forgedSig = signEnrollmentApproval(generateSigningKey(), { accountId: "acc", newInstanceId: "i3", newSigningPublicKey: "x", challenge });
-    const forged = instance({ id: "i3", approvedByInstanceId: "i1", approvalSignature: forgedSig, createdAt: "2026-01-03T00:00:00.000Z" });
-    const secondRoot = instance({ id: "i4", approvedByInstanceId: null, createdAt: "2026-01-04T00:00:00.000Z" });
-    const selfApproved = instance({ id: "i5", approvedByInstanceId: "i5", approvalSignature: sig, createdAt: "2026-01-05T00:00:00.000Z" });
-    const revoked = instance({ id: "i6", status: "revoked", approvedByInstanceId: "i1", approvalSignature: sig });
-    const challenges = new Map([
-      ["i2", challenge],
-      ["i3", challenge],
-    ]);
-    const verdict = verifyInstanceChain([secondRoot, forged, second, root, selfApproved, revoked], challenges);
-    expect([...verdict.trusted].sort()).toEqual(["i1", "i2"]);
-    expect(verdict.refused.get("i3")).toBe("approval signature does not verify");
-    expect(verdict.refused.get("i4")).toBe("a second unapproved instance");
-    expect(verdict.refused.get("i5")).toBe("approved by itself");
-    expect(verdict.refused.get("i6")).toBe("status is revoked");
+    const second = approve(rootKey, "i1", "i2", { createdAt: "2026-01-02T00:00:00.000Z" });
+    const third = approve(second.key, "i2", "i3", { createdAt: "2026-01-03T00:00:00.000Z" }); // depth 3
+    expect(enrollmentApprovalMessage({ accountId: "acc", newInstanceId: "i2", newSigningPublicKey: second.inst.signingPublicKey, challenge: "chal-i2" })).toBe(
+      `allo-enroll-v1\nacc\ni2\n${second.inst.signingPublicKey}\nchal-i2`,
+    );
+    const forged = approve(generateSigningKey(), "i1", "i4"); // signed by a key that is not the approver's
+    const unsigned = instance({ id: "i5", approvedByInstanceId: "i1", approvalSignature: null, enrollmentChallenge: "c" });
+    const noChallenge = instance({ id: "i6", approvedByInstanceId: "i1", approvalSignature: "A".repeat(88), enrollmentChallenge: null });
+    const secondRoot = instance({ id: "i7", approvedByInstanceId: null, createdAt: "2026-01-07T00:00:00.000Z" });
+    const selfApproved = instance({ id: "i8", approvedByInstanceId: "i8", approvalSignature: "A".repeat(88), enrollmentChallenge: "c" });
+    const dangling = approve(generateSigningKey(), "i-gone", "i9");
+    const viaForged = approve(forged.key, "i4", "i10"); // a valid signature under a refused approver
+    const revoked = approve(rootKey, "i1", "i11", { status: "revoked" });
+    const verdict = verifyInstanceChain([viaForged.inst, secondRoot, third.inst, forged.inst, second.inst, root, unsigned, noChallenge, selfApproved, dangling.inst, revoked.inst]);
+    expect([...verdict.trusted].sort()).toEqual(["i1", "i2", "i3"]);
+    expect(verdict.refused.get("i4")).toBe("approval signature does not verify");
+    expect(verdict.refused.get("i5")).toBe("approved without a signature or a challenge");
+    expect(verdict.refused.get("i6")).toBe("approved without a signature or a challenge");
+    expect(verdict.refused.get("i7")).toBe("a second unapproved instance");
+    expect(verdict.refused.get("i8")).toBe("approved by itself");
+    expect(verdict.refused.get("i9")).toBe("approver i-gone is not in the listing");
+    expect(verdict.refused.get("i10")).toBe("approver i4 is refused");
+    expect(verdict.refused.get("i11")).toBe("status is revoked");
   });
 
-  it("without the challenge a third party accepts the server's attestation; a dangling approver is a refusal only when no root is reached", () => {
-    const root = instance({ id: "i1" });
-    const approved = instance({ id: "i2", approvedByInstanceId: "i1", approvalSignature: "A".repeat(88) });
-    const chained = instance({ id: "i3", approvedByInstanceId: "i2", approvalSignature: "A".repeat(88) });
-    const orphan = instance({ id: "i9", approvedByInstanceId: "i7", approvalSignature: "A".repeat(88) });
-    const verdict = verifyInstanceChain([root, approved, chained, orphan] as PublicInstance[]);
-    expect([...verdict.trusted].sort()).toEqual(["i1", "i2", "i3", "i9"]);
-  });
-
-  it("an instance approved by a since-revoked approver stays trusted (trust flows from the approval, not the approver's status)", () => {
+  it("an instance approved by a since-revoked approver stays trusted when the approver is in the listing (own account), and is refused when it is not (another account's active-only listing)", () => {
     const rootKey = generateSigningKey();
     const root = instance({ id: "i1", signingPublicKey: publicKeyBase64(rootKey), status: "revoked" });
-    const k2 = generateSigningKey();
-    const sig = signEnrollmentApproval(rootKey, { accountId: "acc", newInstanceId: "i2", newSigningPublicKey: publicKeyBase64(k2), challenge: "c" });
-    const second = instance({ id: "i2", signingPublicKey: publicKeyBase64(k2), approvedByInstanceId: "i1", approvalSignature: sig });
-    const verdict = verifyInstanceChain([root, second], new Map([["i2", "c"], ["key:i1", publicKeyBase64(rootKey)]]));
-    expect([...verdict.trusted]).toEqual(["i2"]);
-    // and with the approver's key known, a wrong signature is still refused
-    const bad = { ...second, approvalSignature: signEnrollmentApproval(generateSigningKey(), { accountId: "acc", newInstanceId: "i2", newSigningPublicKey: publicKeyBase64(k2), challenge: "c" }) };
-    expect(verifyInstanceChain([root, bad], new Map([["i2", "c"], ["key:i1", publicKeyBase64(rootKey)]])).trusted.size).toBe(0);
+    const second = approve(rootKey, "i1", "i2");
+    expect([...verifyInstanceChain([root, second.inst]).trusted]).toEqual(["i2"]);
+    const outside = verifyInstanceChain([second.inst]);
+    expect(outside.trusted.size).toBe(0);
+    expect(outside.refused.get("i2")).toBe("approver i1 is not in the listing");
+    // a revoked mid-chain approver: root → revoked i2 → i3 stays trusted
+    const third = approve(second.key, "i2", "i3");
+    const activeRoot = instance({ id: "i1", signingPublicKey: publicKeyBase64(rootKey) });
+    expect([...verifyInstanceChain([activeRoot, { ...second.inst, status: "revoked" }, third.inst]).trusted].sort()).toEqual(["i1", "i3"]);
+  });
+
+  it("a third party must see a bootstrap root: an active-only listing with no unapproved instance trusts nothing", () => {
+    const rootKey = generateSigningKey();
+    const second = approve(rootKey, "i1", "i2");
+    const verdict = verifyInstanceChain([second.inst] as PublicInstance[]);
+    expect(verdict.trusted.size).toBe(0);
   });
 });

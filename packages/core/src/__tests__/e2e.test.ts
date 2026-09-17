@@ -252,20 +252,90 @@ describe("end to end over the fake server", () => {
     await stopAll(alice, bob);
   });
 
-  it("(i) an instance whose approval chain is forged is skipped when adding", async () => {
+  it("(i) planted instances with a forged or absent signature are skipped when adding; a valid chain of depth 3 is accepted", async () => {
     const server = fakeServer();
     const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
-    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
-    const { generateSigningKey, publicKeyBase64 } = await import("../crypto/signing");
-    // a server-planted second "bootstrap" on Bob's account, with key packages ready
-    const planted = server.injectInstance({ accountId: "acc-bob-0001", signingPublicKey: publicKeyBase64(generateSigningKey()), approvedByInstanceId: null });
-    server.keyPackages.set(planted.id, [{ ciphersuite: 1, ref: "AAAA", data: "AAAA" }]);
+    const bobIos = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const { generateSigningKey, publicKeyBase64, signEnrollmentApproval } = await import("../crypto/signing");
+    const rootId = bobIos.client.instanceId!;
+    const root = server.instances.get(rootId)!;
+    // (1) a second "bootstrap" root; (2) approved by the root but signed by somebody else; (3) no signature at all
+    const plantedRoot = server.injectInstance({ accountId: "acc-bob-0001", signingPublicKey: publicKeyBase64(generateSigningKey()), approvedByInstanceId: null });
+    const forgedKey = generateSigningKey();
+    const forged = server.injectInstance({
+      accountId: "acc-bob-0001",
+      signingPublicKey: publicKeyBase64(forgedKey),
+      approvedByInstanceId: rootId,
+      approvalSignature: signEnrollmentApproval(generateSigningKey(), { accountId: "acc-bob-0001", newInstanceId: "x", newSigningPublicKey: publicKeyBase64(forgedKey), challenge: "Y2hhbGxlbmdl" }),
+      enrollmentChallenge: "Y2hhbGxlbmdl",
+    });
+    const unsigned = server.injectInstance({ accountId: "acc-bob-0001", signingPublicKey: publicKeyBase64(generateSigningKey()), approvedByInstanceId: rootId, approvalSignature: null, enrollmentChallenge: null });
+    for (const p of [plantedRoot, forged, unsigned]) server.keyPackages.set(p.id, [{ ciphersuite: 1, ref: `ref-${p.id}`, data: "AAAA" }]);
+    void root;
+    // a legitimate chain of depth 3: ios (root) approves desktop, desktop approves laptop
+    const bobDesktop = await makeClient(server, "acc-bob-0001", "Bob desktop", "desktop");
+    await bobIos.client.instance.refreshPending();
+    await bobIos.client.instance.approve(bobDesktop.client.instanceId!);
+    await waitFor(() => bobDesktop.client.instance.state() === "active");
+    const bobLaptop = await makeClient(server, "acc-bob-0001", "Bob laptop", "desktop");
+    await bobDesktop.client.instance.refreshPending();
+    await bobDesktop.client.instance.approve(bobLaptop.client.instanceId!);
+    await waitFor(() => bobLaptop.client.instance.state() === "active");
+    await waitFor(() => (server.keyPackages.get(bobLaptop.client.instanceId!)?.length ?? 0) > 0);
+    expect(server.instances.get(bobLaptop.client.instanceId!)!.enrollmentChallenge).not.toBeNull();
+
     const conv = await alice.client.conversations.createDirect("acc-bob-0001");
-    await waitJoined(bob, conv.id);
+    await waitJoined(bobIos, conv.id);
+    await waitJoined(bobDesktop, conv.id);
+    await waitJoined(bobLaptop, conv.id);
     const leaves = server.conversations.get(conv.id)!.leaves;
-    expect(leaves.has(planted.id)).toBe(false);
-    expect(server.keyPackages.get(planted.id)).toHaveLength(1); // never even claimed
-    await stopAll(alice, bob);
+    expect([...leaves.keys()].sort()).toEqual([alice.client.instanceId, rootId, bobDesktop.client.instanceId, bobLaptop.client.instanceId].sort());
+    for (const p of [plantedRoot, forged, unsigned]) {
+      expect(leaves.has(p.id)).toBe(false);
+      expect(server.keyPackages.get(p.id)).toHaveLength(1); // never even claimed
+    }
+    await alice.client.messages.send(conv.id, "to all three");
+    await waitForText(bobLaptop, conv.id, "to all three");
+    await stopAll(alice, bobIos, bobDesktop, bobLaptop);
+  });
+
+  it("(j) registration recovery: storage wiped, secret kept → 409 idempotency_conflict → the listed instance is adopted", async () => {
+    const server = fakeServer();
+    const secrets = new MemorySecrets();
+    const bob1 = await makeClient(server, "acc-bob-0001", "Bob", "ios", { storage: new MemoryStorage(), secrets });
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob1, conv.id);
+    const id = bob1.client.instanceId!;
+    await bob1.client.stop();
+    const bob2 = await makeClient(server, "acc-bob-0001", "Bob", "ios", { storage: new MemoryStorage(), secrets });
+    expect(bob2.client.instanceId).toBe(id);
+    expect(bob2.client.instance.state()).toBe("active");
+    expect(server.requestLog.some((r) => r.method === "POST" && r.path === "/v1/instances" && r.status === 409)).toBe(true);
+    expect(server.instancesOf("acc-bob-0001")).toHaveLength(1);
+    // the wiped store lost the group state; the leaf exists server-side, so the conversation is listed but not readable
+    await waitFor(() => bob2.client.conversations.get(conv.id) !== undefined);
+    expect(bob2.client.conversations.get(conv.id)?.joined).toBe(false);
+    // a key that matches no live instance is refused rather than silently re-registered
+    server.instances.get(id)!.status = "revoked";
+    const bob3 = await makeClient(server, "acc-bob-0001", "Bob", "ios", { storage: new MemoryStorage(), secrets }, false);
+    const { InvalidStateError } = await import("../errors");
+    await expect(bob3.client.start()).rejects.toBeInstanceOf(InvalidStateError);
+    await stopAll(alice, bob2);
+  });
+
+  it("(k) push token registration goes to PUT/DELETE /v1/instances/me/push, signed", async () => {
+    const server = fakeServer();
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    await bob.client.instance.setPushToken("apns", "device-token-1");
+    const inst = server.instances.get(bob.client.instanceId!)!;
+    expect(inst.pushToken).toBe("device-token-1");
+    expect(inst.pushProvider).toBe("apns");
+    await bob.client.instance.clearPushToken();
+    expect(inst.pushToken).toBeNull();
+    const calls = server.requestLog.filter((r) => r.path === "/v1/instances/me/push");
+    expect(calls.map((c) => [c.method, c.status, c.instanceId])).toEqual([["PUT", 204, inst.id], ["DELETE", 204, inst.id]]);
+    await stopAll(bob);
   });
 });
 
