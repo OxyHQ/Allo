@@ -1,0 +1,286 @@
+import { describe, expect, it } from "vitest";
+import { fakeServer, flush, makeClient, stopAll, texts, waitFor, waitForText, waitJoined } from "./e2eHelpers";
+import { bytesEqual, bytesInclude, utf8Encode } from "../util/bytes";
+import { sleep } from "../util/async";
+import { MemorySecrets, MemoryStorage } from "../testing/memoryAdapters";
+
+describe("end to end over the fake server", () => {
+  it("(a) DM: text both ways, edit, delete, reaction, read receipt, rename", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice web", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    expect(alice.client.instance.state()).toBe("active");
+    expect(bob.client.instance.state()).toBe("active");
+
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    expect(conv.kind).toBe("dm");
+    expect(conv.joined).toBe(true);
+    await waitJoined(bob, conv.id);
+
+    const aliceKey = await alice.client.messages.send(conv.id, "hi bob");
+    const pendingEcho = alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey);
+    expect(pendingEcho?.sendState).toBe("pending");
+    const onBob = await waitForText(bob, conv.id, "hi bob");
+    expect(onBob.isOwn).toBe(false);
+    expect(onBob.senderAccountId).toBe("acc-alice-01");
+    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey)?.sendState === "accepted");
+    const accepted = alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey)!;
+    expect(accepted.id).toBe(onBob.id);
+    expect(alice.client.messages.timeline(conv.id).filter((i) => i.content.kind === "text")).toHaveLength(1);
+
+    await bob.client.messages.send(conv.id, "hi alice", { replyTo: onBob.id });
+    const reply = await waitForText(alice, conv.id, "hi alice");
+    expect(reply.replyTo).toBe(onBob.id);
+
+    // no plaintext reached the server
+    for (const e of server.eventsOf(conv.id)) {
+      expect(bytesInclude(utf8Encode(e.payload), utf8Encode("hi bob"))).toBe(false);
+    }
+
+    await alice.client.messages.edit(conv.id, accepted.id, "hi bob (edited)");
+    await waitForText(bob, conv.id, "hi bob (edited)");
+    expect(bob.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.content).toEqual({ kind: "text", body: "hi bob (edited)", isEdited: true });
+
+    await bob.client.messages.react(conv.id, accepted.id, "👍");
+    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.reactions.length === 1);
+    expect(alice.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.reactions).toEqual([{ key: "👍", accountIds: ["acc-bob-0001"] }]);
+    await bob.client.messages.react(conv.id, accepted.id, "👍");
+    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.reactions.length === 0);
+
+    // read receipt: bob marks read → alice's message shows read
+    expect(bob.client.conversations.get(conv.id)?.unreadCount).toBe(1);
+    await bob.client.messages.markRead(conv.id);
+    expect(bob.client.conversations.get(conv.id)?.unreadCount).toBe(0);
+    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.sendState === "read");
+
+    await alice.client.messages.remove(conv.id, accepted.id);
+    await waitFor(() => bob.client.messages.timeline(conv.id).find((i) => i.id === accepted.id)?.content.kind === "deleted");
+
+    await alice.client.conversations.rename(conv.id, "Us two");
+    await waitFor(() => bob.client.conversations.get(conv.id)?.title === "Us two");
+    expect(alice.client.conversations.get(conv.id)?.title).toBe("Us two");
+    expect(alice.client.conversations.list().map((c) => c.id)).toEqual([conv.id]);
+
+    await stopAll(alice, bob);
+  });
+
+  it("(b) second device: pending → approved by Bob-ios → added by the elector → sees Alice's next message; its message reaches Bob-ios", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bobIos = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bobIos, conv.id);
+    await alice.client.messages.send(conv.id, "before desktop");
+    await waitForText(bobIos, conv.id, "before desktop");
+
+    const bobDesktop = await makeClient(server, "acc-bob-0001", "Bob desktop", "desktop");
+    expect(bobDesktop.client.instance.state()).toBe("pending-approval");
+    await bobIos.client.instance.refreshPending();
+    const pending = bobIos.client.instance.pending();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].instance.id).toBe(bobDesktop.client.instanceId);
+    expect(pending[0].fingerprint).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){3}$/);
+    // a wrong challenge is refused before anything is signed
+    await expect(bobIos.client.instance.approve(pending[0].instance.id, "not-the-challenge")).rejects.toThrow(/challenge/);
+    await bobIos.client.instance.approve(pending[0].instance.id, pending[0].challenge);
+    await waitFor(() => bobDesktop.client.instance.state() === "active");
+    // desktop uploads key packages once active; then the elector (Bob-ios, lowest id) adds it
+    await waitFor(() => (server.keyPackages.get(bobDesktop.client.instanceId!)?.length ?? 0) > 0);
+    await bobIos.client.sync.now();
+    await waitJoined(bobDesktop, conv.id, 10_000);
+    expect(bobDesktop.client.messages.timeline(conv.id).filter((i) => i.content.kind === "text")).toHaveLength(0); // history before the join is not readable
+
+    await alice.client.messages.send(conv.id, "after desktop");
+    await waitForText(bobIos, conv.id, "after desktop");
+    await waitForText(bobDesktop, conv.id, "after desktop");
+
+    await bobDesktop.client.messages.send(conv.id, "from desktop");
+    await waitForText(bobIos, conv.id, "from desktop");
+    await waitForText(alice, conv.id, "from desktop");
+    expect(bobIos.client.messages.timeline(conv.id).find((i) => i.content.kind === "text" && i.content.body === "from desktop")?.isOwn).toBe(true);
+    expect(alice.client.conversations.get(conv.id)?.epoch).toBe(bobDesktop.client.conversations.get(conv.id)?.epoch);
+    await stopAll(alice, bobIos, bobDesktop);
+  });
+
+  it("(c) offline catch-up: 20 messages while disconnected arrive in order after reconnect", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    server.setOffline(bob.client.instanceId!, true);
+    await waitFor(() => bob.client.sync.state() !== "live");
+    for (let i = 1; i <= 20; i++) await alice.client.messages.send(conv.id, `m${i}`);
+    await alice.client.sync.flush();
+    await sleep(50);
+    expect(texts(bob.client.messages.timeline(conv.id))).toHaveLength(0);
+    server.setOffline(bob.client.instanceId!, false);
+    await waitFor(() => texts(bob.client.messages.timeline(conv.id)).length === 20, 10_000);
+    expect(texts(bob.client.messages.timeline(conv.id))).toEqual(Array.from({ length: 20 }, (_, i) => `m${i + 1}`));
+    await stopAll(alice, bob);
+  });
+
+  it("(d) revocation: the remaining leaf removes the revoked one; its state cannot read what follows", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bobIos = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bobIos, conv.id);
+    const bobDesktop = await makeClient(server, "acc-bob-0001", "Bob desktop", "desktop");
+    await bobIos.client.instance.refreshPending();
+    await bobIos.client.instance.approve(bobDesktop.client.instanceId!);
+    await waitFor(() => bobDesktop.client.instance.state() === "active");
+    await waitFor(() => (server.keyPackages.get(bobDesktop.client.instanceId!)?.length ?? 0) > 0);
+    await bobIos.client.sync.now();
+    await waitJoined(bobDesktop, conv.id, 10_000);
+    await waitFor(() => alice.client.conversations.get(conv.id)!.epoch === bobDesktop.client.conversations.get(conv.id)!.epoch);
+    const epochBefore = alice.client.conversations.get(conv.id)!.epoch;
+
+    await bobDesktop.client.instance.revoke(bobIos.client.instanceId!);
+    await waitFor(() => bobIos.client.instance.state() === "revoked");
+    // desktop (the remaining leaf of the account) commits the Remove; alice processes it
+    await waitFor(() => alice.client.conversations.get(conv.id)!.epoch === epochBefore + 1, 10_000);
+    const leaves = server.conversations.get(conv.id)!.leaves;
+    expect(leaves.get(bobIos.client.instanceId!)?.state).toBe("removed");
+
+    await alice.client.messages.send(conv.id, "after revoke");
+    await waitForText(bobDesktop, conv.id, "after revoke");
+    // the revoked instance received nothing and its group state, even fed the ciphertext directly, cannot decrypt
+    await sleep(50);
+    expect(texts(bobIos.client.messages.timeline(conv.id))).not.toContain("after revoke");
+    const ev = server.eventsOf(conv.id).filter((e) => e.kind === "app_message").pop()!;
+    const { CryptoEngine } = await import("../crypto/engine");
+    const { AtRestCipher } = await import("../crypto/atRest");
+    const { AlloStore } = await import("../storage/store");
+    const { Namespace } = await import("../storage/namespace");
+    const { base64Decode } = await import("../util/bytes");
+    const engine = await CryptoEngine.create();
+    const cipher = await AtRestCipher.open(bobIos.secrets, "acc-bob-0001", "allo");
+    const store = new AlloStore(bobIos.storage, cipher, new Namespace("allo", "acc-bob-0001")).forInstance(bobIos.client.instanceId!);
+    const stateBytes = (await store.getBytes("groupState", conv.id))!;
+    const state = engine.deserializeGroup(stateBytes);
+    await expect(engine.processIncoming(state, base64Decode(ev.payload))).rejects.toThrow();
+    await stopAll(alice, bobIos, bobDesktop);
+  });
+
+  it("(e) epoch conflict: two concurrent adds of Carol → one 409, resync, Carol added exactly once, all agree", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const carol = await makeClient(server, "acc-carol-01", "Carol", "android");
+    const group = await alice.client.conversations.createGroup(["acc-bob-0001"]);
+    await waitJoined(bob, group.id);
+    await Promise.all([alice.client.conversations.addMember(group.id, "acc-carol-01"), bob.client.conversations.addMember(group.id, "acc-carol-01")]);
+    await flush(alice, bob);
+    await waitJoined(carol, group.id, 10_000);
+    await flush(alice, bob, carol);
+    expect(server.requestLog.some((r) => r.status === 409)).toBe(true);
+    const carolLeaves = [...server.conversations.get(group.id)!.leaves.entries()].filter(([, l]) => l.accountId === "acc-carol-01");
+    expect(carolLeaves).toHaveLength(1);
+    expect(server.eventsOf(group.id).filter((e) => e.kind === "mls_commit")).toHaveLength(2); // initial add of bob, the winning carol add; the loser's retry found Carol present and was dropped
+    const epochs = [alice, bob, carol].map((c) => c.client.conversations.get(group.id)!.epoch);
+    expect(new Set(epochs).size).toBe(1);
+    await alice.client.messages.send(group.id, "three of us");
+    await waitForText(bob, group.id, "three of us");
+    await waitForText(carol, group.id, "three of us");
+    await stopAll(alice, bob, carol);
+  });
+
+  it("(f) restart: a client recreated on the same storage keeps its instance and timeline and can send", async () => {
+    const server = fakeServer();
+    const storage = new MemoryStorage();
+    const secrets = new MemorySecrets();
+    const alice1 = await makeClient(server, "acc-alice-01", "Alice", "web", { storage, secrets });
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice1.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    await alice1.client.messages.send(conv.id, "one");
+    await bob.client.messages.send(conv.id, "two");
+    await waitForText(alice1, conv.id, "two");
+    const instanceId = alice1.client.instanceId;
+    await alice1.client.stop();
+
+    const alice2 = await makeClient(server, "acc-alice-01", "Alice", "web", { storage, secrets });
+    expect(alice2.client.instanceId).toBe(instanceId);
+    expect(alice2.client.instance.state()).toBe("active");
+    expect(server.instancesOf("acc-alice-01")).toHaveLength(1);
+    expect(texts(alice2.client.messages.timeline(conv.id))).toEqual(["one", "two"]);
+    await alice2.client.messages.send(conv.id, "three");
+    await waitForText(bob, conv.id, "three");
+    await bob.client.messages.send(conv.id, "four");
+    await waitForText(alice2, conv.id, "four");
+    // secrets and storage never hold the plaintext or the raw signing key
+    expect(bytesInclude(storage.dump(), utf8Encode("three"))).toBe(false);
+    const rawKey = (await secrets.get(`allo.instance-key.acc-alice-01.allo`))!;
+    expect(bytesInclude(storage.dump(), rawKey)).toBe(false);
+    await stopAll(alice2, bob);
+  });
+
+  it("(g) media round trip", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    const bytes = new Uint8Array(5000).map((_, i) => (i * 7) & 0xff);
+    await alice.client.media.upload(conv.id, bytes, { kind: "file", filename: "data.bin", mime: "application/octet-stream", caption: "cap" });
+    await waitFor(() => bob.client.messages.timeline(conv.id).some((i) => i.content.kind === "media"));
+    const item = bob.client.messages.timeline(conv.id).find((i) => i.content.kind === "media")!;
+    const media = (item.content as { media: { ref: { blobId: string; conversationId: string }; size: number; caption?: string } }).media;
+    expect(media.size).toBe(5000);
+    expect(media.caption).toBe("cap");
+    const got = await bob.client.media.download(media.ref);
+    expect(bytesEqual(got, bytes)).toBe(true);
+    // the server holds ciphertext only
+    const blob = server.blobs.get(media.ref.blobId)!;
+    expect(bytesInclude(blob.bytes, bytes.subarray(0, 64))).toBe(false);
+    await stopAll(alice, bob);
+  });
+
+  it("(h) a DM created twice returns the same conversation", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const a = await alice.client.conversations.createDirect("acc-bob-0001");
+    const again = await alice.client.conversations.createDirect("acc-bob-0001");
+    expect(again.id).toBe(a.id);
+    await waitJoined(bob, a.id);
+    const fromBob = await bob.client.conversations.createDirect("acc-alice-01");
+    expect(fromBob.id).toBe(a.id);
+    expect(server.conversations.size).toBe(1);
+    expect(alice.client.conversations.list()).toHaveLength(1);
+    await stopAll(alice, bob);
+  });
+
+  it("(i) an instance whose approval chain is forged is skipped when adding", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const { generateSigningKey, publicKeyBase64 } = await import("../crypto/signing");
+    // a server-planted second "bootstrap" on Bob's account, with key packages ready
+    const planted = server.injectInstance({ accountId: "acc-bob-0001", signingPublicKey: publicKeyBase64(generateSigningKey()), approvedByInstanceId: null });
+    server.keyPackages.set(planted.id, [{ ciphersuite: 1, ref: "AAAA", data: "AAAA" }]);
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    const leaves = server.conversations.get(conv.id)!.leaves;
+    expect(leaves.has(planted.id)).toBe(false);
+    expect(server.keyPackages.get(planted.id)).toHaveLength(1); // never even claimed
+    await stopAll(alice, bob);
+  });
+});
+
+describe("contract details", () => {
+  it("a DM with an account the server has never seen fails with NotFoundError; one whose instances are all revoked is created with no other leaf", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const { NotFoundError } = await import("../errors");
+    await expect(alice.client.conversations.createDirect("acc-nobody-01")).rejects.toBeInstanceOf(NotFoundError);
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    await bob.client.instance.revoke(bob.client.instanceId!);
+    await waitFor(() => bob.client.instance.state() === "revoked");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    expect(conv.joined).toBe(true);
+    expect(server.conversations.get(conv.id)!.leaves.size).toBe(1);
+    await stopAll(alice, bob);
+  });
+});
