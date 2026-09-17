@@ -45,6 +45,7 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
+        "@allo/core": "file:../core",
         "@types/express": "^4.17.21",
         "@types/supertest": "^6.0.3",
         "drizzle-kit": "0.31.10",
@@ -2914,6 +2915,10 @@
 
     "zxing-wasm": ["zxing-wasm@3.1.0", "", { "dependencies": { "@types/emscripten": "^1.41.5", "type-fest": "^5.7.0" } }, "sha512-5+3V1wPRx4gvbeLH2jB7n2cKrYJ1q4i3QgjnBUtrDPeqxJSi6BdzKJg4y6aF6bgW8zfntnYJyrkqFMevDhL2NA=="],
 
+    "@allo/backend/@allo/core": ["@allo/core@file:packages/core", { "dependencies": { "@allo/shared-types": "file:../shared-types", "@hpke/common": "1.10.1", "@hpke/core": "1.9.0", "@hpke/dhkem-x25519": "1.8.0", "@noble/ciphers": "^2.2.0", "@noble/curves": "^2.2.0", "@noble/hashes": "^2.2.0", "socket.io-client": "^4.8.3", "ts-mls": "1.6.4", "zod": "^4.4.3" }, "devDependencies": { "@types/node": "^24.9.2", "typescript": "^5.9.3", "vitest": "^4.1.10" } }],
+
+    "@allo/backend/@allo/shared-types": ["@allo/shared-types@file:packages/shared-types", { "dependencies": { "zod": "^4.4.3" }, "devDependencies": { "@types/node": "^24.9.2", "typescript": "^5.9.3", "vitest": "^4.1.10" } }],
+
     "@asamuzakjp/css-color/lru-cache": ["lru-cache@10.4.3", "", {}, "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="],
 
     "@babel/code-frame/@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
@@ -3593,6 +3598,8 @@
     "wrap-ansi-cjs/ansi-styles": ["ansi-styles@4.3.0", "", { "dependencies": { "color-convert": "^2.0.1" } }, "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg=="],
 
     "zxing-wasm/type-fest": ["type-fest@5.7.0", "", { "dependencies": { "tagged-tag": "^1.0.0" } }, "sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg=="],
+
+    "@allo/backend/@allo/core/@allo/shared-types": ["@allo/shared-types@file:packages/shared-types", {}],
 
     "@babel/core/@babel/helper-compilation-targets/@babel/compat-data": ["@babel/compat-data@7.28.6", "", {}, "sha512-2lfu57JtzctfIrcGMz992hyLlByuzgIk58+hhGCxjKZ3rWI82NnVLjXcaTqkI2NvlcvOskZaiZ5kjUALo3Lpxg=="],
 

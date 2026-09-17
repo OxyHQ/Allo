@@ -46,6 +46,16 @@ export const clientInstanceSchema = z.object({
   /** `null` for the bootstrap instance, which nobody approved. */
   approvedByInstanceId: instanceIdSchema.nullable(),
   approvalSignature: ed25519SignatureSchema.nullable(),
+  /**
+   * The challenge the approval signature was made over, published once the
+   * instance is approved so that ANY client can verify the chain
+   * (`enrollmentApprovalMessage` needs it). `null` for the bootstrap instance
+   * and while an enrollment is still pending: the challenge is secret only
+   * until it has been signed. Without it a verifier would have to trust the
+   * server's word that an instance was approved, which is the one thing the
+   * chain exists to make unnecessary.
+   */
+  enrollmentChallenge: enrollmentChallengeSchema.nullable(),
   createdAt: isoDateSchema,
 });
 export type ClientInstance = z.infer<typeof clientInstanceSchema>;
@@ -62,6 +72,7 @@ export const publicInstanceSchema = clientInstanceSchema.pick({
   signingPublicKey: true,
   approvedByInstanceId: true,
   approvalSignature: true,
+  enrollmentChallenge: true,
   status: true,
 });
 export type PublicInstance = z.infer<typeof publicInstanceSchema>;

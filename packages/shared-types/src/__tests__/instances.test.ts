@@ -28,6 +28,7 @@ const instance: ClientInstance = {
   lastSeenAt: null,
   approvedByInstanceId: null,
   approvalSignature: null,
+  enrollmentChallenge: null,
   createdAt: ISO,
 };
 
@@ -35,8 +36,19 @@ describe("clientInstanceSchema", () => {
   it("accepts a bootstrap instance and one approved by another", () => {
     expect(clientInstanceSchema.safeParse(instance).success).toBe(true);
     expect(
-      clientInstanceSchema.safeParse({ ...instance, approvedByInstanceId: UUID_V7, approvalSignature: SIGNATURE }).success,
+      clientInstanceSchema.safeParse({
+        ...instance,
+        approvedByInstanceId: UUID_V7,
+        approvalSignature: SIGNATURE,
+        enrollmentChallenge: "Q".repeat(43),
+      }).success,
     ).toBe(true);
+  });
+  it("publishes the challenge an approval was signed over, so any client can verify the chain", () => {
+    expect(clientInstanceSchema.safeParse({ ...instance, enrollmentChallenge: "not base64url!" }).success).toBe(false);
+    expect(publicInstanceSchema.parse({ ...instance, enrollmentChallenge: "Q".repeat(43) }).enrollmentChallenge).toBe(
+      "Q".repeat(43),
+    );
   });
   it("rejects a missing nullable field, a bad status and a short key", () => {
     const { revokedAt: _omit, ...missing } = instance;
@@ -50,7 +62,17 @@ describe("publicInstanceSchema", () => {
   it("strips displayName and timestamps from a full instance", () => {
     const parsed = publicInstanceSchema.parse(instance);
     expect(Object.keys(parsed).sort()).toEqual(
-      ["accountId", "appId", "approvalSignature", "approvedByInstanceId", "id", "platform", "signingPublicKey", "status"].sort(),
+      [
+        "accountId",
+        "appId",
+        "approvalSignature",
+        "approvedByInstanceId",
+        "enrollmentChallenge",
+        "id",
+        "platform",
+        "signingPublicKey",
+        "status",
+      ].sort(),
     );
     const _typed: PublicInstance = parsed;
     expect("displayName" in parsed).toBe(false);

@@ -129,11 +129,11 @@ approval. `RegisterInstanceResponse` refuses a pending answer without a
 challenge and an active one with one.
 
 `ClientInstance` (own account's view) carries `enrolledAt`, `revokedAt`,
-`lastSeenAt`, `approvedByInstanceId` and `approvalSignature` as
+`lastSeenAt`, `approvedByInstanceId`, `approvalSignature` and `enrollmentChallenge` (published once approved, `null` before and for the bootstrap instance) as
 always-present, nullable fields, mirroring the columns behind them.
 `PublicInstance` (another account's view) is the subset needed to verify an
 enrollment chain and address an MLS leaf: id, accountId, appId, platform,
-signingPublicKey, approvedByInstanceId, approvalSignature, status.
+signingPublicKey, approvedByInstanceId, approvalSignature, enrollmentChallenge, status.
 
 `revoke` may be called by any active instance of the account, or by the
 instance on itself. It marks every active leaf of the instance for removal and
