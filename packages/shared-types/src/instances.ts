@@ -16,6 +16,7 @@ import {
   instanceIdSchema,
   isoDateSchema,
   platformSchema,
+  x25519PublicKeySchema,
 } from "./common";
 
 export const INSTANCE_STATUSES = ["pending", "active", "revoked"] as const;
@@ -39,6 +40,14 @@ export const clientInstanceSchema = z.object({
   displayName: displayNameSchema,
   /** Raw 32-byte Ed25519 public key, base64. */
   signingPublicKey: ed25519PublicKeySchema,
+  /**
+   * Raw 32-byte X25519 public key, base64: what a donor instance seals an
+   * archive key to when it offers this instance its history. `null` on an
+   * instance registered before the field existed, until it calls
+   * `PUT /v1/instances/me/transfer-key`; an offer to such an instance is
+   * refused with `transfer_key_missing`.
+   */
+  transferPublicKey: x25519PublicKeySchema.nullable(),
   status: instanceStatusSchema,
   enrolledAt: isoDateSchema.nullable(),
   revokedAt: isoDateSchema.nullable(),
@@ -70,6 +79,7 @@ export const publicInstanceSchema = clientInstanceSchema.pick({
   appId: true,
   platform: true,
   signingPublicKey: true,
+  transferPublicKey: true,
   approvedByInstanceId: true,
   approvalSignature: true,
   enrollmentChallenge: true,
@@ -83,6 +93,8 @@ export const registerInstanceRequestSchema = z.object({
   platform: platformSchema,
   displayName: displayNameSchema,
   signingPublicKey: ed25519PublicKeySchema,
+  /** Required: every instance registered from now on can receive history. */
+  transferPublicKey: x25519PublicKeySchema,
 });
 export type RegisterInstanceRequest = z.infer<typeof registerInstanceRequestSchema>;
 
@@ -153,6 +165,15 @@ export const setPushTokenRequestSchema = z.object({
   token: z.string().min(1).max(1024),
 });
 export type SetPushTokenRequest = z.infer<typeof setPushTokenRequestSchema>;
+
+/**
+ * `PUT /v1/instances/me/transfer-key` — for an instance registered before
+ * `transferPublicKey` existed. Answers with the instance, after.
+ */
+export const setTransferKeyRequestSchema = z.object({
+  transferPublicKey: x25519PublicKeySchema,
+});
+export type SetTransferKeyRequest = z.infer<typeof setTransferKeyRequestSchema>;
 
 /**
  * Domain separator of the enrollment approval signature. Its presence is what

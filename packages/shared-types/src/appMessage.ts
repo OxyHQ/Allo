@@ -88,6 +88,16 @@ export const readMessageSchema = z.object({
   t: z.literal("read"),
   upTo: eventRefSchema,
 });
+/**
+ * A delivery receipt, sent by a RECEIVING instance once it has imported
+ * everything up to `upTo`. Encrypted like `read`, so the server learns
+ * nothing; a receiver acts on it only when it comes from another account.
+ */
+export const deliveredMessageSchema = z.object({
+  v,
+  t: z.literal("delivered"),
+  upTo: eventRefSchema,
+});
 export const mediaMessageSchema = z.object({
   v,
   t: z.literal("media"),
@@ -126,6 +136,7 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   deleteMessageSchema,
   reactionMessageSchema,
   readMessageSchema,
+  deliveredMessageSchema,
   mediaMessageSchema,
   conversationMessageSchema,
   typingMessageSchema,

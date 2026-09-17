@@ -10,10 +10,11 @@ import {
   registerInstanceRequestSchema,
   registerInstanceResponseSchema,
   setPushTokenRequestSchema,
+  setTransferKeyRequestSchema,
   type ClientInstance,
   type PublicInstance,
 } from "../instances";
-import { CHALLENGE, ISO, OBJECT_ID, PUBKEY, SIGNATURE, UUID_V7 } from "./fixtures";
+import { CHALLENGE, ISO, OBJECT_ID, PUBKEY, SIGNATURE, UUID_V7, XPUBKEY } from "./fixtures";
 
 const instance: ClientInstance = {
   id: UUID_V7,
@@ -22,6 +23,7 @@ const instance: ClientInstance = {
   platform: "ios",
   displayName: "Nate's phone",
   signingPublicKey: PUBKEY,
+  transferPublicKey: XPUBKEY,
   status: "active",
   enrolledAt: ISO,
   revokedAt: null,
@@ -56,6 +58,13 @@ describe("clientInstanceSchema", () => {
     expect(clientInstanceSchema.safeParse({ ...instance, status: "enabled" }).success).toBe(false);
     expect(clientInstanceSchema.safeParse({ ...instance, signingPublicKey: "AAAA" }).success).toBe(false);
   });
+  it("transferPublicKey is nullable (a Phase 2 row) but never absent, and is 44 base64 chars", () => {
+    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: null }).success).toBe(true);
+    const { transferPublicKey: _omit, ...missing } = instance;
+    expect(clientInstanceSchema.safeParse(missing).success).toBe(false);
+    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: "AAAA" }).success).toBe(false);
+    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: SIGNATURE }).success).toBe(false);
+  });
 });
 
 describe("publicInstanceSchema", () => {
@@ -72,10 +81,12 @@ describe("publicInstanceSchema", () => {
         "platform",
         "signingPublicKey",
         "status",
+        "transferPublicKey",
       ].sort(),
     );
     const _typed: PublicInstance = parsed;
     expect("displayName" in parsed).toBe(false);
+    expect(parsed.transferPublicKey).toBe(XPUBKEY);
   });
   it("rejects when the key is missing", () => {
     const { signingPublicKey: _omit, ...rest } = instance;
@@ -84,9 +95,15 @@ describe("publicInstanceSchema", () => {
 });
 
 describe("registerInstanceRequestSchema", () => {
-  const body = { appId: "allo", platform: "web", displayName: "Firefox", signingPublicKey: PUBKEY };
+  const body = { appId: "allo", platform: "web", displayName: "Firefox", signingPublicKey: PUBKEY, transferPublicKey: XPUBKEY };
   it("accepts a well-formed registration", () => {
     expect(registerInstanceRequestSchema.safeParse(body).success).toBe(true);
+  });
+  it("requires the transfer key: null and absent are both refused", () => {
+    const { transferPublicKey: _omit, ...without } = body;
+    expect(registerInstanceRequestSchema.safeParse(without).success).toBe(false);
+    expect(registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: null }).success).toBe(false);
+    expect(registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: "AAAA" }).success).toBe(false);
   });
   it("rejects an empty or 81-char display name and an unknown platform", () => {
     expect(registerInstanceRequestSchema.safeParse({ ...body, displayName: "" }).success).toBe(false);
@@ -119,6 +136,12 @@ describe("approve / list / pending / push", () => {
     expect(listInstancesResponseSchema.safeParse([instance]).success).toBe(false);
     expect(listPendingEnrollmentsResponseSchema.safeParse({ pending: [{ instance, challenge: CHALLENGE }] }).success).toBe(true);
     expect(listPendingEnrollmentsResponseSchema.safeParse({ pending: [{ instance }] }).success).toBe(false);
+  });
+  it("transfer key takes exactly a 44-char base64 key", () => {
+    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: XPUBKEY }).success).toBe(true);
+    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: null }).success).toBe(false);
+    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: SIGNATURE }).success).toBe(false);
+    expect(setTransferKeyRequestSchema.safeParse({}).success).toBe(false);
   });
   it("push token takes fcm|apns and 1..1024 chars", () => {
     expect(setPushTokenRequestSchema.safeParse({ provider: "fcm", token: "t" }).success).toBe(true);

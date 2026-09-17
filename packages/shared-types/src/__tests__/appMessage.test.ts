@@ -38,6 +38,8 @@ const valid: AppMessage[] = [
   { v: 1, t: "delete", target: ref },
   { v: 1, t: "reaction", target: ref, key: "👍", op: "add" },
   { v: 1, t: "read", upTo: ref },
+  { v: 1, t: "delivered", upTo: ref },
+  { v: 1, t: "delivered", upTo: local },
   media,
   { v: 1, t: "conversation", name: "Familia" },
   { v: 1, t: "conversation" },
@@ -69,6 +71,9 @@ describe("appMessageSchema", () => {
     expect(appMessageSchema.safeParse({ v: 1, t: "text", body: "x".repeat(MAX_TEXT_BODY_LENGTH + 1) }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: 1, t: "reaction", target: ref, key: "👍", op: "toggle" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: 1, t: "typing", on: "yes" }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: "delivered" }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: "delivered", upTo: UUID_V7 }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 2, t: "delivered", upTo: ref }).success).toBe(false);
     expect(appMessageSchema.safeParse({ ...media, kind: "gif" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ ...media, key: "short" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ ...media, sha256: SHA256.toUpperCase() }).success).toBe(false);
@@ -83,6 +88,15 @@ describe("encode / decode", () => {
       expect(JSON.parse(Buffer.from(bytes).toString("utf8"))).toEqual(m);
       expect(decodeAppMessage(bytes)).toEqual(m);
     }
+  });
+  it("a delivered receipt round-trips, and an unknown t still fails", () => {
+    const m: AppMessage = { v: 1, t: "delivered", upTo: ref };
+    const decoded = decodeAppMessage(encodeAppMessage(m));
+    expect(decoded).toEqual(m);
+    expect(decoded.t).toBe("delivered");
+    expect(() => decodeAppMessage(new TextEncoder().encode(JSON.stringify({ v: 1, t: "acked", upTo: ref })))).toThrow(
+      AppMessageDecodeError,
+    );
   });
   it("keeps non-ASCII text intact", () => {
     const m: AppMessage = { v: 1, t: "text", body: "ñandú 🦤 日本" };

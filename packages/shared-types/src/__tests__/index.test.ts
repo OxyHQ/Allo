@@ -18,6 +18,9 @@ describe("index re-exports every module", () => {
       "encodeCursor", // sync
       "uploadBlobResponseSchema", // blobs
       "decodeAppMessage", // appMessage
+      "decodeArchive", // archive
+      "createHistoryOfferRequestSchema", // historyOffers
+      "putBackupRequestSchema", // backups
     ] as const;
     for (const m of markers) expect(api[m], m).toBeDefined();
     expect(Object.keys(api).length).toBeGreaterThan(100);

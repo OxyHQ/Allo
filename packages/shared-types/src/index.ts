@@ -33,6 +33,15 @@ export * from "./blobs";
 // The E2EE application-message envelope (plaintext before MLS)
 export * from "./appMessage";
 
+// The E2EE history archive: payload, chunking, manifest and sealing constants
+export * from "./archive";
+
+// History offers between instances of one account
+export * from "./historyOffers";
+
+// Encrypted account backups unlocked by a recovery phrase
+export * from "./backups";
+
 // Legacy transport envelope + pagination, still used by the directory routes
 export * from "./api";
 

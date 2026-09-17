@@ -61,6 +61,8 @@ export const EMPTY_BODY_SHA256_HEX = "e3b0c44298fc1c149afbf4c8996fb92427ae41e464
 export const ed25519PublicKeySchema = z.base64().length(44);
 /** A 64-byte Ed25519 signature, base64: exactly 88 characters. */
 export const ed25519SignatureSchema = z.base64().length(88);
+/** A raw 32-byte X25519 public key, base64: exactly 44 characters (the instance transfer key). */
+export const x25519PublicKeySchema = z.base64().length(44);
 
 /** A non-negative integer that fits a JSON number exactly (epochs, seqs, sizes). */
 export const nonNegativeIntSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -79,6 +81,8 @@ export const ALLO_ERROR_CODES = [
   "key_packages_exhausted",
   "idempotency_conflict",
   "payload_too_large",
+  "transfer_key_missing",
+  "backup_not_found",
   "rate_limited",
   "unavailable",
   "internal",
