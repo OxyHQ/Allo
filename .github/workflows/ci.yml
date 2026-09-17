@@ -165,11 +165,9 @@ jobs:
       # `bun run --filter`, and not `bun test`: they are different runners and only
       # one of them works here. The script is jest under the jest-expo preset,
       # which is what strips the Flow types off React Native's entrypoint and
-      # resolves the `__mocks__` stand-in for the Matrix binding — a package whose
-      # entry calls into a native module no test process can load. Bun's own runner
-      # does neither, so `bun test` parses `react-native/index.js` raw and dies on
-      # `import typeof`. Everything except the four suites that need the binding's
-      # enum values at runtime does run under both.
+      # applies the `__mocks__` stand-ins for native modules no test process can
+      # load. Bun's own runner does neither, so `bun test` parses
+      # `react-native/index.js` raw and dies on `import typeof`.
       - name: Test frontend
         run: bun run --filter @allo/frontend test
 

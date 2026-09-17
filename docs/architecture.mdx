@@ -1,212 +1,252 @@
 ---
 title: Architecture
-description: Monorepo layout, frontend/backend split, and how the pieces wire together.
+description: The package graph, the backend module map and data model, realtime, and how it deploys.
 order: 1
 ---
 
 # Architecture
 
-Allo is a three-workspace monorepo managed with Bun. The split is intentional and strict: nothing in the frontend imports from the backend, and the only shared surface is `@allo/shared-types`.
+Allo is a Bun workspace monorepo with five packages. The messaging engine is
+an SDK the app consumes, not code inside the app; the backend is a modular
+monolith over Postgres that stores and relays ciphertext. The decision behind
+this shape is [ADR 0001](./adr/0001-clean-break-platform); the vocabulary is
+[Concepts](./platform/concepts).
 
-## Workspaces
+## Packages
 
 ```
 packages/
-  shared-types/   @allo/shared-types   TS-only, built first via postinstall
-  frontend/       @allo/frontend       Expo Router app (iOS / Android / Web)
-  backend/        @allo/backend        Express + Socket.IO + PostgreSQL
+  shared-types/   @allo/shared-types   the v1 wire contract: zod schemas and their types
+  core/           @allo/core           headless messaging SDK (MLS, instances, sync, outbox, storage)
+  react/          @allo/react          AlloProvider and hooks over @allo/core
+  frontend/       @allo/frontend       Expo Router app for iOS, Android and web
+  backend/        @allo/backend        Express, drizzle, Socket.IO
 ```
 
-Root `package.json` declares `workspaces: ["packages/*"]` and orchestrates with `bun run --filter`:
+```
+@allo/shared-types  <--  @allo/core  <--  @allo/react  <--  @allo/frontend
+                    <--  @allo/backend
+```
+
+`shared-types` has no internal dependency and no React. `core` imports
+nothing from React, Expo or React Native and runs under Node, browsers and
+Hermes. `react` is plain React with no React Native import, so Expo consumes
+it on every platform. The frontend consumes `@allo/react` for everything chat
+and carries no engine code of its own. The backend consumes `shared-types`
+only: it validates every `/v1` body and query with the same schemas the SDK
+parses answers with.
+
+The root `postinstall` builds `shared-types`, `core` and `react` in that
+order, so the other packages type-check right after `bun install`. The SDK is
+documented in [SDK](./platform/sdk), the contract in [API v1](./platform/api-v1).
+
+Root scripts:
 
 ```sh
-bun run dev                # all workspaces in parallel
+bun run dev                # every workspace
 bun run dev:frontend       # @allo/frontend only
 bun run dev:backend        # @allo/backend only
-bun run build              # build all
-bun run build:shared-types # rebuild types (runs on postinstall too)
+bun run build              # every workspace
 bun run typecheck          # backend then frontend, no emit
-bun run test               # all workspaces
+bun run test               # every workspace
 ```
 
-A root `lint` script exists but is not usable: the backend declares no `lint`, and `shared-types` declares one without shipping eslint or a config. Only the frontend lints.
+A root `lint` script exists but only the frontend has a working lint setup.
 
-## Dependency graph
-
-```
-@allo/shared-types  ◀── @allo/frontend
-                    ◀── @allo/backend
-```
-
-`shared-types` has zero internal deps. Both `frontend` and `backend` consume its compiled `dist/` output (the `postinstall` script in the root `package.json` makes sure the build is always fresh after `bun install`).
-
-External shared deps both halves pull from npm:
-
-- `@oxy.so/core` — auth client + types. Its `/server` entry point supplies the backend's auth, CORS and rate-limit middleware.
-- `@oxy.so/contracts` — shared API contracts
-- `@oxy.so/services` — RN auth context (frontend only)
-- `@oxy.so/bloom` — UI primitives (frontend only)
-- `@oxy.so/crowdsource*` — moderation pipeline (backend only)
+External shared dependencies: `@oxy.so/core` (auth client and types; its
+`/server` entry supplies the backend's auth, CORS and rate-limit middleware),
+`@oxy.so/db` (column helpers, uuid v7, the migrator), `@oxy.so/services` (the
+React Native session, frontend only), `@oxy.so/bloom` (UI, frontend only),
+`@oxy.so/crowdsource*` (moderation, backend only).
 
 ## Frontend
 
-`packages/frontend/` is an Expo SDK 57 app (React Native 0.86, React 19.2) using Expo Router for file-based routing. Highlights:
+`packages/frontend/` is an Expo Router app. Chat state comes from
+`@allo/react` hooks over one `AlloClient`; the client is constructed with
+three platform adapters (Oxy session, an encrypted-at-rest byte store, a
+secret store) described in [SDK](./platform/sdk). The frontend declares
+`@allo/core` and `@allo/react` as dependencies; the `lib/allo/` seam that
+constructs the client and the screens' move onto the hooks are the last step
+of the platform change, and the ADR's cutover checklist is where the lead
+records whether it is complete.
 
-| Area | Module |
-|------|--------|
-| Routing | `app/` (Expo Router 57, typed routes) |
-| Styling | NativeWind 5 preview (Tailwind for RN) + Bloom theme tokens |
-| State (UI) | Zustand stores in `stores/` |
-| State (server) | Custom hooks in `hooks/` over the offline-aware API client in `lib/api/` |
-| Encryption | `lib/signalProtocol.ts` + `stores/deviceKeysStore.ts` |
-| Offline cache | `lib/offlineStorage.ts` + `lib/offlineQueue/` (AsyncStorage) |
-| Secure storage | `lib/secureStorage.ts` (wraps `expo-secure-store`) |
-| Real-time | Socket.IO client (`lib/network/`) |
-| P2P | `lib/p2pMessaging.ts` (WebRTC data channels; not functional) |
-| Matrix | `lib/matrix/` — client port for the [migration](./matrix/client-strategy). Nothing imports it yet. |
-| i18n | `lib/i18n.ts` + `locales/` (en, es, it) |
-| Notifications | `expo-notifications`. The token POST has no server route — see [Push](#push-notifications). |
-
-### Responsive layout
-
-Breakpoints live in `constants/responsive.ts`:
-
-- `< 768px` — single-pane stack
-- `768 - 1023px` — list + thread two-pane
-- `>= 1024px` — list + thread + contact details three-pane
-
-One file does all three: `app/(chat)/_layout.tsx` reads both breakpoints and switches component trees at each boundary. The thread route it renders into is `app/(chat)/c/[id].tsx`; there is no `app/c/` group and no second layout.
-
-### Stores
-
-Zustand-backed stores in `stores/`:
-
-| Store | Responsibility |
-|-------|---------------|
-| `messagesStore` | In-memory + AsyncStorage-persisted decrypted message cache, keyed by conversation id. |
-| `conversationsStore` | List of conversations + denormalized last-message + unread counts. |
-| `deviceKeysStore` | Local device key bundle (public + private), regen / rotation triggers. |
-| `usersStore` | Resolved user profiles fetched from Oxy. |
-| `appearanceStore` | Theme mode + accent color. Mirrors backend `UserSettings.appearance`. |
-| `chatUIStore` | Transient UI: active conversation, draft text, scroll position. |
-| `messagePreferencesStore` | Per-conversation font size, density, mute state. |
-| `conversationSwipePreferencesStore` | User-customized swipe actions. |
-
-State that needs to survive launch goes through Zustand's persist middleware over AsyncStorage; ephemeral UI state lives in plain Zustand.
+Unchanged by the platform change: routing (`app/`), styling (NativeWind and
+Bloom theme tokens through `useTheme()`), the responsive layout in
+`app/(chat)/_layout.tsx`, i18n (`lib/i18n.ts`, flat bundles in `locales/`),
+profiles at `/@handle`, and the appearance and privacy settings screens.
 
 ## Backend
 
-`packages/backend/` is a single Express app + a Socket.IO server attached to the same HTTP server. Entry point is `server.ts`.
+`packages/backend/` is one Express app with a Socket.IO server on the same
+HTTP server. The shape is Mention's: pure assembly, fail-fast boot,
+migrations before readiness, transactional outbox, lease-claimed workers,
+graceful shutdown, sanitised logs.
+
+### Module map
 
 ```
-src/
-  config/       CrowdSource moderation configuration
-  db/           drizzle schema (db/schema/) and one repository per domain
-  routes/       Express routers mounted under /api
-  services/     the moderation pipeline (CrowdSource intake, outbox, workers)
-  types/        backend-only TS types
-  utils/        helpers (row → DTO serializers, logger, push, etc.)
-  __tests__/    vitest suites; the *.realdb.test.ts ones need a real Postgres
+server.ts                       bootstrap only: env, Postgres, migration ledger, sockets, workers, listen, ready
+src/app.ts                      createApp(deps): pure HTTP assembly, middleware order, the one error handler
+src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
+src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
+src/middleware/                 instanceAuth (Ed25519 request signature), oxySession, requestObservability
+src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs
+src/routes/                     the kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
+src/services/platform/          the rules: instances, key packages, conversations, events and sync, blobs, wire projections
+src/db/schema/                  one file per domain; CONVENTIONS.md is binding
+src/db/platform/                repositories; appendClientEvent is the event-log transaction
+src/workers/                    deliveryWorker, blobGc
+src/services/push/              FCM and APNs senders
+src/services/moderation/        the CrowdSource pipeline
+drizzle/                        generated migrations, one deploy-phase marker each
 ```
 
-There is no `middleware/` directory: auth, CORS and rate limiting all come from `@oxy.so/core/server`.
+**Runtime.** `createApp(deps)` never listens, never opens Postgres, never
+creates a Socket.IO server and never starts a timer; tests build fakes for
+its deps. Middleware order is the contract: request observability, CORS,
+health routes, the raw-body routes (`/webhooks` and `POST /v1/blobs`) ahead of
+`express.json({ verify })` which stashes the raw body for the signature,
+no-store headers, per-user rate limit, `/api` behind Oxy auth, `/v1` behind
+Oxy auth with the instance signature per route, a JSON 404, and one error
+handler that turns zod errors into `validation_failed`, `AlloHttpError` into
+its code, body-parser's 413 into `payload_too_large`, and everything else into
+`500 internal` with no message. `server.ts` boots in a fixed order and marks
+the process ready last; `markRuntimeReady` throws if migrations were not
+marked complete first. `GET /health/live` is always 200; `GET /health/ready`
+(and its alias `GET /api/health`) is 200 only when the phase is ready,
+migrations are verified and Postgres answers `select 1`. Shutdown drops
+readiness first, stops workers while Postgres is still open, then closes
+HTTP, sockets, the Redis adapter and the pool together, with a ten-second
+deadline.
 
-### Tables
+**Auth.** One way in: an Oxy bearer token, validated by `@oxy.so/core/server`
+and naming the account. Every route that acts as one installation also
+requires `X-Allo-Instance`, `X-Allo-Timestamp` and `X-Allo-Signature`, an
+Ed25519 signature by the instance's key over the method, request target,
+timestamp and raw-body digest (`middleware/instanceAuth.ts`). The three
+Oxy-only routes are register, list own instances and list another account's
+public instances. There is no user table; identity is Oxy's.
 
-Defined in `packages/backend/src/db/schema/`, one file per domain. There are no
-Mongoose models; the three that remained (`Conversation`, `Message`, `Device`)
-went with the messaging switch.
+**Instances and key packages** (`services/platform/instanceService.ts`,
+`keyPackageService.ts`): registration with the bootstrap rule, pending
+enrollments, approval by signature, rejection, revocation (which marks
+leaves removed, appends a control event, and disconnects sockets), push token
+registration; key package upload with unique refs and one-time claims that
+nudge an instance whose stock runs low.
 
-| Table | What it stores |
-|-------|---------------|
-| `conversations` | `direct` or `group`, plus the denormalised `last_message_*` preview |
-| `conversation_participants` | One membership per person: `role`, `joined_at`, `last_read_at`, `unread_count`, `archived_at` — the last two are Mongo's `unreadCounts` map and `archivedBy` list, moved onto the row they were always keyed by |
-| `messages` | Ciphertext, `sender_device_id`, `encryption_version`, `encrypted_media`, and the legacy plaintext columns |
-| `message_reads` / `message_deliveries` / `message_reactions` | The three Mongo `Map`s / arrays, as rows with unique indexes that give them idempotency the Maps got from their keys |
-| `devices` / `device_pre_keys` | Public key bundle per `(user_id, device_id)`; one-time pre-keys are a child table, so nothing joins them by accident |
-| `user_settings` | Per-user appearance, privacy, security (cloudSync toggle), profile customization |
-| `blocks` / `restricts` | Per-user block + restrict lists |
-| `user_behavior` | Per-user UX preferences / analytics counters |
-| `abuse_reports` | Account reports filed by users |
-| `moderation_events` / `moderation_outbox` / `moderation_enforcements` | The CrowdSource moderation pipeline's event log, transactional outbox and applied enforcement |
-| `bridge_*` | The Matrix bridge accounts, link sessions and proxy leases |
+**Conversations and events** (`conversationService.ts`, `eventService.ts`,
+`db/platform/eventRepository.ts`): DM idempotency on `dm_key`, group
+uniqueness on `mls_group_id`, the initial commit appended in the create
+transaction; `appendClientEvent` runs under `SELECT ... FOR UPDATE` on the
+conversation row and is where the epoch compare-and-set, the dense `seq`, the
+add and remove authorization, the welcome's separate event, the membership
+updates and the delivery rows are one write or none. Server-side leave writes
+a `member_left` control event.
 
-There is **no `User` model**. Identity is delegated to Oxy. The backend trusts the `req.user.id` populated by `@oxy.so/core`'s `oxy.auth()` middleware and stores everything keyed by that Oxy user id.
+**Deliveries and sync** (`db/platform/deliveryRepository.ts`): one
+`instance_deliveries` row per event and recipient, written in the event's
+transaction; `GET /v1/sync` walks an instance's rows by integer id and the
+cursor is that id in base64url; `POST /v1/sync/ack` marks everything up to it.
 
-### Authentication
+**Blobs** (`blobService.ts`, `db/platform/blobRepository.ts`): size cap
+(`ALLO_BLOB_MAX_BYTES`, default 25 MiB), digest check, a 32-random-byte hex
+id, bytes in `blob_bytes` behind a `BlobStore` interface so S3 can replace it.
 
-```ts
-import { oxyClient } from "@oxy.so/core";
-import { createOxyAuthMiddleware } from "@oxy.so/core/server";
+**Workers.** All started after Postgres is verified, all stopped in the
+drain before the pool closes, none leader-gated because every claim is
+`FOR UPDATE SKIP LOCKED`. The delivery worker (every second, batch 100) claims
+due deliveries under a lease and nudges a connected instance over the socket
+or, for an `app_message` to an instance with a push token and no live socket,
+sends "New message" with the conversation and event ids and nothing else; a
+transient failure backs off, a rejected token is cleared, a revoked
+instance's deliveries go dead. The expiry sweep (every minute) deletes rows
+past `expires_at`: deliveries after 30 days, unreferenced blobs after 7 days,
+moderation rows after 90. The blob collector (hourly) adds the case the sweep
+cannot express: unreferenced blobs of a revoked uploader. The moderation
+outbox dispatcher is unchanged.
 
-// Public routes
-publicApiRouter.get("/health", (req, res) => res.json({ status: "ok" }));
+**Kept modules.** The people directory (`routes/directory.ts`, a projection
+of Oxy profiles), profile settings and social (`routes/profileSettings.ts`,
+`db/social/`), moderation (`services/moderation/`, account reports only,
+`POST /api/reports`, the CrowdSource webhook), the push senders
+(`services/push/`, FCM and APNs, the latter HTTP/2 with an ES256 provider
+token and no library), and the ecosystem activity publisher.
 
-// Authenticated routes
-app.use("/api", publicApiRouter);
-app.use("/api", createOxyAuthMiddleware(oxyClient), authenticatedApiRouter);
-```
+### Data model
 
-`createOxyAuthMiddleware` validates the incoming `Authorization: Bearer <jwt>` against the Oxy API, populates `req.user = { id, ... }`, and rejects with 401 if the token is missing or invalid. Both routers mount on `/api`; the public one is registered first, so `/api/health` is reached before the auth middleware runs.
+Schema is `src/db/schema/`, one file per domain; `CONVENTIONS.md` there is
+binding (text ids, closed sets as CHECKs, `timestamptz`, no foreign keys to
+Oxy ids). Column-level detail is in the schema files' comments.
 
-There is no optional-auth middleware. Every route is either fully public or fully authenticated.
+| table | one line |
+| --- | --- |
+| `client_instances` | one row per installation: account, app, platform, raw Ed25519 public key (unique per account), status `pending`/`active`/`revoked`, the enrollment challenge, the approver and its signature, push provider and token (a protected column) |
+| `key_packages` | an instance's published MLS key packages, opaque, unique by ref, consumed at most once; gone with the instance |
+| `conversations` | kind `dm`/`group`, app, the unique `dm_key` for a DM, the unique MLS group id, `current_epoch` and `last_seq` advanced under the row lock |
+| `conversation_members` | one row per (conversation, account): role `owner`/`admin`/`member`, state `joined`/`left`/`removed`; rows are kept as membership history |
+| `conversation_leaves` | which instances hold a leaf: state `pending_welcome`/`active`/`removed`, the epoch added and the epoch removed |
+| `conversation_events` | the append-only log: dense `seq` per conversation, kind, epoch, sender, idempotency key (unique per sender instance), `payload` as ciphertext bytes or server-authored control JSON, declared `blob_ids` |
+| `instance_deliveries` | the outbox and the per-instance sync stream: a `bigserial` id (the one integer key, because it is the cursor), status, lease, attempts, expiry at 30 days |
+| `blobs` / `blob_bytes` | uploaded ciphertext: size, digest, uploader, `expires_at` cleared when an event references it; the bytes in their own table behind `BlobStore` |
+| `user_settings`, `blocks`, `restricts`, `user_behavior` | per-account settings and social lists, kept from before |
+| `abuse_reports`, `moderation_events`, `moderation_outbox`, `moderation_enforcements` | the CrowdSource pipeline, kept from before |
 
-### Real-time
+Four messaging columns are registered in `protectedColumns.ts` (beside the
+two moderation payload columns) so a listing cannot serialise them by
+accident: `client_instances.push_token`, `key_packages.data`,
+`conversation_events.payload` and `blob_bytes.data`. The push token never
+leaves the process; the readers that legitimately return the other three
+(the claim, the event and sync reads, the blob download) name them
+explicitly.
 
-The Socket.IO server lives on the same HTTP server. The `/messaging` namespace is the primary surface; the main namespace is reserved for ambient connection tracking.
+### Realtime
 
-Connection authentication mirrors REST — the client sends `{ token, userId }` in `socket.handshake.auth`. The middleware in `server.ts` populates `socket.user = { id }`; unauthenticated sockets are disconnected on connect.
+Socket.IO namespace `/v1` on the same HTTP server (`runtime/socket.ts`). Two
+handshake middlewares in order: `oxy.authSocket()`, then the instance
+signature over `handshake.auth` with the path fixed to `/socket` and an empty
+body, through the same function the HTTP middleware uses. A connected socket
+joins `instance:<id>` and `account:<accountId>`; the rooms are derived from
+the verified instance, never from client input.
 
-Each authenticated socket auto-joins `user:<userId>`. The client then sends `joinConversation` / `leaveConversation` to subscribe to per-thread rooms. The server broadcasts `newMessage`, `messageUpdated`, `messageDeleted`, and `typing` into the conversation room.
+The pattern is nudge, then pull. Nothing of substance travels over the
+socket: after an event's transaction commits, the server emits `sync.nudge`
+to each recipient instance's room, and the client answers by pulling
+`GET /v1/sync` from its persisted cursor. The nudge is the fast path and may
+be lost; the delivery rows are the durable path, and the delivery worker
+re-nudges or pushes whatever was not acked. The other server events are
+`instance.approved`, `instance.revoked`, `keypackages.low` and `presence`
+(best effort, to accounts sharing a conversation). The one client event is
+`typing`, an MLS ciphertext relayed to the conversation's other active leaves
+and stored nowhere.
 
-### Security middleware
+With `REDIS_URL` set, the Redis adapter lets a room emit on one ECS task reach
+a socket on another and lets the delivery worker ask whether an instance is
+connected anywhere. Without it, or when Redis cannot be reached in five
+seconds, the server runs single-instance and says so; Redis is not part of
+readiness.
 
-Allo writes none of its own. `server.ts` applies three middlewares from `@oxy.so/core/server`:
+Domain code emits through the `Realtime` seam (`runtime/realtime.ts`); with
+no server set, every call is a no-op, which is what tests and one-shot
+scripts get.
 
-- `createOxyCors({ appOrigins })` — the Oxy apex family (`*.oxy.so`) is admitted automatically; `appOrigins` adds the two local dev origins. The allowlist is a literal in `server.ts`, not an environment variable.
-- `createOxyRateLimit(oxyClient)` — resolves the session and applies per-user rate limiting in one pass, mounted before the API routers.
-- `createOxyAuthMiddleware(oxyClient)` — described above.
+## Build and deploy
 
-There **is** a database guard, and what it covers is narrower than its name suggests. `server.ts` mounts a middleware ahead of every route which answers `503 Database temporarily unavailable` when `ensurePostgresReachable()` rejects. That function probes the pool once and caches the result, so **after a successful probe it never rejects again**: a database that dies mid-life produces a `500`, and a client still cannot distinguish "retry shortly" from a real fault for the outage that actually happens in production.
+| target | command | output |
+| --- | --- | --- |
+| Web | `bun run build:frontend` | `packages/frontend/dist/`, the static assets of the Cloudflare Worker `allo-frontend` (`packages/frontend/wrangler.toml`), deployed by `.github/workflows/deploy-frontends.yml`. `workers_dev = false` keeps `allo.you` the only hostname serving it. |
+| iOS / Android | `eas build --platform ios` / `android` in `packages/frontend/` | EAS-managed `.ipa` / `.aab` |
+| Backend | `bun run build:backend` | `packages/backend/dist/`, shipped as a `linux/arm64` image from `packages/backend/Dockerfile`, pushed to ECR as `oxy/allo` and rolled out on ECS by `.github/workflows/deploy-aws.yml`. Port `8080` injected by ECS (`4140` is the local default). Public URL `api.allo.you`. |
 
-So it covers COLD START only. That is deliberate rather than an omission: a per-request `select 1` would put a round trip in front of every request including those that never touch a table, and if it ever backed a load-balancer health check it would turn a brief Postgres hiccup into the whole service being pulled out of the pool. A real readiness endpoint is a separate decision and does not exist yet.
+The deploy applies migrations in both phases: `--phase=pre` before the
+rollout (additive, while the old image still serves) and `--phase=post` after
+it (drops and narrowing). Every generated `.sql` carries exactly one
+`-- oxy:deploy-phase=` marker, and a wrong marker is applied at the wrong side
+of the rollout rather than merely mislabelled. `packages/backend/README.md`
+has the migrator commands, the environment and the test setup.
 
-It now covers the only store there is. Two earlier revisions of this page were each half right — one said no guard existed, the other described one covering Mongo, which by then was not the store most routes read. Both are corrected here rather than quietly, because a corrected document carrying a new inaccuracy is what makes the next reader stop checking.
+## Where this is going
 
-### Push notifications
-
-`utils/push.ts` can deliver through Firebase Admin, but nothing reaches it. The frontend posts its device token to `/notifications/push-token`, and **no notifications router is mounted**, so the call 404s and no `PushToken` document is ever created. `sendPushToUser` reads a collection that stays empty, and no route calls it. Push is inert on both ends.
-
-## Where this is going: Matrix
-
-Allo is migrating to Matrix, and this architecture is what it migrates off. The
-design lives in [`docs/matrix/`](./matrix/data-model) and deliberately precedes
-implementation.
-
-The REST + Socket.IO transport and the encryption in [Encryption](./encryption)
-are still what runs, and no Matrix code serves traffic. The storage layer HAS
-moved, separately from the Matrix work: every domain is on PostgreSQL via
-drizzle, and the Mongoose models are gone.
-
-The one piece of Matrix code in the tree is `packages/frontend/lib/matrix/`, a
-client port: an interface (`types.ts`) that may not import a Matrix SDK, a
-native implementation over `@unomed/react-native-matrix-sdk`, and a web half
-that throws `MatrixPlatformUnsupportedError` rather than pretending to work. No
-screen, hook or store imports any of it; its only callers are its own tests.
-
-Two spikes validated the decisions behind it. `spikes/matrix-web/` is complete
-and documented; of `spikes/matrix-rn/` only the generated `android/` project is
-committed, so the Android run it performed cannot be reproduced from the repo.
-
-## Shared types
-
-`packages/shared-types/` is a plain TypeScript package. `bun run build` emits `dist/` and the `postinstall` script in the root runs `bun run build:shared-types` so the latest types are always present after `bun install`. Both frontend and backend `import { … } from "@allo/shared-types"`.
-
-## Build & deploy
-
-| Target | Command | Output |
-|--------|---------|--------|
-| Web | `bun run build:frontend` | `packages/frontend/dist/`, uploaded as the static assets of the Cloudflare **Worker** `allo-frontend` (`packages/frontend/wrangler.toml`) by `.github/workflows/deploy-frontends.yml`. Not a Pages project: `workers_dev = false` is what keeps `allo.you` the only hostname serving it. |
-| iOS | `eas build --platform ios` in `packages/frontend/` | EAS-managed `.ipa` |
-| Android | `eas build --platform android` in `packages/frontend/` | EAS-managed `.aab` |
-| Backend | `bun run build:backend` | `packages/backend/dist/`. Shipped as a `linux/arm64` image built from `packages/backend/Dockerfile`, pushed to ECR and rolled out on AWS ECS by `.github/workflows/deploy-aws.yml` — see [the backend README](https://github.com/OxyHQ/Allo/blob/main/packages/backend/README.md#deployment). |
+[Roadmap](./platform/roadmap): history transfer and backup (Phase 3),
+Mention on the same SDK with app grants (Phase 4), external connectors on the
+connector contract (Phase 5), audit, load tests and launch (Phase 6). The
+acceptance tests of the issue and their status are tracked there.

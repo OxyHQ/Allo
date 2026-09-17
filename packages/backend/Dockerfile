@@ -42,6 +42,8 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
+COPY packages/core/package.json ./packages/core/
+COPY packages/react/package.json ./packages/react/
 COPY packages/frontend/package.json ./packages/frontend/
 
 # The root manifest's `patchedDependencies` is read and RESOLVED before --filter
@@ -52,16 +54,25 @@ COPY packages/frontend/package.json ./packages/frontend/
 # "Couldn't find patch file: 'patches/expo@57.0.6.patch'".
 COPY patches ./patches/
 
-# shared-types source must exist before install: the root "postinstall" script
-# builds it (bun run build:shared-types) as part of `bun install`.
+# The SDK workspaces' sources must exist before install: the root "postinstall"
+# script builds shared-types, core and react (in that order) as part of
+# `bun install`. The backend imports only shared-types at runtime; core is a
+# devDependency of the backend (its integration suite drives the real SDK
+# against the real app) and react is built only because the root postinstall
+# builds every SDK package the same way everywhere.
 COPY packages/shared-types ./packages/shared-types/
+COPY packages/core ./packages/core/
+COPY packages/react ./packages/react/
 
-# Install only the backend + shared-types workspaces (and shared root deps such
-# as @oxy.so/core). --frozen-lockfile guarantees the committed bun.lock is used
+# Install only the backend + SDK workspaces (and shared root deps such as
+# @oxy.so/core); the heavy expo/react-native frontend tree is never downloaded
+# into this image. --frozen-lockfile guarantees the committed bun.lock is used
 # verbatim, so the build is fully deterministic.
 RUN bun install --frozen-lockfile \
         --filter '@allo/backend' \
-        --filter '@allo/shared-types'
+        --filter '@allo/shared-types' \
+        --filter '@allo/core' \
+        --filter '@allo/react'
 
 # Copy backend source.
 COPY packages/backend ./packages/backend
