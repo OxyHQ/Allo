@@ -186,8 +186,8 @@ export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
     );
 
     const PlayPauseIcon = status.playing
-      ? Icons.Pause_Filled_Corner0_Rounded
-      : Icons.Play_Filled_Corner0_Rounded;
+      ? Icons.RiPauseFill
+      : Icons.RiPlayFill;
 
     return (
       <View style={styles.bubble}>

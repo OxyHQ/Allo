@@ -54,7 +54,7 @@
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
-    "@oxy.so/bloom": "^1.0.0",
+    "@oxy.so/bloom": "^2.0.0",
     "@oxy.so/contracts": "^1.1.1",
     "@oxy.so/core": "^1.1.2",
     "@oxy.so/expo-splash": "^1.0.0",
