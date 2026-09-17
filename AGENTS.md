@@ -26,6 +26,13 @@ still serving, `post` drops and narrows and lands only once the new one has
 rolled. A migration whose marker is wrong is therefore applied at the wrong side
 of the rollout rather than merely mislabelled.
 
+**The boot gate knows the contract.** In production `server.ts` refuses to
+start while a `pre` migration is pending and tolerates a pending `post` one
+with a warning (`src/runtime/migrationGate.ts`), because during the rollout the
+`post` one-shot has not run yet by design. The first platform release measured
+the other behaviour: every new task died on the pending `0005` (post), ECS
+rolled back, and the `post` one-shot never ran.
+
 ## Commands
 
 ```bash

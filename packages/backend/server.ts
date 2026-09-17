@@ -13,13 +13,13 @@
 import dotenv from "dotenv";
 import http from "node:http";
 import { join } from "node:path";
-import { assertPostgresMigrationsCurrent, readJournal } from "@oxy.so/db/migrate";
 import { startEcosystemActivity, stopEcosystemActivity } from "./src/ecosystemActivity";
 import { checkPostgresHealth, closePostgres, connectPostgres, getDb, getPostgresClient } from "./src/db";
 import { startExpirySweep, stopExpirySweep } from "./src/db/expiry";
 import { registerGlobalErrorHandlers } from "./src/runtime/globalErrorHandlers";
 import { registerGracefulShutdown } from "./src/runtime/gracefulShutdown";
 import { markMigrationsComplete, markRuntimeNotReady, markRuntimeReady } from "./src/runtime/health";
+import { assertPreMigrationsCurrent } from "./src/runtime/migrationGate";
 import { setRealtime } from "./src/runtime/realtime";
 import { createSocketServer } from "./src/runtime/socket";
 import { attachSocketRedisAdapter } from "./src/runtime/socketRedisAdapter";
@@ -66,7 +66,9 @@ export async function bootServer(): Promise<void> {
     const db = connectPostgres(env.databaseUrl);
     if (!(await checkPostgresHealth())) throw new Error("Postgres is unreachable");
     if (process.env.NODE_ENV === "production") {
-      await assertPostgresMigrationsCurrent(getPostgresClient(), readJournal(join(__dirname, "drizzle")));
+      // Pending `post` migrations are the expected mid-rollout state; only a
+      // pending `pre` migration refuses the boot. See runtime/migrationGate.ts.
+      await assertPreMigrationsCurrent(getPostgresClient(), join(__dirname, "drizzle"), logger);
     }
     markMigrationsComplete();
 
