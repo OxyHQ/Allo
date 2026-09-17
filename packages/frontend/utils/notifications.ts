@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 
+import { getData } from "@/utils/storage";
+
 // Do not statically import 'expo-notifications' to avoid bundling it on web.
 // Use a cached dynamic import so the package is only loaded on native platforms.
 let notificationsModule: typeof import('expo-notifications') | null = null;
@@ -99,4 +101,15 @@ export async function getDevicePushToken(): Promise<DevicePushToken> {
     console.warn('Failed to get device push token:', e);
   }
   return null;
+}
+
+/** Where the "notifications on/off" switch in Settings keeps its answer. */
+export const NOTIFICATION_PREFERENCE_KEY = 'pref:notificationsEnabled';
+
+/**
+ * Whether the user wants notifications. On until they say otherwise: an
+ * absent preference is "on", so a fresh install rings.
+ */
+export async function isPushEnabled(): Promise<boolean> {
+  return (await getData<boolean>(NOTIFICATION_PREFERENCE_KEY)) !== false;
 }

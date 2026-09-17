@@ -3,8 +3,7 @@
  *
  * Its own module because `shareAttachment.native.ts` and
  * `shareAttachment.web.ts` are resolved one-or-the-other by the bundler, so
- * neither can be the one that owns the shape — the same arrangement
- * `lib/matrix/types.ts` has for the chat client.
+ * neither can be the one that owns the shape.
  */
 
 export interface ShareAttachmentRequest {

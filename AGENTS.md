@@ -82,9 +82,9 @@ tag in `packages/frontend/package.json` before blaming your own code.
 ## Data storage: PostgreSQL, and nothing else
 
 `DATABASE_URL` is REQUIRED to boot (`server.ts`) and every route, worker and
-sweep reads Postgres. The Mongo→Postgres port is finished: social, moderation,
-bridges and messaging all landed, the three Mongoose models and the Mongo
-connection are deleted, and there is no second store to choose between.
+sweep reads Postgres. The Mongo→Postgres port is finished: everything landed,
+the Mongoose models and the Mongo connection are deleted, and there is no
+second store to choose between.
 
 Schema is `db/schema/` (one file per domain) and the binding decisions — naming,
 primary keys, closed value sets, the `jsonb` register, the Mongoose-hook →
@@ -118,96 +118,22 @@ residue survived three separate passes. That exemption is why prose may still
 mention Mongo — to explain why a column is `text`, or why a shape is what it is —
 and why such a mention is not evidence that anything connects to it.
 
-## Migration to Matrix
+## The Allo platform
 
-Allo is moving to Matrix and will stop carrying its own transport. `docs/matrix/`
-holds both halves: `data-model.md`, `bridges.md` and `client-strategy.md` are
-design that preceded implementation deliberately, each existing to find the
-places where the approved plan does not survive contact with what Matrix actually
-does, while `ui-wiring.md`, `push.md` and `ephemeral.md` describe what is built
-and keep an explicit, numbered list of what still is not.
+The chat transport is being replaced, not extended. The decision and the design
+are in `docs/adr/0001-clean-break-platform.md` and `docs/platform/`; nothing in
+this file describes the new platform yet.
 
-**The current transport is still the one that works.** Everything the app does
+**The legacy transport is still the one that runs.** Everything the app does
 today goes through `@allo/backend` over REST and Socket.IO, and the encryption
-described in `docs/encryption.mdx` is what actually runs.
-
-`packages/frontend/lib/matrix/` is a client port, not a migration:
-
-- `types.ts` is the port interface (`AlloChatClient`). No Matrix SDK may be
-  imported here; every type is an Allo view model.
-- `client.native.ts` plus `native/` is the iOS/Android implementation over
-  `@unomed/react-native-matrix-sdk`.
-- `client.web.ts` plus `web/` is the web implementation over `matrix-js-sdk` and
-  `@matrix-org/matrix-sdk-crypto-wasm`, on ordinary `/sync` rather than sliding
-  sync. The crypto WebAssembly is fetched by `web/cryptoWasm.ts` and nowhere
-  else, once a session exists. See the gotcha below. Two open tabs remain unsafe
-  and unguarded; the hole is marked in the file's header.
-- `errors.ts` holds the states the port refuses to be in.
-
-**The app imports it, behind a flag.** Screens, components and hooks reach the
-port through the `lib/chat/` seam: conversation creation, the timeline, media,
-invitations, push and recovery. Which backend answers is decided by
-`EXPO_PUBLIC_CHAT_BACKEND` (`lib/chat/backend.ts`). Unset means `allo-api`, so
-**the shipped default is still the legacy backend**, and a misspelt value throws
-at import rather than silently serving the wrong app.
-
-The native tests run against `__mocks__/@unomed/react-native-matrix-sdk.ts`. The
-web ones need no mock, because every module they cover takes what it needs of the
-SDK as a structural type and imports none of it at runtime.
-
-Setting the flag to `matrix` does not give a working app against *our own*
-homeserver: **there is none.** It does work against somebody else's.
-`matrix.org` serves the OIDC surface the port needs, and its dynamic client
-registration was exercised with Allo's own payload shape. The trade (foreign
-MXIDs, no Oxy SSO, and conversations that cannot be migrated later) is set out in
-`docs/matrix/interim-homeserver.md`.
-
-As for ours: `matrix.allo.you` does not resolve. `allo.you/.well-known/matrix/client`
-is now a real file in `packages/frontend/public/`, served ahead of the SPA
-fallback; before it existed the fallback answered that path 200 with `index.html`. The Terraform exists in `oxy-infra`
-(`terraform-uswest2/app-allo-matrix.tf`) and has never been applied.
-
-Two spikes back the decisions. Both live outside the workspaces, so a root
-`bun install` does not touch them and they do not affect the main `bun.lock`.
-
-- `spikes/matrix-web/` runs `matrix-js-sdk` plus
-  `@matrix-org/matrix-sdk-crypto-wasm` under a production
-  `expo export --platform web`, driven headlessly in a browser. `README.md` to
-  run it, `RESULTS.md` for what it proved and, just as importantly, what it did
-  not: OIDC is only half proven, and the two-tab hazard could not be ruled out.
-- `spikes/matrix-rn/` runs `@unomed/react-native-matrix-sdk` on a physical
-  Android device, checks C1 to C8 (native binding starts, login, sliding sync,
-  encrypted room, message round trip, file upload, history recovery on a cold
-  device, cross-device key sharing). `README.md` has the operator instructions
-  and what each check means. Its results are not recorded in the repo the way
-  `matrix-web`'s are. The generated `android/` project is deliberately not
-  committed; run `expo prebuild`.
-
-  Two constraints that fail on the device rather than in the build: the ABIs are
-  pinned to `armeabi-v7a,arm64-v8a` by
-  `spikes/matrix-rn/plugins/withMatrixSdkAbis.js` because those are the only ones
-  shipping `libmatrix_sdk_ffi.so`, so an **x86_64 emulator will not work**. You
-  need ARM hardware or an arm64 emulator. And the build needs the Android NDK for
-  the C++ glue, which is why `eas.json`'s `standalone` profile exists.
+described in `docs/encryption.mdx` is what actually runs, until the app moves
+to `@allo/react`.
 
 ## Key features
 
-- **Authentication:** two ways in, told apart by the HTTP scheme.
-  `Authorization: Bearer` is an Oxy token and is what the app sends today;
-  `Authorization: MatrixBearer` is a Matrix Authentication Service token,
-  validated by RFC 7662 introspection in `packages/backend/src/middleware/matrixAuth.ts`
-  plus `src/services/auth/`. The scheme, and not a side header, carries the
-  discrimination: a proxy that strips an unknown header would otherwise separate
-  a credential from its issuer, and `oxy.auth()` reads a token only from a header
-  beginning with the exact string `"Bearer "`, so the two validators cannot see
-  each other's tokens. There is no fall-through between them. The MAS path is
-  **off unless `ALLO_MAS_ISSUER` is set**, and the introspection endpoint must be
-  same-origin with the issuer or the process refuses to boot — MAS sends no `iss`,
-  so where the question is asked IS the issuer verification. An introspection
-  answer is cached for at most 30 seconds, which is the bound on how long a
-  revoked token keeps working; MAS unreachable is 503 and never 401, because an
-  outage must not sign everybody out. **The Socket.IO handshake is not covered**
-  and still requires an Oxy token.
+- **Authentication:** `Authorization: Bearer` carries an Oxy token, read by
+  `oxy.auth()` only from a header beginning with the exact string `"Bearer "`.
+  The Socket.IO handshake requires the same Oxy token.
 - **People directory:** `/api/directory/*` (`packages/backend/src/routes/directory.ts`)
   answers the five Oxy lookups the app makes — `getProfileByUsername`,
   `getUserById`, `getUsersByIds`, `searchProfiles`, `getFileDownloadUrl` — so an
@@ -221,53 +147,12 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
   filename:** no forward secrecy, prekeys generated but unused, and groups,
   multi-device, P2P and media are broken or unimplemented. See
   `docs/encryption.mdx`.
-- **Offline first:** queue plus sync (`lib/offlineQueue/`, `lib/offlineStorage.ts`,
-  `lib/optimistic/`).
-- **Real time:** Socket.io for messaging. WebRTC is scaffolded only:
-  `lib/p2pMessaging.ts` never establishes a connection, and the calls screen
-  renders mock data.
+- **Offline first:** local storage plus a sync queue (`lib/offlineStorage.ts`).
+- **Real time:** Socket.io for messaging. The calls screen renders mock data and
+  has no transport behind it.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.
-- **Push notifications:** on the Matrix path, and only there. **Synapse owns the
-  pusher registry.** The client registers a pusher with
-  `data.format = "event_id_only"` and the backend implements the Matrix Push
-  Gateway (`POST /_matrix/push/v1/notify`, `routes/pushGateway.ts`), so no device
-  token is stored anywhere in Allo. The gateway is mounted ahead of
-  `express.json()` and of Oxy auth (Synapse has no session) and is authenticated
-  by a per-device HMAC capability in the pusher's URL, minted by
-  `POST /api/push/gateway`. FCM and APNs both ship; APNs is HTTP/2 plus an ES256
-  provider token in `services/push/apns*.ts`, with no library. There is no web
-  push, and the notification says "New message" rather than the message;
-  enriching it needs an iOS Notification Service Extension and an Android
-  background service. See `docs/matrix/push.md`.
-- **Ephemeral conversations:** the third chat tier, Matrix path only. It was
-  specified as "secret", meaning keys that never leave the devices present, and
-  that cannot be built: key backup is per account and takes no `roomId`, and any
-  other Matrix client on the account uploads the keys anyway. So the tier is
-  defined by how long content lasts instead. This device stops drawing a message
-  at its deadline and redacts its own from the homeserver
-  (`lib/matrix/ephemeral/`, `lib/chat/ephemeralSweep.ts`), and an ephemeral room
-  **refuses to send** when it cannot account for a participant's cross-signing
-  identity (`ephemeral/guard.ts`, enforced inside the port;
-  `__tests__/matrix/ephemeral/sendGate.test.ts` keeps every send path passing
-  through it). The marker is global account data,
-  `so.oxy.allo.ephemeral_rooms`, because the native binding has no API for a
-  custom room state event, so **the other participants are not told**. Read
-  `docs/matrix/ephemeral.md` before touching any of it, especially section 7 and
-  the nine gaps.
-- **Linked accounts (bridged networks):** `Ajustes` then `Otras redes`. The
-  screens (`app/(chat)/settings/linked-accounts*`, `lib/bridges/`,
-  `hooks/useBridges.ts`) drive the orchestration API that already existed at
-  `/api/bridges`. The app carries **no list of networks**, it renders the
-  catalogue. **Today a user can link nothing:** `ALLO_BRIDGES_ENABLED` is empty
-  everywhere; Telegram and Slack would work if a bridge were deployed; Discord
-  speaks the `legacy` `/v1` protocol and cannot be enabled at all; and
-  WhatsApp, Instagram and Messenger declare `requiresProxy`, so the backend
-  refuses to boot without a residential-proxy provider and they never reach the
-  catalogue. Bridged rooms show the network's mark and **never a padlock**; the
-  rule lives in `lib/chat/roomOrigin.ts`, and `data-model.md` section 5.3
-  contradicts `bridges.md` section 2.3 on it.
 - **Profiles:** `/@handle`, served by `app/(chat)/[username].tsx`. The `@` is part
   of the SEGMENT VALUE, the way Mention does it, so a handle copied between the
   two apps names the same Oxy account; `lib/profile/handle.ts` is the only place
@@ -277,23 +162,6 @@ Two spikes back the decisions. Both live outside the workspaces, so a root
   profile here is who somebody is plus a button to talk to them, not a feed:
   `components/profile/ProfileIdentity.tsx` draws the person and is shared with
   the conversation-details pane.
-- **Who somebody in a conversation is:** `lib/chat/people.ts`, and nothing else
-  in chat asks Oxy about a person. It exists because **the homeserver knows
-  nobody's name**: MAS knows the Oxy subject only as a localpart and Allo never
-  sets a Matrix `displayname`, so every title a client computes from a room's
-  members is an MXID and every `displayName` the port reports is `undefined`.
-  `matrixIdentity.ts` goes both ways now — `oxyUserIdFrom` is the exact inverse
-  of `matrixUserIdFor` and **as strict**, because a coerced lookup succeeds
-  against a stranger; a bridge puppet, a foreign user and a malformed localpart
-  are all refused, and `roomOrigin.ts` is asked about the first before the
-  localpart is examined at all. `hooks/useChatPeople.ts` binds it to React
-  Query: one cache entry per person, and `ChatPeopleDirectory` coalesces a tick's
-  worth of ids into one `getUsersByIds`, so a group of thirty is one request. A
-  person still being looked up draws NOTHING and one that could not be resolved
-  draws `chat.person.unknown` — never the id.
-  `__tests__/chat/noMatrixIdsOnScreen.test.ts` is a source scan that fails if an
-  identifier can reach a screen again; there is no render test in this repo, and
-  the regression is the shape of the expression rather than one screen.
 - **Privacy settings:** five rows, and the shapes differ on purpose — one switch
   in the list (online status), one chooser screen (visibility), three list
   screens (blocked, restricted, hidden words, the first two sharing
@@ -328,22 +196,6 @@ BOTH entries pointing at the current target.
 **`@react-native-community/netinfo`.** Root `overrides` plus `resolutions` pin it
 to an **exact version, not a range**; the frontend declares it as a direct
 dependency. Keep it exact.
-
-**`@unomed/react-native-matrix-sdk`.** Listed in root `trustedDependencies` so
-Bun runs its postinstall. It is a direct frontend dependency but has no Expo
-config plugin entry in `app.config.js` yet.
-
-**`@matrix-org/matrix-sdk-crypto-wasm`.** Its `.wasm` is several megabytes and
-cannot be resolved by Metro the way the package expects: it uses
-`import.meta.url`, which under the web export points at a path that does not
-exist, and the Worker's SPA fallback (`not_found_handling`) answers that path with
-`index.html`, so **the failure reads as a WebAssembly MIME type error rather than
-a missing file**. Every web script (`start`, `dev`, `web`, `build*`) therefore
-runs `scripts/copy-matrix-wasm.js` first, which copies the module into `public/`
-(gitignored), and `lib/matrix/web/cryptoWasm.ts` passes that URL to `initAsync()`
-explicitly. **If you add a way to build for web, add the copy step to it.**
-`public/_headers` keeps the file revalidating, because its URL carries no content
-hash.
 
 **`bun.lock` regeneration.** Always run `bun install` from the **monorepo root**,
 never inside a package: a sub-package install can drop workspace resolution lines

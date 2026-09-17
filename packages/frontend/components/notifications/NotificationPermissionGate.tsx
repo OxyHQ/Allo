@@ -7,7 +7,6 @@ import React, { useContext, useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { BottomSheetContext } from '@/context/BottomSheetContext';
-import { matrixRuntime } from '@/lib/chat/matrixRuntime';
 import { NotificationPermissionSheet } from '@/components/notifications/NotificationPermissionSheet';
 import {
   hasNotificationPermission,
@@ -50,16 +49,8 @@ export function NotificationPermissionGate({
         <NotificationPermissionSheet
           onLater={() => bs.openBottomSheet(false)}
           onEnable={async () => {
-            const granted = await requestNotificationPermissions();
+            await requestNotificationPermissions();
             bs.openBottomSheet(false);
-            if (granted) {
-              // Permission is only half of it. What actually makes the phone ring
-              // is a pusher on the homeserver, and this is the moment the user
-              // asked for one — see `lib/chat/pushRegistration.ts`. A no-op until
-              // there is a signed-in Matrix session, which is why it is safe to
-              // call here without knowing whether there is.
-              await matrixRuntime.syncPushRegistration();
-            }
           }}
         />
       );

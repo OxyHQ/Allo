@@ -2,16 +2,20 @@ import { useCallback, useEffect } from 'react';
 import { useUsersStore } from '@/stores/usersStore';
 import { useOxy } from '@oxy.so/services';
 import { Conversation } from '@/app/(chat)/index';
-import type { SenderInfo } from '@/hooks/useMatrixSenderInfo';
 import { logger } from '@/utils/logger';
 
 /**
- * Who sent each message, on the Express backend.
- *
- * Every id here is an **Oxy account id**. `useMatrixSenderInfo` is the other
- * half, for the backend where they are Matrix user ids, and the two answer the
- * same {@link SenderInfo} shape so that `ConversationView` picks between them
- * with a `??` and nothing else changes.
+ * How a screen asks who sent a message. Each answers `undefined` for a sender
+ * it cannot name, and a caller draws nothing rather than the id.
+ */
+export interface SenderInfo {
+  getSenderName: (senderId: string) => string | undefined;
+  getSenderHandle: (senderId: string) => string | undefined;
+  getSenderAvatar: (senderId: string) => string | undefined;
+}
+
+/**
+ * Who sent each message. Every id here is an **Oxy account id**.
  */
 export function useSenderInfo(
   conversation: Conversation | null | undefined,

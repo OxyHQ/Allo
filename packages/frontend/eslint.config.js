@@ -13,8 +13,9 @@ module.exports = defineConfig([
       // on iOS and Android, `foo.web.ts` on web — and `tsconfig.json` tells
       // TypeScript the same thing through `moduleSuffixes`. The import resolver
       // knows about neither, so an import of a module that exists *only* as
-      // platform variants, as `lib/matrix/client` does, would be reported as
-      // unresolved by a rule that is otherwise worth keeping on.
+      // platform variants (`foo.native.ts` beside `foo.web.ts`, with no plain
+      // `foo.ts`) would be reported as unresolved by a rule that is otherwise
+      // worth keeping on.
       'import/resolver': {
         typescript: {
           extensions: [

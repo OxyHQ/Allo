@@ -2,9 +2,8 @@
  * What a file is, guessed from what it is called.
  *
  * The last resort, and the only one available in several places: a picker on
- * Android or in a browser often reports no MIME type, and an attachment that
- * arrived over Matrix carries its type inside an opaque media ref that nothing
- * outside `lib/matrix/` may open. The filename is what is left.
+ * Android or in a browser often reports no MIME type, and a received attachment
+ * may carry none either. The filename is what is left.
  *
  * **Deliberately short.** An extension that is not in here yields `undefined`,
  * and every caller has its own right answer for that: an upload sends

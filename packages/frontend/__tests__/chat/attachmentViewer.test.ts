@@ -17,8 +17,8 @@ import type { MediaItem, Message } from '@/stores/messagesStore';
  * gallery that reorders the conversation puts the swipe somewhere the reader did
  * not come from.
  *
- * All of it against `Message`, which both backends fill, so none of it knows
- * whether it is looking at a Matrix room or the Express API.
+ * All of it against `Message`, so none of it knows where the attachments came
+ * from.
  */
 
 function message(id: string, media: MediaItem[] | undefined): Message {
@@ -60,8 +60,8 @@ describe('the gallery a viewer opens on', () => {
   });
 
   it('spans the whole conversation and not the tapped message', () => {
-    // A Matrix event carries one attachment, so five photographs are five
-    // messages. A gallery scoped to one of them could never be swiped.
+    // Five photographs sent one at a time are five messages. A gallery scoped
+    // to one of them could never be swiped.
     const items = collectViewerItems([
       message('m1', [withThumbnail('a')]),
       message('m2', [withThumbnail('b')]),
@@ -124,7 +124,7 @@ describe('the gallery a viewer opens on', () => {
   });
 
   it('cannot confuse two different pairs for one page', () => {
-    // A Matrix media ref is JSON and may contain any character, including the
+    // A media id is opaque and may contain any character, including the
     // separator. The message id cannot, which is why it goes first.
     const items = collectViewerItems([
       message('m1', [{ id: 'x#y', type: 'image' }]),

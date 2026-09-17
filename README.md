@@ -32,8 +32,7 @@ Private keys live in the iOS Keychain and the Android Keystore through
 
 ### 📱 Device first
 
-Messages are written locally first and the cloud is secondary. Cloud sync is a setting
-the user controls, not a requirement.
+Messages are written locally first and the server is secondary.
 
 Mutations made offline are queued and replayed on reconnect, so the app keeps working
 without a network.
@@ -123,8 +122,7 @@ bun run typecheck && bun run test
 | `bun run clean` | Remove build artifacts and `node_modules` |
 
 **`@allo/frontend`**: `start`, `dev`, `android`, `ios`, `web`, `build`, `build-web`,
-`test` (Jest), `lint` (`expo lint`), `clean`, plus `copy-matrix-wasm`, `clear-cache` and
-`reset-project`. The dev, start, web and build scripts run `copy-matrix-wasm` first.
+`test` (Jest), `lint` (`expo lint`), `clean`, plus `clear-cache` and `reset-project`.
 
 **`@allo/backend`**: `dev`, `start`, `build`, `test` (Vitest, which needs a real Postgres
 server — each `*.realdb.test.ts` suite creates its own throwaway, fully-migrated
@@ -147,46 +145,11 @@ the rollout it lands on.
 > "ESLint couldn't find an eslint.config.js". Only the frontend is lintable today, via
 > `bun run --filter @allo/frontend lint`.
 
-## Moving to Matrix
+## The Allo platform
 
-Allo is migrating to [Matrix](https://matrix.org) and will stop carrying its own
-transport. The design work is deliberately ahead of the code.
-
-**Nothing has switched over yet.** What ships today is REST plus Socket.IO against
-`@allo/backend`. A Matrix client port exists under
-[`packages/frontend/lib/matrix/`](packages/frontend/lib/matrix/), with separate native and
-web implementations, but no screen in the app imports it.
-
-<details>
-<summary><b>Design notes and the spikes that informed them</b></summary>
-
-<br>
-
-Design only, no implementation proposed yet:
-
-| Note | Subject |
-|---|---|
-| [`data-model.md`](docs/matrix/data-model.md) | How Allo conversations map onto Matrix rooms, and what the mapping costs |
-| [`client-strategy.md`](docs/matrix/client-strategy.md) | Which SDK on which platform, and why |
-| [`bridges.md`](docs/matrix/bridges.md) | Bridge topology and its constraints |
-| [`interim-homeserver.md`](docs/matrix/interim-homeserver.md) | Homeserver plan for the transition |
-| [`linked-accounts.md`](docs/matrix/linked-accounts.md) | Tying Matrix identities to Oxy accounts |
-| [`ephemeral.md`](docs/matrix/ephemeral.md) | Typing notifications and receipts |
-| [`push.md`](docs/matrix/push.md) | Push notification routing |
-| [`ui-wiring.md`](docs/matrix/ui-wiring.md) | Connecting the client port to screens |
-
-`spikes/` holds the throwaway apps that tested the risky assumptions first. They are not
-workspaces and no root script builds them.
-
-- [`spikes/matrix-web/`](spikes/matrix-web/) runs `matrix-js-sdk` and
-  `matrix-sdk-crypto-wasm` under a production Expo web export. Its `RESULTS.md` records
-  what it proved and what it did not.
-- [`spikes/matrix-rn/`](spikes/matrix-rn/) runs `@unomed/react-native-matrix-sdk` on a
-  physical Android device. It needs ARM hardware, because the native library ships only
-  `armeabi-v7a` and `arm64-v8a`, so an x86_64 emulator installs and then crashes. The
-  generated `android/` project is not committed, so run `expo prebuild` first.
-
-</details>
+The chat transport is being replaced, not extended. The decision and the design are in
+[`docs/adr/0001-clean-break-platform.md`](docs/adr/0001-clean-break-platform.md) and
+[`docs/platform/`](docs/platform/).
 
 ## Documentation
 

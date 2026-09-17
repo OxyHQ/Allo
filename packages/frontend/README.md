@@ -27,7 +27,6 @@ This package contains the complete React Native application that runs on Android
 ### Security & Encryption
 - 🔐 **End-to-End Encryption** - Direct messages encrypted client-side with static ECDH (P-256) between identity keys + AES-256-GCM
 - 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
-- ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
 - 🔑 **Device Key Management** - Automatic key generation and exchange on first launch
 - ⚠️ **No Forward Secrecy** - The same key encrypts every message between a pair of identity keys; compromising either private key decrypts that pair's entire message history, past and future
 - ⚠️ **Plaintext Fallback** - If encryption fails or the recipient has no registered device, the message is sent unencrypted rather than blocked
@@ -59,7 +58,7 @@ Push notifications are wired on this side but have no server to talk to — see
 - Expo Notifications, Secure Store, Camera, Video, Image Picker
 - **Static ECDH (P-256) + AES-256-GCM** - End-to-end encryption for direct messages (see [Encryption](../../docs/encryption.mdx) for what this does and doesn't provide)
 - **AsyncStorage** - Offline-first message storage
-- **Socket.IO** - Real-time messaging and P2P signaling
+- **Socket.IO** - Real-time messaging
 
 ## Project Structure
 ```
@@ -73,9 +72,6 @@ Push notifications are wired on this side but have no server to talk to — see
 ├── lib/                # Library code
 │   ├── signalProtocol.ts  # End-to-end encryption/decryption (static ECDH + AES-256-GCM)
 │   ├── offlineStorage.ts  # Offline message storage
-│   ├── offlineQueue/      # Queued mutations, replayed on reconnect
-│   ├── p2pMessaging.ts    # Peer-to-peer messaging (scaffolding; not functional)
-│   ├── matrix/            # Matrix client port (see below) — nothing imports it yet
 │   └── ...
 ├── locales/            # i18n translation files (en, es, it)
 ├── plugins/            # Expo config plugins
@@ -87,7 +83,7 @@ Push notifications are wired on this side but have no server to talk to — see
 ├── styles/             # Global styles and colors
 ├── types/              # TypeScript types
 ├── utils/              # Utility functions
-├── __mocks__/          # Jest manual mocks (the Matrix native binding)
+├── __mocks__/          # Jest manual mocks
 ├── __tests__/          # Jest suites
 ├── app.config.js       # Expo app configuration
 ├── config.ts           # Base URLs and third-party keys
@@ -216,39 +212,29 @@ This package is part of the Allo monorepo and integrates with:
 - **Group chats**: When sending in a group conversation, the app encrypts the message for only the first other participant returned by the conversation's participant list. Every other participant sees a decryption-failure placeholder.
 - **Multi-device**: `getRecipientKeys` (`stores/deviceKeysStore.ts`) always picks the recipient's first registered device (`devices[0]`, sorted by device id) rather than the device the recipient is actually using. A second device the same user owns generally cannot decrypt messages sent to them.
 - **Plaintext fallback**: If encryption fails, or the recipient has no registered devices, the message is sent as plaintext instead of being blocked (`stores/messagesStore.ts`).
-- **Peer-to-peer**: Not implemented. `lib/p2pMessaging.ts`'s `establishP2PConnection` always returns `false` (a placeholder), and the WebRTC offer/answer/ICE-candidate handlers are unimplemented stubs. Every message currently goes through the server relay.
 - **Media attachments**: Not implemented. The attachment menu's photo, document, camera, location, contact, and poll handlers are all no-ops (`components/conversation/ConversationView.tsx`), and there is no upload endpoint on the backend.
 
-## Matrix client port
+## The Allo platform
 
-`lib/matrix/` is a client port for the [Matrix migration](../../docs/matrix/).
-It is code that exists, not a feature that runs: **no screen, hook or store
-imports it**, and the messaging described above is still what the app does.
+The messaging described above is the legacy path, and it is being replaced
+rather than extended: the design is in
+[`docs/adr/0001-clean-break-platform.md`](../../docs/adr/0001-clean-break-platform.md)
+and [`docs/platform/`](../../docs/platform/). The app moves to `@allo/react`
+in a later change; until then the legacy path is what runs.
 
-| Module | What it is |
-|--------|-----------|
-| `types.ts` | The port interface (`AlloChatClient`) plus its view models. Nothing here may import a Matrix SDK. |
-| `client.native.ts`, `native/` | The iOS/Android implementation over `@unomed/react-native-matrix-sdk`. |
-| `client.web.ts` | Deliberately unimplemented — it throws `MatrixPlatformUnsupportedError` rather than returning a stub that quietly does nothing. |
-| `errors.ts` | The states the port refuses to be in. |
-
-`__tests__/matrix/` covers the pure translation modules against
-`__mocks__/@unomed/react-native-matrix-sdk.ts`; the native binding itself cannot
-be loaded in a test process. Those suites need jest under the `jest-expo`
-preset, which is why `bun run test` here is not interchangeable with `bun test`.
+The Jest suites run under the `jest-expo` preset, which is why `bun run test`
+here is not interchangeable with `bun test`.
 
 ### Device-First Architecture
 
 - **Local Storage**: All messages are stored locally using AsyncStorage (offline-first)
-- **Cloud Sync**: Optional cloud backup can be enabled in Settings → Security
 - **Offline Support**: App works completely offline, messages sync when online
-- **Privacy**: When cloud sync is disabled, messages never leave the device
 
 ### Message Flow
 
 1. User types message → encrypted locally (static ECDH + AES-256-GCM), or sent as plaintext if encryption fails
 2. Message stored locally in AsyncStorage (offline-first)
-3. Message POSTed to the server (if cloud sync is enabled), which relays it to the recipient — there is no working P2P path yet
+3. Message POSTed to the server, which relays it to the recipient
 4. Recipient receives the message → decrypts locally if it was encrypted
 5. Message displayed in conversation
 
@@ -256,7 +242,6 @@ preset, which is why `bun run test` here is not interchangeable with `bun test`.
 
 Access security settings via: **Settings → Security & Encryption**
 
-- **Cloud Sync Toggle**: Enable/disable cloud backup
 - **Encryption Status**: View encryption initialization status
 - **Device ID**: View your device's registered device ID
 

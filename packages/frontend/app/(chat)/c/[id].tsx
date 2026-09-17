@@ -1,14 +1,12 @@
 import React, { useMemo, useEffect, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import ConversationView from "@/components/conversation/ConversationView";
-import { MatrixInvitationCard } from "@/components/matrix/MatrixInvitationCard";
 import { useConversation } from "@/hooks/useConversation";
 import { useConversationsStore } from "@/stores";
 import { useOxy } from "@oxy.so/services";
 import { useUserById, useUsersStore } from "@/stores/usersStore";
 import { api } from "@/utils/api";
 import { toast } from "@oxy.so/bloom/toast";
-import { CHAT_BACKEND } from "@/lib/chat/backend";
 
 /** Participant shape returned by the backend conversations API. */
 interface ApiConversationParticipant {
@@ -48,7 +46,7 @@ type CreateConversationPayload = ApiConversation & { data?: ApiConversation };
  * Offline-first: renders ConversationView immediately using an optimistic
  * conversation when needed, so the user never sees a loading spinner.
  */
-function AlloApiConversationRoute() {
+export default function ConversationRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const { user: currentUser } = useOxy();
@@ -229,41 +227,4 @@ function AlloApiConversationRoute() {
     optimisticId;
 
   return <ConversationView conversationId={conversationId || undefined} />;
-}
-
-/**
- * The same route, for a Matrix room.
- *
- * Everything the branch above does — resolving a user id, inventing an optimistic
- * conversation, creating one over the API — exists because Allo's own backend
- * makes a conversation out of a pair of user ids. On Matrix the id in the URL is
- * a room id and rooms come from sync alone: there is nothing to create here, and
- * a room that has not arrived yet is a room the timeline reports as empty rather
- * than one this route should conjure.
- *
- * The one thing it does branch on is an **invitation**, which is a room the
- * viewer has not joined: it has no readable timeline, and a composer over it
- * would send into a room this account is not in. That is how every group starts
- * for everybody who did not create it, so it is the difference between a family
- * group and a family group nobody else can use.
- */
-function MatrixConversationRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const conversation = useConversation(id);
-
-  if (id && conversation?.isInvitation) {
-    return <MatrixInvitationCard roomId={id} name={conversation.name} />;
-  }
-  return <ConversationView conversationId={id || undefined} />;
-}
-
-/**
- * Picks the route body for this build's chat backend.
- *
- * A component boundary and not a branch inside one body, because the two have
- * different hooks: React allows a component to be chosen conditionally, and does
- * not allow its hooks to be.
- */
-export default function UnifiedConversationRoute() {
-  return CHAT_BACKEND === 'matrix' ? <MatrixConversationRoute /> : <AlloApiConversationRoute />;
 }

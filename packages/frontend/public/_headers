@@ -1,35 +1,7 @@
 # Cloudflare reads this file from the export root. It kept working when the app
 # left Pages for a Worker: wrangler keeps `_headers` out of the asset manifest
-# and uploads it as a deployment module, so the rules below still apply.
+# and uploads it as a deployment module, so the rule below still applies.
 #
-# The Matrix crypto WebAssembly module is served from a fixed path with no
-# content hash in it — unlike the JS bundles, which Metro fingerprints — because
-# the app has to know the URL to hand to `initAsync()` before it can load
-# anything. A long cache on a mutable URL would mean a browser keeping one
-# deploy's 7.8 MB module forever, so this one file revalidates instead: the
-# ETag makes a repeat visit a conditional request, not another download.
-/matrix_sdk_crypto_wasm_bg.wasm
-  Cache-Control: public, max-age=0, must-revalidate
-
-# The Matrix delegation files have no extension, so nothing infers a type for
-# them and they would go out as octet-stream. The spec asks for JSON, and a
-# federating server that cannot parse the answer falls through to the SRV
-# record — which does not exist here.
-#
-# `not_found_handling = "single-page-application"` in `../wrangler.toml` sends
-# unmatched paths to index.html, but real assets are matched first, so these
-# files win. They did not exist until recently, which is why that path used to
-# answer 200 with HTML.
-/.well-known/matrix/server
-  Content-Type: application/json
-  Access-Control-Allow-Origin: *
-  Cache-Control: public, max-age=3600
-
-/.well-known/matrix/client
-  Content-Type: application/json
-  Access-Control-Allow-Origin: *
-  Cache-Control: public, max-age=3600
-
 # EVERY response, and the reason this rule has to exist at all: Cloudflare Pages
 # added these two headers to every response it served, automatically, with
 # nothing in this repository asking for them. Workers Static Assets does not, so

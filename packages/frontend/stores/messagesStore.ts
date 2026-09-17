@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { MessageDto } from '@allo/shared-types';
+import type { MessageDto } from '@/lib/chat/legacyApiTypes';
 import { api } from '@/utils/api';
 import { useDeviceKeysStore } from './deviceKeysStore';
 import {
@@ -11,8 +11,6 @@ import {
   removeMessageLocally,
   addToSyncQueue,
 } from '@/lib/offlineStorage';
-import { p2pManager } from '@/lib/p2pMessaging';
-import { CLOUD_SYNC_ENABLED_BY_DEFAULT } from '@/lib/security/cloudSync';
 import { logger } from '@/utils/logger';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -20,10 +18,8 @@ import NetInfo from '@react-native-community/netinfo';
  * Messages Store with Signal Protocol Encryption
  *
  * Features:
- * - End-to-end encryption using Signal Protocol
+ * - End-to-end encryption between device keys
  * - Offline-first storage (device-first)
- * - Optional cloud sync
- * - P2P messaging when available
  *
  * NOTE: Removed subscribeWithSelector middleware to fix getSnapshot error
  */
@@ -35,14 +31,13 @@ export interface MediaItem {
   /**
    * The full-size original, when {@link id} names a smaller copy of it.
    *
-   * A bubble is 250pt wide and draws the smallest copy it can get — on the
-   * Matrix path that is the sender's own thumbnail, because a homeserver cannot
-   * resize what it cannot read. The viewer needs the other one, and by the time
-   * a `MediaItem` reaches a component the original is otherwise gone.
+   * A bubble is 250pt wide and draws the smallest copy it can get — for an
+   * encrypted attachment that is the sender's own thumbnail, because a server
+   * cannot resize what it cannot read. The viewer needs the other one, and by
+   * the time a `MediaItem` reaches a component the original is otherwise gone.
    *
    * Absent when {@link id} already *is* the original, which is every attachment
-   * on the Express path and any Matrix attachment whose sender made no
-   * thumbnail. Readers should use `fullSizeId ?? id`.
+   * whose sender made no thumbnail. Readers should use `fullSizeId ?? id`.
    */
   fullSizeId?: string;
   /** What the sender called it. Used to name a share, never drawn in a bubble. */
@@ -95,8 +90,7 @@ export interface StickerItem {
  * failed means nothing is, and the two draw different marks — see
  * `components/messages/messageStatus.ts`.
  *
- * `delivered` is only ever reached by the Express backend, which has a delivery
- * receipt. Matrix has none.
+ * `delivered` needs a delivery receipt from the backend.
  */
 export type MessageReadStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
@@ -142,8 +136,6 @@ interface MessagesState {
   // Last updated timestamps by conversation
   lastUpdatedByConversation: Record<string, number>;
 
-  // Cloud sync enabled
-  cloudSyncEnabled: boolean;
   
   // Actions
   setMessages: (conversationId: string, messages: Message[]) => void;
@@ -151,7 +143,6 @@ interface MessagesState {
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void;
   removeMessage: (conversationId: string, messageId: string) => void;
   clearMessages: (conversationId: string) => void;
-  setCloudSyncEnabled: (enabled: boolean) => void;
   addReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>;
   removeReaction: (conversationId: string, messageId: string, emoji: string) => Promise<void>;
   
@@ -180,13 +171,6 @@ export const useMessagesStore = create<MessagesState>()(
     loadingByConversation: {},
     errorByConversation: {},
     lastUpdatedByConversation: {},
-    // What the app runs with until a launch reads the account's document, and
-    // what that read settles on when the document does not decide it. Imported
-    // rather than written twice: the two used to be a `true` here and a
-    // `|| false` there, and only a 404 kept them from disagreeing out loud. See
-    // `lib/security/cloudSync.ts` for the rule and for why `false` on the server
-    // is not yet anybody's decision.
-    cloudSyncEnabled: CLOUD_SYNC_ENABLED_BY_DEFAULT,
 
     // Actions
     setMessages: async (conversationId, messages) => {
@@ -358,10 +342,6 @@ export const useMessagesStore = create<MessagesState>()(
       });
     },
 
-    setCloudSyncEnabled: (enabled) => {
-      set({ cloudSyncEnabled: enabled });
-    },
-
     addReaction: async (conversationId, messageId, emoji) => {
       // POST /messages/:id/reactions toggles the caller's reaction and returns
       // the authoritative reaction map, which we write back to local state.
@@ -441,122 +421,120 @@ export const useMessagesStore = create<MessagesState>()(
           get().setMessages(conversationId, decryptedMessages);
         }
 
-        // If cloud sync is enabled, fetch from server
-        if (get().cloudSyncEnabled) {
-          try {
-            const netInfo = await NetInfo.fetch();
-            if (netInfo.isConnected) {
-              const response = await api.get<{ messages: MessageDto[] }>('/messages', { conversationId });
-              const serverMessages = response.data?.messages || [];
-              
-              // Process server messages (encrypted or plaintext)
-              const deviceKeysStore = useDeviceKeysStore.getState();
-              const processedServerMessages = await Promise.all(
-                serverMessages.map(async (msg: MessageDto): Promise<Message | null> => {
-                  const messageId = String(msg._id);
-                  const deliveredTo = msg.deliveredTo ?? [];
-                  const readBy = msg.readBy ?? {};
+        // Then the server's copy, when reachable
+        try {
+          const netInfo = await NetInfo.fetch();
+          if (netInfo.isConnected) {
+            const response = await api.get<{ messages: MessageDto[] }>('/messages', { conversationId });
+            const serverMessages = response.data?.messages || [];
+            
+            // Process server messages (encrypted or plaintext)
+            const deviceKeysStore = useDeviceKeysStore.getState();
+            const processedServerMessages = await Promise.all(
+              serverMessages.map(async (msg: MessageDto): Promise<Message | null> => {
+                const messageId = String(msg._id);
+                const deliveredTo = msg.deliveredTo ?? [];
+                const readBy = msg.readBy ?? {};
 
-                  // Server messages always originate from a real user (not the AI assistant)
-                  const resolveReadStatus = (): 'pending' | 'sent' | 'delivered' | 'read' | undefined => {
-                    if (msg.senderId !== currentUserId) {
-                      return undefined;
+                // Server messages always originate from a real user (not the AI assistant)
+                const resolveReadStatus = (): 'pending' | 'sent' | 'delivered' | 'read' | undefined => {
+                  if (msg.senderId !== currentUserId) {
+                    return undefined;
+                  }
+                  const readByUserIds = Object.keys(readBy);
+                  if (readByUserIds.length > 0) {
+                    const recipientRead = readByUserIds.some((id) => id !== currentUserId);
+                    if (recipientRead) {
+                      return 'read';
                     }
-                    const readByUserIds = Object.keys(readBy);
-                    if (readByUserIds.length > 0) {
-                      const recipientRead = readByUserIds.some((id) => id !== currentUserId);
-                      if (recipientRead) {
-                        return 'read';
-                      }
-                      return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
-                    }
-                    if (deliveredTo.length > 0) {
-                      return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
-                    }
-                    return 'sent';
+                    return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
+                  }
+                  if (deliveredTo.length > 0) {
+                    return deliveredTo.some((id) => id !== currentUserId) ? 'delivered' : 'sent';
+                  }
+                  return 'sent';
+                };
+
+                // Handle plaintext messages (legacy or when encryption unavailable)
+                if (msg.text && !msg.ciphertext) {
+                  return {
+                    id: messageId,
+                    text: msg.text,
+                    senderId: msg.senderId,
+                    senderDeviceId: msg.senderDeviceId,
+                    timestamp: new Date(String(msg.createdAt)),
+                    isSent: msg.senderId === currentUserId,
+                    conversationId: msg.conversationId,
+                    fontSize: msg.fontSize,
+                    isEncrypted: false,
+                    readStatus: resolveReadStatus(),
+                    messageType: 'user',
                   };
+                }
 
-                  // Handle plaintext messages (legacy or when encryption unavailable)
-                  if (msg.text && !msg.ciphertext) {
+                // Handle encrypted messages
+                if (msg.ciphertext && msg.senderId && msg.senderDeviceId) {
+                  // Skip decryption for messages sent by current user (already plaintext locally)
+                  if (msg.senderId === currentUserId) {
+                    // This shouldn't happen, but if it does, skip it
+                    return null;
+                  }
+
+                  try {
+                    const decryptedText = await deviceKeysStore.decryptMessageFromSender(
+                      msg.ciphertext,
+                      msg.senderId,
+                      msg.senderDeviceId
+                    );
                     return {
                       id: messageId,
-                      text: msg.text,
+                      text: decryptedText,
                       senderId: msg.senderId,
                       senderDeviceId: msg.senderDeviceId,
                       timestamp: new Date(String(msg.createdAt)),
                       isSent: msg.senderId === currentUserId,
                       conversationId: msg.conversationId,
                       fontSize: msg.fontSize,
-                      isEncrypted: false,
+                      isEncrypted: false, // Mark as decrypted
                       readStatus: resolveReadStatus(),
                       messageType: 'user',
                     };
+                  } catch (error) {
+                    console.error('[Messages] Error decrypting server message:', error);
+                    // Return message with error indicator instead of null
+                    return {
+                      id: messageId,
+                      text: '[Encrypted - Decryption failed]',
+                      senderId: msg.senderId,
+                      senderDeviceId: msg.senderDeviceId,
+                      timestamp: new Date(String(msg.createdAt)),
+                      isSent: msg.senderId === currentUserId,
+                      conversationId: msg.conversationId,
+                      fontSize: msg.fontSize,
+                      isEncrypted: true, // Still encrypted
+                      messageType: 'user',
+                    };
                   }
+                }
 
-                  // Handle encrypted messages
-                  if (msg.ciphertext && msg.senderId && msg.senderDeviceId) {
-                    // Skip decryption for messages sent by current user (already plaintext locally)
-                    if (msg.senderId === currentUserId) {
-                      // This shouldn't happen, but if it does, skip it
-                      return null;
-                    }
-
-                    try {
-                      const decryptedText = await deviceKeysStore.decryptMessageFromSender(
-                        msg.ciphertext,
-                        msg.senderId,
-                        msg.senderDeviceId
-                      );
-                      return {
-                        id: messageId,
-                        text: decryptedText,
-                        senderId: msg.senderId,
-                        senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(String(msg.createdAt)),
-                        isSent: msg.senderId === currentUserId,
-                        conversationId: msg.conversationId,
-                        fontSize: msg.fontSize,
-                        isEncrypted: false, // Mark as decrypted
-                        readStatus: resolveReadStatus(),
-                        messageType: 'user',
-                      };
-                    } catch (error) {
-                      console.error('[Messages] Error decrypting server message:', error);
-                      // Return message with error indicator instead of null
-                      return {
-                        id: messageId,
-                        text: '[Encrypted - Decryption failed]',
-                        senderId: msg.senderId,
-                        senderDeviceId: msg.senderDeviceId,
-                        timestamp: new Date(String(msg.createdAt)),
-                        isSent: msg.senderId === currentUserId,
-                        conversationId: msg.conversationId,
-                        fontSize: msg.fontSize,
-                        isEncrypted: true, // Still encrypted
-                        messageType: 'user',
-                      };
-                    }
-                  }
-
-                  // Message has neither text nor ciphertext - invalid
-                  console.warn('[Messages] Server message missing both text and ciphertext:', msg);
-                  return null;
-                })
-              );
-              
-              const validMessages = processedServerMessages.filter((msg): msg is Message => msg !== null);
-              
-              // Merge with local messages
-              const allMessages = [...localMessages, ...validMessages];
-              const uniqueMessages = Array.from(
-                new Map(allMessages.map(msg => [msg.id, msg])).values()
-              ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-              
-              get().setMessages(conversationId, uniqueMessages);
-            }
-          } catch (error) {
-            console.warn('[Messages] Error fetching from server (using local):', error);
+                // Message has neither text nor ciphertext - invalid
+                console.warn('[Messages] Server message missing both text and ciphertext:', msg);
+                return null;
+              })
+            );
+            
+            const validMessages = processedServerMessages.filter((msg): msg is Message => msg !== null);
+            
+            // Merge with local messages
+            const allMessages = [...localMessages, ...validMessages];
+            const uniqueMessages = Array.from(
+              new Map(allMessages.map(msg => [msg.id, msg])).values()
+            ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+            
+            get().setMessages(conversationId, uniqueMessages);
           }
+        } catch (error) {
+          console.warn('[Messages] Error fetching from server (using local):', error);
         }
 
         set((state) => {
@@ -665,85 +643,62 @@ export const useMessagesStore = create<MessagesState>()(
         // Add to local storage immediately (offline-first)
         get().addMessage(message);
 
-        // Try to send via P2P first (if enabled and encrypted)
-        // Note: P2P only works with encrypted messages
         const netInfo = await NetInfo.fetch();
-        if (netInfo.isConnected && isEncrypted && ciphertext) {
-          try {
-            const sentViaP2P = await p2pManager.sendMessage(
-              conversationId,
-              recipientUserId,
-              message,
-              ciphertext
-            );
-            
-            if (sentViaP2P) {
-              // Message sent via P2P - update status to 'sent'
-              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
-              return message;
-            }
-          } catch (error) {
-            console.warn('[Messages] P2P send failed, using server:', error);
-          }
-        }
 
-        // Fallback to server (if cloud sync enabled)
+        // Send to the server, which relays it to the recipient
         if (netInfo.isConnected) {
-          if (get().cloudSyncEnabled) {
-            try {
-              // Send encrypted or plaintext based on availability
-              const payload: {
-                conversationId: string;
-                senderDeviceId: number;
-                messageType: string;
-                fontSize?: number;
-                ciphertext?: string;
-                encryptionVersion?: number;
-                text?: string;
-              } = {
+          try {
+            // Send encrypted or plaintext based on availability
+            const payload: {
+              conversationId: string;
+              senderDeviceId: number;
+              messageType: string;
+              fontSize?: number;
+              ciphertext?: string;
+              encryptionVersion?: number;
+              text?: string;
+            } = {
+              conversationId,
+              senderDeviceId: finalDeviceKeys.deviceId,
+              messageType: 'text',
+              fontSize,
+            };
+            
+            if (isEncrypted && ciphertext) {
+              payload.ciphertext = ciphertext;
+              payload.encryptionVersion = 1;
+            } else {
+              // Send as plaintext when encryption unavailable
+              payload.text = text.trim();
+            }
+            
+            await api.post('/messages', payload);
+            
+            // Update message status to 'sent' after successful send
+            get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
+          } catch (error) {
+            console.error('[Messages] Error sending to server:', error);
+            // Keep as 'pending' if send fails - will retry
+            // Add to sync queue for retry
+            await addToSyncQueue({
+              type: 'send_message',
+              conversationId,
+              data: {
                 conversationId,
                 senderDeviceId: finalDeviceKeys.deviceId,
+                ...(isEncrypted && ciphertext 
+                  ? { ciphertext, encryptionVersion: 1 }
+                  : { text: text.trim() }
+                ),
                 messageType: 'text',
                 fontSize,
-              };
-              
-              if (isEncrypted && ciphertext) {
-                payload.ciphertext = ciphertext;
-                payload.encryptionVersion = 1;
-              } else {
-                // Send as plaintext when encryption unavailable
-                payload.text = text.trim();
-              }
-              
-              await api.post('/messages', payload);
-              
-              // Update message status to 'sent' after successful send
-              get().updateMessage(conversationId, message.id, { readStatus: 'sent' });
-            } catch (error) {
-              console.error('[Messages] Error sending to server:', error);
-              // Keep as 'pending' if send fails - will retry
-              // Add to sync queue for retry
-              await addToSyncQueue({
-                type: 'send_message',
-                conversationId,
-                data: {
-                  conversationId,
-                  senderDeviceId: finalDeviceKeys.deviceId,
-                  ...(isEncrypted && ciphertext 
-                    ? { ciphertext, encryptionVersion: 1 }
-                    : { text: text.trim() }
-                  ),
-                  messageType: 'text',
-                  fontSize,
-                },
-              });
-            }
+              },
+            });
           }
         }
         
-        // If offline or cloud sync disabled, add to sync queue
-        if (!netInfo.isConnected || !get().cloudSyncEnabled) {
-          // Offline or cloud sync disabled - add to sync queue
+        // Offline: add to the sync queue
+        if (!netInfo.isConnected) {
           await addToSyncQueue({
             type: 'send_message',
             conversationId,

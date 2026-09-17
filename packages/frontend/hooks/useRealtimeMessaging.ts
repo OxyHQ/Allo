@@ -3,7 +3,6 @@ import { useOxy } from '@oxy.so/services';
 import { oxyClient } from '@oxy.so/core';
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_URL } from '@/config';
-import { CHAT_BACKEND } from '@/lib/chat/backend';
 import { useMessagesStore } from '@/stores/messagesStore';
 import { useConversationsStore } from '@/stores/conversationsStore';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
@@ -343,11 +342,6 @@ export const useRealtimeMessaging = (conversationId?: string) => {
   }, [user?.id, addMessage, updateMessage, removeMessage, updateConversation, deviceKeysStore]);
 
   const connectSocket = useCallback(() => {
-    // Socket.IO carries the Express backend's messages. A build whose chat
-    // backend is Matrix gets its messages from the homeserver's sync loop
-    // instead, and a socket opened here would deliver events for conversations
-    // that build is not drawing.
-    if (CHAT_BACKEND === 'matrix') return;
     if (!isAuthenticated || !user?.id) return;
 
     // If socket already exists and is connected, just ensure listeners are set up

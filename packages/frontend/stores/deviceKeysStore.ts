@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import type { DeviceDto, PreKey, PublicDeviceBundle, SignedPreKey } from '@allo/shared-types';
+import type { DeviceDto, PreKey, PublicDeviceBundle, SignedPreKey } from '@/lib/chat/legacyApiTypes';
 import {
   initializeDeviceKeys,
   DeviceKeys,

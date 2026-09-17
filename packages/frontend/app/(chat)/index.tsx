@@ -37,8 +37,6 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { ConversationSecurityMark } from '@/components/bridges/ConversationSecurityMark';
-import type { ConversationSecurity } from '@/lib/chat/roomOrigin';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
@@ -51,10 +49,6 @@ import {
 
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
-
-// Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
-import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
-import { useMatrixConversations } from '@/hooks/useMatrixConversations';
 
 // Utils
 import { colors } from '@/styles/colors';
@@ -97,33 +91,6 @@ export interface Conversation {
     unreadCount: number;
     avatar?: string; // For direct: contact avatar, for group: group avatar or first participant avatar
     isArchived?: boolean;
-    /**
-     * The viewer has been invited and has not joined. There is nothing to read in
-     * the conversation until they do, and opening it yields no messages.
-     *
-     * Only the Matrix backend produces this: the Express API has no invitations.
-     */
-    isInvitation?: boolean;
-    /**
-     * This account has put the conversation's messages on a timer: they stop
-     * being drawn here after their lifetime, and the ones this device sent are
-     * removed from the homeserver.
-     *
-     * Only the Matrix backend produces this, and it is a fact about *this
-     * account* rather than about the conversation — the other people in it are
-     * not told. See `docs/matrix/ephemeral.md`.
-     */
-    isEphemeral?: boolean;
-    /**
-     * What may be claimed about who can read this conversation, and which remote
-     * network carries it if any (`docs/matrix/data-model.md` §5.3).
-     *
-     * Decided once by `lib/chat/roomOrigin.ts` and never by a component. Absent
-     * on conversations from the Express API, which has no rooms, no bridges and
-     * no encryption state to read — and absent is correctly drawn as no mark at
-     * all rather than as an open padlock.
-     */
-    security?: ConversationSecurity;
     theme?: string; // Color theme ID (shared with all participants)
     // Group-specific fields
     participants?: ConversationParticipant[]; // All participants (including current user for groups)
@@ -178,8 +145,6 @@ interface ConversationRowStyles {
     conversationTimestampUnread: TextStyle;
     conversationBottomRow: ViewStyle;
     conversationMessage: TextStyle;
-    invitationLabel: TextStyle;
-    ephemeralMark: TextStyle;
     unreadBadge: ViewStyle;
     unreadText: TextStyle;
 }
@@ -308,18 +273,6 @@ const ConversationRow = React.memo(function ConversationRow({
                             <ThemedText style={styles.conversationName} numberOfLines={1}>
                                 {displayName}
                             </ThemedText>
-                            {/*
-                              * Both marks, from one decision made in
-                              * `lib/chat/roomOrigin.ts`. The row deliberately does
-                              * no case analysis of its own — see
-                              * `data-model.md` §5.3 for why that separation is the
-                              * point rather than a style preference.
-                              */}
-                            <ConversationSecurityMark
-                                security={item.security}
-                                size={13}
-                                color={theme.colors.textSecondary}
-                            />
                             {isGroup && participantCount > 0 && (
                                 <ThemedText
                                     style={[
@@ -344,27 +297,9 @@ const ConversationRow = React.memo(function ConversationRow({
                     </ThemedText>
                 </View>
                 <View style={styles.conversationBottomRow}>
-                    {/* An ephemeral conversation looks exactly like an ordinary one
-                        until its messages start disappearing, which is the moment it
-                        is too late to notice. The marker is beside the preview and
-                        not instead of it: what was said still belongs in the row. */}
-                    {item.isEphemeral && !item.isInvitation && (
-                        <Ionicons
-                            name="timer-outline"
-                            size={14}
-                            color={styles.ephemeralMark.color}
-                            accessibilityLabel={t('Messages in this conversation disappear')}
-                        />
-                    )}
-                    {item.isInvitation ? (
-                        <ThemedText style={styles.invitationLabel} numberOfLines={1}>
-                            {t('Invitation · tap to answer')}
-                        </ThemedText>
-                    ) : (
-                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                            {item.lastMessage}
-                        </ThemedText>
-                    )}
+                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                        {item.lastMessage}
+                    </ThemedText>
                     {item.unreadCount > 0 && (
                         <View style={styles.unreadBadge}>
                             <Text style={styles.unreadText}>
@@ -533,12 +468,7 @@ export default function ConversationsList() {
     const router = useRouter();
     const { width: windowWidth } = useWindowDimensions();
     // Get conversations from store
-    const storedConversations = useConversationsStore(state => state.conversations);
-    // ...or from the Matrix room list, which is `undefined` unless this build's
-    // chat backend is Matrix. The port's sync loop keeps it up to date, so there
-    // is nothing to fetch, nothing to cache and nothing to refresh.
-    const roomConversations = useMatrixConversations();
-    const conversations = roomConversations ?? storedConversations;
+    const conversations = useConversationsStore(state => state.conversations);
     const loadCachedConversations = useConversationsStore(state => state.loadCachedConversations);
     const fetchConversations = useConversationsStore(state => state.fetchConversations);
     const refreshConversations = useConversationsStore(state => state.refreshConversations);
@@ -564,26 +494,18 @@ export default function ConversationsList() {
     // than a read taken once: fetching before it lands would paint a list of
     // zeroes over the cache and never recover.
     useEffect(() => {
-        // The Matrix room list is fed by sync, not by a request. Calling the
-        // Express API here would fetch a list this screen is not drawing.
-        if (roomConversations !== undefined) {
-            return;
-        }
         loadCachedConversations();
         if (currentUserId) {
             fetchConversations(currentUserId);
         }
-    }, [loadCachedConversations, fetchConversations, currentUserId, roomConversations]);
+    }, [loadCachedConversations, fetchConversations, currentUserId]);
 
     // Pull-to-refresh, for the same reason, is a no-op until the viewer is known.
     const handleRefresh = useCallback(() => {
-        if (roomConversations !== undefined) {
-            return;
-        }
         if (currentUserId) {
             refreshConversations(currentUserId);
         }
-    }, [refreshConversations, currentUserId, roomConversations]);
+    }, [refreshConversations, currentUserId]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -797,20 +719,9 @@ export default function ConversationsList() {
         // An invitation has no preview to show — there is nothing readable in
         // the room yet — so the row says what it is instead of going blank and
         // reading as a conversation nobody has written in.
-        invitationLabel: {
-            fontSize: 13,
-            fontWeight: '600',
-            color: theme.colors.primary,
-            flex: 1,
-            marginRight: 8,
-        },
         // A style whose only job is to carry a colour to an icon, because an
         // Ionicon takes one as a prop and not from a stylesheet. Read from the
         // theme like every other colour in the app.
-        ephemeralMark: {
-            color: theme.colors.textSecondary,
-            marginRight: 4,
-        },
         unreadBadge: {
             backgroundColor: colors.primaryColor,
             borderRadius: 12,
@@ -1218,9 +1129,7 @@ export default function ConversationsList() {
                     )}
                 </Animated.View>
 
-                {/* Renders its children unchanged unless this build's chat backend
-                    is Matrix and there is no session yet. */}
-                <MatrixSignInGate>
+                <>
                     {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
                         <ConversationsSkeleton theme={theme} />
                     ) : visibleConversations.length > 0 ? (
@@ -1251,7 +1160,7 @@ export default function ConversationsList() {
                             />
                         </>
                     )}
-                </MatrixSignInGate>
+                </>
 
                 <Link
                     href="/(chat)/settings"

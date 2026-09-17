@@ -17,10 +17,7 @@ import {
 } from '@/utils/notifications';
 import { initializeI18n } from './i18n';
 import { INITIALIZATION_TIMEOUT } from './constants';
-import { fetchMyCloudSyncEnabled } from '@/lib/security/cloudSync';
 import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
-import { useMessagesStore } from '@/stores/messagesStore';
-import { p2pManager } from './p2pMessaging';
 import { runStartupHealthCheck } from '@/utils/appHealthCheck';
 
 export interface InitializationResult {
@@ -136,8 +133,7 @@ export class AppInitializer {
 
   /**
    * Deferred initialization — runs after the app is visible.
-   * Signal Protocol, P2P messaging, and notifications don't need
-   * to block the first render.
+   * Device keys and notifications don't need to block the first render.
    */
   static async initializeDeferred(): Promise<void> {
     try {
@@ -191,25 +187,6 @@ async function initializeSignalProtocol(): Promise<void> {
     const deviceKeysStore = useDeviceKeysStore.getState();
     if (!deviceKeysStore.isInitialized) {
       await deviceKeysStore.initialize();
-    }
-
-    // What this account's document says about cloud sync, from Allo's backend
-    // and not Oxy's — see `lib/security/cloudSync.ts`, which also holds the rule
-    // for reading the field and why an absent one leaves cloud sync on.
-    //
-    // A launch is not blocked on the answer. The store already holds the value
-    // this settles on in every case but one, so a settings endpoint having a bad
-    // day costs nothing here.
-    try {
-      useMessagesStore.getState().setCloudSyncEnabled(await fetchMyCloudSyncEnabled());
-    } catch (error) {
-      logger.warn('[AppInitializer] the cloud sync setting could not be loaded', error);
-    }
-
-    // Initialize P2P manager. It re-mints its own access token on each
-    // (re)connection, so we only gate on having a session token here.
-    if (oxyClient.getAccessToken()) {
-      await p2pManager.initialize(user.id);
     }
   } catch (error) {
     logger.error('[AppInitializer] Error initializing Signal Protocol', error);

@@ -48,12 +48,10 @@ import {
 /**
  * An attachment, full size.
  *
- * **Not a Matrix feature.** Everything it draws comes from `Message.media`,
- * which both backends fill, and every URL it shows comes from the one resolver
- * `ConversationView` already reconciles — so a conversation on the Express API
- * opens the same viewer with the same gestures. Nothing here knows which
- * backend it is looking at, and nothing here may learn: an `import` of
- * `CHAT_BACKEND` in this file would be the beginning of a second viewer.
+ * Everything it draws comes from `Message.media`, and every URL it shows comes
+ * from the one resolver `ConversationView` hands it. Nothing here knows where
+ * the bytes come from, and nothing here may learn: a transport-specific import
+ * in this file would be the beginning of a second viewer.
  *
  * The pager is a row of pages this component translates itself rather than a
  * native scroll view. A scroll view inside a modal, wrapping a view that also
@@ -461,9 +459,9 @@ const ViewerPage = memo<ViewerPageProps>(({ item, resolveUrl, isActive, zoomStyl
           source={{ uri: fullUri }}
           style={StyleSheet.absoluteFill}
           contentFit="contain"
-          // No `cachePolicy`: on the Matrix path these bytes are a decrypted
-          // copy of a picture from an encrypted conversation, and expo-image's
-          // disk cache would write it somewhere the media cache cannot release.
+          // Memory only: these bytes may be a decrypted copy of a picture from
+          // an encrypted conversation, and expo-image's disk cache would write
+          // it somewhere nothing in the app can release.
           cachePolicy="memory"
           accessibilityLabel={item.filename ?? t('Attachment')}
         />

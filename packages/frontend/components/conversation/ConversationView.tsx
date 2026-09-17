@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useEffect, useContext, useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   StyleSheet,
   View,
   TextInput,
@@ -13,7 +12,7 @@ import {
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
-import { useRouter, usePathname, useSegments, type Href } from 'expo-router';
+import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import { toast } from '@oxy.so/bloom/toast';
@@ -36,8 +35,6 @@ import { SwipeableMessage } from '@/components/messages/SwipeableMessage';
 import { MediaCarousel } from '@/components/messages/MediaCarousel';
 import { MicSendButton } from '@/components/messages/MicSendButton';
 import { AttachmentViewer } from '@/components/media/AttachmentViewer';
-import { EphemeralBanner } from '@/components/matrix/EphemeralBanner';
-import { useEphemeralRefusalMessage } from '@/components/matrix/ephemeralRefusal';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ReplyIcon } from '@/assets/icons/reply-icon';
 import { ForwardIcon } from '@/assets/icons/forward-icon';
@@ -57,7 +54,6 @@ import { useConversationTheme } from '@/hooks/useConversationTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
-import { useEphemeralPolicy } from '@/hooks/useEphemeralPolicy';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -78,12 +74,6 @@ import { useUsersStore } from '@/stores/usersStore';
 import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useSenderInfo } from '@/hooks/useSenderInfo';
-import { useMatrixSenderInfo, useMessageSenderRequests } from '@/hooks/useMatrixSenderInfo';
-import { useChatPeople } from '@/hooks/useChatPeople';
-// Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
-import { CHAT_BACKEND } from '@/lib/chat/backend';
-import { useMatrixTimeline } from '@/hooks/useMatrixTimeline';
-import { useMatrixMedia } from '@/hooks/useMatrixMedia';
 import {
   captureMediaAttachment,
   pickDocumentAttachments,
@@ -120,20 +110,6 @@ const EMPTY_MESSAGES: Message[] = [];
 
 // Stable empty style for FlashList contentContainer
 const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 8 };
-
-// Shown above the oldest loaded message while the homeserver is being asked for
-// more. Declared once, at module scope, so the list header is not a new element
-// type on every render.
-const olderMessagesStyles = StyleSheet.create({
-  spinner: { paddingVertical: 12 },
-});
-
-const OlderMessagesSpinner = (
-  <View style={olderMessagesStyles.spinner}>
-    <ActivityIndicator />
-  </View>
-);
-
 
 /**
  * ConversationView Component
@@ -193,10 +169,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Get conversation data early so we can use its theme
   const conversation = useConversation(conversationId);
 
-  // Whether this conversation's messages disappear, and after how long. Answers
-  // `undefined` on the Express backend, which has no such thing.
-  const ephemeralPolicy = useEphemeralPolicy(conversationId);
-
   // Use conversation-specific theme (falls back to global theme if no conversation theme set)
   const theme = useConversationTheme(conversation?.theme);
 
@@ -207,42 +179,21 @@ export default function ConversationView({ conversationId: propConversationId }:
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
   // Get messages from store (direct access with stable empty array reference)
-  const storedMessages = useMessagesStore(state =>
+  const messages = useMessagesStore(state =>
     conversationId ? (state.messagesByConversation[conversationId] || EMPTY_MESSAGES) : EMPTY_MESSAGES
   );
 
-  // ...or from the Matrix port, which is `undefined` unless this build's chat
-  // backend is Matrix. The room's timeline is a live view over the sync loop, so
-  // there is no fetch: opening it is subscribing to it.
-  const matrixTimeline = useMatrixTimeline(conversationId);
-  const messages = matrixTimeline?.messages ?? storedMessages;
-
-  // Attachments the port has fetched and decrypted, keyed by the media refs the
-  // messages above carry. `undefined` on the Express path, where a media id is
-  // an Oxy Cloud file id instead — see `getMediaUrl`.
-  const matrixMedia = useMatrixMedia();
-
   // The store-backed indicator is re-emitted as a DOM event and so only ever
-  // fires on web; the port's comes from the homeserver and works everywhere.
-  const typingUserIds = matrixTimeline?.typingUserIds ?? storedTypingUserIds;
+  // fires on web.
+  const typingUserIds = storedTypingUserIds;
 
   /**
-   * Says the viewer is typing, wherever this conversation lives.
+   * Says the viewer is typing.
    *
    * The throttling around this — one notice per five seconds, a stop after three
-   * idle — belongs to the composer and is the same either way; only the wire
-   * changes.
+   * idle — belongs to the composer.
    */
-  const notifyTyping = useCallback(
-    (isTyping: boolean) => {
-      if (matrixTimeline) {
-        matrixTimeline.setTyping(isTyping);
-        return;
-      }
-      sendTypingIndicator(isTyping);
-    },
-    [matrixTimeline, sendTypingIndicator],
-  );
+  const notifyTyping = sendTypingIndicator;
 
   // Group messages by time and format with day separators
   const messageGroups = useMemo(() => {
@@ -254,10 +205,9 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [messages]);
 
   // Get loading state
-  const storedIsLoading = useMessagesStore(state =>
+  const isLoading = useMessagesStore(state =>
     conversationId ? state.isLoading(conversationId) : false
   );
-  const isLoading = matrixTimeline?.isLoading ?? storedIsLoading;
 
   // Get UI state from store - access directly from state for reactivity
   const inputText = useChatUIStore(state =>
@@ -278,25 +228,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
   const setEditing = useChatUIStore(state => state.setEditing);
   const sendMessage = useMessagesStore(state => state.sendMessage);
-
-  /**
-   * Tell the homeserver the newest message here has been seen.
-   *
-   * An Effect because it is the one thing on this screen that is neither derived
-   * state nor a response to something the user did: nobody taps "I have read
-   * this", and the fact being reported — that a conversation with these messages
-   * in it is on screen — only exists after the render that put them there. It is
-   * a write to an external system, which is the case Effects are for.
-   *
-   * Keyed on the newest message rather than on the list, so scrolling, a
-   * reaction, or an edit does not re-send. Re-running is harmless anyway: the
-   * source drops a receipt for an event it has already sent one for.
-   */
-  const markRead = matrixTimeline?.markRead;
-  const newestMessageId = messages.length > 0 ? messages[messages.length - 1].id : undefined;
-  useEffect(() => {
-    markRead?.();
-  }, [markRead, newestMessageId]);
 
 
   const flatListRef = useRef<FlashListRef<FormattedMessageGroup> | null>(null);
@@ -337,11 +268,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     // Clear UI state when switching conversations
     clearConversationUI(conversationId);
 
-    // A Matrix timeline is not fetched: it is a live view the port opens over
-    // the sync loop, and asking the Express API for this room's messages would
-    // request a conversation that does not exist there.
-    if (CHAT_BACKEND === 'matrix') return;
-
     // Fetch messages (store will handle duplicate requests)
     if (currentUserId) {
       fetchMessages(conversationId, currentUserId);
@@ -363,30 +289,9 @@ export default function ConversationView({ conversationId: propConversationId }:
   const conversationMetadata = useConversationMetadata(conversation, currentUserId);
   const { isGroup } = conversationMetadata;
 
-  /**
-   * Who sent each incoming message, from whichever backend this build talks to.
-   *
-   * Both hooks are called because hooks must be; only one of them answers.
-   * `useMatrixSenderInfo` is `undefined` on the Express path, and on the Matrix
-   * path `useSenderInfo` has nothing to do — a Matrix `Conversation` carries no
-   * participants, so its Effect iterates nothing and it fetches nobody.
-   *
-   * The lookup is built here rather than inside `useMatrixSenderInfo` because
-   * the refusal below needs the same people, and asking twice would be two sets
-   * of queries for one answer.
-   */
-  const senderRequests = useMessageSenderRequests(messages);
-  const chatPeople = useChatPeople(senderRequests);
-  const alloApiSenderInfo = useSenderInfo(conversation, isGroup, conversationMetadata);
-  const matrixSenderInfo = useMatrixSenderInfo(chatPeople);
+  // Who sent each incoming message.
   const { getSenderName, getSenderHandle, getSenderAvatar } =
-    matrixSenderInfo ?? alloApiSenderInfo;
-
-  // An ephemeral conversation refuses to send when it cannot account for who is
-  // in it. That is a rule and not a fault, so it is said in the reader's own
-  // language rather than passed through as the port's English — and it names the
-  // people rather than their Matrix ids, which is what the lookup above is for.
-  const ephemeralRefusalMessage = useEphemeralRefusalMessage(chatPeople);
+    useSenderInfo(conversation, isGroup, conversationMetadata);
 
   /**
    * Handle header press to show contact/group details
@@ -395,17 +300,6 @@ export default function ConversationView({ conversationId: propConversationId }:
    */
   const handleHeaderPress = useCallback(() => {
     if (!conversationId) return;
-
-    // On Matrix the conversation's details are a room's: who is in it, what the
-    // power levels let this account do, and the way out. None of that is in
-    // `ContactDetails`, which draws the participants of a Mongo document, so
-    // the two backends go to different places rather than to one screen that
-    // would have to be both.
-    if (CHAT_BACKEND === 'matrix') {
-      router.push(`/room/${conversationId}` as Href);
-      return;
-    }
-
     if (!conversation || !bottomSheet) return;
 
     if (!isLargeScreen) {
@@ -646,51 +540,6 @@ export default function ConversationView({ conversationId: propConversationId }:
       setMessageTextSize(sizeToUse);
     }
 
-    // On Matrix a message is addressed to a room, not to a recipient: there is
-    // no device list to encrypt for by hand and no user id to look up, because
-    // the room's members and their devices are the homeserver's business and the
-    // SDK's. Everything below this branch exists to satisfy the Signal
-    // implementation, which needs to know who it is encrypting for.
-    //
-    // The per-message font size does not survive this path. `AlloTimelineHandle`
-    // sends a body and nothing else, and Allo's font size is meant to travel as
-    // `so.oxy.allo.font_size` inside the encrypted content
-    // (`docs/matrix/data-model.md` §4.2) — which the port has no call for yet.
-    // The gesture still adjusts the composer; it just does not reach the message.
-    if (matrixTimeline) {
-      try {
-        // The same composer, sending or rewriting. An edit keeps the original
-        // event's place and timestamp on every client in the room; only the body
-        // changes, which is why the row does not move when this returns.
-        if (editingMessageId !== undefined) {
-          await matrixTimeline.edit(editingMessageId, text);
-          setEditing(conversationId, undefined);
-        } else {
-          await matrixTimeline.send(text);
-        }
-      } catch (error) {
-        console.error('Error sending message:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
-        toast.error(ephemeralRefusalMessage(error) ?? errorMessage);
-        setInputText(conversationId, text);
-        return;
-      }
-
-      if (sizeToUse && sizeToUse !== originalSize) {
-        setMessageTextSize(originalSize);
-        setTempTextSize(originalSize);
-      }
-      setIsSizeAdjusting(false);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-      return;
-    }
-
     // Get recipient user ID from conversation
     // For direct messages, get the other participant
     // For groups, we'll need to handle multiple recipients (for now, use first other participant)
@@ -764,7 +613,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, matrixTimeline, notifyTyping, editingMessageId, setEditing, ephemeralRefusalMessage]);
+  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, notifyTyping]);
 
   /**
    * Handle Enter key press to send message
@@ -791,44 +640,19 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [inputText, handleSend]);
 
   /**
-   * Sends one attachment, and says so when it does not go.
+   * Sends what was picked, and says so when it cannot.
    *
-   * Attachments exist on the Matrix path only, and that is a property of the
-   * backend rather than a gap in this screen: Allo's Express API has never had
-   * an upload endpoint, and the homeserver's media repository is what replaces
-   * it. A build talking to the old backend says so instead of opening a picker
-   * that leads nowhere.
-   *
-   * Failures are shown rather than logged. An upload is something the user
-   * started and waited for, and the one that matters most —
-   * `MatrixMediaEncryptionUnknownError`, raised when the conversation's
-   * encryption state has not synced yet — is recovered from by trying again,
-   * which nobody does if nothing said anything.
+   * The legacy API has no upload endpoint, so today this says so instead of
+   * opening a picker that leads nowhere. The pickers stay wired because the
+   * platform client that replaces this path sends attachments through the same
+   * call.
    */
   const sendAttachments = useCallback(async (attachments: PickedAttachments) => {
     if (attachments.length === 0) {
       return;
     }
-    if (!matrixTimeline) {
-      toast.error('Attachments need the Matrix chat backend.');
-      return;
-    }
-    for (const attachment of attachments) {
-      try {
-        await matrixTimeline.sendAttachment(attachment);
-      } catch (error) {
-        console.error('Error sending attachment:', error);
-        toast.error(
-          ephemeralRefusalMessage(error) ??
-            (error instanceof Error ? error.message : 'The attachment could not be sent.')
-        );
-        return;
-      }
-    }
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [matrixTimeline, ephemeralRefusalMessage]);
+    toast.error('Attachments are not available yet.');
+  }, []);
 
   /**
    * Picks from the photo library, or takes a picture, and sends what comes back.
@@ -862,13 +686,10 @@ export default function ConversationView({ conversationId: propConversationId }:
         onSelectPhoto={() => handleSelectMedia(pickMediaAttachments)}
         onSelectDocument={() => handleSelectMedia(pickDocumentAttachments)}
         onSelectCamera={() => handleSelectMedia(captureMediaAttachment)}
-        // Location, contact and poll are left unwired rather than stubbed. None
-        // of the three is missing a picker: `m.location` is in the spec and the
-        // port does not translate it, a contact card has no event type at all,
-        // and a poll is MSC3381 — so each needs a decision about what Allo
-        // sends before there is anything for a handler to do. See
-        // `docs/matrix/ui-wiring.md` §5. An option the menu offers and silently
-        // ignores is worse than one it does not offer.
+        // Location, contact and poll are left unwired rather than stubbed: each
+        // needs a decision about what Allo sends before there is anything for a
+        // handler to do. An option the menu offers and silently ignores is
+        // worse than one it does not offer.
         onSelectLocation={undefined}
         onSelectContact={undefined}
         onSelectPoll={undefined}
@@ -901,55 +722,38 @@ export default function ConversationView({ conversationId: propConversationId }:
   /**
    * Resolve a media download URL from a media ID.
    *
-   * Two different resolutions behind one prop, and they must not be mixed. On
-   * the Matrix path the id is the port's opaque media ref: the bytes live in
-   * the homeserver's media repository, are encrypted in an encrypted room, and
-   * are fetched and decrypted by the port — so the answer comes from a cache and
-   * is `''` until it arrives. On the Express path the id is an Oxy Cloud file
-   * id and the URL is built from it, with a rendition variant that depends on
-   * the item's kind (`mediaVariantForKind`). Neither server can resolve the
-   * other's identifiers.
+   * The id is an Oxy Cloud file id and the URL is built from it, with a
+   * rendition variant that depends on the item's kind (`mediaVariantForKind`).
    *
    * Returns an empty string when there is nothing yet, so the image renderer
    * surfaces its own empty state instead of a masking placeholder.
    */
   const getMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
-    if (matrixMedia) {
-      return matrixMedia.url(mediaId);
-    }
     try {
       return oxyServices.getFileDownloadUrl(mediaId, mediaVariantForKind(kind));
     } catch (error) {
       console.error('Error getting media URL:', error);
       return '';
     }
-  }, [oxyServices, matrixMedia]);
+  }, [oxyServices]);
 
   /**
    * The same media, at full size, for the viewer.
    *
-   * It differs from `getMediaUrl` on the Express path and only there. That
-   * resolver asks Oxy Cloud for a rendition sized for a 250pt bubble —
+   * `getMediaUrl` asks Oxy Cloud for a rendition sized for a 250pt bubble —
    * `w1280` for a picture, `poster` (a still frame) for a video — and both are
    * the wrong answer full screen: one is soft on a modern display and the other
    * is a photograph of a video. Omitting the variant serves the bytes as
    * uploaded, which is what "full size" means.
-   *
-   * On the Matrix path there is nothing to choose. A media ref already names one
-   * blob in the homeserver's media repository, and the viewer is given the
-   * original ref rather than the thumbnail's — see `lib/chat/attachmentViewer.ts`.
    */
   const getFullMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
-    if (matrixMedia) {
-      return matrixMedia.url(mediaId);
-    }
     try {
       return oxyServices.getFileDownloadUrl(mediaId, undefined);
     } catch (error) {
       logger.error('[Conversation] Error getting full-size media URL:', error);
       return '';
     }
-  }, [oxyServices, matrixMedia]);
+  }, [oxyServices]);
 
   /**
    * The same resolution for an attachment that is not a picture.
@@ -961,16 +765,13 @@ export default function ConversationView({ conversationId: propConversationId }:
    * omitted variant serves.
    */
   const getAttachmentUrl = useCallback((source: string): string => {
-    if (matrixMedia) {
-      return matrixMedia.url(source);
-    }
     try {
       return oxyServices.getFileDownloadUrl(source, undefined);
     } catch (error) {
       logger.error('[Conversation] Error getting attachment URL:', error);
       return '';
     }
-  }, [oxyServices, matrixMedia]);
+  }, [oxyServices]);
 
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
@@ -1035,8 +836,8 @@ export default function ConversationView({ conversationId: propConversationId }:
    * Opens the full-screen viewer on the picture or video that was tapped.
    *
    * The gallery is every attachment in the conversation, not just this
-   * message's: a Matrix event carries one attachment, so five photographs are
-   * five messages, and a viewer built from one of them could never be swiped.
+   * message's: five photographs sent one at a time are five messages, and a
+   * viewer built from one of them could never be swiped.
    * Which page it opens on is decided in `lib/chat/attachmentViewer.ts`, from
    * the message and the media together — the same file sent twice has the same
    * media id twice.
@@ -1086,21 +887,13 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
 
     try {
-      if (matrixTimeline) {
-        // One call for both directions. Which one it is depends on whether this
-        // account has already annotated the event, and the port asks the SDK
-        // that question against state a snapshot here could be a sync behind —
-        // a reaction sent from the user's phone a moment ago, for instance.
-        await matrixTimeline.toggleReaction(selectedMessage.id, emoji);
-      } else {
-        const currentReactions = selectedMessage.reactions || {};
-        const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
+      const currentReactions = selectedMessage.reactions || {};
+      const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
 
-        if (hasReacted) {
-          await removeReaction(conversationId, selectedMessage.id, emoji);
-        } else {
-          await addReaction(conversationId, selectedMessage.id, emoji);
-        }
+      if (hasReacted) {
+        await removeReaction(conversationId, selectedMessage.id, emoji);
+      } else {
+        await addReaction(conversationId, selectedMessage.id, emoji);
       }
     } catch (error) {
       console.error('[Conversation] Error toggling reaction:', error);
@@ -1108,7 +901,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     } finally {
       resetSelectionState();
     }
-  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState, matrixTimeline]);
+  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState]);
 
   const setReplyTo = useChatUIStore((state) => state.setReplyTo);
   const replyTo = useChatUIStore((state) => conversationId && state.replyToByConversation ? state.replyToByConversation[conversationId] : undefined);
@@ -1169,26 +962,15 @@ export default function ConversationView({ conversationId: propConversationId }:
   /**
    * Handle delete action
    *
-   * On Matrix this is a redaction, and a redaction is not a disappearance: the
-   * event keeps its place, its sender and its time on every client in the room,
-   * and only its content goes. The row stays and starts drawing itself as
-   * deleted, which is the protocol working — see `AlloTimelineHandle.redact`.
+   * The legacy API has no endpoint that removes a message, so there is nothing
+   * to call and no reason to pretend otherwise by clearing it here: a message
+   * gone from this device and present on every other one is worse than one that
+   * is still there.
    */
-  const handleDelete = useCallback((message: Message) => {
+  const handleDelete = useCallback((_message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    if (!matrixTimeline) {
-      // The Express backend has no endpoint that removes a message, so there is
-      // nothing to call and no reason to pretend otherwise by clearing it here:
-      // a message gone from this device and present on every other one is worse
-      // than one that is still there.
-      toast.error('Deleting messages is not available on this account.');
-      return;
-    }
-    matrixTimeline.deleteMessage(message.id).catch((error: unknown) => {
-      console.error('[Conversation] Error deleting message:', error);
-      toast.error('Failed to delete message');
-    });
-  }, [resetSelectionState, matrixTimeline]);
+    toast.error('Deleting messages is not available on this account.');
+  }, [resetSelectionState]);
 
   /**
    * Handle info action
@@ -1227,17 +1009,9 @@ export default function ConversationView({ conversationId: propConversationId }:
       },
     ];
 
-    // Both only ever apply to the viewer's own messages. Matrix lets a moderator
-    // redact somebody else's, but Allo does not check power levels, and an
-    // action offered to everyone that works for a few is worse than one that is
-    // not offered: the failure arrives after the tap, from the homeserver.
+    // Only ever applies to the viewer's own messages: an action offered to
+    // everyone that works for a few is worse than one that is not offered.
     if (message.isSent) {
-      if (matrixTimeline) {
-        actions.push({
-          label: 'Edit',
-          onPress: () => handleEdit(message),
-        });
-      }
       actions.push({
         label: 'Delete',
         icon: <TrashIcon size={20} color="#FF3B30" />,
@@ -1250,7 +1024,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       return actions.filter(action => action.label !== 'Copy');
     }
     return actions;
-  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleEdit, handleDelete, matrixTimeline]);
+  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleDelete]);
 
   /**
    * Handle swipe to reply
@@ -1396,11 +1170,6 @@ export default function ConversationView({ conversationId: propConversationId }:
             />
           </View>
 
-          {/* Under the header and above everything else, so that it is on screen
-              whenever the conversation is — including the empty one, which is
-              exactly when somebody is about to write the first message into it. */}
-          {ephemeralPolicy !== undefined && <EphemeralBanner policy={ephemeralPolicy} />}
-
           {/* Messages List */}
           {messageGroups.length > 0 ? (
             <>
@@ -1409,15 +1178,6 @@ export default function ConversationView({ conversationId: propConversationId }:
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}
-                // Older messages are asked for as the top of the list comes into
-                // view. The store-backed path has no such call — it fetches a
-                // conversation whole — so this stays undefined there and the list
-                // behaves exactly as it did.
-                onStartReached={matrixTimeline?.loadOlder}
-                onStartReachedThreshold={0.5}
-                ListHeaderComponent={
-                  matrixTimeline?.isPaginating ? OlderMessagesSpinner : undefined
-                }
               />
               {/* Typing Indicator */}
               {typingUserIds.length > 0 && (

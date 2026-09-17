@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { ConversationDto, EnrichedConversationParticipant } from '@allo/shared-types';
+import type { ConversationDto, EnrichedConversationParticipant } from '@/lib/chat/legacyApiTypes';
 import { Conversation, ConversationParticipant, ConversationType } from '@/app/(chat)/index';
 import { api } from '@/utils/api';
 import { useUsersStore, type UserEntity } from './usersStore';

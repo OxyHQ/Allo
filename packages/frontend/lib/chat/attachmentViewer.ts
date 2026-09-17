@@ -4,12 +4,9 @@ import type { MediaItem, Message } from '@/stores/messagesStore';
  * What the full-screen viewer opens on, worked out from the messages a screen
  * already has.
  *
- * The viewer is not a Matrix feature. Both backends put their attachments in
- * `Message.media`, and everything here reads that field and nothing else — no
- * media refs are parsed, no server is named, no `CHAT_BACKEND` is consulted. So
- * a conversation on the Express API opens the same viewer, and the only
- * difference is which resolver turns an id into a URL (see `getMediaUrl` in
- * `ConversationView`).
+ * Everything here reads `Message.media` and nothing else — no media ids are
+ * parsed and no server is named. The only thing that knows how an id becomes a
+ * URL is the resolver `ConversationView` hands the viewer (`getMediaUrl`).
  *
  * Pure, and separate from the component for that reason: what the gallery
  * contains and where it opens are the two things worth being sure about, and
@@ -57,10 +54,9 @@ export interface ViewerSelection {
 /**
  * Every attachment in these messages that the viewer can show, oldest first.
  *
- * The whole conversation and not the tapped message: a Matrix event carries one
- * attachment, so five photographs are five messages, and a viewer scoped to one
- * message could never be swiped. Timeline order is the messages' own — nothing
- * is sorted here, exactly as `matrixViewModel` does not re-sort the room list.
+ * The whole conversation and not the tapped message: five photographs sent one
+ * at a time are five messages, and a viewer scoped to one message could never
+ * be swiped. Timeline order is the messages' own — nothing is sorted here.
  */
 export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
   const items: ViewerItem[] = [];
@@ -102,8 +98,8 @@ export function selectViewerItem(
  * A key that no other pair can produce.
  *
  * Length-prefixed rather than separated by a character, and that is the whole
- * point: a media id is a Matrix media ref, which is JSON and may contain any
- * character at all, so *every* separator appears in some legitimate id. With a
+ * point: a media id is opaque and may contain any character at all, so *every*
+ * separator appears in some legitimate id. With a
  * plain `a + '#' + b`, the pair `('m1', 'x#y')` and the pair `('m1#x', 'y')`
  * both spell `m1#x#y`, and a duplicated React key makes one of the two pages
  * disappear. The length says exactly where the first half ends, so the decoding

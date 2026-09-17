@@ -7,7 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { toast } from '@oxy.so/bloom/toast';
@@ -20,12 +20,10 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { Header } from '@/components/layout/Header';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
-import { roomAdminSource } from '@/lib/chat/roomAdmin';
 import { useOxy } from '@oxy.so/services';
 import type { User as OxyUser } from '@oxy.so/core';
 import type { Href } from 'expo-router';
@@ -58,19 +56,9 @@ interface User {
  * New Chat Screen
  * Allows users to search for and start a new conversation
  *
- * **One creation path, whichever backend this build talks to.** Everything below
- * chooses people and hands them to `useCreateConversation`, which answers with
- * the id of a conversation to open; whether that is a row in Mongo or an
- * encrypted room on a homeserver is decided by `EXPO_PUBLIC_CHAT_BACKEND` and is
- * not this screen's business. See `lib/chat/newConversation.ts`.
- *
- * **It is also the app's one people-picker.** With `?invite=<roomId>` it adds
- * the people chosen to a conversation that already exists instead of making a
- * new one; everything above that last step — the search, the selection, the
- * rows — is the same screen doing the same job, and a second copy of it would
- * be a second search that drifts. Only the Matrix room details screen produces
- * that link, because only Matrix has a way to invite somebody to a room that
- * already exists.
+ * **One creation path.** Everything below chooses people and hands them to
+ * `useCreateConversation`, which answers with the id of a conversation to open;
+ * how it is made is not this screen's business. See `lib/chat/newConversation.ts`.
  */
 export default function NewChatScreen() {
   const { t } = useTranslation();
@@ -78,9 +66,6 @@ export default function NewChatScreen() {
   const router = useRouter();
   const { oxyServices } = useOxy();
   const createConversation = useCreateConversation();
-  const { invite: inviteRoomId } = useLocalSearchParams<{ invite?: string }>();
-  /** Adding to a conversation rather than starting one. */
-  const isInviting = typeof inviteRoomId === 'string' && inviteRoomId !== '';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -209,92 +194,28 @@ export default function NewChatScreen() {
     [createConversation, isCreating, router, t],
   );
 
-  /**
-   * Adds the chosen people to a conversation that already exists.
-   *
-   * Every invitation is its own request, so some can be accepted and others
-   * refused; what is reported is what happened, and the screen only leaves when
-   * at least one person was actually invited. Telling the user "added" and
-   * going back to a group nobody joined is the failure this shape prevents.
-   */
-  const invitePeople = useCallback(
-    async (roomId: string, participantIds: readonly string[]) => {
-      if (isCreating) {
-        return;
-      }
-      setIsCreating(true);
-      // Borrowed rather than merely fetched: the registry hands out one source
-      // per room and drops it when nothing is watching, so a screen that used
-      // one without subscribing would leave an entry behind for every room it
-      // ever invited into. Watching it also means that if the details screen
-      // this was opened from is still on the stack, its member list is the one
-      // that gets refreshed.
-      const source = roomAdminSource(roomId);
-      const release = source.subscribe(() => {});
-      try {
-        const outcome = await source.invite(participantIds);
-        if (outcome.failed.length > 0) {
-          toast.error(
-            t('Some invitations could not be sent ({{count}})', {
-              count: outcome.failed.length,
-            }),
-          );
-        }
-        if (outcome.invited.length === 0) {
-          return;
-        }
-        toast.success(t('Invitations sent ({{count}})', { count: outcome.invited.length }));
-        setSelectedUserIds(new Set());
-        setIsSelectionMode(false);
-        router.replace(`/c/${roomId}` as Href);
-      } catch (error: unknown) {
-        logger.error('[NewChat] Error inviting people:', error);
-        toast.error(getErrorMessage(error) || t('Allo could not invite anybody'));
-      } finally {
-        release();
-        setIsCreating(false);
-      }
-    },
-    [isCreating, router, t],
-  );
-
   // Open a one-to-one conversation with the user whose row was tapped
   const openConversation = useCallback(
     async (user: User) => {
-      // While adding people to a conversation there is nothing to open: a tap
-      // is a choice, which is what selection mode already means.
-      if (isSelectionMode || isInviting) {
+      // In selection mode a tap is a choice, not an opening.
+      if (isSelectionMode) {
         toggleUserSelection(user.id);
         return;
       }
       await startConversation([user.id], undefined);
     },
-    [isInviting, isSelectionMode, toggleUserSelection, startConversation],
+    [isSelectionMode, toggleUserSelection, startConversation],
   );
 
-  // What the button at the bottom does: add the chosen people to a conversation
-  // that exists, or start one where a single person is a direct message and
-  // more than one is a group.
+  // What the button at the bottom does: start a conversation where a single
+  // person is a direct message and more than one is a group.
   const submitSelection = useCallback(async () => {
     if (selectedUserIds.size === 0) {
       toast.error(t('Choose at least one person'));
       return;
     }
-    const participantIds = Array.from(selectedUserIds);
-    if (isInviting && inviteRoomId !== undefined) {
-      await invitePeople(inviteRoomId, participantIds);
-      return;
-    }
-    await startConversation(participantIds, groupName);
-  }, [
-    groupName,
-    invitePeople,
-    inviteRoomId,
-    isInviting,
-    selectedUserIds,
-    startConversation,
-    t,
-  ]);
+    await startConversation(Array.from(selectedUserIds), groupName);
+  }, [groupName, selectedUserIds, startConversation, t]);
 
   const styles = StyleSheet.create({
     container: {
@@ -448,16 +369,12 @@ export default function NewChatScreen() {
       <ThemedView style={styles.container}>
         <Header
           options={{
-            title: isInviting ? t('Add people') : t('New Chat'),
+            title: t('New Chat'),
             showBackButton: true,
           }}
         />
 
-        {/* On the Matrix backend there is nothing to choose from and nowhere to
-            put a new conversation until there is a client: the people are
-            invited by their id on the homeserver this account lives on. With the
-            flag unset the gate renders its children and nothing else. */}
-        <MatrixSignInGate>
+        <>
           <View style={styles.searchContainer}>
             <View style={styles.searchInputWrapper}>
               <Ionicons
@@ -518,9 +435,7 @@ export default function NewChatScreen() {
               lottieSource={require('@/assets/lottie/welcome.json')}
               title={
                 searchQuery.length === 0
-                  ? isInviting
-                    ? t('Search for the people to add')
-                    : t('Search for users to start a conversation')
+                  ? t('Search for users to start a conversation')
                   : t('Type at least 2 characters to search')
               }
             />
@@ -530,9 +445,8 @@ export default function NewChatScreen() {
             <View style={styles.createFooter}>
               {/* Only for a group. A one-to-one conversation is drawn with the
                   other person's name by every client, so a title here would be
-                  one nobody asked for — and on Matrix it would be a name the
-                  homeserver can read, because room state is not encrypted. */}
-              {!isInviting && selectedUserIds.size > 1 && (
+                  one nobody asked for. */}
+              {selectedUserIds.size > 1 && (
                 <View style={styles.groupNameField}>
                   <TextFieldInput
                     label={t('Group name')}
@@ -558,11 +472,7 @@ export default function NewChatScreen() {
                   <ActivityIndicator color={theme.colors.background} />
                 ) : (
                   <ThemedText style={styles.createButtonText}>
-                    {isInviting
-                      ? t('Add to the conversation ({{count}})', {
-                          count: selectedUserIds.size,
-                        })
-                      : selectedUserIds.size === 1
+                    {selectedUserIds.size === 1
                         ? t('Start Chat')
                         : t('Start Group Chat ({{count}})', {
                             count: selectedUserIds.size,
@@ -572,7 +482,7 @@ export default function NewChatScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </MatrixSignInGate>
+        </>
       </ThemedView>
     </SafeAreaView>
   );

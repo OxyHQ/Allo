@@ -17,15 +17,14 @@ import { displayDurationMs, formatPlaybackTime, playbackFraction, seekPositionMs
 /**
  * A voice note, playable.
  *
- * **No waveform, and that is a decision rather than a gap.** Matrix carries one
- * — MSC3246, beside the voice marker Allo already sends — but nothing that
- * reaches this component has it: Allo's recorder samples no amplitudes, so
- * outgoing notes carry none, and the port's `AlloMediaContent` does not expose
- * the field for the incoming ones that do. Drawing bars from anything else means
- * drawing a picture of audio nobody measured, which is a lie told sixty times a
- * second. A plain progress bar is honest about what is known: how long it is and
- * how far through it we are. (Adding the real waveform means widening the port
- * and both of its halves; it is worth doing and it is not this.)
+ * **No waveform, and that is a decision rather than a gap.** Nothing that
+ * reaches this component has one: Allo's recorder samples no amplitudes, so
+ * outgoing notes carry none, and incoming ones carry none either. Drawing bars
+ * from anything else means drawing a picture of audio nobody measured, which is
+ * a lie told sixty times a second. A plain progress bar is honest about what is
+ * known: how long it is and how far through it we are. (Adding a real waveform
+ * means recording amplitudes and carrying them; it is worth doing and it is not
+ * this.)
  *
  * **Nothing is fetched until play is pressed.** The bytes of a voice note are
  * the whole recording, not a thumbnail, and asking the resolver for a URL is
