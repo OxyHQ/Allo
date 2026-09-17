@@ -149,9 +149,10 @@ for an `active` instance. A second device sits on a "approve this device" screen
 until an active device approves it from Settings → Devices
 (`app/(chat)/settings/devices.tsx`: `useOwnInstances` + `usePendingEnrollments`,
 approve with the challenge so a swapped one is refused, reject, revoke). A
-revoked device gets "start over" (`reset()` then `start()`). The pending device
-cannot yet show its OWN fingerprint: core's `InstanceView` omits the record's
-`challenge`; the approver's screen shows it.
+revoked device gets "start over" (`reset()` then `start()`). Both sides show the
+same challenge fingerprint for an out-of-band comparison: the pending device
+reads its own from `instance.enrollment?.fingerprint` (present only while it is
+pending), the approver from `usePendingEnrollments()`.
 
 **The web secret store is the platform's documented weak point.** A browser has
 no Keychain; the storage key and the signing key sit in IndexedDB (`allo-secrets`)
