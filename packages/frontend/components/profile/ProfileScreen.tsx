@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@oxy.so/bloom/button';
-import { Skeleton } from '@oxy.so/bloom';
+import * as Skeleton from '@oxy.so/bloom/skeleton';
 import { toast } from '@oxy.so/bloom/toast';
 import { useOxy } from '@oxy.so/services';
 

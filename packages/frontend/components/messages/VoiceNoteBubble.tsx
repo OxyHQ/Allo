@@ -3,7 +3,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useTranslation } from 'react-i18next';
-import { Icons } from '@oxy.so/bloom';
+import { RiPauseFill, RiPlayFill } from '@oxy.so/bloom/icons';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
@@ -186,8 +186,8 @@ export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
     );
 
     const PlayPauseIcon = status.playing
-      ? Icons.RiPauseFill
-      : Icons.RiPlayFill;
+      ? RiPauseFill
+      : RiPlayFill;
 
     return (
       <View style={styles.bubble}>

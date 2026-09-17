@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button } from '@oxy.so/bloom/button';
-import { TextFieldInput } from '@oxy.so/bloom';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTranslation } from 'react-i18next';
 
 import { ThemedView } from '@/components/ThemedView';

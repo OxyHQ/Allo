@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, StyleSheet, TouchableOpacity, View } from 
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { TextFieldInput } from '@oxy.so/bloom';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { toast } from '@oxy.so/bloom/toast';
 
 import Avatar from '@/components/Avatar';

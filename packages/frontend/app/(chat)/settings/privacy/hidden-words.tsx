@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 
-import { TextFieldInput } from '@oxy.so/bloom';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { Button } from '@oxy.so/bloom/button';
 import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
 import { toast } from '@oxy.so/bloom/toast';

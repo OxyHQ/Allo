@@ -29,7 +29,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { toast } from '@oxy.so/bloom/toast';
 
 // Components
-import { Search, Skeleton } from '@oxy.so/bloom';
+import { Search } from '@oxy.so/bloom/search';
+import * as Skeleton from '@oxy.so/bloom/skeleton';
 import { useTranslation } from 'react-i18next';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
