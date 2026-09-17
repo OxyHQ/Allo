@@ -44,3 +44,16 @@ export function extensionOf(filename: string): string {
 export function mimetypeFromFilename(filename: string): string | undefined {
   return MIMETYPE_BY_EXTENSION[extensionOf(filename)];
 }
+
+/**
+ * The extension for a MIME type, or `undefined` when it is not one of the
+ * types above. The inverse of {@link mimetypeFromFilename}, for naming a
+ * decrypted attachment on disk so the native players can tell what it is.
+ */
+export function extensionForMime(mime: string): string | undefined {
+  const wanted = mime.toLowerCase().split(';')[0].trim();
+  for (const [extension, type] of Object.entries(MIMETYPE_BY_EXTENSION)) {
+    if (type === wanted) return extension;
+  }
+  return undefined;
+}

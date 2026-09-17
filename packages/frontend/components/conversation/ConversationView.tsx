@@ -14,8 +14,8 @@ import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LottieView from 'lottie-react-native';
 import { toast } from '@oxy.so/bloom/toast';
+import { useTimeline } from '@allo/react';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -49,11 +49,11 @@ import { EmojiIcon } from '@/assets/icons/emoji-icon';
 import ChatBackgroundImage from '@/assets/images/background.png';
 
 // Hooks
-import { useTheme } from '@/hooks/useTheme';
 import { useConversationTheme } from '@/hooks/useConversationTheme';
 import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
+import { useSenderInfo } from '@/hooks/useSenderInfo';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -62,36 +62,30 @@ import { BottomSheetContext } from '@/context/BottomSheetContext';
 import { colors } from '@/styles/colors';
 import {
   getOtherParticipants,
-  isGroupConversation,
-  useContactInfo,
 } from '@/utils/conversationUtils';
-import { getConversationId, useSenderName } from '@/utils/conversationHelpers';
+import { getConversationId } from '@/utils/conversationHelpers';
 import { logger } from '@/utils/logger';
-import { useMessagesStore, useChatUIStore, useMessagePreferencesStore } from '@/stores';
+import { useChatUIStore, useMessagePreferencesStore } from '@/stores';
+import { useConversationThemeId } from '@/stores/conversationThemeStore';
 import { useOxy } from '@oxy.so/services';
-import { useUserById } from '@/stores/usersStore';
-import { useUsersStore } from '@/stores/usersStore';
-import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
-import { useTypingIndicator } from '@/hooks/useTypingIndicator';
-import { useSenderInfo } from '@/hooks/useSenderInfo';
+import { readAttachmentBytes } from '@/lib/allo/attachmentBytes';
 import {
   captureMediaAttachment,
   pickDocumentAttachments,
   pickMediaAttachments,
   toVoiceAttachment,
+  type AlloOutgoingAttachment,
   type PickedAttachments,
 } from '@/lib/chat/attachments';
 import { selectViewerItem, type ViewerSelection } from '@/lib/chat/attachmentViewer';
+import { messagesFromItems, type Message } from '@/lib/chat/model';
+import { getErrorMessage } from '@/utils/errors';
 
 // Constants
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 
 // Utils
 import { groupMessagesByTime, formatMessageGroupsWithDays, FormattedMessageGroup } from '@/utils/messageGrouping';
-
-// Import Message type from store
-import type { MediaItem, Message } from '@/stores';
-import { mediaVariantForKind } from '@/utils/mediaVariant';
 
 /**
  * ConversationView component props
@@ -103,30 +97,21 @@ interface ConversationViewProps {
 
 type SelectionContext = 'text' | 'media';
 
-// Get current user ID from Oxy hook (will be used in component)
-
-// Stable empty array to prevent Zustand selector from creating new references
-const EMPTY_MESSAGES: Message[] = [];
-
-// Stable empty style for FlashList contentContainer
-const MESSAGE_LIST_CONTENT_STYLE = { paddingVertical: 8 };
-
 /**
  * ConversationView Component
- * 
+ *
  * Displays a conversation with messages, input, and header.
  * Supports both direct and group conversations with responsive layouts.
- * 
+ *
+ * The timeline, the send actions and the typing state come from
+ * `useTimeline` (`@allo/react`); the SDK decrypts on this device and this
+ * component only projects what it is given into the message components.
+ *
  * Features:
  * - Tap to toggle message timestamps (only one visible at a time)
  * - Group conversation sender names
  * - Responsive header with contact/group details
  * - Keyboard-aware input
- * 
- * @example
- * ```tsx
- * <ConversationView conversationId="1" />
- * ```
  */
 export default function ConversationView({ conversationId: propConversationId }: ConversationViewProps = {}) {
   const router = useRouter();
@@ -135,7 +120,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   const bottomSheet = useContext(BottomSheetContext);
   const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize ?? MESSAGING_CONSTANTS.MESSAGE_TEXT_SIZE);
   const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
-  const { user, oxyServices } = useOxy();
+  const { user } = useOxy();
   const currentUserId = user?.id;
 
   // Send button gesture state
@@ -160,40 +145,24 @@ export default function ConversationView({ conversationId: propConversationId }:
 
   // Check if it's a username route (starts with @)
   const isUsernameRoute = conversationIdOrUsername?.startsWith('@');
-  const username = isUsernameRoute ? conversationIdOrUsername?.substring(1) : undefined;
-
-  // For username routes, we'll resolve to conversation ID in useEffect
-  // For now, use the ID directly if it's not a username
   const conversationId = isUsernameRoute ? undefined : conversationIdOrUsername;
 
   // Get conversation data early so we can use its theme
   const conversation = useConversation(conversationId);
 
   // Use conversation-specific theme (falls back to global theme if no conversation theme set)
-  const theme = useConversationTheme(conversation?.theme);
+  const conversationThemeId = useConversationThemeId(conversationId);
+  const theme = useConversationTheme(conversationThemeId);
 
-  // Initialize realtime messaging and typing indicator hooks
-  const { sendTypingIndicator } = useRealtimeMessaging(conversationId);
-  const storedTypingUserIds = useTypingIndicator(conversationId);
+  // The timeline and its actions. `''` when there is no conversation: the hook
+  // takes a string and cannot be conditional; it subscribes to nothing useful.
+  const timeline = useTimeline(conversationId ?? '');
+  const { items, send, sendMedia, edit, remove, react, markRead, setTyping, loadOlder, reachedStart, typing } = timeline;
 
   const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
 
-  // Get messages from store (direct access with stable empty array reference)
-  const messages = useMessagesStore(state =>
-    conversationId ? (state.messagesByConversation[conversationId] || EMPTY_MESSAGES) : EMPTY_MESSAGES
-  );
-
-  // The store-backed indicator is re-emitted as a DOM event and so only ever
-  // fires on web.
-  const typingUserIds = storedTypingUserIds;
-
-  /**
-   * Says the viewer is typing.
-   *
-   * The throttling around this — one notice per five seconds, a stop after three
-   * idle — belongs to the composer.
-   */
-  const notifyTyping = sendTypingIndicator;
+  // The SDK's items as the message components draw them
+  const messages = useMemo(() => messagesFromItems(items), [items]);
 
   // Group messages by time and format with day separators
   const messageGroups = useMemo(() => {
@@ -204,10 +173,12 @@ export default function ConversationView({ conversationId: propConversationId }:
     return formatMessageGroupsWithDays(groups);
   }, [messages]);
 
-  // Get loading state
-  const isLoading = useMessagesStore(state =>
-    conversationId ? state.isLoading(conversationId) : false
-  );
+  // Whatever is on screen has been read. The SDK sends one receipt per
+  // advance and nothing when nothing is new, so this is safe on every change.
+  useEffect(() => {
+    if (!conversationId || items.length === 0) return;
+    markRead().catch((error: unknown) => logger.warn('[Conversation] read receipt failed', error));
+  }, [conversationId, items, markRead]);
 
   // Get UI state from store - access directly from state for reactivity
   const inputText = useChatUIStore(state =>
@@ -222,17 +193,14 @@ export default function ConversationView({ conversationId: propConversationId }:
   );
 
   // Get store actions (using selectors to avoid re-renders)
-  const fetchMessages = useMessagesStore(state => state.fetchMessages);
   const clearConversationUI = useChatUIStore(state => state.clearConversationUI);
   const setInputText = useChatUIStore(state => state.setInputText);
   const setVisibleTimestamp = useChatUIStore(state => state.setVisibleTimestamp);
   const setEditing = useChatUIStore(state => state.setEditing);
-  const sendMessage = useMessagesStore(state => state.sendMessage);
-
 
   const flatListRef = useRef<FlashListRef<FormattedMessageGroup> | null>(null);
   const inputRef = useRef<TextInput>(null);
-  const lastFetchedConversationId = useRef<string | null>(null);
+  const lastOpenedConversationId = useRef<string | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Message actions state
@@ -254,26 +222,13 @@ export default function ConversationView({ conversationId: propConversationId }:
     return selectedMessage.media.find(media => media.id === selectedMediaId) || null;
   }, [selectedMessage, selectedMediaId]);
 
-  // Fetch messages when conversation changes
+  // Clear UI state when switching conversations
   useEffect(() => {
     if (!conversationId) return;
-
-    // Only fetch if this is a different conversation
-    if (lastFetchedConversationId.current === conversationId) {
-      return; // Already fetched this conversation
-    }
-
-    lastFetchedConversationId.current = conversationId;
-
-    // Clear UI state when switching conversations
+    if (lastOpenedConversationId.current === conversationId) return;
+    lastOpenedConversationId.current = conversationId;
     clearConversationUI(conversationId);
-
-    // Fetch messages (store will handle duplicate requests)
-    if (currentUserId) {
-      fetchMessages(conversationId, currentUserId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, currentUserId]); // Fetch when conversation or user changes
+  }, [conversationId, clearConversationUI]);
 
   // Cleanup typing timeout when conversation changes or component unmounts
   useEffect(() => {
@@ -312,16 +267,16 @@ export default function ConversationView({ conversationId: propConversationId }:
           contactAvatar={conversationMetadata.contactAvatar}
           isOnline={conversationMetadata.isOnline}
           lastSeen={conversationMetadata.contactInfo?.lastSeen}
-          participants={conversationMetadata.participants}
+          participants={conversation.participants}
           groupName={conversationMetadata.groupInfo?.name}
           groupAvatar={conversationMetadata.groupInfo?.avatar}
           currentUserId={currentUserId}
-          conversationTheme={conversation?.theme}
+          myRole={conversation.myRole}
         />
       );
       bottomSheet.openBottomSheet(true);
     }
-  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata, currentUserId, router]);
+  }, [conversationId, conversation, isLargeScreen, isGroup, bottomSheet, conversationMetadata, currentUserId]);
 
   // Styles memoized for performance
   const styles = useMemo(() => StyleSheet.create({
@@ -362,10 +317,10 @@ export default function ConversationView({ conversationId: propConversationId }:
       paddingHorizontal: 8,
       paddingVertical: 8,
       paddingBottom: Platform.OS === 'ios' ? 8 : 12,
-      backgroundColor: theme.colors.background || '#FFFFFF',
+      backgroundColor: theme.colors.background,
       gap: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border || 'rgba(0,0,0,0.08)',
+      borderTopColor: theme.colors.border,
     },
     inputWrapper: {
       flex: 1,
@@ -374,7 +329,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       minHeight: 36,
       maxHeight: 100,
       borderRadius: 20,
-      backgroundColor: '#F0F0F0',
+      backgroundColor: theme.colors.backgroundSecondary,
       paddingLeft: 12,
       paddingRight: 12,
       paddingTop: 8,
@@ -385,7 +340,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       paddingHorizontal: 0,
       paddingVertical: Platform.OS === 'ios' ? 8 : 6,
       fontSize: isSizeAdjusting ? tempTextSize : messageTextSize,
-      color: '#000000',
+      color: theme.colors.text,
       textAlignVertical: 'top',
       minHeight: 20,
       maxHeight: 84,
@@ -443,32 +398,17 @@ export default function ConversationView({ conversationId: propConversationId }:
       fontStyle: 'italic',
       color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
     },
-    sizeIndicator: {
-      position: 'absolute',
-      bottom: 60,
-      alignSelf: 'center',
-      backgroundColor: theme.colors.card || '#FFFFFF',
-      borderRadius: 20,
+    notJoinedBanner: {
       paddingHorizontal: 16,
-      paddingVertical: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 8,
-      borderWidth: 1,
-      borderColor: theme.colors.border || 'rgba(0,0,0,0.1)',
+      paddingVertical: 10,
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
     },
-    sizeIndicatorText: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: theme.colors.text,
-    },
-    sizePreview: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: theme.colors.text,
-      marginTop: 4,
+    notJoinedText: {
+      fontSize: 13,
+      textAlign: 'center',
+      color: theme.colors.textSecondary,
     },
   }), [theme, messageTextSize, isSizeAdjusting, tempTextSize]);
 
@@ -482,6 +422,19 @@ export default function ConversationView({ conversationId: propConversationId }:
       return () => clearTimeout(timeoutId);
     }
   }, [messageGroups.length]);
+
+  /**
+   * Says the viewer is typing.
+   *
+   * The throttling around this — one notice per five seconds, a stop after three
+   * idle — belongs to the composer; the SDK encrypts and sends the notice.
+   */
+  const notifyTyping = useCallback((on: boolean) => {
+    if (!conversationId) return;
+    setTyping(on).catch(() => {
+      // A typing notice that does not go out is not worth a toast.
+    });
+  }, [conversationId, setTyping]);
 
   // Typing indicator: throttle to max 1 emit per 5s (Telegram pattern)
   const lastTypingEmitRef = useRef<number>(0);
@@ -516,12 +469,14 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
   }, [conversationId, setInputText, notifyTyping]);
 
+  const setReplyTo = useChatUIStore((state) => state.setReplyTo);
+  const replyTo = useChatUIStore((state) => conversationId && state.replyToByConversation ? state.replyToByConversation[conversationId] : undefined);
+
   const handleSend = useCallback(async (sizeToUse?: number) => {
     if (!conversationId || inputText.trim().length === 0) return;
 
     const text = inputText.trim();
     const originalSize = messageTextSize;
-    const finalSize = sizeToUse ?? messageTextSize;
 
     // Clear typing timeout and stop typing indicator
     if (typingTimeoutRef.current) {
@@ -531,54 +486,20 @@ export default function ConversationView({ conversationId: propConversationId }:
     notifyTyping(false);
 
     // Clear input immediately for better UX (before sending)
-    if (conversationId) {
-      setInputText(conversationId, '');
-    }
+    setInputText(conversationId, '');
 
     // Temporarily set the size if it was adjusted
     if (sizeToUse && sizeToUse !== messageTextSize) {
       setMessageTextSize(sizeToUse);
     }
 
-    // Get recipient user ID from conversation
-    // For direct messages, get the other participant
-    // For groups, we'll need to handle multiple recipients (for now, use first other participant)
-    let recipientUserId: string | undefined;
-    if (conversation) {
-      if (isGroup) {
-        // For groups, get the first other participant (in a real implementation, 
-        // we'd send to all participants, but for now use first one)
-        const otherParticipants = getOtherParticipants(conversation, currentUserId);
-        recipientUserId = otherParticipants[0]?.id;
-      } else {
-        // For direct messages, get the other participant
-        const otherParticipants = getOtherParticipants(conversation, currentUserId);
-        recipientUserId = otherParticipants[0]?.id;
-      }
-    }
-
-    if (!recipientUserId || !currentUserId) {
-      console.error('Cannot send message: missing recipient or current user ID');
-      if (conversationId) {
-        setInputText(conversationId, text);
-      }
-      return;
-    }
-
-    // Send message via store with custom font size if adjusted
     try {
-      const result = await sendMessage(conversationId, text, currentUserId, recipientUserId, sizeToUse && sizeToUse !== originalSize ? sizeToUse : undefined);
-
-      if (!result) {
-        // Message failed to send - check for error in store
-        const error = useMessagesStore.getState().getError(conversationId);
-        toast.error(error || 'Failed to send message. Please try again.');
-
-        // Restore text on error
-        if (conversationId) {
-          setInputText(conversationId, text);
-        }
-        return;
+      if (editingMessageId !== undefined) {
+        await edit(editingMessageId, text);
+        setEditing(conversationId, undefined);
+      } else {
+        await send(text, replyTo ? { replyTo } : undefined);
+        if (replyTo) setReplyTo(conversationId, undefined);
       }
 
       // Scroll to bottom after sending
@@ -586,14 +507,11 @@ export default function ConversationView({ conversationId: propConversationId }:
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
-      toast.error(errorMessage);
+      logger.error('[Conversation] Error sending message:', error);
+      toast.error(getErrorMessage(error) || 'Failed to send message. Please try again.');
 
       // Restore text on error
-      if (conversationId) {
-        setInputText(conversationId, text);
-      }
+      setInputText(conversationId, text);
       return; // Don't continue with cleanup if there was an error
     }
 
@@ -604,16 +522,11 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
     setIsSizeAdjusting(false);
 
-    // Ensure input is cleared (double-check)
-    if (conversationId) {
-      setInputText(conversationId, '');
-    }
-
     // Refocus input after sending
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
-  }, [conversationId, inputText, sendMessage, setInputText, messageTextSize, setMessageTextSize, conversation, isGroup, currentUserId, notifyTyping]);
+  }, [conversationId, inputText, send, edit, editingMessageId, setEditing, replyTo, setReplyTo, setInputText, messageTextSize, setMessageTextSize, notifyTyping]);
 
   /**
    * Handle Enter key press to send message
@@ -640,19 +553,30 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [inputText, handleSend]);
 
   /**
-   * Sends what was picked, and says so when it cannot.
+   * Sends what was picked.
    *
-   * The legacy API has no upload endpoint, so today this says so instead of
-   * opening a picker that leads nowhere. The pickers stay wired because the
-   * platform client that replaces this path sends attachments through the same
-   * call.
+   * Each attachment is read whole, handed to the SDK — which encrypts it with a
+   * key of its own, uploads the ciphertext and sends the `media` message — and
+   * appears in the timeline as a local echo. One at a time, in the order they
+   * were chosen: two uploads at once is twice the memory for the same result.
    */
   const sendAttachments = useCallback(async (attachments: PickedAttachments) => {
-    if (attachments.length === 0) {
+    if (!conversationId || attachments.length === 0) {
       return;
     }
-    toast.error('Attachments are not available yet.');
-  }, []);
+    for (const attachment of attachments) {
+      try {
+        await sendMedia(await readAttachmentBytes(attachment.uri), uploadMeta(attachment));
+      } catch (error) {
+        logger.error('[Conversation] an attachment could not be sent:', error);
+        toast.error(getErrorMessage(error) || 'The attachment could not be sent.');
+        return;
+      }
+    }
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [conversationId, sendMedia]);
 
   /**
    * Picks from the photo library, or takes a picture, and sends what comes back.
@@ -666,7 +590,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       pick()
         .then(sendAttachments)
         .catch((error: unknown) => {
-          console.error('Error choosing an attachment:', error);
+          logger.error('[Conversation] Error choosing an attachment:', error);
           toast.error('The attachment could not be read.');
         });
     },
@@ -718,61 +642,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     setVisibleTimestamp(conversationId, newId);
   }, [conversationId, visibleTimestampId, setVisibleTimestamp]);
 
-
-  /**
-   * Resolve a media download URL from a media ID.
-   *
-   * The id is an Oxy Cloud file id and the URL is built from it, with a
-   * rendition variant that depends on the item's kind (`mediaVariantForKind`).
-   *
-   * Returns an empty string when there is nothing yet, so the image renderer
-   * surfaces its own empty state instead of a masking placeholder.
-   */
-  const getMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
-    try {
-      return oxyServices.getFileDownloadUrl(mediaId, mediaVariantForKind(kind));
-    } catch (error) {
-      console.error('Error getting media URL:', error);
-      return '';
-    }
-  }, [oxyServices]);
-
-  /**
-   * The same media, at full size, for the viewer.
-   *
-   * `getMediaUrl` asks Oxy Cloud for a rendition sized for a 250pt bubble —
-   * `w1280` for a picture, `poster` (a still frame) for a video — and both are
-   * the wrong answer full screen: one is soft on a modern display and the other
-   * is a photograph of a video. Omitting the variant serves the bytes as
-   * uploaded, which is what "full size" means.
-   */
-  const getFullMediaUrl = useCallback((mediaId: string, kind: MediaItem['type']): string => {
-    try {
-      return oxyServices.getFileDownloadUrl(mediaId, undefined);
-    } catch (error) {
-      logger.error('[Conversation] Error getting full-size media URL:', error);
-      return '';
-    }
-  }, [oxyServices]);
-
-  /**
-   * The same resolution for an attachment that is not a picture.
-   *
-   * Separate from `getMediaUrl` because it takes no kind. A voice note, an audio
-   * file and a document have no name in `MediaItem['type']`, and the Oxy
-   * rendition variant that argument picks — `w1280`, `poster` — is meaningless
-   * for all three: what is wanted is the file as uploaded, which is what an
-   * omitted variant serves.
-   */
-  const getAttachmentUrl = useCallback((source: string): string => {
-    try {
-      return oxyServices.getFileDownloadUrl(source, undefined);
-    } catch (error) {
-      logger.error('[Conversation] Error getting attachment URL:', error);
-      return '';
-    }
-  }, [oxyServices]);
-
   const selectedMessagePreview = useMemo(() => {
     if (!selectedMessage) {
       return null;
@@ -791,7 +660,6 @@ export default function ConversationView({ conversationId: propConversationId }:
           key="preview-media"
           media={mediaToRender}
           isAiMessage={selectedMessage.messageType === 'ai'}
-          getMediaUrl={getMediaUrl}
           onMediaPress={() => { }}
           onMediaLongPress={() => { }}
         />
@@ -827,7 +695,6 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, [
     selectedMessage,
     selectedMediaItem,
-    getMediaUrl,
     isGroup,
     getSenderName,
   ]);
@@ -840,13 +707,9 @@ export default function ConversationView({ conversationId: propConversationId }:
    * viewer built from one of them could never be swiped.
    * Which page it opens on is decided in `lib/chat/attachmentViewer.ts`, from
    * the message and the media together — the same file sent twice has the same
-   * media id twice.
-   *
-   * Both backends reach here. The viewer never learns which one: the gallery
-   * comes from `Message.media`, which both fill, and the URLs come from
-   * `getMediaUrl`, which is already reconciled above.
+   * blob id twice.
    */
-  const handleMediaPress = useCallback((message: Message, mediaId: string, index: number) => {
+  const handleMediaPress = useCallback((message: Message, mediaId: string) => {
     setViewerSelection(selectViewerItem(messages, message.id, mediaId) ?? null);
   }, [messages]);
 
@@ -877,9 +740,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     setSelectionContext(null);
   }, []);
 
-  const addReaction = useMessagesStore((state) => state.addReaction);
-  const removeReaction = useMessagesStore((state) => state.removeReaction);
-
+  /** Toggles: the SDK removes a reaction this account already set. */
   const handleReactionSelect = useCallback(async (emoji: string) => {
     if (!selectedMessage || !conversationId) {
       resetSelectionState();
@@ -887,24 +748,14 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
 
     try {
-      const currentReactions = selectedMessage.reactions || {};
-      const hasReacted = currentReactions[emoji]?.includes(currentUserId || '') || false;
-
-      if (hasReacted) {
-        await removeReaction(conversationId, selectedMessage.id, emoji);
-      } else {
-        await addReaction(conversationId, selectedMessage.id, emoji);
-      }
+      await react(selectedMessage.id, emoji);
     } catch (error) {
-      console.error('[Conversation] Error toggling reaction:', error);
+      logger.error('[Conversation] Error toggling reaction:', error);
       toast.error('Failed to update reaction');
     } finally {
       resetSelectionState();
     }
-  }, [selectedMessage, conversationId, currentUserId, addReaction, removeReaction, resetSelectionState]);
-
-  const setReplyTo = useChatUIStore((state) => state.setReplyTo);
-  const replyTo = useChatUIStore((state) => conversationId && state.replyToByConversation ? state.replyToByConversation[conversationId] : undefined);
+  }, [selectedMessage, conversationId, react, resetSelectionState]);
 
   /**
    * Handle reply action
@@ -920,7 +771,7 @@ export default function ConversationView({ conversationId: propConversationId }:
   /**
    * Handle forward action
    */
-  const handleForward = useCallback((message: Message) => {
+  const handleForward = useCallback((_message: Message) => {
     resetSelectionState({ preserveMessage: true });
     // TODO: Implement forward functionality
   }, [resetSelectionState]);
@@ -935,7 +786,7 @@ export default function ConversationView({ conversationId: propConversationId }:
       await Clipboard.setStringAsync(message.text || '');
       toast.success('Message copied to clipboard');
     } catch (error) {
-      console.error('[Conversation] Failed to copy message to clipboard:', error);
+      logger.error('[Conversation] Failed to copy message to clipboard:', error);
     }
   }, [resetSelectionState]);
 
@@ -959,18 +810,24 @@ export default function ConversationView({ conversationId: propConversationId }:
     setInputText(conversationId, '');
   }, [conversationId, setEditing, setInputText]);
 
+  const handleCancelReply = useCallback(() => {
+    if (!conversationId) return;
+    setReplyTo(conversationId, undefined);
+  }, [conversationId, setReplyTo]);
+
   /**
-   * Handle delete action
-   *
-   * The legacy API has no endpoint that removes a message, so there is nothing
-   * to call and no reason to pretend otherwise by clearing it here: a message
-   * gone from this device and present on every other one is worse than one that
-   * is still there.
+   * Handle delete action: the SDK sends a `delete` for one of the viewer's own
+   * messages and every device draws it as taken back.
    */
-  const handleDelete = useCallback((_message: Message) => {
+  const handleDelete = useCallback(async (message: Message) => {
     resetSelectionState({ preserveMessage: true });
-    toast.error('Deleting messages is not available on this account.');
-  }, [resetSelectionState]);
+    try {
+      await remove(message.id);
+    } catch (error) {
+      logger.error('[Conversation] Error deleting message:', error);
+      toast.error(getErrorMessage(error) || 'The message could not be deleted.');
+    }
+  }, [resetSelectionState, remove]);
 
   /**
    * Handle info action
@@ -1011,20 +868,28 @@ export default function ConversationView({ conversationId: propConversationId }:
 
     // Only ever applies to the viewer's own messages: an action offered to
     // everyone that works for a few is worse than one that is not offered.
-    if (message.isSent) {
+    if (message.isSent && !message.isDeleted && !message.isUndecryptable) {
+      if (!message.media && !message.attachment) {
+        actions.push({
+          label: 'Edit',
+          onPress: () => handleEdit(message),
+        });
+      }
       actions.push({
         label: 'Delete',
-        icon: <TrashIcon size={20} color="#FF3B30" />,
-        onPress: () => handleDelete(message),
+        icon: <TrashIcon size={20} color={theme.colors.error} />,
+        onPress: () => {
+          void handleDelete(message);
+        },
         destructive: true,
       });
     }
 
     if (context === 'media') {
-      return actions.filter(action => action.label !== 'Copy');
+      return actions.filter(action => action.label !== 'Copy' && action.label !== 'Edit');
     }
     return actions;
-  }, [theme.colors.text, handleReply, handleForward, handleCopy, handleInfo, handleDelete]);
+  }, [theme.colors.text, theme.colors.error, handleReply, handleForward, handleCopy, handleInfo, handleEdit, handleDelete]);
 
   /**
    * Handle swipe to reply
@@ -1032,6 +897,12 @@ export default function ConversationView({ conversationId: propConversationId }:
   const handleSwipeToReply = useCallback((message: Message) => {
     handleReply(message);
   }, [handleReply]);
+
+  /** Older history, when the reader scrolls to the top of what is shown. */
+  const handleStartReached = useCallback(() => {
+    if (reachedStart) return;
+    loadOlder().catch((error: unknown) => logger.warn('[Conversation] loading older messages failed', error));
+  }, [reachedStart, loadOlder]);
 
   /**
    * Render a message group with day separator if needed
@@ -1047,7 +918,7 @@ export default function ConversationView({ conversationId: propConversationId }:
           <DaySeparator date={item.timestamp} />
         )}
         <SwipeableMessage
-          enabled={!isAiGroup} // Disable swipe for AI messages
+          enabled={!isAiGroup} // Disable swipe for system lines
           onSwipeRight={() => handleSwipeToReply(firstMessage)}
           replyIcon={<ReplyIcon size={20} color="#FFFFFF" />}
         >
@@ -1056,8 +927,6 @@ export default function ConversationView({ conversationId: propConversationId }:
             isGroup={isGroup}
             getSenderName={getSenderName}
             getSenderAvatar={getSenderAvatar}
-            getMediaUrl={getMediaUrl}
-            getAttachmentUrl={getAttachmentUrl}
             visibleTimestampId={visibleTimestampId}
             onMessagePress={toggleTimestamp}
             onMessageLongPress={handleMessageLongPress}
@@ -1077,8 +946,6 @@ export default function ConversationView({ conversationId: propConversationId }:
     isGroup,
     getSenderName,
     getSenderAvatar,
-    getMediaUrl,
-    getAttachmentUrl,
     visibleTimestampId,
     toggleTimestamp,
     handleMessageLongPress,
@@ -1094,6 +961,8 @@ export default function ConversationView({ conversationId: propConversationId }:
   }, []);
 
   const canSend = inputText.trim().length > 0;
+  const canWrite = conversation?.joined !== false;
+  const replyingTo = replyTo ? messages.find((m) => m.id === replyTo) : undefined;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -1178,12 +1047,14 @@ export default function ConversationView({ conversationId: propConversationId }:
                 data={messageGroups}
                 renderItem={renderMessageGroup}
                 keyExtractor={getGroupKey}
+                onStartReached={handleStartReached}
+                onStartReachedThreshold={0.2}
               />
               {/* Typing Indicator */}
-              {typingUserIds.length > 0 && (
+              {typing && (
                 <View style={styles.typingIndicator}>
                   <ThemedText style={styles.typingText}>
-                    {typingUserIds.length === 1 ? 'Someone is typing...' : `${typingUserIds.length} people are typing...`}
+                    Someone is typing...
                   </ThemedText>
                 </View>
               )}
@@ -1216,7 +1087,6 @@ export default function ConversationView({ conversationId: propConversationId }:
             <AttachmentViewer
               key={viewerSelection.items[viewerSelection.index]?.key}
               selection={viewerSelection}
-              resolveUrl={getFullMediaUrl}
               onClose={handleViewerClose}
             />
           )}
@@ -1241,6 +1111,16 @@ export default function ConversationView({ conversationId: propConversationId }:
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
           >
+            {/* A second device that has not been added to the group yet can
+                read nothing and send nothing; saying so beats a composer that
+                silently fails. */}
+            {!canWrite && (
+              <View style={styles.notJoinedBanner}>
+                <ThemedText style={styles.notJoinedText}>
+                  This device is being added to the conversation…
+                </ThemedText>
+              </View>
+            )}
             {/* Rewrite mode. Without a way out of it, the next thing the user
                 typed would silently replace an old message instead of sending. */}
             {editingMessageId !== undefined && (
@@ -1257,12 +1137,30 @@ export default function ConversationView({ conversationId: propConversationId }:
                 </TouchableOpacity>
               </View>
             )}
+            {/* Reply mode, with the same way out. */}
+            {editingMessageId === undefined && replyTo !== undefined && (
+              <View style={styles.editingBanner}>
+                <ThemedText style={styles.editingBannerText} numberOfLines={1}>
+                  {`Replying to ${replyingTo ? (replyingTo.isSent ? 'yourself' : getSenderName(replyingTo.senderId) ?? '') : ''}`.trim()}
+                </ThemedText>
+                <TouchableOpacity
+                  onPress={handleCancelReply}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel reply"
+                >
+                  <CloseIcon size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={styles.inputContainer}>
               {/* Attach Button */}
               <TouchableOpacity
                 style={styles.attachButton}
                 onPress={handleAttach}
                 activeOpacity={0.7}
+                disabled={!canWrite}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Plus
@@ -1279,8 +1177,9 @@ export default function ConversationView({ conversationId: propConversationId }:
                   value={inputText}
                   onChangeText={handleInputChange}
                   placeholder="Message"
-                  placeholderTextColor={colors.chatInputPlaceholder || theme.colors.textSecondary || '#999999'}
+                  placeholderTextColor={theme.colors.textSecondary}
                   multiline
+                  editable={canWrite}
                   maxLength={MESSAGING_CONSTANTS.INPUT_MAX_LENGTH}
                   textAlignVertical="top"
                   returnKeyType={canSend ? "send" : "default"}
@@ -1333,4 +1232,17 @@ export default function ConversationView({ conversationId: propConversationId }:
       </ImageBackground>
     </SafeAreaView>
   );
+}
+
+/** What the SDK is told about an attachment: the picker's description, minus the URI it has already read. */
+function uploadMeta(attachment: AlloOutgoingAttachment) {
+  return {
+    kind: attachment.kind,
+    filename: attachment.filename,
+    mime: attachment.mimetype,
+    width: attachment.width,
+    height: attachment.height,
+    durationMs: attachment.durationMs,
+    caption: attachment.caption,
+  };
 }

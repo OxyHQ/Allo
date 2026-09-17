@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import Avatar from './Avatar';
-import { ConversationParticipant } from '@/app/(chat)/index';
+import type { ConversationParticipant } from '@/lib/chat/model';
 import { useTheme } from '@/hooks/useTheme';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
 

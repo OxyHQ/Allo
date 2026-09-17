@@ -8,7 +8,6 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { oxyClient } from '@oxy.so/core';
 import { logger } from '@/utils/logger';
-import type { User } from '@oxy.so/core';
 
 import { useAppearanceStore } from '@/stores/appearanceStore';
 import {
@@ -17,7 +16,6 @@ import {
 } from '@/utils/notifications';
 import { initializeI18n } from './i18n';
 import { INITIALIZATION_TIMEOUT } from './constants';
-import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
 import { runStartupHealthCheck } from '@/utils/appHealthCheck';
 
 export interface InitializationResult {
@@ -96,7 +94,7 @@ export class AppInitializer {
   /**
    * Initializes the entire app
    * Only blocks on critical-path work (user + appearance).
-   * Heavy tasks (Signal Protocol, notifications) are deferred.
+   * Notification setup is deferred.
    */
   static async initializeApp(): Promise<InitializationResult> {
     try {
@@ -133,17 +131,16 @@ export class AppInitializer {
 
   /**
    * Deferred initialization — runs after the app is visible.
-   * Device keys and notifications don't need to block the first render.
+   * Notifications don't need to block the first render. The messaging client
+   * is not started here: `lib/allo/AlloRoot.tsx` owns it and starts it once the
+   * Oxy session names an account.
    */
   static async initializeDeferred(): Promise<void> {
     try {
       // Run health check first (development only)
       await runStartupHealthCheck();
 
-      await Promise.all([
-        setupNotificationsIfNeeded(),
-        initializeSignalProtocol(),
-      ]);
+      await setupNotificationsIfNeeded();
     } catch (error) {
       console.warn('[AppInitializer] Deferred init error:', error);
     }
@@ -162,36 +159,3 @@ export class AppInitializer {
     ]);
   }
 }
-
-/**
- * Initialize Signal Protocol encryption
- */
-async function initializeSignalProtocol(): Promise<void> {
-  try {
-    // Get current user - try multiple methods
-    let user: User | null = null;
-    try {
-      user = await oxyClient.getCurrentUser();
-    } catch {
-      // If getCurrentUser fails, user might not be authenticated yet
-      logger.info('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
-      return;
-    }
-
-    if (!user?.id) {
-      logger.info('[AppInitializer] User not authenticated, skipping Signal Protocol initialization');
-      return;
-    }
-
-    // Initialize device keys
-    const deviceKeysStore = useDeviceKeysStore.getState();
-    if (!deviceKeysStore.isInitialized) {
-      await deviceKeysStore.initialize();
-    }
-  } catch (error) {
-    logger.error('[AppInitializer] Error initializing Signal Protocol', error);
-    // Don't throw - encryption initialization shouldn't block app startup
-  }
-}
-
-

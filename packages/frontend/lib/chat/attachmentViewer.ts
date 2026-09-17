@@ -1,12 +1,13 @@
-import type { MediaItem, Message } from '@/stores/messagesStore';
+import type { MediaRef } from '@allo/core';
+import type { MediaItem, Message } from '@/lib/chat/model';
 
 /**
  * What the full-screen viewer opens on, worked out from the messages a screen
  * already has.
  *
- * Everything here reads `Message.media` and nothing else — no media ids are
- * parsed and no server is named. The only thing that knows how an id becomes a
- * URL is the resolver `ConversationView` hands the viewer (`getMediaUrl`).
+ * Everything here reads `Message.media` and nothing else — no blob ids are
+ * parsed and no server is named. The only thing that turns a `MediaRef` into
+ * bytes is the SDK, through `lib/allo/useMediaUri.ts`.
  *
  * Pure, and separate from the component for that reason: what the gallery
  * contains and where it opens are the two things worth being sure about, and
@@ -19,18 +20,13 @@ export interface ViewerItem {
    * Identity of this page, unique within one gallery.
    *
    * Built from the message and the media, not from the media alone: the same
-   * file sent twice is the same media id twice, and a duplicated React key
+   * file sent twice is the same blob id twice, and a duplicated React key
    * makes the second copy disappear.
    */
   readonly key: string;
   readonly kind: MediaItem['type'];
-  /**
-   * The full-size original. What the viewer asks the resolver for.
-   *
-   * `fullSizeId ?? id` — see {@link MediaItem.fullSizeId}. A row drawing the
-   * original already has nothing bigger to show.
-   */
-  readonly mediaId: string;
+  /** The full-size original. What the viewer asks the SDK for. */
+  readonly ref: MediaRef;
   /**
    * The smaller copy the bubble already drew, when there is one.
    *
@@ -39,7 +35,8 @@ export interface ViewerItem {
    * on black — the thumbnail is already decrypted and in the cache, so drawing
    * it costs nothing and covers the wait.
    */
-  readonly previewId: string | undefined;
+  readonly previewRef: MediaRef | undefined;
+  readonly mime: string;
   /** For the share sheet. Absent for an attachment whose sender did not say. */
   readonly filename: string | undefined;
 }
@@ -65,8 +62,9 @@ export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
       items.push({
         key: viewerKey(message.id, media.id),
         kind: media.type,
-        mediaId: media.fullSizeId ?? media.id,
-        previewId: media.fullSizeId === undefined ? undefined : media.id,
+        ref: media.ref,
+        previewRef: media.thumbnailRef,
+        mime: media.mime,
         filename: media.filename,
       });
     }
@@ -81,7 +79,7 @@ export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
  * `undefined` rather than an empty gallery on purpose: a viewer with no pages
  * is a black screen the user has to dismiss, and the honest response to a tap
  * on something that is no longer there is not to open at all. It happens — a
- * message can be redacted between the render that drew it and the tap.
+ * message can be deleted between the render that drew it and the tap.
  */
 export function selectViewerItem(
   messages: readonly Message[],
@@ -113,7 +111,7 @@ function viewerKey(messageId: string, mediaId: string): string {
  * Keeps an index inside a gallery that has changed underneath it.
  *
  * The gallery is a snapshot taken when the viewer opened, but the viewer stays
- * open while the conversation keeps arriving, and a redaction shortens the
+ * open while the conversation keeps arriving, and a deletion shortens the
  * list. An index past the end draws nothing at all; clamping shows the last
  * picture instead, which is the closest true answer.
  */

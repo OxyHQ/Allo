@@ -1,5 +1,6 @@
 // Guarantees globalThis.crypto.getRandomValues (expo-crypto-backed on RN) is
-// installed before any crypto runs — @noble's randomBytes in lib/signalProtocol.ts needs it.
+// installed before any crypto runs — `@allo/core`'s MLS engine draws every key
+// and nonce from it.
 import '@oxy.so/core';
 // Required polyfill for @oxy.so/services - must be imported first
 import 'react-native-url-polyfill/auto';
@@ -40,6 +41,7 @@ import { routeMatchers } from '@/utils/routeUtils';
 
 // Services & Utils
 import { AppInitializer } from '@/lib/appInitializer';
+import { AlloRoot } from '@/lib/allo/AlloRoot';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
 
 // Styles
@@ -256,13 +258,18 @@ export default function RootLayout() {
 
     return (
       <AppProviders queryClient={queryClient}>
-        {Platform.OS !== 'web' && (
-          <NotificationPermissionGate
-            appIsReady={appIsReady}
-            initializationComplete={splashState.initializationComplete}
-          />
-        )}
-        <MainLayout isScreenNotMobile={isScreenNotMobile} />
+        {/* The messaging client lives under the Oxy provider and above every
+            screen: `AlloRoot` builds it once the session names an account and
+            gates the app on this device's enrollment. */}
+        <AlloRoot>
+          {Platform.OS !== 'web' && (
+            <NotificationPermissionGate
+              appIsReady={appIsReady}
+              initializationComplete={splashState.initializationComplete}
+            />
+          )}
+          <MainLayout isScreenNotMobile={isScreenNotMobile} />
+        </AlloRoot>
       </AppProviders>
     );
   }, [

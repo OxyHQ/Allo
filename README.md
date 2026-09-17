@@ -41,19 +41,14 @@ without a network.
 </tr>
 </table>
 
-> [!WARNING]
-> **Read the crypto claims carefully before trusting them.** Allo uses a static ECDH
-> (P-256) agreement between long lived identity keys plus AES-256-GCM. There is no KDF
-> and no ratchet, so the AES key for a pair of identity keys is constant and only the IV
-> changes per message. There is **no forward secrecy**. Group chats, multi device and
-> media are not covered, and when a recipient has no registered device the message is
-> sent in plaintext rather than blocked.
->
-> The module is named `signalProtocol.ts` for historical reasons only. It does not
-> implement the Signal Protocol: no X3DH, no Double Ratchet. The generated pre-keys are
-> never used to encrypt, and the pre-key signature is never verified.
->
-> [`docs/encryption.mdx`](docs/encryption.mdx) documents all of this, including the gaps.
+> [!NOTE]
+> Every conversation is an MLS group. The app encrypts, decrypts and stores messages on
+> the device through the Allo platform SDK (`packages/core`, consumed by the app via
+> `packages/react`); the server carries ciphertext and public keys. Each installation is
+> a *device* with its own signing key, approved by one that is already signed in.
+> [`docs/platform/`](docs/platform/) describes the design and its threat model, including
+> what the web build cannot protect: its keys live in IndexedDB, readable by any script on
+> the origin.
 
 ## Packages
 
@@ -147,9 +142,12 @@ the rollout it lands on.
 
 ## The Allo platform
 
-The chat transport is being replaced, not extended. The decision and the design are in
+The chat transport was replaced, not extended. The decision and the design are in
 [`docs/adr/0001-clean-break-platform.md`](docs/adr/0001-clean-break-platform.md) and
-[`docs/platform/`](docs/platform/).
+[`docs/platform/`](docs/platform/). The frontend reaches it through `@allo/react` and one
+seam, `packages/frontend/lib/allo/`, which constructs the client with the platform's
+storage (SQLite on a phone, IndexedDB on the web), secret store and Oxy session; see
+[`packages/frontend/README.md`](packages/frontend/README.md#the-messaging-seam-liballo).
 
 ## Documentation
 

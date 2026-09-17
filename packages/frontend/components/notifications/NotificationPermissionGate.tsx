@@ -13,6 +13,7 @@ import {
   requestNotificationPermissions,
 } from '@/utils/notifications';
 import { INITIALIZATION_TIMEOUT } from '@/lib/constants';
+import { announcePushPermissionGranted } from '@/lib/allo/push';
 
 interface NotificationPermissionGateProps {
   appIsReady: boolean;
@@ -49,8 +50,11 @@ export function NotificationPermissionGate({
         <NotificationPermissionSheet
           onLater={() => bs.openBottomSheet(false)}
           onEnable={async () => {
-            await requestNotificationPermissions();
+            const granted = await requestNotificationPermissions();
             bs.openBottomSheet(false);
+            // The messaging client registers the push token on this signal;
+            // see `lib/allo/push.ts`.
+            if (granted) announcePushPermissionGranted();
           }}
         />
       );

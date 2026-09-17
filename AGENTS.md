@@ -120,14 +120,43 @@ and why such a mention is not evidence that anything connects to it.
 
 ## The Allo platform
 
-The chat transport is being replaced, not extended. The decision and the design
-are in `docs/adr/0001-clean-break-platform.md` and `docs/platform/`; nothing in
-this file describes the new platform yet.
+The chat transport was replaced, not extended. The decision and the design are
+in `docs/adr/0001-clean-break-platform.md` and `docs/platform/`. The app runs on
+it: `@allo/core` (headless SDK: instances, MLS end-to-end encryption, sync,
+outbox, media) and `@allo/react` (provider and hooks) are workspace packages
+under `packages/`, and the legacy REST/Socket.IO chat path is deleted from the
+frontend. `utils/api.ts` survives ONLY for profile settings, the directory and
+reports.
 
-**The legacy transport is still the one that runs.** Everything the app does
-today goes through `@allo/backend` over REST and Socket.IO, and the encryption
-described in `docs/encryption.mdx` is what actually runs, until the app moves
-to `@allo/react`.
+**`lib/allo/` is the only place the frontend constructs the client.** Screens
+use `@allo/react` hooks and the projections in `lib/chat/model.ts`
+(`TimelineItemView` → `Message`, `ConversationView` → `Conversation`, so the
+message components kept their shapes). The seam holds every platform adapter:
+`storage.native.ts` (expo-sqlite, one `kv` table, `batch` in a transaction) and
+`storage.web.ts` (IndexedDB), `secrets.native.ts` (expo-secure-store,
+`WHEN_UNLOCKED_THIS_DEVICE_ONLY`) and `secrets.web.ts`, `session.ts` (the
+`OxyServices` instance from `useOxy()`), `people.ts` (the ONE place the chat path
+asks Oxy about a person; coalesced `getUsersByIds`, filling `usersStore`),
+`push.ts`, `useMediaUri.ts`, and `AlloRoot.tsx`, which owns the lifecycle: one
+client per signed-in account, `stop()` on an account switch, `reset()` (wipe and
+best-effort self-revoke) on sign-out. **Nothing on the chat path may fall back
+to AsyncStorage**; `__tests__/allo/noLegacyChatPath.test.ts` is a TypeScript-AST
+census that enforces it, plus no `socket.io-client`, no legacy endpoint, and
+`@allo/core` value imports only inside `lib/allo/`.
+
+**Enrollment is a gate, not a setting.** `EnrollmentGate` renders the app only
+for an `active` instance. A second device sits on a "approve this device" screen
+until an active device approves it from Settings → Devices
+(`app/(chat)/settings/devices.tsx`: `useOwnInstances` + `usePendingEnrollments`,
+approve with the challenge so a swapped one is refused, reject, revoke). A
+revoked device gets "start over" (`reset()` then `start()`). The pending device
+cannot yet show its OWN fingerprint: core's `InstanceView` omits the record's
+`challenge`; the approver's screen shows it.
+
+**The web secret store is the platform's documented weak point.** A browser has
+no Keychain; the storage key and the signing key sit in IndexedDB (`allo-secrets`)
+where any script on the origin can read them. Never move them to `localStorage`
+or a cookie; see the header of `lib/allo/secrets.web.ts`.
 
 ## Key features
 
@@ -142,14 +171,18 @@ to `@allo/react`.
   public, so no service credential is needed, and the responses are a PROJECTION
   (`DirectoryUser` in `@allo/shared-types`) rather than the Oxy `User`, which
   carries `email`, `phone`, `address` and `birthday`.
-- **E2E encryption:** `lib/signalProtocol.ts` does static ECDH (P-256) between
-  identity keys, no KDF, AES-256-GCM. **It is not the Signal Protocol despite the
-  filename:** no forward secrecy, prekeys generated but unused, and groups,
-  multi-device, P2P and media are broken or unimplemented. See
-  `docs/encryption.mdx`.
-- **Offline first:** local storage plus a sync queue (`lib/offlineStorage.ts`).
-- **Real time:** Socket.io for messaging. The calls screen renders mock data and
-  has no transport behind it.
+- **E2E encryption, sync, media, devices:** all `@allo/core`, reached through
+  `@allo/react`; see "The Allo platform" above. Media is fetched and decrypted
+  on demand by `useMediaUri` (a cache file on native, released on unmount; an
+  object URL on web); a voice note or a document is not fetched until played or
+  opened. Sending a thumbnail alongside a picture is not possible yet:
+  `UploadMediaMeta` carries no thumbnail, so receivers download the original to
+  draw a bubble.
+- **Conversation themes** are a preference of THIS device
+  (`stores/conversationThemeStore.ts`), no longer shared with participants.
+  There is no archive; a swipe "delete" LEAVES the conversation.
+- **Real time:** the SDK's socket. The calls screen renders mock data and has no
+  transport behind it.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.
@@ -196,6 +229,18 @@ BOTH entries pointing at the current target.
 **`@react-native-community/netinfo`.** Root `overrides` plus `resolutions` pin it
 to an **exact version, not a range**; the frontend declares it as a direct
 dependency. Keep it exact.
+
+**Metro and the MLS engine.** `metro.config.js` aliases `crypto` (a Node-only
+fallback inside `@hpke/common`) to `metro/empty-module.js`, the optional `ts-mls`
+peers Allo does not install (`@hpke/ml-kem` and friends) to
+`metro/ts-mls-optional-peer.js`, and every `@hpke/*` package root to its ESM
+build. The last one is not cosmetic: the CJS build is a UMD wrapper whose
+factory takes a parameter named `require`, Metro's collector only rewrites the
+global one, and the static-render bundle `expo export` runs in Node picks the
+`require` condition and dies with "Requiring unknown module @hpke/common".
+Measured: the client bundle compiled and the SSR pass failed until the ESM
+mapping landed. Jest needs `ts-mls|@hpke` in `transformIgnorePatterns` for the
+same ESM reason.
 
 **`bun.lock` regeneration.** Always run `bun install` from the **monorepo root**,
 never inside a package: a sub-package install can drop workspace resolution lines

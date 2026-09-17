@@ -1,4 +1,4 @@
-import type { MessageReadStatus } from '@/stores/messagesStore';
+import type { MessageReadStatus } from '@/lib/chat/model';
 
 /**
  * Which mark a message's status draws.

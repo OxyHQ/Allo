@@ -6,18 +6,18 @@ export const API_URL =
   process.env.NODE_ENV === 'production'
     ? 'https://api.allo.you/api'
     : (process.env.API_URL ?? 'http://localhost:4140/api');
-export const SOCKET_URL =
-  process.env.NODE_ENV === "production"
-    ? "wss://api.allo.you"
-    : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
 
-export const API_URL_SOCKET =
-  process.env.NODE_ENV === "production"
-    ? "wss://api.allo.you"
-    : (process.env.API_URL_SOCKET ?? "ws://localhost:4140");
+/**
+ * The origin the Allo platform SDK (`@allo/core`) talks to. The SDK mounts its
+ * own `/v1/*` routes and its own Socket.IO namespace under this origin, so it
+ * takes the backend's ORIGIN and not the `/api` prefix the legacy REST helper
+ * still uses for profile, directory and reports.
+ */
+export const ALLO_PLATFORM_URL =
+  process.env.NODE_ENV === 'production'
+    ? 'https://api.allo.you'
+    : (process.env.EXPO_PUBLIC_ALLO_PLATFORM_URL ?? API_URL.replace(/\/api\/?$/, ''));
 
-export const API_URL_SOCKET_CHAT = process.env.API_URL_SOCKET_CHAT || 'http://localhost:4140';
-export const API_OXY_CHAT = process.env.API_OXY_CHAT || 'http://localhost:4140';
 // Oxy is ALWAYS the production identity provider — deliberately no dev branch.
 // Oxy owns the account, and a build pointing identity at a local port nothing is
 // listening on does not fail loudly: it renders a signed-out app.

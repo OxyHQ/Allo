@@ -8,7 +8,8 @@ import { RiPauseFill, RiPlayFill } from '@oxy.so/bloom/icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import type { MessageAttachment, MessageReadStatus } from '@/stores/messagesStore';
+import type { MessageAttachment, MessageReadStatus } from '@/lib/chat/model';
+import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { logger } from '@/utils/logger';
 
 import { MessageMetadata } from './MessageMetadata';
@@ -27,10 +28,11 @@ import { displayDurationMs, formatPlaybackTime, playbackFraction, seekPositionMs
  * this.)
  *
  * **Nothing is fetched until play is pressed.** The bytes of a voice note are
- * the whole recording, not a thumbnail, and asking the resolver for a URL is
- * what starts the download (see `lib/chat/mediaCache.ts`). A screenful of voice
- * notes that downloaded themselves on render would spend a conversation's worth
- * of a stranger's data allowance to draw a row that is a play button either way.
+ * the whole recording, not a thumbnail, and enabling `useMediaUri` is what
+ * starts the download and the decryption (see `lib/allo/useMediaUri.ts`). A
+ * screenful of voice notes that downloaded themselves on render would spend a
+ * conversation's worth of a stranger's data allowance to draw a row that is a
+ * play button either way.
  */
 
 export interface VoiceNoteBubbleProps {
@@ -39,18 +41,12 @@ export interface VoiceNoteBubbleProps {
   readonly timestamp: Date;
   readonly showTimestamp: boolean;
   readonly readStatus: MessageReadStatus | undefined;
-  /**
-   * An attachment source to a local URI, or `''` while there is not one yet.
-   *
-   * Called only after the user has pressed play — see the note above.
-   */
-  readonly resolveUrl: (source: string) => string;
 }
 
 const SECONDS_TO_MILLISECONDS = 1000;
 
 export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
-  ({ attachment, isSent, timestamp, showTimestamp, readStatus, resolveUrl }) => {
+  ({ attachment, isSent, timestamp, showTimestamp, readStatus }) => {
     const theme = useTheme();
     const { t } = useTranslation();
 
@@ -62,7 +58,7 @@ export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
     const [pendingPlay, setPendingPlay] = useState(false);
     const [scrubFraction, setScrubFraction] = useState<number | undefined>(undefined);
 
-    const uri = wanted ? resolveUrl(attachment.source) : '';
+    const { uri } = useMediaUri(attachment.ref, attachment.mime, wanted);
     const player = useAudioPlayer(uri === '' ? null : uri);
     const status = useAudioPlayerStatus(player);
 

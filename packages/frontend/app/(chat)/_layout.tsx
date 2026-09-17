@@ -7,12 +7,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { ContactDetails } from '@/components/ContactDetails';
 import { EmptyState } from '@/components/shared/EmptyState';
 import ConversationsList from './index';
-import { useConversationsStore } from '@/stores';
-import { useUserById } from '@/stores/usersStore';
+import { useChatConversations } from '@/hooks/useChatConversations';
 import { useOxy } from '@oxy.so/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
-import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
 import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
 import { ProfileScreen } from '@/components/profile/ProfileScreen';
 import { profileHandleFromPathname } from '@/lib/profile/handle';
@@ -35,9 +33,7 @@ export default function ChatLayout() {
   const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
 
   const { user: currentUser } = useOxy();
-  const conversations = useConversationsStore(state => state.conversations);
-
-  useRealtimeMessaging(undefined);
+  const conversations = useChatConversations();
 
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
@@ -79,6 +75,7 @@ export default function ChatLayout() {
         groupName: groupInfo?.name,
         groupAvatar: groupInfo?.avatar,
         currentUserId: currentUser?.id,
+        myRole: activeConversation.myRole,
       };
     }
 
@@ -151,9 +148,7 @@ export default function ChatLayout() {
               <Stack.Screen name="settings/language" />
               <Stack.Screen name="settings/privacy" />
               <Stack.Screen name="settings/profile-customization" />
-              <Stack.Screen name="settings/linked-accounts" />
-              {/* Second level: one screen per network, driven by the server's catalogue */}
-              <Stack.Screen name="settings/linked-accounts/[network]" />
+              <Stack.Screen name="settings/devices" />
               {/* Second level nested routes under privacy. Online status is not
                   among them: it is one boolean, and it is a switch in the list. */}
               <Stack.Screen name="settings/privacy/profile-visibility" />
@@ -220,6 +215,7 @@ export default function ChatLayout() {
         <Stack.Screen name="settings/privacy/restricted" />
         <Stack.Screen name="settings/privacy/hidden-words" />
         <Stack.Screen name="settings/profile-customization" />
+        <Stack.Screen name="settings/devices" />
       </Stack>
     </ThemedView>
   );

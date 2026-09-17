@@ -5,7 +5,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import AnimatedTabBar from './common/AnimatedTabBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,16 +14,24 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import Avatar from './Avatar';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
+import { toast } from '@oxy.so/bloom/toast';
+import { Search } from '@oxy.so/bloom/search';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
+import { useRouter, type Href } from 'expo-router';
+import { useConversationActions } from '@allo/react';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { useUserById, useUsersStore } from '@/stores/usersStore';
 import { useParticipantFullName } from '@/utils/conversationUtils';
 import { COLOR_THEMES } from '@/styles/colorThemes';
-import { useConversationsStore } from '@/stores';
-import { api } from '@/utils/api';
-import { useOxy } from '@oxy.so/services';
+import { useConversationThemeStore } from '@/stores/conversationThemeStore';
+import { useAvatarUrl, usePeople, usePerson } from '@/hooks/usePerson';
+import { useUserSearch } from '@/hooks/useUserSearch';
+import { confirmDialog } from '@/utils/alerts';
+import { getErrorMessage } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
-import { ConversationParticipant, ConversationType } from '@/app/(chat)/index';
-import { getOtherParticipants, isGroupConversation } from '@/utils/conversationUtils';
+import type { ConversationParticipant, ConversationType } from '@/lib/chat/model';
+import { getOtherParticipants } from '@/utils/conversationUtils';
 import { GroupAvatar } from './GroupAvatar';
 import { ProfileIdentity } from './profile/ProfileIdentity';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
@@ -40,49 +48,29 @@ function bareHandle(username: string | undefined): string | undefined {
   return handle ? handle : undefined;
 }
 
+/** How long a group's name may be. The same cap `app/(chat)/new.tsx` applies. */
+const GROUP_NAME_MAX_LENGTH = 64;
+
 /**
  * Participant item component for group conversations
  * Extracted to separate component to allow using hooks properly
  */
 function ParticipantItem({
   participant,
+  onRemove,
 }: {
   participant: ConversationParticipant;
+  /** Present when the viewer may remove this member. */
+  onRemove?: (participant: ConversationParticipant) => void;
 }) {
   const theme = useTheme();
-  const { oxyServices } = useOxy(); // Telegram-style: calls backend
-  const usersStore = useUsersStore();
-  const participantUser = useUserById(participant.id);
+  const { t } = useTranslation();
+  const person = usePerson(participant.id);
   const fullName = useParticipantFullName(participant);
   const initial = fullName?.charAt(0).toUpperCase() || '?';
   const participantShape = useAvatarShape(participant.id);
-
-  // Ensure we fetch user data if missing
-  React.useEffect(() => {
-    if (!participantUser && oxyServices) {
-      if (participant.username) {
-        usersStore.ensureByUsername(participant.username, (u: string) => oxyServices.getProfileByUsername(u));
-      } else if (participant.id) {
-        // By id, so `getUserById`. The by-username endpoint 404s on an account id.
-        usersStore.ensureById(participant.id, (id: string) => oxyServices.getUserById(id));
-      }
-    }
-  }, [participant.username, participant.id, participantUser, usersStore, oxyServices]);
-
-  // Get avatar URL using oxyServices
-  const participantAvatar = React.useMemo(() => {
-    let avatar = participantUser?.avatar || participant.avatar;
-    if (avatar && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
-      try {
-        return oxyServices.getFileDownloadUrl(avatar, 'thumb');
-      } catch (e) {
-        // Ignore error
-      }
-    }
-    return avatar;
-  }, [participantUser?.avatar, participant.avatar, oxyServices]);
-  
-  const participantUsername = participantUser?.username || participantUser?.handle || participant.username;
+  const participantAvatar = useAvatarUrl(person?.avatar ?? participant.avatar);
+  const participantUsername = person?.handle ?? participant.username;
 
   const styles = React.useMemo(() => StyleSheet.create({
     participantItem: {
@@ -106,10 +94,13 @@ function ParticipantItem({
       color: theme.colors.textSecondary,
       marginTop: 2,
     },
+    removeButton: {
+      padding: 8,
+    },
   }), [theme]);
 
   return (
-    <TouchableOpacity style={styles.participantItem} activeOpacity={0.7}>
+    <View style={styles.participantItem}>
       <Avatar
         size={40}
         source={participantAvatar ? { uri: participantAvatar } : undefined}
@@ -122,7 +113,18 @@ function ParticipantItem({
           <ThemedText style={styles.participantUsername}>@{participantUsername}</ThemedText>
         )}
       </View>
-    </TouchableOpacity>
+      {onRemove && (
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={() => onRemove(participant)}
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.group.removeMember', 'Remove from group')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="person-remove-outline" size={20} color={theme.colors.error} />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -139,7 +141,8 @@ interface ContactDetailsProps {
   groupName?: string;
   groupAvatar?: string;
   currentUserId?: string;
-  conversationTheme?: string; // Current conversation theme ID
+  /** What the viewer may do to a group. Absent means "member". */
+  myRole?: 'owner' | 'admin' | 'member';
 }
 
 export function ContactDetails({
@@ -154,11 +157,14 @@ export function ContactDetails({
   groupName,
   groupAvatar,
   currentUserId,
-  conversationTheme,
+  myRole = 'member',
 }: ContactDetailsProps) {
   const theme = useTheme();
-  const updateConversation = useConversationsStore(state => state.updateConversation);
+  const { t } = useTranslation();
+  const router = useRouter();
+  const { addMember, removeMember, leave, rename } = useConversationActions();
   const isGroup = conversationType === 'group';
+  const canManage = isGroup && (myRole === 'owner' || myRole === 'admin');
   const otherParticipants = isGroup && participants
     ? (getOtherParticipants({ participants }, currentUserId) || [])
     : [];
@@ -166,89 +172,126 @@ export function ContactDetails({
     ? groupName
     : contactName;
 
-  // Handler to update conversation theme
-  const handleThemeChange = useCallback(async (themeId: string) => {
+  usePeople(useMemo(() => participants.map((p) => p.id), [participants]));
+
+  // The conversation's colour theme is this device's preference: see the store.
+  const conversationTheme = useConversationThemeStore((state) =>
+    conversationId ? state.themeByConversation[conversationId] : undefined,
+  );
+  const setConversationTheme = useConversationThemeStore((state) => state.setConversationTheme);
+
+  const handleThemeChange = useCallback((themeId: string) => {
     if (!conversationId) return;
-
-    try {
-      // Optimistically update the UI
-      updateConversation(conversationId, { theme: themeId });
-
-      // Call backend API to persist theme and sync with other participants
-      await api.put(`/conversations/${conversationId}`, { theme: themeId });
-    } catch (error) {
-      console.error('[ContactDetails] Error updating conversation theme:', error);
-      // Could add error handling/rollback here if needed
-    }
-  }, [conversationId, updateConversation]);
+    setConversationTheme(conversationId, themeId);
+  }, [conversationId, setConversationTheme]);
 
   // Define tabs based on conversation type
   const tabs = isGroup
     ? [
-      { id: 'participants', label: 'Participants' },
-      { id: 'info', label: 'Info' },
+      { id: 'participants', label: t('chat.details.participants', 'Participants') },
+      { id: 'info', label: t('chat.details.info', 'Info') },
     ]
     : [
-      { id: 'info', label: 'Info' },
-      { id: 'media', label: 'Media' },
+      { id: 'info', label: t('chat.details.info', 'Info') },
+      { id: 'media', label: t('chat.details.media', 'Media') },
     ];
 
   const [activeTab, setActiveTab] = useState(tabs[0].id);
 
-  // Get oxy services for avatar URLs
-  const { oxyServices } = useOxy(); // Telegram-style: calls backend
-  const usersStore = useUsersStore();
-
-  // For direct conversations, get the other participant's user data from Oxy
+  // For direct conversations, the other participant, through the people layer
   const otherParticipant = !isGroup ? participants?.find(p => p.id !== currentUserId) : undefined;
-  const contactUser = useUserById(!isGroup && otherParticipant ? otherParticipant.id : undefined);
+  const contactPerson = usePerson(!isGroup ? otherParticipant?.id : undefined);
+  const contactAvatarUrl = useAvatarUrl(isGroup ? (groupAvatar || contactAvatar) : (contactPerson?.avatar || contactAvatar));
 
-  // Ensure we fetch user data if missing
-  React.useEffect(() => {
-    if (!isGroup && otherParticipant && !contactUser) {
-      if (otherParticipant.username) {
-        usersStore.ensureByUsername(otherParticipant.username, (u) => oxyServices.getProfileByUsername(u));
-      } else if (otherParticipant.id) {
-        // By id, so `getUserById`. The by-username endpoint 404s on an account id.
-        usersStore.ensureById(otherParticipant.id, (id) => oxyServices.getUserById(id));
-      }
-    }
-  }, [isGroup, otherParticipant, contactUser, usersStore, oxyServices]);
-
-  // Get contact avatar URL using oxyServices
-  const contactAvatarUrl = useMemo(() => {
-    if (isGroup) return groupAvatar || contactAvatar;
-    
-    // For direct conversations, try Oxy user data first
-    let avatar = contactUser?.avatar || contactAvatar;
-    
-    if (avatar && !avatar.startsWith('http') && !avatar.startsWith('file://')) {
-      try {
-        return oxyServices.getFileDownloadUrl(avatar, 'thumb');
-      } catch (e) {
-        // Ignore error
-      }
-    }
-    
-    return avatar;
-  }, [isGroup, contactUser?.avatar, contactAvatar, groupAvatar, oxyServices]);
-
-  // Get contact bio from Oxy user data
-  const contactBio = contactUser?.bio || contactUser?.description;
-  
   // Use actual contact data from Oxy
   const contactData = {
-    name: contactName,
-    username: contactUsername || contactUser?.username || contactUser?.handle,
+    name: contactPerson?.displayName || contactName,
+    username: bareHandle(contactUsername) || contactPerson?.handle,
     avatar: contactAvatarUrl,
-    bio: contactBio,
     isOnline,
     lastSeen: lastSeen || new Date(),
-    verified: contactUser?.verified || false,
   };
 
   // Get avatar shape for the contact (only for direct conversations)
   const contactAvatarShape = useAvatarShape(!isGroup ? otherParticipant?.id : undefined);
+
+  // ---- group management -----------------------------------------------------
+  const [busy, setBusy] = useState(false);
+  const [draftName, setDraftName] = useState<string | null>(null);
+  const search = useUserSearch();
+  const memberIds = useMemo(() => new Set(participants.map((p) => p.id)), [participants]);
+
+  const run = useCallback(async (action: () => Promise<void>, failure: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+    } catch (error: unknown) {
+      logger.error('[ContactDetails] group action failed:', error);
+      toast.error(getErrorMessage(error) || failure);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const handleRename = useCallback(() => {
+    if (!conversationId || draftName === null) return;
+    const name = draftName.trim();
+    if (name === '' || name === groupName) {
+      setDraftName(null);
+      return;
+    }
+    void run(async () => {
+      await rename(conversationId, name);
+      setDraftName(null);
+      toast.success(t('chat.group.renamed', 'Group renamed'));
+    }, t('chat.group.renameFailed', 'The group could not be renamed'));
+  }, [conversationId, draftName, groupName, rename, run, t]);
+
+  const handleAddMember = useCallback((accountId: string) => {
+    if (!conversationId) return;
+    if (memberIds.has(accountId)) {
+      toast.error(t('chat.group.alreadyMember', 'Already in this group'));
+      return;
+    }
+    void run(async () => {
+      await addMember(conversationId, accountId);
+      search.clear();
+      toast.success(t('chat.group.memberAdded', 'Added to the group'));
+    }, t('chat.group.addFailed', 'The person could not be added'));
+  }, [conversationId, memberIds, addMember, search, run, t]);
+
+  const handleRemoveMember = useCallback(async (participant: ConversationParticipant) => {
+    if (!conversationId) return;
+    const confirmed = await confirmDialog({
+      title: t('chat.group.removeMember', 'Remove from group'),
+      message: t('chat.group.removeMemberConfirm', 'They will no longer see new messages in this group.'),
+      okText: t('common.remove', 'Remove'),
+      cancelText: t('common.cancel', 'Cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    void run(async () => {
+      await removeMember(conversationId, participant.id);
+      toast.success(t('chat.group.memberRemoved', 'Removed from the group'));
+    }, t('chat.group.removeFailed', 'The person could not be removed'));
+  }, [conversationId, removeMember, run, t]);
+
+  const handleLeave = useCallback(async () => {
+    if (!conversationId) return;
+    const confirmed = await confirmDialog({
+      title: isGroup ? t('chat.leave.group', 'Leave group') : t('chat.leave.conversation', 'Delete conversation'),
+      message: t('chat.leave.confirm', 'You will stop receiving messages here, and this device will no longer be able to read them.'),
+      okText: isGroup ? t('chat.leave.group', 'Leave group') : t('common.delete', 'Delete'),
+      cancelText: t('common.cancel', 'Cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    void run(async () => {
+      await leave(conversationId);
+      router.replace('/' as Href);
+    }, t('chat.leave.failed', 'The conversation could not be left'));
+  }, [conversationId, isGroup, leave, router, run, t]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -308,6 +351,10 @@ export function ContactDetails({
       fontSize: 16,
       color: theme.colors.text,
     },
+    infoValueDestructive: {
+      fontSize: 16,
+      color: theme.colors.error,
+    },
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -321,7 +368,7 @@ export function ContactDetails({
     actionButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: theme.colors.background,
       marginLeft: 8,
     },
     tabsContainer: {
@@ -329,6 +376,35 @@ export function ContactDetails({
       borderBottomColor: theme.colors.border,
     },
     tabContent: {
+      flex: 1,
+    },
+    renameRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 8,
+    },
+    renameField: {
+      flex: 1,
+    },
+    smallButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      backgroundColor: theme.colors.primary,
+    },
+    smallButtonText: {
+      color: theme.colors.background,
+      fontWeight: '600',
+    },
+    searchResult: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      gap: 12,
+    },
+    searchResultName: {
+      fontSize: 15,
+      color: theme.colors.text,
       flex: 1,
     },
   }), [theme]);
@@ -352,15 +428,15 @@ export function ContactDetails({
         {/* Header */}
         <View style={styles.header}>
           <ThemedText style={styles.headerTitle}>
-            {isGroup ? 'Group Info' : 'Contact Info'}
+            {isGroup ? t('chat.details.groupInfo', 'Group Info') : t('chat.details.contactInfo', 'Contact Info')}
           </ThemedText>
         </View>
 
         {/* Avatar and Name - Always visible. The same renderer the profile
             screen uses, so a person looks the same wherever they are shown. */}
         <ProfileIdentity
-          displayName={displayName}
-          handle={isGroup ? undefined : bareHandle(contactUsername)}
+          displayName={isGroup ? displayName : contactData.name}
+          handle={isGroup ? undefined : contactData.username}
           status={
             isGroup
               ? otherParticipants.length > 0
@@ -394,27 +470,86 @@ export function ContactDetails({
         />
 
         {/* Tab Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Participants Tab - Only for groups */}
-          {isGroup && activeTab === 'participants' && otherParticipants?.length > 0 && (
-            <View style={styles.section}>
-              {otherParticipants.map((participant) => (
-                <ParticipantItem
-                  key={participant.id}
-                  participant={participant}
-                />
-              ))}
-            </View>
+          {isGroup && activeTab === 'participants' && (
+            <>
+              {canManage && (
+                <View style={styles.section}>
+                  <ThemedText style={styles.sectionTitle}>{t('chat.group.addMember', 'Add someone')}</ThemedText>
+                  <Search
+                    label={t('Search users…')}
+                    value={search.term}
+                    onChangeText={search.setTerm}
+                    onClearText={search.clear}
+                  />
+                  {search.searching && <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 12 }} />}
+                  {search.results
+                    .filter((candidate) => !memberIds.has(candidate.id))
+                    .map((candidate) => (
+                      <TouchableOpacity
+                        key={candidate.id}
+                        style={styles.searchResult}
+                        onPress={() => handleAddMember(candidate.id)}
+                        disabled={busy}
+                        accessibilityRole="button"
+                      >
+                        <Avatar size={36} source={candidate.avatar ? { uri: candidate.avatar } : undefined} label={candidate.displayName.charAt(0).toUpperCase()} />
+                        <ThemedText style={styles.searchResultName} numberOfLines={1}>
+                          {candidate.displayName}
+                        </ThemedText>
+                        <Ionicons name="person-add-outline" size={20} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                    ))}
+                </View>
+              )}
+              {otherParticipants.length > 0 && (
+                <View style={styles.section}>
+                  {otherParticipants.map((participant) => (
+                    <ParticipantItem
+                      key={participant.id}
+                      participant={participant}
+                      onRemove={canManage ? handleRemoveMember : undefined}
+                    />
+                  ))}
+                </View>
+              )}
+            </>
           )}
 
           {/* Info Tab */}
           {activeTab === 'info' && (
             <>
+              {/* Group name */}
+              {isGroup && (
+                <View style={styles.section}>
+                  <ThemedText style={styles.sectionTitle}>{t('chat.group.name', 'Group name')}</ThemedText>
+                  <View style={styles.renameRow}>
+                    <View style={styles.renameField}>
+                      <TextFieldInput
+                        label={t('chat.group.name', 'Group name')}
+                        placeholder={t('Group name (optional)')}
+                        value={draftName ?? groupName ?? ''}
+                        onChangeText={setDraftName}
+                        maxLength={GROUP_NAME_MAX_LENGTH}
+                        returnKeyType="done"
+                        onSubmitEditing={handleRename}
+                      />
+                    </View>
+                    {draftName !== null && draftName.trim() !== (groupName ?? '') && (
+                      <TouchableOpacity style={styles.smallButton} onPress={handleRename} disabled={busy} accessibilityRole="button">
+                        <Text style={styles.smallButtonText}>{t('Save')}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+
               {/* Actions - Only for direct conversations */}
               {!isGroup && (
                 <View style={styles.section}>
                   <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-                    <Ionicons name="call" size={20} color="#FFFFFF" />
+                    <Ionicons name="call" size={20} color={theme.colors.background} />
                     <Text style={styles.actionButtonText}>Call</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -424,16 +559,6 @@ export function ContactDetails({
                     <Ionicons name="videocam" size={20} color={theme.colors.text} />
                     <Text style={[styles.actionButtonText, { color: theme.colors.text }]}>Video</Text>
                   </TouchableOpacity>
-                </View>
-              )}
-
-              {/* About - Only for direct conversations */}
-              {!isGroup && contactData.bio && (
-                <View style={styles.section}>
-                  <ThemedText style={styles.sectionTitle}>About</ThemedText>
-                  <ThemedText style={{ color: theme.colors.text, fontSize: 15, lineHeight: 22 }}>
-                    {contactData.bio}
-                  </ThemedText>
                 </View>
               )}
 
@@ -454,9 +579,9 @@ export function ContactDetails({
                 </View>
               )}
 
-              {/* Chat Theme */}
+              {/* Chat Theme — a preference of this device; see conversationThemeStore */}
               <View style={styles.section}>
-                <ThemedText style={styles.sectionTitle}>Chat Theme</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('chat.theme.title', 'Chat Theme')}</ThemedText>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -547,6 +672,27 @@ export function ContactDetails({
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
+
+                {conversationId && (
+                  <TouchableOpacity
+                    style={styles.infoItem}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      void handleLeave();
+                    }}
+                    disabled={busy}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.infoIcon}>
+                      <Ionicons name="exit-outline" size={20} color={theme.colors.error} />
+                    </View>
+                    <View style={styles.infoContent}>
+                      <Text style={styles.infoValueDestructive}>
+                        {isGroup ? t('chat.leave.group', 'Leave group') : t('chat.leave.conversation', 'Delete conversation')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
               </View>
             </>
           )}
@@ -574,4 +720,3 @@ export function ContactDetails({
     </ThemedView>
   );
 }
-

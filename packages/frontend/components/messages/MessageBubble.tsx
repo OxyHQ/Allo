@@ -5,7 +5,7 @@ import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';
-import type { MessageReadStatus } from '@/stores/messagesStore';
+import type { MessageReadStatus } from '@/lib/chat/model';
 import { MessageMetadata } from './MessageMetadata';
 
 /**

@@ -32,7 +32,7 @@ import {
     useConversationSwipePreferencesStore,
     SwipeActionType,
 } from '@/stores';
-import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
+import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
 const IconComponent = Ionicons;
@@ -49,19 +49,11 @@ export default function SettingsScreen() {
     const swipeActionOptions = useMemo(
         () => ([
             {
-                value: 'archive',
-                label: t('settings.conversations.archiveLabel', 'Archive'),
-                description: t(
-                    'settings.conversations.archiveDescription',
-                    'Hide the chat but keep its history.',
-                ),
-            },
-            {
                 value: 'delete',
                 label: t('settings.conversations.deleteLabel', 'Delete'),
                 description: t(
                     'settings.conversations.deleteDescription',
-                    'Remove the chat from your list.',
+                    'Leave the chat and remove it from your list.',
                 ),
             },
             {
@@ -77,16 +69,6 @@ export default function SettingsScreen() {
     );
     const leftActionDescription = swipeActionOptions.find(option => option.value === leftSwipeAction)?.description;
     const rightActionDescription = swipeActionOptions.find(option => option.value === rightSwipeAction)?.description;
-
-    const deviceKeysInitialized = useDeviceKeysStore((state) => state.isInitialized);
-    // deviceId is a number; format it here because the row renders a string.
-    // Compared against undefined rather than truthiness so device 0 still reads
-    // as initialized.
-    const deviceId = useDeviceKeysStore((state) =>
-        state.deviceKeys?.deviceId !== undefined
-            ? String(state.deviceKeys.deviceId)
-            : 'Not initialized'
-    );
 
     // Determine Expo SDK/version information with safe fallbacks
     const expoSdkVersion =
@@ -136,6 +118,9 @@ export default function SettingsScreen() {
                     title: t('Notifications'),
                     message: t('notification.permission.denied'),
                 });
+            } else {
+                // The messaging client registers the push token on this signal.
+                announcePushPermissionGranted();
             }
         }
     }, [t]);
@@ -551,28 +536,13 @@ export default function SettingsScreen() {
                     />
                 </SettingsListGroup>
 
-                {/* Security & Encryption */}
-                <SettingsListGroup title="Security & Encryption">
-                    <SettingsListItem
-                        icon={<IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />}
-                        title="Signal Protocol Encryption"
-                        description={
-                            deviceKeysInitialized
-                                ? 'End-to-end encryption enabled'
-                                : 'Initializing encryption...'
-                        }
-                        rightElement={
-                            <IconComponent
-                                name={deviceKeysInitialized ? 'checkmark-circle' : 'time-outline'}
-                                size={20}
-                                color={deviceKeysInitialized ? '#4CAF50' : theme.colors.textSecondary}
-                            />
-                        }
-                    />
+                {/* Devices: every enrolled device of this account, and the ones waiting to be approved */}
+                <SettingsListGroup title={t('settings.sections.security', 'Security')}>
                     <SettingsListItem
                         icon={<IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />}
-                        title="Device ID"
-                        description={deviceId}
+                        title={t('devices.title', 'Devices')}
+                        description={t('settings.devicesDesc', 'Approve a new device, or remove one')}
+                        onPress={() => router.push('/settings/devices')}
                     />
                 </SettingsListGroup>
 

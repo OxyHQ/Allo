@@ -8,7 +8,7 @@ import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
 import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
 import { MsgFailedIcon } from '@/assets/icons/msgfailed-icon';
 import { statusMark, type MessageStatusMark } from '@/components/messages/messageStatus';
-import type { MessageReadStatus } from '@/stores/messagesStore';
+import type { MessageReadStatus } from '@/lib/chat/model';
 
 /** The picture for each mark. Which mark a status gets is `messageStatus.ts`. */
 const MARK_ICONS: Record<
