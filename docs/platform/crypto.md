@@ -289,9 +289,11 @@ a leaf, from the listing alone and never from the server's word:
   listing: trust flows from the approval event, not from the approver's
   current status.
 
-One gap follows from the contract: another account's listing carries active
-instances only, so from outside, an instance whose approver has since been
-revoked cannot be verified and is refused. Both the conversation creator and
+For this to hold from another account's point of view, the public listing
+(`GET /v1/accounts/:accountId/instances`) carries active AND revoked
+instances, never pending ones: a revoked approver stays visible with its key
+and its status, so what it approved still chains, and an approver missing from
+the listing makes the whole chain refuse. Both the conversation creator and
 the elector run this check before claiming key packages; a refused instance is
 logged and never added. The e2e suite plants instances with forged and absent
 signatures and checks they are skipped, and accepts a valid chain of depth
