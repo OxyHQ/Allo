@@ -431,9 +431,14 @@ export class InstanceManager {
   private computeCurrentView(): InstanceView | null {
     if (!this.record) return null;
     const listed = this.own.find((i) => i.id === this.record?.id);
+    const enrollment =
+      this.record.status === "pending" && this.record.challenge
+        ? { challenge: this.record.challenge, fingerprint: challengeFingerprint(this.record.challenge) }
+        : undefined;
     // The record is updated first (approval, revocation); a listing fetched earlier must not outvote it.
-    if (listed) return { ...this.toView(listed), status: this.record.status };
+    if (listed) return { ...this.toView(listed), status: this.record.status, ...(enrollment ? { enrollment } : {}) };
     return {
+      ...(enrollment ? { enrollment } : {}),
       id: this.record.id,
       accountId: this.record.accountId,
       appId: this.record.appId,

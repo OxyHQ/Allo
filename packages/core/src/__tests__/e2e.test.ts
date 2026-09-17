@@ -388,6 +388,29 @@ describe("end to end over the fake server", () => {
     await stopAll(alice, bob);
   });
 
+  it("(n) a pending instance's own view carries its enrollment challenge and the approver's fingerprint; gone once active; never on others", async () => {
+    const server = fakeServer();
+    const bobIos = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    expect(bobIos.client.instance.current()?.enrollment).toBeUndefined(); // bootstrap: never pending
+    const bobDesktop = await makeClient(server, "acc-bob-0001", "Bob desktop", "desktop");
+    expect(bobDesktop.client.instance.state()).toBe("pending-approval");
+    const own = bobDesktop.client.instance.current()!;
+    expect(own.enrollment).toBeDefined();
+    expect(own.enrollment!.fingerprint).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){3}$/);
+    expect(bobDesktop.client.instance.current()).toBe(own); // stable
+    await bobIos.client.instance.refreshPending();
+    const pending = bobIos.client.instance.pending().find((p) => p.instance.id === bobDesktop.client.instanceId)!;
+    expect(pending.challenge).toBe(own.enrollment!.challenge);
+    expect(pending.fingerprint).toBe(own.enrollment!.fingerprint);
+    expect(pending.instance.enrollment).toBeUndefined(); // the approver's view of the OTHER instance carries none
+    expect(bobIos.client.instance.list().every((i) => i.enrollment === undefined)).toBe(true);
+    await bobIos.client.instance.approve(pending.instance.id, pending.challenge);
+    await waitFor(() => bobDesktop.client.instance.state() === "active");
+    expect(bobDesktop.client.instance.current()?.enrollment).toBeUndefined();
+    expect(bobDesktop.client.instance.current()).not.toBe(own);
+    await stopAll(bobIos, bobDesktop);
+  });
+
   it("(k) push token registration goes to PUT/DELETE /v1/instances/me/push, signed", async () => {
     const server = fakeServer();
     const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");

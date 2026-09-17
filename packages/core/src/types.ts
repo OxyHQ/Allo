@@ -119,6 +119,13 @@ export interface InstanceView {
   revokedAt: string | null;
   lastSeenAt: string | null;
   createdAt: string;
+  /**
+   * Only on THIS instance's own view while it is pending approval: the
+   * challenge the server issued and its fingerprint, computed with the same
+   * function the approver's `pending()[i].fingerprint` uses, so the two
+   * screens can be compared by eye. Never present for other instances.
+   */
+  enrollment?: { challenge: string; fingerprint: string };
 }
 
 export interface PendingEnrollmentView {
