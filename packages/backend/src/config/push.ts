@@ -2,68 +2,36 @@ import { createPrivateKey } from "crypto";
 import * as z from "zod";
 
 /**
- * Push notification configuration (docs/matrix/push.md).
+ * Push notification configuration: the provider credentials, and nothing else.
  *
- * ## Why there is no token store any more
+ * Which device gets notified, and with what, is the delivery worker's business
+ * (`docs/platform/api-v1.md`); this module only decides whether a platform CAN
+ * be delivered to. It holds no token registry — a device's push token lives on
+ * its `client_instances` row, next to the instance it belongs to.
  *
- * On Matrix the homeserver owns the pusher registry. A client registers itself
- * with `POST /_matrix/client/v3/pushers/set`, and from then on Synapse decides
- * which events deserve a notification and posts them to a **push gateway** —
- * this backend — with the device token (`pushkey`) inside every request. Allo
- * therefore never has to know which token belongs to which user, which is why
- * `models/PushToken.ts` is gone rather than reimplemented: a second registry
- * would be one that can disagree with the homeserver's, and the way that
- * disagreement shows up is a phone that stopped ringing months ago and nobody
- * noticed.
+ * ## Validated once, memoised, frozen
  *
- * ## Same shape as `config/bridges.ts`, for the same reason
- *
- * Validated with zod ONCE, memoised, frozen. These variables decide whether a
- * platform can be notified at all, and a typo that reads as `undefined` at the
- * point of use is a platform that silently stops delivering — the failure mode
- * this whole change exists to end.
+ * These variables decide whether a platform can be notified at all, and a typo
+ * that reads as `undefined` at the point of use is a platform that silently
+ * stops delivering — the failure mode this module exists to end.
  *
  * ## Half a configuration is worse than none
  *
- * An app id without the credentials to deliver to it is an endpoint that accepts
- * notifications and drops them. So each platform is all-or-nothing, checked in
- * `superRefine`: a deployment that asks for iOS without an APNs key does not
- * boot. A deployment that configures neither platform is not misconfigured — it
- * is a deployment without push, and the gateway route is simply not mounted.
+ * A platform is enabled by its credentials being COMPLETE, and each platform is
+ * all-or-nothing, checked in `superRefine`: a deployment that sets a Firebase
+ * project id without a service account, or an APNs key id without the key, does
+ * not boot. A deployment that configures neither platform is not misconfigured —
+ * it is a deployment without push, and `enabled` is false.
  */
 
-/** Which provider carries a notification, decided by the pusher's `app_id`. */
+/** Which provider carries a notification. */
 export type PushPlatform = "android" | "ios";
 
 export const PUSH_PLATFORMS: readonly PushPlatform[] = ["android", "ios"];
 
-/**
- * Where the gateway router is mounted, and the route inside it.
- *
- * Two halves of one constant, composed rather than written out twice, because
- * the composed value is not a preference: Synapse parses a pusher's URL and
- * refuses any whose path is not exactly `/_matrix/push/v1/notify`, so a gateway
- * published anywhere else can never receive anything. Splitting them without
- * deriving the whole would put the mount and the published URL in two places
- * that can disagree, and the way that disagreement shows up is every pusher
- * registering successfully and never firing.
- */
-export const PUSH_GATEWAY_MOUNT_PATH = "/_matrix/push";
-export const PUSH_GATEWAY_NOTIFY_PATH = "/v1/notify";
-export const PUSH_GATEWAY_PATH = `${PUSH_GATEWAY_MOUNT_PATH}${PUSH_GATEWAY_NOTIFY_PATH}`;
-
 /** Apple's two front doors. Which one is reached is `ALLO_APNS_ENVIRONMENT`. */
 const APNS_PRODUCTION_HOST = "https://api.push.apple.com";
 const APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com";
-
-/**
- * The shortest gateway secret this deployment will accept.
- *
- * The secret authenticates every notification Synapse sends, so it is a
- * capability over other people's phones. 32 characters of a random alphabet is
- * the same floor the bridge tokens use.
- */
-const MINIMUM_SECRET_LENGTH = 32;
 
 const emptyAsUndefined = (value: unknown): unknown =>
   typeof value === "string" && value.trim().length === 0 ? undefined : value;
@@ -71,121 +39,32 @@ const emptyAsUndefined = (value: unknown): unknown =>
 const optionalString = (minimumLength = 1) =>
   z.preprocess(emptyAsUndefined, z.string().trim().min(minimumLength).optional());
 
-/**
- * The URL clients are told to register their pusher against.
- *
- * Absolute, http(s), and with exactly {@link PUSH_GATEWAY_PATH} as its path. A
- * query string is allowed and is in fact where the capability token rides — see
- * `services/push/gatewayToken.ts` — so it is deliberately not rejected here, but
- * a URL that already carries one would produce two and Synapse would send the
- * wrong one back. Hence: no query, no fragment, no credentials.
- */
-const gatewayUrl = z
-  .string()
-  .trim()
-  .url()
-  .refine((value) => {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  }, "must use http:// or https://")
-  .refine((value) => {
-    const url = new URL(value);
-    return url.pathname === PUSH_GATEWAY_PATH;
-  }, `must have the path ${PUSH_GATEWAY_PATH} — Synapse refuses any pusher whose URL does not`)
-  .refine((value) => {
-    const url = new URL(value);
-    return (
-      url.search.length === 0 &&
-      url.hash.length === 0 &&
-      url.username.length === 0 &&
-      url.password.length === 0
-    );
-  }, "must carry no query, fragment or credentials: the capability token is appended to it");
-
-/**
- * A Matrix `app_id`: reverse-DNS, per platform, and stable forever.
- *
- * Stable because it is half of a pusher's identity on the homeserver. Changing
- * it does not migrate anything — it strands every pusher already registered
- * under the old one, and those keep firing at a gateway that no longer claims
- * the app id until Synapse is told they are rejected.
- */
-const appId = z
-  .string()
-  .trim()
-  .regex(
-    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/,
-    "must be a reverse-DNS application id such as so.oxy.allo.android",
-  )
-  .max(64, "must be at most 64 characters, which is what the Matrix specification allows");
-
-/**
- * The gateway's shared secrets, newest first.
- *
- * A list rather than one value so a secret can be rotated without stranding
- * every pusher already registered. The first entry mints new gateway URLs;
- * every entry verifies. Dropping the previous secret is what finally retires it,
- * and it is safe once every installation has launched once — a launch
- * re-registers its pusher with a freshly minted URL.
- */
-const secretList = z.preprocess(
-  emptyAsUndefined,
-  z
-    .string()
-    .trim()
-    .transform((value) =>
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter((entry) => entry.length > 0),
-    )
-    .pipe(
-      z
-        .array(
-          z
-            .string()
-            .min(
-              MINIMUM_SECRET_LENGTH,
-              `each secret must be at least ${MINIMUM_SECRET_LENGTH} characters`,
-            ),
-        )
-        .min(1),
-    )
-    .optional(),
-);
-
 const apnsEnvironment = z.preprocess(
   emptyAsUndefined,
   z.enum(["production", "sandbox"]).default("production"),
 );
 
-type PushEnvironment = Record<string, string | undefined>;
+const FCM_VARIABLES = ["FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT_BASE64"] as const;
+const APNS_VARIABLES = [
+  "ALLO_APNS_KEY_ID",
+  "ALLO_APNS_TEAM_ID",
+  "ALLO_APNS_PRIVATE_KEY_BASE64",
+  "ALLO_APNS_TOPIC",
+] as const;
 
-/** Whether every variable FCM needs is present. All of them or none. */
-function isFcmComplete(environment: PushEnvironment): boolean {
-  return (
-    typeof environment.FIREBASE_PROJECT_ID === "string" &&
-    environment.FIREBASE_PROJECT_ID.trim().length > 0 &&
-    typeof environment.FIREBASE_SERVICE_ACCOUNT_BASE64 === "string" &&
-    environment.FIREBASE_SERVICE_ACCOUNT_BASE64.trim().length > 0
-  );
+type ParsedPushEnvironment = Record<string, string | undefined>;
+
+/** Which of a platform's variables are set. All of them or none is the rule. */
+function presentAmong(
+  environment: ParsedPushEnvironment,
+  variables: readonly string[],
+): readonly string[] {
+  return variables.filter((key) => environment[key] !== undefined);
 }
 
-/** Whether every variable APNs needs is present. All of them or none. */
-function isApnsComplete(environment: PushEnvironment): boolean {
-  return (["ALLO_APNS_KEY_ID", "ALLO_APNS_TEAM_ID", "ALLO_APNS_PRIVATE_KEY_BASE64", "ALLO_APNS_TOPIC"] as const).every(
-    (key) => typeof environment[key] === "string" && (environment[key] ?? "").trim().length > 0,
-  );
-}
-
-function buildPushEnvSchema(raw: PushEnvironment) {
+function buildPushEnvSchema() {
   return z
     .object({
-      ALLO_PUSH_GATEWAY_URL: z.preprocess(emptyAsUndefined, gatewayUrl.optional()),
-      ALLO_PUSH_GATEWAY_SECRETS: secretList,
-      ALLO_PUSH_ANDROID_APP_ID: z.preprocess(emptyAsUndefined, appId.optional()),
-      ALLO_PUSH_IOS_APP_ID: z.preprocess(emptyAsUndefined, appId.optional()),
-
       FIREBASE_PROJECT_ID: optionalString(),
       FIREBASE_SERVICE_ACCOUNT_BASE64: optionalString(),
 
@@ -197,72 +76,29 @@ function buildPushEnvSchema(raw: PushEnvironment) {
       ALLO_APNS_ENVIRONMENT: apnsEnvironment,
     })
     .superRefine((environment, context) => {
-      const androidRequested = environment.ALLO_PUSH_ANDROID_APP_ID !== undefined;
-      const iosRequested = environment.ALLO_PUSH_IOS_APP_ID !== undefined;
-      if (!androidRequested && !iosRequested) {
-        /**
-         * No platform asked for. Not an error — it is a deployment without push,
-         * and the gateway is not mounted. Anything else set alongside it is
-         * inert, which is preferable to refusing to boot over a variable that
-         * decides nothing.
-         */
-        return;
-      }
-
-      if (environment.ALLO_PUSH_GATEWAY_URL === undefined) {
+      const fcmPresent = presentAmong(environment, FCM_VARIABLES);
+      if (fcmPresent.length > 0 && fcmPresent.length < FCM_VARIABLES.length) {
+        const missing = FCM_VARIABLES.filter((key) => !fcmPresent.includes(key));
         context.addIssue({
           code: "custom",
-          path: ["ALLO_PUSH_GATEWAY_URL"],
+          path: [missing[0] ?? FCM_VARIABLES[0]],
           message:
-            "is required once a push platform is configured — it is the address clients register " +
-            "their pusher against, and without it nothing can ever reach this gateway",
+            `${FCM_VARIABLES.join(" and ")} are both required to enable Android push; ` +
+            `${missing.join(", ")} is missing. Half a configuration is a platform that ` +
+            "looks enabled and delivers nothing",
         });
       }
 
-      if (environment.ALLO_PUSH_GATEWAY_SECRETS === undefined) {
+      const apnsPresent = presentAmong(environment, APNS_VARIABLES);
+      if (apnsPresent.length > 0 && apnsPresent.length < APNS_VARIABLES.length) {
+        const missing = APNS_VARIABLES.filter((key) => !apnsPresent.includes(key));
         context.addIssue({
           code: "custom",
-          path: ["ALLO_PUSH_GATEWAY_SECRETS"],
+          path: [missing[0] ?? APNS_VARIABLES[0]],
           message:
-            "is required once a push platform is configured — without it the gateway would accept " +
-            "a notification from anyone who found the URL, which is a spam relay aimed at users' phones",
-        });
-      }
-
-      if (androidRequested && !isFcmComplete(raw)) {
-        context.addIssue({
-          code: "custom",
-          path: ["FIREBASE_SERVICE_ACCOUNT_BASE64"],
-          message:
-            "FIREBASE_PROJECT_ID and FIREBASE_SERVICE_ACCOUNT_BASE64 are both required to enable " +
-            "ALLO_PUSH_ANDROID_APP_ID: an app id without credentials is a gateway that accepts " +
-            "Android notifications and drops them",
-        });
-      }
-
-      if (iosRequested && !isApnsComplete(raw)) {
-        context.addIssue({
-          code: "custom",
-          path: ["ALLO_APNS_PRIVATE_KEY_BASE64"],
-          message:
-            "ALLO_APNS_KEY_ID, ALLO_APNS_TEAM_ID, ALLO_APNS_PRIVATE_KEY_BASE64 and ALLO_APNS_TOPIC " +
-            "are all required to enable ALLO_PUSH_IOS_APP_ID: an app id without an authentication " +
-            "key is a gateway that accepts iOS notifications and drops them",
-        });
-      }
-
-      if (
-        androidRequested &&
-        iosRequested &&
-        environment.ALLO_PUSH_ANDROID_APP_ID === environment.ALLO_PUSH_IOS_APP_ID
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["ALLO_PUSH_IOS_APP_ID"],
-          message:
-            "must differ from ALLO_PUSH_ANDROID_APP_ID — the app id is the only thing that says " +
-            "which provider a device token belongs to, and one shared between platforms would send " +
-            "Android tokens to Apple",
+            `${APNS_VARIABLES.join(", ")} are all required to enable iOS push; ` +
+            `${missing.join(", ")} is missing. Half a configuration is a platform that ` +
+            "looks enabled and delivers nothing",
         });
       }
     });
@@ -292,15 +128,8 @@ export interface ApnsCredentials {
 }
 
 export interface PushConfig {
-  /** Whether any platform can be delivered to. False means no gateway route. */
+  /** Whether any platform can be delivered to. */
   readonly enabled: boolean;
-  readonly gatewayUrl: string | undefined;
-  /** Newest first. The first mints; all verify. See {@link secretList}. */
-  readonly gatewaySecrets: readonly string[];
-  /** `app_id` → platform. The only thing that decides which provider is used. */
-  readonly platformByAppId: ReadonlyMap<string, PushPlatform>;
-  /** Platform → `app_id`, for telling a client which one to register under. */
-  readonly appIdByPlatform: ReadonlyMap<PushPlatform, string>;
   readonly fcm: FcmCredentials | undefined;
   readonly apns: ApnsCredentials | undefined;
 }
@@ -344,23 +173,10 @@ function readApnsPrivateKey(base64Key: string): string {
 }
 
 export function loadPushConfig(environment: NodeJS.ProcessEnv = process.env): PushConfig {
-  const parsed = buildPushEnvSchema(environment).parse(environment);
-
-  const platformByAppId = new Map<string, PushPlatform>();
-  const appIdByPlatform = new Map<PushPlatform, string>();
-  if (parsed.ALLO_PUSH_ANDROID_APP_ID !== undefined) {
-    platformByAppId.set(parsed.ALLO_PUSH_ANDROID_APP_ID, "android");
-    appIdByPlatform.set("android", parsed.ALLO_PUSH_ANDROID_APP_ID);
-  }
-  if (parsed.ALLO_PUSH_IOS_APP_ID !== undefined) {
-    platformByAppId.set(parsed.ALLO_PUSH_IOS_APP_ID, "ios");
-    appIdByPlatform.set("ios", parsed.ALLO_PUSH_IOS_APP_ID);
-  }
+  const parsed = buildPushEnvSchema().parse(environment);
 
   const fcm =
-    parsed.ALLO_PUSH_ANDROID_APP_ID !== undefined &&
-    parsed.FIREBASE_PROJECT_ID !== undefined &&
-    parsed.FIREBASE_SERVICE_ACCOUNT_BASE64 !== undefined
+    parsed.FIREBASE_PROJECT_ID !== undefined && parsed.FIREBASE_SERVICE_ACCOUNT_BASE64 !== undefined
       ? Object.freeze({
           projectId: parsed.FIREBASE_PROJECT_ID,
           serviceAccountJson: Buffer.from(
@@ -371,7 +187,6 @@ export function loadPushConfig(environment: NodeJS.ProcessEnv = process.env): Pu
       : undefined;
 
   const apns =
-    parsed.ALLO_PUSH_IOS_APP_ID !== undefined &&
     parsed.ALLO_APNS_KEY_ID !== undefined &&
     parsed.ALLO_APNS_TEAM_ID !== undefined &&
     parsed.ALLO_APNS_PRIVATE_KEY_BASE64 !== undefined &&
@@ -389,11 +204,7 @@ export function loadPushConfig(environment: NodeJS.ProcessEnv = process.env): Pu
       : undefined;
 
   return Object.freeze({
-    enabled: platformByAppId.size > 0,
-    gatewayUrl: parsed.ALLO_PUSH_GATEWAY_URL,
-    gatewaySecrets: Object.freeze([...(parsed.ALLO_PUSH_GATEWAY_SECRETS ?? [])]),
-    platformByAppId,
-    appIdByPlatform,
+    enabled: fcm !== undefined || apns !== undefined,
     fcm,
     apns,
   });
@@ -404,8 +215,8 @@ let cached: PushConfig | undefined;
 /**
  * The process-wide push configuration, parsed on first use.
  *
- * Lazy for the same reason the bridge one is: importing a push module must not
- * crash a process whose environment has nothing to do with push.
+ * Lazy so that importing a push module cannot crash a process whose
+ * environment has nothing to do with push.
  */
 export function pushConfig(): PushConfig {
   if (!cached) cached = loadPushConfig();

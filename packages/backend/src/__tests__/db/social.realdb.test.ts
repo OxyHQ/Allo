@@ -324,12 +324,9 @@ describe("user_settings defaults come from the schema, not from the repository",
     expect(row.profileMinimalistMode).toBe(false);
   });
 
-  it("keeps cloud sync opt-IN while encryption and P2P are opt-OUT", async () => {
+  it("keeps encryption and P2P opt-OUT", async () => {
     const row = await ensureUserSettings(db, id("settings-user"));
 
-    // The asymmetry IS the product's device-first stance, so it is asserted as
-    // three separate facts rather than "the security defaults are correct".
-    expect(row.securityCloudSyncEnabled).toBe(false);
     expect(row.securityEncryptionEnabled).toBe(true);
     expect(row.securityPeerToPeerEnabled).toBe(true);
   });
@@ -341,17 +338,17 @@ describe("user_settings defaults come from the schema, not from the repository",
     // column sees the new default. A repository that "helpfully normalises"
     // missing settings would still report false here, and that is the mistake
     // most likely to be made, because it looks like defensive coding.
-    await client`alter table user_settings alter column security_cloud_sync_enabled set default true`;
+    await client`alter table user_settings alter column security_encryption_enabled set default false`;
     try {
       const row = await ensureUserSettings(db, id("settings-user"));
-      expect(row.securityCloudSyncEnabled).toBe(true);
+      expect(row.securityEncryptionEnabled).toBe(false);
     } finally {
-      await client`alter table user_settings alter column security_cloud_sync_enabled set default false`;
+      await client`alter table user_settings alter column security_encryption_enabled set default true`;
     }
 
     // And the restore worked, so no later case inherits a poisoned default.
     const after = await ensureUserSettings(db, id("settings-user"));
-    expect(after.securityCloudSyncEnabled).toBe(false);
+    expect(after.securityEncryptionEnabled).toBe(true);
   });
 });
 
@@ -403,11 +400,11 @@ describe("a settings update is partial, and is an allow-list", () => {
     const oxyUserId = id("settings-user");
     const row = await updateUserSettings(db, oxyUserId, {
       appearanceThemeMode: "dark",
-      securityCloudSyncEnabled: true,
+      securityPeerToPeerEnabled: false,
     });
 
     expect(row.appearanceThemeMode).toBe("dark");
-    expect(row.securityCloudSyncEnabled).toBe(true);
+    expect(row.securityPeerToPeerEnabled).toBe(false);
     // Untouched columns still get their defaults — this is the `{ upsert: true }`
     // half, and it must not produce a row of nulls.
     expect(row.securityEncryptionEnabled).toBe(true);
@@ -423,7 +420,7 @@ describe("a settings update is partial, and is an allow-list", () => {
       privacyShowContactInfo: false,
       privacyHiddenWords: ["one", "two"],
       profileDisplayName: "Ada",
-      securityCloudSyncEnabled: true,
+      securityPeerToPeerEnabled: false,
     });
 
     const row = await updateUserSettings(db, oxyUserId, { privacyAllowTags: false });
@@ -437,7 +434,7 @@ describe("a settings update is partial, and is an allow-list", () => {
     expect(row.privacyShowContactInfo).toBe(false);
     expect(row.privacyHiddenWords).toEqual(["one", "two"]);
     expect(row.profileDisplayName).toBe("Ada");
-    expect(row.securityCloudSyncEnabled).toBe(true);
+    expect(row.securityPeerToPeerEnabled).toBe(false);
   });
 
   it("tells `null` (clear it) from absent (leave it)", async () => {
@@ -536,7 +533,7 @@ describe("the allow-list is checked against the real table", () => {
     // it. This is the gate that makes the tuple and the table one fact.
     expect([...UPDATABLE_USER_SETTINGS_COLUMNS].sort()).toEqual(schemaColumns);
     // Anti-vacuity: a traversal returning nothing would satisfy the equality above.
-    expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(21);
+    expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(20);
   });
 
   it("excludes identity and timestamp columns", async () => {

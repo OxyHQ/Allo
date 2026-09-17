@@ -6,16 +6,12 @@ import type { SearchProfilesResponse, User } from "@oxy.so/core";
  *
  * ## Why they move at all
  *
- * Allo is collapsing to one sign-in. Once the app authenticates only through
- * Matrix Authentication Service it holds no Oxy session, so an Oxy SDK call
- * from a screen has nothing to authenticate with — and the app should not carry
- * a second identity provider's client just to draw an avatar. These five are
- * the whole of what it asks Oxy for: `getProfileByUsername` (6 call sites),
- * `getUserById` (5), `getUsersByIds` (2), `searchProfiles` (2) and
- * `getFileDownloadUrl` (15, all avatars).
- *
- * **The app still calls Oxy directly today.** This is the surface it moves to,
- * built and tested before anything depends on it.
+ * The app draws a person through this backend rather than by calling Oxy from
+ * a screen, so a client that holds an Allo session and nothing else — an SDK
+ * consumer that is not the Allo app — can still resolve who somebody is. These
+ * five are the whole of what the app asks Oxy for: `getProfileByUsername`,
+ * `getUserById`, `getUsersByIds`, `searchProfiles` and `getFileDownloadUrl`
+ * (avatars).
  *
  * ## Why no service credential is required
  *

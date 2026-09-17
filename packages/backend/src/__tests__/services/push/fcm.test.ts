@@ -1,32 +1,25 @@
 import type { Message } from "firebase-admin/messaging";
 import { describe, expect, it } from "vitest";
 
+import type { PushDevice, PushNotification } from "../../../services/push/delivery";
 import { createFcmSender, type FcmTransport, type FcmTransportResult } from "../../../services/push/fcm";
-import type { PushNotificationDevice, PushNotificationRequest } from "../../../services/push/notification";
 
 /**
  * Android delivery.
  *
  * Two things are being protected here. The first is what a notification says:
- * the words come from the client and the message never does, so an assertion on
- * the payload is an assertion that plaintext cannot appear in it. The second is
- * the rejection mapping, which is the only place in the system that can delete a
- * live pusher.
+ * the words and the data are exactly what the caller handed over, so an
+ * assertion on the payload is an assertion that nothing else can appear in it.
+ * The second is the rejection mapping, which is the only place in the system
+ * that can retire a live token.
  */
 
-const DEVICE: PushNotificationDevice = {
-  appId: "so.oxy.allo.android",
-  pushkey: "device-token-aaa",
-  fallback: undefined,
-  sound: undefined,
-};
+const DEVICE: PushDevice = { platform: "android", token: "device-token-aaa" };
 
-const ALERT: PushNotificationRequest = {
-  eventId: "$an-event-id",
-  roomId: "!a-room:allo.you",
-  unreadCount: 3,
-  highPriority: true,
-  devices: [DEVICE],
+const NOTIFICATION: PushNotification = {
+  title: "Allo",
+  body: "New message",
+  data: { conversation_id: "conv-1", event_id: "evt-1" },
 };
 
 function recordingTransport(results: readonly FcmTransportResult[]): {
@@ -54,52 +47,22 @@ function tokenOf(message: Message | undefined): string | undefined {
 }
 
 describe("the message FCM is given", () => {
-  it("carries the event coordinates and the client's own words", async () => {
+  it("carries the caller's words and data, and nothing else", async () => {
     const { transport, sent } = recordingTransport([delivered]);
-    await createFcmSender(transport).send(
-      [{ ...DEVICE, fallback: { title: "Allo", body: "Nuevo mensaje" } }],
-      ALERT,
-    );
+    await createFcmSender(transport).send([DEVICE], NOTIFICATION);
 
     const message = sent[0]?.[0];
     expect(tokenOf(message)).toBe("device-token-aaa");
-    expect(message?.data).toEqual({
-      event_id: "$an-event-id",
-      room_id: "!a-room:allo.you",
-      unread_count: "3",
-    });
-    expect(message?.notification).toEqual({ title: "Allo", body: "Nuevo mensaje" });
+    expect(message?.data).toEqual({ conversation_id: "conv-1", event_id: "evt-1" });
+    expect(message?.notification).toEqual({ title: "Allo", body: "New message" });
+    expect(message?.android?.priority).toBe("high");
   });
 
-  it("falls back to built-in words when the client registered none", async () => {
+  it("copies the data rather than sharing the caller's object", async () => {
     const { transport, sent } = recordingTransport([delivered]);
-    await createFcmSender(transport).send([DEVICE], ALERT);
+    await createFcmSender(transport).send([DEVICE], NOTIFICATION);
 
-    expect(sent[0]?.[0]?.notification).toEqual({ title: "Allo", body: "New message" });
-  });
-
-  it("collapses on the event, so a retry replaces the first attempt", async () => {
-    const { transport, sent } = recordingTransport([delivered]);
-    await createFcmSender(transport).send([DEVICE], ALERT);
-
-    expect(sent[0]?.[0]?.android?.collapseKey).toBe("$an-event-id");
-    expect(sent[0]?.[0]?.android?.priority).toBe("high");
-  });
-
-  it("shows nothing for a counts-only notification, which announces no new message", async () => {
-    const { transport, sent } = recordingTransport([delivered]);
-    await createFcmSender(transport).send([DEVICE], {
-      eventId: undefined,
-      roomId: undefined,
-      unreadCount: 0,
-      highPriority: false,
-      devices: [DEVICE],
-    });
-
-    const message = sent[0]?.[0];
-    expect(message?.notification).toBeUndefined();
-    expect(message?.data).toEqual({ unread_count: "0" });
-    expect(message?.android?.priority).toBe("normal");
+    expect(sent[0]?.[0]?.data).not.toBe(NOTIFICATION.data);
   });
 });
 
@@ -107,7 +70,7 @@ describe("what FCM says about a token", () => {
   it("reports a delivered message as delivered", async () => {
     const { transport } = recordingTransport([delivered]);
 
-    expect(await createFcmSender(transport).send([DEVICE], ALERT)).toEqual([
+    expect(await createFcmSender(transport).send([DEVICE], NOTIFICATION)).toEqual([
       { kind: "delivered" },
     ]);
   });
@@ -116,10 +79,10 @@ describe("what FCM says about a token", () => {
     "messaging/registration-token-not-registered",
     "messaging/invalid-registration-token",
     "messaging/invalid-recipient",
-  ])("rejects the pusher when the token is unambiguously gone (%s)", async (code) => {
+  ])("rejects the token when it is unambiguously gone (%s)", async (code) => {
     const { transport } = recordingTransport([failureWith(code)]);
 
-    expect(await createFcmSender(transport).send([DEVICE], ALERT)).toEqual([
+    expect(await createFcmSender(transport).send([DEVICE], NOTIFICATION)).toEqual([
       { kind: "rejected", reason: code },
     ]);
   });
@@ -129,7 +92,7 @@ describe("what FCM says about a token", () => {
      * The two that look like rejections and are not. `invalid-argument` is
      * returned for a malformed *message* as well as a malformed token, and our
      * message is the same shape for every device — treating it as a dead token
-     * would delete every pusher in the system over one of our own bugs.
+     * would retire every token in the system over one of our own bugs.
      * `sender-id-mismatch` is a credential mistake on this side far more often
      * than a bad token.
      */
@@ -138,31 +101,31 @@ describe("what FCM says about a token", () => {
     "messaging/server-unavailable",
     "messaging/internal-error",
     "messaging/quota-exceeded",
-  ])("keeps the pusher for anything that might be our fault (%s)", async (code) => {
+  ])("keeps the token for anything that might be our fault (%s)", async (code) => {
     const { transport } = recordingTransport([failureWith(code)]);
 
-    expect(await createFcmSender(transport).send([DEVICE], ALERT)).toEqual([
+    expect(await createFcmSender(transport).send([DEVICE], NOTIFICATION)).toEqual([
       { kind: "failed", reason: code },
     ]);
   });
 
-  it("keeps every pusher when the whole call fails", async () => {
+  it("keeps every token when the whole call fails", async () => {
     const transport: FcmTransport = async () => {
       throw new Error("FCM is unreachable");
     };
 
-    expect(await createFcmSender(transport).send([DEVICE, DEVICE], ALERT)).toEqual([
+    expect(await createFcmSender(transport).send([DEVICE, DEVICE], NOTIFICATION)).toEqual([
       { kind: "failed", reason: "FCM is unreachable" },
       { kind: "failed", reason: "FCM is unreachable" },
     ]);
   });
 
-  it("keeps every pusher when the results cannot be matched to the devices", async () => {
+  it("keeps every token when the results cannot be matched to the devices", async () => {
     const { transport } = recordingTransport([delivered]);
 
     const outcomes = await createFcmSender(transport).send(
-      [DEVICE, { ...DEVICE, pushkey: "device-token-bbb" }],
-      ALERT,
+      [DEVICE, { ...DEVICE, token: "device-token-bbb" }],
+      NOTIFICATION,
     );
 
     expect(outcomes.every((outcome) => outcome.kind === "failed")).toBe(true);
@@ -175,8 +138,8 @@ describe("what FCM says about a token", () => {
     ]);
 
     const outcomes = await createFcmSender(transport).send(
-      [DEVICE, { ...DEVICE, pushkey: "device-token-bbb" }],
-      ALERT,
+      [DEVICE, { ...DEVICE, token: "device-token-bbb" }],
+      NOTIFICATION,
     );
 
     expect(outcomes[0]?.kind).toBe("rejected");

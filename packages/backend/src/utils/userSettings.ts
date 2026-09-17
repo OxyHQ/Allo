@@ -1,13 +1,12 @@
 /**
  * The `user_settings` wire shape, both directions.
  *
- * The table is FLAT (`privacy_show_contact_info`, `security_cloud_sync_enabled`,
+ * The table is FLAT (`privacy_show_contact_info`, `security_encryption_enabled`,
  * …) because `schema/social.ts` refused to store four Mongoose sub-documents as
  * opaque `jsonb`. The API is NESTED, because that is what Mongo emitted and what
  * every client reads today — `stores/appearanceStore.ts` reads
  * `appearance.primaryColor` and `profileCustomization.coverImage`,
- * `lib/privacy/api.ts` reads `privacy.hiddenWords`, `lib/security/cloudSync.ts`
- * reads `security.cloudSyncEnabled`.
+ * `lib/privacy/api.ts` reads `privacy.hiddenWords`.
  *
  * So the flattening stops here. This module is the ONE place the two shapes meet:
  * {@link toUserSettingsDto} projects a row outward and
@@ -68,7 +67,6 @@ export interface UserSettingsDto {
     coverImage?: string;
   };
   readonly security: {
-    cloudSyncEnabled: boolean;
     encryptionEnabled: boolean;
     peerToPeerEnabled: boolean;
   };
@@ -111,7 +109,6 @@ export function toUserSettingsDto(row: UserSettingsRow): UserSettingsDto {
       ...optional("coverImage", row.profileCoverImage),
     },
     security: {
-      cloudSyncEnabled: row.securityCloudSyncEnabled,
       encryptionEnabled: row.securityEncryptionEnabled,
       peerToPeerEnabled: row.securityPeerToPeerEnabled,
     },
@@ -238,8 +235,6 @@ export function readUserSettingsPatch(body: unknown): UserSettingsPatch {
 
   const security = group(root, "security");
   if (security) {
-    const cloudSyncEnabled = bool(security, "cloudSyncEnabled");
-    if (cloudSyncEnabled !== undefined) patch.securityCloudSyncEnabled = cloudSyncEnabled;
     const encryptionEnabled = bool(security, "encryptionEnabled");
     if (encryptionEnabled !== undefined) patch.securityEncryptionEnabled = encryptionEnabled;
     const peerToPeerEnabled = bool(security, "peerToPeerEnabled");

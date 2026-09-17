@@ -13,8 +13,8 @@
  * worth nothing if a handler does not call it.
  *
  * The one thing deliberately NOT asserted is `_id`. Mongo emitted one; nothing
- * in this repository reads it (`stores/appearanceStore.ts`, `lib/privacy/api.ts`
- * and `lib/security/cloudSync.ts` all key on `oxyUserId`), so the port emits the
+ * in this repository reads it (`stores/appearanceStore.ts` and
+ * `lib/privacy/api.ts` key on `oxyUserId`), so the port emits the
  * row's real `id` and does not invent an alias.
  */
 
@@ -95,11 +95,7 @@ describe("GET /api/profile/settings/me", () => {
       coverPhotoEnabled: true,
       minimalistMode: false,
     });
-    // Device-first, and the asymmetry is the product decision: cloud sync is
-    // opt-IN while encryption and P2P are opt-OUT. A projection that read the
-    // wrong column would most likely show all three the same way.
     expect(doc.security).toEqual({
-      cloudSyncEnabled: false,
       encryptionEnabled: true,
       peerToPeerEnabled: true,
     });
@@ -151,7 +147,7 @@ describe("PUT /api/profile/settings", () => {
         profileHeaderImage: "file-header-1",
         profileCustomization: { minimalistMode: true, displayName: "Ada" },
         privacy: { profileVisibility: "private", hiddenWords: ["spoiler"] },
-        security: { cloudSyncEnabled: true },
+        security: { peerToPeerEnabled: false },
       });
 
     expect(response.status).toBe(200);
@@ -168,9 +164,8 @@ describe("PUT /api/profile/settings", () => {
     // Untouched neighbours in a group that WAS written keep their values.
     expect(doc.privacy.showOnlineStatus).toBe(true);
     expect(doc.security).toEqual({
-      cloudSyncEnabled: true,
       encryptionEnabled: true,
-      peerToPeerEnabled: true,
+      peerToPeerEnabled: false,
     });
   });
 

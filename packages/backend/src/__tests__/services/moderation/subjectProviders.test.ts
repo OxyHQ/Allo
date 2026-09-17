@@ -62,28 +62,19 @@ describe("moderation subject registry", () => {
 });
 
 /**
- * §6.4 — the assertion above is necessary and is NOT sufficient.
+ * The assertion above is necessary and is NOT sufficient.
  *
- * A bridged room is not encrypted. The bridge holds the far side's keys and joins
- * as a member, so the server really can read a WhatsApp message in full, and the
- * argument that protects every other room — "the server holds ciphertext and has no
- * decryption code" — simply does not apply there. That makes a `message` provider
- * *technically* possible for the first time, and it makes the review that would
- * approve it read reasonably: "bridged rooms aren't encrypted, so for those we can
- * describe the content".
+ * Pinning `deliverableTypes()` to `['user']` does not catch the change in its most
+ * likely form. The one-line version keeps `reportedType: 'user'` and hangs
+ * conversation material off the snapshot's `context`: the deliverable SET is
+ * untouched, every assertion above still passes, and a jury of strangers receives
+ * material the server was never supposed to be able to describe.
  *
- * Pinning `deliverableTypes()` to `['user']` does not catch that change in its most
- * likely form. The one-line version keeps `reportedType: 'user'` and hangs the
- * bridged room's messages off the snapshot's `context`: the deliverable SET is
- * untouched, every assertion above still passes, and a jury of strangers receives a
- * WhatsApp conversation written mostly by somebody with no Oxy account who never
- * agreed to anything.
- *
- * So what is pinned here is the MODULE GRAPH. A provider cannot condition on a
- * room's encryption state without reading room state, and it cannot read room state
- * without importing something that knows what a room is. The closure below is that
- * import surface, and it is deliberately small enough that any growth is a
- * deliberate act with a failing test attached.
+ * So what is pinned here is the MODULE GRAPH. A provider cannot describe a
+ * conversation without reading conversation state, and it cannot read that
+ * without importing something that knows what a conversation is. The closure
+ * below is that import surface, and it is deliberately small enough that any
+ * growth is a deliberate act with a failing test attached.
  *
  * This will occasionally fail for an innocent refactor. That is the trade: the
  * alternative is a denylist of suspicious module names, which is defeated by
@@ -94,19 +85,18 @@ describe("what the subject providers are allowed to reach", () => {
 
   /**
    * The first-party modules reachable from `subjects/`, as relative paths from
-   * `src/`. Nothing here can observe a room, a conversation, a message or an
+   * `src/`. Nothing here can observe a conversation, a message, an instance or an
    * encryption state — which is the property, stated as a list because a property
    * about absence has to be checked against something.
    */
   const ALLOWED_FIRST_PARTY = [
     /**
      * The reportable-type tuple, which `localOnlyTypes()` subtracts the registry
-     * from. It replaces `models/Report.ts`, and the swap is a WIDENING worth
-     * reading rather than a rename: this module declares three tables, and one of
-     * them is `reports`. What it still cannot reach is any table describing a
-     * room, a conversation, a message or an encryption state — those live in
-     * sibling schema files this closure never touches, and the pattern below
-     * fails loudly if a barrel import ever brings them in.
+     * from. This module declares three tables, and one of them is `reports`. What
+     * it still cannot reach is any table describing a conversation, an event or
+     * an instance — those live in sibling schema files this closure never
+     * touches, and the pattern below fails loudly if a barrel import ever brings
+     * them in.
      */
     "db/schema/columns.ts",
     "db/schema/moderation.ts",
@@ -118,7 +108,6 @@ describe("what the subject providers are allowed to reach", () => {
 
   /** The packages that closure imports. Also pinned: a new one is a new capability. */
   const ALLOWED_PACKAGES = [
-    "@allo/shared-types",
     "@oxy.so/core",
     "@oxy.so/crowdsource",
     "@oxy.so/db",
@@ -132,10 +121,10 @@ describe("what the subject providers are allowed to reach", () => {
    * Redundant with the closure while the closure is correct, and it is here for the
    * day it is not: a list that must be edited to make a test pass is a list that
    * gets edited to make a test pass. This one names the thing itself, so widening
-   * the closure to include a room-state module still fails, loudly, on the
-   * assertion that actually describes §6.4.
+   * the closure to include a conversation module still fails, loudly, on the
+   * assertion that actually describes the rule.
    */
-  const FORBIDDEN_MODULE_PATTERN = /conversation|message|room|encrypt|cipher|crypto|bridge/i;
+  const FORBIDDEN_MODULE_PATTERN = /conversation|message|event|instance|encrypt|cipher|crypto/i;
 
   const SOURCE_ROOT = path.resolve(__dirname, "../../..");
 
@@ -195,12 +184,11 @@ describe("what the subject providers are allowed to reach", () => {
     expect(packages).toEqual(ALLOWED_PACKAGES);
   });
 
-  it("registers no provider that can observe a room's encryption state", () => {
+  it("registers no provider that can observe conversation state", () => {
     /**
-     * The assertion §6.4 asks for by name. `deliverableTypes()` answers "is there a
-     * `message` provider"; this answers the harder question — "could any provider
-     * behave differently in a bridged room" — and the answer is no, because nothing
-     * in its reach can tell it whether a room is encrypted.
+     * `deliverableTypes()` answers "is there a `message` provider"; this answers
+     * the harder question — "could any provider describe a conversation" — and
+     * the answer is no, because nothing in its reach knows what one is.
      */
     const { firstParty, packages } = moduleClosure();
 
@@ -208,8 +196,8 @@ describe("what the subject providers are allowed to reach", () => {
       expect(
         FORBIDDEN_MODULE_PATTERN.test(module),
         `${module} is reachable from the subject providers. A provider that can see ` +
-          "room, conversation or encryption state can be conditioned on a bridged " +
-          "room being unencrypted, which is exactly what §6.4 forbids.",
+          "conversation, event or instance state can describe material the server " +
+          "is not supposed to be able to describe.",
       ).toBe(false);
     }
   });
@@ -218,7 +206,7 @@ describe("what the subject providers are allowed to reach", () => {
     /**
      * The other half of the same door. A provider could keep `reportedType: 'user'`
      * — leaving `deliverableTypes()` untouched — and still tell a jury it is looking
-     * at a room. The subject type is what the jury is told, so it is pinned too.
+     * at a conversation. The subject type is what the jury is told, so it is pinned too.
      */
     for (const type of deliverableTypes()) {
       expect(subjectProviderFor(type)?.subjectType).toBe("identity.profile");
@@ -306,11 +294,11 @@ describe("user subject provider", () => {
     for (const forbidden of [
       "ciphertext",
       "conversationId",
-      "participants",
-      "identityKey",
-      "preKey",
-      "encryptedMedia",
-      "senderDeviceId",
+      "members",
+      "payload",
+      "keyPackage",
+      "instanceId",
+      "blobId",
     ]) {
       expect(serialised).not.toContain(forbidden);
     }

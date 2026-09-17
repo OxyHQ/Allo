@@ -24,10 +24,9 @@ import { reportStateForDecision } from "./reportStatus";
  * Y" — written by a user about their own inbox, and there was no account-level
  * restriction, no delivery suspension and no global mute for a decision to invoke.
  *
- * **Synapse has all four.** Its admin API can suspend, deactivate, lock and
- * shadow-ban an account (docs/matrix/data-model.md §6.6), so the sentence above is
- * now a description of Allo's own code and not of what is possible. The technical
- * impossibility is gone.
+ * The messaging platform (`docs/platform/`) can grow an account-level primitive
+ * — a delivery suspension, an instance revocation — so the sentence above is a
+ * description of Allo's own code today and not of what is possible.
  *
  * That is not permission to enforce, and the distinction is the entire point of
  * writing it down: the answer to "why does Allo only observe?" is no longer **"it

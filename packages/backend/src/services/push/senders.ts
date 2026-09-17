@@ -13,9 +13,8 @@ import { createFcmSender, createFirebaseTransport } from "./fcm";
  * that is expensive to open and is meant to be reused across notifications.
  *
  * A platform with no entry here cannot be delivered to, and `config/push.ts`
- * guarantees that never happens by accident — an app id without credentials
- * fails at boot rather than producing a gateway that accepts notifications for a
- * platform it cannot reach.
+ * guarantees that is never an accident — half a platform's credentials fail at
+ * boot rather than producing a sender that looks configured and reaches nothing.
  */
 
 /** Builds the map. Pure, so a test can build one without touching the network. */

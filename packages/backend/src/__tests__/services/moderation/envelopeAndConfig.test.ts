@@ -16,7 +16,6 @@ vi.mock("../../../services/moderation/subjects/registry", async () => {
   return { ...actual, subjectProviderFor: vi.fn() };
 });
 
-import { resetBridgesConfigForTests } from "../../../config/bridges";
 import {
   ModerationSubjectNotAnOxyAccountError,
   ModerationSubjectUnsupportedError,
@@ -174,38 +173,23 @@ describe("report envelope input", () => {
   });
 
   /**
-   * §6.5 — the last gate before material crosses the process boundary.
+   * The last gate before material crosses the process boundary.
    *
    * Intake never queues one of these, so every assertion below is about a state
    * that should be unreachable. They are here because of what the reachable version
-   * would DO rather than how likely it is: an event id composed into an envelope
-   * and posted is a disclosure, not a stall, and it is not recoverable by fixing
-   * the bug afterwards.
+   * would DO rather than how likely it is: an identifier that is not an account
+   * composed into an envelope and posted is a disclosure, not a stall, and it is
+   * not recoverable by fixing the bug afterwards.
    */
   describe("a subject that is not an Oxy account", () => {
-    beforeEach(() => {
-      process.env.ALLO_MATRIX_SERVER_NAME = "allo.you";
-      resetBridgesConfigForTests();
-    });
-
-    afterEach(() => {
-      delete process.env.ALLO_MATRIX_SERVER_NAME;
-      resetBridgesConfigForTests();
-    });
-
     async function buildFor(reportedId: string): Promise<unknown> {
       return await buildModerationReportInput({ ...report, reportedId }).catch(
         (error: unknown) => error,
       );
     }
 
-    it.each([
-      ["a Matrix event id", "$eventid123:allo.you"],
-      ["a room id", "!roomid123:allo.you"],
-      ["a bridge ghost", "@whatsapp_1234567890:allo.you"],
-      ["a federated user", "@someone:elsewhere.example"],
-    ])("refuses to describe %s", async (_label, reportedId) => {
-      const thrown = await buildFor(reportedId);
+    it("refuses to describe a handle", async () => {
+      const thrown = await buildFor("@someone");
 
       expect(thrown).toBeInstanceOf(ModerationSubjectNotAnOxyAccountError);
       expect(thrown).toHaveProperty("retryable", false);
@@ -225,34 +209,31 @@ describe("report envelope input", () => {
         snapshot: snapshotFn,
       });
 
-      await buildFor("$eventid123:allo.you");
+      await buildFor("@someone");
       expect(snapshotFn).not.toHaveBeenCalled();
     });
 
     it("keeps the identifier out of the error message", async () => {
       /**
        * The message travels: `ModerationDeliveryWorker` copies a thrown message
-       * into `Report.lastDeliveryError` and the logger prints it. An event id
-       * interpolated here would put conversation metadata into both — the exact
-       * material §6.5 says does not leave, leaking through the error path of the
-       * check that exists to stop it.
+       * into `Report.lastDeliveryError` and the logger prints it. An identifier
+       * interpolated here would put it into both.
        */
-      const eventId = "$aVeryDistinctiveEventId:allo.you";
-      const thrown = await buildFor(eventId);
+      const handle = "@aVeryDistinctiveHandle";
+      const thrown = await buildFor(handle);
 
       expect(thrown).toBeInstanceOf(Error);
       if (thrown instanceof Error) {
-        expect(thrown.message).not.toContain(eventId);
-        expect(thrown.message).not.toContain("aVeryDistinctiveEventId");
+        expect(thrown.message).not.toContain(handle);
+        expect(thrown.message).not.toContain("aVeryDistinctiveHandle");
         expect(thrown.message).toContain("report-1");
       }
     });
 
-    it("still describes an MXID this homeserver owns", async () => {
+    it("still describes an account id, trimmed", async () => {
       /**
        * The counterpart, and the one that would make this guard a regression if it
-       * were missing: a local user reported from a room arrives as an MXID, and it
-       * must resolve and deliver like any other account report.
+       * were missing: an ordinary account report must resolve and deliver.
        */
       const snapshotFn = vi.fn().mockResolvedValue(snapshot);
       vi.mocked(subjectProviderFor).mockReturnValue({
@@ -261,17 +242,9 @@ describe("report envelope input", () => {
         snapshot: snapshotFn,
       });
 
-      const built = await buildModerationReportInput({
-        ...report,
-        reportedId: "@user-1:allo.you",
-      });
+      const built = await buildModerationReportInput({ ...report, reportedId: " user-1 " });
 
       expect(built).not.toBeNull();
-      /**
-       * The provider is handed the OXY id, never the MXID. It passes `reportedId`
-       * straight to `oxyClient.getUserById`, so an MXID reaching it would be a 404
-       * and a report closed as "the account no longer exists".
-       */
       expect(snapshotFn).toHaveBeenCalledWith("user-1");
     });
   });

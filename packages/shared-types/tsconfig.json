@@ -15,8 +15,6 @@
         "resolveJsonModule": true,
         "moduleResolution": "node",
         "allowSyntheticDefaultImports": true,
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
         "composite": true
     },
     "include": [
@@ -24,6 +22,7 @@
     ],
     "exclude": [
         "node_modules",
-        "dist"
+        "dist",
+        "src/__tests__"
     ]
 }

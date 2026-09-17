@@ -1,109 +1,69 @@
 # @allo/shared-types
 
-TypeScript contracts shared between the Allo frontend (`@allo/frontend`) and
-backend (`@allo/backend`).
+The Allo platform's API v1 wire contract, as zod schemas with their inferred
+TypeScript types. `@allo/backend` validates request bodies and queries with
+them; `@allo/core` types its calls and parses every answer through the same
+ones. One definition, both sides.
 
-This package models the **wire / transport layer** only: the HTTP response
-envelope and the serialized DTOs the backend returns. It deliberately does
-*not* contain the frontend's presentation-shaped store types, nor the backend's
-drizzle table types — the schema imports the primitives from here, and the
-serializers in `packages/backend/src/utils/` map rows onto these DTOs.
+`docs/platform/api-v1.md` is the route-by-route reference generated from
+these modules by hand; the schema wins where the two disagree.
 
-## Package Structure
+## Package structure
 
 ```
 src/
-├── api.ts           # HTTP response envelope + pagination
-├── message.ts       # Message DTOs (encrypted + legacy plaintext media)
-├── conversation.ts  # Conversation + Oxy-enriched participant DTOs
-├── device.ts        # Device key bundle / pre-key DTOs
-└── index.ts         # Re-exports every module
+├── common.ts           # ids, base64, timestamps, error envelope, AlloErrorCode, base64url codec
+├── instances.ts        # ClientInstance, enrollment, push token, enrollmentApprovalMessage()
+├── requestSigning.ts   # X-Allo-* headers, signedRequestMessage(), socket handshake auth
+├── keyPackages.ts      # upload / claim MLS key packages
+├── conversations.ts    # ConversationSummary, create/list, dmKeyFor()
+├── events.ts           # ConversationEvent, SubmitEventRequest (+ CommitInfo), ControlEvent
+├── sync.ts             # the delivery stream, cursors, Socket.IO event payloads
+├── blobs.ts            # encrypted blob upload/download
+├── appMessage.ts       # the E2EE envelope (plaintext before MLS), encode/decode
+├── api.ts              # legacy success/error envelope (directory routes only)
+├── directory.ts        # people directory DTOs (the Oxy lookups, projected)
+├── index.ts            # re-exports every module
+└── __tests__/          # vitest; positive AND negative cases per schema
 ```
 
-## Core Types
+Naming: `fooSchema` is the zod schema, `Foo` is `z.infer<typeof fooSchema>`,
+and a closed set is an `as const` tuple (`FOO_KINDS`) beside its `z.enum`.
+Pure helpers whose output both sides must agree on byte for byte
+(`signedRequestMessage`, `enrollmentApprovalMessage`, `dmKeyFor`,
+`encodeCursor` / `decodeCursor`, `encodeAppMessage` / `decodeAppMessage`)
+live here so there is exactly one implementation.
 
-### API transport (`api.ts`)
-
-Mirrors `packages/backend/src/utils/apiHelpers.ts`.
-
-- **`ApiSuccessResponse<T>`** — success envelope; payload lives under `data`.
-- **`ApiErrorResponse`** — `{ error, message }` shape emitted on failure.
-- **`PaginationOptions`** — offset-based `{ limit, offset }` for list endpoints.
-
-### Messages (`message.ts`)
-
-Mirrors the `Message` model as served by `routes/messages.ts`.
-
-- **`MessageDto`** — serialized message. Mongoose `Map` fields (`readBy`,
-  `reactions`) are typed as `Record<string, …>` because they serialize to plain
-  JSON objects on the wire.
-- **`EncryptedMediaItem`** — media descriptor on the encrypted-message path. The type exists in the schema, but no client code currently produces one — see [docs/encryption.mdx](../../docs/encryption.mdx).
-- **`MediaItem`** — plaintext media descriptor, retained for the legacy
-  pre-encryption path only.
-- **`MediaKind`** / **`MessageKind`** — `"image" | "video" | "audio" | "file"`
-  and `"text" | "media" | "system"`.
-
-### Conversations (`conversation.ts`)
-
-Mirrors the `Conversation` model plus the enrichment done by
-`utils/oxyUserDisplay.ts` for `GET /api/conversations`.
-
-- **`ConversationDto`** — serialized conversation with enriched participants.
-- **`ConversationParticipant`** — raw participant as stored on the document.
-- **`EnrichedConversationParticipant`** — participant plus Oxy profile data
-  (name, username, avatar).
-- **`ParticipantDisplayName`** — `displayName` is canonical and composed by the
-  Oxy API; `first` / `last` must never be used to recompose it.
-- **`ConversationType`** / **`ConversationParticipantRole`**.
-
-### Devices (`device.ts`)
-
-Mirrors the `Device` model as exchanged by `routes/devices.ts`. All key
-material is Base64 encoded.
-
-- **`DeviceDto`** — full device record, including one-time pre-keys.
-- **`PublicDeviceBundle`** — bundle returned for key exchange
-  (`GET /api/devices/user/:userId`); excludes one-time pre-keys.
-- **`SignedPreKey`** / **`PreKey`**.
+No React, no Node-only API in anything that ships: the base64url codec and
+the UTF-8 encoding are written against `Uint8Array`, `TextEncoder` and
+`TextDecoder` so the same code runs in Node, browsers and Hermes.
 
 ## Usage
 
-The package is a workspace dependency — no install step beyond the root
-`bun install`. Import types directly from the package root:
-
 ```typescript
-import type { ConversationDto, MessageDto, PublicDeviceBundle } from "@allo/shared-types";
+import { submitEventRequestSchema, type SubmitEventRequest } from "@allo/shared-types";
+
+const body: SubmitEventRequest = submitEventRequestSchema.parse(req.body);
 ```
 
 ## Development
 
 ```bash
-bun run build   # tsc → dist/
-bun run dev     # tsc --watch
+bun run build       # tsc → dist/ (tests excluded)
+bun run typecheck   # tsc --noEmit over src/ INCLUDING the tests
+bun run test        # vitest run
 bun run clean
 ```
 
-A `lint` script is declared but does not run: this package ships neither eslint
-nor an `eslint.config.js`, so it exits with "ESLint couldn't find an
-eslint.config.js". `tsc` is the only check this package has, and it runs on
-every `bun install` — the root `postinstall` calls `build:shared-types`, so a
-type error here fails the install before anything else compiles.
-
-The backend and frontend consume `dist/`, so `shared-types` builds first in the
-root `bun run build` chain.
+`tsconfig.json` excludes `src/__tests__` so tests do not land in `dist/`;
+`tsconfig.test.json` puts them back for `typecheck`, which is the only thing
+that type-checks a test. Run `bun install` from the monorepo root only.
 
 ## Contributing
 
-When adding types:
-
-1. Only add what crosses the frontend/backend boundary. Types used by a single
-   package belong in that package.
-2. Document which model / route the DTO mirrors, so drift is easy to spot.
-3. A keyed collection is a `Record<string, …>` on the wire even when the backend
-   stores it as rows — `readBy` and `reactions` are child tables, folded up by the
-   serializer, because that is the shape clients have always received.
-4. Export the module from `index.ts`.
-
-## License
-
-UNLICENSED — private package for Allo.
+1. Only what crosses the backend/SDK boundary belongs here.
+2. A schema change is a contract change: update `docs/platform/api-v1.md`.
+3. Every schema gets at least one test that a wrong shape is REJECTED; a
+   refinement (a field required under one discriminant) gets a mutation check.
+4. Export the module from `index.ts`; `__tests__/index.test.ts` asserts a
+   marker per module.

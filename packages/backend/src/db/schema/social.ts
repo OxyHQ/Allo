@@ -109,8 +109,7 @@ export const userSettings = pgTable(
     profileDisplayName: text(),
     profileCoverImage: text(),
 
-    /** Device-first: cloud sync is opt-IN, encryption and P2P are opt-OUT. */
-    securityCloudSyncEnabled: boolean().notNull().default(false),
+    /** Encryption and P2P are opt-OUT. */
     securityEncryptionEnabled: boolean().notNull().default(true),
     securityPeerToPeerEnabled: boolean().notNull().default(true),
 

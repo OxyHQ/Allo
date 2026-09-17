@@ -2,13 +2,7 @@ import { connect, constants, type ClientHttp2Session } from "http2";
 
 import type { ApnsCredentials } from "../../config/push";
 import { logger } from "../../utils/logger";
-import {
-  isAlert,
-  notificationText,
-  type PushDeliveryOutcome,
-  type PushSender,
-} from "./delivery";
-import type { PushNotificationDevice, PushNotificationRequest } from "./notification";
+import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from "./delivery";
 import type { ApnsTokenProvider } from "./apnsAuth";
 
 /**
@@ -22,15 +16,13 @@ import type { ApnsTokenProvider } from "./apnsAuth";
  *
  * ## What is in the payload
  *
- * The same as the Android one and for the same reason: the event id, the room
- * id, and text the client chose at registration. Never the message — see
- * `notification.ts`.
+ * The same as the Android one and for the same reason: the caller's title and
+ * body, and its `data` coordinates. Never the message — see `delivery.ts`.
  *
  * `mutable-content` is set on every alert. It changes nothing today, because
  * Allo ships no notification service extension; it is what *lets* one rewrite
  * the body with the decrypted message later, and setting it now means that work
- * does not also need a server change and a re-registration of every pusher on
- * every phone.
+ * does not also need a server change.
  */
 
 /** The path APNs takes a device token on. */
@@ -39,18 +31,8 @@ const DEVICE_PATH_PREFIX = "/3/device/";
 /** How long one request may take before it is given up on as a failure. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
-/** APNs refuses a collapse id longer than this, rather than truncating it. */
-const MAXIMUM_COLLAPSE_ID_BYTES = 64;
-
-/**
- * Apple's priority values.
- *
- * A background notification **must** be sent at 5; Apple refuses one sent at 10
- * with `BadPriority`, which is a rejection of the request rather than of the
- * token and would otherwise look like an outage.
- */
+/** Apple's priority for an alert the user should see now. */
 const PRIORITY_IMMEDIATE = "10";
-const PRIORITY_CONSERVE_POWER = "5";
 
 /**
  * The APNs reasons that mean this token is permanently undeliverable.
@@ -66,7 +48,7 @@ const PRIORITY_CONSERVE_POWER = "5";
  * `ExpiredProviderToken` and `InvalidProviderToken` are about *our* signing key,
  * `BadTopic` and `TopicDisallowed` about *our* configuration, and `PayloadTooLarge`
  * about *our* payload — treating any of them as a dead token would delete every
- * iOS pusher in the system over a mistake in one environment variable.
+ * iOS token in the system over a mistake in one environment variable.
  */
 const PERMANENTLY_INVALID_REASONS: ReadonlySet<string> = new Set([
   "BadDeviceToken",
@@ -75,7 +57,7 @@ const PERMANENTLY_INVALID_REASONS: ReadonlySet<string> = new Set([
 ]);
 
 export interface ApnsRequest {
-  /** `/3/device/<pushkey>`. */
+  /** `/3/device/<token>`. */
   readonly path: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
@@ -106,8 +88,8 @@ export function createApnsSender(
 }
 
 async function sendOne(
-  device: PushNotificationDevice,
-  notification: PushNotificationRequest,
+  device: PushDevice,
+  notification: PushNotification,
   credentials: ApnsCredentials,
   tokens: ApnsTokenProvider,
   transport: ApnsTransport,
@@ -115,13 +97,13 @@ async function sendOne(
   let response: ApnsResponse;
   try {
     response = await transport({
-      path: `${DEVICE_PATH_PREFIX}${encodeURIComponent(device.pushkey)}`,
-      headers: buildHeaders(notification, credentials, tokens),
-      body: JSON.stringify(buildPayload(device, notification)),
+      path: `${DEVICE_PATH_PREFIX}${encodeURIComponent(device.token)}`,
+      headers: buildHeaders(credentials, tokens),
+      body: JSON.stringify(buildPayload(notification)),
     });
   } catch (error) {
     // A signing error, a connection that could not be opened, a timeout. None of
-    // them says anything about the token, so the pusher survives.
+    // them says anything about the token, so the token survives.
     logger.error("[Push] an APNs request did not complete", error);
     return { kind: "failed", reason: error instanceof Error ? error.message : String(error) };
   }
@@ -143,59 +125,27 @@ async function sendOne(
 }
 
 function buildHeaders(
-  notification: PushNotificationRequest,
   credentials: ApnsCredentials,
   tokens: ApnsTokenProvider,
 ): Record<string, string> {
-  const alert = isAlert(notification);
-  const headers: Record<string, string> = {
+  return {
     authorization: `bearer ${tokens.token()}`,
     "apns-topic": credentials.topic,
-    "apns-push-type": alert ? "alert" : "background",
-    "apns-priority":
-      alert && notification.highPriority ? PRIORITY_IMMEDIATE : PRIORITY_CONSERVE_POWER,
+    "apns-push-type": "alert",
+    "apns-priority": PRIORITY_IMMEDIATE,
   };
-
-  /**
-   * Collapsed on the event, so a retry after a transient failure replaces the
-   * first attempt on the lock screen rather than adding a second copy of one
-   * message.
-   */
-  const collapseId = notification.eventId;
-  if (collapseId !== undefined && Buffer.byteLength(collapseId, "utf8") <= MAXIMUM_COLLAPSE_ID_BYTES) {
-    headers["apns-collapse-id"] = collapseId;
-  }
-
-  return headers;
 }
 
-/** The APNs payload. `aps` is Apple's; the two keys beside it are Allo's. */
-function buildPayload(
-  device: PushNotificationDevice,
-  notification: PushNotificationRequest,
-): Record<string, unknown> {
-  const coordinates: Record<string, string> = {};
-  if (notification.eventId !== undefined) coordinates.event_id = notification.eventId;
-  if (notification.roomId !== undefined) coordinates.room_id = notification.roomId;
-
-  if (!isAlert(notification)) {
-    return {
-      aps: {
-        "content-available": 1,
-        ...(notification.unreadCount === undefined ? {} : { badge: notification.unreadCount }),
-      },
-      ...coordinates,
-    };
-  }
-
-  const text = notificationText(device);
+/**
+ * The APNs payload. `aps` is Apple's; the keys beside it are the caller's
+ * `data`, which is why `data` may not use the key `aps` — Apple would read it.
+ */
+function buildPayload(notification: PushNotification): Record<string, unknown> {
+  const { aps: _reserved, ...coordinates } = notification.data;
   return {
     aps: {
-      alert: { title: text.title, body: text.body },
+      alert: { title: notification.title, body: notification.body },
       "mutable-content": 1,
-      ...(device.sound === undefined ? {} : { sound: device.sound }),
-      ...(notification.unreadCount === undefined ? {} : { badge: notification.unreadCount }),
-      ...(notification.roomId === undefined ? {} : { "thread-id": notification.roomId }),
     },
     ...coordinates,
   };

@@ -1,0 +1,23 @@
+{
+  "name": "mls-spike",
+  
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@hpke/chacha20poly1305": "1.8.0",
+    "@hpke/dhkem-x25519": "1.8.0",
+    "@hpke/dhkem-x448": "1.8.0",
+    "@hpke/hybridkem-x-wing": "0.7.0",
+    "@hpke/ml-kem": "0.3.0",
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "^2.4.0",
+    "@noble/post-quantum": "0.5.2",
+    "ts-mls": "1"
+  }
+}

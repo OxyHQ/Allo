@@ -11,15 +11,15 @@ import {
   type ApnsTransport,
 } from "../../../services/push/apns";
 import type { ApnsTokenProvider } from "../../../services/push/apnsAuth";
-import type { PushNotificationDevice, PushNotificationRequest } from "../../../services/push/notification";
+import type { PushDevice, PushNotification } from "../../../services/push/delivery";
 
 /**
  * iOS delivery.
  *
  * The payload assertions are the ones that matter for privacy — the message
- * itself is never in scope here, so what is asserted is that only coordinates
- * and the client's own words travel. The reason mapping is the one that matters
- * for keeping people's notifications alive.
+ * itself is never in scope here, so what is asserted is that only the caller's
+ * words and coordinates travel. The reason mapping is the one that matters for
+ * keeping people's notifications alive.
  *
  * The last group runs the real HTTP/2 client against a real HTTP/2 server. It is
  * worth the machinery: everything above it tests the sender against a transport
@@ -37,19 +37,12 @@ const CREDENTIALS: ApnsCredentials = {
 
 const TOKENS: ApnsTokenProvider = { token: () => "a-provider-token" };
 
-const DEVICE: PushNotificationDevice = {
-  appId: "so.oxy.allo.ios",
-  pushkey: "device-token-aaa",
-  fallback: undefined,
-  sound: undefined,
-};
+const DEVICE: PushDevice = { platform: "ios", token: "device-token-aaa" };
 
-const ALERT: PushNotificationRequest = {
-  eventId: "$an-event-id",
-  roomId: "!a-room:allo.you",
-  unreadCount: 3,
-  highPriority: true,
-  devices: [DEVICE],
+const ALERT: PushNotification = {
+  title: "Allo",
+  body: "New message",
+  data: { conversation_id: "conv-1", event_id: "evt-1" },
 };
 
 function recordingTransport(response: ApnsResponse): {
@@ -86,59 +79,46 @@ describe("the request Apple is given", () => {
     expect(sent[0]?.headers["apns-topic"]).toBe("so.oxy.allo");
   });
 
-  it("carries the client's own words, the coordinates, and nothing else", async () => {
+  it("carries the caller's words, the coordinates, and nothing else", async () => {
     const { transport, sent } = recordingTransport(ACCEPTED);
-    await createApnsSender(CREDENTIALS, TOKENS, transport).send(
-      [{ ...DEVICE, fallback: { title: "Allo", body: "Nuevo mensaje" }, sound: "default" }],
-      ALERT,
-    );
+    await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], ALERT);
 
     expect(payloadOf(sent[0])).toEqual({
       aps: {
-        alert: { title: "Allo", body: "Nuevo mensaje" },
+        alert: { title: "Allo", body: "New message" },
         "mutable-content": 1,
-        sound: "default",
-        badge: 3,
-        "thread-id": "!a-room:allo.you",
       },
-      event_id: "$an-event-id",
-      room_id: "!a-room:allo.you",
+      conversation_id: "conv-1",
+      event_id: "evt-1",
     });
   });
 
-  it("is an alert at priority 10, collapsed on the event", async () => {
+  it("is an alert at priority 10", async () => {
     const { transport, sent } = recordingTransport(ACCEPTED);
     await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], ALERT);
 
     expect(sent[0]?.headers["apns-push-type"]).toBe("alert");
     expect(sent[0]?.headers["apns-priority"]).toBe("10");
-    expect(sent[0]?.headers["apns-collapse-id"]).toBe("$an-event-id");
   });
 
-  it("is a background push at priority 5 when there is nothing to announce", async () => {
-    const { transport, sent } = recordingTransport(ACCEPTED);
-    await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], {
-      eventId: undefined,
-      roomId: undefined,
-      unreadCount: 0,
-      highPriority: false,
-      devices: [DEVICE],
-    });
-
-    // Apple refuses a background notification sent at priority 10 outright.
-    expect(sent[0]?.headers["apns-push-type"]).toBe("background");
-    expect(sent[0]?.headers["apns-priority"]).toBe("5");
-    expect(payloadOf(sent[0])).toEqual({ aps: { "content-available": 1, badge: 0 } });
-  });
-
-  it("leaves out a collapse id Apple would refuse for being too long", async () => {
+  it("never lets a data key overwrite Apple's own block", async () => {
+    /**
+     * `aps` is where Apple reads the alert from. A caller's `data.aps` spread
+     * beside it would replace the alert with a string, and Apple would answer
+     * `PayloadTooLarge` or show nothing — so the key is dropped, not merged.
+     */
     const { transport, sent } = recordingTransport(ACCEPTED);
     await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], {
       ...ALERT,
-      eventId: `$${"e".repeat(70)}`,
+      data: { aps: "overwritten", conversation_id: "conv-1" },
     });
 
-    expect(sent[0]?.headers["apns-collapse-id"]).toBeUndefined();
+    const payload = payloadOf(sent[0]);
+    expect(payload.aps).toEqual({
+      alert: { title: "Allo", body: "New message" },
+      "mutable-content": 1,
+    });
+    expect(payload.conversation_id).toBe("conv-1");
   });
 });
 
@@ -155,7 +135,7 @@ describe("what Apple says about a token", () => {
     ["BadDeviceToken", 400],
     ["Unregistered", 410],
     ["DeviceTokenNotForTopic", 400],
-  ])("rejects the pusher when the token is unambiguously gone (%s)", async (reason, status) => {
+  ])("rejects the token when it is unambiguously gone (%s)", async (reason, status) => {
     const { transport } = recordingTransport({ status, reason });
 
     expect(await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], ALERT)).toEqual([
@@ -172,7 +152,7 @@ describe("what Apple says about a token", () => {
     ["PayloadTooLarge", 413],
     ["TooManyRequests", 429],
     ["ServiceUnavailable", 503],
-  ])("keeps the pusher for anything that might be our fault (%s)", async (reason, status) => {
+  ])("keeps the token for anything that might be our fault (%s)", async (reason, status) => {
     const { transport } = recordingTransport({ status, reason });
 
     expect(await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], ALERT)).toEqual([
@@ -180,7 +160,7 @@ describe("what Apple says about a token", () => {
     ]);
   });
 
-  it("keeps the pusher when the answer carried no reason to read", async () => {
+  it("keeps the token when the answer carried no reason to read", async () => {
     const { transport } = recordingTransport({ status: 500, reason: undefined });
 
     expect(await createApnsSender(CREDENTIALS, TOKENS, transport).send([DEVICE], ALERT)).toEqual([
@@ -188,7 +168,7 @@ describe("what Apple says about a token", () => {
     ]);
   });
 
-  it("keeps the pusher when the request never completed", async () => {
+  it("keeps the token when the request never completed", async () => {
     const transport: ApnsTransport = async () => {
       throw new Error("the connection was reset");
     };

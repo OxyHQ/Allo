@@ -2,10 +2,10 @@ import { Router, type Response } from "express";
 import type { OxyAuthRequest } from "@oxy.so/core/server";
 import * as z from "zod";
 
-import { isOxyUserId } from "../services/bridges/matrixIdentity";
 import type { OxyDirectoryService } from "../services/oxy/OxyDirectoryService";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
 import { getErrorMessage, isOxyUserNotFound } from "../utils/oxyUserDisplay";
+import { isOxyUserId } from "../utils/oxyUserId";
 import { logger } from "../utils/logger";
 
 /**
@@ -29,10 +29,9 @@ import { logger } from "../utils/logger";
  *
  * `GET /users/:userId` on Oxy also accepts a public key, and `resolveUserId`
  * there maps it. Allo has never had one: every id it holds is a 24-character
- * ObjectId, and it is the SAME shape the Matrix authentication boundary
- * requires of an MXID localpart — so it is checked with the same function,
- * `isOxyUserId`, rather than with a second regular expression that could come
- * to a different conclusion.
+ * ObjectId, checked with `isOxyUserId` — the one place that shape is written
+ * down — rather than with a second regular expression that could come to a
+ * different conclusion.
  */
 
 /** Oxy handles. Bounded, and without the `@` — see `lib/profile/handle.ts`. */
