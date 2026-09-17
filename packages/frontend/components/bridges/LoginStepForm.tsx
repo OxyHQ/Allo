@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
-import { TextFieldInput } from '@oxy.so/bloom';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { Button } from '@oxy.so/bloom/button';
 import { useTranslation } from 'react-i18next';
 

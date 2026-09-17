@@ -11,7 +11,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { toast } from '@oxy.so/bloom/toast';
-import { TextFieldInput } from '@oxy.so/bloom';
+import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTranslation } from 'react-i18next';
 
 // Components

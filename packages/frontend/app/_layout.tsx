@@ -11,7 +11,7 @@ import '@/lib/immerSetup';
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { Fab } from '@oxy.so/bloom/fab';
-import { Pencil_Stroke2_Corner0_Rounded } from '@oxy.so/bloom/icons';
+import { RiEditLine } from '@oxy.so/bloom/icons';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack, usePathname, useRouter } from "expo-router";
@@ -124,7 +124,7 @@ const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
           {shouldShowComposeFab && (
             <Fab
               accessibilityLabel={t('New Chat')}
-              icon={<Pencil_Stroke2_Corner0_Rounded />}
+              icon={<RiEditLine />}
               onPress={() => router.push('/new')}
               placement="bottom-right"
               variant="tertiary"
