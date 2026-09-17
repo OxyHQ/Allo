@@ -13,7 +13,7 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@allo/shared-types": "file:../shared-types",
+        "@allo/shared-types": "workspace:*",
         "@hpke/common": "1.10.1",
         "@hpke/core": "1.9.0",
         "@hpke/dhkem-x25519": "1.8.0",

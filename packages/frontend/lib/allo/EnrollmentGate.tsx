@@ -35,7 +35,7 @@ export function EnrollmentGate({ children, onSignOut }: EnrollmentGateProps) {
     return (
       <PendingApprovalScreen
         deviceName={instance?.displayName}
-        fingerprint={instance ? pendingFingerprint(client, instance.id) : undefined}
+        fingerprint={instance?.enrollment?.fingerprint}
         errorMessage={error?.message}
         onSignOut={onSignOut}
       />
@@ -53,20 +53,6 @@ export function EnrollmentGate({ children, onSignOut }: EnrollmentGateProps) {
     );
   }
   return <>{children}</>;
-}
-
-/**
- * The fingerprint of THIS device's challenge.
- *
- * Core exposes a pending enrollment's fingerprint through `instance.pending()`
- * — the approver's view — and this device's own challenge through its own
- * instance record. The record is what the server returned at registration; the
- * fingerprint is computed the same way the approver's is, so both screens show
- * the same eight hex digits.
- */
-function pendingFingerprint(client: ReturnType<typeof useAlloClient>, instanceId: string): string | undefined {
-  const own = client.instance.pending().find((p) => p.instance.id === instanceId);
-  return own?.fingerprint;
 }
 
 interface PendingApprovalScreenProps {

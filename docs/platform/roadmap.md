@@ -100,57 +100,57 @@ Remains: security audit; load tests; launch.
 
 ## Acceptance tests (issue section 23)
 
-The lead sets each status after verifying the tree. Values: `met`,
-`met, test exists`, `open`, `not in scope of this change`.
+Statuses were set on 2026-09-17 against the tree of the pull request that closes
+issue #139 (the named tests are the evidence).
 
 ### E2EE
 
 | Test | Status |
 |---|---|
-| Backend DB contains no plaintext for new chats | TBD-BY-LEAD |
-| Blobs contain no plaintext media | TBD-BY-LEAD |
-| Logs and push contain no content | TBD-BY-LEAD |
-| A stolen Oxy token cannot decrypt history | TBD-BY-LEAD |
-| The server cannot silently add a reader | TBD-BY-LEAD |
-| Key substitution is detectable or rejected per the final model | TBD-BY-LEAD |
+| Backend DB contains no plaintext for new chats | met, test exists: `integration/coreClient.realdb.test.ts` searches every `conversation_events.payload` for every message text sent |
+| Blobs contain no plaintext media | met, test exists: the same suite uploads a file through the SDK and searches every blob for a window of its bytes |
+| Logs and push contain no content | met by design, partly tested: the log sanitiser and the route-template-only request log are unit tested; push carries only `{ conversationId, eventId }` with a fixed body (`deliveryWorker` tests); no test reads production logs |
+| A stolen Oxy token cannot decrypt history | met by design: keys never leave the instance; instance-signed requests keep a bare token from acting as an instance (`instanceAuth` tests) |
+| The server cannot silently add a reader | met, test exists: `@allo/core` verifies every approval chain before claiming a key package; e2e (i) plants server-side instances with forged or absent signatures and they are never added |
+| Key substitution is detectable or rejected per the final model | met for enrollment: `(account_id, signing_public_key)` is unique, approvals are signed over the published challenge, chains are verified by every client; the user-facing fingerprint comparison is built on both devices |
 
 ### Multi-device
 
 | Test | Status |
 |---|---|
-| Three installations send and receive with the first switched off | TBD-BY-LEAD |
-| Messages sent from one device appear on the user's other devices | TBD-BY-LEAD |
-| Revoking an installation cuts future access | TBD-BY-LEAD |
-| A new installation recovers only the permitted history | TBD-BY-LEAD |
-| Desktop is first class without a primary phone | TBD-BY-LEAD |
+| Three installations send and receive with the first switched off | met, test exists: core e2e (b, c) and the backend integration suite run three instances across two accounts with one offline |
+| Messages sent from one device appear on the user's other devices | met, test exists: core e2e (b) and the integration suite (Bob desktop receives what Bob iOS sends) |
+| Revoking an installation cuts future access | met, test exists: core e2e (d) and the integration suite (no delivery row, sockets cut, cannot decrypt) |
+| A new installation recovers only the permitted history | open: a new instance receives future messages only; history transfer and backup are Phase 3 (`history.requestFrom` throws NotImplemented) |
+| Desktop is first class without a primary phone | met by design and by test: any active instance approves, adds and revokes; the integration suite has Bob desktop approve-free after enrollment and revoke Bob iOS |
 
 ### Apps
 
 | Test | Status |
 |---|---|
-| Mention reads only its authorised conversations | TBD-BY-LEAD |
-| Allo can show Mention conversations | TBD-BY-LEAD |
-| Visual grouping shares no keys | TBD-BY-LEAD |
-| A shared thread requires explicit consent | TBD-BY-LEAD |
+| Mention reads only its authorised conversations | not in scope of this change (Phase 4) |
+| Allo can show Mention conversations | not in scope of this change (Phase 4) |
+| Visual grouping shares no keys | not in scope of this change (Phase 4); the rule is written in concepts.md |
+| A shared thread requires explicit consent | not in scope of this change (Phase 4) |
 
 ### Reliability
 
 | Test | Status |
 |---|---|
-| Timeout plus retry does not duplicate messages | TBD-BY-LEAD |
-| A crash between the DB write and the notification loses no delivery | TBD-BY-LEAD |
-| Redis down loses no messages | TBD-BY-LEAD |
-| A large backfill keeps memory bounded | TBD-BY-LEAD |
-| Concurrent commits and revocations leave no inconsistent crypto state | TBD-BY-LEAD |
+| Timeout plus retry does not duplicate messages | met, test exists: outbox idempotency (core `outbox.test.ts`, backend idempotency replay test) |
+| A crash between the DB write and the notification loses no delivery | met by design, test exists for the mechanism: deliveries are rows written in the event's transaction and claimed with leases; the socket nudge is only the fast path |
+| Redis down loses no messages | met by design: Redis only fans out Socket.IO nudges; the delivery stream is Postgres. `socketRedisAdapter` degrades to single-instance mode without throwing (tested) |
+| A large backfill keeps memory bounded | partly: sync pages (`MAX_SYNC_PAGE`) and pipelines per delivery; no load test was run (Phase 6 hardening) |
+| Concurrent commits and revocations leave no inconsistent crypto state | met, test exists: epoch CAS with 409 and re-sync (core e2e (e), integration suite concurrent add of Carol); revocation Remove commit by the elector (core e2e (d)) |
 
 ### Clean break
 
 | Test | Status |
 |---|---|
-| No Matrix imports on the final product path | TBD-BY-LEAD |
-| No legacy `signalProtocol.ts` | TBD-BY-LEAD |
-| No endpoint accepts native chat plaintext | TBD-BY-LEAD |
-| No compatibility DTOs without a consumer | TBD-BY-LEAD |
-| No dual writes | TBD-BY-LEAD |
-| No migration code without a real need | TBD-BY-LEAD |
-| No feature flag that reactivates the old architecture | TBD-BY-LEAD |
+| No Matrix imports on the final product path | met, test exists: zero references in packages/*; the frontend census `noLegacyChatPath` and the backend `noMongo` scan run in CI |
+| No legacy `signalProtocol.ts` | met |
+| No endpoint accepts native chat plaintext | met, test exists: `noPlaintextPaths.test.ts` (AST scan of the v1 routes and the zod contract) |
+| No compatibility DTOs without a consumer | met: the old DTOs are deleted with their routes |
+| No dual writes | met: there is one store and one event table |
+| No migration code without a real need | met: 0004 creates, 0005 drops; no data is converted |
+| No feature flag that reactivates the old architecture | met: `EXPO_PUBLIC_CHAT_BACKEND` and the MAS/bridge configuration are gone |

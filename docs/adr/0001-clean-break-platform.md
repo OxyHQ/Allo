@@ -132,18 +132,18 @@ The lead fills the status column after verifying the tree. Values: `done`,
 
 | Issue checkbox | Status in this change |
 |---|---|
-| Allo App switches to the new SDK/core | TBD-BY-LEAD |
-| Remove `EXPO_PUBLIC_CHAT_BACKEND` | TBD-BY-LEAD |
-| Remove the Matrix backend as a product path | TBD-BY-LEAD |
-| Remove unused Matrix SDKs | TBD-BY-LEAD |
-| Remove unused Matrix WASM and copy scripts | TBD-BY-LEAD |
-| Remove unused Matrix stores, hooks and adapters | TBD-BY-LEAD |
-| Remove Matrix documentation describing a retired architecture | TBD-BY-LEAD |
-| Remove Matrix workflows, DNS and config | TBD-BY-LEAD |
-| Remove `signalProtocol.ts` and the legacy key model | TBD-BY-LEAD |
-| Remove legacy plaintext endpoints | TBD-BY-LEAD |
-| Remove columns and tables that only served the legacy contract | TBD-BY-LEAD |
-| Remove `cloudSyncEnabled` | TBD-BY-LEAD |
-| Remove `offlineStorage.ts` and AsyncStorage messaging | TBD-BY-LEAD |
-| Remove old types, DTOs, aliases and compat shims | TBD-BY-LEAD |
-| Reset development data instead of writing an artificial migration | TBD-BY-LEAD |
+| Allo App switches to the new SDK/core | done: every chat screen consumes `@allo/react`; `lib/allo/` is the only place that constructs the client; `__tests__/allo/noLegacyChatPath.test.ts` keeps it so |
+| Remove `EXPO_PUBLIC_CHAT_BACKEND` | done |
+| Remove the Matrix backend as a product path | done: MAS/`MatrixBearer` auth, the Matrix push gateway and the bridge orchestration are deleted |
+| Remove unused Matrix SDKs | done: `matrix-js-sdk`, `@matrix-org/matrix-sdk-crypto-wasm`, `@unomed/react-native-matrix-sdk` are gone from every manifest |
+| Remove unused Matrix WASM and copy scripts | done: `scripts/copy-matrix-wasm.js` and its script hooks are gone |
+| Remove unused Matrix stores, hooks and adapters | done: `lib/matrix/`, `lib/chat/matrix*`, `hooks/useMatrix*`, `components/matrix/` are gone |
+| Remove Matrix documentation describing a retired architecture | done: `docs/matrix/` and the Matrix spikes are gone; `spikes/mls/` replaces them |
+| Remove Matrix workflows, DNS and config | done in this repository: `cloudflare-allo-matrix-dns.yml`, `public/.well-known/matrix`, the Matrix env in `deploy-frontends.yml`; the never-applied Terraform in `oxy-infra` (`terraform-uswest2/app-allo-matrix.tf`) is outside this repository and still to delete |
+| Remove `signalProtocol.ts` and the legacy key model | done: `lib/signalProtocol.ts`, `stores/deviceKeysStore.ts`, the `devices`/`device_pre_keys` tables and `/api/devices` |
+| Remove legacy plaintext endpoints | done: `/api/messages` and `/api/conversations` are gone; `/v1` carries ciphertext only (`noPlaintextPaths.test.ts`) |
+| Remove columns and tables that only served the legacy contract | done: migration `0005` (post phase) drops the nine retired tables and `user_settings.security_cloud_sync_enabled` |
+| Remove `cloudSyncEnabled` | done: setting, column, DTO field and UI removed; retention is now the delivery stream plus local storage |
+| Remove `offlineStorage.ts` and AsyncStorage messaging | done: `lib/offlineStorage.ts`, `lib/offlineQueue/`, `lib/optimistic/`, `lib/secureStorage.ts` are gone; the SDK stores ciphertext in SQLite/IndexedDB |
+| Remove old types, DTOs, aliases and compat shims | done: `@allo/shared-types` carries only the v1 contract plus the directory and API envelope types |
+| Reset development data instead of writing an artificial migration | done: migration `0004` drops the three colliding messaging tables before creating the new ones; nothing is converted |

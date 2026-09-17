@@ -13,8 +13,8 @@
         "test": "vitest run"
     },
     "dependencies": {
-        "@allo/core": "file:../core",
-        "@allo/shared-types": "file:../shared-types"
+        "@allo/core": "workspace:*",
+        "@allo/shared-types": "workspace:*"
     },
     "peerDependencies": {
         "react": ">=18"

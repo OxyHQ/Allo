@@ -39,7 +39,13 @@ WORKDIR /app
 # lockfile, but only the backend + shared-types workspaces are actually
 # installed below (via --filter), so the heavy expo/react-native frontend tree
 # is never downloaded into this image.
-COPY package.json bun.lock ./
+# bunfig.toml selects the HOISTED linker. Without it bun >= 1.3 defaults to the
+# isolated linker inside the image, which materialises the `file:` workspace
+# dependencies as nested per-package copies under packages/backend/node_modules
+# instead of the root symlinks the host has, and the copy of @allo/shared-types
+# it produces has no package.json, so the very first `require` at boot fails
+# with MODULE_NOT_FOUND. Measured on 2026-09-17: image built, boot died.
+COPY package.json bun.lock bunfig.toml ./
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/core/package.json ./packages/core/
