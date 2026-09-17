@@ -128,13 +128,13 @@ export async function runHealthCheck(): Promise<HealthCheckResult> {
   try {
     // Import stores to verify they're working
     const { useChatUIStore } = await import('../stores/chatUIStore');
-    const { useMessagesStore } = await import('../stores/messagesStore');
-    const { useConversationsStore } = await import('../stores/conversationsStore');
+    const { useUsersStore } = await import('../stores/usersStore');
+    if (!useChatUIStore || !useUsersStore) throw new Error('a store failed to load');
 
     checks.push({
       name: 'Zustand Stores',
       status: 'pass',
-      message: 'All stores initialized with Immer middleware',
+      message: 'UI and people stores initialized',
     });
   } catch (error) {
     checks.push({
@@ -174,22 +174,6 @@ export async function runHealthCheck(): Promise<HealthCheckResult> {
       name: 'expo-image',
       status: 'fail',
       message: `expo-image not available: ${error}`,
-    });
-  }
-
-  // 7. Check Socket.IO
-  try {
-    const io = await import('socket.io-client');
-    checks.push({
-      name: 'Socket.IO',
-      status: 'pass',
-      message: 'WebSocket support available',
-    });
-  } catch (error) {
-    checks.push({
-      name: 'Socket.IO',
-      status: 'fail',
-      message: `Socket.IO not available: ${error}`,
     });
   }
 

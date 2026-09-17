@@ -1,27 +1,26 @@
 # @allo/backend
 
-> The backend package of the Allo monorepo - A modern chat API service built with Express.js and TypeScript.
+> The backend package of the Allo monorepo — the Express/TypeScript API service.
 
 ---
 
 ## Overview
 
-This is the **backend package** of the **Allo** monorepo. Allo is a modern chat application with **end-to-end encrypted direct messages**, **device-first architecture**, and **optional cloud sync**. The backend provides the API service for messaging, conversations, user settings, and device key management. The backend uses Oxy for authentication, so no user management is needed.
+This is the **backend package** of the **Allo** monorepo. It owns what the
+messaging platform needs on a server — conversations, membership, client
+instances, E2EE coordination, events, delivery, sync, media and push — plus the
+account-side features that sit beside it: profile settings, blocks and
+restricts, a people directory that projects Oxy profiles, and account reports
+delivered to CrowdSource. Authentication is Oxy's, so there is no user
+management here.
 
-### Key Features
-
-- 🔐 **End-to-End Encryption** - Direct messages are encrypted client-side (static ECDH P-256 + AES-256-GCM) before reaching the server; see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model and known gaps
-- 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
-- ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Device Key Management** - Device public key bundles and key exchange
-- ⚠️ **Plaintext Fallback** - The client falls back to sending plaintext when it can't encrypt a message; the server stores whatever it's given
+Messaging platform routes: see [docs/platform/api-v1.md](../../docs/platform/api-v1.md).
 
 ## Tech Stack
 
 - Node.js with TypeScript
 - Express.js for REST API
 - PostgreSQL with drizzle-orm — the only store, for every domain
-- Socket.IO for real-time messaging
 - Oxy Services for authentication (users managed by Oxy platform)
 
 ## Getting Started
@@ -61,7 +60,8 @@ bun run dev
 
 ### Environment Configuration
 
-Create a `.env` file in this package directory with the following variables:
+Create a `.env` file in this package directory. `.env.example` is the annotated
+list; the short form:
 
 ```env
 # Database. REQUIRED — the server refuses to boot without it.
@@ -78,11 +78,22 @@ OXY_API_URL=https://api.oxy.so
 PORT=4140
 NODE_ENV=development
 
-# Push notifications (optional). Without these, utils/push.ts logs that push is
-# disabled and returns. Setting them is still not enough to make push work —
-# see the note at the end of this file.
-FIREBASE_PROJECT_ID=your_firebase_project_id
-FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
+# Redis for the Socket.IO adapter (optional; unset or unreachable means
+# single-instance mode, never a boot failure).
+REDIS_URL=
+
+# Largest accepted blob upload, in bytes (optional; default 25 MiB).
+ALLO_BLOB_MAX_BYTES=
+
+# Push providers (optional; each platform is all-or-nothing, see
+# src/config/push.ts). Used by the delivery worker only.
+FIREBASE_PROJECT_ID=
+FIREBASE_SERVICE_ACCOUNT_BASE64=
+ALLO_APNS_KEY_ID=
+ALLO_APNS_TEAM_ID=
+ALLO_APNS_PRIVATE_KEY_BASE64=
+ALLO_APNS_TOPIC=
+ALLO_APNS_ENVIRONMENT=production
 
 # CrowdSource moderation (optional; the webhook route is not mounted when unset)
 CROWDSOURCE_ENABLED=false
@@ -91,26 +102,6 @@ CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 # Set during a secret rotation so in-flight deliveries signed with the old
 # secret still verify.
 CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
-
-# Bridge orchestration (optional; see "Bridges" below). No network is enabled
-# and no internal route is mounted when ALLO_BRIDGES_ENABLED is empty.
-ALLO_BRIDGES_ENABLED=
-ALLO_MATRIX_SERVER_NAME=allo.you
-
-# Matrix Authentication Service (optional; see "Authentication" below). Setting
-# ALLO_MAS_ISSUER is what makes this backend accept a Matrix access token
-# alongside an Oxy one. Empty means Oxy tokens only, which is the deployed
-# default. The introspection URL must be same-origin with the issuer or the
-# process refuses to boot.
-ALLO_MAS_ISSUER=
-ALLO_MAS_INTROSPECTION_URL=
-ALLO_MAS_INTROSPECTION_CLIENT_ID=
-ALLO_MAS_INTROSPECTION_CLIENT_SECRET=
-ALLO_MAS_ALLOWED_CLIENT_IDS=
-ALLO_MAS_ACCEPTED_SCOPES=
-ALLO_MAS_EXPECTED_AUDIENCE=
-ALLO_MAS_INTROSPECTION_CACHE_SECONDS=
-ALLO_MAS_INTROSPECTION_TIMEOUT_MS=
 
 # Allo's own credential for calling the Oxy API as itself (optional; both or
 # neither). Every Oxy route the directory uses is public, so the lookups work
@@ -190,57 +181,26 @@ therefore pointless: the next deploy overwrites it. Change the GitHub secret.
 
 ### Authentication
 
-Two ways to be signed in, told apart by the **HTTP authentication scheme**:
+One way to be signed in: an Oxy access token.
 
 ```
-Authorization: Bearer <oxy access token>          ← the default, and what ships
-Authorization: MatrixBearer <MAS access token>    ← opt-in, see below
+Authorization: Bearer <oxy access token>
 ```
 
-The Oxy half is unchanged: `createOxyAuthMiddleware(oxy)` from
-`@oxy.so/core/server`, mounted on `/api` in `server.ts`, alongside
-`createOxyCors` and `createOxyRateLimit` from the same package.
+`createOxyAuthMiddleware(oxy)` from `@oxy.so/core/server`, mounted on `/api`
+and `/v1` in `src/app.ts`, alongside `createOxyCors` and `createOxyRateLimit`
+from the same package. It produces `req.userId` / `req.user` for every route
+behind it. The `/v1` routes that act as one installation additionally require
+the instance signature (see "Messaging platform" below).
 
-The Matrix half is `src/middleware/matrixAuth.ts`, mounted immediately ahead of
-it, and it answers **only** requests using the `MatrixBearer` scheme. Everything
-else passes straight through untouched. The scheme carries the discrimination
-rather than a side header because a side header can be stripped by a proxy and
-separated from the credential it describes; `oxy.auth()` extracts a token only
-from a header beginning with the exact string `"Bearer "`, so a MatrixBearer
-credential is structurally invisible to it, and a refused MatrixBearer request
-is never offered to the Oxy validator for a second opinion.
-
-The token itself is opaque, so it is validated by RFC 7662 introspection against
-MAS on every request, subject to a **30-second** cache (`exp` is an additional
-ceiling, never an extension). That window is the bound on how long a revoked
-token keeps working. Beyond `active`, the checks are: the token is an access
-token and not a refresh token, it carries the MSC2967 Matrix client-API scope,
-its `iss` and `aud` match when the response carries them, its `client_id` is in
-the allowlist when one is configured, and its `username` is a well-formed Oxy
-account id — a bridge ghost such as `whatsapp_447700900000` is refused, not
-coerced. MAS unreachable is **503, never 401**: an outage must not sign anybody
-out. See `src/config/matrixAuth.ts` for the boot-time rules and
-`src/services/auth/` for the rest.
-
-Both paths produce the same `req.userId` / `req.user`, so no route knows or
-cares which sign-in produced the request.
-
-Routes are split into two routers: `publicApiRouter` (health only) and
-`authenticatedApiRouter`, which carries `/profile`, `/conversations`,
-`/messages`, `/devices`, `/reports`, `/bridges`, `/push` and `/directory`. The
-CrowdSource webhook is mounted separately at `/webhooks/crowdsource`, ahead of
-the JSON body parser, because it needs the raw body to verify its signature.
-
-**The Socket.IO handshake is not covered.** It still authenticates with
-`oxy.authSocket()`, so a MAS token cannot open a websocket. That is deliberate:
-the realtime namespace belongs to the legacy transport, which the Matrix path
-replaces with `/sync` rather than authenticating into.
+`/api` carries `/profile`, `/reports` and `/directory`. The CrowdSource webhook
+is mounted at `/webhooks/crowdsource`, ahead of the JSON body parser, because it
+needs the raw body to verify its signature; so is `POST /v1/blobs`.
 
 ### People directory
 
-`/api/directory/*` answers the five Oxy lookups the app makes today, so that an
-app authenticating only through MAS — and therefore holding no Oxy session —
-can still draw a person.
+`/api/directory/*` answers the five Oxy lookups the app makes, so the app draws
+a person through this backend rather than by calling Oxy itself.
 
 | Route | Replaces |
 | --- | --- |
@@ -256,9 +216,9 @@ first/last, avatar id, resolved avatar URL, bio. The Oxy `User` carries `email`,
 `phone`, `address` and `birthday`, and this backend asks Oxy as itself, so
 anything it forwarded it would forward to every signed-in user.
 
-Each `DirectoryUser` already carries `avatarUrl`, so the fifteen places in the
-app that turn an avatar id into a URL become a field read rather than a request.
-The asset endpoint exists for an id that arrives from somewhere else.
+Each `DirectoryUser` already carries `avatarUrl`, so a place in the app that
+turns an avatar id into a URL becomes a field read rather than a request. The
+asset endpoint exists for an id that arrives from somewhere else.
 
 Authenticated, even though every underlying Oxy route is public: an
 unauthenticated profile lookup here would be an enumeration endpoint pointed at
@@ -269,172 +229,59 @@ No service credential is required, for the same reason. Setting
 bulk lookup authenticates; see `src/config/oxyService.ts`, which also documents
 the console.oxy.so step that mints them.
 
-### Health Check
+### Health
 
-#### GET /api/health
-- Public endpoint
-- Returns: `{ status: "ok", service: "allo-backend" }`
+- `GET /health/live` — always 200 `{ status: "alive" }`. A draining task is
+  still alive; draining is reported by readiness only.
+- `GET /health/ready` — 200 once the process has booted, verified the migration
+  ledger (production) and can `select 1` against Postgres; 503 otherwise, with
+  `phase` and `dependencies: { postgres, migrations }`. Drops to 503 on the
+  first SIGTERM, before anything else closes.
+- `GET /api/health` — an alias of `/health/ready`, kept for the existing ALB
+  target group.
 
-### Conversations
+Redis is deliberately absent from readiness: the Socket.IO adapter is optional
+and a task without it serves correctly in single-instance mode.
 
-#### GET /api/conversations
-- Get all conversations for the authenticated user
-- Query params: `limit` (default: 50), `offset` (default: 0)
-- Returns: `{ conversations: Conversation[] }`
+### Messaging platform (`/v1`)
 
-#### GET /api/conversations/:id
-- Get a specific conversation by ID
-- Returns: `Conversation`
+The route-by-route contract is [docs/platform/api-v1.md](../../docs/platform/api-v1.md);
+every request and response shape is a zod schema in `@allo/shared-types`, and
+the backend validates with the same schemas the SDK parses with. In short:
 
-#### POST /api/conversations
-- Create a new conversation
-- Body:
-```json
-{
-  "type": "direct" | "group",
-  "participantIds": ["user1", "user2"],
-  "name": "Group Name", // Optional, for groups only
-  "description": "Group description", // Optional, for groups only
-  "avatar": "avatar_url" // Optional, for groups only
-}
-```
-- Returns: `Conversation`
+| Area | Routes | Auth |
+| --- | --- | --- |
+| Instances | `POST/GET /v1/instances`, `GET /v1/accounts/:accountId/instances` | Oxy |
+| Enrollment | `GET /v1/instances/pending`, `POST /v1/instances/:id/{approve,reject,revoke}`, `PUT/DELETE /v1/instances/me/push` | instance-signed |
+| Key packages | `PUT /v1/key-packages`, `POST /v1/key-packages/claim` | instance-signed |
+| Conversations | `POST/GET /v1/conversations`, `GET /v1/conversations/:id`, `POST /v1/conversations/:id/leave` | instance-signed |
+| Events | `POST/GET /v1/conversations/:id/events` | instance-signed |
+| Sync | `GET /v1/sync`, `POST /v1/sync/ack` | instance-signed |
+| Blobs | `POST /v1/blobs` (raw octet-stream), `GET /v1/blobs/:id` | instance-signed |
 
-#### PUT /api/conversations/:id
-- Update a conversation (name, description, avatar for groups)
-- Body:
-```json
-{
-  "name": "Updated Name",
-  "description": "Updated description",
-  "avatar": "new_avatar_url"
-}
-```
+"Instance-signed" means the Oxy bearer PLUS `X-Allo-Instance`,
+`X-Allo-Timestamp` and `X-Allo-Signature`: an Ed25519 signature by the
+installation's key over the method, the request target, the timestamp and the
+SHA-256 of the raw body (`src/middleware/instanceAuth.ts`). The raw body is
+captured by `express.json({ verify })`, which is why the blob upload — raw
+bytes, size-capped by `ALLO_BLOB_MAX_BYTES` — is mounted ahead of the JSON
+parser in `src/app.ts` with its own chain.
 
-#### POST /api/conversations/:id/participants
-- Add participants to a group conversation
-- Body: `{ "participantIds": ["user1", "user2"] }`
+Socket.IO namespace `/v1` takes the same three fields in `handshake.auth`
+(path `/socket`, empty body) after `oxy.authSocket()`. A socket joins
+`instance:<id>` and `account:<accountId>`; the server emits `sync.nudge`,
+`instance.approved`, `instance.revoked`, `keypackages.low` and `presence`, and
+relays `typing` ciphertext to a conversation's other active leaves without
+storing it (`src/runtime/socket.ts`).
 
-#### DELETE /api/conversations/:id/participants/:participantId
-- Remove a participant from a group conversation
+Every non-2xx answer on `/v1` is `{ error: { code, message, details? } }` with
+`code` from `ALLO_ERROR_CODES`; the one place that shape is written is the error
+handler in `src/app.ts`, and routes throw `AlloHttpError` (`src/utils/httpErrors.ts`).
 
-#### POST /api/conversations/:id/archive
-- Archive a conversation
-
-#### POST /api/conversations/:id/unarchive
-- Unarchive a conversation
-
-#### POST /api/conversations/:id/mark-read
-- Mark conversation as read
-
-### Messages
-
-**Important**: Direct messages are end-to-end encrypted client-side (static ECDH P-256 + AES-256-GCM) when the client is able to encrypt them, and the backend stores that ciphertext as-is — it never has the keys to decrypt it. When encryption isn't possible (e.g. the recipient has no registered device), the client falls back to plaintext and the backend stores that too. See [docs/encryption.mdx](../../docs/encryption.mdx) for the full model.
-
-#### GET /api/messages
-- Get messages for a conversation
-- Returns encrypted messages - client must decrypt them
-- Query params:
-  - `conversationId` (required)
-  - `limit` (default: 50)
-  - `before` (ISO date string for pagination)
-- Returns: `{ messages: Message[] }` (encrypted)
-
-#### GET /api/messages/:id
-- Get a specific message by ID
-- Returns: `Message`
-
-#### POST /api/messages
-- Send a new message (encrypted or plaintext for backward compatibility)
-- Body (encrypted):
-```json
-{
-  "conversationId": "conv_id",
-  "senderDeviceId": 1,
-  "ciphertext": "base64_encoded_encrypted_message",
-  "encryptedMedia": [ // Optional
-    {
-      "id": "media_id",
-      "type": "image" | "video" | "audio" | "file",
-      "ciphertext": "base64_encoded_encrypted_media",
-      "thumbnailCiphertext": "base64_encoded_encrypted_thumbnail", // Optional
-      "fileName": "file.jpg", // Optional
-      "fileSize": 1024, // Optional
-      "mimeType": "image/jpeg", // Optional
-      "width": 1920, // Optional
-      "height": 1080, // Optional
-      "duration": 120 // Optional, for video/audio
-    }
-  ],
-  "encryptionVersion": 1,
-  "messageType": "text" | "media" | "system",
-  "replyTo": "message_id", // Optional
-  "fontSize": 16 // Optional, custom font size
-}
-```
-- Body (legacy plaintext - deprecated):
-```json
-{
-  "conversationId": "conv_id",
-  "senderDeviceId": 1,
-  "text": "Message text",
-  "media": [...]
-}
-```
-- Returns: `Message`
-
-#### PUT /api/messages/:id
-- Edit a message
-- Body: `{ "text": "Updated text" }`
-
-#### DELETE /api/messages/:id
-- Delete a message (soft delete)
-
-#### POST /api/messages/:id/read
-- Mark a message as read
-
-#### POST /api/messages/:id/delivered
-- Mark a message as delivered
-
-### Device Management (key registration)
-
-#### GET /api/devices
-- Get all devices for the authenticated user
-- Returns: `{ devices: Device[] }`
-
-#### GET /api/devices/:deviceId
-- Get a specific device by deviceId
-- Returns: `Device`
-
-#### POST /api/devices
-- Register a new device with its public key bundle
-- Body:
-```json
-{
-  "deviceId": 1,
-  "identityKeyPublic": "base64_encoded_public_key",
-  "signedPreKey": {
-    "keyId": 1,
-    "publicKey": "base64_encoded_public_key",
-    "signature": "base64_encoded_signature"
-  },
-  "preKeys": [
-    {
-      "keyId": 1,
-      "publicKey": "base64_encoded_public_key"
-    }
-  ],
-  "registrationId": 12345
-}
-```
-
-#### GET /api/devices/user/:userId
-- Get all devices for a specific user (for key exchange)
-- Returns public keys only
-
-#### GET /api/devices/user/:userId/prekeys/:deviceId
-- Get preKeys for a specific device (for key exchange)
-- Returns: `{ preKeys: PreKey[] }`
+The server never sees plaintext: every `payload` is MLS ciphertext, a `typing`
+frame is ciphertext, a push says only "New message" with the conversation and
+event ids, and `__tests__/platform/noPlaintextPaths.test.ts` scans the routers'
+TypeScript AST to keep it that way.
 
 ### Profile Settings
 
@@ -474,11 +321,6 @@ the console.oxy.so step that mints them.
     "minimalistMode": false,
     "displayName": "Display Name",
     "coverImage": "url"
-  },
-  "security": {
-    "cloudSyncEnabled": false, // Device-first by default
-    "encryptionEnabled": true, // Encryption on/off
-    "peerToPeerEnabled": true // Stored but not enforced — P2P isn't functional yet, see docs/encryption.mdx
   }
 }
 ```
@@ -509,26 +351,18 @@ the console.oxy.so step that mints them.
 ### Reports (moderation)
 
 Account reports only. Message content is deliberately never sent for review — it
-is end-to-end encrypted — and that is enforced in three places rather than one:
-`ModerationSubjectProvider` only types an account subject, so a `message`
-provider does not compile; a test pins `deliverableTypes()` to `['user']`; and a
-second test pins the module graph the providers can reach, so no provider can be
-conditioned on a room's encryption state.
-
-That last one is about bridges. A bridged room is **not** encrypted, so the
-server really can read a WhatsApp or Telegram message — and
-`docs/matrix/data-model.md` §6.4 decides on purpose that it still never goes to a
-jury: the coverage would be inverted, the bridge would become load-bearing, and
-most of what is in the room was written by somebody with no Oxy account who never
-agreed to anything.
+is end-to-end encrypted and the server never holds a key — and that is enforced
+in three places rather than one: `ModerationSubjectProvider` only types an
+account subject, so a `message` provider does not compile; a test pins
+`deliverableTypes()` to `['user']`; and a second test pins the module graph the
+providers can reach, so no provider can describe a conversation.
 
 #### POST /api/reports
 - File a report against an account
-- `reportedId` accepts an Oxy user id **or** an MXID; `Report.reportedId` is
-  always stored as the Oxy id (§6.2), so the dedup key is unchanged
-- A subject with no Oxy account — a user on another homeserver, a bridge ghost, a
-  room or an event id — is still accepted and stored, with the reason it cannot
-  be reviewed recorded on the row (§6.3). The response is identical either way
+- `reportedId` is an Oxy account id. An `@handle` is accepted and stored, with
+  the reason it cannot be reviewed recorded on the row, and never delivered —
+  resolve a handle through the directory first. The response is identical
+  either way
 - Returns the created report
 
 #### GET /api/reports/mine
@@ -543,210 +377,48 @@ agreed to anything.
 - Registered before `express.json()` so the raw body survives for signature
   verification.
 
-### Bridges
+### Push
 
-Orchestration for the mautrix bridges. Design: [`docs/matrix/bridges.md`](../../docs/matrix/bridges.md).
-The bridges themselves are separate AGPL processes run **unmodified**; nothing
-here patches or embeds them.
+`src/services/push/` delivers a `{ title, body, data }` notification to a list
+of `{ platform, token }` devices through FCM and APNs (`sendPush` in
+`dispatch.ts`). APNs is HTTP/2 plus an ES256 provider token, with no library.
+The senders never see message content; what a notification says and who is
+notified is decided by `src/workers/deliveryWorker.ts`: title "Allo", body
+"New message", `data = { conversationId, eventId }`, sent only for an
+`app_message` to an instance with no live socket and a registered token. A
+token lives on the `client_instances` row (`PUT /v1/instances/me/push`), is a
+protected column, and is cleared when a provider rejects it.
 
-#### Authenticated, for the app
+### Workers
 
-| Route | Purpose |
-|---|---|
-| `GET /api/bridges/networks` | The catalogue the account-linking screen renders. Only **enabled** networks; the app carries no list of its own. |
-| `GET /api/bridges/accounts` | The caller's linked accounts. |
-| `POST /api/bridges/networks/:network/link` | Start a login. Body: `{ "flowId": "phone" }`. |
-| `GET /api/bridges/links/:linkId` | Long-poll behind a QR step. Socket.IO (`bridgeLinkStep`) is the fast path; this is the one that always works. |
-| `POST /api/bridges/links/:linkId/submit` | Answer the current step. Body: `{ "values": { "<fieldId>": "…" } }`. |
-| `DELETE /api/bridges/links/:linkId` | Abandon an attempt. |
-| `DELETE /api/bridges/accounts/:accountId` | Unlink. Does **not** release the proxy lease. |
-| `POST /api/bridges/accounts/:accountId/reconnect` | Re-read `whoami` and reconcile the stored state. |
+All started by `server.ts` after Postgres is verified, all stopped in the
+shutdown drain before the pool closes, none leader-gated (every claim is
+`FOR UPDATE SKIP LOCKED`, so every task may run one):
 
-Two rules these routes exist to enforce:
+| Worker | Interval | What it does |
+| --- | --- | --- |
+| `workers/deliveryWorker.ts` | 1 s, batch 100 | Claims `pending` `instance_deliveries` under a lease; nudges a connected instance over the socket, pushes otherwise (app messages only), backs off transient failures (`min(2^attempts s, 1h)`) |
+| `db/expiry.ts` | 60 s | Deletes rows past `expires_at`: moderation tables, deliveries older than 30 days, blobs unreferenced for 7 days |
+| `workers/blobGc.ts` | 1 h | The blob delete the sweep cannot express: unreferenced blobs of a revoked uploader |
+| `services/moderation/ModerationOutboxDispatcher.ts` | configured | CrowdSource report delivery and decision application |
 
-- **A disabled network answers 404, not 403.** A 403 says "exists, but not for
-  you", which lets a client enumerate the roadmap by probing identifiers. A
-  disabled network, an unknown one and a half-configured one all give the same
-  answer.
-- **The MXID is derived from the authenticated Oxy identity, never from the
-  request.** The provisioning `shared_secret` makes a bridge believe `?user_id=`
-  with no further checks, so an MXID a client could influence would make these
-  endpoints "link an account for whoever you like".
+## Module map
 
-#### Internal, called only by the bridges
-
-Mounted at `/internal/bridges`, **before `express.json()` and before Oxy
-authentication**, with their own body parser — so no Oxy session can satisfy them
-and the per-user rate limiter cannot throttle them.
-
-| Route | Auth |
-|---|---|
-| `POST /internal/bridges/status` | `Authorization: Bearer <as_token>`, constant-time against every enabled network. The matching token also identifies which bridge sent it. |
-| `GET /internal/bridges/proxy` | `?t=<ALLO_BRIDGE_PROXY_ENDPOINT_TOKEN>`. Mounted only when a proxy provider is configured. Answers `{"proxy_url": "…"}` — that field name is what the bridge deserialises. |
-
-#### Configuration
-
-A network is reachable only if it is listed in `ALLO_BRIDGES_ENABLED` **and** has
-its complete trio of variables **and** satisfies the preconditions its catalogue
-row declares. All of it is checked at boot in one `superRefine`, so a deployment
-that asks for a network it cannot serve does not start.
-
-```env
-ALLO_BRIDGES_ENABLED=telegram,slack
-ALLO_MATRIX_SERVER_NAME=allo.you
-
-ALLO_BRIDGE_TELEGRAM_BASE_URL=http://allo-bridge-telegram:29317
-ALLO_BRIDGE_TELEGRAM_SHARED_SECRET=<32+ chars>
-ALLO_BRIDGE_TELEGRAM_AS_TOKEN=<the registration's as_token>
-
-# Optional tuning
-ALLO_BRIDGES_MAX_ACCOUNTS_PER_NETWORK=2
-ALLO_BRIDGES_LINK_TTL_SECONDS=600
-ALLO_BRIDGES_DISPLAY_STEP_TTL_SECONDS=170   # WhatsApp's QR window is ~2m40s
-ALLO_BRIDGES_STALE_MARGIN_SECONDS=300
-ALLO_BRIDGES_HTTP_TIMEOUT_MS=15000
-
-# Proxy provider. Required to enable any network whose catalogue row says
-# requiresProxy — WhatsApp, Instagram, Messenger. Without it they cannot be
-# turned on at all, which is the point: every user would otherwise egress from
-# one datacentre address, correlated for banning.
-ALLO_BRIDGE_PROXY_PROVIDER=provider-a
-ALLO_BRIDGE_PROXY_GATEWAY=http://gateway.example:8000
-ALLO_BRIDGE_PROXY_USERNAME_TEMPLATE=acct-country-{country}-session-{session}
-ALLO_BRIDGE_PROXY_PASSWORD=<from the secret manager>
-ALLO_BRIDGE_PROXY_COUNTRIES=ES,PT,FR
-ALLO_BRIDGE_PROXY_ECHO_URL=https://echo.example/whoami
-ALLO_BRIDGE_PROXY_ENDPOINT_TOKEN=<32+ chars, rotatable on its own>
 ```
-
-`{country}` and `{session}` in the username template are load-bearing and the
-config refuses a template missing either: without the first the provider egresses
-wherever it likes while the lease claims otherwise, and without the second every
-user shares one session and one exit address.
-
-The echo endpoint must answer `{"ip": "…", "country": "ES"}` and is fetched
-**through** the proxy. If the country it reports disagrees with the lease, the
-lease is quarantined and the account does not connect — better an account that
-fails to connect than one that connects from the wrong country.
-
-#### What is deliberately not built yet
-
-- **Discord.** Its catalogue row says `architecture: "legacy"`: `mautrix-discord`
-  speaks a different `/v1` provisioning API that needs its own adapter, and whose
-  wire format the design does not pin down. Listing it in `ALLO_BRIDGES_ENABLED`
-  fails at boot rather than publishing a network whose login cannot start.
-- **The per-user slot pool for WhatsApp and Meta** (`bridges.md` §4.3). Those
-  networks cannot be enabled without a contracted proxy provider, and the design
-  leaves the slot count, the per-slot secrets and the legal sign-off open.
-  `BridgeAccount.slotId` and the proxy endpoint's `?slot=` are in place for it.
-
-## Real-time Messaging (Socket.IO)
-
-The backend provides real-time messaging through Socket.IO.
-
-### Connection
-
-Connect to the `/messaging` namespace:
-
-```javascript
-import { io } from 'socket.io-client';
-
-const socket = io('http://localhost:4140/messaging', {
-  auth: {
-    token: 'your_oxy_token',
-    userId: 'your_user_id'
-  }
-});
-```
-
-### Events
-
-#### Client → Server
-
-- `joinConversation` - Join a conversation room
-  - Payload: `conversationId: string`
-
-- `leaveConversation` - Leave a conversation room
-  - Payload: `conversationId: string`
-
-- `typing` - Typing indicator
-  - Payload: `{ conversationId: string, userId: string, isTyping: boolean }`
-
-#### Server → Client
-
-- `newMessage` - New message received
-  - Payload: `Message`
-
-- `messageUpdated` - Message was edited
-  - Payload: `Message`
-
-- `messageDeleted` - Message was deleted
-  - Payload: `{ id: string }`
-
-- `typing` - Mirrored to everyone in the room except the sender
-  - Payload: `{ conversationId: string, userId: string, isTyping: boolean }`
-
-## Database Schema
-
-### Conversation
-
-```typescript
-{
-  type: "direct" | "group",
-  participants: [
-    {
-      userId: string, // Oxy user ID
-      role: "admin" | "member",
-      joinedAt: Date,
-      lastReadAt?: Date
-    }
-  ],
-  name?: string, // For groups
-  description?: string, // For groups
-  avatar?: string, // For groups
-  createdBy: string, // Oxy user ID
-  lastMessageAt?: Date,
-  lastMessage?: {
-    text?: string,
-    senderId: string,
-    timestamp: Date
-  },
-  unreadCounts: Record<string, number>, // userId -> unread count
-  archivedBy: string[], // Array of user IDs
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-### Message
-
-```typescript
-{
-  conversationId: string,
-  senderId: string, // Oxy user ID
-  senderDeviceId: number, // Device that sent it
-
-  // Encrypted content
-  ciphertext?: string, // Base64; the server cannot decrypt this
-  encryptedMedia?: EncryptedMediaItem[],
-
-  // Legacy plaintext fields — also what the plaintext fallback writes
-  text?: string,
-  media?: MediaItem[],
-
-  encryptionVersion?: number,
-  messageType?: "text" | "media" | "system",
-
-  replyTo?: string, // Message ID
-  fontSize?: number,
-  editedAt?: Date,
-  deletedAt?: Date,
-  readBy: Record<string, Date>, // userId -> read timestamp
-  deliveredTo: string[], // Array of user IDs
-  reactions?: Record<string, string[]>, // emoji -> userIds
-  createdAt: Date,
-  updatedAt: Date
-}
+server.ts                       bootstrap only: env → Postgres → ledger → sockets → workers → listen → ready
+src/app.ts                      createApp(deps): pure HTTP assembly, middleware order, error handler
+src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
+src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
+src/middleware/                 instanceAuth (Ed25519 request signature), requestObservability
+src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs
+src/routes/                     kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
+src/services/platform/          the rules: instance lifecycle, key packages, conversations, events + sync, blobs, wire projections
+src/db/schema/                  one file per domain; CONVENTIONS.md is binding
+src/db/platform/                repositories; appendClientEvent is the event-log transaction
+src/workers/                    deliveryWorker, blobGc
+src/services/push/              FCM and APNs senders
+src/services/moderation/        CrowdSource pipeline
+drizzle/                        generated migrations, one phase marker each
 ```
 
 ## Development Scripts
@@ -779,11 +451,10 @@ message naming this command. That is deliberate: a database test that skips
 itself when no server is present is a test nobody notices has stopped running.
 
 A real server rather than a mock, because the properties under test only exist
-on one: a deferred constraint trigger judged at COMMIT, `ON CONFLICT` against a
-unique index, `xmax`, `nulls last`, an increment evaluated in SQL, and two levels
-of `ON DELETE CASCADE`. A mocked `insert` accepts statements the server rejects
-outright. See `src/db/schema/CONVENTIONS.md` for the decisions the port is bound
-by, including what happened to the Mongoose hooks and to the three TTL indexes.
+on one: `ON CONFLICT` against a unique index, `xmin`, a CHECK rendered from a
+tuple, an increment evaluated in SQL. A mocked `insert` accepts statements the
+server rejects outright. See `src/db/schema/CONVENTIONS.md` for the decisions
+the schema is bound by.
 
 ## Monorepo Integration
 
@@ -799,46 +470,9 @@ This package is part of the Allo monorepo and integrates with:
   and is a frontend dependency only.
 - Uses `@oxy.so/crowdsource*` for the moderation pipeline
 
-## Security & Encryption
-
-### End-to-End Encryption
-
-Direct messages are encrypted client-side with a static Diffie-Hellman scheme (see [docs/encryption.mdx](../../docs/encryption.mdx) for the full model; the frontend module is named `signalProtocol.ts` for historical reasons but does not implement the Signal Protocol):
-
-- **Device Keys**: Each device has its own identity key, signed pre-key, and one-time pre-keys. Only the identity key is used for encryption — the pre-keys are generated and stored but not consumed by any encrypt/decrypt path.
-- **Key Exchange**: Devices exchange public keys through the backend.
-- **Storage**: The backend stores whatever the client sends — encrypted ciphertext when the client was able to encrypt, plaintext when it falls back because it couldn't (e.g. the recipient has no registered device).
-- **No Forward Secrecy**: The same static shared secret encrypts every message between a pair of identity keys; there is no per-message or per-session key.
-- **Device Management**: Users can register multiple devices, each with separate keys, but a recipient's non-primary devices generally cannot decrypt messages sent to them (see [docs/encryption.mdx](../../docs/encryption.mdx)).
-
-### Device-First Architecture
-
-- **Local Storage**: Messages are stored locally on the device first
-- **Optional Cloud Sync**: Users can enable cloud backup in settings (disabled by default)
-- **Privacy**: When cloud sync is disabled, messages are only stored on devices
-- **P2P**: Peer-to-peer messaging is scaffolded (`lib/p2pMessaging.ts`) but not yet functional — every message currently goes through the server relay
-
-### Message Encryption Flow
-
-1. Client attempts to encrypt the message with the recipient's identity key (static ECDH + AES-256-GCM); if that fails, it falls back to plaintext
-2. Client sends the resulting ciphertext (or plaintext) to the backend
-3. Backend stores the message as received — it never has the keys to decrypt a ciphertext payload
-4. Backend delivers the message to recipient devices
-5. Recipient devices decrypt locally when the payload is encrypted
-
 ## Notes
 
-- **Matrix migration**: Allo is moving to Matrix and this service is what it
-  will move off. See [docs/matrix/](../../docs/matrix/) for the design. Nothing
-  has changed here yet — this backend is still the transport the app uses.
-- **Push notifications do not work**: `src/routes/notifications.ts` was deleted in
-  commit `670f008` and never remounted, so the `POST /notifications/push-token`
-  the client still sends 404s and no `PushToken` document is ever written.
-  `utils/push.ts` can talk to Firebase, but `sendPushToUser` queries an empty
-  collection — and the only thing that calls it is `createNotification`, which
-  nothing outside its own file calls either.
 - **No User Management**: Users are managed by the Oxy platform. The backend only stores Oxy user IDs.
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
-- **Real-time**: Socket.IO is used for real-time message delivery and updates.
-- **Encryption**: Direct messages are end-to-end encrypted when the client can encrypt them; the backend never sees the keys needed to decrypt ciphertext, but see [docs/encryption.mdx](../../docs/encryption.mdx) for the plaintext fallback and other gaps (no forward secrecy, broken group encryption, non-functional multi-device and P2P).
-- **Device-First**: Messages stored locally by default. Cloud sync is optional.
+- **Encryption**: the backend stores and relays ciphertext only and never holds
+  a decryption key. See [docs/platform/crypto.md](../../docs/platform/crypto.md).

@@ -27,18 +27,10 @@ directory = "./dist"
 # the same change, and behaves the same way: real assets are matched first, and
 # only a genuine miss gets the shell.
 #
-# That ordering is load-bearing for two files here, and BOTH still exist under
-# `public/`:
-#
-#   .well-known/matrix/server   the federation delegation for `server_name`
-#                               allo.you, pointing at matrix.allo.you
-#   .well-known/matrix/client   client discovery
-#
-# Delete either and this fallback answers its path with `index.html` and status
-# **200**, which is worse than serving nothing: server-server resolution falls
-# through to the `_matrix-fed._tcp` SRV record only when the well-known request
-# *fails*, and a 200 carrying HTML is a success that happens not to be the JSON
-# anyone wanted. There is no SRV record to fall through to.
+# One consequence worth knowing: any extensionless file placed under `public/`
+# that a remote system expects as JSON is answered by this fallback with
+# `index.html` and status **200** the moment it is deleted — a success carrying
+# the wrong body. Give such a file a `Content-Type` in `public/_headers`.
 #
 # The other, unchanged wart: a stale hashed bundle is a miss too, so a `.js` URL
 # from a previous deploy is answered with `index.html`. That is what shipped
@@ -48,9 +40,7 @@ not_found_handling = "single-page-application"
 # `public/_headers` survives the move. Workers static assets read it exactly as
 # Pages did: wrangler excludes `_headers` and `_redirects` from the asset
 # manifest and uploads each as a deployment module instead
-# (`createAssetsIgnoreFunction` in wrangler 4). It is what gives the two
-# extensionless delegation files `Content-Type: application/json` and what keeps
-# the un-hashed crypto WebAssembly module revalidating.
+# (`createAssetsIgnoreFunction` in wrangler 4).
 
 # ONE custom domain, and that is a change from what the Pages project served.
 #

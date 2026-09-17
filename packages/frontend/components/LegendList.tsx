@@ -121,7 +121,7 @@ function LegendListInner<ItemT>(
     if (effectiveScrollEventThrottle != null) {
         fallbackProps.scrollEventThrottle = effectiveScrollEventThrottle;
     }
-    // The wrapper bridges LegendList and FlatList prop shapes; the merged props
+    // The wrapper adapts LegendList props to FlatList's shape; the merged props
     // are structurally a FlatList config at runtime.
     return <RNFlatList {...(fallbackProps as unknown as FlatListProps<ItemT>)} />;
 }

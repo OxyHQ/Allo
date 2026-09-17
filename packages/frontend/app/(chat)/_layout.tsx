@@ -7,14 +7,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { ContactDetails } from '@/components/ContactDetails';
 import { EmptyState } from '@/components/shared/EmptyState';
 import ConversationsList from './index';
-import RoomAdminRoute from './room/[id]';
-import { useConversationsStore } from '@/stores';
-import { useUserById } from '@/stores/usersStore';
+import { useChatConversations } from '@/hooks/useChatConversations';
 import { useOxy } from '@oxy.so/services';
 import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
 import { BREAKPOINTS } from '@/constants/responsive';
-import { useRealtimeMessaging } from '@/hooks/useRealtimeMessaging';
-import { useEphemeralSweep } from '@/hooks/useEphemeralSweep';
 import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
 import { ProfileScreen } from '@/components/profile/ProfileScreen';
 import { profileHandleFromPathname } from '@/lib/profile/handle';
@@ -37,26 +33,12 @@ export default function ChatLayout() {
   const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
 
   const { user: currentUser } = useOxy();
-  const conversations = useConversationsStore(state => state.conversations);
-
-  useRealtimeMessaging(undefined);
-
-  // Subscribing is what keeps this device taking its own expired messages off
-  // the homeserver, for every ephemeral conversation and not only the one on
-  // screen. Called here because this layout is mounted for as long as the chat
-  // part of the app is; the value is the conversations currently on a timer,
-  // which nothing draws yet. See `lib/chat/ephemeralSweep.ts`.
-  useEphemeralSweep();
+  const conversations = useChatConversations();
 
   const isSettingsRoute = pathname?.includes('/settings');
   const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
   const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
   const isNewChatRoute = pathname === '/(chat)/new' || pathname === '/new' || pathname?.endsWith('/new');
-  // The Matrix-only conversation details screen. Matched here for the same
-  // reason the New Chat screen is: on a wide window the panes are chosen from
-  // the path rather than by the navigator, so a route nothing matches would
-  // draw "select a conversation" over a screen the user just opened.
-  const roomDetailsMatch = pathname?.match(/\/room\/([^/]+)$/);
   // A profile, for the same reason: `/@alice` reaches this layout as an ordinary
   // path, and without a branch for it the sidebar's own "Profile" row would open
   // a screen that this pane immediately paints "select a conversation" over.
@@ -93,6 +75,7 @@ export default function ChatLayout() {
         groupName: groupInfo?.name,
         groupAvatar: groupInfo?.avatar,
         currentUserId: currentUser?.id,
+        myRole: activeConversation.myRole,
       };
     }
 
@@ -165,9 +148,7 @@ export default function ChatLayout() {
               <Stack.Screen name="settings/language" />
               <Stack.Screen name="settings/privacy" />
               <Stack.Screen name="settings/profile-customization" />
-              <Stack.Screen name="settings/linked-accounts" />
-              {/* Second level: one screen per network, driven by the server's catalogue */}
-              <Stack.Screen name="settings/linked-accounts/[network]" />
+              <Stack.Screen name="settings/devices" />
               {/* Second level nested routes under privacy. Online status is not
                   among them: it is one boolean, and it is a switch in the list. */}
               <Stack.Screen name="settings/privacy/profile-visibility" />
@@ -188,8 +169,6 @@ export default function ChatLayout() {
                 return null;
               }
             })()
-          ) : roomDetailsMatch ? (
-            <RoomAdminRoute />
           ) : isConversationRoute && conversationIdMatch ? (
             // Show conversation detail from /c/:id route
             // Use the wrapper component that handles the require path correctly
@@ -225,7 +204,6 @@ export default function ChatLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="new" />
         <Stack.Screen name="c/[id]" />
-        <Stack.Screen name="room/[id]" />
         <Stack.Screen name="u/[id]" />
         <Stack.Screen name="[username]" />
         <Stack.Screen name="settings/index" />
@@ -237,8 +215,7 @@ export default function ChatLayout() {
         <Stack.Screen name="settings/privacy/restricted" />
         <Stack.Screen name="settings/privacy/hidden-words" />
         <Stack.Screen name="settings/profile-customization" />
-        <Stack.Screen name="settings/linked-accounts" />
-        <Stack.Screen name="settings/linked-accounts/[network]" />
+        <Stack.Screen name="settings/devices" />
       </Stack>
     </ThemedView>
   );

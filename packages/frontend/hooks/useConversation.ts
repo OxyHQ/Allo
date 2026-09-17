@@ -1,36 +1,17 @@
 import { useMemo } from 'react';
+import { useConversation as useAlloConversation } from '@allo/react';
 
-import { useConversationsStore } from '@/stores';
-import { useMatrixConversations } from '@/hooks/useMatrixConversations';
+import { conversationFromView, type Conversation } from '@/lib/chat/model';
 
 /**
- * Hook to get conversation data by ID from the store
+ * One conversation, as a screen draws it, or `null` while the SDK does not
+ * know it. Subscribes to the SDK's `conversations` topic and re-projects when
+ * it emits.
  *
- * @example
- * ```tsx
- * const conversation = useConversation('conv-1');
- * ```
- *
- * With the Matrix chat backend the conversation comes from the room list rather
- * than the store: a room is only ever known through sync, so there is nowhere
- * else to look it up. The store branch below is untouched, and is what a build
- * with `EXPO_PUBLIC_CHAT_BACKEND` unset still runs.
+ * `''` is passed for a missing id rather than skipping the hook: the SDK hook
+ * takes a string, and hooks cannot be conditional.
  */
-export function useConversation(conversationId?: string | null) {
-  const stored = useConversationsStore(state =>
-    conversationId ? state.getConversation(conversationId) : null
-  );
-  const rooms = useMatrixConversations();
-
-  return useMemo(() => {
-    if (rooms === undefined) {
-      return stored;
-    }
-    if (!conversationId) {
-      return null;
-    }
-    // Undefined while sync has not delivered the room — a deep link into a
-    // conversation the client has not seen yet is the ordinary way there.
-    return rooms.find((room) => room.id === conversationId);
-  }, [rooms, stored, conversationId]);
+export function useConversation(conversationId?: string | null): Conversation | null {
+  const view = useAlloConversation(conversationId ?? '');
+  return useMemo(() => (view ? conversationFromView(view) : null), [view]);
 }

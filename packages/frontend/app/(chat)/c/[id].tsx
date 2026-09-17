@@ -1,269 +1,101 @@
-import React, { useMemo, useEffect, useRef } from "react";
-import { useLocalSearchParams } from "expo-router";
-import ConversationView from "@/components/conversation/ConversationView";
-import { MatrixInvitationCard } from "@/components/matrix/MatrixInvitationCard";
-import { useConversation } from "@/hooks/useConversation";
-import { useConversationsStore } from "@/stores";
-import { useOxy } from "@oxy.so/services";
-import { useUserById, useUsersStore } from "@/stores/usersStore";
-import { api } from "@/utils/api";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { toast } from "@oxy.so/bloom/toast";
-import { CHAT_BACKEND } from "@/lib/chat/backend";
+import { useOxy } from "@oxy.so/services";
+import { useAlloClient, useConversation as useAlloConversation, useConversationActions } from "@allo/react";
 
-/** Participant shape returned by the backend conversations API. */
-interface ApiConversationParticipant {
-  userId: string;
-  username?: string;
-  avatar?: string;
-  name?: { displayName?: string; first?: string; last?: string };
-}
-
-/** Conversation shape returned by the backend conversations API. */
-interface ApiConversation {
-  _id?: string;
-  id?: string;
-  name?: string;
-  createdAt?: string;
-  avatar?: string;
-  participants?: ApiConversationParticipant[];
-}
-
-/**
- * POST /conversations payload — the backend may return the conversation bare or
- * wrapped under a nested `data` key, so both shapes are accepted.
- */
-type CreateConversationPayload = ApiConversation & { data?: ApiConversation };
+import ConversationView from "@/components/conversation/ConversationView";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { useTheme } from "@/hooks/useTheme";
+import { getErrorMessage } from "@/utils/errors";
+import { logger } from "@/utils/logger";
 
 /**
  * Unified route handler for ALL conversations: /c/:id
  *
- * This route handles both:
- * 1. Direct conversations (when id is a userId)
- * 2. Group/channel conversations (when id is a conversationId)
+ * The id is a conversation id or an Oxy account id, and the two are told
+ * apart by asking the SDK:
  *
- * It automatically detects which type based on:
- * - If a conversation with this ID exists → use it directly
- * - If not, treat it as a userId and find/create a direct conversation
+ * 1. A conversation with this id is known locally → render it.
+ * 2. It is not → the list is refreshed once from the server, because a
+ *    conversation created on another device a moment ago is not local yet.
+ * 3. Still not → the id is treated as an ACCOUNT id and a direct conversation
+ *    with that person is created (idempotent on the server: opening the same
+ *    person twice answers the same conversation), and the route is replaced
+ *    with the conversation's own id.
  *
- * Offline-first: renders ConversationView immediately using an optimistic
- * conversation when needed, so the user never sees a loading spinner.
+ * Nothing optimistic: the SDK answers quickly and an optimistic conversation
+ * that the server then names differently was a bug the store-based version
+ * carried.
  */
-function AlloApiConversationRoute() {
+export default function ConversationRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const theme = useTheme();
+  const { user } = useOxy();
+  const client = useAlloClient();
+  const known = useAlloConversation(id ?? "");
+  const { createDirect, refresh } = useConversationActions();
+  const [failed, setFailed] = useState<string | null>(null);
+  const resolving = useRef<string | null>(null);
 
-  const { user: currentUser } = useOxy();
-  const conversations = useConversationsStore((state) => state.conversations);
-  const conversationsById = useConversationsStore((state) => state.conversationsById);
-  const addConversation = useConversationsStore((state) => state.addConversation);
-  const ensureById = useUsersStore((state) => state.ensureById);
-  const oxyServices = useOxy().oxyServices;
-
-  // Check if this ID is an existing conversation
-  const existingConversationById = conversationsById[id || ""];
-
-  // If not found as conversation ID, try to find as userId (direct conversation)
-  const existingDirectConversation = useMemo(() => {
-    if (existingConversationById || !id || !currentUser?.id) return null;
-
-    const directConv = conversations.find((conv) => {
-      if (conv.type !== "direct") return false;
-      const otherParticipant = conv.participants?.find(
-        (p) => p.id !== currentUser.id
-      );
-      return otherParticipant?.id === id;
-    });
-
-    return directConv || null;
-  }, [conversations, id, currentUser?.id, existingConversationById]);
-
-  // Determine if we're treating this as a userId or conversationId
-  const isUserId = !existingConversationById && id;
-  const targetUserId = isUserId ? id : null;
-
-  // Get user by ID (only if treating as userId)
-  const targetUser = useUserById(targetUserId ?? undefined);
-
-  // Ensure user is loaded in store (only if treating as userId)
   useEffect(() => {
-    if (targetUserId && oxyServices) {
-      ensureById(targetUserId, (id) => oxyServices.getUserById(id));
+    if (!id || known || resolving.current === id) return;
+    if (id === user?.id) {
+      setFailed("You cannot start a conversation with yourself.");
+      return;
     }
-  }, [targetUserId, ensureById, oxyServices]);
-
-  // Build an optimistic conversation ID for direct conversations
-  const optimisticId = useMemo(() => {
-    if (!isUserId || !targetUserId || !currentUser?.id) return null;
-    const sorted = [targetUserId, currentUser.id].sort();
-    return `optimistic-dm-${sorted[0]}-${sorted[1]}`;
-  }, [isUserId, targetUserId, currentUser?.id]);
-
-  // Add optimistic conversation to store if treating as userId and none exists
-  const addedOptimistic = useRef(false);
-  useEffect(() => {
-    if (
-      !isUserId ||
-      existingDirectConversation ||
-      !optimisticId ||
-      !targetUserId ||
-      !currentUser?.id ||
-      addedOptimistic.current
-    )
-      return;
-
-    // Only add optimistic if it doesn't exist yet
-    const store = useConversationsStore.getState();
-    if (store.conversationsById[optimisticId]) return;
-
-    const targetName =
-      targetUser && typeof targetUser.name !== "string" ? targetUser.name : undefined;
-    const displayName =
-      targetName?.displayName || targetUser?.username || "Chat";
-
-    addConversation({
-      id: optimisticId,
-      type: "direct",
-      name: displayName,
-      lastMessage: "",
-      timestamp: new Date().toISOString(),
-      unreadCount: 0,
-      // Cached `UserEntity.avatar` is nullable (mirrors the SDK); the local
-      // Conversation shape uses `string | undefined`, so coerce `null` away.
-      avatar: targetUser?.avatar ?? undefined,
-      participants: [
-        {
-          id: targetUserId,
-          name: {
-            displayName,
-            first: displayName.split(" ")[0],
-            last: displayName.split(" ").slice(1).join(" "),
-          },
-          username: targetUser?.username,
-          avatar: targetUser?.avatar ?? undefined,
-        },
-      ],
-      participantCount: 2,
-    });
-    addedOptimistic.current = true;
-  }, [
-    isUserId,
-    existingDirectConversation,
-    optimisticId,
-    targetUserId,
-    currentUser?.id,
-    targetUser,
-    addConversation,
-  ]);
-
-  // Create real conversation in the background (only for direct conversations)
-  const creatingRef = useRef(false);
-  useEffect(() => {
-    if (
-      !isUserId ||
-      !targetUserId ||
-      !currentUser?.id ||
-      existingDirectConversation ||
-      creatingRef.current
-    )
-      return;
-
-    creatingRef.current = true;
-
+    resolving.current = id;
+    let cancelled = false;
     (async () => {
       try {
-        const response = await api.post<CreateConversationPayload>("/conversations", {
-          type: "direct",
-          participantIds: [targetUserId],
-        });
-
-        const apiConversation: ApiConversation = response.data.data || response.data;
-        const participants = (apiConversation.participants || []).map(
-          (p) => ({
-            id: p.userId,
-            name: {
-              displayName: p.name?.displayName || p.username || "Unknown",
-              first: p.name?.first || "",
-              last: p.name?.last || "",
-            },
-            username: p.username,
-            avatar: p.avatar,
-          })
-        );
-
-        const conversation = {
-          id: apiConversation._id || apiConversation.id || "",
-          type: "direct" as const,
-          name: apiConversation.name || "Direct Chat",
-          lastMessage: "",
-          timestamp: new Date(apiConversation.createdAt ?? Date.now()).toISOString(),
-          unreadCount: 0,
-          avatar: apiConversation.avatar,
-          participants,
-          groupName: apiConversation.name,
-          groupAvatar: apiConversation.avatar,
-          participantCount: participants.length,
-        };
-
-        // Remove optimistic and add real conversation
-        if (optimisticId) {
-          useConversationsStore.getState().removeConversation(optimisticId);
-        }
-        addConversation(conversation);
+        await refresh();
+        if (cancelled) return;
+        // The refresh may have made it known, in which case the render that
+        // follows draws it and there is nothing to create. Asked of the client
+        // directly: the hook's value in this closure is from before the refresh.
+        if (client.conversations.get(id)) return;
+        const conversation = await createDirect(id);
+        if (cancelled) return;
+        if (conversation.id !== id) router.replace(`/c/${conversation.id}` as Href);
       } catch (error: unknown) {
-        console.error("[ConversationRoute] Error creating conversation:", error);
-        toast.error("Failed to create conversation");
+        if (cancelled) return;
+        logger.error("[ConversationRoute] Could not open a conversation:", error);
+        const message = getErrorMessage(error) || "Failed to open the conversation";
+        setFailed(message);
+        toast.error(message);
+      } finally {
+        if (resolving.current === id) resolving.current = null;
       }
     })();
-  }, [
-    isUserId,
-    targetUserId,
-    currentUser?.id,
-    existingDirectConversation,
-    addConversation,
-    optimisticId,
-  ]);
+    return () => {
+      cancelled = true;
+    };
+    // `known` is deliberately read only at the start: once it exists the branch above returns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, known?.id, user?.id, client, createDirect, refresh, router]);
 
-  // Determine final conversation ID to render
-  const conversationId =
-    existingConversationById?.id ||
-    existingDirectConversation?.id ||
-    optimisticId;
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        pending: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.background,
+        },
+      }),
+    [theme],
+  );
 
-  return <ConversationView conversationId={conversationId || undefined} />;
-}
-
-/**
- * The same route, for a Matrix room.
- *
- * Everything the branch above does — resolving a user id, inventing an optimistic
- * conversation, creating one over the API — exists because Allo's own backend
- * makes a conversation out of a pair of user ids. On Matrix the id in the URL is
- * a room id and rooms come from sync alone: there is nothing to create here, and
- * a room that has not arrived yet is a room the timeline reports as empty rather
- * than one this route should conjure.
- *
- * The one thing it does branch on is an **invitation**, which is a room the
- * viewer has not joined: it has no readable timeline, and a composer over it
- * would send into a room this account is not in. That is how every group starts
- * for everybody who did not create it, so it is the difference between a family
- * group and a family group nobody else can use.
- */
-function MatrixConversationRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const conversation = useConversation(id);
-
-  if (id && conversation?.isInvitation) {
-    return <MatrixInvitationCard roomId={id} name={conversation.name} />;
+  if (known) return <ConversationView conversationId={known.id} />;
+  if (failed) {
+    return <EmptyState lottieSource={require("@/assets/lottie/welcome.json")} title={failed} />;
   }
-  return <ConversationView conversationId={id || undefined} />;
-}
-
-/**
- * Picks the route body for this build's chat backend.
- *
- * A component boundary and not a branch inside one body, because the two have
- * different hooks: React allows a component to be chosen conditionally, and does
- * not allow its hooks to be.
- */
-export default function UnifiedConversationRoute() {
-  return CHAT_BACKEND === 'matrix' ? <MatrixConversationRoute /> : <AlloApiConversationRoute />;
+  return (
+    <View style={styles.pending}>
+      <ActivityIndicator color={theme.colors.primary} />
+    </View>
+  );
 }

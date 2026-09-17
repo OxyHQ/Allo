@@ -1,33 +1,28 @@
 /**
- * The registry that replaces this service's Mongo TTL indexes.
+ * The registry of rows that expire, and the sweep that deletes them.
  *
- * Mongo reaped three collections with no code anywhere in this repository:
- * `moderation_events`, `moderation_outbox` and `bridgelinksessions` each
- * declared `{ expiresAt: 1 }, { expireAfterSeconds: 0 }`, and the server deleted
- * the rows itself. **All three indexes were confirmed present on the live
- * `allo-production` database**, so the reaping is real behaviour this port must
- * reproduce, not a declaration that never took effect.
- *
- * Postgres has no TTL index. Without this registry AND a caller that runs it,
- * the three tables grow forever — with no error, no failing test and no symptom
- * until disk. It is invisible in a diff because the thing doing the work was
- * never in this codebase to go missing.
- *
- * `expireAfterSeconds: 0` means "delete once the instant in `expiresAt` has
- * passed", so every entry here has `retentionSeconds: 0`: the column already IS
- * the deadline. That is a faithful translation, not a shortcut.
- *
- * The registry is only half of it. {@link startExpirySweep} is the other half and
- * `server.ts` is its one caller — a registry nothing schedules reaps exactly as
+ * Postgres has no TTL index. A table whose rows carry an `expires_at` deadline
+ * grows forever unless something deletes them — with no error, no failing test
+ * and no symptom until disk. This registry names every such table, and
+ * {@link startExpirySweep} is the caller that actually runs it; `server.ts` is
+ * that caller's one call site. A registry nothing schedules reaps exactly as
  * much as no registry at all, and it is the shape of that omission that makes it
  * dangerous: the list LOOKS like the work. `__tests__/db/schema.realdb.test.ts`
  * therefore asserts that `server.ts` actually starts the sweep, by reading the
  * file, rather than only that the list is well formed.
+ *
+ * Every entry has `retentionSeconds: 0`: the column already IS the deadline,
+ * set by the writer, so the sweep deletes a row once that instant has passed.
+ *
+ * A new table with a deadline column belongs here AND needs a leading btree
+ * index on that column, which `findUnsupportedExpiryColumns` checks against the
+ * real catalogue in the schema suite.
  */
 
 import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxy.so/db/expiry";
 import type { SqlExecutor } from "@oxy.so/db";
-import { bridgeLinkSessions } from "./schema/bridges";
+import { blobs } from "./schema/blobs";
+import { instanceDeliveries } from "./schema/deliveries";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
 
 export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
@@ -54,15 +49,29 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
       "fire long before it, and that alerting is not this sweep's job.",
   },
   {
-    table: bridgeLinkSessions,
-    column: bridgeLinkSessions.expiresAt,
+    table: instanceDeliveries,
+    column: instanceDeliveries.expiresAt,
     retentionSeconds: 0,
     reason:
-      "An in-flight bridge linking attempt. Past its deadline the remote login " +
-      "process is gone and the row can only produce a session that cannot be " +
-      "resumed. Deleting it also drops the historical record of an ATTEMPT — " +
-      "which is what Mongo already did, so keeping them would be a new policy " +
-      "rather than a preserved one.",
+      "Per-instance delivery stream entries, dated 30 days out at insert. A " +
+      "delivery still unacked at its deadline is dropped from the STREAM " +
+      "(`GET /v1/sync` will not return it again); the event itself stays in " +
+      "`conversation_events` and a client that was away that long refetches " +
+      "through `GET /v1/conversations/:id/events`. The row is what makes the " +
+      "cursor dense, so the deadline is the bound on how far behind a device " +
+      "may fall before it has to resync rather than catch up.",
+  },
+  {
+    table: blobs,
+    column: blobs.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Uploaded blobs nobody referenced within seven days. `expires_at` is " +
+      "cleared to NULL the moment an event names the blob in its `blobIds`, so " +
+      "a dated row is by definition one no message points at. Deleting it " +
+      "cascades to `blob_bytes`. The blob collector (`workers/blobGc.ts`) " +
+      "covers the case this sweep cannot see: an unreferenced blob whose " +
+      "uploader instance was revoked before the seven days ran out.",
   },
 ];
 
@@ -88,11 +97,9 @@ export async function runExpirySweep(
 /**
  * How often the sweep runs.
  *
- * 60 seconds because that is the period of Mongo's own TTL monitor, which is
- * what these three tables were reaped by until now. A faithful port keeps the
- * reaping latency the writers were built against rather than picking a new
- * number: `moderation_events` is a webhook dedupe table, and how long a deleted
- * entry stays deleted-but-not-yet-reaped is the window in which a redelivery is
+ * 60 seconds is the reaping latency the writers were built against.
+ * `moderation_events` is a webhook dedupe table, and how long a deleted entry
+ * stays deleted-but-not-yet-reaped is the window in which a redelivery is
  * processed twice.
  */
 export const EXPIRY_SWEEP_INTERVAL_MS = 60_000;

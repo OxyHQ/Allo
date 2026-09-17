@@ -34,16 +34,10 @@
  * **A provider may only describe an ACCOUNT.** Allo is end-to-end encrypted; the
  * server holds ciphertext and public keys. A provider is the ONLY place where a
  * decision to disclose could be made, so it is the place the constraint has to be
- * stated. A provider that reached for message plaintext would not be a feature — it
+ * stated. A provider that reached for message content would not be a feature — it
  * would be the point at which the encryption promise quietly stopped being true.
- *
- * The rule used to be "may only describe material the server can legitimately
- * read", and Matrix bridges are why it was tightened. A bridged room is NOT
- * encrypted — the bridge holds the far side's keys and participates as a member —
- * so the server genuinely can read one, and the old rule would have permitted a
- * provider there. docs/matrix/data-model.md §6.4 says no, and the two types below
- * are how that answer is enforced by the compiler rather than by a condition
- * somebody could relax.
+ * The two types below are how that answer is enforced by the compiler rather
+ * than by a condition somebody could relax.
  */
 
 import type { ContextInput, ReportSubjectInput, ResourceInput } from "@oxy.so/crowdsource";
@@ -52,19 +46,14 @@ import type { ContextInput, ReportSubjectInput, ResourceInput } from "@oxy.so/cr
  * The reported types a provider may be registered for: the ones whose identifier
  * names an account.
  *
- * A TYPE rather than a runtime list, and that is the whole point of §6.4. The
- * hazard it closes is not "somebody adds a `message` provider" — that is loud, and
- * `subjectProviders.test.ts` fails on it. The hazard is the version that reads
- * REASONABLY in a pull request: *"bridged rooms are not encrypted, so for those we
- * CAN describe a message"*. A provider conditioned on the room's encryption state
- * is a one-line diff, it is true on its own terms, and it is exactly the failure —
- * a WhatsApp conversation disclosed to a jury drawn from strangers.
- *
- * Written as a type, that change stops being a one-line diff. `reportedType:
- * "message"` is not assignable to this alias, so the registry does not compile
- * until somebody widens the alias — an edit to THIS file, under this comment,
- * which is a deliberate act and a reviewable one. The three standing reasons are in
- * `registry.ts`; the two extra sentences a bridge adds are there too.
+ * A TYPE rather than a runtime list. The hazard it closes is not "somebody adds
+ * a `message` provider" — that is loud, and `subjectProviders.test.ts` fails on
+ * it. The hazard is the version that reads REASONABLY in a pull request: a
+ * provider conditioned on some future class of conversation the server can read.
+ * A condition is a one-line diff; a type is not. `reportedType: "message"` is
+ * not assignable to this alias, so the registry does not compile until somebody
+ * widens the alias — an edit to THIS file, under this comment, which is a
+ * deliberate act and a reviewable one. The standing reasons are in `registry.ts`.
  */
 export type AccountReportedType = "user";
 
@@ -73,9 +62,9 @@ export type AccountReportedType = "user";
  *
  * The counterpart of {@link AccountReportedType}, and it closes the same door from
  * the other side. A provider could otherwise keep `reportedType: "user"` — passing
- * every assertion that pins the deliverable SET — while describing a bridged room
- * as `content.room` or hanging its messages off `context`. The subject type is what
- * a jury is told it is looking at, so constraining it to the identity realm is what
+ * every assertion that pins the deliverable SET — while describing a conversation
+ * as content or hanging its messages off `context`. The subject type is what a
+ * jury is told it is looking at, so constraining it to the identity realm is what
  * makes "a jury sees a profile and an allegation" a property of the type system
  * rather than a description of today's code.
  */
@@ -143,10 +132,9 @@ export interface ModerationSubjectProvider {
    * provider that threw would make deletion look like an outage and be retried
    * for days.
    *
-   * `reportedId` is always an OXY user id (§6.2). An MXID is translated at the
-   * edge, in `services/moderation/subjectIdentity.ts`, and a subject that has no
-   * Oxy account never reaches a provider at all — so nothing here has to know that
-   * Matrix exists, and no provider has an identifier it could resolve to a room.
+   * `reportedId` is always an OXY user id. The identifier is classified at the
+   * edge, in `services/moderation/subjectIdentity.ts`, and a subject that is not
+   * an account never reaches a provider at all.
    */
   snapshot(reportedId: string): Promise<ModerationSubjectSnapshot | null>;
 }

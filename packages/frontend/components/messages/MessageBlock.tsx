@@ -18,20 +18,6 @@ export interface MessageBlockProps {
   isGroup?: boolean;
   getSenderName?: (senderId: string) => string | undefined;
   getSenderAvatar?: (senderId: string) => string | undefined;
-  /**
-   * Resolve a media id to a URL. Takes the item's kind because the Oxy
-   * rendition variant is MIME-specific — see `mediaVariantForKind`.
-   */
-  getMediaUrl: (mediaId: string, kind: MediaItem['type']) => string;
-  /**
-   * Resolve an attachment that is not a picture — a voice note, an audio file,
-   * a document — to a local URI, or `''` while there is not one yet.
-   *
-   * Separate from `getMediaUrl` because it takes no kind: `MediaItem['type']`
-   * has no name for any of these, and the Oxy rendition variant that argument
-   * chooses does not apply to them.
-   */
-  getAttachmentUrl: (source: string) => string;
   visibleTimestampId?: string | null;
   onMessagePress: (messageId: string) => void;
   onMessageLongPress?: (message: Message, position: { x: number; y: number; width?: number; height?: number }) => void;
@@ -64,7 +50,6 @@ export interface MessageBlockProps {
  *   group={messageGroup}
  *   isGroup={true}
  *   getSenderName={(id) => 'John'}
- *   getMediaUrl={(id, kind) => `https://example.com/${id}?kind=${kind}`}
  *   onMessagePress={(id) => console.log('Pressed', id)}
  * />
  * ```
@@ -74,8 +59,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
   isGroup = false,
   getSenderName,
   getSenderAvatar,
-  getMediaUrl,
-  getAttachmentUrl,
   visibleTimestampId,
   onMessagePress,
   onMessageLongPress,
@@ -284,7 +267,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
           <MediaCarousel
             media={allMedia}
             isAiMessage={isAiGroup}
-            getMediaUrl={getMediaUrl}
             onMediaPress={handleMediaPress}
             onMediaLongPress={(mediaId, index, event) => {
               // Find the message that contains this media item
@@ -335,7 +317,6 @@ export const MessageBlock = memo<MessageBlockProps>(({
             timestamp: message.timestamp,
             showTimestamp: message.messageType !== 'ai',
             readStatus: message.readStatus,
-            resolveUrl: getAttachmentUrl,
           };
           return attachment.kind === 'file' ? (
             <FileBubble key={`attachment-${message.id}`} {...shared} />

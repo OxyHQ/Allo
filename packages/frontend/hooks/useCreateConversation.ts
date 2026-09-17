@@ -1,52 +1,36 @@
 import { useCallback } from 'react';
+import { useConversationActions } from '@allo/react';
 
-import { useOxy } from '@oxy.so/services';
-
-import { createAlloApiConversation } from '@/lib/chat/alloApiConversations';
-import { CHAT_BACKEND } from '@/lib/chat/backend';
-import { matrixConversationCreator } from '@/lib/chat/matrixConversations';
-import type { ConversationCreator, NewConversationRequest } from '@/lib/chat/newConversation';
-import { useConversationsStore } from '@/stores';
-import { api } from '@/utils/api';
+import { planConversation, type ConversationCreator, type NewConversationRequest } from '@/lib/chat/newConversation';
 
 /**
- * Starting a conversation, on whichever backend this build talks to.
+ * Starting a conversation.
  *
  * The seam, and the whole of it: one function in, one conversation id out, and
- * the screen that calls it does not know which system answered. That is the
- * point — `app/(chat)/new.tsx` has one "create" path, not two, and the flag
- * decides underneath it.
+ * the screen that calls it does not know how it was made. `app/(chat)/new.tsx`
+ * and the profile screen's "message" button have one "create" path and this
+ * is it.
  *
- * A hook rather than a plain function because the Express path needs three
- * things that live in React: the viewer, the conversations already on this
- * device, and the store to put the new one in. None of them exists on the Matrix
- * path — a room comes from sync and from nowhere else — so they are read
- * unconditionally and used in one branch. Reading them unconditionally is not
- * waste, it is the rule: {@link CHAT_BACKEND} is a build-time constant, so the
- * branch below is settled before the app runs and the hooks above it always run
- * in the same order.
+ * `planConversation` decides what is a direct message and what is a group;
+ * the SDK makes it. A direct message between the same two people is
+ * idempotent on the server, so opening one twice answers the same id. A group
+ * is named after it exists, because the SDK's create takes members and the
+ * name travels as an encrypted message of its own.
  */
 export function useCreateConversation(): ConversationCreator {
-  const { user } = useOxy();
-  const viewerId = user?.id;
-  const known = useConversationsStore((state) => state.conversations);
-  const remember = useConversationsStore((state) => state.addConversation);
+  const { createDirect, createGroup, rename } = useConversationActions();
 
   return useCallback(
-    (request: NewConversationRequest) => {
-      if (CHAT_BACKEND === 'matrix') {
-        return matrixConversationCreator.create(request);
+    async (request: NewConversationRequest) => {
+      const plan = planConversation(request);
+      if (plan.isDirect) {
+        const conversation = await createDirect(plan.participantIds[0]);
+        return conversation.id;
       }
-      return createAlloApiConversation(request, {
-        // Wrapped rather than passed by reference: `api.post` is a method, and
-        // a method handed over as a value is one refactor away from needing the
-        // receiver it no longer has.
-        post: (endpoint, body) => api.post(endpoint, body),
-        known,
-        viewerId,
-        remember,
-      });
+      const conversation = await createGroup([...plan.participantIds]);
+      if (plan.name !== undefined) await rename(conversation.id, plan.name);
+      return conversation.id;
     },
-    [known, viewerId, remember],
+    [createDirect, createGroup, rename],
   );
 }

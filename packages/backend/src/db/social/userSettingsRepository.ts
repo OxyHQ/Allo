@@ -19,15 +19,13 @@
  *   `oxyUserId` and `createdAt` — so no patch, however it was constructed, can
  *   move a settings row to another user or rewrite when it was created.
  *
- * ## The defaults are the schema's, and they are asymmetric on purpose
+ * ## The defaults are the schema's
  *
- * `security_cloud_sync_enabled` defaults FALSE while `security_encryption_...`
- * and `security_peer_to_peer_...` default TRUE. That asymmetry is the product's
- * device-first stance: cloud sync is opt-IN. Nothing in this module writes a
- * security column unless a caller explicitly asked for it — in particular
- * {@link ensureUserSettings} inserts `{id, oxyUserId}` and lets the server apply
- * every default, rather than "normalising" a new row with a literal it could get
- * wrong in exactly the direction that turns cloud sync on for somebody.
+ * `security_encryption_...` and `security_peer_to_peer_...` default TRUE.
+ * Nothing in this module writes a security column unless a caller explicitly
+ * asked for it — in particular {@link ensureUserSettings} inserts
+ * `{id, oxyUserId}` and lets the server apply every default, rather than
+ * "normalising" a new row with a literal it could get wrong.
  */
 
 import { eq } from "drizzle-orm";
@@ -71,7 +69,6 @@ export const UPDATABLE_USER_SETTINGS_COLUMNS = [
   "profileMinimalistMode",
   "profileDisplayName",
   "profileCoverImage",
-  "securityCloudSyncEnabled",
   "securityEncryptionEnabled",
   "securityPeerToPeerEnabled",
 ] as const;

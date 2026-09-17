@@ -23,8 +23,8 @@ import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { MessageBlock } from '@/components/messages/MessageBlock';
 import { DaySeparator } from '@/components/messages/DaySeparator';
-import { useMessagesStore, type Message } from '@/stores/messagesStore';
-import type { Conversation } from '@/app/(chat)/index';
+import { useTimeline } from '@allo/react';
+import { messagesFromItems, type Conversation } from '@/lib/chat/model';
 import {
   useConversationDisplayName,
   getOtherParticipants,
@@ -38,9 +38,6 @@ import {
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 const MAX_PREVIEW_MESSAGES = 6;
-
-// Stable empty array to prevent Zustand selector from creating new references each render
-const EMPTY_MESSAGES: Message[] = [];
 
 // No-op handlers for read-only preview
 const NOOP = () => {};
@@ -74,19 +71,16 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
   const cardOpacity = useSharedValue(0);
   const cardScale = useSharedValue(0.92);
 
-  // Get messages from store (use stable empty ref to prevent infinite re-render loop)
-  const conversationId = conversation?.id;
-  const messages = useMessagesStore((state) =>
-    conversationId ? (state.messagesByConversation[conversationId] || EMPTY_MESSAGES) : EMPTY_MESSAGES
-  );
+  // The newest few items of the conversation, from the SDK. `''` for no
+  // conversation: the hook takes a string and cannot be conditional.
+  const { items } = useTimeline(conversation?.id ?? '', { pageSize: MAX_PREVIEW_MESSAGES });
 
-  // Take last N messages and group them using the same pipeline as ConversationView
+  // Group them using the same pipeline as ConversationView
   const messageGroups = useMemo(() => {
-    if (messages.length === 0) return [];
-    const recent = messages.slice(-MAX_PREVIEW_MESSAGES);
-    const groups = groupMessagesByTime(recent);
+    if (items.length === 0) return [];
+    const groups = groupMessagesByTime(messagesFromItems(items));
     return formatMessageGroupsWithDays(groups);
-  }, [messages]);
+  }, [items]);
 
   const isGroup = conversation ? isGroupConversation(conversation) : false;
   // Reactive: re-renders when this conversation's participant user cache is enriched.
@@ -105,21 +99,6 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
     const participant = conversation.participants.find((p) => p.id === senderId);
     return participant?.avatar;
   }, [conversation?.participants]);
-
-  // Dummy getMediaUrl for preview (media won't be interactive)
-  const getMediaUrl = useCallback((mediaId: string): string => {
-    return `media://${mediaId}`;
-  }, []);
-
-  /**
-   * A peek shows what a conversation looks like; it does not fetch anything.
-   *
-   * `''` — the same answer the real resolvers give while a file has not
-   * arrived — so a voice note in the peek draws its player with no length and a
-   * document draws its row, and neither starts a download for a preview the user
-   * is holding a finger on.
-   */
-  const getAttachmentUrl = useCallback((): string => '', []);
 
   // Animate in/out
   useEffect(() => {
@@ -318,8 +297,6 @@ export const ConversationPeekPreview = memo<ConversationPeekPreviewProps>(({
                     isGroup={isGroup}
                     getSenderName={getSenderName}
                     getSenderAvatar={getSenderAvatar}
-                    getMediaUrl={getMediaUrl}
-                    getAttachmentUrl={getAttachmentUrl}
                     onMessagePress={NOOP}
                   />
                 </View>

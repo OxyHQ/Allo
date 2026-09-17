@@ -11,12 +11,11 @@ import type { ShareAttachmentRequest, ShareAttachmentOutcome } from './shareAtta
  * of asking for write access to the whole photo library, for a feature that is
  * a single tap on a single picture.
  *
- * **Nothing is copied.** The URI shared is the one the media cache already
- * holds — a file the port decrypted into the app's cache directory, which
- * `MatrixMediaCache` releases when it evicts the entry, when the account
- * changes and when the session ends. Writing a second copy somewhere friendlier
- * would be a plaintext photograph from an encrypted conversation outliving the
- * session that was allowed to read it.
+ * **Nothing is copied.** The URI shared is the one the app already holds — a
+ * file in its own cache directory, released when the account changes and when
+ * the session ends. Writing a second copy somewhere friendlier would be a
+ * plaintext photograph from an encrypted conversation outliving the session
+ * that was allowed to read it.
  */
 export async function shareAttachment(
   request: ShareAttachmentRequest,

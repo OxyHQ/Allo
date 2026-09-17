@@ -6,59 +6,79 @@ order: 0
 
 # Allo
 
-A modern, cross-platform chat app built with Expo, React Native, and a Node.js / Express backend. Direct messages are end-to-end encrypted with static ECDH (P-256) + AES-256-GCM, stored on the device first, and relayed through the server as opaque ciphertext when cloud sync is on.
+A cross-platform chat app built with Expo, React Native, and a Node.js /
+Express backend. Every conversation, direct or group, is one MLS group
+(RFC 9420); every installation is its own cryptographic instance; the server
+stores and relays ciphertext and never holds a key that opens it.
 
 <Badge variant="success">App</Badge> <Badge>iOS / Android / Web</Badge>
 
 ## What it is
 
-Allo is the Oxy ecosystem's encrypted messenger. The frontend is an Expo Router app that targets iOS, Android, and Web from one codebase. The backend is a stateless Express service that brokers conversations, device keys, and Socket.IO traffic — it never holds plaintext.
+Allo is the Oxy ecosystem's encrypted messenger, and the messaging platform
+other Oxy apps will consume. The frontend is an Expo Router app that targets
+iOS, Android, and Web from one codebase and gets everything chat from the
+`@allo/react` hooks over the headless `@allo/core` SDK. The backend is an
+Express service over Postgres that brokers instances, key packages,
+conversations, encrypted events, delivery, sync and media, plus Socket.IO for
+nudges.
 
-Identity is delegated to the Oxy platform: users sign in with their Oxy account through `@oxy.so/services`, the backend trusts the resulting JWT, and there is no separate user database in Allo. The only per-user records the server holds are conversation membership, device keys, encrypted message blobs, and a small `UserSettings` document.
+Identity is delegated to the Oxy platform: users sign in with their Oxy
+account through `@oxy.so/services`, the backend trusts the resulting token,
+and there is no separate user database in Allo. What the server holds per
+account is its instances and their public keys, conversation membership,
+ciphertext events, delivery state, blobs, and a small settings document.
 
-For account management UI see [MyAccount](/developers/docs/accounts). For the underlying RN SDK see [@oxy.so/services](/developers/docs/services).
-
-**Migrating to Matrix.** Allo will stop carrying its own transport; the design
-work is under [Matrix](#documentation-map) at the bottom of this page and
-deliberately precedes any implementation. Everything described here is still
-what the app actually does today.
+For account management UI see [MyAccount](/developers/docs/accounts). For the
+underlying RN SDK see [@oxy.so/services](/developers/docs/services).
 
 ## Architecture
 
 ```
-   ┌──────────────────────┐                  ┌──────────────────────┐
-   │   Allo Frontend      │  ── REST ─────▶  │   Allo Backend       │
-   │   (Expo / RN / Web)  │                  │   (Express + Mongo)  │
-   │                      │  ◀── Socket.IO ─ │                      │
-   └──────────────────────┘                  └──────────────────────┘
-            │                                          │
-            ▼                                          ▼
-     SecureStore / AsyncStorage              MongoDB (ciphertext only)
-     (device keys, message cache,            +  Oxy API (auth, profiles)
-      offline queue)
+   Allo frontend (Expo / RN / web)
+     @allo/react  ->  @allo/core  ---- REST /v1, signed per instance ---->  Allo backend
+                        |            <--- Socket.IO /v1: nudges, typing ---  (Express + Postgres)
+                        v                                                        |
+     encrypted local store (SQLite / IndexedDB)                                   v
+     secret store (Keychain / Keystore / IndexedDB)                    Postgres: ciphertext events,
+       instance key, storage key                                       instances, deliveries, blobs
+                                                                       + Oxy API (auth, profiles)
 ```
 
-The split is strict: every byte the server stores for a `Message` document is opaque to it. Plaintext only exists on the sender's device, on the recipient's device, and in transit over TLS to the API.
+The split is strict: a message is plaintext only inside the sending and
+receiving instances. Group names, read receipts, reactions and typing are
+encrypted application messages too.
 
 Inside `packages/`:
 
 | Package | Role |
-|---------|------|
-| `frontend` (`@allo/frontend`) | Expo + Expo Router app. NativeWind for styling, Zustand for local state, TanStack-style stores around the encrypted message cache. |
-| `backend` (`@allo/backend`) | Express + Socket.IO. Mongoose models for conversations, messages, devices, settings, blocks, restricts, push tokens. Auth via `@oxy.so/core`'s `oxy.auth()`. |
-| `shared-types` (`@allo/shared-types`) | TypeScript-only package built ahead of the others (a `postinstall` script runs `build:shared-types`). |
+| --- | --- |
+| `shared-types` (`@allo/shared-types`) | The v1 wire contract as zod schemas and types. Built first. |
+| `core` (`@allo/core`) | The headless SDK: MLS through `CryptoEngine`, the instance model, encrypted storage, sync, outbox, conversations, messages, media. No React. |
+| `react` (`@allo/react`) | `AlloProvider` and hooks over the client. Plain React. |
+| `frontend` (`@allo/frontend`) | The Expo app. Consumes `@allo/react` for chat and carries no engine code. |
+| `backend` (`@allo/backend`) | Express + drizzle + Socket.IO. A modular monolith over Postgres. |
 
-Build order matters: `shared-types` -> `backend` + `frontend` (in parallel).
+Build order: `shared-types`, then `core`, then `react` (all three by
+`postinstall`), then `frontend` and `backend`.
 
 ## Threat model
 
-- **What the server sees:** ciphertext (when encryption succeeds), message size, sender/recipient envelope (conversation id, sender Oxy user id, sender device id), and timing.
-- **What the server cannot see, for successfully encrypted messages:** message bodies. There is currently no working encrypted-media path — see [Encryption](./encryption).
-- **What a stolen device cannot do:** read messages without the OS-level credential that gates `expo-secure-store` (Face ID / fingerprint / passcode). Private keys live in SecureStore on iOS / Android and never leave the device.
-- **Recovery:** there is no server-side reset. Messages stored only on-device are gone if the device is lost without cloud sync enabled.
-- **Important caveats:** encryption has no forward secrecy (a leaked identity key decrypts that pair's entire message history), group conversations with more than two participants aren't correctly encrypted for every member, a second device belonging to the same user generally cannot decrypt messages sent to that user, and the client falls back to sending plaintext when it can't encrypt rather than blocking the send. See [Encryption](./encryption) for the full picture.
+The full model, with assets, actors, what MLS gives, what the instance model
+gives, what the server can still see and what is not defended, is
+[Threat model](./platform/threat-model). In short:
 
-Cloud sync is **opt-in** per user in `Settings -> Security & Encryption`. Until they enable it, the server's `messages` table is the only off-device copy — and even that is ciphertext.
+- **What the server sees:** who talks to whom, when, how much, which
+  installations hold a leaf, ciphertext sizes, blob sizes, presence, push
+  tokens.
+- **What the server cannot see:** any message, name, receipt, reaction or
+  media file. It never holds a key.
+- **What a stolen Oxy token cannot do:** act inside a conversation, because
+  every such request is signed by the instance's private key, and a new
+  instance it registers is pending until an existing device approves it.
+- **Recovery:** there is no server-side reset. A new instance sees a
+  conversation from the epoch it joined; history transfer and backup are not
+  built yet, so losing every instance loses history.
 
 ## Install
 
@@ -70,12 +90,14 @@ cd Allo
 bun install
 ```
 
-`bun install` resolves the three workspaces, then `postinstall` builds `@allo/shared-types` so the other packages can type-check immediately.
+`bun install` resolves the workspaces, then `postinstall` builds
+`@allo/shared-types`, `@allo/core` and `@allo/react` so the other packages can
+type-check immediately.
 
 ### Prerequisites
 
 - Node.js 20.19+ and Bun 1.3+
-- PostgreSQL (local or hosted) — connection string goes into `packages/backend/.env`. `packages/backend/docker-compose.postgres.yml` brings up a local one.
+- PostgreSQL (local or hosted): the connection string goes into `packages/backend/.env`. `packages/backend/docker-compose.postgres.yml` brings up a local one.
 - For iOS: macOS + Xcode. For Android: Android Studio.
 
 ### Environment
@@ -83,7 +105,7 @@ bun install
 `packages/backend/.env`:
 
 ```env
-# REQUIRED — the server refuses to boot without it.
+# REQUIRED: the server refuses to boot without it.
 DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/allo_dev
 # Read by @oxy.so/core, not by this package. Defaults to https://api.oxy.so.
 OXY_API_URL=https://api.oxy.so
@@ -92,11 +114,13 @@ PORT=4140
 NODE_ENV=development
 ```
 
-There is no `FRONTEND_URL` and no `JWT_SECRET`. Both appear in older deployment
-docs and are read by neither this package nor `@oxy.so/core`; the CORS allowlist
-is a literal in `server.ts` plus whatever `createOxyCors` admits automatically.
+The full list (Redis for the Socket.IO adapter, the blob size cap, the push
+providers, CrowdSource) is in the
+[backend README](https://github.com/OxyHQ/Allo/blob/main/packages/backend/README.md#environment-configuration).
+There is no `FRONTEND_URL` and no `JWT_SECRET`; the CORS allowlist is a
+literal in `src/app.ts` plus whatever `createOxyCors` admits automatically.
 
-`packages/frontend/.env` — optional. `config.ts` hardcodes production and
+`packages/frontend/.env` is optional. `config.ts` hardcodes production and
 defaults development to `localhost:4140`, so a local run needs nothing set:
 
 ```env
@@ -106,13 +130,11 @@ EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
 ```
 
 See the [frontend README](https://github.com/OxyHQ/Allo/blob/main/packages/frontend/README.md#environment-setup)
-for the full list. `EXPO_PUBLIC_WS_URL` and `EXPO_PUBLIC_POSTHOG_KEY` were
-documented here previously and are read nowhere.
+for the full list.
 
 ## Quick start
 
-Apply the schema once before the first run — a fresh database has no tables, and
-the backend will start and then fail on the first query rather than at boot:
+Apply the schema once before the first run: a fresh database has no tables.
 
 ```sh
 cd packages/backend
@@ -121,9 +143,9 @@ bun run db:migrate -- --target-database=allo_dev --phase=all
 ```
 
 `--target-database` is mandatory and is checked against the database
-`DATABASE_URL` actually points at, so a connection string left over from another
-project cannot be migrated by accident. `--phase=all` is right for a local
-database; the deploy runs `pre` and `post` around the rollout instead.
+`DATABASE_URL` actually points at, so a connection string left over from
+another project cannot be migrated by accident. `--phase=all` is right for a
+local database; the deploy runs `pre` and `post` around the rollout instead.
 
 ```sh
 # Start everything (frontend + backend)
@@ -134,61 +156,49 @@ bun run dev:backend
 bun run dev:frontend
 ```
 
-Then in the Expo CLI, press `w` for web, `i` for iOS simulator, or `a` for Android emulator.
+Then in the Expo CLI, press `w` for web, `i` for iOS simulator, or `a` for
+Android emulator.
 
 ## Core concepts
 
-### Device-first storage
+The vocabulary (Conversation, AppSpace, ClientInstance, enrollment, history
+versus live state, media, push, storage rules, the connector boundary) is
+[Concepts](./platform/concepts). The three ideas a newcomer needs:
 
-Allo treats the device as the source of truth. When a user sends a message:
+### Instances, not devices
 
-1. The client encrypts the plaintext locally using its device keys (or falls back to plaintext if it can't — see [Encryption](./encryption)).
-2. The ciphertext is written to AsyncStorage via `lib/offlineStorage.ts` and added to the conversation's Zustand `messagesStore`.
-3. The encrypted payload is POSTed to `/api/messages`. If the network is unavailable, the mutation sits in the offline queue (`lib/offlineQueue/`) and replays on reconnect.
-4. The recipient's device pulls or receives the ciphertext, decrypts locally, and renders.
+Every installation registers as a client instance with its own Ed25519 key.
+The first instance on an account is active at once; every later one is
+pending until an existing active instance approves it by signing a
+server-issued challenge whose fingerprint the user compares on both screens.
+There is no primary phone: a laptop is approved by a phone, or a phone by a
+laptop. Revoking an instance refuses its signature, cuts its sockets, and has
+a remaining instance commit its removal from every group.
 
-The UI never blocks on the network — sent messages appear immediately and reconcile when the server responds.
+### One conversation, one MLS group
 
-### Device keys
+A DM or a group is one MLS group whose leaves are the members' active
+instances. Adding a member means claiming a key package for each of their
+instances and committing an Add; the server stores the commit and the
+welcome, advances the epoch, and fans the ciphertext out to every leaf. The
+SDK adds an account's own new instances to its conversations by itself, and
+removes revoked ones. Sending a message is encrypting an application message
+to the group and posting it with an idempotency key; the durable outbox
+retries until the server accepts it, and a stale epoch makes the client
+re-sync and re-encrypt.
 
-Each install generates its own key bundle on first launch (`lib/signalProtocol.ts`, `stores/deviceKeysStore.ts`). The module is named `signalProtocol.ts` for historical reasons, but it does not implement the Signal Protocol — there's no X3DH, no Double Ratchet, and no per-session key derivation:
+### Nudge, then pull
 
-- **Identity key pair** — P-256, long-lived. The only key pair actually used to derive an encryption key.
-- **Signed pre-key** — P-256, signed by the identity key with ECDSA over SHA-256. Generated and uploaded, but not used by any encrypt/decrypt path, and its signature is never verified.
-- **One-time pre-keys** — 100 P-256 key pairs, uploaded to the backend but never consumed during encryption.
-- **Registration id** — random 31-bit integer, persisted in `expo-secure-store`.
-
-Public keys are published to `POST /api/devices`. Private keys never leave the device. Encryption derives a static ECDH shared secret between the sender's and recipient's identity keys (no KDF, so the key never changes for a given pair), then AES-256-GCM with a fresh 96-bit IV per message.
-
-See [Encryption](./encryption) for the full picture, including what isn't implemented yet (forward secrecy, multi-device, correct group encryption, P2P, encrypted media).
-
-### Conversations and messages
-
-A `Conversation` is either `direct` (two participants) or `group` (named, with admins). The server-side schema lives in `packages/backend/src/models/Conversation.ts`:
-
-- `participants[]` — `{ userId, role, joinedAt, lastReadAt }`
-- `unreadCounts` — `Record<userId, number>` updated when a participant marks read
-- `archivedBy` — per-user soft archive
-- `lastMessage` — denormalized summary of the most recent message for list views
-
-`Message` documents (`models/Message.ts`) store `ciphertext`, `senderDeviceId`, `encryptionVersion`, optional `encryptedMedia[]`, plus `readBy`, `deliveredTo`, and a soft-delete `deletedAt`.
-
-### Real-time over Socket.IO
-
-The backend exposes a `/messaging` namespace (`server.ts`). The client authenticates with the same Oxy bearer token and joins:
-
-- `user:<userId>` — personal room for delivery / device events
-- `conversation:<conversationId>` — per-conversation room for `newMessage`, `messageUpdated`, `messageDeleted`, and `typing` indicators
-
-`joinConversation` / `leaveConversation` events scope subscriptions when the active thread changes. Typing indicators are broadcast to peers in the conversation room except the sender.
-
-### Peer-to-peer (not yet functional)
-
-`lib/p2pMessaging.ts` scaffolds a WebRTC data channel signaled over Socket.IO, but the connection-establishment path is a stub: it always reports failure, and the offer/answer/ICE-candidate handlers are unimplemented. Every message today goes through the REST relay when cloud sync is enabled.
+The server writes one delivery row per event and recipient instance in the
+same transaction as the event, then nudges connected instances over the
+socket. A client pulls `GET /v1/sync` from its persisted cursor, decrypts each
+delivery through the engine, persists the result and the cursor in one
+batch, and acks. A push notification says only "New message" and is a nudge
+for an instance with no socket; the sync cursor is the truth.
 
 ### Routing
 
-Frontend routing follows Expo Router 57 conventions:
+Frontend routing follows Expo Router conventions:
 
 ```
 app/
@@ -200,23 +210,28 @@ app/
     index.tsx            # conversation list
     new.tsx              # start a conversation
     c/[id].tsx           # individual conversation
-    u/[id].tsx           # user profile
+    [username].tsx       # /@handle profile
     settings/...
   calls.tsx              # calls screen (mock data)
 ```
 
-Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a contact-details column. All three come out of the single `(chat)/_layout.tsx`.
+Mobile gets a single-pane stack. Tablet gets list + thread. Desktop adds a
+contact-details column. All three come out of the single `(chat)/_layout.tsx`.
 
 ## Documentation map
 
-The system as it runs today:
+The system as built:
 
-- [Architecture](./architecture) — package layout, dependency graph, build order
-- [Encryption](./encryption) — key bundle, static ECDH derivation, AES-GCM framing, and known gaps
-- [API](./api) — backend REST and Socket.IO surface
+- [Architecture](./architecture): package graph, backend module map, data model, realtime, deploy
+- [Encryption](./encryption): what runs, and the gaps
+- [API](./api): the backend's HTTP and Socket.IO surface, in brief
+- [Cryptography](./platform/crypto): MLS through `CryptoEngine`, the envelope, media, the instance model, storage at rest, what is not built
+- [SDK](./platform/sdk): `@allo/core` and `@allo/react`, and how an app integrates
+- [API v1](./platform/api-v1): every route, payload and socket event
 
-Where it is going — design only, nothing implemented:
+The decisions and the plan:
 
-- [Matrix: data model](./matrix/data-model) — how Allo's conversations map onto Matrix rooms, and what that mapping costs
-- [Matrix: bridges](./matrix/bridges) — bridge topology and its constraints
-- [Matrix: client strategy](./matrix/client-strategy) — which SDK on which platform, and why
+- [ADR 0001](./adr/0001-clean-break-platform): why the platform is a clean break, and what it replaced
+- [Threat model](./platform/threat-model)
+- [Concepts](./platform/concepts)
+- [Roadmap](./platform/roadmap): phases, and what is not built

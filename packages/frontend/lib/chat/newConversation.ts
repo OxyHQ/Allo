@@ -1,15 +1,14 @@
 /**
- * Starting a conversation, in words that are true on both backends.
+ * Starting a conversation, in words that do not depend on who answers.
  *
  * The New Chat screen knows people by their Oxy id and knows nothing else: not
- * room ids, not MXIDs, not participant documents. What it can say is "these
- * people, and this name if they are a group", and that is this module. The two
- * creators — `alloApiConversations.ts` and `matrixConversations.ts` — take it
- * from here in completely different directions, and {@link planConversation} is
- * the part they must not each decide for themselves: whether one person is a
- * direct message, and what a group is called.
+ * conversation ids, not participant documents. What it can say is "these
+ * people, and this name if they are a group", and that is this module. A
+ * creator (`alloApiConversations.ts` today) takes it from here, and
+ * {@link planConversation} is the part no creator may decide for itself:
+ * whether one person is a direct message, and what a group is called.
  *
- * Both of them answer with a conversation id, because that is the only thing the
+ * A creator answers with a conversation id, because that is the only thing the
  * screen does next: `router.replace('/c/' + id)`.
  */
 
@@ -17,10 +16,9 @@ export interface NewConversationRequest {
   /**
    * Oxy user ids of the people to talk to, never including the viewer.
    *
-   * The viewer is added by whoever is being asked — the Express API puts the
-   * caller in the participant list, and a Matrix room's creator is in it by
-   * construction — so passing them here would be asking to talk to oneself
-   * twice.
+   * The viewer is added by whoever is being asked — the API puts the caller in
+   * the participant list — so passing them here would be asking to talk to
+   * oneself twice.
    */
   readonly participantIds: readonly string[];
   /** What the user called the group. Ignored for a one-to-one conversation. */
@@ -28,12 +26,11 @@ export interface NewConversationRequest {
 }
 
 /**
- * Creating a conversation, whichever backend this build talks to.
+ * Creating a conversation.
  *
- * Answers with the id of the conversation to open. It is not the same kind of id
- * on the two backends — a Mongo ObjectId on one, a Matrix room id on the other —
- * and nothing above this line is allowed to care, which is what keeps the screen
- * free of a second code path.
+ * Answers with the id of the conversation to open. What kind of id that is,
+ * nothing above this line is allowed to care about, which is what keeps the
+ * screen free of a second code path.
  */
 export type ConversationCreator = (request: NewConversationRequest) => Promise<string>;
 
@@ -48,12 +45,12 @@ export class NoParticipantsError extends Error {
 /**
  * The request, checked and reduced to the facts both backends need.
  *
- * The shape both creators start from, so that "two people is a direct message"
- * is decided once. If each decided for itself, the same tap would make a direct
- * conversation on one backend and a two-person group on the other — and on
- * Matrix that difference is permanent, because `m.direct` is what every client
- * uses to draw a room with the other person's name and avatar instead of a
- * generated title.
+ * The shape a creator starts from, so that "two people is a direct message" is
+ * decided once. If each creator decided for itself, the same tap could make a
+ * direct conversation in one place and a two-person group in another — and that
+ * difference is permanent, because it is what every client uses to draw a
+ * conversation with the other person's name and avatar instead of a generated
+ * title.
  */
 export interface PlannedConversation {
   /** Deduplicated, in the order they were chosen. Never empty. */
@@ -65,9 +62,8 @@ export interface PlannedConversation {
 
 export function planConversation(request: NewConversationRequest): PlannedConversation {
   // Deduplicated rather than trusted. The screen holds a Set, but a duplicate
-  // arriving from anywhere else would be an invitation sent to the same person
-  // twice on Matrix, and — worse — would turn a conversation with one person
-  // into a "group" of two entries naming one.
+  // arriving from anywhere else would turn a conversation with one person into
+  // a "group" of two entries naming one.
   const participantIds = [...new Set(request.participantIds)];
   if (participantIds.length === 0) {
     throw new NoParticipantsError();

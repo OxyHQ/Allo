@@ -3,7 +3,7 @@ import {
   collectViewerItems,
   selectViewerItem,
 } from '@/lib/chat/attachmentViewer';
-import type { MediaItem, Message } from '@/stores/messagesStore';
+import type { MediaItem, Message } from '@/lib/chat/model';
 
 /**
  * What the full-screen viewer opens on.
@@ -17,18 +17,20 @@ import type { MediaItem, Message } from '@/stores/messagesStore';
  * gallery that reorders the conversation puts the swipe somewhere the reader did
  * not come from.
  *
- * All of it against `Message`, which both backends fill, so none of it knows
- * whether it is looking at a Matrix room or the Express API.
+ * All of it against `Message`, so none of it knows where the attachments came
+ * from.
  */
+
+const CONVERSATION = 'conv-1';
 
 function message(id: string, media: MediaItem[] | undefined): Message {
   return {
     id,
     text: '',
-    senderId: '@alice:allo.you',
+    senderId: 'acc-alice',
     timestamp: new Date(1_700_000_000_000),
     isSent: false,
-    conversationId: '!room:allo.you',
+    conversationId: CONVERSATION,
     media,
   };
 }
@@ -36,16 +38,24 @@ function message(id: string, media: MediaItem[] | undefined): Message {
 /** A picture the sender made a thumbnail for: two refs, one row. */
 function withThumbnail(id: string): MediaItem {
   return {
-    id: `${id}:thumb`,
+    id: `${id}:full`,
     type: 'image',
-    fullSizeId: `${id}:full`,
+    ref: { conversationId: CONVERSATION, blobId: `${id}:full` },
+    thumbnailRef: { conversationId: CONVERSATION, blobId: `${id}:thumb` },
+    mime: 'image/jpeg',
     filename: `${id}.jpg`,
   };
 }
 
 /** A picture with no smaller copy: the row already draws the original. */
 function original(id: string): MediaItem {
-  return { id: `${id}:full`, type: 'image', filename: `${id}.jpg` };
+  return {
+    id: `${id}:full`,
+    type: 'image',
+    ref: { conversationId: CONVERSATION, blobId: `${id}:full` },
+    mime: 'image/jpeg',
+    filename: `${id}.jpg`,
+  };
 }
 
 describe('the gallery a viewer opens on', () => {
@@ -56,12 +66,12 @@ describe('the gallery a viewer opens on', () => {
       message('m3', [withThumbnail('b')]),
     ]);
 
-    expect(items.map((item) => item.mediaId)).toEqual(['a:full', 'b:full']);
+    expect(items.map((item) => item.ref.blobId)).toEqual(['a:full', 'b:full']);
   });
 
   it('spans the whole conversation and not the tapped message', () => {
-    // A Matrix event carries one attachment, so five photographs are five
-    // messages. A gallery scoped to one of them could never be swiped.
+    // Five photographs sent one at a time are five messages. A gallery scoped
+    // to one of them could never be swiped.
     const items = collectViewerItems([
       message('m1', [withThumbnail('a')]),
       message('m2', [withThumbnail('b')]),
@@ -74,7 +84,7 @@ describe('the gallery a viewer opens on', () => {
   it('opens on the original, which is the only thing full screen means', () => {
     const items = collectViewerItems([message('m1', [withThumbnail('a')])]);
 
-    expect(items[0].mediaId).toBe('a:full');
+    expect(items[0].ref.blobId).toBe('a:full');
   });
 
   it('keeps the thumbnail as the preview, so the wait is not a black screen', () => {
@@ -83,38 +93,36 @@ describe('the gallery a viewer opens on', () => {
     // that on a slow connection is seconds long.
     const items = collectViewerItems([message('m1', [withThumbnail('a')])]);
 
-    expect(items[0].previewId).toBe('a:thumb');
+    expect(items[0].previewRef?.blobId).toBe('a:thumb');
   });
 
   it('has no preview when the row was already showing the original', () => {
-    // Otherwise the viewer would draw the same bytes twice, and ask the cache
-    // for a ref that is the one it is already waiting on.
     const items = collectViewerItems([message('m1', [original('a')])]);
 
-    expect(items[0].previewId).toBeUndefined();
-    expect(items[0].mediaId).toBe('a:full');
+    expect(items[0].previewRef).toBeUndefined();
+    expect(items[0].ref.blobId).toBe('a:full');
   });
 
-  it('carries the filename, which is what a share sheet is named after', () => {
+  it('carries the filename and the MIME, which is what a share sheet is named after', () => {
     const items = collectViewerItems([message('m1', [withThumbnail('a')])]);
 
     expect(items[0].filename).toBe('a.jpg');
+    expect(items[0].mime).toBe('image/jpeg');
   });
 
   it('keeps a video in the gallery and says it is one', () => {
     const items = collectViewerItems([
-      message('m1', [{ id: 'clip:thumb', type: 'video', fullSizeId: 'clip:full' }]),
+      message('m1', [{ ...withThumbnail('clip'), type: 'video', mime: 'video/mp4' }]),
     ]);
 
     expect(items).toEqual([
-      expect.objectContaining({ kind: 'video', mediaId: 'clip:full' }),
+      expect.objectContaining({ kind: 'video', ref: { conversationId: CONVERSATION, blobId: 'clip:full' } }),
     ]);
   });
 
   it('gives the same file sent twice two different pages', () => {
-    // The Express path keys media on an Oxy file id, so sending one picture
-    // twice produces the same id twice. A shared key would make React drop the
-    // second page and a swipe would land on nothing.
+    // Sending one picture twice produces the same blob id twice. A shared key
+    // would make React drop the second page and a swipe would land on nothing.
     const items = collectViewerItems([
       message('m1', [original('a')]),
       message('m2', [original('a')]),
@@ -124,11 +132,11 @@ describe('the gallery a viewer opens on', () => {
   });
 
   it('cannot confuse two different pairs for one page', () => {
-    // A Matrix media ref is JSON and may contain any character, including the
+    // A media id is opaque and may contain any character, including the
     // separator. The message id cannot, which is why it goes first.
     const items = collectViewerItems([
-      message('m1', [{ id: 'x#y', type: 'image' }]),
-      message('m1#x', [{ id: 'y', type: 'image' }]),
+      message('m1', [{ ...original('x#y'), id: 'x#y' }]),
+      message('m1#x', [{ ...original('y'), id: 'y' }]),
     ]);
 
     expect(items[0].key).not.toBe(items[1].key);
@@ -143,23 +151,23 @@ describe('which page a tap opens', () => {
   ];
 
   it('opens on the picture that was tapped', () => {
-    expect(selectViewerItem(messages, 'm2', 'b:thumb')?.index).toBe(1);
+    expect(selectViewerItem(messages, 'm2', 'b:full')?.index).toBe(1);
   });
 
   it('opens on the first one when the first one was tapped', () => {
-    expect(selectViewerItem(messages, 'm1', 'a:thumb')?.index).toBe(0);
+    expect(selectViewerItem(messages, 'm1', 'a:full')?.index).toBe(0);
   });
 
   it('opens on the last one when the last one was tapped', () => {
-    expect(selectViewerItem(messages, 'm3', 'c:thumb')?.index).toBe(2);
+    expect(selectViewerItem(messages, 'm3', 'c:full')?.index).toBe(2);
   });
 
   it('gives the whole gallery, not just the page', () => {
-    expect(selectViewerItem(messages, 'm2', 'b:thumb')?.items).toHaveLength(3);
+    expect(selectViewerItem(messages, 'm2', 'b:full')?.items).toHaveLength(3);
   });
 
   it('needs the message as well as the media to find the page', () => {
-    // Two messages can carry the same media id; the media alone would open the
+    // Two messages can carry the same blob id; the media alone would open the
     // first one, which is not the one the finger was on.
     const duplicated = [message('m1', [original('a')]), message('m2', [original('a')])];
 
@@ -167,7 +175,7 @@ describe('which page a tap opens', () => {
   });
 
   it('does not open at all on media that is no longer there', () => {
-    // A message can be redacted between the render that drew it and the tap. A
+    // A message can be deleted between the render that drew it and the tap. A
     // viewer with no pages is a black screen the reader has to dismiss.
     expect(selectViewerItem(messages, 'm2', 'gone')).toBeUndefined();
   });
@@ -183,8 +191,6 @@ describe('an index into a gallery that changed underneath it', () => {
   });
 
   it('falls back to the last page rather than off the end', () => {
-    // A redaction while the viewer is open shortens the gallery. Past the end
-    // draws nothing at all.
     expect(clampViewerIndex(5, 3)).toBe(2);
   });
 

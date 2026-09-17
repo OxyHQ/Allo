@@ -41,19 +41,18 @@ import { subjectProviderFor } from "./subjects/registry";
  * conflated, which is why they are different `localStatus` values and why the
  * absent route is written down as a reason rather than inferred from a missing row.
  *
- * ## Matrix adds a SECOND way for a report to have nowhere to go
+ * ## A SECOND way for a report to have nowhere to go
  *
- * A type can have no provider, and now a SUBJECT can have no Oxy account: a user on
- * a homeserver Allo does not run, a bridge ghost, a room, an event id
- * (docs/matrix/data-model.md §6.3, §6.5). Those two facts are independent — a
- * perfectly deliverable `user` report can name a WhatsApp ghost — so they are
- * decided separately here and produce different sentences on the row.
+ * A type can have no provider, and a SUBJECT can be something other than an Oxy
+ * account id — a handle, today. Those two facts are independent — a perfectly
+ * deliverable `user` report can name a handle — so they are decided separately
+ * here and produce different sentences on the row.
  *
  * Left undecided, the second one is not a stored state at all but a 404 arriving
  * hours later at `ModerationDeliveryWorker`, which closes the report saying "the
  * reported account no longer exists" — a claim that was never true about an account
- * that never existed. §6.3's requirement is that the decision be made and written,
- * and that is what turns an indistinguishable silence into a row somebody can read.
+ * that was never named. The decision is made and written here, and that is what
+ * turns an indistinguishable silence into a row somebody can read.
  */
 
 export class DuplicateReportError extends Error {
@@ -140,23 +139,16 @@ interface ReportRouting {
  * alone.
  *
  * The two facts are ordered, and the order is a claim rather than a convenience.
- * "Allo never delivers reports of this TYPE" outranks "this particular subject has
- * no Oxy account", because the first is permanent and the second is about one row:
- * a reported message stays local whether its id is an Allo message id, a Matrix
- * event id or anything else, and saying so is more useful to whoever reads the row
- * than a sentence about Matrix identifiers.
+ * "Allo never delivers reports of this TYPE" outranks "this particular subject is
+ * not an Oxy account", because the first is permanent and the second is about one
+ * row: a reported message stays local whatever its id looks like, and saying so is
+ * more useful to whoever reads the row than a sentence about identifier shapes.
  *
- * The ordering is in the CONTROL FLOW and not only in the returned reason, which is
- * the part that was wrong when this function was first written. Resolving before
- * the type check ran the MXID -> Oxy translation for every reported type, so a
- * `message` report whose id happened to start with `@` and match this homeserver
- * had its `reportedId` rewritten to the MXID's localpart -- a string shaped exactly
- * like an Oxy user id, stored as the identity of a reported MESSAGE, where that
- * translation means nothing at all. It also made every reported message read
- * `bridgesConfig()` to compute an answer that was then thrown away.
- *
- * Nothing is resolved for a type that has no provider. The identifier is stored as
- * the caller gave it, which for those types is the only thing it can honestly be.
+ * The ordering is in the CONTROL FLOW and not only in the returned reason. A
+ * `message` report whose id happens to start with `@` is a message id, and the
+ * subject rule means nothing about it — so nothing is resolved for a type that has
+ * no provider. The identifier is stored as the caller gave it, which for those
+ * types is the only thing it can honestly be.
  */
 function routeReport(reportedType: ReportedType, reportedId: string): ReportRouting {
   if (subjectProviderFor(reportedType) === undefined) {
@@ -186,7 +178,7 @@ function routeReport(reportedType: ReportedType, reportedId: string): ReportRout
  * provider AND the reported subject is an Oxy account. Either miss stores the
  * report at `received` with its own reason recorded, which is the behaviour a
  * reporter should get regardless: the report is a receipt and a local record, and
- * it still counts as a signal about an account even when its material can never be
+ * it still counts as evidence about an account even when its material can never be
  * reviewed.
  *
  * That branch is the reason the two writes stay in one transaction rather than
@@ -210,9 +202,9 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
    * Bounded HERE as well as at the route, and for the same reason `requireIdentifier`
    * exists at all: this function is exported and the route is only its first caller.
    *
-   * Section 6.3 is what makes the bound necessary rather than tidy. An identifier
-   * that resolves to nothing is deliberately STORED instead of refused, so an
-   * unbounded one is untrusted bytes reaching Mongo by design -- and a `user` report
+   * The bound is necessary rather than tidy. An identifier that resolves to
+   * nothing is deliberately STORED instead of refused, so an unbounded one is
+   * untrusted bytes reaching the database by design -- and a `user` report
    * carrying a megabyte of them still gets a delivery event, whose `getUserById`
    * fails with something `isOxyUserNotFound` cannot recognise and the outbox
    * therefore retries as an outage forever.
@@ -234,13 +226,13 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
    * Re-derived here rather than trusted from the caller, for the reason
    * `requireIdentifier` gives about itself: `createReport` is exported, and the
    * route is only its first caller. A worker or a reconciliation script handing
-   * over a raw MXID must produce the same stored row as the route does, or the
-   * unique index would let one account be reported twice by one reporter — once
-   * under its Oxy id and once under its MXID — and §7.3's "one penalty per
-   * incident" would fail with nothing failing in a test.
+   * over an untrimmed id must produce the same stored row as the route does, or
+   * the unique index would let one account be reported twice by one reporter —
+   * and §7.3's "one penalty per incident" would fail with nothing failing in a
+   * test.
    *
-   * The DELIVERY pipeline still never does this: §6.2 puts the translation at the
-   * edge, and intake is the edge. Everything past this line sees an Oxy user id.
+   * The DELIVERY pipeline never does this: the resolution is at the edge, and
+   * intake is the edge. Everything past this line sees an Oxy user id.
    */
   const { reportedId, deliverable, localStatusReason } = routeReport(
     reportedType,

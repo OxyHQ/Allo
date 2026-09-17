@@ -1,9 +1,12 @@
-import type { User } from "@oxy.so/core";
-import type {
-  ConversationParticipant,
-  EnrichedConversationParticipant,
-  ParticipantDisplayName,
-} from "@allo/shared-types";
+/**
+ * Reading an Oxy client error without depending on its class.
+ *
+ * `@oxy.so/core` surfaces failures in more than one shape — an `Error` with a
+ * `status`, a plain object with a `code` — and the callers here only need one
+ * bit out of any of them: was the person not found, or did something else go
+ * wrong. Kept separate from the callers so the directory route and the
+ * moderation subject provider agree on what a 404 looks like.
+ */
 
 interface OxyUserErrorShape {
   status?: unknown;
@@ -41,54 +44,6 @@ export function getErrorMessage(error: unknown): string | undefined {
 export function isOxyUserNotFound(error: unknown): boolean {
   const shapedError: OxyUserErrorShape = isRecord(error) ? error : {};
   return shapedError.status === 404 || shapedError.code === "ERR_BAD_REQUEST";
-}
-
-export function enrichParticipantWithOxyUser(
-  participant: ConversationParticipant,
-  oxyUser: User | null | undefined
-): EnrichedConversationParticipant {
-  if (!oxyUser) {
-    return {
-      ...participant,
-      name: participantNameOrFallback(participant),
-    };
-  }
-
-  return {
-    ...participant,
-    name: resolveDisplayName(oxyUser),
-    username: oxyUser.username,
-    avatar: oxyUser.avatar,
-  };
-}
-
-function participantNameOrFallback(
-  participant: ConversationParticipant & { name?: ParticipantDisplayName }
-): ParticipantDisplayName {
-  return participant.name ?? { displayName: "Unknown", first: "Unknown", last: "" };
-}
-
-/**
- * Emit the participant display name straight from the Oxy API's canonical
- * `name.displayName` (core 3.10 types it as required). `first` / `last` are
- * passed through verbatim for callers that need the split parts; they are NOT
- * recomposed into a display string here.
- */
-function resolveDisplayName(oxyUser: User): ParticipantDisplayName {
-  const name = oxyUser.name;
-  const displayName =
-    trimToUndefined(name?.displayName) ?? trimToUndefined(oxyUser.username) ?? "Unknown";
-
-  return {
-    displayName,
-    first: trimToUndefined(name?.first) ?? "",
-    last: trimToUndefined(name?.last) ?? "",
-  };
-}
-
-function trimToUndefined(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -26,7 +26,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { CloseIcon } from '@/assets/icons/close-icon';
 import { ShareIcon } from '@/assets/icons/share-icon';
 import { clampViewerIndex, type ViewerItem, type ViewerSelection } from '@/lib/chat/attachmentViewer';
-import type { MediaItem } from '@/stores';
+import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { logger } from '@/utils/logger';
 import { mimetypeFromFilename } from '@/utils/mimetypes';
 
@@ -48,12 +48,10 @@ import {
 /**
  * An attachment, full size.
  *
- * **Not a Matrix feature.** Everything it draws comes from `Message.media`,
- * which both backends fill, and every URL it shows comes from the one resolver
- * `ConversationView` already reconciles — so a conversation on the Express API
- * opens the same viewer with the same gestures. Nothing here knows which
- * backend it is looking at, and nothing here may learn: an `import` of
- * `CHAT_BACKEND` in this file would be the beginning of a second viewer.
+ * Everything it draws comes from `Message.media`, and every URL it shows comes
+ * from `useMediaUri`, which asks the SDK for the bytes and only for the pages
+ * inside the window built by {@link isWithinViewerWindow}. Nothing here knows
+ * where the bytes come from beyond that.
  *
  * The pager is a row of pages this component translates itself rather than a
  * native scroll view. A scroll view inside a modal, wrapping a view that also
@@ -72,14 +70,6 @@ import {
 export interface AttachmentViewerProps {
   /** The gallery and the page it opens on. See `lib/chat/attachmentViewer.ts`. */
   readonly selection: ViewerSelection;
-  /**
-   * A media id to a local URI, or `''` while there is not one yet.
-   *
-   * The same resolver the bubbles use, and **asking is what starts the
-   * download** — which is why only the pages inside the window built by
-   * {@link isWithinViewerWindow} ever ask.
-   */
-  readonly resolveUrl: (mediaId: string, kind: MediaItem['type']) => string;
   readonly onClose: () => void;
 }
 
@@ -87,7 +77,7 @@ export interface AttachmentViewerProps {
 const SNAP_DURATION = 220;
 
 export const AttachmentViewer = memo<AttachmentViewerProps>(
-  ({ selection, resolveUrl, onClose }) => {
+  ({ selection, onClose }) => {
     const { t } = useTranslation();
     // Named `viewport`, not `window`: on web `window` is a global, and a local
     // that shadows it makes every later line ambiguous to read.
@@ -116,6 +106,9 @@ export const AttachmentViewer = memo<AttachmentViewerProps>(
     const gestureStartPanY = useSharedValue(0);
 
     const active: ViewerItem | undefined = items[index];
+    // The page on screen is inside the window, so this is served from the cache
+    // the page already filled; it exists so the share button has a file to hand over.
+    const activeFile = useMediaUri(active?.ref, active?.mime ?? '');
 
     /**
      * Settles on a page: puts the row where that page is, and un-zooms.
@@ -154,7 +147,7 @@ export const AttachmentViewer = memo<AttachmentViewerProps>(
       if (active === undefined) {
         return;
       }
-      const uri = resolveUrl(active.mediaId, active.kind);
+      const uri = activeFile.uri;
       if (uri === '') {
         toast.error(t('This attachment is still downloading.'));
         return;
@@ -170,7 +163,7 @@ export const AttachmentViewer = memo<AttachmentViewerProps>(
           logger.error('[media] an attachment could not be shared', error);
           toast.error(t('The attachment could not be shared.'));
         });
-    }, [active, resolveUrl, t]);
+    }, [active, activeFile.uri, t]);
 
     /* -------------------------------------------------------------------
      * Gestures
@@ -361,7 +354,6 @@ export const AttachmentViewer = memo<AttachmentViewerProps>(
                     {isWithinViewerWindow(itemIndex, index) ? (
                       <ViewerPage
                         item={item}
-                        resolveUrl={resolveUrl}
                         isActive={itemIndex === index}
                         zoomStyle={itemIndex === index ? zoomStyle : undefined}
                       />
@@ -419,7 +411,6 @@ AttachmentViewer.displayName = 'AttachmentViewer';
 
 interface ViewerPageProps {
   readonly item: ViewerItem;
-  readonly resolveUrl: (mediaId: string, kind: MediaItem['type']) => string;
   readonly isActive: boolean;
   /** Only the page on screen is magnified; the neighbours are drawn at rest. */
   readonly zoomStyle: AnimatedStyle<ViewStyle> | undefined;
@@ -433,10 +424,10 @@ interface ViewerPageProps {
  * opens on black for as long as a full-size photograph takes to arrive over a
  * connection the user may not have.
  */
-const ViewerPage = memo<ViewerPageProps>(({ item, resolveUrl, isActive, zoomStyle }) => {
+const ViewerPage = memo<ViewerPageProps>(({ item, isActive, zoomStyle }) => {
   const { t } = useTranslation();
-  const fullUri = resolveUrl(item.mediaId, item.kind);
-  const previewUri = item.previewId === undefined ? '' : resolveUrl(item.previewId, item.kind);
+  const fullUri = useMediaUri(item.ref, item.mime).uri;
+  const previewUri = useMediaUri(item.previewRef, THUMBNAIL_MIME).uri;
 
   if (item.kind === 'video') {
     return (
@@ -461,9 +452,9 @@ const ViewerPage = memo<ViewerPageProps>(({ item, resolveUrl, isActive, zoomStyl
           source={{ uri: fullUri }}
           style={StyleSheet.absoluteFill}
           contentFit="contain"
-          // No `cachePolicy`: on the Matrix path these bytes are a decrypted
-          // copy of a picture from an encrypted conversation, and expo-image's
-          // disk cache would write it somewhere the media cache cannot release.
+          // Memory only: these bytes may be a decrypted copy of a picture from
+          // an encrypted conversation, and expo-image's disk cache would write
+          // it somewhere nothing in the app can release.
           cachePolicy="memory"
           accessibilityLabel={item.filename ?? t('Attachment')}
         />
@@ -473,6 +464,9 @@ const ViewerPage = memo<ViewerPageProps>(({ item, resolveUrl, isActive, zoomStyl
 });
 
 ViewerPage.displayName = 'ViewerPage';
+
+/** The MIME a sender's thumbnail is encoded as; see `renderThumbnail` in `lib/chat/attachments.ts`. */
+const THUMBNAIL_MIME = 'image/jpeg';
 
 /**
  * The one colour in this file that is not from the theme, and why.

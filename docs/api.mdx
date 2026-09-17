@@ -6,197 +6,82 @@ order: 3
 
 # API
 
-The Allo backend is a small Express + Socket.IO service. Every authenticated route is mounted under `/api` behind `createOxyAuthMiddleware` from `@oxy.so/core/server`, so the client must send `Authorization: Bearer <oxy-jwt>` on every request. The middleware populates `req.user = { id }` from the Oxy access token; the backend keys all of its own records by that Oxy user id and never owns a user record itself.
+The Allo backend is an Express + Socket.IO service. It has two HTTP surfaces
+behind Oxy authentication (`createOxyAuthMiddleware` from `@oxy.so/core/server`,
+so every request carries `Authorization: Bearer <oxy access token>`): the
+messaging platform under `/v1`, and the account-side routes under `/api`. The
+middleware populates the account id from the token; the backend keys its own
+records by that Oxy user id and never owns a user record itself.
 
-`GET /api/health` is the only public route under `/api`. `POST /webhooks/crowdsource` sits outside it entirely and authenticates by signature instead.
+Public routes: `GET /health/live`, `GET /health/ready` and its alias
+`GET /api/health`. `POST /webhooks/crowdsource` sits outside both surfaces and
+authenticates by signature.
 
 ## Base URL
 
 | Env | URL |
-|-----|-----|
+| --- | --- |
 | Production | `https://api.allo.you` |
 | Development | `http://localhost:4140` |
 
-Both are hardcoded in `packages/frontend/config.ts`; only the development side can be overridden from the environment.
+Both are hardcoded in `packages/frontend/config.ts`; only the development
+side can be overridden from the environment.
 
 ## Health
 
-### `GET /api/health`
+- `GET /health/live`: always 200 `{ status: "alive" }`. A draining task is still alive.
+- `GET /health/ready`: 200 once the process has booted, verified the migration ledger (production) and can `select 1` against Postgres; 503 otherwise, with `phase` and `dependencies: { postgres, migrations }`. Drops to 503 on the first SIGTERM.
+- `GET /api/health`: an alias of ready, kept for the existing load-balancer target group.
 
-Public. Returns:
+## Messaging platform: `/v1`
 
-```json
-{ "status": "ok", "service": "allo-backend" }
-```
+The route-by-route contract, the error codes, the request signing algorithm
+and every socket event are in [API v1](./platform/api-v1); every request and
+response shape is a zod schema in `@allo/shared-types`, and the backend
+validates with the same schemas the SDK parses with. This page only orients.
 
-## Conversations
+| Area | Routes | Auth |
+| --- | --- | --- |
+| Instances | `POST/GET /v1/instances`, `GET /v1/accounts/:accountId/instances` | Oxy |
+| Enrollment | `GET /v1/instances/pending`, `POST /v1/instances/:id/{approve,reject,revoke}`, `PUT/DELETE /v1/instances/me/push` | instance-signed |
+| Key packages | `PUT /v1/key-packages`, `POST /v1/key-packages/claim` | instance-signed |
+| Conversations | `POST/GET /v1/conversations`, `GET /v1/conversations/:id`, `POST /v1/conversations/:id/leave` | instance-signed |
+| Events | `POST/GET /v1/conversations/:id/events` | instance-signed |
+| Sync | `GET /v1/sync`, `POST /v1/sync/ack` | instance-signed |
+| Blobs | `POST /v1/blobs` (raw octet-stream), `GET /v1/blobs/:id` | instance-signed |
 
-### `GET /api/conversations`
+"Instance-signed" means the Oxy bearer plus `X-Allo-Instance`,
+`X-Allo-Timestamp` and `X-Allo-Signature`: an Ed25519 signature by the
+installation's key over the method, the request target, the timestamp and the
+SHA-256 of the raw body. A stolen Oxy token alone can call only the three
+Oxy-only routes.
 
-List the authenticated user's conversations.
+Every event payload is MLS ciphertext the server cannot read. Message text,
+edits, deletions, reactions, read receipts, typing and group names are all
+inside it; there is no route that accepts or returns plaintext, and
+`__tests__/platform/noPlaintextPaths.test.ts` scans the routers to keep it
+that way. Every non-2xx answer on `/v1` is `{ error: { code, message, details? } }`.
 
-Query params: `limit` (default 50), `offset` (default 0).
+## Account-side routes: `/api`
 
-Returns: `{ conversations: Conversation[] }`.
+### People directory
 
-### `GET /api/conversations/:id`
+`GET /api/directory/*` answers the five Oxy lookups the app makes, so the app
+draws a person through this backend rather than by calling Oxy itself:
+profile by username, user by id, users by ids, profile search, asset URL.
+Every answer is a `DirectoryUser` projection (id, handle, display name,
+avatar, bio) rather than the Oxy `User`, which carries email, phone, address
+and birthday. The [backend README](https://github.com/OxyHQ/Allo/blob/main/packages/backend/README.md#people-directory)
+has the route table.
 
-Fetch one conversation. Returns the `Conversation`. 404 if the authenticated user is not a participant.
+### Profile settings
 
-### `POST /api/conversations`
+Per-account settings document. There is no separate user record; these
+settings hang off the Oxy user id.
 
-Create a new conversation.
-
-```jsonc
-{
-  "type": "direct" | "group",
-  "participantIds": ["oxyUserA", "oxyUserB"],
-  "name": "Project Allo",        // group only
-  "description": "Team chat",    // group only
-  "avatar": "https://…"          // group only
-}
-```
-
-`direct` conversations dedupe — if one already exists between the same two participants, the existing one is returned.
-
-### `PUT /api/conversations/:id`
-
-Update group metadata. Body fields are all optional: `name`, `description`, `avatar`.
-
-### `POST /api/conversations/:id/participants`
-
-Add participants (group only). Body: `{ participantIds: string[] }`.
-
-### `DELETE /api/conversations/:id/participants/:participantId`
-
-Remove a participant. Admin only.
-
-### `POST /api/conversations/:id/archive` / `unarchive`
-
-Toggle the per-user archive flag (writes the calling user's id into / out of `archivedBy`).
-
-### `POST /api/conversations/:id/mark-read`
-
-Mark the conversation read for the calling user — updates `unreadCounts[userId] = 0` and writes `participants[i].lastReadAt`.
-
-## Messages
-
-Messages are end-to-end encrypted when the client is able to encrypt them (see [Encryption](./encryption) for the current gaps). If encryption isn't possible — most commonly because the recipient has no registered device — the client falls back to sending plaintext, and the server stores whatever it's given (`text` or `ciphertext`). The server never has the keys to decrypt a `ciphertext` field itself.
-
-### `GET /api/messages`
-
-Required query params:
-
-- `conversationId` — id of the conversation
-- `limit` (default 50)
-- `before` — ISO timestamp for pagination (older than)
-
-Returns `{ messages: Message[] }` with the encrypted payloads as the server saw them. The client decrypts locally with the sender's public key.
-
-### `GET /api/messages/:id`
-
-Fetch a single message by id.
-
-### `POST /api/messages`
-
-Send a new message.
-
-```jsonc
-{
-  "conversationId": "…",
-  "senderDeviceId": 1,
-  "ciphertext": "base64(IV || AES-GCM(plaintext))",
-  "encryptedMedia": [             // optional
-    {
-      "id": "media_…",
-      "type": "image",
-      "ciphertext": "base64",
-      "thumbnailCiphertext": "base64",
-      "fileName": "photo.jpg",
-      "fileSize": 102400,
-      "mimeType": "image/jpeg",
-      "width": 1920,
-      "height": 1080,
-      "duration": 0
-    }
-  ],
-  "encryptionVersion": 1,
-  "messageType": "text" | "media" | "system",
-  "replyTo": "messageId",         // optional
-  "fontSize": 16                  // optional
-}
-```
-
-The backend stores the payload, denormalizes `lastMessage` on the conversation, increments `unreadCounts` for every other participant, and emits `newMessage` to the conversation's Socket.IO room.
-
-### `PUT /api/messages/:id`
-
-Edit a message (sender only). Body: `{ text }` for legacy plaintext, or a new encrypted `ciphertext` payload.
-
-### `DELETE /api/messages/:id`
-
-Soft-delete (sender only). Sets `deletedAt`; clients render a tombstone in place.
-
-### `POST /api/messages/:id/read` / `delivered`
-
-Receipts. Updates `readBy[userId] = now` / appends to `deliveredTo`. Emits `messageUpdated` over Socket.IO.
-
-## Devices (key registration)
-
-### `GET /api/devices`
-
-List the authenticated user's registered devices.
-
-### `GET /api/devices/:deviceId`
-
-Fetch one device by Signal `deviceId` (numeric, per-install).
-
-### `POST /api/devices`
-
-Register a device with its public key bundle.
-
-```jsonc
-{
-  "deviceId": 12345,
-  "identityKeyPublic": "base64",
-  "signedPreKey": {
-    "keyId": 1,
-    "publicKey": "base64",
-    "signature": "base64"
-  },
-  "preKeys": [
-    { "keyId": 1, "publicKey": "base64" },
-    { "keyId": 2, "publicKey": "base64" }
-  ],
-  "registrationId": 67890
-}
-```
-
-Unique on `(userId, deviceId)`. Posting the same `deviceId` again replaces the bundle (key rotation).
-
-### `GET /api/devices/user/:userId`
-
-List another user's devices — **public keys only**. Used by senders to bootstrap a new conversation.
-
-### `GET /api/devices/user/:userId/prekeys/:deviceId`
-
-Returns the target device's stored one-time pre-keys as-is (`{ preKeys: PreKey[] }`). The server does not delete or mark pre-keys as consumed after they're fetched. Note that the current client encryption path (see [Encryption](./encryption)) doesn't use pre-keys at all — it encrypts directly against the recipient's `identityKeyPublic` — so this endpoint isn't exercised for key agreement today.
-
-## Profile settings
-
-Per-user settings document. There is no separate user record — these settings hang off the Oxy user id.
-
-### `GET /api/profile/settings/me`
-
-Returns the calling user's `UserSettings`.
-
-### `GET /api/profile/settings/:userId`
-
-Returns another user's public-facing settings (subject to their privacy flags).
-
-### `PUT /api/profile/settings`
-
-Patch settings. Top-level keys are merged; nested objects are deep-merged.
+- `GET /api/profile/settings/me`: the calling user's `UserSettings`.
+- `GET /api/profile/settings/:userId`: another user's public-facing settings, subject to their privacy flags.
+- `PUT /api/profile/settings`: patch. Top-level keys are merged; nested objects are deep-merged.
 
 ```jsonc
 {
@@ -204,7 +89,7 @@ Patch settings. Top-level keys are merged; nested objects are deep-merged.
     "themeMode": "light" | "dark" | "system",
     "primaryColor": "#000000"
   },
-  "profileHeaderImage": "https://…",
+  "profileHeaderImage": "https://...",
   "privacy": {
     "profileVisibility": "public" | "private" | "followers_only",
     "showContactInfo": true,
@@ -221,120 +106,79 @@ Patch settings. Top-level keys are merged; nested objects are deep-merged.
     "coverPhotoEnabled": true,
     "minimalistMode": false,
     "displayName": "Display Name",
-    "coverImage": "https://…"
-  },
-  "security": {
-    "cloudSyncEnabled": false,
-    "encryptionEnabled": true,
-    "peerToPeerEnabled": true
+    "coverImage": "https://..."
   }
 }
 ```
 
-### `DELETE /api/profile/settings/behavior`
-
-Reset learned UX preferences (`UserBehavior` collection).
+- `DELETE /api/profile/settings/behavior`: reset learned UX preferences.
 
 ### Blocks and restricts
 
 | Method | Path | Body |
-|--------|------|------|
-| `GET` | `/api/profile/blocks` | — |
+| --- | --- | --- |
+| `GET` | `/api/profile/blocks` | |
 | `POST` | `/api/profile/blocks` | `{ blockedId }` |
-| `DELETE` | `/api/profile/blocks/:blockedId` | — |
-| `GET` | `/api/profile/restricts` | — |
+| `DELETE` | `/api/profile/blocks/:blockedId` | |
+| `GET` | `/api/profile/restricts` | |
 | `POST` | `/api/profile/restricts` | `{ restrictedId }` |
-| `DELETE` | `/api/profile/restricts/:restrictedId` | — |
+| `DELETE` | `/api/profile/restricts/:restrictedId` | |
 
-Blocks hide the user across the app and reject incoming messages. Restricts hide their messages without telling them.
+Both lists are written and stored; nothing in the messaging platform reads
+them yet.
 
-## Reports
+### Reports
 
-Moderation intake, backed by CrowdSource. **Accounts only** — message content is never submitted for review. Encrypted messages stay between the devices that can read them, and a bridged room, which is *not* encrypted, is excluded on purpose rather than by omission ([data model §6.4](/docs/matrix/data-model)). The rule is enforced by the type of a subject provider, by a test pinning `deliverableTypes()` to exactly `['user']`, and by a test pinning the module graph a provider can reach.
+Moderation intake, backed by CrowdSource. **Accounts only**: message content
+is never submitted for review, because it is end-to-end encrypted and the
+server never holds a key. The rule is enforced by the type of a subject
+provider, by a test pinning `deliverableTypes()` to exactly `['user']`, and
+by a test pinning the module graph a provider can reach.
 
-### `POST /api/reports`
-
-File a report against an account. Returns the created report.
-
-`reportedId` accepts an Oxy user id or an MXID — a client in a room has the latter — and the stored `reportedId` is always the Oxy id. A subject with no Oxy account behind it (a user on another homeserver, a bridge ghost, a room, an event id) is still accepted and stored, with the reason it cannot be reviewed recorded on the report. The response does not distinguish the two cases.
-
-### `GET /api/reports/mine`
-
-List the reports the calling user has filed.
-
-### `POST /webhooks/crowdsource`
-
-Inbound decisions from CrowdSource. Public but signature-verified, and mounted **only** when `CROWDSOURCE_WEBHOOK_SECRET` is set — otherwise the server logs that the route is absent and starts anyway. It is registered ahead of the JSON body parser so the raw body survives for signature verification.
+- `POST /api/reports`: file a report against an account. `reportedId` is an Oxy account id; an `@handle` is accepted and stored with the reason it cannot be reviewed, and never delivered. Returns the created report.
+- `GET /api/reports/mine`: the reports the calling user has filed.
+- `POST /webhooks/crowdsource`: inbound decisions. Public but signature-verified, mounted only when `CROWDSOURCE_WEBHOOK_SECRET` is set, and registered ahead of the JSON body parser so the raw body survives for verification.
 
 ## Real-time (Socket.IO)
 
-The Socket.IO server is attached to the same HTTP server. The primary namespace is `/messaging`.
+Namespace `/v1` on the same HTTP server. The handshake carries the Oxy bearer
+and, in `handshake.auth`, the same three instance fields as a signed request,
+with the path fixed to `/socket` and an empty body. A connected socket joins
+`instance:<id>` and `account:<accountId>`.
 
-### Connecting
+| Event | Direction | Meaning |
+| --- | --- | --- |
+| `sync.nudge` | server to client | something is waiting in this instance's stream; pull `GET /v1/sync` |
+| `instance.approved` | server to client | this instance is now active |
+| `instance.revoked` | server to client (account room) | an instance of the account was revoked |
+| `keypackages.low` | server to client | upload more key packages |
+| `presence` | server to client | `{ accountId, online }`, best effort, for accounts sharing a conversation |
+| `typing` | both ways | `{ conversationId, ciphertext }`: an MLS application message relayed to the conversation's other active leaves and never stored |
 
-```ts
-import { io } from 'socket.io-client';
-
-const socket = io('http://localhost:4140/messaging', {
-  auth: {
-    token: '<oxy access token>',
-    userId: '<oxy user id>',
-  },
-});
-```
-
-The middleware in `server.ts` reads `socket.handshake.auth`, populates `socket.user = { id }`, and disconnects unauthenticated sockets on connect. Each authenticated socket auto-joins `user:<userId>` for personal events.
-
-### Client -> Server
-
-| Event | Payload | Effect |
-|-------|---------|--------|
-| `joinConversation` | `conversationId: string` | Joins `conversation:<id>` room |
-| `leaveConversation` | `conversationId: string` | Leaves `conversation:<id>` room |
-| `typing` | `{ conversationId, userId, isTyping }` | Broadcast to peers in the conversation room |
-
-### Server -> Client
-
-| Event | Payload | Notes |
-|-------|---------|-------|
-| `newMessage` | `Message` | Encrypted — client decrypts locally |
-| `messageUpdated` | `Message` | Edits + read / delivered receipts |
-| `messageDeleted` | `{ id: string }` | Soft delete |
-| `typing` | `{ conversationId, userId, isTyping }` | Mirrored from peers |
-
-Only three event categories ever trigger client-side side effects beyond updating UI state — anything else logs a dev warning and no-ops, in line with the rest of the Oxy ecosystem's "explicit whitelist, never an `else` branch" pattern.
+No message content travels over the socket. Payload schemas are in
+`@allo/shared-types` (`sync.ts`).
 
 ## Errors
 
-| Status | Meaning |
-|--------|---------|
-| `400` | Validation error. Body: `{ message: string, field?: string }` |
-| `401` | Missing or invalid Oxy bearer token |
-| `403` | Authenticated but not allowed (e.g. removing a participant you don't admin) |
-| `404` | Resource not found, or you are not a participant |
-| `429` | Rate limited by `createOxyRateLimit` (`@oxy.so/core/server`), applied per resolved user |
-| `503` | Matrix authentication is temporarily unavailable — retry after `Retry-After`. Also returned by the connect middleware in `server.ts` when the initial database connection cannot be ESTABLISHED (`Database temporarily unavailable`). **Not** returned for an outage that starts after the process has connected: `connectToDatabase()` returns early once connected, so a store that dies mid-life surfaces as a `500`. |
-
-All error bodies are JSON.
+On `/v1`, every non-2xx answer is `{ error: { code, message, details? } }` and
+the codes (`unauthorized`, `forbidden`, `not_found`, `validation_failed`,
+`epoch_conflict`, `instance_not_active`, `instance_revoked`,
+`key_packages_exhausted`, `idempotency_conflict`, `payload_too_large`,
+`rate_limited`, `unavailable`, `internal`) with their HTTP statuses are
+tabulated in [API v1](./platform/api-v1#errors). The `/api` routes answer
+Oxy's own envelope. `429` comes from `createOxyRateLimit`, applied per
+resolved user, on both surfaces.
 
 ## Schemas
 
-Every table is drizzle, in `packages/backend/src/db/schema/`. There are no Mongoose models.
+Every table is drizzle, in `packages/backend/src/db/schema/`, one file per
+domain, with `CONVENTIONS.md` binding. The messaging tables are
+`client_instances`, `key_packages`, `conversations`, `conversation_members`,
+`conversation_leaves`, `conversation_events`, `instance_deliveries`, `blobs`
+and `blob_bytes`; the kept ones are `user_settings`, `blocks`, `restricts`,
+`user_behavior` and the moderation tables. One line on each is in
+[Architecture](./architecture#data-model).
 
-- `conversations.ts` — `conversations` (direct / group, plus the `last_message_*` preview) and `conversation_participants` (one membership per person, carrying `unread_count` and `archived_at`)
-- `messages.ts` — `messages` (ciphertext, `sender_device_id`, `encryption_version`, `encrypted_media`) plus `message_reads`, `message_deliveries` and `message_reactions`
-- `devices.ts` — `devices` (unique on `(user_id, device_id)`, identity key and signed pre-key) and `device_pre_keys`
-- `social.ts` — `user_settings`, `blocks`, `restricts`, `user_behavior`
-- `moderation.ts`, `bridges.ts`
-
-Two wire shapes are NOT stored the way they are served, and `packages/backend/src/utils/` is where they are composed:
-
-- **`unreadCounts`** is a `{userId: count}` object rebuilt per response from each participant row's `unread_count`. It is not a column.
-- **`archivedBy` is gone.** Archival is one participant's `archived_at`, applied as a filter on the conversation list, and is never reported to the other participants.
-
-Conversations and messages carry both `id` and `_id`, with `_id` derived from `id` so the two cannot disagree; `_id` is the v1 spelling kept for shipped clients that read it with no fallback. Row ids are text and come in two shapes — a uuid v7 for rows created since the Postgres cutover, and the original Mongo ObjectId hex for rows the backfill carried over — so nothing may assume a format.
-- `Report.ts`, `ModerationEvent.ts`, `ModerationOutbox.ts` — the moderation pipeline
-
-TypeScript shapes are re-exported from `@allo/shared-types` for the frontend.
-
-There is no notifications endpoint. The client posts a device token to `/notifications/push-token`, nothing serves that path, and no `PushToken` document is ever written — see [Architecture](./architecture#push-notifications).
+TypeScript shapes for every `/v1` request and response are the zod schemas
+in `@allo/shared-types`; `DirectoryUser` and the `/api` envelope live there
+too.

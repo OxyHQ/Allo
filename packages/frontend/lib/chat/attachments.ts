@@ -3,15 +3,44 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { createVideoPlayer } from 'expo-video';
 
-import type { AlloOutgoingAttachment, AlloOutgoingThumbnail } from '@/lib/matrix/types';
 import { logger } from '@/utils/logger';
 import { mimetypeFromFilename } from '@/utils/mimetypes';
+
+export type AlloMediaKind = 'image' | 'video' | 'audio' | 'voice' | 'file';
+
+/** A small copy sent alongside, so receivers can draw the row before downloading. */
+export interface AlloOutgoingThumbnail {
+  readonly uri: string;
+  readonly mimetype: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Something chosen to send, described well enough to be listed before it is fetched. */
+export interface AlloOutgoingAttachment {
+  readonly kind: AlloMediaKind;
+  /** Shown by clients that list attachments, and used to pick an extension. */
+  readonly filename: string;
+  readonly mimetype: string;
+  /** Where the bytes are now: a `file://` path on a phone, a `blob:` URL in a browser. */
+  readonly uri: string;
+  /** Prose to send with it. */
+  readonly caption?: string;
+  readonly width?: number;
+  readonly height?: number;
+  /** Bytes. Sent so receivers can decide before downloading. */
+  readonly size?: number;
+  /** Milliseconds. For audio and video. */
+  readonly durationMs?: number;
+  /** The sender is the only one who can make it: nobody else can read the original. */
+  readonly thumbnail?: AlloOutgoingThumbnail;
+}
 
 /**
  * Choosing something to send, and describing it well enough that the person
  * receiving it does not have to download it to find out what it is.
  *
- * Everything here is platform-neutral on purpose: the port takes a URI, and a
+ * Everything here is platform-neutral on purpose: the sender takes a URI, and a
  * URI is what `expo-image-picker` hands over on all three platforms — a
  * `file://` path on a phone, a `blob:` URL in a browser. Neither this module nor
  * `ConversationView` has to know which one it is on.
@@ -74,14 +103,12 @@ export async function pickMediaAttachments(): Promise<PickedAttachments> {
  *
  * `copyToCacheDirectory` is left on, and it is not an optimisation: on Android a
  * picked document arrives as a `content://` URI owned by whichever app provided
- * it, and that URI is not a path the Matrix SDK — which reads files through
- * Rust, on another thread, some time later — can open. The copy the picker makes
- * is in Allo's own cache directory and is a file both halves of the port can
- * read.
+ * it, and that URI is not a path a native module reading the file later, on
+ * another thread, can open. The copy the picker makes is in Allo's own cache
+ * directory and is a file anything in the app can read.
  *
- * A document has no thumbnail. An `m.file` may carry one and Allo makes none:
- * rendering the first page of a PDF is a document engine, and the row draws an
- * icon and a filename either way.
+ * A document has no thumbnail. Allo makes none: rendering the first page of a
+ * PDF is a document engine, and the row draws an icon and a filename either way.
  */
 export async function pickDocumentAttachments(): Promise<PickedAttachments> {
   const result = await DocumentPicker.getDocumentAsync({
@@ -258,9 +285,9 @@ async function saveThumbnail(
 /**
  * A recording from the composer's microphone, as an attachment.
  *
- * `durationSeconds` is what `MicSendButton` reports; the port speaks
- * milliseconds, which is also what Matrix's `info.duration` is. Getting that
- * conversion wrong would put "0:00" under every voice message in every client.
+ * `durationSeconds` is what `MicSendButton` reports; the attachment carries
+ * milliseconds. Getting that conversion wrong would put "0:00" under every
+ * voice message in every client.
  */
 export function toVoiceAttachment(
   uri: string,
@@ -293,7 +320,7 @@ function fallbackFilename(uri: string, isVideo: boolean, prefix = 'attachment'):
 }
 
 /**
- * What Matrix calls bytes nobody could name.
+ * What bytes nobody could name are called.
  *
  * Every client treats it as "a file" and offers a download, which is the honest
  * outcome. Guessing is worse: a receiver told `image/jpeg` about a QuickTime

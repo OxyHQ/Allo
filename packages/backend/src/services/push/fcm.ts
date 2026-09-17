@@ -3,32 +3,24 @@ import { getMessaging, type Message } from "firebase-admin/messaging";
 
 import type { FcmCredentials } from "../../config/push";
 import { logger } from "../../utils/logger";
-import {
-  isAlert,
-  notificationText,
-  type PushDeliveryOutcome,
-  type PushSender,
-} from "./delivery";
-import type { PushNotificationDevice, PushNotificationRequest } from "./notification";
+import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from "./delivery";
 
 /**
  * Android delivery, through Firebase Cloud Messaging.
  *
  * ## What is in the payload, and what is not
  *
- * The event id and the room id, and text the client chose at registration time.
- * Never the message: this gateway has never seen one (see `notification.ts`), so
- * there is nothing here that could leak even by mistake.
+ * The caller's title and body, and its `data` — coordinates the app uses to
+ * fetch and decrypt locally. Never the message: this process has never seen one
+ * (see `delivery.ts`), so there is nothing here that could leak even by mistake.
  *
  * A `notification` block is included as well as the `data`, and that is a
  * deliberate concession rather than an oversight. A data-only message is what a
- * client that decrypts the event locally would want, and it is what Allo will
- * want once it can do that — but until something is listening for one, a
- * data-only message shows the user nothing at all. A messenger that does not
- * notify is not used. So the notification is displayed by the system with the
- * text the client supplied, and the coordinates travel beside it in `data` for
- * the day the app can turn them into the real message. See
- * `docs/matrix/push.md` §5.
+ * client that decrypts locally would want — but until something is listening
+ * for one, a data-only message shows the user nothing at all. A messenger that
+ * does not notify is not used. So the notification is displayed by the system
+ * with the generic words, and the coordinates travel beside it in `data` for
+ * the day the app can turn them into the real message.
  */
 
 /**
@@ -50,7 +42,7 @@ const FIREBASE_APP_NAME = "allo-push";
  * - **`messaging/invalid-argument`** is returned both for a malformed token and
  *   for a malformed *message*. Our message is built once and is the same shape
  *   for every device, so if it is ever wrong it is wrong for everybody — and
- *   treating that as "the token is invalid" would delete every pusher in the
+ *   treating that as "the token is invalid" would retire every token in the
  *   system in one pass, on a bug we introduced.
  * - **`messaging/sender-id-mismatch`** means the token belongs to a different
  *   Firebase project. That is a credential mistake on this side far more often
@@ -58,7 +50,7 @@ const FIREBASE_APP_NAME = "allo-push";
  *   every one of those tokens work again — if they have not been deleted in the
  *   meantime.
  *
- * Both are logged loudly instead. A stale pusher costs a wasted request per
+ * Both are logged loudly instead. A stale token costs a wasted request per
  * message; a deleted live one costs a person their notifications with nothing on
  * screen to say so.
  */
@@ -94,7 +86,7 @@ export function createFcmSender(transport: FcmTransport): PushSender {
         /**
          * The whole call failed — credentials, network, an outage. Nothing here
          * says anything about any individual token, so every device is a
-         * transient failure and every pusher survives.
+         * transient failure and every token survives.
          */
         logger.error("[Push] FCM refused the whole batch", error);
         const reason = error instanceof Error ? error.message : String(error);
@@ -104,7 +96,7 @@ export function createFcmSender(transport: FcmTransport): PushSender {
       if (results.length !== devices.length) {
         /**
          * A transport that answers with a different number of results has broken
-         * the one contract that lets an outcome be matched to a pushkey. Failing
+         * the one contract that lets an outcome be matched to a token. Failing
          * all of them is the only safe reading: the alternative is attributing
          * somebody else's rejection to a live device.
          */
@@ -137,47 +129,15 @@ function outcomeFor(result: FcmTransportResult): PushDeliveryOutcome {
   return { kind: "failed", reason: code };
 }
 
-function buildMessage(
-  device: PushNotificationDevice,
-  notification: PushNotificationRequest,
-): Message {
-  const data: Record<string, string> = {};
-  if (notification.eventId !== undefined) data.event_id = notification.eventId;
-  if (notification.roomId !== undefined) data.room_id = notification.roomId;
-  if (notification.unreadCount !== undefined) {
-    data.unread_count = String(notification.unreadCount);
-  }
-
-  const base = {
-    token: device.pushkey,
-    data,
-    android: {
-      priority: notification.highPriority ? ("high" as const) : ("normal" as const),
-      /**
-       * Collapsed on the event, so a retry after a transient failure replaces
-       * the earlier attempt instead of ringing the phone twice for one message.
-       * Counts-only notifications collapse together for the same reason.
-       */
-      collapseKey: notification.eventId ?? "allo.counts",
-    },
-  };
-
-  if (!isAlert(notification)) {
-    // Nothing to announce: a data message that a background handler can use to
-    // bring a badge down, and that shows the user nothing on its own.
-    return base;
-  }
-
-  const text = notificationText(device);
+function buildMessage(device: PushDevice, notification: PushNotification): Message {
   return {
-    ...base,
-    notification: { title: text.title, body: text.body },
+    token: device.token,
+    data: { ...notification.data },
+    notification: { title: notification.title, body: notification.body },
     android: {
-      ...base.android,
-      notification: {
-        channelId: "default",
-        ...(device.sound === undefined ? {} : { sound: device.sound }),
-      },
+      /** A message is worth waking the device for. */
+      priority: "high",
+      notification: { channelId: "default" },
     },
   };
 }

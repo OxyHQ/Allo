@@ -8,7 +8,8 @@ import { DocumentIcon } from '@/assets/icons/document-icon';
 import { shareAttachment } from '@/components/media/shareAttachment';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import type { MessageAttachment, MessageReadStatus } from '@/stores/messagesStore';
+import type { MessageAttachment, MessageReadStatus } from '@/lib/chat/model';
+import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { logger } from '@/utils/logger';
 import { extensionOf, mimetypeFromFilename } from '@/utils/mimetypes';
 
@@ -24,9 +25,9 @@ import { formatFileSize } from './attachmentFormat';
  * reads this kind of file already live.
  *
  * **Nothing is fetched until it is asked for.** A document is whatever size its
- * sender chose, and asking the resolver for a URL is what starts the download
- * (see `lib/chat/mediaCache.ts`). A row that downloaded itself on render would
- * pull a 40 MB attachment onto a phone that only scrolled past it.
+ * sender chose, and enabling `useMediaUri` is what starts the download and the
+ * decryption (see `lib/allo/useMediaUri.ts`). A row that downloaded itself on
+ * render would pull a 40 MB attachment onto a phone that only scrolled past it.
  */
 
 export interface FileBubbleProps {
@@ -35,19 +36,17 @@ export interface FileBubbleProps {
   readonly timestamp: Date;
   readonly showTimestamp: boolean;
   readonly readStatus: MessageReadStatus | undefined;
-  /** An attachment source to a local URI, or `''` while there is not one yet. */
-  readonly resolveUrl: (source: string) => string;
 }
 
 export const FileBubble = memo<FileBubbleProps>(
-  ({ attachment, isSent, timestamp, showTimestamp, readStatus, resolveUrl }) => {
+  ({ attachment, isSent, timestamp, showTimestamp, readStatus }) => {
     const theme = useTheme();
     const { t } = useTranslation();
 
     const [wanted, setWanted] = useState(false);
     const [pendingOpen, setPendingOpen] = useState(false);
 
-    const uri = wanted ? resolveUrl(attachment.source) : '';
+    const { uri } = useMediaUri(attachment.ref, attachment.mime, wanted);
 
     const open = useCallback(
       (readyUri: string) => {

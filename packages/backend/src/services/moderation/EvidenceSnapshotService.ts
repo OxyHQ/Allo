@@ -29,7 +29,7 @@ import type { ModerationReport } from "../../db/moderation/reportRepository";
  * reason it is not a fifth thing: a subject that is not an Oxy account never gets
  * described. That is `resolveModerationSubject`'s answer, not this module's
  * opinion, and it is checked here because this is the last line before material
- * crosses the process boundary (§6.5).
+ * crosses the process boundary.
  */
 
 /**
@@ -60,20 +60,19 @@ export class ModerationSubjectUnsupportedError extends Error {
  * The subject is not an Oxy account, and this is the last place that can still
  * matter.
  *
- * Also unreachable by design — intake never queues one (§6.3) — and also a defect
+ * Also unreachable by design — intake never queues one — and also a defect
  * rather than a state, so it dead-letters for the same reasons as the error above.
- * It exists anyway because of what the reachable version would DO: §6.5 requires
- * that a Matrix event id never reach CrowdSource, and an event id that got past
- * intake would otherwise be composed into an envelope's `externalId` and posted.
+ * It exists anyway because of what the reachable version would DO: an identifier
+ * that is not an account, composed into an envelope's `externalId` and posted, is
+ * a disclosure of whatever the identifier was.
  *
  * A guard that only exists at intake is a guard against intake's own bugs and
  * nothing else. This one sits at the last statement before the material is handed
  * to the SDK, which is the only position from which the requirement is a property
  * of the deployment rather than of one code path.
  *
- * The identifier is deliberately absent from the message. It may BE the event id,
- * and an exception string is copied into `Report.lastDeliveryError` and into logs —
- * neither of which is a place conversation metadata should accumulate.
+ * The identifier is deliberately absent from the message: an exception string is
+ * copied into `Report.lastDeliveryError` and into logs.
  */
 export class ModerationSubjectNotAnOxyAccountError extends Error {
   readonly retryable = false;

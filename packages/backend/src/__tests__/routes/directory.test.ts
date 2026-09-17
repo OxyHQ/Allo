@@ -237,9 +237,9 @@ describe("an account by id", () => {
   it("refuses anything that is not an Oxy account id", async () => {
     /**
      * Oxy's own route also accepts a public key, which Allo has never had. The
-     * shape is checked with `isOxyUserId` — the SAME function the Matrix
-     * authentication boundary uses — so the two cannot come to different
-     * conclusions about the same string.
+     * shape is checked with `isOxyUserId`, the one place it is written down, so
+     * no second expression can come to a different conclusion about the same
+     * string.
      */
     for (const candidate of ["nate", "oxy_dk_abcdef", OXY_USER_ID.toUpperCase(), "507f1f77"]) {
       const response = await request(directoryApp()).get(`/api/directory/users/${candidate}`);

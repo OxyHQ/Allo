@@ -18,25 +18,24 @@
 
 ## About
 
-This is the **frontend package** of the **Allo** monorepo. **Allo** is a chat platform for mobile and web with **end-to-end encrypted direct messages** and a **device-first architecture**. It features offline support and a clean UI. Built with Expo and React Native, it supports file-based routing, multi-language support, and a modern UI.
+This is the **frontend package** of the **Allo** monorepo. **Allo** is a chat platform for mobile and web where every conversation, direct or group, is **end-to-end encrypted with MLS** by the Allo platform SDK (`@allo/core`), and every message is decrypted and stored on the device. Built with Expo and React Native, it supports file-based routing, multi-language support, and a modern UI.
 
 This package contains the complete React Native application that runs on Android, iOS, and Web platforms.
 
 ## Features
 
 ### Security & Encryption
-- 🔐 **End-to-End Encryption** - Direct messages encrypted client-side with static ECDH (P-256) between identity keys + AES-256-GCM
-- 📱 **Device-First Architecture** - Messages stored locally first, cloud is secondary
-- ☁️ **Optional Cloud Sync** - Users can enable/disable cloud backup in settings
-- 🔑 **Device Key Management** - Automatic key generation and exchange on first launch
-- ⚠️ **No Forward Secrecy** - The same key encrypts every message between a pair of identity keys; compromising either private key decrypts that pair's entire message history, past and future
-- ⚠️ **Plaintext Fallback** - If encryption fails or the recipient has no registered device, the message is sent unencrypted rather than blocked
+- 🔐 **End-to-End Encryption** - Every conversation is an MLS group; `@allo/core` encrypts, decrypts and stores on the device. The server carries ciphertext and public keys only.
+- 📱 **Devices, not sessions** - Each installation is an *instance* with its own signing key. The first device of an account is active at once; every later one waits on an approval screen until an already-active device approves it from Settings → Devices, comparing a verification code.
+- 🗄️ **Encrypted at rest** - The SDK's store is SQLite on iOS/Android and IndexedDB on the web, and every value in it is ciphertext. The storage key and the signing key live in the Keychain/Keystore (`expo-secure-store`) on a phone.
+- ⚠️ **Web secret store** - A browser has no Keychain. On the web those two keys live in an IndexedDB store named `secrets`, and any script on the origin can read them; see `lib/allo/secrets.web.ts`. Clearing site data revokes the device.
 
 ### Messaging
-- Real-time messaging, encrypted for direct conversations
-- Offline support with local storage
-- Message reactions and replies
+- Real-time, encrypted messaging for direct and group conversations, through `@allo/react`
+- Works offline on what the device already has; sends are queued and retried by the SDK
+- Message edits, deletes, reactions and replies
 - Read receipts and delivery status
+- Encrypted media: pictures, videos, voice notes and documents, decrypted only when shown
 
 ### User Experience
 - Universal app: Android, iOS, and Web
@@ -45,8 +44,8 @@ This package contains the complete React Native application that runs on Android
 - Responsive design and theming
 - Modern UI with custom icons and animations
 
-Push notifications are wired on this side but have no server to talk to — see
-[Push Notifications](#push-notifications-expo--fcm) below.
+Push notifications go through the platform: see
+[Push Notifications](#push-notifications) below.
 
 ## Tech Stack
 - [Expo](https://expo.dev/) SDK 57 & React Native 0.86 (React 19.2)
@@ -57,9 +56,9 @@ Push notifications are wired on this side but have no server to talk to — see
 - Expo Router (file-based routing)
 - Custom SVG icons
 - Expo Notifications, Secure Store, Camera, Video, Image Picker
-- **Static ECDH (P-256) + AES-256-GCM** - End-to-end encryption for direct messages (see [Encryption](../../docs/encryption.mdx) for what this does and doesn't provide)
-- **AsyncStorage** - Offline-first message storage
-- **Socket.IO** - Real-time messaging and P2P signaling
+- **`@allo/core` + `@allo/react`** - The Allo platform SDK: MLS end-to-end encryption, sync, outbox, media, devices (see [`docs/platform/`](../../docs/platform/))
+- **expo-sqlite / IndexedDB** - The SDK's encrypted store, per platform
+- **expo-secure-store** - The storage key and this device's signing key (native)
 
 ## Project Structure
 ```
@@ -71,29 +70,60 @@ Push notifications are wired on this side but have no server to talk to — see
 ├── context/            # React context providers
 ├── hooks/              # Custom React hooks
 ├── lib/                # Library code
-│   ├── signalProtocol.ts  # End-to-end encryption/decryption (static ECDH + AES-256-GCM)
-│   ├── offlineStorage.ts  # Offline message storage
-│   ├── offlineQueue/      # Queued mutations, replayed on reconnect
-│   ├── p2pMessaging.ts    # Peer-to-peer messaging (scaffolding; not functional)
-│   ├── matrix/            # Matrix client port (see below) — nothing imports it yet
+│   ├── allo/           # THE seam to the SDK: the only place a client is built (see below)
+│   ├── chat/           # Chat view-model types, projections, pickers, viewer arithmetic
 │   └── ...
 ├── locales/            # i18n translation files (en, es, it)
 ├── plugins/            # Expo config plugins
 ├── scripts/            # Utility scripts
-├── stores/             # State management (Zustand)
-│   ├── messagesStore.ts      # Encrypted message store
-│   ├── deviceKeysStore.ts    # Device key management
+├── metro/              # Stub modules Metro is pointed at for the MLS engine (see metro.config.js)
+├── stores/             # State management (Zustand): UI state, preferences, the people cache
 │   └── ...
 ├── styles/             # Global styles and colors
 ├── types/              # TypeScript types
 ├── utils/              # Utility functions
-├── __mocks__/          # Jest manual mocks (the Matrix native binding)
+├── __mocks__/          # Jest manual mocks
 ├── __tests__/          # Jest suites
 ├── app.config.js       # Expo app configuration
 ├── config.ts           # Base URLs and third-party keys
 ├── package.json        # Project metadata and dependencies
 └── ...
 ```
+
+## The messaging seam: `lib/allo/`
+
+Screens and components never import `@allo/core` for a value; they use the
+hooks in `@allo/react` (`useConversations`, `useTimeline`, `useOwnInstances`,
+…) and the projections in `lib/chat/model.ts`. `lib/allo/` is the only place
+the SDK is *constructed*, and every platform adapter it needs lives there:
+
+| File | What it is |
+|---|---|
+| `client.ts` | `createAppAlloClient` — the one `createAlloClient(...)` call, with the adapters below |
+| `storage.native.ts` / `storage.web.ts` | `StorageAdapter` over `expo-sqlite` (`allo.db`, table `kv`) / IndexedDB (`allo`, store `kv`); `batch` is one transaction |
+| `secrets.native.ts` / `secrets.web.ts` | `SecretStore` over `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`) / IndexedDB (`allo-secrets`); the web file documents the limitation |
+| `session.ts` | `OxySessionAdapter` over the `OxyServices` instance `useOxy()` provides — the session authority |
+| `people.ts` | `PeopleDirectory` and the coalesced `getUsersByIds` lookup that fills `usersStore`; the only place the chat path asks Oxy about a person |
+| `push.ts` | The device push token → `client.instance.setPushToken`, once permission is granted; cleared on sign-out |
+| `useMediaUri.ts` + `mediaSink.*.ts` | A `MediaRef` → a URI a player can open: a cache file on native, an object URL on web, released on unmount |
+| `AlloRoot.tsx` + `EnrollmentGate.tsx` | Client lifecycle (one per signed-in account; stop on switch, `reset()` on sign-out) and the approval / revoked screens |
+
+A source scan, `__tests__/allo/noLegacyChatPath.test.ts`, keeps it that way:
+no `socket.io-client`, no AsyncStorage on the chat path, no legacy messaging
+endpoint, and `@allo/core` imported for values only inside `lib/allo/`.
+
+### Metro and the MLS engine
+
+`metro.config.js` carries a resolver for three things the engine's dependencies
+need and Metro cannot do on its own: `crypto` (a Node-only fallback in
+`@hpke/common`, behind a `globalThis.crypto` check that never fails in a browser
+or on Hermes) resolves to `metro/empty-module.js`; the optional `ts-mls` peers
+for ciphersuites Allo does not use (`@hpke/ml-kem` and friends) resolve to
+`metro/ts-mls-optional-peer.js`, which throws by name if anything ever reads it;
+and `@hpke/*` are pointed at their ESM builds, because the CJS ones are UMD
+wrappers whose `require` parameter shadows the global and leaves Metro's
+dependency collector blind. All three apply to every platform, including the
+static-render bundle `expo export` runs in Node.
 
 ## Getting Started
 
@@ -200,55 +230,49 @@ This package is part of the Allo monorepo and integrates with:
 
 ## Security & Encryption
 
-### End-to-End Encryption Implementation
-
-`lib/signalProtocol.ts` implements static Diffie-Hellman, not the Signal Protocol despite the filename (kept for historical reasons / to orient readers already familiar with the code). See [docs/encryption.mdx](../../docs/encryption.mdx) for the full picture; summary:
-
-- **Device Keys**: Each device generates an identity key pair, a signed pre-key, and 100 one-time pre-keys on first launch and uploads the public halves to the backend. Only the identity key pair is actually used for encryption — the signed pre-key and one-time pre-keys are generated, stored, and published, but no encrypt/decrypt path reads them.
-- **Key Exchange**: Devices publish and fetch public identity keys through the backend API.
-- **Encryption**: `deriveSharedSecret` computes the ECDH shared point between the sender's and recipient's identity keys and uses the raw X coordinate directly as the AES-256 key — there is no KDF. The same pair of identity keys always produces the same encryption key.
-- **Decryption**: Messages are decrypted locally on the recipient's device using the same static shared secret.
-- **No Forward Secrecy**: The encryption key for a pair of users never changes; only the IV is unique per message. If either party's identity private key is ever compromised, every past and future message between that pair can be decrypted.
-- **Signatures Unused**: The signed pre-key's ECDSA signature is generated and stored, but `verifySignature` is never called on any send or receive path — nothing actually checks it.
+Encryption is the platform's, not the app's. `@allo/core` keeps every
+conversation as an MLS group; the app never touches a key, a ciphertext or a
+group state. What the app is responsible for is where the SDK keeps its
+secrets and its store on each platform — the adapters in `lib/allo/` — and the
+enrollment gate that keeps an unapproved device out. The design, the threat
+model and what is still open are in [`docs/platform/`](../../docs/platform/).
 
 ### Known Limitations
 
-- **Group chats**: When sending in a group conversation, the app encrypts the message for only the first other participant returned by the conversation's participant list. Every other participant sees a decryption-failure placeholder.
-- **Multi-device**: `getRecipientKeys` (`stores/deviceKeysStore.ts`) always picks the recipient's first registered device (`devices[0]`, sorted by device id) rather than the device the recipient is actually using. A second device the same user owns generally cannot decrypt messages sent to them.
-- **Plaintext fallback**: If encryption fails, or the recipient has no registered devices, the message is sent as plaintext instead of being blocked (`stores/messagesStore.ts`).
-- **Peer-to-peer**: Not implemented. `lib/p2pMessaging.ts`'s `establishP2PConnection` always returns `false` (a placeholder), and the WebRTC offer/answer/ICE-candidate handlers are unimplemented stubs. Every message currently goes through the server relay.
-- **Media attachments**: Not implemented. The attachment menu's photo, document, camera, location, contact, and poll handlers are all no-ops (`components/conversation/ConversationView.tsx`), and there is no upload endpoint on the backend.
+- **Web keys are readable by the origin.** No Keychain in a browser: the storage
+  key and the signing key are in IndexedDB. See `lib/allo/secrets.web.ts`.
+- **No thumbnail on send.** `UploadMediaMeta` carries none, so a receiver draws a
+  picture only after downloading the original; a video with no thumbnail draws a
+  play mark until opened.
+- **No history for a new device.** A second device reads from the moment it was
+  approved; history transfer is a later phase of the SDK.
+- **The pending device cannot show its own verification code.** The SDK's
+  `InstanceView` omits the challenge; the approving device shows it, and the
+  pending screen asks the user to check the device name.
+- **Sign-out wipes this device's messages.** `AlloRoot` calls `reset()` on
+  sign-out, which revokes the instance and clears its store; signing back in
+  enrols the device afresh.
 
-## Matrix client port
+## The Allo platform
 
-`lib/matrix/` is a client port for the [Matrix migration](../../docs/matrix/).
-It is code that exists, not a feature that runs: **no screen, hook or store
-imports it**, and the messaging described above is still what the app does.
+The app runs on it: `@allo/react` for the hooks, `lib/allo/` for the seam (see
+[above](#the-messaging-seam-liballo)). The design is in
+[`docs/adr/0001-clean-break-platform.md`](../../docs/adr/0001-clean-break-platform.md)
+and [`docs/platform/`](../../docs/platform/).
 
-| Module | What it is |
-|--------|-----------|
-| `types.ts` | The port interface (`AlloChatClient`) plus its view models. Nothing here may import a Matrix SDK. |
-| `client.native.ts`, `native/` | The iOS/Android implementation over `@unomed/react-native-matrix-sdk`. |
-| `client.web.ts` | Deliberately unimplemented — it throws `MatrixPlatformUnsupportedError` rather than returning a stub that quietly does nothing. |
-| `errors.ts` | The states the port refuses to be in. |
-
-`__tests__/matrix/` covers the pure translation modules against
-`__mocks__/@unomed/react-native-matrix-sdk.ts`; the native binding itself cannot
-be loaded in a test process. Those suites need jest under the `jest-expo`
-preset, which is why `bun run test` here is not interchangeable with `bun test`.
+The Jest suites run under the `jest-expo` preset, which is why `bun run test`
+here is not interchangeable with `bun test`.
 
 ### Device-First Architecture
 
 - **Local Storage**: All messages are stored locally using AsyncStorage (offline-first)
-- **Cloud Sync**: Optional cloud backup can be enabled in Settings → Security
 - **Offline Support**: App works completely offline, messages sync when online
-- **Privacy**: When cloud sync is disabled, messages never leave the device
 
 ### Message Flow
 
 1. User types message → encrypted locally (static ECDH + AES-256-GCM), or sent as plaintext if encryption fails
 2. Message stored locally in AsyncStorage (offline-first)
-3. Message POSTed to the server (if cloud sync is enabled), which relays it to the recipient — there is no working P2P path yet
+3. Message POSTed to the server, which relays it to the recipient
 4. Recipient receives the message → decrypts locally if it was encrypted
 5. Message displayed in conversation
 
@@ -256,31 +280,22 @@ preset, which is why `bun run test` here is not interchangeable with `bun test`.
 
 Access security settings via: **Settings → Security & Encryption**
 
-- **Cloud Sync Toggle**: Enable/disable cloud backup
 - **Encryption Status**: View encryption initialization status
 - **Device ID**: View your device's registered device ID
 
-## Push Notifications (Expo + FCM)
+## Push Notifications
 
-**Not functional end to end.** The client half is built; the server half is
-missing, so no push has ever been delivered.
+The device token is the SDK's to register. Once the OS grants permission —
+either from the first-run sheet (`NotificationPermissionGate`) or the switch in
+Settings — `lib/allo/push.ts` reads the FCM/APNs token through
+`expo-notifications` and hands it to `client.instance.setPushToken`, which
+makes it this instance's pusher on the backend. Nothing about the token is
+stored in the app, and `clearPushToken` removes it on sign-out.
 
-- `expo-notifications` is configured via plugin in `app.config.js` for native
-  builds, and `components/notifications/RegisterPushToken.tsx` fetches the
-  device token after the user authenticates.
-- It then `POST`s it to `/notifications/push-token`, and
-  `app/(chat)/settings/index.tsx` `DELETE`s the same path when the user turns
-  notifications off. **The backend mounts no notifications router**, so both
-  calls 404. `RegisterPushToken` catches the failure and logs a warning, which
-  is why nothing surfaces in the UI.
-- Nothing therefore ever writes a `PushToken` document. The backend's
-  `utils/push.ts` can send through Firebase Admin, but `sendPushToUser` queries
-  a collection that stays empty — and no route calls it either.
-- Registration is also skipped on web and in Expo Go (remote push needs a
-  development build from SDK 53 onward).
-
-Closing this needs a backend route that persists the token and a call site that
-sends on new messages; neither exists today.
+Where a token cannot be had — the web, a simulator, an Expo Go client (remote
+push needs a development build) — nothing is registered and nothing is said.
+What the notification says, and whether it is delivered at all, is the
+backend's: the app only registers the device.
 
 ## Contributing
 

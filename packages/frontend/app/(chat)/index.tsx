@@ -27,6 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { toast } from '@oxy.so/bloom/toast';
+import { useConversationActions, useSyncState } from '@allo/react';
 
 // Components
 import { Search } from '@oxy.so/bloom/search';
@@ -37,30 +38,26 @@ import { ThemedText } from '@/components/ThemedText';
 import Avatar from '@/components/Avatar';
 import { GroupAvatar } from '@/components/GroupAvatar';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { ConversationSecurityMark } from '@/components/bridges/ConversationSecurityMark';
-import type { ConversationSecurity } from '@/lib/chat/roomOrigin';
 
 // Hooks
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxy.so/services';
+import { useChatConversations } from '@/hooks/useChatConversations';
 import {
-    useConversationsStore,
     useConversationSwipePreferencesStore,
+    useUsersStore,
     SwipeActionType,
 } from '@/stores';
 
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
 
-// Matrix chat backend (behind EXPO_PUBLIC_CHAT_BACKEND)
-import { MatrixSignInGate } from '@/components/matrix/MatrixSignInGate';
-import { useMatrixConversations } from '@/hooks/useMatrixConversations';
-
 // Utils
 import { colors } from '@/styles/colors';
 import {
     useConversationDisplayName,
-    getConversationAvatar,
+    useConversationAvatar,
+    getConversationDisplayName,
     getOtherParticipants,
     getParticipantCount,
     isGroupConversation,
@@ -68,69 +65,17 @@ import {
 import { formatConversationTimestamp } from '@/utils/dateUtils';
 import { useAvatarShape } from '@/hooks/useAvatarShape';
 import { useBottomChrome } from '@/context/BottomChromeContext';
+import { confirmDialog } from '@/utils/alerts';
+import { logger } from '@/utils/logger';
+import type { Conversation } from '@/lib/chat/model';
 
 // Skeleton dimension lookup tables (module-level to avoid re-allocation per render)
 const SKELETON_NAME_WIDTHS = [140, 110, 160, 120, 130, 100, 150, 115, 145, 125] as const;
 const SKELETON_MSG_WIDTHS = [200, 170, 220, 180, 150, 210, 190, 160, 230, 175] as const;
 
-// Export types for use in other files
-export type ConversationType = 'direct' | 'group';
-
-export interface ConversationParticipant {
-    id: string;
-    name?: {
-        /** Canonical, ready-to-render display string from the Oxy API. */
-        displayName: string;
-        first: string;
-        last: string;
-    };
-    username?: string;
-    avatar?: string;
-}
-
-export interface Conversation {
-    id: string;
-    type: ConversationType;
-    name: string; // For direct: contact name, for group: group name or generated name
-    lastMessage: string;
-    timestamp: string;
-    unreadCount: number;
-    avatar?: string; // For direct: contact avatar, for group: group avatar or first participant avatar
-    isArchived?: boolean;
-    /**
-     * The viewer has been invited and has not joined. There is nothing to read in
-     * the conversation until they do, and opening it yields no messages.
-     *
-     * Only the Matrix backend produces this: the Express API has no invitations.
-     */
-    isInvitation?: boolean;
-    /**
-     * This account has put the conversation's messages on a timer: they stop
-     * being drawn here after their lifetime, and the ones this device sent are
-     * removed from the homeserver.
-     *
-     * Only the Matrix backend produces this, and it is a fact about *this
-     * account* rather than about the conversation — the other people in it are
-     * not told. See `docs/matrix/ephemeral.md`.
-     */
-    isEphemeral?: boolean;
-    /**
-     * What may be claimed about who can read this conversation, and which remote
-     * network carries it if any (`docs/matrix/data-model.md` §5.3).
-     *
-     * Decided once by `lib/chat/roomOrigin.ts` and never by a component. Absent
-     * on conversations from the Express API, which has no rooms, no bridges and
-     * no encryption state to read — and absent is correctly drawn as no mark at
-     * all rather than as an open padlock.
-     */
-    security?: ConversationSecurity;
-    theme?: string; // Color theme ID (shared with all participants)
-    // Group-specific fields
-    participants?: ConversationParticipant[]; // All participants (including current user for groups)
-    groupName?: string; // Custom group name (optional)
-    groupAvatar?: string; // Custom group avatar (optional)
-    participantCount?: number; // Number of participants (for groups)
-}
+// The chat view-model types live in `@/lib/chat/model`; re-exported for the
+// modules that historically imported them from this screen.
+export type { Conversation, ConversationParticipant, ConversationType } from '@/lib/chat/model';
 
 /**
  * Direct conversation avatar with shape support.
@@ -178,8 +123,6 @@ interface ConversationRowStyles {
     conversationTimestampUnread: TextStyle;
     conversationBottomRow: ViewStyle;
     conversationMessage: TextStyle;
-    invitationLabel: TextStyle;
-    ephemeralMark: TextStyle;
     unreadBadge: ViewStyle;
     unreadText: TextStyle;
 }
@@ -187,7 +130,6 @@ interface ConversationRowStyles {
 interface ConversationRowProps {
     item: Conversation;
     currentUserId?: string;
-    oxyServices: ReturnType<typeof useOxy>['oxyServices'];
     isActive: boolean;
     isSelected: boolean;
     isSelectionMode: boolean;
@@ -213,15 +155,14 @@ interface ConversationRowProps {
  * A single conversation-list row.
  *
  * Its own component so it can SUBSCRIBE to its participants' Oxy user data via
- * `useConversationDisplayName`. When the user cache is enriched later (e.g. by
- * `useRealtimeMessaging`), the store subscription re-renders exactly this row with
- * the real display name — no out-of-band `getState()` read that the React Compiler
- * could freeze on a stale first value.
+ * `useConversationDisplayName`. When the people cache is filled later, the
+ * store subscription re-renders exactly this row with the real display name —
+ * no out-of-band `getState()` read that the React Compiler could freeze on a
+ * stale first value.
  */
 const ConversationRow = React.memo(function ConversationRow({
     item,
     currentUserId,
-    oxyServices,
     isActive,
     isSelected,
     isSelectionMode,
@@ -235,12 +176,10 @@ const ConversationRow = React.memo(function ConversationRow({
     onSwipeAction,
     registerSwipeableRef,
 }: ConversationRowProps) {
-    const { t } = useTranslation();
-    const theme = useTheme();
     const isGroup = isGroupConversation(item);
     // Reactive: subscribes to this conversation's participant user cache.
     const displayName = useConversationDisplayName(item, currentUserId);
-    const avatar = getConversationAvatar(item, currentUserId, oxyServices);
+    const avatar = useConversationAvatar(item, currentUserId);
     const otherParticipants = getOtherParticipants(item, currentUserId);
     const participantCount = getParticipantCount(item, currentUserId);
     const leftEnabled = leftSwipeAction !== 'none';
@@ -308,18 +247,6 @@ const ConversationRow = React.memo(function ConversationRow({
                             <ThemedText style={styles.conversationName} numberOfLines={1}>
                                 {displayName}
                             </ThemedText>
-                            {/*
-                              * Both marks, from one decision made in
-                              * `lib/chat/roomOrigin.ts`. The row deliberately does
-                              * no case analysis of its own — see
-                              * `data-model.md` §5.3 for why that separation is the
-                              * point rather than a style preference.
-                              */}
-                            <ConversationSecurityMark
-                                security={item.security}
-                                size={13}
-                                color={theme.colors.textSecondary}
-                            />
                             {isGroup && participantCount > 0 && (
                                 <ThemedText
                                     style={[
@@ -344,27 +271,9 @@ const ConversationRow = React.memo(function ConversationRow({
                     </ThemedText>
                 </View>
                 <View style={styles.conversationBottomRow}>
-                    {/* An ephemeral conversation looks exactly like an ordinary one
-                        until its messages start disappearing, which is the moment it
-                        is too late to notice. The marker is beside the preview and
-                        not instead of it: what was said still belongs in the row. */}
-                    {item.isEphemeral && !item.isInvitation && (
-                        <Ionicons
-                            name="timer-outline"
-                            size={14}
-                            color={styles.ephemeralMark.color}
-                            accessibilityLabel={t('Messages in this conversation disappear')}
-                        />
-                    )}
-                    {item.isInvitation ? (
-                        <ThemedText style={styles.invitationLabel} numberOfLines={1}>
-                            {t('Invitation · tap to answer')}
-                        </ThemedText>
-                    ) : (
-                        <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                            {item.lastMessage}
-                        </ThemedText>
-                    )}
+                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
+                        {item.lastMessage}
+                    </ThemedText>
                     {item.unreadCount > 0 && (
                         <View style={styles.unreadBadge}>
                             <Text style={styles.unreadText}>
@@ -407,18 +316,14 @@ const ConversationRow = React.memo(function ConversationRow({
  * Must be a component (not a closure) so we can use useAnimatedStyle.
  */
 function SwipeAction({
-    action,
     direction,
     dragAnimatedValue,
     windowWidth,
 }: {
-    action: SwipeActionType;
     direction: 'left' | 'right';
     dragAnimatedValue: SharedValue<number>;
     windowWidth: number;
 }) {
-    const isDelete = action === 'delete';
-
     const animatedStyle = useAnimatedStyle(() => {
         const drag = dragAnimatedValue.value;
         const width = interpolate(
@@ -437,19 +342,19 @@ function SwipeAction({
                     justifyContent: 'center',
                     alignItems: 'center',
                     overflow: 'hidden',
-                    backgroundColor: isDelete ? colors.chatUnreadBadge : colors.chatTypingIndicator,
+                    backgroundColor: colors.chatUnreadBadge,
                 },
                 animatedStyle,
             ]}
         >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20 }}>
                 <Ionicons
-                    name={isDelete ? 'trash-outline' : 'archive-outline'}
+                    name="trash-outline"
                     size={20}
                     color="#FFFFFF"
                 />
                 <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>
-                    {isDelete ? 'Delete' : 'Archive'}
+                    Delete
                 </Text>
             </View>
         </Animated.View>
@@ -458,24 +363,7 @@ function SwipeAction({
 
 function SkeletonRow({ index, theme }: { index: number; theme: ReturnType<typeof useTheme> }) {
     // Compuesto con las primitivas de `Skeleton` de Bloom en vez de con vistas y
-    // una animación propias.
-    //
-    // La versión anterior animaba la opacidad con
-    //
-    //     opacity.value = withTiming(1, …, () => {
-    //       opacity.value = withTiming(0.3, …);
-    //     });
-    //
-    // más un `setInterval` de 1600 ms que la relanzaba sin esperar. Un callback
-    // que escribe el mismo shared value que lo disparó es recursión directa: en
-    // web el setter es un setter de JavaScript corriente, y producción devolvía
-    //
-    //     RangeError: Maximum call stack size exceeded
-    //         at Object.get [as valueSetter]
-    //
-    // El brillo vive ahora en la librería compartida, así que este fichero no
-    // tiene animación que mantener y el resto del ecosistema arregla o mejora el
-    // efecto una sola vez.
+    // una animación propias: el brillo vive en la librería compartida.
     return (
         <Skeleton.Row
             style={{
@@ -521,96 +409,61 @@ function ConversationsSkeleton({ theme }: { theme: ReturnType<typeof useTheme> }
  * Conversations list component
  * Displays list of all conversations with support for direct and group chats
  *
- * Follows Expo Router 54 best practices:
- * - Uses Link components for navigation
- * - Derives selected state from pathname
- * - Supports responsive layouts
+ * The list is the SDK's (`useChatConversations`), already decrypted on this
+ * device and kept live by its sync. There is no archive: the platform has no
+ * such state, and a swipe that "deletes" a conversation LEAVES it.
  */
 export default function ConversationsList() {
     const theme = useTheme();
+    const { t } = useTranslation();
     const { contentClearance: bottomBarClearance } = useBottomChrome();
     const pathname = usePathname();
     const router = useRouter();
     const { width: windowWidth } = useWindowDimensions();
-    // Get conversations from store
-    const storedConversations = useConversationsStore(state => state.conversations);
-    // ...or from the Matrix room list, which is `undefined` unless this build's
-    // chat backend is Matrix. The port's sync loop keeps it up to date, so there
-    // is nothing to fetch, nothing to cache and nothing to refresh.
-    const roomConversations = useMatrixConversations();
-    const conversations = roomConversations ?? storedConversations;
-    const loadCachedConversations = useConversationsStore(state => state.loadCachedConversations);
-    const fetchConversations = useConversationsStore(state => state.fetchConversations);
-    const refreshConversations = useConversationsStore(state => state.refreshConversations);
-    const isLoading = useConversationsStore(state => state.isLoading);
-    const isRefreshing = useConversationsStore(state => state.isRefreshing);
-    const hasFetchedOnce = useConversationsStore(state => state.hasFetchedOnce);
-    const archiveConversation = useConversationsStore(state => state.archiveConversation);
-    const unarchiveConversation = useConversationsStore(state => state.unarchiveConversation);
-    const removeConversation = useConversationsStore(state => state.removeConversation);
+    const conversations = useChatConversations();
+    const syncState = useSyncState();
+    const { leave, refresh } = useConversationActions();
     const leftSwipeAction = useConversationSwipePreferencesStore(state => state.leftSwipeAction);
     const rightSwipeAction = useConversationSwipePreferencesStore(state => state.rightSwipeAction);
+    const usersById = useUsersStore((state) => state.usersById);
 
-    // Get current user ID and oxy services
-    const { user, oxyServices } = useOxy();
+    // Get current user ID
+    const { user } = useOxy();
     const currentUserId = user?.id;
 
-    // Offline-first: load cached conversations instantly, then fetch from API in parallel
-    // Cache shows data immediately; API fetch updates in the background.
-    //
-    // The fetch waits for the viewer's id because every conversation's unread
-    // badge is that viewer's own entry in a per-participant map. Restoring an
-    // Oxy session can take seconds, so `currentUserId` is a dependency rather
-    // than a read taken once: fetching before it lands would paint a list of
-    // zeroes over the cache and never recover.
-    useEffect(() => {
-        // The Matrix room list is fed by sync, not by a request. Calling the
-        // Express API here would fetch a list this screen is not drawing.
-        if (roomConversations !== undefined) {
-            return;
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+            await refresh();
+        } catch (error: unknown) {
+            logger.warn('[Conversations] refresh failed', error);
+        } finally {
+            setIsRefreshing(false);
         }
-        loadCachedConversations();
-        if (currentUserId) {
-            fetchConversations(currentUserId);
-        }
-    }, [loadCachedConversations, fetchConversations, currentUserId, roomConversations]);
-
-    // Pull-to-refresh, for the same reason, is a no-op until the viewer is known.
-    const handleRefresh = useCallback(() => {
-        if (roomConversations !== undefined) {
-            return;
-        }
-        if (currentUserId) {
-            refreshConversations(currentUserId);
-        }
-    }, [refreshConversations, currentUserId, roomConversations]);
+    }, [refresh]);
 
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Filter conversations based on search query and archived status
+    // Filter conversations based on search query
     const visibleConversations = useMemo(() => {
-        let filtered = conversations.filter(conv => !conv.isArchived);
-
-        if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
-            filtered = filtered.filter(conv =>
-                conv.name.toLowerCase().includes(query) ||
-                conv.lastMessage.toLowerCase().includes(query)
-            );
+        if (!searchQuery.trim()) {
+            return conversations;
         }
-
-        return filtered;
-    }, [conversations, searchQuery]);
+        const query = searchQuery.toLowerCase();
+        const getUser = (id: string) => usersById[id]?.data;
+        return conversations.filter(conv =>
+            getConversationDisplayName(conv, currentUserId, getUser).toLowerCase().includes(query) ||
+            conv.lastMessage.toLowerCase().includes(query)
+        );
+    }, [conversations, searchQuery, usersById, currentUserId]);
     // Determine empty state messaging
-    const hasArchivedOnly = conversations.length > 0 && visibleConversations.length === 0 && !searchQuery.trim();
     const noSearchResults = searchQuery.trim() && visibleConversations.length === 0;
 
     const emptyStateCopy = noSearchResults
         ? 'No conversations found.\nTry a different search term.'
-        : hasArchivedOnly
-            ? 'All of your conversations are archived.\nAdjust swipe settings if you want them to stay visible.'
-            : 'No conversations yet.\nStart a new chat to get started!';
+        : 'No conversations yet.\nStart a new chat to get started!';
 
     // Track selected conversation from pathname
     // Matches both /c/:id format and legacy /(chat)/:id format
@@ -794,23 +647,6 @@ export default function ConversationsList() {
             flex: 1,
             marginRight: 8,
         },
-        // An invitation has no preview to show — there is nothing readable in
-        // the room yet — so the row says what it is instead of going blank and
-        // reading as a conversation nobody has written in.
-        invitationLabel: {
-            fontSize: 13,
-            fontWeight: '600',
-            color: theme.colors.primary,
-            flex: 1,
-            marginRight: 8,
-        },
-        // A style whose only job is to carry a colour to an icon, because an
-        // Ionicon takes one as a prop and not from a stylesheet. Read from the
-        // theme like every other colour in the app.
-        ephemeralMark: {
-            color: theme.colors.textSecondary,
-            marginRight: 4,
-        },
         unreadBadge: {
             backgroundColor: colors.primaryColor,
             borderRadius: 12,
@@ -824,29 +660,6 @@ export default function ConversationsList() {
             color: '#FFFFFF',
             fontSize: 11,
             fontWeight: '700',
-        },
-        swipeActionContainer: {
-            justifyContent: 'center',
-            alignItems: 'center',
-            overflow: 'hidden',
-        },
-        swipeActionContent: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            paddingHorizontal: 20,
-        },
-        swipeActionArchive: {
-            backgroundColor: colors.chatTypingIndicator,
-        },
-        swipeActionDelete: {
-            backgroundColor: colors.chatUnreadBadge,
-        },
-        swipeActionText: {
-            color: '#FFFFFF',
-            fontSize: 14,
-            fontWeight: '600',
         },
         settingsButton: {
             paddingHorizontal: 16,
@@ -870,6 +683,16 @@ export default function ConversationsList() {
         },
         participantCountLabel: {
             marginLeft: 4,
+        },
+        syncBanner: {
+            paddingHorizontal: 16,
+            paddingVertical: 6,
+            backgroundColor: theme.colors.backgroundSecondary,
+        },
+        syncBannerText: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+            textAlign: 'center',
         },
     }), [theme]);
 
@@ -934,71 +757,46 @@ export default function ConversationsList() {
     }, [isSelectionMode, toggleConversationSelection, router]);
 
     /**
-     * Archive a conversation with toast notification and undo
+     * Leave conversations. There is no undo: leaving is a commit on the
+     * group that every other member's device applies, so it is confirmed
+     * first rather than offered as a toast to take back.
      */
-    const handleArchiveConversation = useCallback((conversationId: string, conversationName: string) => {
-        archiveConversation(conversationId);
-
-        toast.success(`Archived "${conversationName}"`, {
-            action: {
-                label: 'Undo',
-                onClick: () => {
-                    unarchiveConversation(conversationId);
-                    toast.success('Archive undone');
-                },
-            },
-            duration: 4000,
+    const leaveConversations = useCallback(async (ids: readonly string[]) => {
+        if (ids.length === 0) return;
+        const confirmed = await confirmDialog({
+            title: ids.length === 1 ? t('chat.leave.conversation', 'Delete conversation') : t('chat.leave.many', 'Delete {{count}} conversations', { count: ids.length }),
+            message: t('chat.leave.confirm', 'You will stop receiving messages here, and this device will no longer be able to read them.'),
+            okText: t('common.delete', 'Delete'),
+            cancelText: t('common.cancel', 'Cancel'),
+            destructive: true,
         });
-    }, [archiveConversation, unarchiveConversation]);
-
-    /**
-     * Delete a conversation with toast notification and undo
-     * Note: For undo to work, we'd need to store deleted conversations temporarily
-     */
-    const handleDeleteConversation = useCallback((conversationId: string, conversationName: string) => {
-        removeConversation(conversationId);
-
-        toast.error(`Deleted "${conversationName}"`, {
-            duration: 4000,
-        });
-    }, [removeConversation]);
-
-    /**
-     * Archive all selected conversations
-     */
-    const handleBulkArchive = useCallback(() => {
-        const ids = Array.from(selectedConversationIds);
-        const count = ids.length;
-
-        ids.forEach((id) => archiveConversation(id));
-        clearSelection();
-
-        toast.success(`Archived ${count} conversation${count !== 1 ? 's' : ''}`, {
-            action: {
-                label: 'Undo',
-                onClick: () => {
-                    ids.forEach((id) => unarchiveConversation(id));
-                    toast.success('Archive undone');
-                },
-            },
-            duration: 4000,
-        });
-    }, [selectedConversationIds, archiveConversation, unarchiveConversation, clearSelection]);
+        if (!confirmed) return false;
+        let failed = 0;
+        for (const id of ids) {
+            try {
+                await leave(id);
+            } catch (error: unknown) {
+                failed += 1;
+                logger.error('[Conversations] leave failed:', error);
+            }
+        }
+        if (failed > 0) {
+            toast.error(t('chat.leave.failed', 'The conversation could not be left'));
+        } else {
+            toast.success(ids.length === 1 ? t('chat.leave.done', 'Conversation deleted') : t('chat.leave.doneMany', 'Deleted {{count}} conversations', { count: ids.length }));
+        }
+        return true;
+    }, [leave, t]);
 
     /**
      * Delete all selected conversations
      */
     const handleBulkDelete = useCallback(() => {
         const ids = Array.from(selectedConversationIds);
-        const count = ids.length;
-
-        ids.forEach((id) => removeConversation(id));
-        clearSelection();
-
-        toast.error(`Deleted ${count} conversation${count !== 1 ? 's' : ''}`, {
-            duration: 4000,
+        void leaveConversations(ids).then((done) => {
+            if (done) clearSelection();
         });
-    }, [selectedConversationIds, removeConversation, clearSelection]);
+    }, [selectedConversationIds, leaveConversations, clearSelection]);
 
     // Animated styles for header background during selection mode
     const headerBackgroundColor = theme.colors.background;
@@ -1041,7 +839,6 @@ export default function ConversationsList() {
             }
             return (
                 <SwipeAction
-                    action={action}
                     direction={direction}
                     dragAnimatedValue={dragX}
                     windowWidth={windowWidth}
@@ -1062,23 +859,15 @@ export default function ConversationsList() {
 
         const action = direction === 'left' ? leftSwipeAction : rightSwipeAction;
 
-        if (action === 'none') {
-            closeSwipeable(conversation.id);
-            swipeActionInFlight.current.delete(conversation.id);
-            return;
-        }
-
-        if (action === 'archive') {
-            handleArchiveConversation(conversation.id, conversation.name);
-        } else if (action === 'delete') {
-            handleDeleteConversation(conversation.id, conversation.name);
+        if (action === 'delete') {
+            void leaveConversations([conversation.id]);
         }
 
         setTimeout(() => {
             closeSwipeable(conversation.id);
             swipeActionInFlight.current.delete(conversation.id);
         }, 200);
-    }, [leftSwipeAction, rightSwipeAction, closeSwipeable, handleArchiveConversation, handleDeleteConversation]);
+    }, [leftSwipeAction, rightSwipeAction, closeSwipeable, leaveConversations]);
 
     /**
      * Search bar header component (memoized to prevent re-renders)
@@ -1105,7 +894,6 @@ export default function ConversationsList() {
         <ConversationRow
             item={item}
             currentUserId={currentUserId}
-            oxyServices={oxyServices}
             isActive={selectedId === item.id}
             isSelected={selectedConversationIds.has(item.id)}
             isSelectionMode={isSelectionMode}
@@ -1119,10 +907,14 @@ export default function ConversationsList() {
             onSwipeAction={handleSwipeAction}
             registerSwipeableRef={registerSwipeableRef}
         />
-    ), [selectedId, selectedConversationIds, isSelectionMode, currentUserId, oxyServices, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress, registerSwipeableRef]);
+    ), [selectedId, selectedConversationIds, isSelectionMode, currentUserId, leftSwipeAction, rightSwipeAction, styles, renderSwipeAction, handleSwipeAction, handleConversationLongPress, handleConversationPress, handleAvatarLongPress, registerSwipeableRef]);
 
     // FlashList performance: stable references prevent re-renders
     const keyExtractor = useCallback((item: Conversation) => item.id, []);
+
+    // The first sync of a fresh device has nothing to show yet; the skeleton
+    // covers it and nothing else. `idle` is before the client has started.
+    const isFirstSync = conversations.length === 0 && (syncState === 'idle' || syncState === 'syncing');
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -1192,19 +984,6 @@ export default function ConversationsList() {
                                         styles.selectionActionButton,
                                         selectedCount === 0 && styles.selectionActionButtonDisabled,
                                     ]}
-                                    onPress={handleBulkArchive}
-                                    disabled={selectedCount === 0}
-                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                    accessibilityLabel={`Archive ${selectedCount} conversation${selectedCount !== 1 ? 's' : ''}`}
-                                    accessibilityRole="button"
-                                >
-                                    <Ionicons name="archive-outline" size={20} color="#FFFFFF" />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.selectionActionButton,
-                                        selectedCount === 0 && styles.selectionActionButtonDisabled,
-                                    ]}
                                     onPress={handleBulkDelete}
                                     disabled={selectedCount === 0}
                                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -1218,10 +997,14 @@ export default function ConversationsList() {
                     )}
                 </Animated.View>
 
-                {/* Renders its children unchanged unless this build's chat backend
-                    is Matrix and there is no session yet. */}
-                <MatrixSignInGate>
-                    {isLoading && !hasFetchedOnce && conversations.length === 0 ? (
+                {syncState === 'offline' && (
+                    <View style={styles.syncBanner}>
+                        <ThemedText style={styles.syncBannerText}>{t('chat.sync.offline', 'Offline — showing what this device has')}</ThemedText>
+                    </View>
+                )}
+
+                <>
+                    {isFirstSync ? (
                         <ConversationsSkeleton theme={theme} />
                     ) : visibleConversations.length > 0 ? (
                         <FlashList
@@ -1236,7 +1019,7 @@ export default function ConversationsList() {
                             refreshControl={
                                 <RefreshControl
                                     refreshing={isRefreshing}
-                                    onRefresh={handleRefresh}
+                                    onRefresh={() => { void handleRefresh(); }}
                                     tintColor={theme.colors.primary}
                                     colors={[theme.colors.primary]}
                                 />
@@ -1251,7 +1034,7 @@ export default function ConversationsList() {
                             />
                         </>
                     )}
-                </MatrixSignInGate>
+                </>
 
                 <Link
                     href="/(chat)/settings"

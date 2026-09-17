@@ -4,7 +4,6 @@ import { ThemedView } from "@/components/ThemedView";
 import { Header } from "@/components/layout/Header";
 import { HeaderIconButton } from "@/components/layout/HeaderIconButton";
 import { Toggle } from "@/components/Toggle";
-import { RecoveryDisclosure } from "@/components/matrix/RecoveryDisclosure";
 import { BackArrowIcon } from "@/assets/icons/back-arrow-icon";
 import { useOxy } from "@oxy.so/services";
 import { useTranslation } from "react-i18next";
@@ -18,12 +17,12 @@ import { authenticatedClient } from "@/utils/api";
 import { confirmDialog, alertDialog } from "@/utils/alerts";
 import { getData, storeData } from "@/utils/storage";
 // (already imported above)
-import { hasNotificationPermission, requestNotificationPermissions } from "@/utils/notifications";
-import { isPushEnabled, NOTIFICATION_PREFERENCE_KEY } from "@/lib/chat/pushRegistration";
-import { matrixRuntime } from "@/lib/chat/matrixRuntime";
-import { updateMyCloudSyncEnabled } from "@/lib/security/cloudSync";
-import { logger } from "@/utils/logger";
-import { signOutOfMatrix } from "@/hooks/useMatrixRuntime";
+import {
+    hasNotificationPermission,
+    isPushEnabled,
+    NOTIFICATION_PREFERENCE_KEY,
+    requestNotificationPermissions,
+} from "@/utils/notifications";
 import { useTheme } from "@/hooks/useTheme";
 import { getThemedBorder, getThemedShadow } from "@/utils/theme";
 import { useAppearanceStore } from "@/stores/appearanceStore";
@@ -33,8 +32,7 @@ import {
     useConversationSwipePreferencesStore,
     SwipeActionType,
 } from '@/stores';
-import { useMessagesStore } from '@/stores/messagesStore';
-import { useDeviceKeysStore } from '@/stores/deviceKeysStore';
+import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
 
 const IconComponent = Ionicons;
@@ -51,19 +49,11 @@ export default function SettingsScreen() {
     const swipeActionOptions = useMemo(
         () => ([
             {
-                value: 'archive',
-                label: t('settings.conversations.archiveLabel', 'Archive'),
-                description: t(
-                    'settings.conversations.archiveDescription',
-                    'Hide the chat but keep its history.',
-                ),
-            },
-            {
                 value: 'delete',
                 label: t('settings.conversations.deleteLabel', 'Delete'),
                 description: t(
                     'settings.conversations.deleteDescription',
-                    'Remove the chat from your list.',
+                    'Leave the chat and remove it from your list.',
                 ),
             },
             {
@@ -79,30 +69,6 @@ export default function SettingsScreen() {
     );
     const leftActionDescription = swipeActionOptions.find(option => option.value === leftSwipeAction)?.description;
     const rightActionDescription = swipeActionOptions.find(option => option.value === rightSwipeAction)?.description;
-
-    const cloudSyncEnabled = useMessagesStore((state) => state.cloudSyncEnabled);
-    const deviceKeysInitialized = useDeviceKeysStore((state) => state.isInitialized);
-    // deviceId is a number; format it here because the row renders a string.
-    // Compared against undefined rather than truthiness so device 0 still reads
-    // as initialized.
-    const deviceId = useDeviceKeysStore((state) =>
-        state.deviceKeys?.deviceId !== undefined
-            ? String(state.deviceKeys.deviceId)
-            : 'Not initialized'
-    );
-
-    // The switch moves the store first so the row answers immediately, and then
-    // writes to Allo's own backend — which is where this document lives, and
-    // which the write used to miss for the same reason the boot-time read did.
-    // See `lib/security/cloudSync.ts`.
-    const onToggleCloudSync = useCallback(async (enabled: boolean) => {
-        useMessagesStore.getState().setCloudSyncEnabled(enabled);
-        try {
-            await updateMyCloudSyncEnabled(enabled);
-        } catch (error) {
-            logger.error('[Settings] the cloud sync setting could not be saved', error);
-        }
-    }, []);
 
     // Determine Expo SDK/version information with safe fallbacks
     const expoSdkVersion =
@@ -136,16 +102,11 @@ export default function SettingsScreen() {
     /**
      * Turning notifications on or off.
      *
-     * The switch writes the preference and then asks the runtime to bring the
-     * homeserver in line with it: on Matrix the pusher lives on the homeserver,
-     * so "off" is a pusher deleted there rather than a token deleted here. Allo
-     * keeps no device tokens of its own any more — see `docs/matrix/push.md`.
-     *
      * Permission is requested only when switching **on**, because that is the
      * moment the user has asked for notifications. Being denied still leaves the
-     * preference on: the pusher is registered either way and the notifications
-     * start appearing the moment permission is granted in system settings, which
-     * is better than a switch that silently flips itself back.
+     * preference on: notifications start appearing the moment permission is
+     * granted in system settings, which is better than a switch that silently
+     * flips itself back.
      */
     const onToggleNotifications = useCallback(async (value: boolean) => {
         setNotifications(value);
@@ -157,9 +118,11 @@ export default function SettingsScreen() {
                     title: t('Notifications'),
                     message: t('notification.permission.denied'),
                 });
+            } else {
+                // The messaging client registers the push token on this signal.
+                announcePushPermissionGranted();
             }
         }
-        await matrixRuntime.syncPushRegistration();
     }, [t]);
 
     // Load initial notifications toggle from storage
@@ -244,10 +207,7 @@ export default function SettingsScreen() {
             destructive: true,
         });
         if (!confirmed) return;
-        // Ends the Matrix session — on the homeserver, and everywhere it was kept
-        // on this device. Does nothing in a build talking to the Allo API, where
-        // the account is Oxy's and signing out of it is not this screen's to do.
-        await signOutOfMatrix();
+        // The account is Oxy's and signing out of it is not this screen's to do.
         router.replace('/');
     };
 
@@ -576,51 +536,14 @@ export default function SettingsScreen() {
                     />
                 </SettingsListGroup>
 
-                {/* Linked accounts — conversations Allo carries from other networks */}
-                <SettingsListGroup title={t('settings.sections.linkedAccounts', 'Other networks')}>
-                    <SettingsListItem
-                        icon={<IconComponent name="git-network-outline" size={20} color={theme.colors.textSecondary} />}
-                        title={t('settings.linkedAccounts.title', 'Linked accounts')}
-                        description={t('settings.linkedAccounts.description', 'Bring conversations from other messaging networks into Allo')}
-                        onPress={() => router.push('/settings/linked-accounts')}
-                    />
-                </SettingsListGroup>
-
-                {/* Security & Encryption */}
-                <SettingsListGroup title="Security & Encryption">
-                    <SettingsListItem
-                        icon={<IconComponent name="cloud-outline" size={20} color={theme.colors.textSecondary} />}
-                        title="Cloud Sync"
-                        description="Enable cloud backup and sync (device-first by default)"
-                        rightElement={
-                            <Toggle
-                                value={cloudSyncEnabled}
-                                onValueChange={onToggleCloudSync}
-                            />
-                        }
-                    />
-                    <SettingsListItem
-                        icon={<IconComponent name="lock-closed" size={20} color={theme.colors.textSecondary} />}
-                        title="Signal Protocol Encryption"
-                        description={
-                            deviceKeysInitialized
-                                ? 'End-to-end encryption enabled'
-                                : 'Initializing encryption...'
-                        }
-                        rightElement={
-                            <IconComponent
-                                name={deviceKeysInitialized ? 'checkmark-circle' : 'time-outline'}
-                                size={20}
-                                color={deviceKeysInitialized ? '#4CAF50' : theme.colors.textSecondary}
-                            />
-                        }
-                    />
+                {/* Devices: every enrolled device of this account, and the ones waiting to be approved */}
+                <SettingsListGroup title={t('settings.sections.security', 'Security')}>
                     <SettingsListItem
                         icon={<IconComponent name="phone-portrait-outline" size={20} color={theme.colors.textSecondary} />}
-                        title="Device ID"
-                        description={deviceId}
+                        title={t('devices.title', 'Devices')}
+                        description={t('settings.devicesDesc', 'Approve a new device, or remove one')}
+                        onPress={() => router.push('/settings/devices')}
                     />
-                    <RecoveryDisclosure />
                 </SettingsListGroup>
 
                 {/* App Preferences */}

@@ -2,9 +2,8 @@
  * What a file is, guessed from what it is called.
  *
  * The last resort, and the only one available in several places: a picker on
- * Android or in a browser often reports no MIME type, and an attachment that
- * arrived over Matrix carries its type inside an opaque media ref that nothing
- * outside `lib/matrix/` may open. The filename is what is left.
+ * Android or in a browser often reports no MIME type, and a received attachment
+ * may carry none either. The filename is what is left.
  *
  * **Deliberately short.** An extension that is not in here yields `undefined`,
  * and every caller has its own right answer for that: an upload sends
@@ -44,4 +43,17 @@ export function extensionOf(filename: string): string {
 /** The MIME type for a filename, or `undefined` when its extension is unknown. */
 export function mimetypeFromFilename(filename: string): string | undefined {
   return MIMETYPE_BY_EXTENSION[extensionOf(filename)];
+}
+
+/**
+ * The extension for a MIME type, or `undefined` when it is not one of the
+ * types above. The inverse of {@link mimetypeFromFilename}, for naming a
+ * decrypted attachment on disk so the native players can tell what it is.
+ */
+export function extensionForMime(mime: string): string | undefined {
+  const wanted = mime.toLowerCase().split(';')[0].trim();
+  for (const [extension, type] of Object.entries(MIMETYPE_BY_EXTENSION)) {
+    if (type === wanted) return extension;
+  }
+  return undefined;
 }

@@ -24,8 +24,8 @@ export type AlloDatabase = OxyDatabase<typeof schema>;
  *
  * This lives beside {@link AlloDatabase} rather than in the moderation domain
  * that first needed it. "What a repository accepts" is a property of this
- * service's database, not of one domain: a bridges or messaging repository that
- * needs a transaction handle would otherwise have to import a type out of
+ * service's database, not of one domain: a messaging repository that needs a
+ * transaction handle would otherwise have to import a type out of
  * `db/moderation/`, which reads as a dependency it does not have, or declare its
  * own — and two spellings of one handle can disagree about what a transaction
  * is.
@@ -96,6 +96,29 @@ export function ensurePostgresReachable(): Promise<void> {
     throw error;
   });
   return reachability;
+}
+
+/**
+ * A real `select 1`, for `/health/ready` and the boot probe. False rather
+ * than a throw: readiness is a yes/no, and a pool object survives a server
+ * that has gone away, which is exactly the case this exists to catch.
+ */
+export async function checkPostgresHealth(): Promise<boolean> {
+  if (!handle) return false;
+  try {
+    await handle.client`select 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The raw postgres.js client, for the migration-ledger check at boot. */
+export function getPostgresClient(): postgres.Sql {
+  if (!handle) {
+    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+  }
+  return handle.client;
 }
 
 export async function closePostgres(): Promise<void> {

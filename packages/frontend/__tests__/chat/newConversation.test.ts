@@ -4,9 +4,9 @@ import { NoParticipantsError, planConversation } from '@/lib/chat/newConversatio
  * The rules both backends start from.
  *
  * They are shared rather than decided twice because the difference is
- * permanent on one of them: on Matrix, `m.direct` is what makes every client
- * draw a conversation with the other person's name and avatar instead of a
- * generated title, and a room created without it is a two-person group forever.
+ * permanent: whether a conversation is direct is what makes every client draw
+ * it with the other person's name and avatar instead of a generated title, and
+ * one created as a group is a two-person group forever.
  */
 
 describe('planConversation', () => {
@@ -57,9 +57,8 @@ describe('planConversation', () => {
   });
 
   it('refuses a conversation with nobody in it', () => {
-    // Both backends would accept one — the Express API rejects it, and a Matrix
-    // room with no invitees is a room the user is alone in — and neither is what
-    // the button means.
+    // A backend might accept one — a conversation with no invitees is one the
+    // user is alone in — and that is not what the button means.
     expect(() => planConversation({ participantIds: [], name: 'Familia' })).toThrow(
       NoParticipantsError,
     );

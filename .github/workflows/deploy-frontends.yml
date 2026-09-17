@@ -31,36 +31,16 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           NODE_ENV: production
-          # EXPO_PUBLIC_* is substituted at build time, so these are baked
-          # into the bundle and cannot be changed without another build.
+          # EXPO_PUBLIC_* is substituted at build time, so anything set here is
+          # baked into the bundle and cannot be changed without another build.
+          # The chat engine is no longer chosen by an environment variable:
+          # the app talks to api.allo.you through @allo/core (see
+          # docs/adr/0001-clean-break-platform.md), and the API base comes from
+          # packages/frontend/config.ts.
           #
-          # Matrix, on our own homeserver. The Express backend it replaces
-          # encrypts with static ECDH and no KDF, encrypts groups only for the
-          # first participant, and never had working media — see
-          # docs/encryption.mdx for what it actually does versus what its
-          # filenames claim.
-          EXPO_PUBLIC_CHAT_BACKEND: matrix
-          # allo.you, not matrix.allo.you: `server_name` is what decides the
-          # MXIDs, and allo.you/.well-known/matrix/server — served from
-          # public/ in this repository — is what points the world at the host
-          # below. That is why accounts here read @someone:allo.you.
-          #
-          # This value is the client-server API host, which is a different
-          # thing from the server name and must not be confused with it.
-          EXPO_PUBLIC_MATRIX_HOMESERVER: https://matrix.allo.you
-          #
-          # No OIDC client id: MAS advertises a registration_endpoint and the
-          # client registers itself, holding no secret. The one secret in this
-          # system belongs to MAS, which is a confidential client of Oxy and
-          # runs in ECS. The redirect URI defaults to https://allo.you/ — the
-          # app itself, because the authorization is a top-level redirect and
-          # it is the app that finishes the login on the way back in. It used
-          # to be a static file in public/, for a popup that no longer exists;
-          # see lib/chat/matrixAuthorizer.web.ts.
-          #
-          # If you change either value, verify the OUTPUT rather than the exit
+          # If you add a value here, verify the OUTPUT rather than the exit
           # code: Metro caches transforms and will happily produce a bundle
-          # where neither was substituted. CI installs from scratch so it has
+          # where it was not substituted. CI installs from scratch so it has
           # no such cache; a local `bun run build` does, and needs `--clear`.
       # A WORKER, not a Pages project. A Pages project always serves
       # `<project>.pages.dev` with no way to turn it off, which put a second copy

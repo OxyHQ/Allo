@@ -1,0 +1,35 @@
+{
+    "name": "@allo/core",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Allo messaging SDK: headless client (client instances, MLS end-to-end encryption, sync, outbox, conversations, messages, media) for Node, browsers and React Native",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "dev": "tsc -p tsconfig.json --watch",
+        "clean": "rm -rf dist tsconfig.tsbuildinfo",
+        "typecheck": "tsc -p tsconfig.test.json --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@allo/shared-types": "workspace:*",
+        "@hpke/common": "1.10.1",
+        "@hpke/core": "1.9.0",
+        "@hpke/dhkem-x25519": "1.8.0",
+        "@noble/ciphers": "^2.2.0",
+        "@noble/curves": "^2.2.0",
+        "@noble/hashes": "^2.2.0",
+        "socket.io-client": "^4.8.3",
+        "ts-mls": "1.6.4",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^24.9.2",
+        "typescript": "^5.9.3",
+        "vitest": "^4.1.10"
+    },
+    "files": [
+        "dist/**/*"
+    ]
+}

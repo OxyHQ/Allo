@@ -1,188 +1,101 @@
 ---
 title: Encryption
-description: Static ECDH (P-256) key agreement between identity keys, AES-256-GCM message framing, where keys live, and what isn't implemented yet.
+description: What runs now (MLS groups, the instance model, encrypted storage on the device), where the detail lives, and the gaps the new engine still has.
 order: 2
 ---
 
 # Encryption
 
-Allo encrypts direct messages end-to-end with a static Diffie-Hellman key agreement — ECDH P-256 between the two participants' long-lived identity keys — and AES-256-GCM for the message bytes. The module that implements this is called `signalProtocol.ts` for historical reasons, but it does not implement the Signal Protocol: there is no X3DH, no Double Ratchet, no per-session or per-message key derivation, and the pre-keys it generates are not used for encryption. All crypto runs through the pure-JS `@noble/curves` / `@noble/ciphers` / `@noble/hashes` libraries rather than the Web Crypto API — `crypto.subtle` is undefined on Hermes, React Native's JS engine on iOS/Android, so the app avoids it deliberately.
+Allo encrypts every conversation, direct or group, as one MLS group
+(RFC 9420). Each installation of the app is its own cryptographic instance
+with its own Ed25519 key and its own leaf in every group it is in; the
+backend stores and relays ciphertext and never holds a key that opens any of
+it. This page says what runs and points at the pages that say how. The
+static-ECDH design this replaced is described only in the ADR's "what is
+replaced" table.
 
-## Primitives
+## What runs
 
-| Operation | Algorithm | Where |
-|-----------|-----------|-------|
-| Identity key pair | P-256 | `p256.utils.randomSecretKey()` / `p256.getPublicKey()` (`@noble/curves`) |
-| Signed pre-key | P-256 | Same as identity key. Generated and uploaded, but never read by any encrypt/decrypt path. |
-| Pre-key signature | ECDSA P-256 + SHA-256 | `p256.sign()` (`@noble/curves`). Generated, but `verifySignature` is never called on any send or receive path. |
-| Shared-secret derivation | Static ECDH, **no KDF** | `p256.getSharedSecret(ourPrivate, theirPublic)` — the raw 32-byte X coordinate of the shared point is used directly as the AES-256 key. |
-| Symmetric encryption | AES-256-GCM, 96-bit IV | `gcm(sharedSecret, iv).encrypt(...)` (`@noble/ciphers`) |
-| Random nonces / IDs | CSPRNG | `randomBytes()` (`@noble/hashes`) for IVs; rejection-sampled for device/registration ids |
+**MLS, through `CryptoEngine`.** `@allo/core` wraps the `ts-mls` library
+behind one interface (`packages/core/src/crypto/engine.ts`). Ciphersuite
+`MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`; a leaf's credential names
+`accountId:instanceId`; every key package an instance publishes is signed by
+its long-lived instance key. Adds, removes and updates are commits that rotate
+the group secret, so an instance that is removed holds nothing for the next
+epoch. Text, edits, deletions, reactions, read receipts, typing and the
+group's name are all application messages inside the group: the server sees
+none of them. The crypto provider is pure JavaScript on every platform and
+never calls `crypto.subtle`, because Hermes has no WebCrypto and one provider
+means one key format. All of it, including the invariants the library does
+not enforce and the SDK does, is [Allo Platform cryptography](./platform/crypto).
 
-Source: `packages/frontend/lib/signalProtocol.ts`.
+**The instance model.** The first instance on an account is active at once;
+every later one is pending until an existing active instance signs its id,
+its public key and a server-issued challenge, after the user has compared the
+challenge's fingerprint. The approval and the challenge are published, so any
+client verifies an account's whole approval chain from the listing before it
+adds a leaf, and never on the server's word. Every request that touches a
+conversation carries an Ed25519 signature over the method, path, timestamp
+and body hash, so a stolen Oxy token alone cannot act inside one. Revoking an
+instance refuses its signature, cuts its sockets, and has a remaining leaf
+commit its removal. Sections 6 and 7 of the crypto page.
 
-Because there is no KDF and no ratcheting, the AES key for a given pair of identity keys is constant: it is the same key on message 1 and message 100,000. The only thing unique per message is the IV. See [Threats this does NOT defend against](#threats-this-does-not-defend-against) for what that means in practice.
+**Media.** A file is encrypted on the device with a fresh random key under
+AES-256-GCM, uploaded as an opaque blob under an unguessable id, and the key,
+nonce and digest travel only inside the encrypted `media` message. The server
+checks size and digest and nothing else. Section 4 of the crypto page.
 
-## Key bundle
+**Storage on the device.** Everything the SDK persists (group states, key
+package private halves, decrypted timelines, the outbox, media keys) is
+encrypted at rest with AES-256-GCM under a random storage key kept in the
+platform secret store, namespaced by app, account and instance. Section 8 of
+the crypto page.
 
-Each install owns a key bundle generated on first launch via `initializeDeviceKeys()`:
+What the server does and does not see, the actors it is designed against, and
+the acceptance tests of the issue are in the
+[threat model](./platform/threat-model).
 
-```ts
-interface DeviceKeys {
-  deviceId: number;           // Per-install 31-bit random id
-  identityKeyPublic: string;  // P-256, base64, 65-byte uncompressed SEC1 point
-  identityKeyPrivate: string; // P-256, base64, raw 32-byte scalar
-  signedPreKey: {
-    keyId: number;
-    publicKey: string;        // P-256, base64
-    privateKey: string;       // P-256, base64, raw 32-byte scalar
-    signature: string;        // ECDSA over publicKey, base64 — generated, never verified by any caller
-  };
-  preKeys: Array<{
-    keyId: number;
-    publicKey: string;        // P-256, base64
-    privateKey: string;       // P-256, base64, raw 32-byte scalar
-  }>;
-  registrationId: number;     // 31-bit random
-}
-```
+## Known gaps
 
-- **Identity key pair** — long-lived, identifies the device across sessions. This is the only key pair actually used to derive an encryption key.
-- **Signed pre-key** — generated, signed with the identity key, and uploaded to the backend. No encryption or decryption path reads it.
-- **One-time pre-keys** — a batch of 100 generated up front and uploaded. The backend serves them back on request but never deletes them, and the client never consumes one when encrypting a message: `encryptMessageForRecipient` (`stores/deviceKeysStore.ts`) encrypts directly against the recipient's `identityKeyPublic`, not a pre-key.
+These are properties the engine does not yet have. Each has a place in the
+[roadmap](./platform/roadmap).
 
-## Where keys live
+- **No history transfer and no backup.** A new instance decrypts from the
+  epoch it was welcomed at; nothing before it is readable there. Losing every
+  instance loses history, and the server cannot help because it never had
+  plaintext. `client.history.*` throws `NotImplementedError`.
+- **Trust on first use for the first instance.** When an account has no
+  active instance, whoever holds a valid Oxy token becomes the root of the
+  approval chain. That window includes a user who lost or revoked every
+  device. A recovery mechanism that could approve instead is designed and not
+  built.
+- **A revoked instance keeps the current epoch until a remaining leaf commits
+  the Remove.** It no longer receives events from the server, but ciphertext
+  of that epoch it obtains by other means is readable to it until then.
+- **The approval chain cannot be verified from outside when an approver was
+  revoked**, because another account's listing carries active instances only.
+  Such an instance is refused rather than trusted.
+- **No fingerprint comparison between accounts.** The chain proves an
+  instance belongs to an Oxy account id; that the account is the person the
+  user thinks it is remains Oxy's and the user's problem.
+- **`ts-mls` is unaudited**, single-maintainer and pure TypeScript. The spike
+  checked protocol behaviour, not side channels. OpenMLS and mls-rs remain to
+  be compared on device.
+- **Metadata and traffic analysis are not hidden**: membership, timing,
+  sizes (in 256-byte steps), presence and the existence of typing traffic are
+  visible to the operator.
+- **Malicious JavaScript on the web origin** runs with the page's authority
+  and can use the keys. CSP and Trusted Types are designed, not built.
+- **No delivery receipts, no per-account typing attribution, no thumbnail
+  upload, no key package pruning.** Listed with what the tree does instead in
+  section 10 of the crypto page.
+- **A compromised endpoint reads plaintext after decryption.** Encryption is
+  end to end, not end to eye.
 
-| Layer | What's there |
-|-------|--------------|
-| `expo-secure-store` (iOS Keychain / Android Keystore) | All private key material + the device id + the registration id (`secureStorage.ts`). Gated by the OS credential. |
-| AsyncStorage | Only the **public** half of the bundle (under `signal_device_keys_public`) for fast access when registering with the API. |
-| `@allo/backend` (`Device` collection) | Public keys only — never private material. Unique index on `(userId, deviceId)`. |
-| Server `Message.ciphertext` | The output of `AES-256-GCM(plaintext, iv, staticSharedSecret)`. The server never holds either party's identity private key, so it cannot derive the shared secret and cannot decrypt. |
+## Where the code is
 
-The server has zero ability to decrypt message content. That guarantee holds regardless of the gaps below — but it comes at a cost the original Signal Protocol avoids: the encryption key for a pair of users never rotates, so there is no forward secrecy. Wiping `expo-secure-store` (uninstall, factory reset, or explicit clear) permanently destroys the device's private keys. Without cloud-synced backups elsewhere, that destroys the device's view of every conversation it participated in.
-
-## Registration
-
-On first launch the client runs:
-
-```ts
-const keys = await initializeDeviceKeys();
-await api.post('/devices', {
-  deviceId: keys.deviceId,
-  identityKeyPublic: keys.identityKeyPublic,
-  signedPreKey: {
-    keyId: keys.signedPreKey.keyId,
-    publicKey: keys.signedPreKey.publicKey,
-    signature: keys.signedPreKey.signature,
-  },
-  preKeys: keys.preKeys.map(k => ({ keyId: k.keyId, publicKey: k.publicKey })),
-  registrationId: keys.registrationId,
-});
-```
-
-The backend writes to the `Device` collection keyed on `(userId, deviceId)`. Other clients that want to send to this device fetch via:
-
-- `GET /api/devices/user/:userId` — full list of devices for a user (public keys only)
-- `GET /api/devices/user/:userId/prekeys/:deviceId` — the device's stored one-time pre-keys
-
-The backend returns pre-keys as-is and does not delete or mark them consumed after they're fetched (`routes/devices.ts`). In practice this doesn't create a collision risk today because, as noted above, the client doesn't use pre-keys for encryption at all — it always encrypts against the recipient's identity key.
-
-## Sending a message
-
-```ts
-import { encryptMessage } from '@/lib/signalProtocol';
-
-const ciphertext = await encryptMessage(plaintext, recipientPublicKey);
-
-await api.post('/messages', {
-  conversationId,
-  senderDeviceId: ourDevice.deviceId,
-  ciphertext,
-  encryptionVersion: 1,
-  messageType: 'text',
-});
-```
-
-Inside `encryptMessage` (`lib/signalProtocol.ts`):
-
-1. Load our identity private key and the recipient's identity public key.
-2. `p256.getSharedSecret(ourPrivate, recipientPublic)` — a 33-byte compressed point; the 32-byte X coordinate becomes the AES key directly. No KDF, no per-session or per-message key derivation.
-3. Generate a fresh 12-byte IV with a CSPRNG.
-4. `gcm(sharedSecret, iv).encrypt(plaintext)` — ciphertext with the 16-byte GCM auth tag already appended.
-5. Frame as `IV || ciphertext` and base64-encode.
-
-The IV is fresh per message, so encrypting the same plaintext twice produces different ciphertext, and AES-GCM's auth tag makes tampering surface as a decryption failure. But the key itself is identical for every message ever exchanged between the two identity keys involved — there is no ratcheting and no unique per-message or per-session key.
-
-`recipientPublicKey` here is the recipient's **identity** public key — `encryptMessageForRecipient` (`stores/deviceKeysStore.ts`) passes `recipientKeys.identityKeyPublic`, not a pre-key or session key.
-
-**Group conversations**: the send handler in `ConversationView.tsx` resolves a single `recipientUserId` — the first other participant in the conversation — and encrypts once against that one identity key, regardless of how many people are actually in the conversation. Every other participant receives the same ciphertext but cannot derive the matching shared secret, so their `decryptMessage` call fails and they see a decryption-failure placeholder instead of the message.
-
-## Receiving a message
-
-```ts
-const plaintext = await decryptMessage(message.ciphertext, sender.identityKeyPublic);
-```
-
-Inside `decryptMessage`:
-
-1. Base64-decode and split off the leading 12-byte IV.
-2. `p256.getSharedSecret(ourPrivate, senderPublic)` — the same static shared secret (ECDH is symmetric).
-3. `gcm(sharedSecret, iv).decrypt(ciphertext)` — throws if the auth tag doesn't verify.
-
-A decryption failure surfaces as a UI placeholder rather than a crash. There is no session state to re-establish and no re-keying handshake triggered by a failure — because there is no session in the first place. The most common causes in practice are the group-conversation case above and the multi-device case below.
-
-## Media
-
-Not implemented. `EncryptedMediaItem` exists as a type in `@allo/shared-types` and the `Message` schema has a field for `encryptedMedia`, but no code path in the frontend ever produces one — the attachment menu's photo, document, camera, location, contact, and poll options (`AttachmentMenu`, wired up in `ConversationView.tsx`) are all unimplemented placeholders. There is no file-upload endpoint on the backend either; the unused GridFS helper that used to sit in `utils/` has since been deleted, so nothing on the server can store an attachment today.
-
-## Device-first + cloud sync
-
-**The app runs with cloud sync ON, and the two ends of this setting do not agree.** `UserSettings.security.cloudSyncEnabled` defaults to `false` in the backend schema, and the default is written rather than notional: `ensureUserSettings` creates the document on the first `GET`, so every account has a stored `false` that nobody chose. The client has always run with `true` (`stores/messagesStore.ts`), and the disagreement stayed invisible because the boot-time read asked the Oxy API for an Allo document and got a 404 on every launch.
-
-The read now goes to Allo's backend (`lib/security/cloudSync.ts`), and the rule it applies is deliberately asymmetric: **the document is trusted to turn cloud sync on, not to turn it off, and an absent field leaves it on.** Acting on those stored falses would have switched cloud sync off for every account at boot, as a side effect of a URL fix. When the backend's schema default no longer writes a value nobody asked for, a `false` from the server becomes somebody's decision and the rule becomes a plain "a boolean wins".
-
-What the setting actually changes, which is narrower than "messages stay on the device":
-
-- With cloud sync **off**, `stores/messagesStore.ts` does not fetch from `/api/messages` and does not POST directly. It queues the send instead — and `lib/offlineQueue/queueManager.ts` drains that queue to `POST /api/messages` regardless of the setting, so the message still reaches the server. Incoming messages still arrive over Socket.IO while the app is open.
-- So off does not keep messages off the server. What it removes is the **backfill**: a message that arrived while the app was closed is never fetched, and a reinstalled device opens to empty conversations.
-- When cloud sync is **on**, encrypted messages land on the server so other devices the same user owns can fetch them after a fresh install.
-- The server holds only ciphertext (or, in the plaintext-fallback case below, plaintext) — see [Threats this does NOT defend against](#threats-this-does-not-defend-against).
-- The user can flip `cloudSyncEnabled` in `Settings -> Security & Encryption`. That switch wrote to the Oxy API until the same fix; turning it **off** still does not survive a relaunch, because of the asymmetry above.
-
-## Peer-to-peer
-
-`lib/p2pMessaging.ts` scaffolds a WebRTC-based path — connection tracking, Socket.IO signaling handlers, a `sendMessage` method that's meant to try P2P before falling back to the server — but it is not functional. `establishP2PConnection` always returns `false`, and the WebRTC offer/answer/ICE-candidate handlers are unimplemented stubs that only log. Every message today goes through the REST relay when cloud sync is enabled; there is no working device-to-device data path yet.
-
-## Threats this does NOT defend against
-
-- **No forward secrecy.** The AES key for a pair of users is the static ECDH shared secret between their identity keys and never changes. If either party's identity private key is ever extracted — device compromise, a backup leak, anything — every message the two of them have ever exchanged, and every message they exchange afterward until one of them regenerates their identity key, can be decrypted. There is no ratcheting, no ephemeral per-session keys, and no way to limit the blast radius of a compromised key to messages sent after the compromise.
-- **Group conversations are not actually multi-party encrypted.** A message sent in a group is encrypted for a single other participant; everyone else in the group gets a decryption-failure placeholder instead of the message. Groups with more than two participants are not usable for encrypted messaging today.
-- **Multi-device is not supported.** Senders always encrypt for a recipient's first-registered device (`devices[0]`, sorted by device id). A user signed in on a second device cannot decrypt messages sent to them, because they were encrypted against a different device's identity key.
-- **Plaintext fallback.** When encryption cannot proceed — most commonly because the recipient has no registered device — the client sends the message in the clear instead of refusing to send (`stores/messagesStore.ts`). The conversation's `lastMessage.text` on the backend also stores the plaintext body whenever a message wasn't encrypted. A user cannot assume every message in a conversation was actually encrypted.
-- **Signatures aren't checked.** The signed pre-key's ECDSA signature is generated but never verified by any client. It currently provides no protection against a tampered or substituted key, and pre-keys aren't part of the encryption path regardless (see [Key bundle](#key-bundle)).
-- A compromised device with a screen reader, screenshots, or root access can read plaintext after the local decrypt — encryption is end-to-end, not end-to-eye.
-- Forgetting the device credential and losing every other signed-in device, with cloud sync off, destroys the conversations permanently. There is no server-side reset.
-- A malicious peer can lie about who they are at the human level. The protocol only proves that a given ciphertext and a given device's identity key produce a consistent shared secret — and today that proof is weakened by everything above. Out-of-band identity verification is the user's job.
-
-## What replaces this
-
-Allo is migrating to Matrix, which brings its own end-to-end encryption and
-would retire everything on this page — the static ECDH derivation, the unused
-pre-keys, and the gaps listed above alike.
-
-That work is at the design stage and none of it is implemented. What has been
-worked out, and where the mapping is not free, is in
-[Matrix: data model](./matrix/data-model). The clearest example of a constraint
-found there rather than assumed: Matrix's key backup is per **account**, not per
-room — no call in the encryption API takes a room id — so a chat tier cannot
-opt its keys out of the backup, and any other Matrix client signed into the same
-account would upload them regardless. That is why the second tier is now defined
-by how long messages last (*ephemeral*) rather than by a secrecy guarantee the
-protocol cannot enforce (§5.2).
-
-Until that lands, this page describes the encryption Allo actually performs.
-
-## Audit trail
-
-The encryption module is `packages/frontend/lib/signalProtocol.ts` — the name is a holdover from an earlier design and doesn't reflect what the module implements today (static ECDH, not the Signal Protocol's X3DH + Double Ratchet). The server-side device key registry is `packages/backend/src/models/Device.ts` + `packages/backend/src/routes/devices.ts`. Both are deliberately small and read-through.
+`packages/core/src/crypto/` (engine, provider, request signing and the chain
+check, at-rest cipher), `packages/core/src/sync/` and `outbox/` (epoch
+gating, pending commits, the queue), `packages/backend/src/middleware/instanceAuth.ts`
+and `services/platform/` (the server's half). The wire contract is
+[API v1](./platform/api-v1).

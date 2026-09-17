@@ -22,8 +22,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
  * Everything here is therefore an assertion about persisted state, with two
  * deliberate exceptions, both of them spies on things that are NOT the database:
  * the subject registry (so both branches of the delivery decision are exercised
- * without coupling this file to Allo's own nouns) and `bridgesConfig` (so the
- * ORDER of two decisions inside `routeReport` can be pinned from outside).
+ * without coupling this file to Allo's own nouns) and the outbox enqueue (so a
+ * failing second write can be produced on demand).
  */
 
 /**
@@ -40,12 +40,6 @@ vi.mock("../../../services/moderation/subjects/registry", async () => {
 });
 
 /**
- * Wrapped rather than replaced: the real implementation still runs, and the spy is
- * only here so one test can assert that a reported MESSAGE never asks the bridge
- * configuration anything. That is not a performance assertion — it is how the
- * ordering inside `routeReport` is pinned from the outside.
- */
-/**
  * Real by default, and overridable in exactly one case.
  *
  * `enqueueModerationOutboxEvent` runs for real everywhere here — it is half of
@@ -60,14 +54,6 @@ vi.mock("../../../db/moderation/moderationOutboxRepository", async () => {
   return { ...actual, enqueueModerationOutboxEvent: vi.fn(actual.enqueueModerationOutboxEvent) };
 });
 
-vi.mock("../../../config/bridges", async () => {
-  const actual = await vi.importActual<typeof import("../../../config/bridges")>(
-    "../../../config/bridges",
-  );
-  return { ...actual, bridgesConfig: vi.fn(actual.bridgesConfig) };
-});
-
-import { bridgesConfig, resetBridgesConfigForTests } from "../../../config/bridges";
 import { enqueueModerationOutboxEvent } from "../../../db/moderation/moderationOutboxRepository";
 import { closePostgres, connectPostgres, getDb } from "../../../db";
 import * as schema from "../../../db/schema";
@@ -278,35 +264,23 @@ describe("report intake durability", () => {
 });
 
 /**
- * §6.3 — the second way a report can have nowhere to go.
+ * The second way a report can have nowhere to go.
  *
  * Everything above is about a TYPE with no provider. These are about a SUBJECT
- * with no Oxy account, which is a different fact and, before this, an invisible
- * one: the type is deliverable, the provider exists, the report queues, and hours
- * later Oxy answers 404 and the delivery worker closes the report saying "the
- * reported account no longer exists" — about an account that never existed.
+ * that is not an Oxy account id, which is a different fact and, before this, an
+ * invisible one: the type is deliverable, the provider exists, the report queues,
+ * and hours later Oxy answers 404 and the delivery worker closes the report saying
+ * "the reported account no longer exists" — about an account that was never named.
  *
  * The registry returns a provider throughout, because that is the whole point:
  * this branch must fire even when everything about the TYPE is fine.
  */
 describe("a subject that is not an Oxy account", () => {
-  const SERVER_NAME = "allo.you";
-
-  beforeEach(() => {
-    process.env.ALLO_MATRIX_SERVER_NAME = SERVER_NAME;
-    resetBridgesConfigForTests();
-  });
-
-  afterEach(() => {
-    delete process.env.ALLO_MATRIX_SERVER_NAME;
-    resetBridgesConfigForTests();
-  });
-
-  it("stores a bridge ghost with a reason and enqueues NOTHING", async () => {
+  it("stores a handle with a reason and enqueues NOTHING", async () => {
     const { outboxEventId } = await createReport({
       reporter: id("reporter"),
       reportedType: "user",
-      reportedId: `@whatsapp_1234567890:${SERVER_NAME}`,
+      reportedId: "@someone",
       categories: ["harassment"],
     });
 
@@ -315,41 +289,42 @@ describe("a subject that is not an Oxy account", () => {
 
     const reports = await storedReports();
     expect(reports[0]?.localStatus).toBe("received");
-    expect(reports[0]?.localStatusReason).toContain("WhatsApp");
+    expect(reports[0]?.reportedId).toBe("@someone");
+    expect(reports[0]?.localStatusReason).toContain("handle");
   });
 
   it("gives the non-Oxy subject its OWN reason, not the encryption one", async () => {
     /**
      * The two reasons must stay distinguishable months later. "Allo cannot read
-     * messages" and "this subject has no Oxy account" are different claims with
-     * different remedies, and collapsing them would put a bridge ghost in the same
+     * messages" and "this subject is not an account id" are different claims with
+     * different remedies, and collapsing them would put a handle in the same
      * bucket as every reported message — the bucket nobody investigates because in
      * Allo it is where most reports live.
      */
     await createReport({
       reporter: id("reporter"),
       reportedType: "user",
-      reportedId: "@someone:elsewhere.example",
+      reportedId: "@someone",
       categories: ["spam"],
     });
 
     const reason = (await storedReports())[0]?.localStatusReason;
-    expect(reason).toContain("homeserver");
+    expect(reason).toContain("handle");
     expect(reason).not.toContain("end-to-end encrypted");
   });
 
-  it("stores an MXID this homeserver owns as the OXY id", async () => {
+  it("stores a trimmed account id, so one subject has one dedup key", async () => {
     /**
-     * §6.2. The stored key is the Oxy id whichever identifier the client had, so
-     * the unique index sees one subject and §7.3 opens one case. Storing the MXID
-     * would let one reporter file twice about one person.
+     * The stored key is what the unique index sees. If surrounding whitespace
+     * survived, one reporter could file twice about one person.
      */
     const oxyId = "507f1f77bcf86cd799439011";
+    const reporter = id("reporter");
 
     const { report, outboxEventId } = await createReport({
-      reporter: id("reporter"),
+      reporter,
       reportedType: "user",
-      reportedId: `@${oxyId}:${SERVER_NAME}`,
+      reportedId: `  ${oxyId}  `,
       categories: ["spam"],
     });
 
@@ -357,85 +332,29 @@ describe("a subject that is not an Oxy account", () => {
     expect(reports[0]?.reportedId).toBe(oxyId);
     expect(reports[0]?.localStatus).toBe("queued");
     expect(outboxEventId).toBe(reportSubmitEventId(report.id));
-  });
-
-  it("looks up the duplicate under the canonical id too", async () => {
-    /**
-     * The dedup read is built from the same resolved id as the insert. If it were
-     * not, reporting `@507f…:allo.you` after `507f…` would miss the existing row —
-     * and the unique index would then reject the insert, which now surfaces as a
-     * duplicate anyway. So the assertion is the STORED count: one report, however
-     * the second submission spelled its subject.
-     */
-    const oxyId = "507f1f77bcf86cd799439011";
-    const reporter = id("reporter");
-
-    await createReport({
-      reporter,
-      reportedType: "user",
-      reportedId: oxyId,
-      categories: ["spam"],
-    });
 
     await expect(
-      createReport({
-        reporter,
-        reportedType: "user",
-        reportedId: `@${oxyId}:${SERVER_NAME}`,
-        categories: ["spam"],
-      }),
+      createReport({ reporter, reportedType: "user", reportedId: oxyId, categories: ["spam"] }),
     ).rejects.toBeInstanceOf(DuplicateReportError);
-
     expect(await storedReports()).toHaveLength(1);
-  });
-
-  it("never queues a Matrix event id for delivery", async () => {
-    /**
-     * §6.5. An event id names one message in one room; it is conversation metadata
-     * and it must never reach CrowdSource. Reported as a `user` — which is the
-     * shape a mistake takes, not an attack — the type check alone would wave it
-     * through, so the SUBJECT check is what stops it.
-     */
-    const { outboxEventId } = await createReport({
-      reporter: id("reporter"),
-      reportedType: "user",
-      reportedId: "$eventid123:allo.you",
-      categories: ["harassment"],
-    });
-
-    expect(outboxEventId).toBeUndefined();
-    expect(await storedOutbox()).toHaveLength(0);
-    expect((await storedReports())[0]?.localStatusReason).toContain("conversation metadata");
   });
 });
 
 /**
  * The order in which intake decides, pinned from the outside.
  *
- * "This TYPE never leaves" outranks "this SUBJECT has no Oxy account", and the
+ * "This TYPE never leaves" outranks "this SUBJECT is not an account", and the
  * ordering has to live in the control flow rather than only in the reason that
- * comes back. When it did not, resolving ran for every reported type, and a
- * `message` report whose id began with `@` and matched this homeserver came out
- * with its `reportedId` rewritten to the MXID's localpart — a string shaped like
- * an Oxy user id, stored as the identity of a reported message, where an
- * MXID → Oxy translation means nothing whatsoever.
+ * comes back: a `message` report whose id happens to begin with `@` is a message
+ * id, and the subject rule means nothing whatsoever about it.
  */
 describe("a type with no provider is decided before the subject is resolved", () => {
-  const SERVER_NAME = "allo.you";
-
   beforeEach(() => {
-    process.env.ALLO_MATRIX_SERVER_NAME = SERVER_NAME;
-    resetBridgesConfigForTests();
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
   });
 
-  afterEach(() => {
-    delete process.env.ALLO_MATRIX_SERVER_NAME;
-    resetBridgesConfigForTests();
-  });
-
-  it("stores an MXID-shaped message id verbatim, never as a localpart", async () => {
-    const messageId = `@${"a".repeat(24)}:${SERVER_NAME}`;
+  it("stores a handle-shaped message id verbatim", async () => {
+    const messageId = "@not-a-handle";
 
     await createReport({
       reporter: id("reporter"),
@@ -447,38 +366,22 @@ describe("a type with no provider is decided before the subject is resolved", ()
     expect((await storedReports())[0]?.reportedId).toBe(messageId);
   });
 
-  it("does not consult the bridge configuration at all", async () => {
-    /**
-     * The other half of the same defect, and the one a value assertion cannot see:
-     * every reported message was parsing bridge configuration to compute an answer
-     * that was then discarded.
-     */
-    await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
-      reportedId: `@${"a".repeat(24)}:${SERVER_NAME}`,
-      categories: ["harassment"],
-    });
-
-    expect(bridgesConfig).not.toHaveBeenCalled();
-  });
-
   it("still records the type's own reason, not a subject one", async () => {
     await createReport({
       reporter: id("reporter"),
       reportedType: "message",
-      reportedId: "@someone:elsewhere.example",
+      reportedId: "@someone",
       categories: ["harassment"],
     });
 
     const reason = (await storedReports())[0]?.localStatusReason;
     expect(reason).toContain("end-to-end encrypted");
-    expect(reason).not.toContain("homeserver");
+    expect(reason).not.toContain("handle");
   });
 });
 
 /**
- * §6.3 turns "we could not resolve it" into "we store it and say why", which is
+ * Intake turns "we could not resolve it" into "we store it and say why", which is
  * the right answer and also the reason an unbounded identifier is reachable at
  * all: untrusted bytes are persisted by design. What that costs is not a rejected
  * insert — a `text` column takes a megabyte without complaint — it is a `user`
@@ -487,7 +390,7 @@ describe("a type with no provider is decided before the subject is resolved", ()
  * retries it as an outage for ever.
  */
 describe("the bound on a reported identifier", () => {
-  it("refuses an identifier longer than the Matrix ceiling", async () => {
+  it("refuses an identifier longer than the ceiling", async () => {
     await expect(
       createReport({
         reporter: id("reporter"),
@@ -538,8 +441,8 @@ describe("the bound on a reported identifier", () => {
     ["a bidi override", "user\u202E-1"],
   ])("refuses %s", async (_label, reportedId) => {
     /**
-     * None of these appears in an ObjectId, an MXID, a room id, an alias or an
-     * event id, so nothing real is refused. What is refused is an identifier that
+     * None of these appears in an Oxy account id or a handle, so nothing real is
+     * refused. What is refused is an identifier that
      * behaves like something other than an identifier — one that breaks a log
      * line, truncates in a C-backed layer, or renders as a different account than
      * the one the row holds.

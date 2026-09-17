@@ -1,10 +1,9 @@
 /**
  * Columns that must never leave the process in a response.
  *
- * Mongoose's `select: false` — and `routes/devices.ts`'s `.select("-preKeys")` —
- * do not survive the port: `db.select().from(table)` returns EVERY column, so
- * the first naive rewrite of a query is the first time key material can be
- * serialized into an HTTP response nobody audited.
+ * `db.select().from(table)` returns EVERY column, so the first naive rewrite of
+ * a query is the first time protected material can be serialized into an HTTP
+ * response nobody audited.
  *
  * Read through `publicColumns(table, PROTECTED_COLUMNS)` from `@oxy.so/db/assert`.
  * The exclusion is at the TYPE level: the row type has no such property, so a
@@ -15,39 +14,26 @@
  * Opting in is explicit and greppable: a path that legitimately needs one names
  * it. There is deliberately no helper for that — it must read differently from
  * an ordinary select.
+ *
+ * A new table that stores ciphertext, a credential or a third party's case
+ * material registers its columns here in the same change that creates it.
  */
 export const PROTECTED_COLUMNS = {
-  /**
-   * Signal PUBLIC key material. Not a secret in the cryptographic sense — the
-   * protocol publishes it — but the device list is a per-user fan-out and
-   * `routes/devices.ts` already excluded pre-keys from it, because handing every
-   * caller every device's whole key bundle is a fingerprinting surface and a way
-   * to exhaust a device's one-time pre-keys without ever starting a session.
-   */
-  devices: ["identityKeyPublic", "signedPreKeyPublic", "signedPreKeySignature"],
-  device_pre_keys: ["publicKey"],
-  /**
-   * Ciphertext, not plaintext — but it is the message, and this service is the
-   * one place it exists at rest. Nothing outside a conversation's own
-   * participants has any business receiving it, so a projection that reaches it
-   * has to say so.
-   */
-  messages: ["ciphertext", "encryptedMedia", "text", "media"],
-  /**
-   * A bridge's own login process handle and step ids. Possession lets a caller
-   * drive somebody else's half-finished linking flow.
-   */
-  bridge_link_sessions: ["remoteLoginProcessId", "currentStepId"],
-  /**
-   * The egress identity. `sessionSeed` selects which exit a provider gives out,
-   * and the exit IP ties a user to a network location.
-   */
-  bridge_proxy_leases: ["sessionSeed", "lastExitIp"],
-  bridge_proxy_lease_rotations: ["fromSeed", "toSeed"],
   /**
    * Inbound and outbound moderation payloads, stored whole and opaque. They
    * carry a third party's case material and are for this service's own workers.
    */
   moderation_events: ["payload"],
   moderation_outbox: ["payloadDecision"],
+  /**
+   * Messaging platform material. Ciphertext, MLS public material meant for
+   * exactly one claimer, and a third party's push credential. Each has ONE
+   * legitimate reader, named at the opt-in: `GET /v1/blobs/:id` for the bytes,
+   * `GET …/events` and `GET /v1/sync` for the payload, the claim for a key
+   * package, the delivery worker for the token.
+   */
+  key_packages: ["data"],
+  conversation_events: ["payload"],
+  blob_bytes: ["data"],
+  client_instances: ["pushToken"],
 } as const;

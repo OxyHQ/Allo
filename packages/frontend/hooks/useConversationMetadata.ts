@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Conversation } from '@/app/(chat)/index';
+import type { Conversation } from '@/lib/chat/model';
 import { useOxy } from '@oxy.so/services';
 import {
   useConversationDisplayName,

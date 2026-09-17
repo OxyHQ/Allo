@@ -3,20 +3,21 @@
  *
  * Everything asserted here is a property only a server has. A mocked `insert`
  * accepts any statement — including one the server rejects outright — which is
- * exactly the class of defect a port introduces, and is why this backend already
- * boots a real Mongo replica set for its moderation suite rather than mocking
- * the model.
+ * exactly the class of defect a schema change introduces, and a constraint is
+ * only worth the claim if something proves the server enforces it.
  *
- * The two Mongoose hooks are the reason this file exists. Each is now a database
- * constraint, and a constraint is only worth the claim if something proves the
- * server enforces it.
+ * Only the tables the schema barrel declares are asserted on. The migrated
+ * database may hold more (a `post`-phase migration drops what a schema change
+ * retired only after the rollout), and a table that exists in the database but
+ * not in `db/schema/` is not this suite's business.
  */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, getTableName, sql } from "drizzle-orm";
-import { createDatabase, isCheckViolation, isUniqueViolation, constraintNameOf } from "@oxy.so/db";
+import { eq, getTableName, is, sql } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
+import { createDatabase, constraintNameOf } from "@oxy.so/db";
 import { findUnsupportedExpiryColumns } from "@oxy.so/db/assert";
 import type postgres from "postgres";
 import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
@@ -46,25 +47,6 @@ function id(prefix: string): string {
   return `${prefix}-${String(counter).padStart(4, "0")}`;
 }
 
-async function insertDirectConversation(participantCount: number): Promise<string> {
-  const conversationId = id("conv");
-  await db.transaction(async (tx) => {
-    await tx.insert(schema.conversations).values({
-      id: conversationId,
-      type: "direct",
-      createdBy: "oxy-user-a",
-    });
-    for (let index = 0; index < participantCount; index += 1) {
-      await tx.insert(schema.conversationParticipants).values({
-        id: id("part"),
-        conversationId,
-        userId: `oxy-user-${String(index)}`,
-      });
-    }
-  });
-  return conversationId;
-}
-
 beforeAll(async () => {
   handle = await setUpTestDatabase();
   const created = createDatabase({ databaseUrl: handle.databaseUrl, schema });
@@ -77,218 +59,46 @@ afterAll(async () => {
   await handle?.drop();
 });
 
-describe("the genesis migration", () => {
-  it("creates every table the schema declares", async () => {
+describe("the migrations", () => {
+  it("create every table the schema declares", async () => {
     const rows = await client<{ table_name: string }[]>`
       select table_name from information_schema.tables
       where table_schema = 'public' and table_type = 'BASE TABLE'
     `;
     const names = rows.map((row) => row.table_name);
-    // Anti-vacuity: a broken query returning nothing must not read as success.
-    expect(names.length).toBeGreaterThanOrEqual(19);
-    expect(names).toContain("conversation_participants");
-    expect(names).toContain("moderation_outbox");
-    expect(names).toContain("bridge_proxy_lease_rotations");
+
+    /**
+     * Derived from the barrel rather than listed, so a domain file added to
+     * `schema/index.ts` is asserted on the day it is added. Anti-vacuity: the
+     * barrel must declare something, and the moderation and social tables must
+     * be among them.
+     */
+    const declared = (Object.values(schema) as unknown[])
+      .filter((value): value is PgTable => is(value, PgTable))
+      .map((table) => getTableName(table))
+      .sort();
+    expect(declared.length).toBeGreaterThanOrEqual(7);
+    expect(declared).toContain("reports");
+    expect(declared).toContain("moderation_outbox");
+    expect(declared).toContain("user_settings");
+    expect(declared).toContain("blocks");
+
+    for (const table of declared) {
+      expect(names, `${table} is declared but was not created`).toContain(table);
+    }
   });
 });
 
-describe("Message.pre('save'), now a CHECK", () => {
-  it("refuses a message with neither encrypted content nor legacy plaintext", async () => {
-    const conversationId = await insertDirectConversation(2);
-    const error = await db
-      .insert(schema.messages)
-      .values({
-        id: id("msg"),
-        conversationId,
-        senderId: "oxy-user-0",
-        senderDeviceId: 1,
-      })
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-
-    expect(error).not.toBeNull();
-    expect(isCheckViolation(error)).toBe(true);
-    // Named, not matched on a message: drizzle wraps the driver error, so the
-    // constraint name lives on `cause` and a regex over the text would pass for
-    // the wrong constraint.
-    expect(constraintNameOf(error)).toBe("messages_content_present_check");
-  });
-
-  it("accepts ciphertext alone, and encrypted media alone", async () => {
-    const conversationId = await insertDirectConversation(2);
-    await db.insert(schema.messages).values({
-      id: id("msg"),
-      conversationId,
-      senderId: "oxy-user-0",
-      senderDeviceId: 1,
-      ciphertext: "base64-ciphertext",
-    });
-    await db.insert(schema.messages).values({
-      id: id("msg"),
-      conversationId,
-      senderId: "oxy-user-0",
-      senderDeviceId: 1,
-      encryptedMedia: [{ id: "m1", type: "image", ciphertext: "…" }],
-    });
-
-    const rows = await db
-      .select()
-      .from(schema.messages)
-      .where(eq(schema.messages.conversationId, conversationId));
-    expect(rows).toHaveLength(2);
-  });
-
-  it("still accepts legacy plaintext, and still tolerates ciphertext beside it", async () => {
-    const conversationId = await insertDirectConversation(2);
-    // The hook only `console.warn`ed about this combination. Refusing it here
-    // would be a NEW restriction, discovered in production by whatever legacy
-    // row already has both.
-    await db.insert(schema.messages).values({
-      id: id("msg"),
-      conversationId,
-      senderId: "oxy-user-0",
-      senderDeviceId: 1,
-      ciphertext: "base64-ciphertext",
-      text: "legacy plaintext",
-    });
-    const rows = await db
-      .select()
-      .from(schema.messages)
-      .where(eq(schema.messages.conversationId, conversationId));
-    expect(rows).toHaveLength(1);
-  });
-});
-
-describe("Conversation.pre('save'), now a deferred constraint trigger", () => {
-  it("accepts a direct conversation with exactly 2 participants", async () => {
-    const conversationId = await insertDirectConversation(2);
-    const rows = await db
-      .select()
-      .from(schema.conversationParticipants)
-      .where(eq(schema.conversationParticipants.conversationId, conversationId));
-    expect(rows).toHaveLength(2);
-  });
-
-  it("refuses a direct conversation with 3 participants, at COMMIT", async () => {
-    const error = await insertDirectConversation(3).then(
-      () => null,
-      (caught: unknown) => caught,
-    );
-    expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("conversations_participant_count_check");
-  });
-
-  it("refuses any conversation with fewer than 2 participants", async () => {
-    const error = await insertDirectConversation(1).then(
-      () => null,
-      (caught: unknown) => caught,
-    );
-    expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("conversations_participant_count_check");
-  });
-
-  it("is DEFERRED — the conversation may exist without participants mid-transaction", async () => {
-    // This is the case an IMMEDIATE trigger would reject, and it is how every
-    // conversation is legitimately created: the row first, its participants
-    // second, in one transaction.
-    const conversationId = await insertDirectConversation(2);
-    expect(conversationId).toBeTruthy();
-  });
-
-  it("lets a conversation be deleted, cascading its participants", async () => {
-    const conversationId = await insertDirectConversation(2);
-    await db.delete(schema.conversations).where(eq(schema.conversations.id, conversationId));
-    const rows = await db
-      .select()
-      .from(schema.conversationParticipants)
-      .where(eq(schema.conversationParticipants.conversationId, conversationId));
-    expect(rows).toHaveLength(0);
-  });
-
-  it("refuses dropping a direct conversation to one participant", async () => {
-    const conversationId = await insertDirectConversation(2);
-    const victim = await db
-      .select()
-      .from(schema.conversationParticipants)
-      .where(eq(schema.conversationParticipants.conversationId, conversationId))
-      .limit(1);
-
-    const error = await db
-      .delete(schema.conversationParticipants)
-      .where(eq(schema.conversationParticipants.id, victim[0].id))
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-
-    // The race the Mongoose hook could not close: two concurrent removals each
-    // saw two participants in memory and both passed.
-    expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("conversations_participant_count_check");
-  });
-});
-
-describe("the foreign keys Mongo could not express", () => {
-  it("cascades messages when their conversation is deleted", async () => {
-    const conversationId = await insertDirectConversation(2);
-    const messageId = id("msg");
-    await db.insert(schema.messages).values({
-      id: messageId,
-      conversationId,
-      senderId: "oxy-user-0",
-      senderDeviceId: 1,
-      ciphertext: "base64-ciphertext",
-    });
-    await db.insert(schema.messageReads).values({
-      id: id("read"),
-      messageId,
-      userId: "oxy-user-1",
-    });
-
-    await db.delete(schema.conversations).where(eq(schema.conversations.id, conversationId));
-
-    const reads = await db
-      .select()
-      .from(schema.messageReads)
-      .where(eq(schema.messageReads.messageId, messageId));
-    // Two levels of cascade: conversation → message → read receipt. In Mongo the
-    // messages were simply orphaned and nothing ever collected them.
-    expect(reads).toHaveLength(0);
-  });
-});
-
-describe("uniqueness that an embedded array could not enforce", () => {
-  it("refuses the same person joining one conversation twice", async () => {
-    const conversationId = await insertDirectConversation(2);
-    const error = await db
-      .insert(schema.conversationParticipants)
-      .values({ id: id("part"), conversationId, userId: "oxy-user-0" })
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-    expect(error).not.toBeNull();
-    expect(isUniqueViolation(error)).toBe(true);
-  });
-});
-
-describe("the expiry sweep, which replaces three Mongo TTL indexes", () => {
-  it("registers exactly the three tables that carried one", () => {
+describe("the expiry sweep", () => {
+  it("registers exactly the tables whose rows carry a deadline", () => {
     // Named, not counted: a count alone passes if someone registers the same
-    // table three times, and the whole point is that no TTL table is missing.
+    // table twice, and the whole point is that no deadline table is missing.
     const tables = EXPIRY_SWEEP_TARGETS.map((target) => getTableName(target.table)).sort();
-    expect(tables).toEqual([
-      "bridge_link_sessions",
-      "moderation_events",
-      "moderation_outbox",
-    ]);
+    expect(tables).toEqual(["blobs", "instance_deliveries", "moderation_events", "moderation_outbox"]);
   });
 
   it("every registered column has a supporting index", async () => {
-    // Without a leading btree the sweep is a full table scan on every run — the
-    // exact cost Mongo's TTL index hid.
+    // Without a leading btree the sweep is a full table scan on every run.
     const violations = await findUnsupportedExpiryColumns(db, EXPIRY_SWEEP_TARGETS);
     expect(violations).toEqual([]);
   });
@@ -326,20 +136,20 @@ describe("the expiry sweep, which replaces three Mongo TTL indexes", () => {
    * them is visible in a diff.
    *
    * A registry nothing calls reaps exactly as much as no registry at all, and it
-   * fails the same way Mongo's TTL monitor would if it stopped: no error, no
-   * failing test, no symptom until a table has grown for months. So the wiring is
-   * asserted from `server.ts`'s own source — there is nothing in the module graph
-   * to observe, because the thing being checked is that a call EXISTS.
+   * fails silently: no error, no failing test, no symptom until a table has grown
+   * for months. So the wiring is asserted from `server.ts`'s own source — there is
+   * nothing in the module graph to observe, because the thing being checked is
+   * that a call EXISTS.
    *
-   * Reading the file rather than importing it because importing `server.ts` boots
-   * an HTTP listener and opens two database connections.
+   * Reading the file rather than importing it because importing `server.ts`
+   * boots an HTTP listener and opens a database connection.
    */
   it("is actually started by server.ts", () => {
     const source = readFileSync(join(__dirname, "..", "..", "..", "server.ts"), "utf8");
 
     // Vacuity floor: if the path were wrong or the file empty, every `toContain`
     // below would fail rather than pass, but this says so directly.
-    expect(source.length).toBeGreaterThan(5_000);
+    expect(source.length).toBeGreaterThan(3_000);
     expect(source).toContain("bootServer");
 
     expect(source).toContain('from "./src/db/expiry"');
@@ -380,17 +190,20 @@ describe("the expiry sweep, which replaces three Mongo TTL indexes", () => {
     // is the whole reason the summary is emitted unconditionally.
     const swept = lines.find((line) => line.message.includes("expiry sweep:"));
     expect(swept?.level).toBe("info");
-    expect(swept?.message).toContain("tablesSwept=3");
+    expect(swept?.message).toContain(`tablesSwept=${EXPIRY_SWEEP_TARGETS.length}`);
 
     lines.length = 0;
     await runExpirySweep(db, log);
     expect(lines).toEqual([
-      { level: "debug", message: "expiry sweep: tablesSwept=3 deleted=0" },
+      {
+        level: "debug",
+        message: `expiry sweep: tablesSwept=${EXPIRY_SWEEP_TARGETS.length} deleted=0`,
+      },
     ]);
   });
 });
 
-describe("the outbox claim, which the port must keep idempotent", () => {
+describe("the outbox claim, which must stay idempotent", () => {
   it("treats a repeated enqueue of the same id as a no-op", async () => {
     const outboxId = id("outbox");
     const expiresAt = new Date(Date.now() + 3_600_000);
@@ -422,19 +235,6 @@ describe("the outbox claim, which the port must keep idempotent", () => {
 });
 
 describe("closed value sets are enforced by the database, not just by TypeScript", () => {
-  it("refuses a conversation type outside the tuple", async () => {
-    // `text({ enum })` emits no DDL, so this passes tsc-shaped code and must be
-    // stopped by the CHECK rendered from the same tuple.
-    const error = await client`
-      insert into conversations (id, type, created_by) values (${id("conv")}, 'broadcast', 'u')
-    `.then(
-      () => null,
-      (caught: unknown) => caught,
-    );
-    expect(error).not.toBeNull();
-    expect(String(error)).toContain("conversations_type_check");
-  });
-
   it("refuses a report with an empty category array", async () => {
     const error = await db
       .insert(schema.reports)
@@ -450,8 +250,8 @@ describe("closed value sets are enforced by the database, not just by TypeScript
         (caught: unknown) => caught,
       );
     expect(error).not.toBeNull();
-    // Containment alone is satisfied by an empty array; this is the separate
-    // Mongoose validator, kept as its own constraint.
+    // Containment alone is satisfied by an empty array; this is a separate
+    // constraint.
     expect(constraintNameOf(error)).toBe("reports_categories_non_empty_check");
   });
 
@@ -477,15 +277,28 @@ describe("closed value sets are enforced by the database, not just by TypeScript
     expect(constraintNameOf(error)).toBe("reports_categories_within_check");
   });
 
+  it("refuses a reported type outside the tuple", async () => {
+    // `text({ enum })` emits no DDL, so this passes tsc-shaped code and must be
+    // stopped by the CHECK rendered from the same tuple.
+    const error = await client`
+      insert into reports (id, reported_type, reported_id, reporter, categories)
+      values (${id("report")}, 'starship', 'oxy-user-9', 'oxy-user-7', array['spam'])
+    `.then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).not.toBeNull();
+    expect(String(error)).toContain("reports_reported_type_check");
+  });
+
   /**
-   * The three Mongoose `maxlength` bounds, now CHECKs.
+   * The three length bounds, as CHECKs.
    *
    * `reportRepository` truncates to the same three lengths at every write, so
    * these constraints are unreachable through it by construction — which is the
    * point of having both. The repository decides what a REPORTER experiences (a
-   * 201 with the tail trimmed, exactly as the route and the delivery worker
-   * already did); the CHECK decides what is STORABLE, for the writer that does
-   * not exist yet.
+   * 201 with the tail trimmed); the CHECK decides what is STORABLE, for the
+   * writer that does not exist yet.
    */
   it.each([
     ["details", "reports_details_length_check", MAX_REPORT_DETAILS_LENGTH],
@@ -499,7 +312,7 @@ describe("closed value sets are enforced by the database, not just by TypeScript
       "reports_last_delivery_error_length_check",
       MAX_REPORT_DELIVERY_ERROR_LENGTH,
     ],
-  ])("bounds %s at its Mongoose maxlength", async (column, constraint, limit) => {
+  ])("bounds %s at its declared length", async (column, constraint, limit) => {
     // A distinct (reporter, subject) per insert: every row here is a REPORT, and
     // `reports_reporter_reported_id_reported_type_key` would otherwise reject the
     // second one for a reason that has nothing to do with the bound under test.
@@ -563,51 +376,6 @@ describe("the transaction guard the moderation services depend on", () => {
   });
 });
 
-describe("the bridge network tuple is shared, not copied", () => {
-  it("refuses a network the config does not know", async () => {
-    const error = await client`
-      insert into bridge_proxy_leases
-        (id, oxy_user_id, network, provider, country_code, session_seed)
-      values (${id("lease")}, 'u', 'myspace', 'p', 'ES', 'seed')
-    `.then(
-      () => null,
-      (caught: unknown) => caught,
-    );
-    expect(error).not.toBeNull();
-    expect(String(error)).toContain("bridge_proxy_leases_network_check");
-  });
-
-  it("refuses a country code that is not ISO 3166-1 alpha-2", async () => {
-    const error = await db
-      .insert(schema.bridgeProxyLeases)
-      .values({
-        id: id("lease"),
-        oxyUserId: "u",
-        network: "telegram",
-        provider: "p",
-        countryCode: "esp",
-        sessionSeed: "seed",
-      })
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-    expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("bridge_proxy_leases_country_code_check");
-  });
-});
-
-describe("the sparse index Mongo declared", () => {
-  it("indexes only accounts that have a slot", async () => {
-    const rows = await client<{ indexdef: string }[]>`
-      select indexdef from pg_indexes
-      where tablename = 'bridge_accounts' and indexname = 'bridge_accounts_slot_id_idx'
-    `;
-    expect(rows).toHaveLength(1);
-    expect(rows[0].indexdef).toContain("WHERE");
-  });
-});
-
 describe("timestamps", () => {
   it("stores every timestamp as timestamptz", async () => {
     const rows = await client<{ table_name: string; column_name: string }[]>`
@@ -621,37 +389,12 @@ describe("timestamps", () => {
   });
 });
 
-describe("the trigger functions exist under their own names", () => {
-  it("registers both constraint triggers", async () => {
-    const rows = await client<{ tgname: string }[]>`
-      select tgname from pg_trigger
-      where not tgisinternal
-      order by tgname
-    `;
-    const names = rows.map((row) => row.tgname);
-    expect(names).toContain("conversations_participant_count_check");
-    expect(names).toContain("conversation_participants_count_check");
-  });
-
-  it("declares them DEFERRABLE INITIALLY DEFERRED", async () => {
-    const rows = await client<{ tgdeferrable: boolean; tginitdeferred: boolean }[]>`
-      select tgdeferrable, tginitdeferred from pg_trigger
-      where tgname = 'conversations_participant_count_check' and not tgisinternal
-    `;
-    expect(rows).toHaveLength(1);
-    // Not cosmetic: IMMEDIATE would reject every conversation ever created,
-    // because the row necessarily exists for a moment before its participants.
-    expect(rows[0].tgdeferrable).toBe(true);
-    expect(rows[0].tginitdeferred).toBe(true);
-  });
-});
-
 describe("sanity", () => {
   it("uses the schema helpers rather than raw SQL for ordinary reads", async () => {
     const count = await db
       .select({ total: sql<number>`count(*)::int` })
-      .from(schema.conversations)
-      .where(and(eq(schema.conversations.type, "direct")));
+      .from(schema.reports)
+      .where(eq(schema.reports.reportedType, "user"));
     expect(count[0].total).toBeGreaterThanOrEqual(0);
   });
 });

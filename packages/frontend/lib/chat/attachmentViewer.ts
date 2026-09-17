@@ -1,15 +1,13 @@
-import type { MediaItem, Message } from '@/stores/messagesStore';
+import type { MediaRef } from '@allo/core';
+import type { MediaItem, Message } from '@/lib/chat/model';
 
 /**
  * What the full-screen viewer opens on, worked out from the messages a screen
  * already has.
  *
- * The viewer is not a Matrix feature. Both backends put their attachments in
- * `Message.media`, and everything here reads that field and nothing else — no
- * media refs are parsed, no server is named, no `CHAT_BACKEND` is consulted. So
- * a conversation on the Express API opens the same viewer, and the only
- * difference is which resolver turns an id into a URL (see `getMediaUrl` in
- * `ConversationView`).
+ * Everything here reads `Message.media` and nothing else — no blob ids are
+ * parsed and no server is named. The only thing that turns a `MediaRef` into
+ * bytes is the SDK, through `lib/allo/useMediaUri.ts`.
  *
  * Pure, and separate from the component for that reason: what the gallery
  * contains and where it opens are the two things worth being sure about, and
@@ -22,18 +20,13 @@ export interface ViewerItem {
    * Identity of this page, unique within one gallery.
    *
    * Built from the message and the media, not from the media alone: the same
-   * file sent twice is the same media id twice, and a duplicated React key
+   * file sent twice is the same blob id twice, and a duplicated React key
    * makes the second copy disappear.
    */
   readonly key: string;
   readonly kind: MediaItem['type'];
-  /**
-   * The full-size original. What the viewer asks the resolver for.
-   *
-   * `fullSizeId ?? id` — see {@link MediaItem.fullSizeId}. A row drawing the
-   * original already has nothing bigger to show.
-   */
-  readonly mediaId: string;
+  /** The full-size original. What the viewer asks the SDK for. */
+  readonly ref: MediaRef;
   /**
    * The smaller copy the bubble already drew, when there is one.
    *
@@ -42,7 +35,8 @@ export interface ViewerItem {
    * on black — the thumbnail is already decrypted and in the cache, so drawing
    * it costs nothing and covers the wait.
    */
-  readonly previewId: string | undefined;
+  readonly previewRef: MediaRef | undefined;
+  readonly mime: string;
   /** For the share sheet. Absent for an attachment whose sender did not say. */
   readonly filename: string | undefined;
 }
@@ -57,10 +51,9 @@ export interface ViewerSelection {
 /**
  * Every attachment in these messages that the viewer can show, oldest first.
  *
- * The whole conversation and not the tapped message: a Matrix event carries one
- * attachment, so five photographs are five messages, and a viewer scoped to one
- * message could never be swiped. Timeline order is the messages' own — nothing
- * is sorted here, exactly as `matrixViewModel` does not re-sort the room list.
+ * The whole conversation and not the tapped message: five photographs sent one
+ * at a time are five messages, and a viewer scoped to one message could never
+ * be swiped. Timeline order is the messages' own — nothing is sorted here.
  */
 export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
   const items: ViewerItem[] = [];
@@ -69,8 +62,9 @@ export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
       items.push({
         key: viewerKey(message.id, media.id),
         kind: media.type,
-        mediaId: media.fullSizeId ?? media.id,
-        previewId: media.fullSizeId === undefined ? undefined : media.id,
+        ref: media.ref,
+        previewRef: media.thumbnailRef,
+        mime: media.mime,
         filename: media.filename,
       });
     }
@@ -85,7 +79,7 @@ export function collectViewerItems(messages: readonly Message[]): ViewerItem[] {
  * `undefined` rather than an empty gallery on purpose: a viewer with no pages
  * is a black screen the user has to dismiss, and the honest response to a tap
  * on something that is no longer there is not to open at all. It happens — a
- * message can be redacted between the render that drew it and the tap.
+ * message can be deleted between the render that drew it and the tap.
  */
 export function selectViewerItem(
   messages: readonly Message[],
@@ -102,8 +96,8 @@ export function selectViewerItem(
  * A key that no other pair can produce.
  *
  * Length-prefixed rather than separated by a character, and that is the whole
- * point: a media id is a Matrix media ref, which is JSON and may contain any
- * character at all, so *every* separator appears in some legitimate id. With a
+ * point: a media id is opaque and may contain any character at all, so *every*
+ * separator appears in some legitimate id. With a
  * plain `a + '#' + b`, the pair `('m1', 'x#y')` and the pair `('m1#x', 'y')`
  * both spell `m1#x#y`, and a duplicated React key makes one of the two pages
  * disappear. The length says exactly where the first half ends, so the decoding
@@ -117,7 +111,7 @@ function viewerKey(messageId: string, mediaId: string): string {
  * Keeps an index inside a gallery that has changed underneath it.
  *
  * The gallery is a snapshot taken when the viewer opened, but the viewer stays
- * open while the conversation keeps arriving, and a redaction shortens the
+ * open while the conversation keeps arriving, and a deletion shortens the
  * list. An index past the end draws nothing at all; clamping shows the last
  * picture instead, which is the closest true answer.
  */

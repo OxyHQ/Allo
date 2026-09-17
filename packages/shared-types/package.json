@@ -2,15 +2,15 @@
     "name": "@allo/shared-types",
     "version": "1.0.0",
     "private": true,
-    "description": "Shared TypeScript types for allo frontend and backend",
+    "description": "Allo platform API v1 wire contracts: zod schemas and their types, shared by the backend and the SDK",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsc",
-        "dev": "tsc --watch",
+        "build": "tsc -p tsconfig.json",
+        "dev": "tsc -p tsconfig.json --watch",
         "clean": "rm -rf dist tsconfig.tsbuildinfo",
-        "lint": "eslint src --ext .ts",
-        "test": "echo \"No tests specified\" && exit 0",
+        "typecheck": "tsc -p tsconfig.test.json --noEmit",
+        "test": "vitest run",
         "prepublishOnly": "bun run build"
     },
     "keywords": [
@@ -20,9 +20,13 @@
         "allo"
     ],
     "author": "allo Team",
+    "dependencies": {
+        "zod": "^4.4.3"
+    },
     "devDependencies": {
+        "@types/node": "^24.9.2",
         "typescript": "^5.9.3",
-        "@types/node": "^24.9.2"
+        "vitest": "^4.1.10"
     },
     "files": [
         "dist/**/*"

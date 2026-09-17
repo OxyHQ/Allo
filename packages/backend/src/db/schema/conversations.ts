@@ -1,100 +1,133 @@
 /**
- * Conversations and their participants.
+ * Conversations, their members (accounts) and their leaves (instances in the
+ * MLS group).
  *
- * Ported from `models/Conversation.ts`. The participant array becomes a child
- * table, which is what turns `Conversation.pre('save')` from an application hook
- * into a database constraint — see `CONVENTIONS.md` §"The two Mongoose hooks".
+ * The server knows WHO is in a conversation and WHICH installations hold a
+ * leaf; it never knows the conversation's name or any message — those are
+ * MLS application messages (`docs/platform/api-v1.md`).
  */
 
-import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { bigint, check, index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
+import { CONVERSATION_KINDS, LEAF_STATES, MEMBER_ROLES, MEMBER_STATES } from "@allo/shared-types";
 import { checkOneOf } from "./columns";
+import { clientInstances } from "./instances";
 
-export const CONVERSATION_TYPES = ["direct", "group"] as const;
-export type ConversationType = (typeof CONVERSATION_TYPES)[number];
-
-export const CONVERSATION_PARTICIPANT_ROLES = ["admin", "member"] as const;
-export type ConversationParticipantRole = (typeof CONVERSATION_PARTICIPANT_ROLES)[number];
+export type ConversationKind = (typeof CONVERSATION_KINDS)[number];
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+export type MemberState = (typeof MEMBER_STATES)[number];
+export type LeafState = (typeof LEAF_STATES)[number];
 
 /**
- * The embedded `lastMessage` becomes three columns.
+ * `dm_key` is `dmKeyFor(appId, a, b)` from `@allo/shared-types` and unique, so
+ * two clients creating the same DM at once converge on one row: the loser's
+ * insert is a unique violation the route turns into `created: false`. The
+ * CHECK makes the key mandatory for a `dm`, because a DM without one is a DM
+ * that can be created twice.
  *
- * It is a denormalised preview maintained by the write path, not a reference —
- * deliberately NOT a foreign key to `messages`, because the preview must survive
- * the message being deleted, which is exactly when a FK would either block the
- * delete or null the preview out.
+ * `mls_group_id` is chosen by the creator and unique server-wide.
+ *
+ * `current_epoch` and `last_seq` are advanced under `SELECT … FOR UPDATE` on
+ * this row (`db/platform/eventRepository.ts`), which is the serialisation
+ * point for the whole event log of one conversation. `bigint` because both are
+ * unbounded counters; drizzle hands them back as `number` (`mode: "number"`),
+ * which is safe up to 2^53 and is what the wire contract carries.
  */
 export const conversations = pgTable(
   "conversations",
   {
     id: text().primaryKey(),
-    type: text({ enum: CONVERSATION_TYPES }).notNull(),
-    name: text(),
-    description: text(),
-    avatar: text(),
-    /** Colour theme id, shared by every participant. */
-    theme: text(),
-    createdBy: text().notNull(),
-    lastMessageAt: timestamptz(),
-    lastMessageText: text(),
-    lastMessageSenderId: text(),
-    lastMessageTimestamp: timestamptz(),
+    kind: text({ enum: CONVERSATION_KINDS }).notNull(),
+    appId: text().notNull(),
+    dmKey: text().unique("conversations_dm_key_key"),
+    mlsGroupId: text().notNull().unique("conversations_mls_group_id_key"),
+    currentEpoch: bigint({ mode: "number" }).notNull().default(0),
+    lastSeq: bigint({ mode: "number" }).notNull().default(0),
+    createdByAccountId: text().notNull(),
+    createdByInstanceId: text().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("conversations_created_by_last_message_at_idx").on(t.createdBy, t.lastMessageAt),
-    index("conversations_type_last_message_at_idx").on(t.type, t.lastMessageAt),
-    checkOneOf("conversations_type_check", t.type, CONVERSATION_TYPES),
+    checkOneOf("conversations_kind_check", t.kind, CONVERSATION_KINDS),
+    check("conversations_dm_key_check", sql`${t.kind} <> 'dm' or ${t.dmKey} is not null`),
+    check("conversations_current_epoch_check", sql`${t.currentEpoch} >= 0`),
+    check("conversations_last_seq_check", sql`${t.lastSeq} >= 0`),
   ],
 );
 
 /**
- * One person's membership of one conversation.
+ * One row per (conversation, account). `state` is the account's membership;
+ * which of its installations are in the MLS group is `conversation_leaves`.
  *
- * Three Mongo structures collapse into this row, because all three were keyed by
- * participant and only ever read for a participant who is already in the array:
- *
- * - the `participants[]` entry itself (`role`, `joinedAt`, `lastReadAt`);
- * - `unreadCounts`, a `Map<userId, number>` → `unreadCount`;
- * - `archivedBy`, an array of user ids → `archivedAt`.
- *
- * Keeping `archivedBy` as a list on the conversation would let a user id appear
- * there while not being a participant at all; as a column on the membership row
- * that state is unrepresentable. `archivedAt` rather than a boolean because the
- * timestamp answers "since when" for free and still reads as a flag.
- *
- * The unique index is what `participants.userId` was doing in Mongo — one
- * membership per person per conversation, which the embedded array could not
- * enforce.
+ * A member is `removed` when another account's commit took its last active
+ * leaf away, and `left` when it left itself (`POST …/leave` or a self-remove
+ * commit). Both keep the row: membership history is what says who could ever
+ * have read what.
  */
-export const conversationParticipants = pgTable(
-  "conversation_participants",
+export const conversationMembers = pgTable(
+  "conversation_members",
   {
     id: text().primaryKey(),
     conversationId: text()
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
-    userId: text().notNull(),
-    role: text({ enum: CONVERSATION_PARTICIPANT_ROLES }).notNull().default("member"),
+    accountId: text().notNull(),
+    role: text({ enum: MEMBER_ROLES }).notNull().default("member"),
+    state: text({ enum: MEMBER_STATES }).notNull().default("joined"),
     joinedAt: timestamptz().notNull().defaultNow(),
-    lastReadAt: timestamptz(),
-    unreadCount: integer().notNull().default(0),
-    archivedAt: timestamptz(),
+    leftAt: timestamptz(),
+    addedByAccountId: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("conversation_participants_conversation_id_user_id_key").on(
+    uniqueIndex("conversation_members_conversation_id_account_id_key").on(
       t.conversationId,
-      t.userId,
+      t.accountId,
     ),
-    /** Drives the conversation list: every conversation a person is in, newest first. */
-    index("conversation_participants_user_id_idx").on(t.userId),
-    checkOneOf(
-      "conversation_participants_role_check",
-      t.role,
-      CONVERSATION_PARTICIPANT_ROLES,
+    index("conversation_members_account_id_state_idx").on(t.accountId, t.state),
+    checkOneOf("conversation_members_role_check", t.role, MEMBER_ROLES),
+    checkOneOf("conversation_members_state_check", t.state, MEMBER_STATES),
+  ],
+);
+
+/**
+ * Which instances are in the MLS group, and since which epoch.
+ *
+ * `added_epoch` is the epoch the leaf became part of the group (the epoch the
+ * adding commit CREATED). `removed_epoch` is the epoch the removing commit
+ * created; it stays NULL on a leaf that is `removed` because its instance was
+ * revoked server-side and no client has committed the Remove yet — that is the
+ * only case in which `state = 'removed'` and `removed_epoch IS NULL` coexist,
+ * and the commit rules in `eventRepository.ts` accept such a leaf in
+ * `removedLeaves`.
+ */
+export const conversationLeaves = pgTable(
+  "conversation_leaves",
+  {
+    id: text().primaryKey(),
+    conversationId: text()
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    instanceId: text()
+      .notNull()
+      .references(() => clientInstances.id, { onDelete: "cascade" }),
+    accountId: text().notNull(),
+    state: text({ enum: LEAF_STATES }).notNull(),
+    addedEpoch: bigint({ mode: "number" }).notNull(),
+    removedEpoch: bigint({ mode: "number" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("conversation_leaves_conversation_id_instance_id_key").on(
+      t.conversationId,
+      t.instanceId,
     ),
+    index("conversation_leaves_instance_id_state_idx").on(t.instanceId, t.state),
+    checkOneOf("conversation_leaves_state_check", t.state, LEAF_STATES),
+    check("conversation_leaves_added_epoch_check", sql`${t.addedEpoch} >= 0`),
   ],
 );
