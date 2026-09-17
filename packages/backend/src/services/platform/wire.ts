@@ -33,8 +33,21 @@ export function toClientInstance(row: InstanceRow): ClientInstance {
     lastSeenAt: isoOrNull(row.lastSeenAt),
     approvedByInstanceId: row.approvedByInstanceId,
     approvalSignature: row.approvalSignature,
+    enrollmentChallenge: publishedChallenge(row),
     createdAt: iso(row.createdAt),
   };
+}
+
+/**
+ * The challenge is published once it has been SIGNED — after approval, so any
+ * client can verify the enrollment chain — and is null for the bootstrap
+ * instance and while an enrollment is pending. A pending challenge is returned
+ * to the owner only, through `GET /v1/instances/pending` and the registration
+ * answer, never through this projection.
+ */
+export function publishedChallenge(row: Pick<InstanceRow, "status" | "enrollmentChallenge" | "approvalSignature">): string | null {
+  if (row.status === "pending" || row.approvalSignature === null) return null;
+  return row.enrollmentChallenge;
 }
 
 export function toPublicInstance(row: InstanceRow): PublicInstance {
@@ -46,6 +59,7 @@ export function toPublicInstance(row: InstanceRow): PublicInstance {
     signingPublicKey: row.signingPublicKey,
     approvedByInstanceId: row.approvedByInstanceId,
     approvalSignature: row.approvalSignature,
+    enrollmentChallenge: publishedChallenge(row),
     status: row.status,
   };
 }

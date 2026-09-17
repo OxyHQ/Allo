@@ -5,8 +5,11 @@
  * `socket.data.userId`), then the instance signature over `handshake.auth`
  * (`socketAuthSchema`) with the path fixed to `SOCKET_SIGNING_PATH` and an
  * empty body — the same check `requireInstance` makes, through the same
- * function. A connected socket joins `instance:<id>` and `account:<accountId>`;
- * rooms are derived from the verified instance, never from client input.
+ * function, with ONE difference: a `pending` instance is admitted, because
+ * `instance.approved` is delivered to its room and socket.io-client never
+ * reconnects after a refused handshake. A connected socket joins
+ * `instance:<id>` and `account:<accountId>`; rooms are derived from the
+ * verified instance, never from client input.
  *
  * Inbound `typing` is relayed to the other ACTIVE leaves of the conversation
  * and stored nowhere. Presence is best effort: on connect and disconnect the
@@ -100,6 +103,10 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
           method: "GET",
           pathWithQuery: SOCKET_SIGNING_PATH,
           bodySha256Hex: EMPTY_BODY_SHA256_HEX,
+          // A pending instance is admitted so it can hear `instance.approved`;
+          // it holds no leaf, so typing relays nothing for it, and it is not
+          // announced as present. A revoked one is still refused.
+          allowPending: true,
         },
         deps.instanceAuth,
       );
@@ -148,7 +155,7 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
       return;
     }
     void socket.join([instanceRoom(instance.id), accountRoom(instance.accountId)]);
-    void announcePresence(instance.accountId, true, realtime);
+    if (instance.status === "active") void announcePresence(instance.accountId, true, realtime);
 
     socket.on("typing", (payload) => {
       void relayTyping(instance, payload, realtime).catch((error: unknown) => {

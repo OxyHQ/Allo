@@ -47,6 +47,8 @@ export interface AuthenticatedInstance {
   id: string;
   accountId: string;
   appId: string;
+  /** `active`, or `pending` on the one path that admits it (the socket handshake). */
+  status: "active" | "pending";
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -106,6 +108,14 @@ export async function authenticateInstance(
     method: string;
     pathWithQuery: string;
     bodySha256Hex: string;
+    /**
+     * Admit a `pending` instance. Only the Socket.IO handshake sets this: a
+     * pending instance holds a socket so `instance.approved` can reach it —
+     * socket.io-client does NOT reconnect after a refused handshake, so a
+     * refusal here would leave a freshly approved device deaf until its next
+     * poll. Every HTTP route keeps refusing with `instance_not_active`.
+     */
+    allowPending?: boolean;
   },
   deps: InstanceAuthDeps = {},
 ): Promise<AuthenticatedInstance> {
@@ -126,7 +136,9 @@ export async function authenticateInstance(
   const instance = await findInstance(instanceId.data);
   if (!instance) throw unauthorized("Unknown instance");
   if (instance.accountId !== input.accountId) throw forbidden("The instance belongs to another account");
-  if (instance.status === "pending") throw new AlloHttpError("instance_not_active", "The instance is awaiting approval");
+  if (instance.status === "pending" && !input.allowPending) {
+    throw new AlloHttpError("instance_not_active", "The instance is awaiting approval");
+  }
   if (instance.status === "revoked") throw new AlloHttpError("instance_revoked", "The instance was revoked");
 
   const message = signedRequestMessage({
@@ -138,7 +150,7 @@ export async function authenticateInstance(
   if (!verifyEd25519(message, signature.data, instance.signingPublicKey)) {
     throw unauthorized("Instance signature does not verify");
   }
-  return { id: instance.id, accountId: instance.accountId, appId: instance.appId };
+  return { id: instance.id, accountId: instance.accountId, appId: instance.appId, status: instance.status };
 }
 
 /** The HTTP middleware. Sets `req.instance` and touches `last_seen_at` (best effort). */

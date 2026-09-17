@@ -30,12 +30,28 @@ export function requestObservability(req: Request, res: Response, next: NextFunc
   const id = requestId(req);
   const startedAt = process.hrtime.bigint();
   res.setHeader("X-Request-ID", id);
+  // The template is captured the moment Express assigns `req.route`, while
+  // `req.baseUrl` is still the mounted router's path. Reading it any later is
+  // wrong on the error path: a thrown `AlloHttpError` unwinds every router,
+  // each restoring `baseUrl`, before the error handler ends the response — so
+  // `/v1/conversations/:id/events` would log as `/conversations/:id/events`.
+  let route = "/unmatched";
+  let current: unknown = Reflect.get(req, "route");
+  Object.defineProperty(req, "route", {
+    configurable: true,
+    enumerable: true,
+    get: () => current,
+    set: (value: unknown) => {
+      current = value;
+      route = routeTemplate(req);
+    },
+  });
   res.once("finish", () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
     logger.info("HTTP request completed", {
       requestId: id,
       method: req.method.toUpperCase(),
-      route: routeTemplate(req),
+      route,
       status: res.statusCode,
       durationMs: Math.round(durationMs * 100) / 100,
     });

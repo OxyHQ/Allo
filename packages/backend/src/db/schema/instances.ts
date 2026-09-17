@@ -43,7 +43,11 @@ export const clientInstances = pgTable(
     displayName: text().notNull(),
     signingPublicKey: text().notNull(),
     status: text({ enum: INSTANCE_STATUSES }).notNull().default("pending"),
-    /** base64url, null once the enrollment is resolved either way. */
+    /**
+     * base64url. Null for the bootstrap instance; issued at a non-first
+     * registration and KEPT after approval, because the approval signature is
+     * over it and a verifier needs it. Cleared on rejection/revocation.
+     */
     enrollmentChallenge: text(),
     /** Null for the bootstrap instance, which nobody approved. */
     approvedByInstanceId: text(),

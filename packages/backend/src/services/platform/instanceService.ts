@@ -80,7 +80,15 @@ export async function listOwnInstances(accountId: string, deps: InstanceServiceD
   return rows.map(toClientInstance);
 }
 
-/** Active instances of any account, projected. Null when Allo has never seen the account. */
+/**
+ * Another account's view: every ACTIVE and REVOKED instance, each with its
+ * status, never a pending one. Revoked ones stay in the listing because a
+ * chain verifier needs the approver's key even after the approver was
+ * revoked — what it approved still chains ("verified but not trusted"), while
+ * an approver missing from the listing makes the whole chain refuse. A
+ * pending instance is nobody's yet and its challenge is still a secret.
+ * Null when Allo has never seen the account.
+ */
 export async function listPublicInstances(
   accountId: string,
   deps: InstanceServiceDeps = {},
@@ -88,7 +96,7 @@ export async function listPublicInstances(
   const db = deps.db ?? getDb();
   const all = await listInstancesByAccount(accountId, db);
   if (all.length === 0) return null;
-  return all.filter((row) => row.status === "active").map(toPublicInstance);
+  return all.filter((row) => row.status !== "pending").map(toPublicInstance);
 }
 
 export async function listPendingEnrollments(

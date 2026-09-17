@@ -80,6 +80,26 @@ describe("the handshake", () => {
     const noSession = await open({ ...socketAuthFor(me), oxyUser: undefined });
     expect(noSession.error).toBe("no session");
   });
+
+  it("admits a PENDING instance so it can hear instance.approved, and refuses a revoked one", async () => {
+    const account = accountId();
+    const first = await TestInstance.register(h.app, account);
+    const second = await TestInstance.register(h.app, account);
+    expect(second.registration.enrollment).toBe("pending");
+    const pending = await open(socketAuthFor(second));
+    expect(pending.error).toBeUndefined();
+
+    const approved = new Promise<unknown>((resolve) => pending.socket.once("instance.approved", resolve));
+    setRealtime(sockets.realtime);
+    await first.approve(second);
+    expect(await approved).toEqual({ instanceId: second.id });
+    setRealtime(h.realtime);
+    pending.socket.close();
+
+    await second.signed("post", `/v1/instances/${first.id}/revoke`).expect(200);
+    const revoked = await open(socketAuthFor(first));
+    expect(revoked.error).toBe("instance_revoked");
+  });
 });
 
 describe("rooms and relays", () => {

@@ -121,7 +121,12 @@ export interface ActivateInstanceInput {
   approvalSignature: string;
 }
 
-/** `pending` → `active`. Returns null when the row was not pending (already resolved). */
+/**
+ * `pending` → `active`. Returns null when the row was not pending (already
+ * resolved). The challenge is KEPT: it is what the approval signature was made
+ * over, and once signed it is published so any client can verify the chain
+ * (`publishedChallenge` in `services/platform/wire.ts`).
+ */
 export async function activateInstance(
   id: string,
   input: ActivateInstanceInput,
@@ -132,7 +137,6 @@ export async function activateInstance(
     .update(clientInstances)
     .set({
       status: "active",
-      enrollmentChallenge: null,
       approvedByInstanceId: input.approvedByInstanceId,
       approvalSignature: input.approvalSignature,
       enrolledAt: now,

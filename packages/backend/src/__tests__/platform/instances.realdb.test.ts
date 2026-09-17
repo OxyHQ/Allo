@@ -11,6 +11,7 @@ import {
   SIGNATURE_HEADER,
   TIMESTAMP_HEADER,
   MAX_CLOCK_SKEW_MS,
+  enrollmentApprovalMessage,
   errorResponseSchema,
   instanceResponseSchema,
   listAccountInstancesResponseSchema,
@@ -52,9 +53,10 @@ describe("POST /v1/instances", () => {
     expect(me.registration.instance.status).toBe("active");
     expect(me.registration.instance.enrolledAt).not.toBeNull();
     expect(me.registration.instance.approvedByInstanceId).toBeNull();
+    expect(me.registration.instance.enrollmentChallenge).toBeNull();
     // Nullable fields are present as null, never absent.
     expect(Object.keys(me.registration.instance)).toEqual(
-      expect.arrayContaining(["revokedAt", "lastSeenAt", "approvedByInstanceId", "approvalSignature"]),
+      expect.arrayContaining(["revokedAt", "lastSeenAt", "approvedByInstanceId", "approvalSignature", "enrollmentChallenge"]),
     );
   });
 
@@ -66,6 +68,8 @@ describe("POST /v1/instances", () => {
     expect(second.registration.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(second.registration.instance.status).toBe("pending");
     expect(second.registration.instance.enrolledAt).toBeNull();
+    // While pending the challenge travels only in `challenge`, not on the instance.
+    expect(second.registration.instance.enrollmentChallenge).toBeNull();
   });
 
   it("refuses a malformed body with validation_failed and the issues", async () => {
@@ -111,13 +115,64 @@ describe("GET /v1/instances and /v1/accounts/:accountId/instances", () => {
 
     const other = await request(h.app).get(`/v1/accounts/${account}/instances`).set(USER_HEADER, accountId("stranger"));
     const otherParsed = expectParses(listAccountInstancesResponseSchema, other.body);
-    // Active only: the pending second instance is not somebody another account can address.
+    // Never a pending one: it is not somebody another account can address.
     expect(otherParsed.instances.map((i) => i.id)).toEqual([first.id]);
     expect(Object.keys(otherParsed.instances[0]).sort()).toEqual(
-      ["accountId", "appId", "approvalSignature", "approvedByInstanceId", "id", "platform", "signingPublicKey", "status"].sort(),
+      ["accountId", "appId", "approvalSignature", "approvedByInstanceId", "enrollmentChallenge", "id", "platform", "signingPublicKey", "status"].sort(),
     );
     expect(JSON.stringify(other.body)).not.toContain("secret-token");
     expect(JSON.stringify(other.body)).not.toContain("displayName");
+  });
+
+  it("publishes the challenge to other accounts only once the instance is approved", async () => {
+    const account = accountId();
+    const first = await TestInstance.register(h.app, account);
+    const second = await TestInstance.register(h.app, account);
+    const stranger = accountId("stranger");
+
+    // Pending: the challenge is a secret between the server and the owner. It
+    // must not appear in another account's view — nor, defensively, in the
+    // owner's own listing; only the pending list and the registration carry it.
+    let own = await request(h.app).get("/v1/instances").set(USER_HEADER, account);
+    const pendingView = expectParses(listInstancesResponseSchema, own.body).instances.find((i) => i.id === second.id);
+    expect(pendingView?.status).toBe("pending");
+    expect(pendingView?.enrollmentChallenge).toBeNull();
+    expect(JSON.stringify(own.body)).not.toContain(second.registration.challenge as string);
+    const publicBefore = await request(h.app).get(`/v1/accounts/${account}/instances`).set(USER_HEADER, stranger);
+    expect(JSON.stringify(publicBefore.body)).not.toContain(second.registration.challenge as string);
+
+    await first.approve(second);
+
+    const publicAfter = await request(h.app).get(`/v1/accounts/${account}/instances`).set(USER_HEADER, stranger);
+    const parsed = expectParses(listAccountInstancesResponseSchema, publicAfter.body);
+    const bootstrap = parsed.instances.find((i) => i.id === first.id);
+    const approved = parsed.instances.find((i) => i.id === second.id);
+    expect(bootstrap?.enrollmentChallenge).toBeNull();
+    expect(approved?.enrollmentChallenge).toBe(second.registration.challenge);
+    expect(approved?.approvalSignature).not.toBeNull();
+    own = await request(h.app).get("/v1/instances").set(USER_HEADER, account);
+    expect(expectParses(listInstancesResponseSchema, own.body).instances.find((i) => i.id === second.id)?.enrollmentChallenge).toBe(second.registration.challenge);
+  });
+
+  it("keeps a revoked approver in the public listing, with its status, so what it approved still chains", async () => {
+    const account = accountId();
+    const first = await TestInstance.register(h.app, account);
+    const second = await TestInstance.register(h.app, account);
+    await first.approve(second);
+    const third = await TestInstance.register(h.app, account); // pending, never listed
+    await second.signed("post", `/v1/instances/${first.id}/revoke`).expect(200);
+
+    const response = await request(h.app).get(`/v1/accounts/${account}/instances`).set(USER_HEADER, accountId("stranger"));
+    const parsed = expectParses(listAccountInstancesResponseSchema, response.body);
+    expect(parsed.instances.map((i) => [i.id, i.status])).toEqual([
+      [first.id, "revoked"],
+      [second.id, "active"],
+    ]);
+    expect(parsed.instances.map((i) => i.id)).not.toContain(third.id);
+    // The revoked approver still carries the key the chain is verified with.
+    expect(parsed.instances[0].signingPublicKey).toBe(first.key.publicKeyBase64);
+    expect(parsed.instances[1].approvedByInstanceId).toBe(first.id);
+    expect(parsed.instances[1].enrollmentChallenge).toBe(second.registration.challenge);
   });
 
   it("404s an account Allo has never seen", async () => {
@@ -148,11 +203,19 @@ describe("approval", () => {
     expect(parsed.instance.enrolledAt).not.toBeNull();
     expect(h.realtime.approved).toEqual([second.id]);
 
-    // The challenge is cleared: it is gone from the pending list and the row.
+    // Off the pending list; the challenge is KEPT and now published, because the
+    // approval signature is over it and a verifier needs both.
     const after = await first.signed("get", "/v1/instances/pending");
     expect(after.body.pending).toEqual([]);
     const [row] = await h.db.select().from(schema.clientInstances).where(eq(schema.clientInstances.id, second.id));
-    expect(row.enrollmentChallenge).toBeNull();
+    expect(row.enrollmentChallenge).toBe(second.registration.challenge);
+    expect(parsed.instance.enrollmentChallenge).toBe(second.registration.challenge);
+    expect(enrollmentApprovalMessage({
+      accountId: account,
+      newInstanceId: parsed.instance.id,
+      newSigningPublicKey: parsed.instance.signingPublicKey,
+      challenge: parsed.instance.enrollmentChallenge as string,
+    })).toBe(enrollmentApprovalMessage({ accountId: account, newInstanceId: second.id, newSigningPublicKey: second.key.publicKeyBase64, challenge: second.registration.challenge as string }));
 
     // And the newly active instance can now sign requests itself.
     await second.signed("get", "/v1/instances/pending").expect(200);

@@ -8,12 +8,13 @@
 
 import express from "express";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorResponseSchema } from "@allo/shared-types";
 import { createApp, type CreateAppDependencies } from "../../app";
 import { markMigrationsComplete, markRuntimeReady, markRuntimeShuttingDown, resetRuntimeHealthState } from "../../runtime/health";
 import { requireOxySession } from "../../middleware/oxySession";
 import { AlloHttpError } from "../../utils/httpErrors";
+import { logger } from "../../utils/logger";
 import { fakeOxyAuth, USER_HEADER } from "./harness";
 
 const pass: express.RequestHandler = (_req, _res, next) => next();
@@ -21,7 +22,7 @@ const pass: express.RequestHandler = (_req, _res, next) => next();
 function appWith(overrides: Partial<CreateAppDependencies> = {}, postgres = true) {
   let parsedJson = 0;
   const instanceAuth: express.RequestHandler = (req, _res, next) => {
-    Reflect.set(req, "instance", { id: "inst-00000001", accountId: req.get(USER_HEADER), appId: "allo" });
+    Reflect.set(req, "instance", { id: "inst-00000001", accountId: req.get(USER_HEADER), appId: "allo", status: "active" });
     next();
   };
   const app = createApp({
@@ -134,9 +135,16 @@ describe("the error envelope", () => {
     expect(expectError(crashed.body)).toEqual({ code: "internal", message: "Internal error" });
     expect(JSON.stringify(crashed.body)).not.toContain("secret");
 
+    vi.mocked(logger.info).mockClear();
     const limited = await request(app).get("/api/profile/teapot").set(USER_HEADER, "acct-00000001");
     expect(limited.status).toBe(429);
     expect(expectError(limited.body).code).toBe("rate_limited");
+    // The request line names the MOUNTED template even on the error path, where
+    // every router has unwound (and restored `req.baseUrl`) before the handler
+    // answers; it never names the URL.
+    const line = vi.mocked(logger.info).mock.calls.find(([message]) => message === "HTTP request completed");
+    expect(line?.[1]).toMatchObject({ method: "GET", route: "/api/profile/teapot", status: 429 });
+    expect(JSON.stringify(line?.[1])).not.toContain("acct-00000001");
 
     const missing = await request(app).get("/v1/nowhere").set(USER_HEADER, "acct-00000001");
     expect(missing.status).toBe(404);
