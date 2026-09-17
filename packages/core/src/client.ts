@@ -88,12 +88,14 @@ export interface AlloClient {
     markRead(conversationId: string): Promise<void>;
     setTyping(conversationId: string, on: boolean): Promise<void>;
     isTyping(conversationId: string): boolean;
-    loadOlder(conversationId: string, before?: string): Promise<LoadOlderResult>;
+    /** `limit` defaults to 50. */
+    loadOlder(conversationId: string, before?: string, limit?: number): Promise<LoadOlderResult>;
     unreadCount(conversationId: string): number;
   };
   media: {
     upload(conversationId: string, bytes: Uint8Array, meta: UploadMediaMeta): Promise<string>;
-    download(ref: MediaRef): Promise<Uint8Array>;
+    /** Aborting the signal rejects with the fetch AbortError. */
+    download(ref: MediaRef, options?: { signal?: AbortSignal }): Promise<Uint8Array>;
   };
   sync: {
     state(): SyncState;
@@ -299,12 +301,12 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       markRead: (id) => requireCtx().messages.markRead(id),
       setTyping: (id, on) => requireCtx().messages.setTyping(id, on),
       isTyping: (id) => ctx?.messages.isTyping(id) ?? false,
-      loadOlder: (id, before) => requireCtx().messages.loadOlder(id, before),
+      loadOlder: (id, before, limit) => requireCtx().messages.loadOlder(id, before, limit),
       unreadCount: (id) => ctx?.messages.unreadCount(id) ?? 0,
     },
     media: {
       upload: (id, bytes, meta) => new MediaService(requireCtx()).upload(id, bytes, meta),
-      download: (ref) => new MediaService(requireCtx()).download(ref),
+      download: (ref, options) => new MediaService(requireCtx()).download(ref, options),
     },
     sync: {
       state: () => ctx?.sync.state ?? "idle",

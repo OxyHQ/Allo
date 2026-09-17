@@ -69,6 +69,7 @@ export class InstanceManager {
   private serverAvailable: number | null = null;
   private listView: InstanceView[] | null = null;
   private pendingView: PendingEnrollmentView[] | null = null;
+  private currentCache: InstanceView | null | undefined = undefined;
   private stock = new Map<string, KeyPackageRecord>();
 
   constructor(private readonly deps: InstanceManagerDeps) {}
@@ -209,6 +210,16 @@ export class InstanceManager {
       if (next.status === "revoked") this.deps.onRevoked?.();
     } else if (!me && this.record.status !== "revoked") {
       this.deps.log.warn?.("this instance is no longer listed by the server");
+    }
+    // The listing carries fields (enrolledAt, lastSeenAt…) the current view shows. The cached snapshot is
+    // replaced ONLY when the view actually changed, and that replacement always comes with an emission.
+    if (this.currentCache !== undefined) {
+      const next = this.computeCurrentView();
+      if (JSON.stringify(next) !== JSON.stringify(this.currentCache)) {
+        this.currentCache = next;
+        this.listView = null;
+        this.deps.emitter.emit("instance");
+      }
     }
     this.deps.emitter.emit("instances");
   }
@@ -410,10 +421,18 @@ export class InstanceManager {
     return this.pendingView;
   }
 
+  /** Referentially stable until the `instance` topic emits. */
   currentView(): InstanceView | null {
+    if (this.currentCache !== undefined) return this.currentCache;
+    this.currentCache = this.computeCurrentView();
+    return this.currentCache;
+  }
+
+  private computeCurrentView(): InstanceView | null {
     if (!this.record) return null;
     const listed = this.own.find((i) => i.id === this.record?.id);
-    if (listed) return this.toView(listed);
+    // The record is updated first (approval, revocation); a listing fetched earlier must not outvote it.
+    if (listed) return { ...this.toView(listed), status: this.record.status };
     return {
       id: this.record.id,
       accountId: this.record.accountId,
@@ -451,6 +470,7 @@ export class InstanceManager {
 
   private emitInstance(): void {
     this.listView = null;
+    this.currentCache = undefined;
     this.deps.emitter.emit("instance");
   }
 

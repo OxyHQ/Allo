@@ -55,11 +55,11 @@ export class MediaService {
   }
 
   /** Fetches, verifies and decrypts a blob named by a `MediaRef`. */
-  async download(ref: MediaRef): Promise<Uint8Array> {
+  async download(ref: MediaRef, options: { signal?: AbortSignal } = {}): Promise<Uint8Array> {
     const { ctx } = this;
     const record = ctx.model.mediaKeys.get(ref.blobId);
     if (!record) throw new NotFoundError(`media key for blob ${ref.blobId}`);
-    const ciphertext = await ctx.http.request<Uint8Array>({ method: "GET", path: `/v1/blobs/${ref.blobId}`, binary: true, signer: ctx.signer });
+    const ciphertext = await ctx.http.request<Uint8Array>({ method: "GET", path: `/v1/blobs/${ref.blobId}`, binary: true, signer: ctx.signer, signal: options.signal });
     if (sha256Hex(ciphertext) !== record.sha256) throw new DecryptError("blob digest does not match the message");
     try {
       return gcm(base64Decode(record.key), base64Decode(record.nonce)).decrypt(ciphertext);

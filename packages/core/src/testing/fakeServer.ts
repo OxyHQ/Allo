@@ -229,6 +229,7 @@ export class FakeAlloServer implements SocketHost {
   // ---- http ----------------------------------------------------------------
 
   private async handle(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+    if (init?.signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = new Headers(init?.headers ?? {});

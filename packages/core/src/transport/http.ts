@@ -45,6 +45,8 @@ export interface RequestOptions<T> {
   signer?: Signer;
   /** Expect bytes rather than JSON. */
   binary?: boolean;
+  /** Passed to `fetch`; an abort is rethrown as-is (an `AbortError`), not as a `TransportError`. */
+  signal?: AbortSignal;
 }
 
 export class HttpClient {
@@ -75,8 +77,9 @@ export class HttpClient {
     }
     let response: Response;
     try {
-      response = await this.options.fetch(this.options.baseUrl + req.path, { method: req.method, headers, body: body as BodyInit | undefined });
+      response = await this.options.fetch(this.options.baseUrl + req.path, { method: req.method, headers, body: body as BodyInit | undefined, signal: req.signal });
     } catch (cause) {
+      if (req.signal?.aborted || (cause instanceof Error && cause.name === "AbortError")) throw cause;
       throw new TransportError(0, "network", "request failed to reach the server", undefined, { cause });
     }
     if (!response.ok) throw await this.toError(response);

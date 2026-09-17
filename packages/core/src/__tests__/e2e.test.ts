@@ -237,6 +237,22 @@ describe("end to end over the fake server", () => {
     await stopAll(alice, bob);
   });
 
+  it("(g2) media download honours an AbortSignal", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    await alice.client.media.upload(conv.id, new Uint8Array(64), { kind: "file", filename: "a.bin", mime: "application/octet-stream" });
+    await waitFor(() => bob.client.messages.timeline(conv.id).some((i) => i.content.kind === "media"));
+    const media = (bob.client.messages.timeline(conv.id).find((i) => i.content.kind === "media")!.content as { media: { ref: { blobId: string; conversationId: string } } }).media;
+    const controller = new AbortController();
+    controller.abort();
+    await expect(bob.client.media.download(media.ref, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect((await bob.client.media.download(media.ref)).length).toBe(64);
+    await stopAll(alice, bob);
+  });
+
   it("(h) a DM created twice returns the same conversation", async () => {
     const server = fakeServer();
     const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
@@ -322,6 +338,54 @@ describe("end to end over the fake server", () => {
     const { InvalidStateError } = await import("../errors");
     await expect(bob3.client.start()).rejects.toBeInstanceOf(InvalidStateError);
     await stopAll(alice, bob2);
+  });
+
+  it("(l) instance.current() is referentially stable until the instance topic emits", async () => {
+    const server = fakeServer();
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    let emitted = 0;
+    const off = bob.client.subscribe("instance", () => emitted++);
+    const a = bob.client.instance.current();
+    expect(a).not.toBeNull();
+    expect(bob.client.instance.current()).toBe(a);
+    expect(bob.client.instance.current()).toBe(a);
+    // A refresh re-reads the listing; `lastSeenAt` moves with every signed request, so the snapshot may
+    // change — but only together with an emission, never silently.
+    const before = emitted;
+    await bob.client.instance.refresh();
+    const afterRefresh = bob.client.instance.current();
+    if (emitted === before) expect(afterRefresh).toBe(a);
+    else expect(afterRefresh).not.toBe(a);
+    expect(bob.client.instance.current()).toBe(afterRefresh);
+    const mark = emitted;
+    await bob.client.instance.revoke(bob.client.instanceId!);
+    expect(emitted).toBeGreaterThan(mark);
+    const b = bob.client.instance.current();
+    expect(b).not.toBe(afterRefresh);
+    expect(b?.status).toBe("revoked");
+    expect(bob.client.instance.current()).toBe(b);
+    off();
+    await stopAll(bob);
+  });
+
+  it("(m) loadOlder respects `limit` and reports reachedStart", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+    for (let i = 1; i <= 7; i++) await alice.client.messages.send(conv.id, `n${i}`);
+    await waitForText(bob, conv.id, "n7");
+    const all = bob.client.messages.timeline(conv.id);
+    const last = all[all.length - 1];
+    const page = await bob.client.messages.loadOlder(conv.id, last.id, 3);
+    expect(texts(page.items)).toEqual(["n4", "n5", "n6"]);
+    expect(page.reachedStart).toBe(false);
+    const rest = await bob.client.messages.loadOlder(conv.id, page.items[0].id, 3);
+    expect(texts(rest.items)).toEqual(["n1", "n2", "n3"]);
+    expect(rest.reachedStart).toBe(true);
+    expect((await bob.client.messages.loadOlder(conv.id)).items).toHaveLength(7); // default limit 50
+    await stopAll(alice, bob);
   });
 
   it("(k) push token registration goes to PUT/DELETE /v1/instances/me/push, signed", async () => {
