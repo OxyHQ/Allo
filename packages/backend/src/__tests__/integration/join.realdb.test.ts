@@ -441,7 +441,11 @@ describe("self-join by external commit", () => {
     expect(item?.seq ?? null).toBeNull();
     expect(item?.holdReason).toBe("epoch_stalled"); // held, not retried forever
     expect(conflicts.length).toBeGreaterThanOrEqual(1);
-    expect(conflicts.length).toBeLessThanOrEqual(3); // the cap (measured before the cap: 128)
+    // Three conflicts reach the cap, then the item is held and retried under a
+    // growing backoff (1 s, 2 s, 4 s…), so a 1.5 s window sees at most one more.
+    // Before the cap this window measured 128. The exact cap is pinned by core's
+    // own test (i1) on the fake server; here the property is "bounded and slowing".
+    expect(conflicts.length).toBeLessThanOrEqual(5);
     expect(alice.client.conversations.get(conv.id)?.epoch).toBe(epochBefore); // she did not adopt the forged epoch to get through
     expect(alice.client.conversations.get(conv.id)?.integrity).toBe("refused_commit");
     expect(bob.client.conversations.get(conv.id)?.integrity).toBe("refused_commit");
