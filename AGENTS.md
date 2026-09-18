@@ -84,9 +84,25 @@ packages/
 
 The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
 chat-screen, message-bubble, message-media, chat-composer, chat-people) in
-Bloom's split `AppShell`; `packages/frontend/ARCHITECTURE.md` maps every screen.
-Nothing is hand-built that Bloom has, and a missing piece is added to Bloom and
-released, never patched in the app. Import Bloom by subpath only.
+Bloom's `ChatSplitLayout` with a `Sidebar` rail beside it;
+`packages/frontend/ARCHITECTURE.md` maps every screen.
+
+**Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),
+not the conversation list (`ChatList`), not the picker (`ContactList`), not one
+icon — every glyph comes from `@oxy.so/bloom/icons`, and the app's only drawing
+of its own is Allo's logotype, which is what `Sidebar.logo` is for. When Bloom
+is missing a piece or gets one wrong, it is fixed IN BLOOM, released, and
+consumed: 2.12.1 (a bubble holding controls is not a `<button>`) and 2.12.2
+(`RiChatNewLine`, so the new-chat action stops wearing the compose-a-document
+mark) both came out of building these screens. Import Bloom by subpath only.
+
+**The chat screens can be opened without an account.** `ALLO_HARNESS=1 expo
+start --web` swaps the Oxy session and the Allo client for in-memory stand-ins
+(`packages/frontend/harness/`, resolved only under that flag) seeded with a DM,
+a group, a picture, a document, a voice note and a link, so the UI is looked at
+in a browser and compared with Bloom's own stories rather than assumed. Jest
+cannot do this job: rendering a Bloom chat screen there dies in reanimated 4's
+native worklets, so component coverage stays at the data-path level.
 
 NativeWind is on a **prerelease** (a `5.0.0-preview` tag), paired with Tailwind
 v4 and `react-native-css` v3, and is there only for Bloom's design tokens: the
