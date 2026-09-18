@@ -94,7 +94,7 @@ describe("the expiry sweep", () => {
     // Named, not counted: a count alone passes if someone registers the same
     // table twice, and the whole point is that no deadline table is missing.
     const tables = EXPIRY_SWEEP_TARGETS.map((target) => getTableName(target.table)).sort();
-    expect(tables).toEqual(["blobs", "instance_deliveries", "moderation_events", "moderation_outbox"]);
+    expect(tables).toEqual(["blobs", "history_offers", "instance_deliveries", "moderation_events", "moderation_outbox"]);
   });
 
   it("every registered column has a supporting index", async () => {
@@ -171,20 +171,18 @@ describe("the expiry sweep", () => {
 
     try {
       startExpirySweep(db, log);
-      // The immediate pass is fire-and-forget by design, so wait for the row to
-      // go rather than for a promise this function deliberately does not return.
-      await expect
-        .poll(async () => {
-          const rows = await db
-            .select()
-            .from(schema.moderationEvents)
-            .where(eq(schema.moderationEvents.id, expiredId));
-          return rows.length;
-        })
-        .toBe(0);
+      // The immediate pass is fire-and-forget by design, so wait for the summary
+      // line rather than for a promise this function deliberately does not
+      // return. The line is written once EVERY table has been swept; waiting
+      // for the moderation row alone raced the remaining tables' deletes and
+      // read the log before the summary existed (seen under a full parallel run).
+      await expect.poll(() => lines.some((line) => line.message.includes("expiry sweep:"))).toBe(true);
     } finally {
       stopExpirySweep();
     }
+    expect(
+      await db.select().from(schema.moderationEvents).where(eq(schema.moderationEvents.id, expiredId)),
+    ).toHaveLength(0);
 
     // "Reaped nothing" and "never ran" must be distinguishable in the log, which
     // is the whole reason the summary is emitted unconditionally.

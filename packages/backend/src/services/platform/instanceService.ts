@@ -11,6 +11,7 @@ import {
   type RegisterInstanceRequest,
   type RegisterInstanceResponse,
   type SetPushTokenRequest,
+  type SetTransferKeyRequest,
 } from "@allo/shared-types";
 import { getDb, type AlloDatabase } from "../../db";
 import { listConversationIdsWithLiveLeaf, markLeafRemoved } from "../../db/platform/conversationRepository";
@@ -25,6 +26,7 @@ import {
   listInstancesByAccountAndStatus,
   revokeInstance as revokeInstanceRow,
   setPushToken,
+  setTransferPublicKey,
   type InstanceRow,
 } from "../../db/platform/instanceRepository";
 import { verifyEd25519 } from "../../middleware/instanceAuth";
@@ -56,6 +58,7 @@ export async function registerInstance(
           platform: request.platform,
           displayName: request.displayName,
           signingPublicKey: request.signingPublicKey,
+          transferPublicKey: request.transferPublicKey,
           status: bootstrap ? "active" : "pending",
           enrollmentChallenge: challenge,
         },
@@ -197,6 +200,23 @@ export async function revokeInstance(
   realtime.instanceRevoked(target.accountId, { instanceId: target.id });
   for (const [conversationId, recipients] of nudges) realtime.nudge(recipients, { conversationId });
   await realtime.disconnectInstance(target.id);
+  return toClientInstance(row);
+}
+
+/**
+ * `PUT /v1/instances/me/transfer-key`: a Phase 2 instance (registered before
+ * the field existed, `transferPublicKey: null`) publishes the X25519 key that
+ * history can be sealed to; a later call rotates it. An offer sealed to the
+ * OLD key stays on the row and will not open — the recipient sees a decrypt
+ * failure, not the server — so a client rotates only when it has lost the key.
+ */
+export async function setInstanceTransferKey(
+  instanceId: string,
+  request: SetTransferKeyRequest,
+  deps: InstanceServiceDeps = {},
+): Promise<ClientInstance> {
+  const row = await setTransferPublicKey(instanceId, request.transferPublicKey, deps.db ?? getDb());
+  if (!row) throw notFound("Instance not found");
   return toClientInstance(row);
 }
 

@@ -27,7 +27,11 @@ export type EventKind = (typeof EVENT_KINDS)[number];
  * a client retry lands on the original event. `control` events carry neither.
  *
  * `blob_ids` is what the sender DECLARED; the server never interprets it. It
- * exists so the blob collector keeps what an event references.
+ * exists so the blob collector keeps what an event references; the GIN index
+ * on it is what lets "is this blob named by any event?" be an index probe
+ * rather than a scan, which the archive-chunk release and the collector's
+ * orphan pass (`db/platform/historyRepository.ts`, `workers/blobGc.ts`) ask
+ * per blob.
  */
 export const conversationEvents = pgTable(
   "conversation_events",
@@ -52,6 +56,7 @@ export const conversationEvents = pgTable(
     uniqueIndex("conversation_events_sender_instance_id_idempotency_key_key")
       .on(t.senderInstanceId, t.idempotencyKey)
       .where(sql`idempotency_key is not null`),
+    index("conversation_events_blob_ids_gin_idx").using("gin", t.blobIds),
     checkOneOf("conversation_events_kind_check", t.kind, EVENT_KINDS),
     check("conversation_events_seq_check", sql`${t.seq} >= 1`),
     check("conversation_events_epoch_check", sql`${t.epoch} >= 0`),

@@ -258,6 +258,9 @@ the backend validates with the same schemas the SDK parses with. In short:
 | Events | `POST/GET /v1/conversations/:id/events` | instance-signed |
 | Sync | `GET /v1/sync`, `POST /v1/sync/ack` | instance-signed |
 | Blobs | `POST /v1/blobs` (raw octet-stream), `GET /v1/blobs/:id` | instance-signed |
+| Transfer key | `PUT /v1/instances/me/transfer-key` | instance-signed |
+| History offers | `POST /v1/instances/:id/history-offers` (`:id` = recipient), `GET /v1/instances/me/history-offers`, `POST /v1/instances/me/history-offers/:id/consume` | instance-signed |
+| Backup | `PUT/GET/DELETE /v1/accounts/me/backup` | instance-signed |
 
 "Instance-signed" means the Oxy bearer PLUS `X-Allo-Instance`,
 `X-Allo-Timestamp` and `X-Allo-Signature`: an Ed25519 signature by the
@@ -270,9 +273,48 @@ parser in `src/app.ts` with its own chain.
 Socket.IO namespace `/v1` takes the same three fields in `handshake.auth`
 (path `/socket`, empty body) after `oxy.authSocket()`. A socket joins
 `instance:<id>` and `account:<accountId>`; the server emits `sync.nudge`,
-`instance.approved`, `instance.revoked`, `keypackages.low` and `presence`, and
-relays `typing` ciphertext to a conversation's other active leaves without
-storing it (`src/runtime/socket.ts`).
+`instance.approved`, `instance.revoked`, `keypackages.low`, `history.offer` and
+`presence`, and relays `typing` ciphertext to a conversation's other active
+leaves without storing it (`src/runtime/socket.ts`).
+
+#### History transfer and backups
+
+A new instance is a new MLS leaf; live group state is never copied. Its
+timeline arrives as an E2EE **archive** (`archive.ts` in `@allo/shared-types`):
+the client encrypts it in chunks, uploads each chunk as an ordinary blob, and
+signs an `ArchiveManifest` naming them. The server stores the manifest, the
+key material and the signature and can open none of it.
+
+- **Offer** (`services/platform/historyService.ts`): a donor instance offers
+  another instance of the SAME account its archive, with the archive key
+  sealed (HPKE) to the recipient's `transferPublicKey`. The recipient must be
+  active and have a transfer key (else 409 `transfer_key_missing`; a Phase 2
+  instance publishes one with `PUT /v1/instances/me/transfer-key`), every
+  chunk must exist and belong to the account, and the manifest signature must
+  verify against the donor's key. One pending offer per (donor, recipient): a
+  newer one marks the older `expired`. The recipient hears `history.offer` on
+  its socket room, lists its pending offers, and `consume`s the one it
+  imported. An offer lives 7 days (`HISTORY_OFFER_TTL_MS`).
+- **Backup** (`services/platform/backupService.ts`): one archive per account,
+  its key derived client-side from a recovery phrase. `PUT` replaces the
+  previous backup (the signature is verified against the writing instance),
+  `GET` answers `{ backup: null }` when there is none, `DELETE` is 404
+  `backup_not_found` when there is none. `keyCheck` is stored and returned as
+  given so a client can refuse a mistyped phrase before downloading a chunk.
+
+**Chunk retention** (`db/platform/historyRepository.ts`). A blob named by a
+pending offer or by the backup has `expires_at = null`. When the thing naming
+it lets go — consume, expiry, replacement, backup replaced or deleted — the
+blob is dated `now() + 1 day` unless another pending offer, the backup or a
+conversation event still names it; the ordinary blob sweep then reaps it. The
+day is the recipient's window to finish a download started before it consumed.
+Offer expiry has two hands: `GET …/history-offers` marks the caller's past-due
+offers `expired` on read, and `runExpirySweep` releases every due offer's
+chunks BEFORE the row sweep deletes it, so a `history_offers` row never
+disappears with undated chunks behind it. The blob collector's hourly orphan
+pass is the backstop for a row that goes some other way: an undated blob older
+than 7 days that no event, no pending offer and no backup names is dated a day
+out (never deleted outright).
 
 Every non-2xx answer on `/v1` is `{ error: { code, message, details? } }` with
 `code` from `ALLO_ERROR_CODES`; the one place that shape is written is the error
@@ -398,8 +440,8 @@ shutdown drain before the pool closes, none leader-gated (every claim is
 | Worker | Interval | What it does |
 | --- | --- | --- |
 | `workers/deliveryWorker.ts` | 1 s, batch 100 | Claims `pending` `instance_deliveries` under a lease; nudges a connected instance over the socket, pushes otherwise (app messages only), backs off transient failures (`min(2^attempts s, 1h)`) |
-| `db/expiry.ts` | 60 s | Deletes rows past `expires_at`: moderation tables, deliveries older than 30 days, blobs unreferenced for 7 days |
-| `workers/blobGc.ts` | 1 h | The blob delete the sweep cannot express: unreferenced blobs of a revoked uploader |
+| `db/expiry.ts` | 60 s | Marks due history offers `expired` and releases their chunks, then deletes rows past `expires_at`: moderation tables, deliveries older than 30 days, blobs unreferenced for 7 days, history offers past their 7-day deadline |
+| `workers/blobGc.ts` | 1 h | The blob work the sweep cannot express: deletes unreferenced blobs of a revoked uploader; dates (a day out) an undated blob older than 7 days that no event, pending offer or backup names — an archive chunk whose offer row went without release |
 | `services/moderation/ModerationOutboxDispatcher.ts` | configured | CrowdSource report delivery and decision application |
 
 ## Module map
@@ -410,9 +452,9 @@ src/app.ts                      createApp(deps): pure HTTP assembly, middleware 
 src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
 src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
 src/middleware/                 instanceAuth (Ed25519 request signature), requestObservability
-src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs
+src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs, history, backups
 src/routes/                     kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
-src/services/platform/          the rules: instance lifecycle, key packages, conversations, events + sync, blobs, wire projections
+src/services/platform/          the rules: instance lifecycle, key packages, conversations, events + sync, blobs, history offers, backups, wire projections
 src/db/schema/                  one file per domain; CONVENTIONS.md is binding
 src/db/platform/                repositories; appendClientEvent is the event-log transaction
 src/workers/                    deliveryWorker, blobGc

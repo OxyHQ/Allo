@@ -1,3 +1,5 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readJournal } from "@oxy.so/db/migrate";
@@ -21,6 +23,8 @@ import {
  */
 
 const MIGRATIONS = join(__dirname, "..", "..", "..", "drizzle");
+/** Throwaway migration folders for the synthetic pending cases below. */
+const SYNTHETIC_ROOT = join(tmpdir(), `allo-migration-gate-${process.pid}`);
 
 describe("classifyPendingMigrations", () => {
   const phases = new Map([
@@ -66,19 +70,32 @@ describe("assertPreMigrationsCurrent against a real ledger", () => {
   afterAll(async () => {
     await closePostgres();
     await handle?.drop();
+    rmSync(SYNTHETIC_ROOT, { recursive: true, force: true });
   });
 
-  function entry(tag: string) {
-    const found = readJournal(MIGRATIONS).find((e) => e.tag === tag);
-    if (!found) throw new Error(`journal has no ${tag}`);
-    return found;
-  }
-
-  async function forget(tag: string): Promise<void> {
-    const { when } = entry(tag);
-    const rows = await getPostgresClient()`
-      delete from drizzle.__drizzle_migrations where created_at = ${when} returning id`;
-    expect(rows.length, `the ledger row for ${tag} exists before it is removed`).toBe(1);
+  /**
+   * The ledger is a HIGH-WATER MARK: `pendingEntries` is every journal entry
+   * newer than the newest `created_at` recorded, mirroring the apply rule.
+   * Deleting a mid-chain ledger row therefore makes nothing pending — the
+   * first version of this test forgot `0005` and worked only while `0005`
+   * was the last migration; `0006` landing turned both cases green for the
+   * wrong reason. So the pending state is produced the way it arises in a
+   * deploy instead: migrations NEWER than everything applied. A throwaway
+   * folder carries the real journal plus synthetic tail entries, each with the
+   * `.sql` the phase is read from; the real ledger is left alone.
+   */
+  function folderWith(tail: { tag: string; phase: "pre" | "post" }[]): string {
+    const journal = readJournal(MIGRATIONS);
+    const last = journal[journal.length - 1];
+    const folder = join(SYNTHETIC_ROOT, tail.map((t) => t.tag).join("+"));
+    mkdirSync(join(folder, "meta"), { recursive: true });
+    const entries = [
+      ...journal.map((entry, idx) => ({ idx, version: "7", when: entry.when, tag: entry.tag, breakpoints: true })),
+      ...tail.map((t, i) => ({ idx: journal.length + i, version: "7", when: last.when + 1_000 * (i + 1), tag: t.tag, breakpoints: true })),
+    ];
+    writeFileSync(join(folder, "meta", "_journal.json"), JSON.stringify({ version: "7", dialect: "postgresql", entries }, null, 2));
+    for (const t of tail) writeFileSync(join(folder, `${t.tag}.sql`), `-- oxy:deploy-phase=${t.phase}\nselect 1;\n`);
+    return folder;
   }
 
   it("passes on a fully migrated database without warning", async () => {
@@ -87,19 +104,23 @@ describe("assertPreMigrationsCurrent against a real ledger", () => {
   });
 
   it("lets the boot through with a warning while only a post migration is pending", async () => {
-    await forget("0005_retire_legacy_messaging");
-    await assertPreMigrationsCurrent(getPostgresClient(), MIGRATIONS, log);
+    const folder = folderWith([{ tag: "0900_synthetic_post", phase: "post" }]);
+    await assertPreMigrationsCurrent(getPostgresClient(), folder, log);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("post-phase migrations pending");
   });
 
-  it("refuses the boot while a pre migration is pending, naming it", async () => {
-    await forget("0004_platform_tables");
-    await expect(assertPreMigrationsCurrent(getPostgresClient(), MIGRATIONS, log)).rejects.toBeInstanceOf(
-      PreMigrationsPendingError,
-    );
-    await expect(assertPreMigrationsCurrent(getPostgresClient(), MIGRATIONS, log)).rejects.toThrow(
-      /0004_platform_tables/,
-    );
+  it("refuses the boot while a pre migration is pending, naming it and only it", async () => {
+    const folder = folderWith([
+      { tag: "0900_synthetic_post", phase: "post" },
+      { tag: "0901_synthetic_pre", phase: "pre" },
+    ]);
+    const attempt = assertPreMigrationsCurrent(getPostgresClient(), folder, log);
+    await expect(attempt).rejects.toBeInstanceOf(PreMigrationsPendingError);
+    await expect(attempt).rejects.toThrow(/0901_synthetic_pre/);
+    await attempt.catch((error: PreMigrationsPendingError) => {
+      // The pending post one is tolerated even while the pre one refuses the boot.
+      expect(error.refused.map((r) => r.tag)).toEqual(["0901_synthetic_pre"]);
+    });
   });
 });

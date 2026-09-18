@@ -133,6 +133,9 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     keyPackagesLow(instanceId, event) {
       namespace.to(instanceRoom(instanceId)).emit("keypackages.low", event);
     },
+    historyOffer(instanceId, event) {
+      namespace.to(instanceRoom(instanceId)).emit("history.offer", event);
+    },
     typing(instanceIds, event) {
       for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("typing", event);
     },

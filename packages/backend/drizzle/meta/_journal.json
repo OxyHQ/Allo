@@ -43,6 +43,13 @@
       "when": 1789647102853,
       "tag": "0005_retire_legacy_messaging",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789689427283,
+      "tag": "0006_history_and_backups",
+      "breakpoints": true
     }
   ]
 }

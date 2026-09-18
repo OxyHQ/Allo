@@ -6,6 +6,7 @@ import {
   instanceIdSchema,
   registerInstanceRequestSchema,
   setPushTokenRequestSchema,
+  setTransferKeyRequestSchema,
 } from "@allo/shared-types";
 import { getRequiredInstance } from "../../middleware/instanceAuth";
 import {
@@ -18,6 +19,7 @@ import {
   rejectInstance,
   revokeInstance,
   setInstancePushToken,
+  setInstanceTransferKey,
 } from "../../services/platform/instanceService";
 import { notFound } from "../../utils/httpErrors";
 import { asyncRoute } from "./asyncRoute";
@@ -82,6 +84,16 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
       const me = getRequiredInstance(req);
       await clearInstancePushToken(me.id);
       res.status(204).end();
+    }),
+  );
+
+  router.put(
+    "/instances/me/transfer-key",
+    deps.instanceAuth,
+    asyncRoute(async (req, res) => {
+      const me = getRequiredInstance(req);
+      const instance = await setInstanceTransferKey(me.id, parseBody(setTransferKeyRequestSchema, req));
+      res.json({ instance });
     }),
   );
 

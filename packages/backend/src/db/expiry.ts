@@ -20,9 +20,11 @@
  */
 
 import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxy.so/db/expiry";
-import type { SqlExecutor } from "@oxy.so/db";
+import type { AlloDatabase } from "./index";
+import { expireDueOffers } from "./platform/historyRepository";
 import { blobs } from "./schema/blobs";
 import { instanceDeliveries } from "./schema/deliveries";
+import { historyOffers } from "./schema/history";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
 
 export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
@@ -73,7 +75,33 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
       "covers the case this sweep cannot see: an unreferenced blob whose " +
       "uploader instance was revoked before the seven days ran out.",
   },
+  {
+    table: historyOffers,
+    column: historyOffers.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "History offers, dated seven days out at insert (`HISTORY_OFFER_TTL_MS`). " +
+      "A pending offer the recipient never consumed is gone at its deadline, " +
+      "along with the consumed and expired rows, which are only a record. The " +
+      "row's chunk blobs are NOT deleted here: `releaseDueHistoryOffers` runs " +
+      "ahead of this sweep in `runExpirySweep` and dates them a day out, so " +
+      "the blob sweep above reaps them on its own schedule.",
+  },
 ];
+
+/**
+ * Mark every pending offer past its deadline `expired` and date its chunks.
+ *
+ * Runs in {@link runExpirySweep} BEFORE the deletes, in its own transaction, so
+ * a `history_offers` row is never deleted while its chunk blobs still carry
+ * `expires_at = null`. The sweep itself is a plain delete and cannot do this,
+ * and the alternative — leaving it to the hourly blob collector — is a race the
+ * minute-cadence sweep wins almost every time. The collector's orphan pass
+ * stays as the backstop for a row that goes some other way.
+ */
+export async function releaseDueHistoryOffers(db: AlloDatabase, now = new Date()): Promise<number> {
+  return db.transaction((tx) => expireDueOffers(now, undefined, tx));
+}
 
 /**
  * Run every target once.
@@ -83,9 +111,11 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
  * the failure this whole module exists to make impossible.
  */
 export async function runExpirySweep(
-  db: SqlExecutor,
+  db: AlloDatabase,
   log: { info: (message: string) => void; debug: (message: string) => void },
 ): Promise<readonly ExpirySweepResult[]> {
+  const released = await releaseDueHistoryOffers(db);
+  if (released > 0) log.info(`history offers expired ahead of the sweep: count=${released}`);
   const results = await sweepAllExpiredRows(db, EXPIRY_SWEEP_TARGETS);
   const deleted = results.reduce((total, result) => total + result.deleted, 0);
   const summary = `expiry sweep: tablesSwept=${results.length} deleted=${deleted}`;
@@ -124,7 +154,7 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null;
  * must not hang because of it.
  */
 export function startExpirySweep(
-  db: SqlExecutor,
+  db: AlloDatabase,
   log: { info: (message: string) => void; debug: (message: string) => void; error: (message: string, error: unknown) => void },
 ): void {
   if (sweepTimer) return;

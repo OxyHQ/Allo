@@ -52,6 +52,7 @@ export interface RecordedRealtime extends Realtime {
   approved: string[];
   revoked: { accountId: string; instanceId: string }[];
   low: { instanceId: string; available: number }[];
+  historyOffers: { instanceId: string; offerId: string }[];
   typings: { instanceIds: string[]; conversationId: string }[];
   disconnected: string[];
   /** Instances `isInstanceConnected` answers true for. */
@@ -65,6 +66,7 @@ export function recordedRealtime(): RecordedRealtime {
     approved: [],
     revoked: [],
     low: [],
+    historyOffers: [],
     typings: [],
     disconnected: [],
     connected: new Set(),
@@ -79,6 +81,9 @@ export function recordedRealtime(): RecordedRealtime {
     },
     keyPackagesLow(instanceId, event) {
       r.low.push({ instanceId, available: event.available });
+    },
+    historyOffer(instanceId, event) {
+      r.historyOffers.push({ instanceId, offerId: event.offerId });
     },
     typing(instanceIds, event) {
       r.typings.push({ instanceIds: [...instanceIds], conversationId: event.conversationId });
@@ -95,6 +100,7 @@ export function recordedRealtime(): RecordedRealtime {
       r.approved = [];
       r.revoked = [];
       r.low = [];
+      r.historyOffers = [];
       r.typings = [];
       r.disconnected = [];
       r.connected.clear();
@@ -160,6 +166,19 @@ export function signMessage(key: Ed25519Key, message: string): string {
   return sign(null, Buffer.from(message, "utf8"), key.privateKey).toString("base64");
 }
 
+export interface X25519Key {
+  privateKey: KeyObject;
+  /** Raw 32 bytes, base64: the wire form of `transferPublicKey`. */
+  publicKeyBase64: string;
+}
+
+/** A real X25519 pair: the transfer key an instance registers. The SPKI prefix is 12 bytes, as for Ed25519. */
+export function generateX25519(): X25519Key {
+  const { publicKey, privateKey } = generateKeyPairSync("x25519");
+  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(12);
+  return { privateKey, publicKeyBase64: Buffer.from(raw).toString("base64") };
+}
+
 type Method = "get" | "post" | "put" | "delete";
 
 export class TestInstance {
@@ -167,17 +186,19 @@ export class TestInstance {
     readonly app: express.Express,
     readonly accountId: string,
     readonly key: Ed25519Key,
+    readonly transferKey: X25519Key,
     public id: string,
     public registration: RegisterInstanceResponse,
   ) {}
 
-  /** `POST /v1/instances` with a fresh key; the response is parsed with the contract schema. */
+  /** `POST /v1/instances` with fresh keys; the response is parsed with the contract schema. */
   static async register(
     app: express.Express,
     accountId: string,
-    options: { platform?: Platform; displayName?: string; appId?: string; key?: Ed25519Key } = {},
+    options: { platform?: Platform; displayName?: string; appId?: string; key?: Ed25519Key; transferKey?: X25519Key } = {},
   ): Promise<TestInstance> {
     const key = options.key ?? generateEd25519();
+    const transferKey = options.transferKey ?? generateX25519();
     const response = await request(app)
       .post("/v1/instances")
       .set(USER_HEADER, accountId)
@@ -186,12 +207,13 @@ export class TestInstance {
         platform: options.platform ?? "web",
         displayName: options.displayName ?? "test device",
         signingPublicKey: key.publicKeyBase64,
+        transferPublicKey: transferKey.publicKeyBase64,
       });
     if (response.status !== 201) {
       throw new Error(`register failed: ${response.status} ${JSON.stringify(response.body)}`);
     }
     const parsed = registerInstanceResponseSchema.parse(response.body);
-    return new TestInstance(app, accountId, key, parsed.instance.id, parsed);
+    return new TestInstance(app, accountId, key, transferKey, parsed.instance.id, parsed);
   }
 
   /** The three headers for `method path` with `body` (already serialised). */
