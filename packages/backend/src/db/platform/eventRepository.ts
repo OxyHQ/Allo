@@ -273,7 +273,11 @@ export async function appendClientEvent(
     await markLeafRemoved(conversationId, leaf.instanceId, newEpoch, tx);
   }
 
-  // An account with no active leaf left is no longer in the group.
+  // An account whose LAST leaf this commit removed is no longer in the group.
+  // Only accounts named in `removedLeaves` are examined: a joined member with
+  // no leaf at all (invited before it installed Allo, waiting for the elector
+  // to add its first device) has nothing to lose here and stays `joined`.
+  // "No active leaf after the commit" alone would remove it on every commit.
   const remaining = await listLeaves(conversationId, tx);
   const accountsStillIn = new Set(activeLeaves(remaining).map((leaf) => leaf.accountId));
   for (const leaf of removedLeaves) {

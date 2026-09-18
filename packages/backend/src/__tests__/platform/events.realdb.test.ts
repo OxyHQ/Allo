@@ -236,6 +236,58 @@ describe("POST /v1/conversations/:id/events", () => {
     expect(view.body.conversation.members.find((m: { accountId: string }) => m.accountId === dm2.b.accountId).state).toBe("removed");
   });
 
+  it("a joined member that never had a leaf stays joined through commits that add and remove OTHER accounts' leaves", async () => {
+    // Carol has no instance and no leaf: she was invited before installing Allo. The
+    // rule is "removed only when the commit removed the account's LAST leaf", not
+    // "removed whenever the account has no active leaf after the commit".
+    const a = await TestInstance.register(h.app, accountId("a"));
+    const b = await TestInstance.register(h.app, accountId("b"));
+    await b.stockKeyPackages(2);
+    const carol = accountId("c");
+    const created = await a.signed("post", "/v1/conversations", {
+      kind: "group",
+      mlsGroupId: mlsGroupId(),
+      memberAccountIds: [b.accountId, carol],
+      idempotencyKey: key(),
+    });
+    expect(created.status).toBe(201);
+    const conversationId = created.body.conversation.id as string;
+    const memberStates = async () => {
+      const rows = await h.db.select().from(schema.conversationMembers).where(eq(schema.conversationMembers.conversationId, conversationId));
+      return Object.fromEntries(rows.map((row) => [row.accountId, row.state]));
+    };
+    expect(await memberStates()).toEqual({ [a.accountId]: "joined", [b.accountId]: "joined", [carol]: "joined" });
+
+    // Alice adds Bob's leaf (epoch 0 → 1): Carol, untouched by the commit, is still joined.
+    const add = await a.signed("post", `/v1/conversations/${conversationId}/events`, {
+      idempotencyKey: key(),
+      kind: "mls_commit",
+      epoch: 0,
+      payload: base64("add-b"),
+      commit: {
+        newEpoch: 1,
+        addedLeaves: [{ instanceId: b.id, accountId: b.accountId }],
+        removedLeaves: [],
+        welcome: { payload: base64("welcome-b"), recipients: [b.id] },
+      },
+    });
+    expect(add.status).toBe(200);
+    expect(await memberStates()).toEqual({ [a.accountId]: "joined", [b.accountId]: "joined", [carol]: "joined" });
+
+    // Alice removes Bob's only leaf (1 → 2): Bob lost his last leaf and is removed; Carol never had one and is still joined.
+    const remove = await a.signed("post", `/v1/conversations/${conversationId}/events`, {
+      idempotencyKey: key(),
+      kind: "mls_commit",
+      epoch: 1,
+      payload: base64("remove-b"),
+      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [b.id] },
+    });
+    expect(remove.status).toBe(200);
+    expect(await memberStates()).toEqual({ [a.accountId]: "joined", [b.accountId]: "removed", [carol]: "joined" });
+    const view = await a.signed("get", `/v1/conversations/${conversationId}`);
+    expect(view.body.conversation.members.find((m: { accountId: string }) => m.accountId === carol).state).toBe("joined");
+  });
+
   it("authorization: a member may not remove another account's leaf, a dm may not gain a third account, an added instance must be real and active", async () => {
     const { a, b, conversationId } = await dmBetween(h.app);
     const notAllowed = await b.signed("post", `/v1/conversations/${conversationId}/events`, {
