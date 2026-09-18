@@ -23,7 +23,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
 import { CryptoEngine, base64Decode, base64Encode, generateSigningKey, keyPackageRefFromWire, signEnrollmentApproval, signRequest, type SigningKeyPair } from "@allo/core";
-import { ed25519 } from "@noble/curves/ed25519.js";
 import { INSTANCE_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, type SubmitEventRequest } from "@allo/shared-types";
 import * as schema from "../../db/schema";
 import { logger } from "../../utils/logger";
@@ -231,10 +230,11 @@ describe("self-join by external commit", () => {
     // raw signed API with the phone's own key: a running phone client would
     // reconcile right after approving and add the desktop itself, which on a
     // slow runner lands before stop() and turns this into an elector scenario.
+    const phonePublicKey = base64Decode(bobIos.client.instance.current()!.signingPublicKey);
     await bobIos.client.stop();
     const phoneSecret = await bobIos.secrets.get(`allo.instance-key.${bobId}.allo`);
     expect(phoneSecret).toBeTruthy();
-    const phoneKey: SigningKeyPair = { secretKey: phoneSecret!, publicKey: ed25519.getPublicKey(phoneSecret!) };
+    const phoneKey: SigningKeyPair = { secretKey: phoneSecret!, publicKey: phonePublicKey };
     const approval = await signedFetch(bobId, bobIos.client.instanceId!, phoneKey, "POST", `/v1/instances/${bobDesktop.client.instanceId}/approve`, {
       approvalSignature: signEnrollmentApproval(phoneKey, {
         accountId: bobId,
