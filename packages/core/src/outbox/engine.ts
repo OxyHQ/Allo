@@ -11,6 +11,12 @@
  * `epoch_conflict` the pending state is discarded, a sync processes the
  * winning commit, and the intent is rebuilt on the new state, dropping
  * whatever the winner already did.
+ *
+ * Hold: an application message for a conversation in which no other member
+ * has a device (`ConversationsService.hasNoReachableMember`) is skipped —
+ * not encrypted, not sent, no attempt counted — and picked up by the next
+ * pass once a leaf for another account exists. Encrypting it earlier would
+ * bind it to an epoch that account can never read. Commits are never held.
  */
 import { encodeAppMessage, submitEventResponseSchema, type AppMessage, type EventRef, type SubmitEventRequest } from "@allo/shared-types";
 import type { Context } from "../context";
@@ -111,7 +117,7 @@ export class OutboxEngine {
   private async loop(): Promise<void> {
     const { ctx } = this;
     while (!this.stopped) {
-      const item = ctx.model.outboxItems().find((i) => i.state === "pending");
+      const item = ctx.model.outboxItems().find((i) => i.state === "pending" && !this.isHeld(i));
       if (!item) return;
       if (!ctx.instance.isActive) return;
       try {
@@ -123,6 +129,11 @@ export class OutboxEngine {
         await this.markFailed(item, describeError(error));
       }
     }
+  }
+
+  /** Held items stay `pending` untouched; `TimelineItemView.holdReason` tells the UI why. */
+  private isHeld(item: OutboxItemRecord): boolean {
+    return item.kind === "app_message" && this.ctx.conversations.hasNoReachableMember(item.conversationId);
   }
 
   private async bump(item: OutboxItemRecord): Promise<OutboxItemRecord> {
@@ -417,6 +428,7 @@ export class OutboxEngine {
       ctx.model.putEvent(record);
       ctx.model.outbox.delete(item.id);
       if (nextConv) ctx.model.conversations.set(nextConv.id, nextConv);
+      ctx.messages.invalidate(item.conversationId); // leaves changed: pending echoes may have lost their hold reason
       ctx.conversations.invalidate(item.conversationId);
       ctx.log.info?.("commit applied", { conversationId: item.conversationId, epoch: epoch + 1, added: added.length, removed: removed.length });
     });

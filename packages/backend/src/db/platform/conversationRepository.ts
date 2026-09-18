@@ -6,7 +6,7 @@
  * inside that lock and take the transaction handle explicitly.
  */
 
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists, or, sql } from "drizzle-orm";
 import { uuidv7 } from "@oxy.so/db";
 import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from "../index";
 import { requireTransaction } from "../moderation/transactionGuard";
@@ -303,6 +303,62 @@ export async function listConversationIdsWithLiveLeaf(
       ),
     );
   return rows.map((row) => row.conversationId);
+}
+
+/**
+ * Conversations the account is a `joined` member of WITHOUT an active leaf,
+ * each with the instances that do hold one there. The audience to nudge when
+ * the account's first instance becomes active: until then the conversation's
+ * electors had nobody of the account's to add, and without the nudge they
+ * learn of the new leaf only on their sync interval. A conversation with no
+ * active leaf at all has nobody to tell and is left out.
+ */
+export async function listConversationsAwaitingAccountLeaf(
+  accountId: string,
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<{ conversationId: string; activeLeafInstanceIds: string[] }[]> {
+  const awaiting = await db
+    .select({ conversationId: conversationMembers.conversationId })
+    .from(conversationMembers)
+    .where(
+      and(
+        eq(conversationMembers.accountId, accountId),
+        eq(conversationMembers.state, "joined"),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(conversationLeaves)
+            .where(
+              and(
+                eq(conversationLeaves.conversationId, conversationMembers.conversationId),
+                eq(conversationLeaves.accountId, accountId),
+                eq(conversationLeaves.state, "active"),
+              ),
+            ),
+        ),
+      ),
+    );
+  if (awaiting.length === 0) return [];
+  const leaves = await db
+    .select({ conversationId: conversationLeaves.conversationId, instanceId: conversationLeaves.instanceId })
+    .from(conversationLeaves)
+    .where(
+      and(
+        inArray(
+          conversationLeaves.conversationId,
+          awaiting.map((row) => row.conversationId),
+        ),
+        eq(conversationLeaves.state, "active"),
+      ),
+    )
+    .orderBy(asc(conversationLeaves.createdAt), asc(conversationLeaves.id));
+  const byConversation = new Map<string, string[]>();
+  for (const leaf of leaves) {
+    const ids = byConversation.get(leaf.conversationId) ?? [];
+    ids.push(leaf.instanceId);
+    byConversation.set(leaf.conversationId, ids);
+  }
+  return [...byConversation].map(([conversationId, activeLeafInstanceIds]) => ({ conversationId, activeLeafInstanceIds }));
 }
 
 export async function findActiveLeaf(

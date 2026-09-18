@@ -46,7 +46,11 @@ export class Realtime {
       }
     });
     socket.on("sync.nudge", (payload) => {
-      if (SERVER_TO_CLIENT_EVENTS["sync.nudge"].safeParse(payload).success) ctx.sync.request();
+      const parsed = SERVER_TO_CLIENT_EVENTS["sync.nudge"].safeParse(payload);
+      if (!parsed.success) return;
+      // A nudge naming a conversation lets its elector re-check unreachable members at once (the throttle is skipped).
+      if (parsed.data.conversationId) ctx.conversations.noteNudge(parsed.data.conversationId);
+      ctx.sync.request();
     });
     socket.on("instance.approved", (payload) => {
       if (!SERVER_TO_CLIENT_EVENTS["instance.approved"].safeParse(payload).success) return;

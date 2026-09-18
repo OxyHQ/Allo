@@ -227,6 +227,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
         c.realtime.disconnect();
         c.sync.stop();
         c.outbox.stop();
+        c.conversations.stop();
         if (pendingPoll) clearInterval(pendingPoll);
         pendingPoll = null;
       },
@@ -272,6 +273,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.realtime.disconnect();
     ctx.sync.stop();
     ctx.outbox.stop();
+    ctx.conversations.stop();
     ctx.messages.stop();
     ctx.history.stop();
     ctx.backup.stop();

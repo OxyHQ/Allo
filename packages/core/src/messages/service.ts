@@ -50,6 +50,7 @@ export class MessagesService {
       outbox: ctx.model.outboxItems(conversationId),
       accountId: ctx.accountId,
       instanceId: ctx.instanceId,
+      ...(ctx.conversations.hasNoReachableMember(conversationId) ? { holdReason: "no_reachable_member" as const } : {}),
     });
     this.timelines.set(conversationId, items);
     return items;

@@ -49,6 +49,15 @@ export interface Conversation {
   joined: boolean;
   /** What the viewer may do to the group: only an owner or admin adds and removes members. */
   myRole: 'owner' | 'admin' | 'member';
+  /**
+   * Members other than the viewer who have no device in the group: people
+   * invited before they installed Allo. Nothing sent now reaches them; the
+   * SDK adds their first device when it appears. Ids only; the people layer
+   * names them, and a screen never draws one.
+   */
+  unreachableMemberAccountIds: string[];
+  /** Set when the last message is an own echo the outbox is holding. See {@link MessageHoldReason}. */
+  lastMessageHold?: MessageHoldReason;
 }
 
 export interface MediaItem {
@@ -111,6 +120,14 @@ export interface StickerItem {
  */
 export type MessageReadStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
+/**
+ * Why a `pending` own message is not being sent yet. `no_reachable_member`:
+ * nobody else in the conversation has a device that could read it (they have
+ * not set up Allo); the outbox releases it on its own once one appears. The
+ * SDK derives it, so it is never stale and never set on a failed send.
+ */
+export type MessageHoldReason = 'no_reachable_member';
+
 export interface Message {
   id: string;
   text: string;
@@ -130,6 +147,8 @@ export interface Message {
   reactions?: Record<string, string[]>;
   /** Drawn on the sender's own bubble only. See {@link MessageReadStatus}. */
   readStatus?: MessageReadStatus;
+  /** Only with `readStatus: 'pending'`: the send is held on purpose. See {@link MessageHoldReason}. */
+  holdReason?: MessageHoldReason;
   /** The body has been replaced since it was sent. */
   isEdited?: boolean;
   /** The sender took it back; the body is a placeholder. */
@@ -169,6 +188,7 @@ export function messageFromItem(item: TimelineItemView): Message {
     replyTo: item.replyTo,
     reactions: reactionsFromItem(item),
     readStatus: item.isOwn ? READ_STATUS[item.sendState] : undefined,
+    ...(item.isOwn && item.holdReason ? { holdReason: item.holdReason } : {}),
   };
   const content = item.content;
   switch (content.kind) {
@@ -270,5 +290,7 @@ export function conversationFromView(view: ConversationView): Conversation {
     participantCount: isGroup ? view.memberAccountIds.length : undefined,
     joined: view.joined,
     myRole: view.myRole,
+    unreachableMemberAccountIds: view.unreachableMemberAccountIds,
+    ...(view.lastMessage?.isOwn && view.lastMessage.holdReason ? { lastMessageHold: view.lastMessage.holdReason } : {}),
   };
 }

@@ -16,6 +16,8 @@ export interface ProjectionInput {
   outbox: OutboxItemRecord[];
   accountId: string;
   instanceId: string;
+  /** Why pending echoes are not being sent, when the outbox holds this conversation. */
+  holdReason?: TimelineItemView["holdReason"];
 }
 
 interface Working {
@@ -135,6 +137,7 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       isOwn: true,
       sendState: o.state === "failed" ? "failed" : "pending",
       reactions: [],
+      ...(o.state !== "failed" && input.holdReason ? { holdReason: input.holdReason } : {}),
     };
     if (m.t === "text") {
       add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });

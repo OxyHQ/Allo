@@ -1,4 +1,4 @@
-import type { MessageReadStatus } from '@/lib/chat/model';
+import type { MessageHoldReason, MessageReadStatus } from '@/lib/chat/model';
 
 /**
  * Which mark a message's status draws.
@@ -53,4 +53,21 @@ const TONES: Record<MessageReadStatus, MessageStatusTone> = {
 
 export function statusTone(readStatus: MessageReadStatus): MessageStatusTone {
   return TONES[readStatus];
+}
+
+/**
+ * Whether a message is a HELD echo: pending on purpose, because nobody in the
+ * conversation has a device that could read it yet.
+ *
+ * A held echo draws exactly what any pending message draws — the clock, in the
+ * quiet tone — because it IS still on its way; what changes is what the clock
+ * is allowed to say. `MessageMetadata` gives it an accessible label naming who
+ * it is waiting for, so a screen reader does not report a message that will
+ * sit for days as merely "sending". The hold means nothing on any other status:
+ * the SDK never sets it on a failed send, and a sent one has no hold to report,
+ * so a stale reason paired with anything but `pending` is ignored rather than
+ * relabelling a tick.
+ */
+export function isHeld(readStatus: MessageReadStatus | undefined, holdReason: MessageHoldReason | undefined): boolean {
+  return readStatus === 'pending' && holdReason !== undefined;
 }

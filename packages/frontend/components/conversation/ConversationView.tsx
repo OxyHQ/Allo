@@ -54,6 +54,8 @@ import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
 import { useConversation } from '@/hooks/useConversation';
 import { useConversationMetadata } from '@/hooks/useConversationMetadata';
 import { useSenderInfo } from '@/hooks/useSenderInfo';
+import { useUnreachableMembers } from '@/hooks/useUnreachableMembers';
+import { UnreachableMembersBanner } from '@/components/conversation/UnreachableMembersBanner';
 
 // Context
 import { BottomSheetContext } from '@/context/BottomSheetContext';
@@ -247,6 +249,10 @@ export default function ConversationView({ conversationId: propConversationId }:
   // Who sent each incoming message.
   const { getSenderName, getSenderHandle, getSenderAvatar } =
     useSenderInfo(conversation, isGroup, conversationMetadata);
+
+  // What a held echo's clock is waiting for. Only a message with a
+  // `holdReason` uses it; the banner above the composer says the same thing.
+  const { hold: holdLabel } = useUnreachableMembers(conversation);
 
   /**
    * Handle header press to show contact/group details
@@ -931,6 +937,7 @@ export default function ConversationView({ conversationId: propConversationId }:
             onMessagePress={toggleTimestamp}
             onMessageLongPress={handleMessageLongPress}
             onMediaPress={handleMediaPress}
+            holdLabel={holdLabel ?? undefined}
             onMediaLongPress={(message, mediaId, index, position) => {
               setSelectedMessage(message);
               setSelectedMediaId(mediaId);
@@ -951,6 +958,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     handleMessageLongPress,
     handleMediaPress,
     handleSwipeToReply,
+    holdLabel,
   ]);
 
   /**
@@ -1111,6 +1119,9 @@ export default function ConversationView({ conversationId: propConversationId }:
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? MESSAGING_CONSTANTS.KEYBOARD_OFFSET_IOS : 0}
           >
+            {/* Somebody here has not set up Allo. The composer stays open:
+                the SDK holds what is sent and delivers it when they join. */}
+            <UnreachableMembersBanner conversation={conversation} />
             {/* A second device that has not been added to the group yet can
                 read nothing and send nothing; saying so beats a composer that
                 silently fails. */}

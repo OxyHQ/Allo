@@ -379,7 +379,13 @@ export class InstanceManager {
     return { trusted: this.own.filter((i) => verdict.trusted.has(i.id)), refused: verdict.refused };
   }
 
-  /** Another account's active instances that pass the chain check. */
+  /**
+   * Another account's active instances that pass the chain check. An account
+   * the server has never seen (404: it has no Allo instance at all) and one
+   * whose instances are all inactive (an empty list) both answer no trusted
+   * instance: the account can still be a member, it just cannot be reached
+   * until it installs Allo, and the elector rule adds its first device then.
+   */
   async trustedInstancesOf(accountId: string): Promise<{ trusted: PublicInstance[]; refused: Map<string, string> }> {
     if (accountId === this.deps.accountId) {
       await this.refresh();
@@ -390,8 +396,7 @@ export class InstanceManager {
     try {
       res = await this.deps.http.request({ method: "GET", path: `/v1/accounts/${accountId}/instances`, schema: listAccountInstancesResponseSchema });
     } catch (error) {
-      // 404: the server has never seen that account (it has no Allo instance at all). Nothing to add, and the caller should say so.
-      if (error instanceof TransportError && error.status === 404) throw new NotFoundError(`account ${accountId} has no Allo instance`);
+      if (error instanceof TransportError && error.status === 404) return { trusted: [], refused: new Map() };
       throw error;
     }
     const verdict = verifyInstanceChain(res.instances);

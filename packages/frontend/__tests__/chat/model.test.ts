@@ -49,6 +49,15 @@ describe('messageFromItem', () => {
     }
   });
 
+  it('carries the hold on an own pending echo, and on nothing else', () => {
+    // Held: pending because nobody in the conversation can read it yet. The
+    // bubble draws the clock with a label saying who it waits for.
+    expect(messageFromItem(item({ isOwn: true, sendState: 'pending', holdReason: 'no_reachable_member' })).holdReason).toBe('no_reachable_member');
+    expect(messageFromItem(item({ isOwn: true, sendState: 'pending' })).holdReason).toBeUndefined();
+    // Not own: no status marks at all, so no hold either.
+    expect(messageFromItem(item({ isOwn: false, sendState: 'pending', holdReason: 'no_reachable_member' })).holdReason).toBeUndefined();
+  });
+
   it('turns a picture into a media item with its refs and a video into one that says so', () => {
     const picture = messageFromItem(
       item({
@@ -134,6 +143,7 @@ describe('conversationFromView', () => {
     myRole: 'owner',
     epoch: 4,
     joined: true,
+    unreachableMemberAccountIds: [],
     lastMessage: item(),
     unreadCount: 2,
     lastActivityAt: '2026-09-17T10:00:00.000Z',
@@ -153,7 +163,24 @@ describe('conversationFromView', () => {
       participantCount: 3,
       joined: true,
       myRole: 'owner',
+      unreachableMemberAccountIds: [],
     });
+  });
+
+  it('carries who cannot be reached, and the hold on a last message of my own', () => {
+    // Somebody invited before installing Allo: the view lists them, and an own
+    // echo waiting for them is the row's "Waiting for <name>" subtitle.
+    const held = conversationFromView({
+      ...view,
+      unreachableMemberAccountIds: ['acc-b'],
+      lastMessage: item({ isOwn: true, sendState: 'pending', holdReason: 'no_reachable_member' }),
+    });
+    expect(held.unreachableMemberAccountIds).toEqual(['acc-b']);
+    expect(held.lastMessageHold).toBe('no_reachable_member');
+    // The field is absent, not undefined, when there is no hold: the row
+    // compares it to undefined and a stray key would still pass, but `toEqual`
+    // above keeps the plain shape honest.
+    expect('lastMessageHold' in conversationFromView(view)).toBe(false);
   });
 
   it('leaves a direct conversation unnamed: the people layer names it', () => {

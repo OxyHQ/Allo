@@ -1,4 +1,4 @@
-import { statusMark, statusTone } from '@/components/messages/messageStatus';
+import { isHeld, statusMark, statusTone } from '@/components/messages/messageStatus';
 
 /**
  * Which mark a message's status draws.
@@ -59,6 +59,39 @@ describe('statusMark', () => {
     for (const status of statuses) {
       expect(statusMark(status)).toBeDefined();
       expect(statusTone(status)).toBeDefined();
+    }
+  });
+});
+
+/**
+ * A HELD echo: pending because nobody in the conversation has a device that
+ * could read it yet. It is still on its way, so it draws exactly what pending
+ * draws — the clock, quietly — and never the error; what the hold changes is
+ * the clock's accessible name ("Waiting for <name> to join"), and only while
+ * the message really is pending.
+ */
+describe('isHeld', () => {
+  it('is a pending message with a hold reason', () => {
+    expect(isHeld('pending', 'no_reachable_member')).toBe(true);
+  });
+
+  it('draws a held echo as the quiet clock, never as an error', () => {
+    // The hold does not touch the mark: a held message is pending, and a
+    // pending message is the clock. A red mark would tell the user to resend
+    // something the SDK is about to send on its own.
+    expect(statusMark('pending')).toBe('clock');
+    expect(statusTone('pending')).toBe('quiet');
+    expect(statusMark('pending')).not.toBe('error');
+  });
+
+  it('means nothing without a reason, or on anything but pending', () => {
+    expect(isHeld('pending', undefined)).toBe(false);
+    expect(isHeld(undefined, 'no_reachable_member')).toBe(false);
+    for (const status of ['sent', 'delivered', 'read', 'failed'] as const) {
+      // A tick or an error must not be renamed "waiting": the SDK derives the
+      // reason and never sets it on a failed send, so a reason beside any other
+      // status is stale and the label stays off.
+      expect(isHeld(status, 'no_reachable_member')).toBe(false);
     }
   });
 });

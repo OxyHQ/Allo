@@ -16,6 +16,13 @@ import { planConversation, type ConversationCreator, type NewConversationRequest
  * idempotent on the server, so opening one twice answers the same id. A group
  * is named after it exists, because the SDK's create takes members and the
  * name travels as an encrypted message of its own.
+ *
+ * Somebody who has not installed Allo is a valid participant. The SDK creates
+ * the conversation with whatever devices exist (possibly only this one), lists
+ * the person in `unreachableMemberAccountIds`, holds what is sent, and adds
+ * their first device when it appears — so there is no "not found" here to
+ * catch, and the screens do not look for one. Whatever does throw is a real
+ * failure and is shown as such.
  */
 export function useCreateConversation(): ConversationCreator {
   const { createDirect, createGroup, rename } = useConversationActions();

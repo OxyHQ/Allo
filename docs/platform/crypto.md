@@ -94,6 +94,23 @@ transaction that creates the row. If the server answers `created: false` (a DM
 that already existed), the local group is discarded and this instance waits to
 be added by its account's elector (section 5).
 
+**Creation with no reachable member.** A member account may have no trusted
+active instance at all: the person has not installed Allo (the server has
+never seen the account and `GET /v1/accounts/:id/instances` is 404), or every
+device they had is gone. That is not an error. The account is still posted in
+`memberAccountIds` and the server keeps it as a `joined` member; the group
+starts with whatever leaves exist, possibly only the creator's, and when there
+is nothing to add the request carries no `initialCommit` at all — the group is
+epoch 0 with one leaf. The view reports such accounts in
+`ConversationView.unreachableMemberAccountIds`, computed from the member rows
+against the live tree, and the elector rule in section 5 adds their first
+device when it appears. Two consequences the app must live with: nothing sent
+before that device exists can ever be read on it, because it was encrypted at
+epochs its leaf never held (there is no cross-account history, section 10),
+which is why the outbox holds such messages rather than sending them into the
+void; and a conversation whose members are all unreachable is fully formed
+and listed, not a draft.
+
 **Add and remove.** `CryptoEngine.commit` takes any mix of Add proposals
 (from claimed key package bytes) and Remove proposals (leaf indexes) and
 returns the wire commit, the Welcome when anything was added, and `next`, the
@@ -231,6 +248,37 @@ for every trusted, active own instance that has no leaf and no pending add,
 and commits the Add. The lowest-id rule is the elector: with several devices
 online, one of them commits and the others do nothing; if two race anyway the
 server's epoch check makes one lose and rebuild (section 2).
+
+**Adding a member's first device.** A joined member with no leaf at all — no
+device when the conversation was created, or none left — is the second
+elector's job. After every sync, in each conversation where this instance is
+the lowest instance id among ALL leaves (not just its own account's), it looks
+each such account up (`GET /v1/accounts/:id/instances`), claims key packages
+for the trusted active instances found, and commits the Add. The lookup is
+throttled to once a minute per account per conversation, because a person
+who has not installed Allo stays that way for a long time and a thousand held
+conversations must not poll on every sync. Two things shorten the wait. When
+the lookup lists an instance but the claim returns nothing — the device
+registered moments ago and its key packages are not up yet — the elector
+retries once after five seconds, then falls back to the minute. And when one
+of the account's instances becomes active (bootstrap registration or an
+approval), the server sends `sync.nudge` with the `conversationId` to every
+active leaf of every conversation where that account is a joined member with
+no leaf; the nudged conversation's next reconcile skips the throttle. So in
+the ordinary case the device is added within a sync of installing the app,
+with no polling at all. Once the account holds one leaf, its own elector
+(the first rule above) adds its further devices, and this rule has nothing to
+do.
+
+**The outbox hold.** While a conversation has other joined members and none of
+them has a leaf, an application message would be encrypted for nobody who
+will ever read it. The outbox (`outbox/engine.ts`) therefore leaves such items
+`pending` and untouched — no attempt is burnt, nothing is posted — and the
+view marks them `holdReason: "no_reachable_member"` (derived at read time,
+never stored, so it cannot go stale). The Add commit above releases them: the
+next drain finds a reachable leaf and sends them in order at the new epoch.
+Commits are never held, and a conversation everybody else has LEFT is not
+held either; sending there is pointless but allowed, as before.
 
 **Reacting to `instance_revoked`.** The server appends this control event when
 an instance is revoked (section 6). The elector among the revoked account's

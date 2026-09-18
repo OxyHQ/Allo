@@ -2,11 +2,20 @@
  * Conversations: creating a DM or a group (claim key packages for every
  * trusted instance of every member, create the MLS group, add them in the
  * initial commit, post it all in one request), adding and removing
- * members, leaving, naming (an E2EE `conversation` message), and the
- * multi-device elector rule: after every sync, in each conversation where
- * this instance is the lowest-id active leaf of its account, it adds any
- * trusted active instance of the account that has no leaf — and, once per
- * such instance, offers it this instance's history (`HistoryService.autoOffer`).
+ * members, leaving, naming (an E2EE `conversation` message), and the two
+ * elector rules that run after every sync (`reconcile`):
+ *
+ * - Own devices: in each conversation where this instance is the lowest-id
+ *   active leaf of its account, it adds any trusted active instance of the
+ *   account that has no leaf — and, once per such instance, offers it this
+ *   instance's history (`HistoryService.autoOffer`).
+ * - Unreachable members: a member account may have NO leaf at all — it was
+ *   invited before it installed Allo, or every device it had is gone. In
+ *   each conversation where this instance is the lowest-id active leaf of
+ *   the whole group, it looks such accounts up (at most once a minute per
+ *   account, at once when the server nudges the conversation), claims key
+ *   packages for their trusted active instances and commits the Add. Once
+ *   the account holds one leaf, its own elector adds its further devices.
  */
 import { createConversationResponseSchema, listConversationsResponseSchema, type ConversationSummary, type SubmitEventRequest } from "@allo/shared-types";
 import type { Context } from "../context";
@@ -17,12 +26,40 @@ import { base64Decode, base64Encode, randomBytes } from "../util/bytes";
 import { uuidV7 } from "../util/ids";
 import { describeError } from "../util/logger";
 
+/** How long the elector waits before asking the server again about a member account that still has no reachable device. */
+export const REACH_THROTTLE_MS = 60_000;
+/**
+ * A freshly installed device is listed before its key packages are up: an
+ * attempt that found instances but claimed nothing retries this soon rather
+ * than in a minute.
+ */
+export const REACH_RETRY_MS = 5_000;
+
 export class ConversationsService {
   private views = new Map<string, ConversationView>();
   private listCache: ConversationView[] | null = null;
   private reconciling = false;
+  /** `${conversationId}/${accountId}` → when the elector may look that account up again. */
+  private readonly reachNextAt = new Map<string, number>();
+  /** Keys whose last attempt was the quick retry: a second miss waits the full throttle, so a device that never uploads key packages is not polled every few seconds. */
+  private readonly reachRetried = new Set<string>();
+  /** Conversations the server nudged since the last reconcile: their lookups skip the throttle once. */
+  private readonly nudged = new Set<string>();
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopped = false;
 
   constructor(private readonly ctx: Context) {}
+
+  /** A `sync.nudge` named this conversation (the sync that follows runs `reconcile`). */
+  noteNudge(conversationId: string): void {
+    this.nudged.add(conversationId);
+  }
+
+  stop(): void {
+    this.stopped = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
 
   // ---- views ---------------------------------------------------------------
 
@@ -69,11 +106,42 @@ export class ConversationsService {
       myRole: me?.role ?? "member",
       epoch: state ? ctx.engine.epochOf(state) : 0,
       joined,
+      unreachableMemberAccountIds: this.unreachableMembersOf(record.id),
       lastMessage,
       unreadCount: ctx.messages.unreadCount(record.id),
       lastActivityAt: record.lastActivityAt,
       createdAt: record.createdAt,
     };
+  }
+
+  // ---- reachability --------------------------------------------------------
+
+  /**
+   * Joined member accounts other than mine with no active leaf in the group.
+   * Computed from the record and the live MLS state, never from a cached
+   * view, because the view itself and the timeline both ask.
+   */
+  unreachableMembersOf(conversationId: string): string[] {
+    const { ctx } = this;
+    const record = ctx.model.conversations.get(conversationId);
+    const state = ctx.groups.get(conversationId);
+    if (!record || !state) return [];
+    const withLeaf = new Set(ctx.engine.membersOf(state).map((m) => m.accountId));
+    return record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId && !withLeaf.has(m.accountId)).map((m) => m.accountId);
+  }
+
+  /**
+   * True when the conversation has other joined members and NONE of them
+   * can read what is sent now: the outbox holds application messages until
+   * a leaf for one of them appears. A conversation everybody else has left
+   * is not held; sending there is pointless but allowed, as before.
+   */
+  hasNoReachableMember(conversationId: string): boolean {
+    const { ctx } = this;
+    const record = ctx.model.conversations.get(conversationId);
+    if (!record) return false;
+    const others = record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId).length;
+    return others > 0 && this.unreachableMembersOf(conversationId).length === others;
   }
 
   // ---- creation ------------------------------------------------------------
@@ -91,6 +159,9 @@ export class ConversationsService {
   private async create(kind: "dm" | "group", others: string[]): Promise<ConversationView> {
     const { ctx } = this;
     ctx.instance.assertActive();
+    // A member with no trusted active instance (never installed Allo, or every device gone) is still a member:
+    // the server keeps the row, the group starts with whatever leaves exist (possibly only this one), and the
+    // elector rule adds the account's first device when it appears. `initialCommit` only when there is a leaf to add.
     const targets = await this.trustedLeafTargets([ctx.accountId, ...others], new Set([ctx.instanceId]));
     const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
     const groupId = randomBytes(16);
@@ -140,6 +211,9 @@ export class ConversationsService {
       ctx.model.conversations.set(record.id, record);
     });
     if (claimed.missing.length) ctx.log.info?.("instances with no key packages were not added", { count: claimed.missing.length });
+    // The accounts just looked up and found without a device need not be asked again by the next reconcile.
+    const reached = new Set(targets.map((t) => t.accountId));
+    for (const accountId of others) if (!reached.has(accountId)) this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
     this.invalidate(summary.id);
     return this.get(summary.id)!;
   }
@@ -170,7 +244,7 @@ export class ConversationsService {
     this.invalidate(record.id);
   }
 
-  /** Trusted, active instances of the given accounts, minus `exclude`. Refused ones are logged, never added. */
+  /** Trusted, active instances of the given accounts, minus `exclude`. Refused ones are logged, never added; an account with none contributes nothing. */
   private async trustedLeafTargets(accountIds: string[], exclude: Set<string>): Promise<Array<{ instanceId: string; accountId: string }>> {
     const out: Array<{ instanceId: string; accountId: string }> = [];
     for (const accountId of accountIds) {
@@ -263,50 +337,94 @@ export class ConversationsService {
           const next = { ...existing, members };
           await ctx.store.putJson("conversation", next.id, next);
           ctx.model.conversations.set(next.id, next);
+          ctx.messages.invalidate(next.id); // the hold on pending echoes follows the member rows
           this.invalidate(next.id);
         }
       }
     });
   }
 
-  /** The elector rule for adds. Runs after each sync; cheap when there is nothing to do. */
+  /** The elector rules for adds. Runs after each sync; cheap when there is nothing to do. */
   async reconcile(): Promise<void> {
     const { ctx } = this;
     if (this.reconciling || !ctx.instance.isActive) return;
     this.reconciling = true;
+    let retrySoon = false;
     try {
       const own = ctx.instance.trustedOwnInstances().trusted.filter((i) => i.status === "active" && i.id !== ctx.instanceId);
-      if (own.length === 0) return;
       /** Own instances that share, or are being given, a leaf in a conversation this instance is the elector of. */
       const electorFor = new Set<string>();
       for (const conversationId of ctx.groups.ids()) {
         const state = ctx.groups.get(conversationId)!;
         const record = ctx.model.conversations.get(conversationId);
-        if (!ctx.engine.isActive(state) || record?.removed) continue;
+        if (!record || !ctx.engine.isActive(state) || record.removed) continue;
         const members = ctx.engine.membersOf(state);
-        const ownLeaves = members.filter((m) => m.accountId === ctx.accountId).map((m) => m.instanceId).sort();
-        if (ownLeaves[0] !== ctx.instanceId) continue;
         const present = new Set(members.map((m) => m.instanceId));
-        const pendingAdds = new Set(
-          ctx.model
-            .outboxItems(conversationId)
-            .filter((i) => i.kind === "commit" && i.state === "pending")
-            .flatMap((i) => i.commit?.adds.map((a) => a.instanceId) ?? []),
-        );
-        for (const i of own) if (present.has(i.id) || pendingAdds.has(i.id)) electorFor.add(i.id);
-        const missing = own.filter((i) => !present.has(i.id) && !pendingAdds.has(i.id));
-        if (missing.length === 0) continue;
-        for (const i of missing) electorFor.add(i.id);
-        try {
-          const claimed = await ctx.instance.claimKeyPackages(missing.map((i) => i.id));
-          if (claimed.keyPackages.length === 0) continue;
-          await ctx.outbox.enqueueCommit(conversationId, {
-            adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId: ctx.accountId, keyPackage: k.data })),
-            removes: [],
-            reason: "add_instances",
-          });
-        } catch (error) {
-          ctx.log.warn?.("could not add own instances", { conversationId, error: describeError(error) });
+        const pendingAdds = ctx.model
+          .outboxItems(conversationId)
+          .filter((i) => i.kind === "commit" && i.state === "pending")
+          .flatMap((i) => i.commit?.adds ?? []);
+        const pendingInstances = new Set(pendingAdds.map((a) => a.instanceId));
+        const pendingAccounts = new Set(pendingAdds.map((a) => a.accountId));
+        const nudged = this.nudged.delete(conversationId);
+
+        // Rule 1, own devices: the lowest-id leaf of MY account adds my other trusted instances.
+        const ownLeaves = members.filter((m) => m.accountId === ctx.accountId).map((m) => m.instanceId).sort();
+        if (own.length && ownLeaves[0] === ctx.instanceId) {
+          for (const i of own) if (present.has(i.id) || pendingInstances.has(i.id)) electorFor.add(i.id);
+          const missing = own.filter((i) => !present.has(i.id) && !pendingInstances.has(i.id));
+          if (missing.length) {
+            for (const i of missing) electorFor.add(i.id);
+            try {
+              const claimed = await ctx.instance.claimKeyPackages(missing.map((i) => i.id));
+              if (claimed.keyPackages.length) {
+                await ctx.outbox.enqueueCommit(conversationId, {
+                  adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId: ctx.accountId, keyPackage: k.data })),
+                  removes: [],
+                  reason: "add_instances",
+                });
+              }
+            } catch (error) {
+              ctx.log.warn?.("could not add own instances", { conversationId, error: describeError(error) });
+            }
+          }
+        }
+
+        // Rule 2, unreachable members: the lowest-id leaf of the WHOLE group adds the first device of any
+        // joined account that has none. Throttled per account; a nudge naming the conversation skips the throttle.
+        if (members.map((m) => m.instanceId).sort()[0] !== ctx.instanceId) continue;
+        const now = ctx.now();
+        for (const accountId of this.unreachableMembersOf(conversationId)) {
+          if (pendingAccounts.has(accountId)) continue;
+          const key = `${conversationId}/${accountId}`;
+          const nextAt = this.reachNextAt.get(key);
+          if (!nudged && nextAt !== undefined && now < nextAt) continue;
+          this.reachNextAt.set(key, now + REACH_THROTTLE_MS);
+          if (nudged) this.reachRetried.delete(key);
+          try {
+            const { trusted, refused } = await ctx.instance.trustedInstancesOf(accountId);
+            if (refused.size) ctx.log.warn?.("instances refused by the approval chain", { accountId, count: refused.size });
+            const targets = trusted.filter((i) => !present.has(i.id));
+            if (targets.length === 0) continue;
+            const claimed = await ctx.instance.claimKeyPackages(targets.map((i) => i.id));
+            if (claimed.keyPackages.length === 0) {
+              // Listed, but its key packages are not up yet (it registered moments ago): ask again soon, once.
+              if (!this.reachRetried.has(key)) {
+                this.reachRetried.add(key);
+                this.reachNextAt.set(key, now + REACH_RETRY_MS);
+                retrySoon = true;
+              }
+              continue;
+            }
+            this.reachRetried.delete(key);
+            await ctx.outbox.enqueueCommit(conversationId, {
+              adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId, keyPackage: k.data })),
+              removes: [],
+              reason: "reach_member",
+            });
+          } catch (error) {
+            ctx.log.warn?.("could not reach a member's devices", { conversationId, accountId, error: describeError(error) });
+          }
         }
       }
       // Not awaited: exporting and uploading an archive must not hold the sync loop; autoOffer never throws and dedupes.
@@ -314,6 +432,14 @@ export class ConversationsService {
     } finally {
       this.reconciling = false;
     }
+    if (retrySoon) this.scheduleRetry();
+  }
+
+  private scheduleRetry(): void {
+    if (this.stopped || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.reconcile().catch((error) => this.ctx.log.debug?.("reconcile retry failed", { error: describeError(error) }));
+    }, REACH_RETRY_MS);
   }
 }
-

@@ -8,7 +8,7 @@ import { RiPauseFill, RiPlayFill } from '@oxy.so/bloom/icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import type { MessageAttachment, MessageReadStatus } from '@/lib/chat/model';
+import type { MessageAttachment, MessageHoldReason, MessageReadStatus } from '@/lib/chat/model';
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { logger } from '@/utils/logger';
 
@@ -41,12 +41,15 @@ export interface VoiceNoteBubbleProps {
   readonly timestamp: Date;
   readonly showTimestamp: boolean;
   readonly readStatus: MessageReadStatus | undefined;
+  /** A held echo's clock carries this as its accessible name. */
+  readonly holdReason?: MessageHoldReason;
+  readonly holdLabel?: string;
 }
 
 const SECONDS_TO_MILLISECONDS = 1000;
 
 export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
-  ({ attachment, isSent, timestamp, showTimestamp, readStatus }) => {
+  ({ attachment, isSent, timestamp, showTimestamp, readStatus, holdReason, holdLabel }) => {
     const theme = useTheme();
     const { t } = useTranslation();
 
@@ -222,6 +225,8 @@ export const VoiceNoteBubble = memo<VoiceNoteBubbleProps>(
                 timestamp={timestamp}
                 isSent={isSent}
                 readStatus={readStatus}
+                holdReason={holdReason}
+                holdLabel={holdLabel}
                 showTimestamp={showTimestamp}
                 variant="bubble"
               />

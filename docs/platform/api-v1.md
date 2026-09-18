@@ -428,7 +428,7 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 
 | event | direction | payload | meaning |
 | --- | --- | --- | --- |
-| `sync.nudge` | server → client | `SyncNudgeEvent` `{ conversationId? }` | something is waiting in the stream; pull `/v1/sync` |
+| `sync.nudge` | server → client | `SyncNudgeEvent` `{ conversationId? }` | something is waiting in the stream; pull `/v1/sync`. Also sent, with the `conversationId`, to every active leaf of a conversation whose `joined` member had no active leaf when one of its instances becomes `active` (bootstrap registration or approval), so an elector adds it without waiting for its sync interval |
 | `instance.approved` | server → client (`instance:<id>`) | `InstanceApprovedEvent` `{ instanceId }` | this instance is now active |
 | `instance.revoked` | server → client (`account:<id>`) | `InstanceRevokedEvent` `{ instanceId }` | an instance of the account was revoked |
 | `keypackages.low` | server → client | `KeyPackagesLowEvent` `{ available }` | upload more key packages |

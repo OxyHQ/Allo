@@ -8,7 +8,7 @@ import { DocumentIcon } from '@/assets/icons/document-icon';
 import { shareAttachment } from '@/components/media/shareAttachment';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import type { MessageAttachment, MessageReadStatus } from '@/lib/chat/model';
+import type { MessageAttachment, MessageHoldReason, MessageReadStatus } from '@/lib/chat/model';
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { logger } from '@/utils/logger';
 import { extensionOf, mimetypeFromFilename } from '@/utils/mimetypes';
@@ -36,10 +36,13 @@ export interface FileBubbleProps {
   readonly timestamp: Date;
   readonly showTimestamp: boolean;
   readonly readStatus: MessageReadStatus | undefined;
+  /** A held echo's clock carries this as its accessible name. */
+  readonly holdReason?: MessageHoldReason;
+  readonly holdLabel?: string;
 }
 
 export const FileBubble = memo<FileBubbleProps>(
-  ({ attachment, isSent, timestamp, showTimestamp, readStatus }) => {
+  ({ attachment, isSent, timestamp, showTimestamp, readStatus, holdReason, holdLabel }) => {
     const theme = useTheme();
     const { t } = useTranslation();
 
@@ -182,6 +185,8 @@ export const FileBubble = memo<FileBubbleProps>(
                 timestamp={timestamp}
                 isSent={isSent}
                 readStatus={readStatus}
+                holdReason={holdReason}
+                holdLabel={holdLabel}
                 showTimestamp={showTimestamp}
                 variant="bubble"
               />
