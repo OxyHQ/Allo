@@ -426,13 +426,12 @@ describe("self-join by external commit", () => {
       expect(view.memberAccountIds.sort()).toEqual([aliceId, bobId].sort());
     }
 
-    // MEASURED: what happens to an honest sender now that the server sits at an epoch it refused.
-    // Alice encrypts at `epochBefore`, the server answers 409 `epoch_conflict`, and the outbox's
-    // reaction to a 409 is "sync, then retry" with no cap and no backoff (`core/src/outbox/engine.ts`,
-    // `handleTransportError`): the item stays `pending` and the POST repeats in a tight loop until
-    // the client is stopped — 128 refused POSTs (265 requests with the re-syncs) in the 1.5 s window
-    // below, on this machine. The conversation is wedged for its honest members: fail closed, but a
-    // hot loop rather than a surfaced failure. That is a finding, not a property this test wants.
+    // An honest sender now that the server sits at an epoch it refused: Alice encrypts at
+    // `epochBefore`, the server answers 409 `epoch_conflict`, the outbox re-syncs, sees that the
+    // local epoch cannot advance (the commit was refused), and after EPOCH_STALL_LIMIT (3) such
+    // conflicts holds the item with backoff instead of looping. Before the cap this measured 128
+    // refused POSTs in 1.5 s. The conversation is marked `refused_commit` for its honest members:
+    // fail closed, surfaced, bounded.
     const later = h.unique("after the forgery");
     const laterKey = await alice.client.messages.send(conv.id, later);
     await sleep(1500);
@@ -440,10 +439,13 @@ describe("self-join by external commit", () => {
     const conflicts = conflictsSince(mark).filter((r) => r.method === "POST" && r.route.endsWith("/events"));
     expect(item?.sendState).toBe("pending");
     expect(item?.seq ?? null).toBeNull();
-    expect(item?.holdReason).toBeUndefined(); // not a hold: a send that keeps failing
-    expect(conflicts.length).toBeGreaterThanOrEqual(5); // the retry loop, not a single refusal (measured: 128)
+    expect(item?.holdReason).toBe("epoch_stalled"); // held, not retried forever
+    expect(conflicts.length).toBeGreaterThanOrEqual(1);
+    expect(conflicts.length).toBeLessThanOrEqual(3); // the cap (measured before the cap: 128)
     expect(alice.client.conversations.get(conv.id)?.epoch).toBe(epochBefore); // she did not adopt the forged epoch to get through
-    await alice.client.stop(); // ends the loop; nothing below needs her online
+    expect(alice.client.conversations.get(conv.id)?.integrity).toBe("refused_commit");
+    expect(bob.client.conversations.get(conv.id)?.integrity).toBe("refused_commit");
+    await alice.client.stop(); // nothing below needs her online
     const conflictsAtStop = conflictsSince(mark).filter((r) => r.method === "POST" && r.route.endsWith("/events")).length;
 
     // The security property. Nothing of Alice's landed after the forgery, so there is nothing for the
