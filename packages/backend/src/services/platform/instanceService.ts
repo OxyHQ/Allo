@@ -14,7 +14,11 @@ import {
   type SetTransferKeyRequest,
 } from "@allo/shared-types";
 import { getDb, type AlloDatabase } from "../../db";
-import { listConversationIdsWithLiveLeaf, markLeafRemoved } from "../../db/platform/conversationRepository";
+import {
+  listConversationIdsWithLiveLeaf,
+  listConversationsAwaitingAccountLeaf,
+  markLeafRemoved,
+} from "../../db/platform/conversationRepository";
 import { appendControlEvent } from "../../db/platform/eventRepository";
 import {
   activateInstance,
@@ -33,6 +37,7 @@ import { verifyEd25519 } from "../../middleware/instanceAuth";
 import { getRealtime } from "../../runtime/realtime";
 import { AlloHttpError, forbidden, notFound, unauthorized } from "../../utils/httpErrors";
 import { toClientInstance, toPublicInstance } from "./wire";
+import { logger } from "../../utils/logger";
 
 export interface InstanceServiceDeps {
   db?: AlloDatabase;
@@ -45,7 +50,7 @@ export async function registerInstance(
   deps: InstanceServiceDeps = {},
 ): Promise<RegisterInstanceResponse> {
   const db = deps.db ?? getDb();
-  return db.transaction(async (tx) => {
+  const response = await db.transaction(async (tx): Promise<RegisterInstanceResponse> => {
     const active = await countActiveInstances(accountId, tx);
     const bootstrap = active === 0;
     const challenge = bootstrap ? null : base64UrlEncode(randomBytes(32));
@@ -76,6 +81,32 @@ export async function registerInstance(
       ? { instance, enrollment: "active" }
       : { instance, enrollment: "pending", challenge: challenge as string };
   });
+  if (response.enrollment === "active") await nudgeConversationsAwaitingAccount(accountId, db);
+  return response;
+}
+
+/**
+ * An instance just became `active`. A conversation may already count its
+ * account as a `joined` member with NO active leaf — created while the account
+ * had no instance to add — and its electors would otherwise notice the new
+ * leaf only on their sync interval. Nudge every active leaf of each such
+ * conversation so an elector adds it now. Called after the activating
+ * transaction has committed, so a nudged client that syncs at once sees the
+ * instance in the account's listing.
+ */
+async function nudgeConversationsAwaitingAccount(accountId: string, db: AlloDatabase): Promise<void> {
+  // Best effort: the activating write has committed, and a failed nudge must
+  // not turn a successful registration or approval into a 500. The electors
+  // still find the new leaf on their sync interval.
+  try {
+    const awaiting = await listConversationsAwaitingAccountLeaf(accountId, db);
+    const realtime = getRealtime();
+    for (const { conversationId, activeLeafInstanceIds } of awaiting) {
+      realtime.nudge(activeLeafInstanceIds, { conversationId });
+    }
+  } catch (error) {
+    logger.warn("nudging conversations awaiting an account failed", { error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 export async function listOwnInstances(accountId: string, deps: InstanceServiceDeps = {}): Promise<ClientInstance[]> {
@@ -144,6 +175,7 @@ export async function approveInstance(
   const activated = await activateInstance(target.id, { approvedByInstanceId: approver.id, approvalSignature }, db);
   if (!activated) throw new AlloHttpError("idempotency_conflict", "The instance was resolved concurrently");
   getRealtime().instanceApproved(activated.id, { instanceId: activated.id });
+  await nudgeConversationsAwaitingAccount(approver.accountId, db);
   return toClientInstance(activated);
 }
 

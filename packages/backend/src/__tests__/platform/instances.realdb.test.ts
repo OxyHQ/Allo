@@ -3,6 +3,7 @@
  * with real Ed25519 keys. Every response is parsed with its contract schema.
  */
 
+import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -26,6 +27,7 @@ import {
   expectParses,
   generateEd25519,
   generateX25519,
+  mlsGroupId,
   signMessage,
   TestInstance,
   USER_HEADER,
@@ -449,5 +451,76 @@ describe("push token", () => {
 
     const bad = await me.signed("put", "/v1/instances/me/push", { provider: "sms", token: "abc" });
     expect(bad.status).toBe(400);
+  });
+});
+
+describe("a member whose first instance arrives after the conversation", () => {
+  /** Alice's DM with `bob`, created with no initial commit: Bob is `joined` with no leaf. */
+  async function dmAwaiting(bob: string) {
+    const alice = await TestInstance.register(h.app, accountId("a"));
+    const created = await alice.signed("post", "/v1/conversations", {
+      kind: "dm",
+      mlsGroupId: mlsGroupId(),
+      memberAccountIds: [bob],
+      idempotencyKey: `await-${bob}`,
+    });
+    expect(created.status).toBe(201);
+    return { alice, conversationId: created.body.conversation.id as string };
+  }
+
+  async function insertActiveLeaf(conversationId: string, instance: TestInstance): Promise<void> {
+    await h.db.insert(schema.conversationLeaves).values({
+      id: randomUUID(),
+      conversationId,
+      instanceId: instance.id,
+      accountId: instance.accountId,
+      state: "active",
+      addedEpoch: 1,
+    });
+  }
+
+  it("bootstrap registration nudges the conversation's active leaves, and not the new instance", async () => {
+    const bob = accountId("b");
+    const { alice, conversationId } = await dmAwaiting(bob);
+    h.realtime.reset();
+
+    const bobDevice = await TestInstance.register(h.app, bob);
+    expect(bobDevice.registration.enrollment).toBe("active");
+    expect(h.realtime.nudges).toEqual([{ instanceIds: [alice.id], event: { conversationId } }]);
+    expect(h.realtime.nudges[0].instanceIds).not.toContain(bobDevice.id);
+  });
+
+  it("approval nudges too when the account still holds no leaf, and stays silent once it does", async () => {
+    // Bob's first device exists BEFORE Alice creates the DM, so it is the approval that matters.
+    const first = await TestInstance.register(h.app, accountId("b"));
+    const { alice, conversationId } = await dmAwaiting(first.accountId);
+    const second = await TestInstance.register(h.app, first.accountId);
+    h.realtime.reset();
+
+    await first.approve(second);
+    expect(h.realtime.nudges).toEqual([{ instanceIds: [alice.id], event: { conversationId } }]);
+
+    // Alice's elector has since added Bob's first device: a third device approved later is that device's business.
+    await insertActiveLeaf(conversationId, first);
+    const third = await TestInstance.register(h.app, first.accountId);
+    h.realtime.reset();
+    await first.approve(third);
+    expect(h.realtime.approved).toEqual([third.id]);
+    expect(h.realtime.nudges).toEqual([]);
+  });
+
+  it("an account with no conversation awaiting it triggers nothing", async () => {
+    // Alice already added Bob's first device; his second one changes nothing for her.
+    const bob = accountId("b");
+    const { conversationId } = await dmAwaiting(bob);
+    const bobDevice = await TestInstance.register(h.app, bob);
+    await insertActiveLeaf(conversationId, bobDevice);
+    h.realtime.reset();
+
+    const stranger = await TestInstance.register(h.app, accountId("s"));
+    expect(stranger.registration.enrollment).toBe("active");
+    const bobSecond = await TestInstance.register(h.app, bob);
+    await bobDevice.approve(bobSecond);
+    expect(h.realtime.nudges).toEqual([]);
   });
 });
