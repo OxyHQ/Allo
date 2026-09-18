@@ -134,8 +134,23 @@ export interface AlloClient {
   };
 }
 
+/**
+ * What the facade answers before `start()` has opened the store and after
+ * `reset()` has closed it. Every getter a hook can subscribe to is read
+ * through `useSyncExternalStore`, which re-renders whenever two consecutive
+ * reads differ by identity: an inline `?? []` there is a new array per call
+ * and therefore an unbounded re-render loop the moment a screen mounts over a
+ * not-yet-started client (React error #185). So each answer is ONE shared,
+ * frozen value, the same reference on every call, exactly as the started
+ * services cache theirs.
+ */
+const EMPTY_LIST: never[] = Object.freeze([]) as never[];
+const NO_INSTANCES: InstanceView[] = EMPTY_LIST;
+const NO_PENDING: PendingEnrollmentView[] = EMPTY_LIST;
+const NO_CONVERSATIONS: ConversationView[] = EMPTY_LIST;
+const NO_TIMELINE: TimelineItemView[] = EMPTY_LIST;
 const IDLE_PROGRESS: HistoryProgress = { phase: "idle", done: 0, total: 0 };
-const NO_OFFERS: HistoryOfferView[] = [];
+const NO_OFFERS: HistoryOfferView[] = EMPTY_LIST;
 const NO_BACKUP: BackupStatus = { enabled: false, lastBackupAt: null, eventCount: 0, remote: null, busy: false };
 
 export function createAlloClient(options: AlloClientOptions): AlloClient {
@@ -304,8 +319,8 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     instance: {
       state: () => ctx?.instance.state ?? "unregistered",
       current: () => ctx?.instance.currentView() ?? null,
-      list: () => ctx?.instance.list() ?? [],
-      pending: () => ctx?.instance.pending() ?? [],
+      list: () => ctx?.instance.list() ?? NO_INSTANCES,
+      pending: () => ctx?.instance.pending() ?? NO_PENDING,
       refresh: () => requireCtx().instance.refresh().then(() => activate()),
       refreshPending: () => requireCtx().instance.refreshPending(),
       approve: async (id, challenge) => {
@@ -320,7 +335,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       clearPushToken: () => requireCtx().instance.clearPushToken(),
     },
     conversations: {
-      list: () => ctx?.conversations.list() ?? [],
+      list: () => ctx?.conversations.list() ?? NO_CONVERSATIONS,
       get: (id) => ctx?.conversations.get(id),
       createDirect: (accountId) => requireCtx().conversations.createDirect(accountId),
       createGroup: (ids) => requireCtx().conversations.createGroup(ids),
@@ -331,7 +346,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       refresh: () => requireCtx().conversations.refreshFromServer(),
     },
     messages: {
-      timeline: (id) => ctx?.messages.timeline(id) ?? [],
+      timeline: (id) => ctx?.messages.timeline(id) ?? NO_TIMELINE,
       send: (id, text, o) => requireCtx().messages.send(id, text, o),
       edit: (id, t, body) => requireCtx().messages.edit(id, t, body),
       remove: (id, t) => requireCtx().messages.remove(id, t),
