@@ -12,6 +12,14 @@ import { signRequest, type SigningKeyPair } from "../crypto/signing";
 export const defaultSocketFactory: SocketFactory = (url, auth) => {
   const socket = io(url, {
     autoConnect: false,
+    // WebSocket only, no polling and no upgrade dance. The API runs on several
+    // ECS tasks behind one ALB with no sticky sessions; Socket.IO's polling
+    // transport binds a `sid` to the task that answered the handshake, so the
+    // next poll landing on the other task is answered 400 "Session ID
+    // unknown" and the client loops. Measured on allo.you on 2026-09-18. A
+    // single WebSocket connection stays on one task by construction.
+    transports: ["websocket"],
+    upgrade: false,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 60_000,
