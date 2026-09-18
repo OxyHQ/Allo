@@ -196,9 +196,11 @@ function chatPreview(view: ConversationView, ctx: ChatContext): ChatPreview | un
 /** `ConversationView` → one row of the conversation list. */
 export function chatSummary(view: ConversationView, ctx: ChatContext): ChatSummary {
   const last = view.lastMessage;
+  const other = view.kind === 'dm' ? others(view, ctx.me)[0] : undefined;
   return {
     id: view.id,
     kind: view.kind === 'group' ? 'group' : 'direct',
+    verified: other ? ctx.person(other)?.verified : undefined,
     name: conversationTitle(view, ctx),
     avatar: conversationAvatar(view, ctx),
     faces: conversationFaces(view, ctx),

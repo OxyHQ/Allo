@@ -35,6 +35,8 @@ interface TranscriptProps {
   isGroup: boolean;
   typing: boolean;
   reachedStart: boolean;
+  /** Drawn on the "scroll to latest" button, as the story does. */
+  unreadCount: number;
   onLoadOlder: () => void;
   actions: MessageActions;
 }
@@ -62,6 +64,7 @@ export const Transcript = memo(function Transcript({
   isGroup,
   typing,
   reachedStart,
+  unreadCount,
   onLoadOlder,
   actions,
 }: TranscriptProps) {
@@ -185,6 +188,7 @@ export const Transcript = memo(function Transcript({
       <View style={styles.floating} pointerEvents="box-none">
         <ScrollToBottomButton
           visible={scrolledUp}
+          unreadCount={unreadCount}
           accessibilityLabel={t('chat.scrollToLatest')}
           onPress={() => list.current?.scrollToEnd({ animated: true })}
         />

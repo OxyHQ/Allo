@@ -219,6 +219,7 @@
   "profile.message": "Invia un messaggio",
   "profile.notFound": "Account inesistente",
   "profile.notFoundSubtitle": "Su Allo nessuno usa @{{handle}}.",
+  "profile.verified": "Verificato",
   "profile.view": "Vedi profilo",
   "restorePrompt.body": "Questo account ha un backup cifrato. Inserisci la tua frase di ripristino per portare le conversazioni su questo dispositivo.",
   "restorePrompt.notNow": "Non ora",

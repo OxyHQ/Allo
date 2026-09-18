@@ -203,7 +203,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;
   const other = view.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
-  const handle = other ? ctx.person(other)?.handle : undefined;
+  const otherPerson = other ? ctx.person(other) : undefined;
+  const handle = otherPerson?.handle;
   const faces = conversationFaces(view, ctx);
 
   return (
@@ -211,6 +212,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       <View style={{ paddingTop: split ? 0 : insets.top }}>
         <ChatHeader
           title={title}
+          marker={otherPerson?.verified ? 'verified' : undefined}
+          markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
           avatar={faces ? <GroupAvatar faces={faces} size={40} /> : undefined}
           avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
           avatarName={title}
@@ -268,6 +271,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             <ChatEmptyState description={t('chat.empty.conversation')} notice={t('chat.e2ee')} />
           ) : (
             <Transcript
+              unreadCount={view.unreadCount}
               items={matches}
               sources={sources}
               isGroup={isGroup}

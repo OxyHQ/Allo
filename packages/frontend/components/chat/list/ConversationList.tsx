@@ -102,7 +102,6 @@ export function ConversationList() {
       <PageHeader
         title={t('chat.title')}
         safeArea={!split}
-        border="none"
         actions={
           <ComposerIconButton
             icon={split ? RiEditBoxLine : RiSettings3Line}

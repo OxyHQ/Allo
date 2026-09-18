@@ -34,6 +34,8 @@ export interface Person {
   avatar?: string;
   /** What the person says about themselves on Oxy, when they have said anything. */
   bio?: string;
+  /** Oxy says this account is verified. */
+  verified?: boolean;
 }
 
 /** How long "Oxy said nobody" is believed before being asked again. */
@@ -124,6 +126,7 @@ export function personFromEntity(entity: UserEntity | undefined): Person | undef
     handle,
     avatar: entity.avatar ?? undefined,
     bio: entity.bio ?? entity.description,
+    verified: entity.verified === true,
   };
 }
 

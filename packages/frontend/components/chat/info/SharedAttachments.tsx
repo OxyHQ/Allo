@@ -38,6 +38,24 @@ export function countOf(items: readonly TimelineItemView[], kinds: readonly Medi
   return count > 0 ? count : undefined;
 }
 
+/** How many links the loaded history holds. */
+export function countLinks(items: readonly TimelineItemView[]): number | undefined {
+  let count = 0;
+  for (const item of items) {
+    if (item.content.kind !== 'text') continue;
+    for (const entity of messageEntities(item.content.body)) if (entity.type === 'link') count += 1;
+  }
+  return count > 0 ? count : undefined;
+}
+
+/** The newest picture in the loaded history, decrypted — a group's panel wears it as its cover. */
+export function useLatestPicture(items: readonly TimelineItemView[]): string {
+  const latest = useMemo(() => attachmentsOf(items, ['image'])[0], [items]);
+  const ref = latest?.media.thumbnail?.ref ?? latest?.media.ref;
+  const { uri } = useMediaUri(ref, latest?.media.thumbnail ? 'image/jpeg' : (latest?.media.mime ?? 'image/jpeg'));
+  return uri;
+}
+
 /**
  * Decrypts one tile's thumbnail and hands the URI up. A component rather than a
  * loop, because a hook cannot run per item of a list that changes length.

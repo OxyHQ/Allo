@@ -1,4 +1,5 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import type { TimelineItemView } from '@allo/core';
@@ -35,6 +36,7 @@ interface MessageRowProps {
 /** One bubble, with its media and the menu a press opens. */
 export const MessageRow = memo(function MessageRow({ item, source, position, labels, actions }: MessageRowProps) {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const {
     id,
     senderId: _senderId,
@@ -72,6 +74,8 @@ export const MessageRow = memo(function MessageRow({ item, source, position, lab
       <MessageMedia media={content.media} tone={bubble.direction} onOpen={() => actions.openMedia(id)} />
     ) : undefined;
 
+  const hasMenu = menu.length > 0 && content.kind !== 'deleted' && content.kind !== 'undecryptable';
+
   const bubbleNode = (
     <MessageBubble
       {...bubble}
@@ -83,25 +87,48 @@ export const MessageRow = memo(function MessageRow({ item, source, position, lab
     />
   );
 
-  if (content.kind === 'deleted' || content.kind === 'undecryptable' || menu.length === 0) return bubbleNode;
+  if (!hasMenu) return bubbleNode;
 
   return (
-    <MessageContextMenu
-      label={t('message.actions')}
-      items={menu}
-      reactions={settled ? undefined : false}
-      selectedReaction={mine}
-      onSelectReaction={(emoji) => actions.react(id, emoji)}
-      onSelect={(action) => {
-        if (action === 'reply') actions.reply(id);
-        else if (action === 'edit') actions.edit(id);
-        else if (action === 'delete') actions.remove(id);
-        else if (action === 'copy' && content.kind === 'text') {
-          void Clipboard.setStringAsync(content.body).then(() => toast.success(t('message.copied')));
-        }
-      }}
-    >
-      {bubbleNode}
-    </MessageContextMenu>
+    <View>
+      {/*
+        A long press anywhere on the row opens the menu, and the press lives on
+        a plain pressable rather than on the bubble. Making the BUBBLE the
+        trigger makes it a button, and a picture, a file row, a voice note and
+        a reaction chip all carry buttons of their own — on the web that is a
+        button inside a button, which React DOM refuses to render.
+      */}
+      <Pressable onLongPress={() => setOpen(true)} delayLongPress={300}>
+        {bubbleNode}
+      </Pressable>
+      <MessageContextMenu
+        open={open}
+        onOpenChange={setOpen}
+        label={t('message.actions')}
+        items={menu}
+        reactions={settled ? undefined : false}
+        selectedReaction={mine}
+        onSelectReaction={(emoji) => {
+          setOpen(false);
+          actions.react(id, emoji);
+        }}
+        onSelect={(action) => {
+          if (action === 'reply') actions.reply(id);
+          else if (action === 'edit') actions.edit(id);
+          else if (action === 'delete') actions.remove(id);
+          else if (action === 'copy' && content.kind === 'text') {
+            void Clipboard.setStringAsync(content.body).then(() => toast.success(t('message.copied')));
+          }
+        }}
+      >
+        <View style={[styles.anchor, bubble.direction === 'outgoing' ? styles.anchorEnd : styles.anchorStart]} />
+      </MessageContextMenu>
+    </View>
   );
+});
+
+const styles = StyleSheet.create({
+  anchor: { height: 0, width: 0 },
+  anchorStart: { alignSelf: 'flex-start' },
+  anchorEnd: { alignSelf: 'flex-end' },
 });

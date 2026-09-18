@@ -219,6 +219,7 @@
   "profile.message": "Message",
   "profile.notFound": "No such account",
   "profile.notFoundSubtitle": "Nobody on Allo goes by @{{handle}}.",
+  "profile.verified": "Verified",
   "profile.view": "View profile",
   "restorePrompt.body": "This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.",
   "restorePrompt.notNow": "Not now",

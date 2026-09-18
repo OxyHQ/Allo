@@ -31,7 +31,15 @@ import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 
-import { countOf, SharedFiles, SharedLinks, SharedMedia, SharedVoice } from '@/components/chat/info/SharedAttachments';
+import {
+  countOf,
+  countLinks,
+  SharedFiles,
+  SharedLinks,
+  SharedMedia,
+  SharedVoice,
+  useLatestPicture,
+} from '@/components/chat/info/SharedAttachments';
 import { useChatContext } from '@/hooks/useChatContext';
 import { usePerson } from '@/hooks/usePerson';
 import { conversationAvatar, conversationFaces, conversationTitle } from '@/lib/chat/model';
@@ -82,6 +90,8 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
   const canManage = isGroup && (view?.myRole === 'owner' || view?.myRole === 'admin');
   const other = view?.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
   const person = usePerson(other);
+  // A group has no cover of its own, so the panel wears the last picture shared in it.
+  const cover = useLatestPicture(isGroup ? items : []);
 
   const openProfile = useCallback(
     (accountId: string) => {
@@ -225,6 +235,7 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
       value: 'links',
       label: t('chat.details.links'),
       icon: RiLink,
+      count: countLinks(items),
       content: <SharedLinks items={items} />,
     },
     {
@@ -270,6 +281,7 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
       title={isGroup ? t('chat.details.groupInfo') : t('chat.details.contactInfo')}
       onClose={onClose}
       closeLabel={t('common.close')}
+      coverSource={cover || undefined}
       avatar={faces ? <GroupAvatar faces={faces} size={96} /> : undefined}
       avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
       name={title}

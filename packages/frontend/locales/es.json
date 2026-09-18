@@ -219,6 +219,7 @@
   "profile.message": "Enviar mensaje",
   "profile.notFound": "No existe esa cuenta",
   "profile.notFoundSubtitle": "Nadie en Allo usa @{{handle}}.",
+  "profile.verified": "Verificado",
   "profile.view": "Ver perfil",
   "restorePrompt.body": "Esta cuenta tiene una copia de seguridad cifrada. Introduce tu frase de recuperación para traer tus conversaciones a este dispositivo.",
   "restorePrompt.notNow": "Ahora no",
