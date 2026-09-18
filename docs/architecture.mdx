@@ -64,11 +64,11 @@ React Native session, frontend only), `@oxy.so/bloom` (UI, frontend only),
 `packages/frontend/` is an Expo Router app. Chat state comes from
 `@allo/react` hooks over one `AlloClient`; the client is constructed with
 three platform adapters (Oxy session, an encrypted-at-rest byte store, a
-secret store) described in [SDK](./platform/sdk). The frontend declares
-`@allo/core` and `@allo/react` as dependencies; the `lib/allo/` seam that
-constructs the client and the screens' move onto the hooks are the last step
-of the platform change, and the ADR's cutover checklist is where the lead
-records whether it is complete.
+secret store) described in [SDK](./platform/sdk). `packages/frontend/lib/allo/`
+is the only place the app constructs the client and holds those adapters;
+every chat screen consumes `@allo/react` hooks, and a TypeScript-AST census
+(`__tests__/allo/noLegacyChatPath.test.ts`) fails the build if any other
+path talks to the engine.
 
 Unchanged by the platform change: routing (`app/`), styling (NativeWind and
 Bloom theme tokens through `useTheme()`), the responsive layout in
@@ -90,9 +90,9 @@ src/app.ts                      createApp(deps): pure HTTP assembly, middleware 
 src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
 src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
 src/middleware/                 instanceAuth (Ed25519 request signature), oxySession, requestObservability
-src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs
+src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs, history, backups
 src/routes/                     the kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
-src/services/platform/          the rules: instances, key packages, conversations, events and sync, blobs, wire projections
+src/services/platform/          the rules: instances, key packages, conversations, events and sync, blobs, history offers, backups, wire projections
 src/db/schema/                  one file per domain; CONVENTIONS.md is binding
 src/db/platform/                repositories; appendClientEvent is the event-log transaction
 src/workers/                    deliveryWorker, blobGc
@@ -152,6 +152,19 @@ cursor is that id in base64url; `POST /v1/sync/ack` marks everything up to it.
 (`ALLO_BLOB_MAX_BYTES`, default 25 MiB), digest check, a 32-random-byte hex
 id, bytes in `blob_bytes` behind a `BlobStore` interface so S3 can replace it.
 
+**History offers and backups** (`historyService.ts`, `backupService.ts`,
+`db/platform/historyRepository.ts`): the E2EE archive routes. An offer is
+created only when the donor is active, the recipient is an active instance of
+the same account with a transfer key (`transfer_key_missing` otherwise),
+every chunk blob exists and belongs to the donor's account, and the manifest
+signature verifies against the donor's key; one pending offer per donor and
+recipient, a newer one expiring the older; `history.offer` to the recipient's
+socket room after commit; a seven-day deadline; only the recipient lists or
+consumes. A backup is one row per account, replaced whole, its signature
+verified against the writing instance; `PUT /v1/instances/me/transfer-key`
+publishes a key for an instance that predates the column. The server checks
+signatures so garbage never reaches an inbox, and holds no key to anything.
+
 **Workers.** All started after Postgres is verified, all stopped in the
 drain before the pool closes, none leader-gated because every claim is
 `FOR UPDATE SKIP LOCKED`. The delivery worker (every second, batch 100) claims
@@ -161,9 +174,16 @@ sends "New message" with the conversation and event ids and nothing else; a
 transient failure backs off, a rejected token is cleared, a revoked
 instance's deliveries go dead. The expiry sweep (every minute) deletes rows
 past `expires_at`: deliveries after 30 days, unreferenced blobs after 7 days,
-moderation rows after 90. The blob collector (hourly) adds the case the sweep
-cannot express: unreferenced blobs of a revoked uploader. The moderation
-outbox dispatcher is unchanged.
+moderation rows after 90, history offers 7 days after creation; before it
+deletes anything it marks every pending offer past its deadline `expired` and
+releases its chunks. Chunk retention is the repository's one rule: a blob
+named by a pending offer or by the backup has `expires_at = null`, and when
+that stops (consumed, expired, replaced, deleted) it is dated a day out
+unless another pending offer, the backup or an event still names it. The
+blob collector (hourly) adds the two cases the sweep cannot express:
+unreferenced blobs of a revoked uploader, and an undated chunk older than
+the offer lifetime that nothing names any more, which it dates rather than
+deletes. The moderation outbox dispatcher is unchanged.
 
 **Kept modules.** The people directory (`routes/directory.ts`, a projection
 of Oxy profiles), profile settings and social (`routes/profileSettings.ts`,
@@ -187,17 +207,20 @@ Oxy ids). Column-level detail is in the schema files' comments.
 | `conversation_leaves` | which instances hold a leaf: state `pending_welcome`/`active`/`removed`, the epoch added and the epoch removed |
 | `conversation_events` | the append-only log: dense `seq` per conversation, kind, epoch, sender, idempotency key (unique per sender instance), `payload` as ciphertext bytes or server-authored control JSON, declared `blob_ids` |
 | `instance_deliveries` | the outbox and the per-instance sync stream: a `bigserial` id (the one integer key, because it is the cursor), status, lease, attempts, expiry at 30 days |
-| `blobs` / `blob_bytes` | uploaded ciphertext: size, digest, uploader, `expires_at` cleared when an event references it; the bytes in their own table behind `BlobStore` |
+| `blobs` / `blob_bytes` | uploaded ciphertext: size, digest, uploader, `expires_at` cleared when an event, a pending history offer or the account backup references it; the bytes in their own table behind `BlobStore` |
+| `history_offers` | one donor instance's E2EE archive offered to another instance of the same account: the signed manifest (`jsonb`, validated on write, never queried inside), the HPKE-sealed archive key (a protected column), the donor's signature, the chunk blob ids as `text[]` for the retention queries, status `pending`/`consumed`/`expired`, `expires_at` seven days out |
+| `account_backups` | one row per account, replaced whole: the writing instance, the signed manifest, the key check (a protected column; an HMAC the client compares before downloading), the chunk blob ids |
 | `user_settings`, `blocks`, `restricts`, `user_behavior` | per-account settings and social lists, kept from before |
 | `abuse_reports`, `moderation_events`, `moderation_outbox`, `moderation_enforcements` | the CrowdSource pipeline, kept from before |
 
-Four messaging columns are registered in `protectedColumns.ts` (beside the
+Six messaging columns are registered in `protectedColumns.ts` (beside the
 two moderation payload columns) so a listing cannot serialise them by
 accident: `client_instances.push_token`, `key_packages.data`,
-`conversation_events.payload` and `blob_bytes.data`. The push token never
-leaves the process; the readers that legitimately return the other three
-(the claim, the event and sync reads, the blob download) name them
-explicitly.
+`conversation_events.payload`, `blob_bytes.data`, `history_offers.sealed_key`
+and `account_backups.key_check`. The push token never leaves the process; the
+readers that legitimately return the other five (the claim, the event and
+sync reads, the blob download, the recipient's offer read and the owner's
+backup read) name them explicitly.
 
 ### Realtime
 
@@ -214,10 +237,11 @@ to each recipient instance's room, and the client answers by pulling
 `GET /v1/sync` from its persisted cursor. The nudge is the fast path and may
 be lost; the delivery rows are the durable path, and the delivery worker
 re-nudges or pushes whatever was not acked. The other server events are
-`instance.approved`, `instance.revoked`, `keypackages.low` and `presence`
-(best effort, to accounts sharing a conversation). The one client event is
-`typing`, an MLS ciphertext relayed to the conversation's other active leaves
-and stored nowhere.
+`instance.approved`, `instance.revoked`, `keypackages.low`, `presence`
+(best effort, to accounts sharing a conversation) and `history.offer` (to the
+recipient instance's room; a nudge to list its offers, proving nothing by
+itself). The one client event is `typing`, an MLS ciphertext relayed to the
+conversation's other active leaves and stored nowhere.
 
 With `REDIS_URL` set, the Redis adapter lets a room emit on one ECS task reach
 a socket on another and lets the delivery worker ask whether an instance is
@@ -246,7 +270,9 @@ has the migrator commands, the environment and the test setup.
 
 ## Where this is going
 
-[Roadmap](./platform/roadmap): history transfer and backup (Phase 3),
-Mention on the same SDK with app grants (Phase 4), external connectors on the
-connector contract (Phase 5), audit, load tests and launch (Phase 6). The
-acceptance tests of the issue and their status are tracked there.
+[Roadmap](./platform/roadmap): what remains of Phase 3 (a recovery mechanism
+that can approve an instance, push previews, resumable uploads, an S3 blob
+store), Mention on the same SDK with app grants (Phase 4), external
+connectors on the connector contract (Phase 5), audit, load tests and launch
+(Phase 6). The acceptance tests of the issue and their status are tracked
+there.

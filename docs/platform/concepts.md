@@ -3,7 +3,9 @@
 The conceptual contract from issue #139 sections 5, 6, 8, 9 and 15 to 20. Each
 section states the rule and its status: `built in this change` means the
 lead's design for branch `feat/allo-platform-clean-break` specifies it and the
-lead verifies it in the tree before merge; `designed, not built` means it is a
+lead verifies it in the tree before merge; `built in Phase 3` means branch
+`feat/platform-phase3-history-recovery` (history transfer, backup and
+recovery, delivery receipts, thumbnails); `designed, not built` means it is a
 commitment for a later phase. Routes and payloads are in `api-v1.md`; this
 document does not restate them.
 
@@ -57,6 +59,7 @@ is no primary phone. Fields:
 | `platform` | `ios`, `android`, `web`, `desktop` or `node` |
 | `displayName` | Human label for the devices screen |
 | `signingPublicKey` | Raw Ed25519 public key; the private half never leaves the instance |
+| `transferPublicKey` | Raw X25519 public key a donor instance seals an archive key to; the private half never leaves the instance. `null` on an instance registered before the field existed until it publishes one |
 | `status` | `pending`, `active` or `revoked` |
 | `enrollmentChallenge` | One-time challenge while pending; cleared on resolution |
 | `approvedByInstanceId`, `approvalSignature` | The credential: which active instance approved this one and its signature; null for the bootstrap instance |
@@ -80,18 +83,19 @@ Issue section 8 steps, mapped to the API (details in `api-v1.md`):
 | 4. Another authorised instance approves | An active instance signs the challenge, new id and new public key and calls `POST /v1/instances/:id/approve`; any active instance may approve, no specific device is required |
 | 5. Allo records the public credential | The approver id and approval signature are stored on the instance and served to other accounts |
 | 6. Authorised conversations incorporate the new instance | The account's lowest-id active leaf in each conversation claims a key package and commits an Add; the new instance joins from the welcome |
-| 7. What history it can recover is decided separately | See section 7; not built |
+| 7. What history it can recover is decided separately | See section 7: an E2EE offer from a verified instance of the same account, or the account's encrypted backup with its recovery phrase; never the live group state |
 
 Bootstrap: an account with zero active instances gets an active instance on
 registration (trust on first use). Its weakness is in
-`threat-model.md` section 4. The self-custodied recovery mechanism that could
-approve instead is designed, not built.
+`threat-model.md` section 4. The recovery phrase of section 7 unlocks history
+and does not approve an instance; a self-custodied recovery mechanism that
+could approve instead is designed, not built.
 
 A valid login by itself does not let the server create an endpoint that can
 decrypt: the server never holds key package private parts and cannot author a
 welcome.
 
-Status: built in this change (steps 1 to 6); step 7 designed, not built.
+Status: built in this change (steps 1 to 6); step 7 built in Phase 3.
 
 ## 7. History versus live state
 
@@ -101,17 +105,28 @@ Three separate concerns (issue section 9):
 2. **Joining the current state of the conversation.** The MLS welcome at the
    epoch of the add. Built in this change.
 3. **Recovering old messages.** An encrypted history archive independent of
-   the live group state: the server stores encrypted events, authenticated
-   manifests and encrypted blobs and holds no key to them; a new instance gets
-   history by an E2EE transfer from another active instance or from a backup
-   unlocked by user-held recovery material. Designed, not built (Phase 3).
-   `@allo/core` exposes the history module as a stub that throws
-   `NotImplemented`.
+   the live group state: the decrypted timeline, conversation metadata and
+   media keys of one instance, encrypted on the device in chunks under a key
+   the server never holds, with a manifest signed by the producing instance.
+   The server stores the chunks as ordinary blobs, the manifest, and either a
+   sealed key or a key check, and can open none of it. A new instance gets
+   history one of two ways. By an E2EE **transfer**: the instance that added
+   it to the account's groups offers its archive once, with the archive key
+   sealed to the new instance's transfer key, and the new instance accepts on
+   its own only after it has verified that the donor is an active instance of
+   the same account whose approval chain checks out and whose key signed the
+   manifest. Or from the account's encrypted **backup**, unlocked by a
+   12-word recovery phrase the user holds; a wrong phrase is refused before
+   anything is downloaded, and the backup's signature is verified against the
+   instance that wrote it. Built in Phase 3: `client.history` and
+   `client.backup` in `@allo/core`, `history_offers` and `account_backups` on
+   the server; `crypto.md` sections 12 to 15.
 
 Live cryptographic state is never cloned from one installation to another. A
-new installation is a new instance. If every instance and all recovery
-material is lost, part of the history is irrecoverable, and the product says
-so.
+new installation is a new instance, and the archive carries nothing from the
+MLS state. Restoring needs an active instance, so a device awaiting approval
+restores after it is approved. If every instance and the recovery phrase are
+lost, history is irrecoverable, and the product says so.
 
 ## 8. Unified view rules
 
@@ -138,9 +153,10 @@ same way; filenames, sizes, mime types and captions travel inside the E2EE
 message; object storage sees ciphertext only; URLs carry no key; orphaned
 blobs are garbage collected; sizes are capped.
 
-Status: built in this change for upload, download, per-file keys, encrypted
-thumbnails, GC and size limits. Resumable uploads and downloads and quotas are
-designed, not built. A private Oxy Cloud URL is not E2EE on its own and is not
+Status: built in this change for upload, download, per-file keys, GC and
+size limits; encrypted thumbnail upload built in Phase 3 (the envelope and
+the receiver came with this change, the sender with Phase 3). Resumable
+uploads and downloads and quotas are designed, not built. A private Oxy Cloud URL is not E2EE on its own and is not
 used for chat media.
 
 ## 10. Push rules
@@ -151,7 +167,7 @@ not replace durable delivery and sync; the sync cursor is the truth.
 
 Status: built in this change for FCM and APNs. Client-generated safe previews
 (iOS Notification Service Extension, Android background service) are
-designed, not built. There is no web push.
+designed, not built, Phase 3 included. There is no web push.
 
 ## 11. Search rule
 

@@ -79,10 +79,14 @@ old engine.
   Bridges return in Phase 5 on the connector contract, not as Matrix bridges.
 - `@allo/shared-types` is broken deliberately: it now carries the v1 wire
   contract (zod schemas and types) and nothing legacy.
-- History transfer between instances, encrypted backup and recovery, app grants
-  for third-party apps, and connectors are designed and not built. Until they
-  exist, a new instance sees only events from the epoch it joined onward, and
-  losing every instance loses history. See `docs/platform/roadmap.md`.
+- App grants for third-party apps and connectors are designed and not built.
+  History transfer between instances and the encrypted backup with a recovery
+  phrase were designed here and built in Phase 3
+  (`feat/platform-phase3-history-recovery`): a new instance is still a new
+  leaf that decrypts live traffic from the epoch it joined onward, and old
+  messages reach it only through an E2EE offer from a verified instance of
+  the same account or through the backup; losing every instance and the
+  phrase loses history. See `docs/platform/roadmap.md`.
 - Documentation describing the retired architecture (`docs/encryption.mdx`,
   `docs/architecture.mdx`, `docs/matrix/`) is replaced, not annotated.
 

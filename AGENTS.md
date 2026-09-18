@@ -162,9 +162,35 @@ reads its own from `instance.enrollment?.fingerprint` (present only while it is
 pending), the approver from `usePendingEnrollments()`.
 
 **The web secret store is the platform's documented weak point.** A browser has
-no Keychain; the storage key and the signing key sit in IndexedDB (`allo-secrets`)
-where any script on the origin can read them. Never move them to `localStorage`
-or a cookie; see the header of `lib/allo/secrets.web.ts`.
+no Keychain; the storage key, the signing key, the transfer key and, once
+backup is on, the backup key sit in IndexedDB (`allo-secrets`) where any script
+on the origin can read them. Never move them to `localStorage` or a cookie; see
+the header of `lib/allo/secrets.web.ts`.
+
+**History reaches a new device by transfer or by backup, never by copying
+state.** Both are `@allo/core` (`client.history`, `client.backup`; `docs/platform/crypto.md`
+sections 12 to 16) reached through `useHistoryTransfer` and `useBackup` in
+`@allo/react`. The transfer is automatic: the device that added a newly
+approved device to the account's groups offers its history once, and the new
+device accepts on its own only from a verified same-account donor. The app's
+part is a banner in the conversation list while `progress.phase !== 'idle'`
+("Receiving history from <device name>", the device from `fromInstanceId`);
+it makes no decision about trust. Settings has "Backup and recovery"
+(`app/(chat)/settings/backup.tsx`): enabling shows the twelve words ONCE behind
+an explicit "I wrote them down" confirmation, and **the app never persists the
+phrase anywhere**, not in state, storage, logs or the clipboard on its own;
+the SDK keeps only the derived key. The screen also offers "refresh now" and a
+confirmed "disable". A "Restore from recovery phrase" screen (12-word input)
+is offered to a fresh instance whose account has a remote backup
+(`status.remote.exists` after `refreshStatus()`) before the empty conversation
+list. **Restore only works on an active instance**: `client.backup.restore`
+refuses otherwise, so the pending-approval screen may say a backup exists and
+that approval comes first, and nothing more. A wrong phrase is refused before
+any download (`RecoveryPhraseError`); a backup not signed by an instance of
+this account is refused (`UntrustedInstanceError`). Losing every device and
+the phrase loses history, and the screens say so rather than implying the
+server can help. The screens and the banner are specified with the Phase 3
+change and built alongside it; `navigationTargets` covers the new routes.
 
 ## Key features
 
@@ -183,9 +209,13 @@ or a cookie; see the header of `lib/allo/secrets.web.ts`.
   `@allo/react`; see "The Allo platform" above. Media is fetched and decrypted
   on demand by `useMediaUri` (a cache file on native, released on unmount; an
   object URL on web); a voice note or a document is not fetched until played or
-  opened. Sending a thumbnail alongside a picture is not possible yet:
-  `UploadMediaMeta` carries no thumbnail, so receivers download the original to
-  draw a bubble.
+  opened. `UploadMediaMeta.thumbnail` (`{ bytes, mime, width, height }`) sends
+  a rendered preview as a second encrypted blob named by the same `media`
+  message, and `MediaView.thumbnail.ref` fetches it alone; `sendMedia` is
+  specified to pass the rendered thumbnail with the Phase 3 change, and until
+  it does receivers download the original to draw a bubble. Delivery receipts
+  are encrypted `delivered` messages: an own bubble shows `delivered` once
+  another account's device has it and `read` once a read receipt covers it.
 - **Conversation themes** are a preference of THIS device
   (`stores/conversationThemeStore.ts`), no longer shared with participants.
   There is no archive; a swipe "delete" LEAVES the conversation.

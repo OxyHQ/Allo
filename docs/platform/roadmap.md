@@ -2,8 +2,10 @@
 
 Phases from issue #139 section 22. "This change" is branch
 `feat/allo-platform-clean-break` as specified by the lead's design; the lead
-confirms each "delivered" item against the tree before merge. Anything under
-"remains" is not built.
+confirms each "delivered" item against the tree before merge. Phase 3's
+"delivered by the Phase 3 change" is branch
+`feat/platform-phase3-history-recovery`, written from the code in that tree.
+Anything under "remains" is not built.
 
 ## Environment constraint on the crypto spike
 
@@ -62,14 +64,39 @@ acceptance table below).
 
 ### Phase 3: History, media, recovery
 
-Delivered by this change: encrypted media (per-file keys, encrypted
-thumbnails, blob upload and download, GC, size limit); minimal push through
-FCM and APNs; revocation with the Remove commit performed by a remaining leaf.
+Delivered by this change: encrypted media (per-file keys, the encrypted
+thumbnail envelope and its receiver, blob upload and download, GC, size
+limit); minimal push through FCM and APNs; revocation with the Remove commit
+performed by a remaining leaf.
 
-Remains: encrypted history archive and manifests; E2EE history transfer
-between instances; encrypted backup unlocked by user-held recovery material; a
-self-custodied recovery mechanism able to approve an instance; resumable
-uploads and quotas; client-generated push previews; an S3 blob store.
+Delivered by the Phase 3 change: the encrypted history archive (chunked
+AES-256-GCM with the chunk index and total as additional data, a manifest
+signed by the producing instance, `crypto.md` section 13); a per-instance
+X25519 transfer key, registered and published, with `PUT
+/v1/instances/me/transfer-key` for instances that predate it (section 12);
+E2EE history transfer between instances of one account through
+`history_offers`, with the archive key HPKE-sealed to the recipient, the
+elector offering once to each instance it adds, and the recipient accepting
+on its own only from a donor that is an active, chain-verified instance of
+the same account whose key signed the manifest (section 14); the encrypted
+account backup in `account_backups`, unlocked by a 12-word BIP39 recovery
+phrase shown once and never stored, with a `keyCheck` that refuses a wrong
+phrase before any download, automatic refresh after 20 events or 24 hours,
+and restore verifying the writing instance's signature (section 15); chunk
+retention on the server (retained while an offer or the backup names a chunk,
+released a day after, with a minute sweep and an hourly orphan pass);
+delivery receipts as encrypted `delivered` messages that set `sendState` to
+`delivered` below `read` (section 16); thumbnail upload; `client.history` and
+`client.backup` in `@allo/core`, `useHistoryTransfer` and `useBackup` in
+`@allo/react`; and the app's backup screen, restore screen and transfer
+banner, specified with this change and built alongside it.
+
+Remains: a self-custodied recovery mechanism able to approve an instance (the
+phrase unlocks history only, so trust on first use still bootstraps an
+account with no active instance); restore from an instance awaiting approval
+(restore needs an active instance); a second automatic offer after one
+expires or is refused (`offerTo` by hand); resumable uploads and quotas;
+client-generated push previews; an S3 blob store.
 
 ### Phase 4: Mention
 
@@ -121,7 +148,7 @@ issue #139 (the named tests are the evidence).
 | Three installations send and receive with the first switched off | met, test exists: core e2e (b, c) and the backend integration suite run three instances across two accounts with one offline |
 | Messages sent from one device appear on the user's other devices | met, test exists: core e2e (b) and the integration suite (Bob desktop receives what Bob iOS sends) |
 | Revoking an installation cuts future access | met, test exists: core e2e (d) and the integration suite (no delivery row, sockets cut, cannot decrypt) |
-| A new installation recovers only the permitted history | open: a new instance receives future messages only; history transfer and backup are Phase 3 (`history.requestFrom` throws NotImplemented) |
+| A new installation recovers only the permitted history | met, test exists: core `phase3.test.ts` (t1) has a newly approved device receive the whole timeline from the elector and open a media file and its thumbnail while the server saw ciphertext only, (t2) refuses a forged manifest signature and a donor that is not a verified same-account instance before any download, and (b1) has a fresh install with wiped storage and new keys restore from the phrase while a wrong phrase is refused before any download; the backend suites `platform/history.realdb.test.ts` and `platform/backups.realdb.test.ts` cover the server rules and chunk retention, and the integration suite `phase3.realdb.test.ts` (in this change) runs the SDK against Postgres. A pending-approval instance recovers nothing until approved; losing every device and the phrase loses history |
 | Desktop is first class without a primary phone | met by design and by test: any active instance approves, adds and revokes; the integration suite has Bob desktop approve-free after enrollment and revoke Bob iOS |
 
 ### Apps
