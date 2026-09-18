@@ -18,6 +18,8 @@ import type { SyncEngine } from "./sync/engine";
 import type { ConversationsService } from "./conversations/service";
 import type { MessagesService } from "./messages/service";
 import type { Realtime } from "./sync/realtime";
+import type { HistoryService } from "./history/service";
+import type { BackupService } from "./backup/service";
 
 export interface ResolvedOptions extends AlloClientOptions {
   keyPackageTarget: number;
@@ -47,6 +49,8 @@ export class Context {
   conversations!: ConversationsService;
   messages!: MessagesService;
   realtime!: Realtime;
+  history!: HistoryService;
+  backup!: BackupService;
   /** Set by the client: runs the post-activation steps when a pending instance is approved. */
   onInstanceActivated?: () => void;
 

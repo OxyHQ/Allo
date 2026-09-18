@@ -95,6 +95,8 @@ export interface AlloClientOptions {
   keyPackageTarget?: number;
   /** Live sync interval in ms. Default 30 000. */
   syncIntervalMs?: number;
+  /** How long after a sync that makes a backup due the automatic refresh waits, ms. Default 10 000. */
+  backupDebounceMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +114,8 @@ export interface InstanceView {
   platform: Platform;
   displayName: string;
   signingPublicKey: string;
+  /** `null` on an instance registered before transfer keys existed and not yet upgraded: it cannot receive history. */
+  transferPublicKey: string | null;
   status: ClientInstance["status"];
   isThis: boolean;
   approvedByInstanceId: string | null;
@@ -203,6 +207,49 @@ export interface UploadMediaMeta {
   height?: number;
   durationMs?: number;
   caption?: string;
+  /** A rendered preview, encrypted and uploaded as a second blob; its key travels in the same `media` message. */
+  thumbnail?: { bytes: Uint8Array; mime: string; width: number; height: number };
+}
+
+// ---------------------------------------------------------------------------
+// History transfer and backup
+// ---------------------------------------------------------------------------
+
+export type HistoryPhase = "idle" | "exporting" | "uploading" | "downloading" | "importing";
+
+/** Topic `history`. `done`/`total` count chunks while uploading or downloading, and events while importing. */
+export interface HistoryProgress {
+  phase: HistoryPhase;
+  done: number;
+  total: number;
+  /** The donor while receiving, so the UI can name the device ("Receiving history from …"). */
+  fromInstanceId?: string;
+  /** The recipient while sending. */
+  toInstanceId?: string;
+}
+
+/** A pending offer as the recipient sees it. `trusted` is the SDK's verdict on the donor; `accept()` refuses an untrusted one anyway. */
+export interface HistoryOfferView {
+  id: string;
+  donorInstanceId: string;
+  /** From the account's instance listing; `null` when the donor is not listed. */
+  donorDisplayName: string | null;
+  conversationCount: number;
+  eventCount: number;
+  createdAt: string;
+  expiresAt: string;
+  trusted: boolean;
+}
+
+/** Topic `backup`. `remote` is `null` until the server has been asked (`refreshStatus()`). */
+export interface BackupStatus {
+  enabled: boolean;
+  lastBackupAt: string | null;
+  /** Events covered by the last refresh. */
+  eventCount: number;
+  remote: { exists: boolean; updatedAt: string | null } | null;
+  /** A refresh or a restore is running. */
+  busy: boolean;
 }
 
 export interface SendOptions {
@@ -223,6 +270,8 @@ export type SubscriptionTopic =
   | "instances"
   | "sync"
   | `typing:${string}`
+  | "history"
+  | "backup"
   | "error";
 
 export type { AppMessage };

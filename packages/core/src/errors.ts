@@ -13,7 +13,8 @@ export type AlloErrorCodeName =
   | "storage"
   | "invalid_state"
   | "not_found"
-  | "untrusted_instance";
+  | "untrusted_instance"
+  | "invalid_recovery_phrase";
 
 export class AlloError extends Error {
   override readonly name: string = "AlloError";
@@ -109,5 +110,27 @@ export class NotFoundError extends AlloError {
   override readonly name = "NotFoundError";
   constructor(what: string) {
     super("not_found", `${what} not found`);
+  }
+}
+
+/**
+ * An instance that does not pass the approval chain, or is not an active
+ * instance of THIS account, offered something only a trusted same-account
+ * instance may: history. Nothing from it is opened, downloaded or imported.
+ */
+export class UntrustedInstanceError extends AlloError {
+  override readonly name = "UntrustedInstanceError";
+  readonly instanceId: string;
+  constructor(instanceId: string, reason: string) {
+    super("untrusted_instance", `instance ${instanceId} is not trusted: ${reason}`);
+    this.instanceId = instanceId;
+  }
+}
+
+/** A recovery phrase that is not a valid BIP39 phrase, or that does not unlock the account's backup. Never carries the phrase. */
+export class RecoveryPhraseError extends AlloError {
+  override readonly name = "RecoveryPhraseError";
+  constructor(message: string) {
+    super("invalid_recovery_phrase", message);
   }
 }

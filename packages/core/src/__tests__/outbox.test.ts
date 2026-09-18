@@ -12,10 +12,12 @@ describe("outbox", () => {
     const key = await alice.client.messages.send(conv.id, "resilient");
     expect(alice.client.messages.timeline(conv.id).find((i) => i.localKey === key)?.sendState).toBe("pending");
     await waitForText(bob, conv.id, "resilient", 15_000);
-    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.localKey === key)?.sendState === "accepted");
+    // `accepted` may already have become `delivered` (Bob's encrypted receipt) by the time this polls.
+    await waitFor(() => ["accepted", "delivered"].includes(alice.client.messages.timeline(conv.id).find((i) => i.localKey === key)?.sendState ?? ""));
     const posts = server.requestLog.filter((r) => r.method === "POST" && r.path.endsWith("/events") && r.instanceId === alice.client.instanceId);
     expect(posts.filter((p) => p.status === 503)).toHaveLength(2);
-    expect(server.eventsOf(conv.id).filter((e) => e.kind === "app_message")).toHaveLength(1);
+    // Alice's message exactly once; Bob's encrypted `delivered` receipt is the other app_message in the log.
+    expect(server.eventsOf(conv.id).filter((e) => e.kind === "app_message" && e.senderInstanceId === alice.client.instanceId)).toHaveLength(1);
     expect(alice.client.messages.timeline(conv.id).filter((i) => i.content.kind === "text")).toHaveLength(1);
     await stopAll(alice, bob);
   });

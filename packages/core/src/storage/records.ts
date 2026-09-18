@@ -16,6 +16,8 @@ export const instanceRecordSchema = z.object({
   platform: z.enum(["ios", "android", "web", "desktop", "node"]),
   displayName: z.string(),
   signingPublicKey: b64,
+  /** The X25519 transfer key the SERVER holds for this instance; compared with the local one and re-uploaded when they differ. Absent on a Phase 2 record. */
+  transferPublicKey: b64.nullable().default(null),
   status: z.enum(["pending", "active", "revoked"]),
   /** The challenge issued at registration; kept so this instance can verify its own approval later. */
   challenge: z.string().nullable(),
@@ -131,5 +133,22 @@ export const queuedEventRecordSchema = z.object({
   event: conversationEventSchema,
 });
 export type QueuedEventRecord = z.infer<typeof queuedEventRecordSchema>;
+
+/** An own instance this one (as elector) has offered its history to. One offer per recipient, ever. */
+export const historyOfferedRecordSchema = z.object({
+  instanceId: z.string(),
+  offerId: z.string(),
+  offeredAt: z.string(),
+});
+export type HistoryOfferedRecord = z.infer<typeof historyOfferedRecordSchema>;
+
+/** The backup switch and what the last refresh covered. The key itself is in the secret store. */
+export const backupStateRecordSchema = z.object({
+  enabled: z.boolean(),
+  lastBackupAt: z.string().nullable(),
+  /** Stored events at the last refresh; the auto-refresh policy compares against it. */
+  eventCountAtBackup: z.number().int().min(0),
+});
+export type BackupStateRecord = z.infer<typeof backupStateRecordSchema>;
 
 export type { AppMessage };

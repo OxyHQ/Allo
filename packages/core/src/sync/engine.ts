@@ -137,6 +137,9 @@ export class SyncEngine {
     }
     await ctx.conversations.reconcile();
     ctx.outbox.kick();
+    // Not awaited: a history import can take a while and must not hold the sync loop.
+    void ctx.history.checkOffers();
+    ctx.backup.afterSync();
   }
 
   /** A delivery whose seq is ahead of what we saw: fetch what lies between (some of it is legitimately not ours). */

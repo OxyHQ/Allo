@@ -1,8 +1,8 @@
 /**
  * Messages: the per-conversation timeline (projection over stored events
- * plus local echoes), sending text, edits, deletes, reactions, read
- * receipts (at most one every 5 s per conversation), typing over the
- * socket (encrypted, never stored), and unread counts.
+ * plus local echoes), sending text, edits, deletes, reactions, read and
+ * delivery receipts (each at most one every 5 s per conversation), typing
+ * over the socket (encrypted, never stored), and unread counts.
  */
 import { decodeAppMessage, encodeAppMessage, type AppMessage, type EventRef } from "@allo/shared-types";
 import type { Context } from "../context";
@@ -13,12 +13,15 @@ import { describeError } from "../util/logger";
 import { project } from "./projection";
 
 const READ_THROTTLE_MS = 5000;
+const DELIVERED_THROTTLE_MS = 5000;
 const TYPING_TTL_MS = 6000;
 
 export class MessagesService {
   private timelines = new Map<string, TimelineItemView[]>();
   private readSentAt = new Map<string, number>();
   private readTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private deliveredSentAt = new Map<string, number>();
+  private deliveredTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private typing = new Map<string, Map<string, ReturnType<typeof setTimeout>>>();
 
   constructor(private readonly ctx: Context) {}
@@ -31,6 +34,8 @@ export class MessagesService {
   stop(): void {
     for (const t of this.readTimers.values()) clearTimeout(t);
     this.readTimers.clear();
+    for (const t of this.deliveredTimers.values()) clearTimeout(t);
+    this.deliveredTimers.clear();
     for (const m of this.typing.values()) for (const t of m.values()) clearTimeout(t);
     this.typing.clear();
   }
@@ -116,6 +121,42 @@ export class MessagesService {
           this.readTimers.delete(conversationId);
           void sendReceipt();
         }, READ_THROTTLE_MS - since),
+      );
+    }
+  }
+
+  /**
+   * Another account's message landed: queue a `delivered` receipt naming the
+   * newest other-account item, at most one per 5 s per conversation (a burst
+   * of deliveries becomes one trailing receipt). Never throws.
+   */
+  noteDelivered(conversationId: string): void {
+    const { ctx } = this;
+    if (!ctx.instance.isActive) return;
+    const send = async () => {
+      this.deliveredSentAt.set(conversationId, ctx.now());
+      // Read the model, not the projection: this runs from the dispatcher's after-hooks, before the timeline cache is invalidated.
+      const target = [...ctx.model.eventsOf(conversationId)]
+        .reverse()
+        .find((e) => e.senderAccountId !== ctx.accountId && e.message !== null && (e.message.t === "text" || e.message.t === "media"));
+      if (!target) return;
+      try {
+        await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "delivered", upTo: { kind: "event", conversationId, eventId: target.id } });
+      } catch (error) {
+        ctx.log.debug?.("delivery receipt not sent", { error: describeError(error) });
+      }
+    };
+    const since = ctx.now() - (this.deliveredSentAt.get(conversationId) ?? -Infinity);
+    if (since >= DELIVERED_THROTTLE_MS) {
+      if (this.deliveredTimers.has(conversationId)) return;
+      void send();
+    } else if (!this.deliveredTimers.has(conversationId)) {
+      this.deliveredTimers.set(
+        conversationId,
+        setTimeout(() => {
+          this.deliveredTimers.delete(conversationId);
+          void send();
+        }, DELIVERED_THROTTLE_MS - since),
       );
     }
   }
