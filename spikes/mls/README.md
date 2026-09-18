@@ -19,6 +19,7 @@ bun run spike.ts              # 47 checks, prints PASS/FAIL per check
 bun run probe-nosubtle.ts     # which ts-mls code paths need crypto.subtle
 bun run probe-nobleonly.ts    # the subtle-free provider, alone and interoperating
 bun run build.ts              # browser bundle size with the node:crypto stub
+bun run external.ts           # external join (self-join, resync): 38 checks, see RESULTS-external-join.md
 ```
 
 `nobleOnlyProvider.ts` is the origin of the provider `@allo/core` ships.
