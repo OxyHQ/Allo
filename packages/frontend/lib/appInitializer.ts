@@ -53,6 +53,11 @@ async function setupNotificationsIfNeeded(): Promise<void> {
  */
 async function loadAppearanceSettings(): Promise<void> {
   try {
+    // Nothing to load before sign-in: the request would only answer 401, and
+    // every browser prints that to the console at boot. The settings screens
+    // load on demand once there is a session.
+    const token = await oxyClient.getAccessToken();
+    if (!token) return;
     await useAppearanceStore.getState().loadMySettings();
   } catch (error) {
     console.warn('Failed to load appearance settings:', error);

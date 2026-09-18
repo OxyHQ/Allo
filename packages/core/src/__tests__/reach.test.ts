@@ -59,7 +59,7 @@ describe("members without an instance", () => {
     // (d) the 404 for a never-seen account is not an error here
     expect(server.instancesOf(BOB)).toHaveLength(0);
     const conv = await alice.client.conversations.createDirect(BOB);
-    expect(server.requestLog.some((r) => r.path === `/v1/accounts/${BOB}/instances` && r.status === 404)).toBe(true);
+    expect(server.requestLog.some((r) => r.path === `/v1/accounts/${BOB}/instances` && r.status === 200)).toBe(true); // an empty listing, not an error
     expect(conv.joined).toBe(true);
     expect(conv.memberAccountIds.sort()).toEqual([ALICE, BOB]);
     expect(conv.unreachableMemberAccountIds).toEqual([BOB]);

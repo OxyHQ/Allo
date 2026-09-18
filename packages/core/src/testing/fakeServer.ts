@@ -325,9 +325,8 @@ export class FakeAlloServer implements SocketHost {
     if (method === "POST" && path === "/v1/instances") return this.register(accountId, body);
     if (method === "GET" && path === "/v1/instances") return json(200, { instances: this.instancesOf(accountId).map(toClient) });
     if (method === "GET" && (m = path.match(/^\/v1\/accounts\/([^/]+)\/instances$/))) {
-      // An account the server has never seen is 404; one with no ACTIVE instance is an empty list.
+      // An account with no instance, never seen or not, is an empty list (the backend answers the same).
       const all = this.instancesOf(m[1]);
-      if (all.length === 0) throw new HttpError(404, "not_found", "account");
       return json(200, { instances: all.filter((i) => i.status === "active").map(toPublic) });
     }
     if (method === "GET" && path === "/v1/instances/pending") {

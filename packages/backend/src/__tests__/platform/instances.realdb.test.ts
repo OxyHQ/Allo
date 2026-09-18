@@ -223,10 +223,10 @@ describe("GET /v1/instances and /v1/accounts/:accountId/instances", () => {
     expect(parsed.instances[1].enrollmentChallenge).toBe(second.registration.challenge);
   });
 
-  it("404s an account Allo has never seen", async () => {
+  it("answers an empty list for an account Allo has never seen (a state, not an error)", async () => {
     const response = await request(h.app).get(`/v1/accounts/${accountId("nobody")}/instances`).set(USER_HEADER, accountId());
-    expect(response.status).toBe(404);
-    expect(response.body.error.code).toBe("not_found");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ instances: [] });
   });
 });
 
