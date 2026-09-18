@@ -30,6 +30,12 @@ export const MAX_CONVERSATION_NAME_LENGTH = 128;
 export const MAX_FILENAME_LENGTH = 255;
 export const MAX_MIME_LENGTH = 255;
 export const MAX_CAPTION_LENGTH = 4096;
+export const MAX_POLL_QUESTION_LENGTH = 512;
+export const MAX_POLL_OPTION_LENGTH = 128;
+export const MAX_POLL_OPTIONS = 12;
+export const MAX_PLACE_LABEL_LENGTH = 256;
+export const MAX_CONTACT_NAME_LENGTH = 128;
+export const MAX_CONTACT_DETAIL_LENGTH = 128;
 
 export const eventRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("event"), conversationId: conversationIdSchema, eventId: eventIdSchema }),
@@ -123,6 +129,81 @@ export const conversationMessageSchema = z.object({
   t: z.literal("conversation"),
   name: z.string().min(1).max(MAX_CONVERSATION_NAME_LENGTH).optional(),
 });
+/**
+ * A poll. The options are fixed when it is sent — an id per option, because a
+ * vote names one and a label can be edited in a future version without
+ * orphaning the votes cast against it.
+ */
+export const pollMessageSchema = z.object({
+  v,
+  t: z.literal("poll"),
+  question: z.string().min(1).max(MAX_POLL_QUESTION_LENGTH),
+  options: z
+    .array(z.object({ id: z.string().min(1).max(64), label: z.string().min(1).max(MAX_POLL_OPTION_LENGTH) }))
+    .min(2)
+    .max(MAX_POLL_OPTIONS),
+  /** Whether a voter may choose more than one option. */
+  multiple: z.boolean(),
+  /**
+   * Whether the SENDER asked for the voters not to be named. The server never
+   * sees either way; every client in the group can still see who voted, so
+   * this is a request the UI honours, not a guarantee it can make.
+   */
+  anonymous: z.boolean(),
+});
+
+/**
+ * One account's answer to a poll. The LAST vote wins, and an empty list
+ * retracts — a vote is a statement of the voter's current answer rather than
+ * an increment, so a client that misses one still ends up with the right
+ * total.
+ */
+export const pollVoteMessageSchema = z.object({
+  v,
+  t: z.literal("poll_vote"),
+  target: eventRefSchema,
+  optionIds: z.array(z.string().min(1).max(64)).max(MAX_POLL_OPTIONS),
+});
+
+/**
+ * A place. Coordinates and a name the sender chose; nothing is resolved by
+ * Allo, and no map tile is fetched by the SDK.
+ */
+export const locationMessageSchema = z.object({
+  v,
+  t: z.literal("location"),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  label: z.string().min(1).max(MAX_PLACE_LABEL_LENGTH).optional(),
+  address: z.string().min(1).max(MAX_PLACE_LABEL_LENGTH).optional(),
+});
+
+/**
+ * Somebody's card. `accountId` is set when the card names an Oxy account, so
+ * the receiver can open a conversation with them; a card for somebody outside
+ * Oxy carries only what the sender typed.
+ */
+export const contactMessageSchema = z.object({
+  v,
+  t: z.literal("contact"),
+  name: z.string().min(1).max(MAX_CONTACT_NAME_LENGTH),
+  accountId: z.string().min(1).max(64).optional(),
+  handle: z.string().min(1).max(MAX_CONTACT_DETAIL_LENGTH).optional(),
+  phone: z.string().min(1).max(MAX_CONTACT_DETAIL_LENGTH).optional(),
+});
+
+/**
+ * Pinning a message for everybody in the conversation. A control message, not
+ * a timeline entry: clients fold the last op per target, so two devices that
+ * pin and unpin in either order agree on the result.
+ */
+export const pinMessageSchema = z.object({
+  v,
+  t: z.literal("pin"),
+  target: eventRefSchema,
+  op: z.enum(["pin", "unpin"]),
+});
+
 /** Only ever sent over the socket `typing` channel; never stored as an event. */
 export const typingMessageSchema = z.object({
   v,
@@ -139,6 +220,11 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   deliveredMessageSchema,
   mediaMessageSchema,
   conversationMessageSchema,
+  pollMessageSchema,
+  pollVoteMessageSchema,
+  locationMessageSchema,
+  contactMessageSchema,
+  pinMessageSchema,
   typingMessageSchema,
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;

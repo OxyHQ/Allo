@@ -5,13 +5,24 @@ import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services';
 import { useTotalUnread } from '@allo/react';
 import { ChatSplitLayout } from '@oxy.so/bloom/chat-screen';
-import { RiChat3Fill, RiChat3Line, RiSettings3Fill, RiSettings3Line, RiUser3Fill, RiUserLine } from '@oxy.so/bloom/icons';
+import {
+  RiChat3Fill,
+  RiChat3Line,
+  RiPhoneFill,
+  RiPhoneLine,
+  RiSettings3Fill,
+  RiSettings3Line,
+  RiSlideshow3Line,
+  RiUser3Fill,
+  RiUserLine,
+} from '@oxy.so/bloom/icons';
 import { Sidebar } from '@oxy.so/bloom/sidebar';
 import { useTheme } from '@oxy.so/bloom/theme';
 
 import { LogoIcon } from '@/assets/logo';
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
 import { ConversationList } from '@/components/chat/list/ConversationList';
+import { CallPill } from '@/components/phase2/CallPill';
 import { SettingsMenu } from '@/components/settings/SettingsMenu';
 import { SPLIT_FROM, useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { profileHref } from '@/lib/profile/handle';
@@ -26,7 +37,14 @@ import { conversationIdFromPath, isSettingsPath } from '@/utils/routeUtils';
  */
 export default function ChatLayout() {
   const split = useSplitLayout();
-  return split ? <SplitShell /> : <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    // The pill draws nothing unless a call is minimised, and it lives here so a
+    // minimised call survives walking around the app.
+    <View style={styles.app}>
+      {split ? <SplitShell /> : <Stack screenOptions={{ headerShown: false }} />}
+      <CallPill />
+    </View>
+  );
 }
 
 function SplitShell() {
@@ -45,6 +63,15 @@ function SplitShell() {
 
   const ownProfile = profileHref(user?.username);
   const onProfile = Boolean(ownProfile) && pathname === ownProfile;
+  const selected = inSettings
+    ? 'settings'
+    : onProfile
+      ? 'profile'
+      : pathname.startsWith('/calls')
+        ? 'calls'
+        : pathname.startsWith('/updates')
+          ? 'updates'
+          : 'chats';
 
   // The rail carries navigation only (an account block belongs to the panel
   // variant), so the person's own profile is a foot item rather than a card.
@@ -57,6 +84,19 @@ function SplitShell() {
         activeIcon: RiChat3Fill,
         badge: unread > 0 ? unread : undefined,
         onPress: () => router.push('/'),
+      },
+      {
+        key: 'calls',
+        label: t('calls.title'),
+        icon: RiPhoneLine,
+        activeIcon: RiPhoneFill,
+        onPress: () => router.push('/calls'),
+      },
+      {
+        key: 'updates',
+        label: t('stories.title'),
+        icon: RiSlideshow3Line,
+        onPress: () => router.push('/updates'),
       },
     ],
     [router, t, unread],
@@ -85,7 +125,7 @@ function SplitShell() {
         logo={{ icon: <LogoIcon size={28} color={theme.colors.primary} />, accessibilityLabel: 'Allo' }}
         items={items}
         secondaryItems={secondaryItems}
-        selected={inSettings ? 'settings' : onProfile ? 'profile' : 'chats'}
+        selected={selected}
         style={{ borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.colors.border }}
       />
       <ChatSplitLayout
@@ -106,5 +146,6 @@ function SplitShell() {
 }
 
 const styles = StyleSheet.create({
+  app: { flex: 1, minHeight: 0 },
   root: { flex: 1, minHeight: 0, flexDirection: 'row' },
 });

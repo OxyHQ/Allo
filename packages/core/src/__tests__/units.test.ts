@@ -41,6 +41,87 @@ describe("timeline projection", () => {
   });
 });
 
+describe("polls, pins, places and cards", () => {
+  const ref = (eventId: string) => ({ kind: "event" as const, conversationId: "c", eventId });
+
+  it("counts an account once, lets the last vote replace the one before it, and an empty vote retract", () => {
+    const poll = ev({
+      id: "p1",
+      seq: 1,
+      senderAccountId: "me",
+      message: { v: 1, t: "poll", question: "Thursday?", options: [{ id: "o1", label: "Morning" }, { id: "o2", label: "Evening" }], multiple: true, anonymous: false },
+    });
+    const events: EventRecord[] = [
+      poll,
+      ev({ id: "v1", seq: 2, senderAccountId: "them", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: ["o1"] } }),
+      // the same voter again: this REPLACES their answer rather than adding to it
+      ev({ id: "v2", seq: 3, senderAccountId: "them", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: ["o1", "o2"] } }),
+      ev({ id: "v3", seq: 4, senderAccountId: "me", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: ["o2"] } }),
+      // an option nobody published: dropped, not counted
+      ev({ id: "v4", seq: 5, senderAccountId: "third", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: ["o9"] } }),
+    ];
+    const [item] = project({ conversationId: "c", events, outbox: [], accountId: "me", instanceId: "i" });
+    if (item.content.kind !== "poll") throw new Error("expected a poll");
+    const { poll: view } = item.content;
+    expect(view.options.map((o) => [o.id, o.votes, o.mine])).toEqual([
+      ["o1", 1, false],
+      ["o2", 2, true],
+    ]);
+    // three accounts answered; "third" chose nothing this client knows, and still counts as having answered
+    expect(view.totalVotes).toBe(3);
+    expect(view.voted).toBe(true);
+    expect(view.options[1].accountIds.sort()).toEqual(["me", "them"]);
+
+    const retracted = project({
+      conversationId: "c",
+      events: [...events, ev({ id: "v5", seq: 6, senderAccountId: "me", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: [] } })],
+      outbox: [],
+      accountId: "me",
+      instanceId: "i",
+    })[0];
+    if (retracted.content.kind !== "poll") throw new Error("expected a poll");
+    expect(retracted.content.poll.voted).toBe(false);
+    expect(retracted.content.poll.options[1].votes).toBe(1);
+  });
+
+  it("names nobody on a poll that asked for anonymity, while still counting the answers", () => {
+    const events: EventRecord[] = [
+      ev({ id: "p1", seq: 1, senderAccountId: "me", message: { v: 1, t: "poll", question: "Where?", options: [{ id: "o1", label: "Canal" }, { id: "o2", label: "Park" }], multiple: false, anonymous: true } }),
+      ev({ id: "v1", seq: 2, senderAccountId: "them", message: { v: 1, t: "poll_vote", target: ref("p1"), optionIds: ["o1"] } }),
+    ];
+    const [item] = project({ conversationId: "c", events, outbox: [], accountId: "me", instanceId: "i" });
+    if (item.content.kind !== "poll") throw new Error("expected a poll");
+    expect(item.content.poll.options[0].votes).toBe(1);
+    expect(item.content.poll.options[0].accountIds).toEqual([]);
+  });
+
+  it("folds the last pin op per target, from anybody in the conversation", () => {
+    const events: EventRecord[] = [
+      ev({ id: "e1", seq: 1, senderAccountId: "me", message: { v: 1, t: "text", body: "the address" } }),
+      ev({ id: "e2", seq: 2, senderAccountId: "them", message: { v: 1, t: "pin", target: ref("e1"), op: "pin" } }),
+    ];
+    expect(project({ conversationId: "c", events, outbox: [], accountId: "me", instanceId: "i" })[0].pinned).toBe(true);
+    const unpinned = project({
+      conversationId: "c",
+      events: [...events, ev({ id: "e3", seq: 3, senderAccountId: "me", message: { v: 1, t: "pin", target: ref("e1"), op: "unpin" } })],
+      outbox: [],
+      accountId: "me",
+      instanceId: "i",
+    })[0];
+    expect(unpinned.pinned).toBeUndefined();
+  });
+
+  it("carries a place and a card through as themselves", () => {
+    const events: EventRecord[] = [
+      ev({ id: "e1", seq: 1, senderAccountId: "them", message: { v: 1, t: "location", latitude: 52.37, longitude: 4.89, label: "The canal" } }),
+      ev({ id: "e2", seq: 2, senderAccountId: "them", message: { v: 1, t: "contact", name: "Teodor Ilic", handle: "teodor", accountId: "acc-teodor" } }),
+    ];
+    const [place, card] = project({ conversationId: "c", events, outbox: [], accountId: "me", instanceId: "i" });
+    expect(place.content).toEqual({ kind: "location", place: { latitude: 52.37, longitude: 4.89, label: "The canal", address: undefined } });
+    expect(card.content).toEqual({ kind: "contact", contact: { name: "Teodor Ilic", handle: "teodor", accountId: "acc-teodor", phone: undefined } });
+  });
+});
+
 describe("fake server contract validation", () => {
   it("rejects a body that drifts from the shared-types schema with validation_failed", async () => {
     const server = fakeServer();

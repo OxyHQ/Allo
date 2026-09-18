@@ -261,10 +261,28 @@ when the person's first device activates and the SDK's elector adds it.
   are encrypted `delivered` messages: an own bubble shows `delivered` once
   another account's device has it and `read` once a read receipt covers it.
 - **There is no archive;** the list's swipe action LEAVES the conversation.
-- **Real time:** the SDK's socket. There are no calls, stories, polls or
-  locations yet: the SDK has nothing behind them, so the app draws none of them
-  (Bloom has the UI — `call-ui`, `chat-people`'s stories, `message-media`'s
-  polls and locations — for when it does).
+- **Real time:** the SDK's socket.
+- **Polls, places, cards and pins are message kinds, not features bolted on.**
+  Each is an E2EE `AppMessage` (`poll`, `poll_vote`, `location`, `contact`,
+  `pin`) that the server carries as ciphertext like any other, so none of them
+  needed a backend change. A vote is a statement of the voter's CURRENT answer,
+  not an increment: the last one wins and an empty list retracts, so a client
+  that missed one still totals correctly, and `anonymous` is a request the UI
+  honours rather than a guarantee — every client in the group can still see who
+  voted. `pin` folds the last op per target, so two devices that pin and unpin
+  in either order agree. `ConversationView.lastMessage` must list every kind a
+  row can speak for (`LAST_MESSAGE_KINDS` in `conversations/service.ts`) or the
+  list keeps showing the message before it.
+- **Calls, status updates and presence are the frontend only, and say so.**
+  There is no signalling, no media and no presence in the platform, so
+  `packages/frontend/lib/phase2/{calls,stories,presence}.ts` hold that state in
+  memory for the life of the tab, the screens (`/calls`, `/c/:id/call`,
+  `/updates`) are built on Bloom's `call-ui` and `chat-people` and each carries
+  a notice that nothing is connected. Every one of those files documents what a
+  transport must supply to replace it and marks its sample data `DEMO_*`. The
+  status route is `/updates` because Metro's dev server answers `/status`
+  itself, and a screen that cannot be opened while developing is a screen
+  nobody checks.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.

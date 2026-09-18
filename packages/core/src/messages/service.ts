@@ -7,7 +7,7 @@
 import { decodeAppMessage, encodeAppMessage, type AppMessage, type EventRef } from "@allo/shared-types";
 import type { Context } from "../context";
 import { InvalidStateError, NotFoundError } from "../errors";
-import type { LoadOlderResult, SendOptions, TimelineItemView } from "../types";
+import type { ContactDraft, LoadOlderResult, PlaceDraft, PollDraft, SendOptions, TimelineItemView } from "../types";
 import { base64Decode, base64Encode } from "../util/bytes";
 import { describeError } from "../util/logger";
 import { project } from "./projection";
@@ -80,6 +80,85 @@ export class MessagesService {
     const target = this.find(conversationId, targetId);
     if (!target.isOwn) throw new InvalidStateError("only own messages can be deleted");
     await this.ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "delete", target: this.refFor(conversationId, targetId) });
+  }
+
+  /**
+   * A poll. The option ids are the sender's to choose and travel with the
+   * question, so a vote names an id rather than a position: an option list a
+   * later version reorders still counts the votes already cast.
+   */
+  async sendPoll(conversationId: string, poll: PollDraft): Promise<string> {
+    const options = poll.options.map((label, index) => ({ id: `o${index + 1}`, label }));
+    const message: AppMessage = {
+      v: 1,
+      t: "poll",
+      question: poll.question,
+      options,
+      multiple: poll.multiple ?? false,
+      anonymous: poll.anonymous ?? false,
+    };
+    const item = await this.ctx.outbox.enqueueMessage(conversationId, message);
+    return item.id;
+  }
+
+  /**
+   * This account's answer to a poll, which REPLACES the one before it; an
+   * empty list retracts. Anything that is not an option of that poll is
+   * refused here rather than dropped silently by every receiver.
+   */
+  async vote(conversationId: string, targetId: string, optionIds: readonly string[]): Promise<void> {
+    const target = this.find(conversationId, targetId);
+    if (target.content.kind !== "poll") throw new InvalidStateError("not a poll");
+    const chosen = [...new Set(optionIds)];
+    const known = new Set(target.content.poll.options.map((o) => o.id));
+    if (chosen.some((id) => !known.has(id))) throw new InvalidStateError("unknown poll option");
+    if (chosen.length > 1 && !target.content.poll.multiple) throw new InvalidStateError("this poll takes one answer");
+    await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: "poll_vote",
+      target: this.refFor(conversationId, targetId),
+      optionIds: chosen,
+    });
+  }
+
+  /** A place. Nothing is resolved or fetched here: the coordinates are the sender's. */
+  async sendLocation(conversationId: string, place: PlaceDraft): Promise<string> {
+    const item = await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: "location",
+      latitude: place.latitude,
+      longitude: place.longitude,
+      ...(place.label ? { label: place.label } : {}),
+      ...(place.address ? { address: place.address } : {}),
+    });
+    return item.id;
+  }
+
+  /** Somebody's card. */
+  async sendContact(conversationId: string, contact: ContactDraft): Promise<string> {
+    const item = await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: "contact",
+      name: contact.name,
+      ...(contact.accountId ? { accountId: contact.accountId } : {}),
+      ...(contact.handle ? { handle: contact.handle } : {}),
+      ...(contact.phone ? { phone: contact.phone } : {}),
+    });
+    return item.id;
+  }
+
+  /**
+   * Pins a message for everybody, or takes the pin off. A control message:
+   * the last op per target wins, so two devices doing this at once agree.
+   */
+  async setPinned(conversationId: string, targetId: string, pinned: boolean): Promise<void> {
+    this.find(conversationId, targetId);
+    await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: "pin",
+      target: this.refFor(conversationId, targetId),
+      op: pinned ? "pin" : "unpin",
+    });
   }
 
   /** Toggles this account's reaction `key` on the target. */

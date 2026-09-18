@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useOxy } from '@oxy.so/services';
 import { useConversationActions, useSyncState } from '@allo/react';
 import {
   ChatFolderTabs,
@@ -12,13 +13,14 @@ import {
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton } from '@oxy.so/bloom/chat-composer';
-import { RiDeleteBinLine, RiSettings3Line } from '@oxy.so/bloom/icons';
+import { RiDeleteBinLine, RiPhoneLine, RiSettings3Line, RiSlideshow3Line } from '@oxy.so/bloom/icons';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
+import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useSplitLayout } from '@/hooks/useSplitLayout';
 import { confirmDialog } from '@/utils/alerts';
@@ -35,6 +37,7 @@ const LEAVE = 'leave';
 export function ConversationList() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user } = useOxy();
   const split = useSplitLayout();
   const theme = useTheme();
   const { t } = useTranslation();
@@ -114,6 +117,9 @@ export function ConversationList() {
   );
 
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
+  const me = user?.id;
+  const openStory = useCallback((accountId: string) => router.push(`/updates?story=${accountId}`), [router]);
+  const openUpdates = useCallback(() => router.push('/updates'), [router]);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -121,15 +127,27 @@ export function ConversationList() {
         title={t('chat.title')}
         safeArea={!split}
         actions={
-          // The rail carries settings on a wide window; a phone has no rail, so
-          // the header does. Starting a conversation is the FAB below, which is
-          // where Bloom's own conversations screen puts it.
+          // The rail carries these on a wide window; a phone has no rail, so the
+          // header does. Starting a conversation is the FAB below, which is where
+          // Bloom's own conversations screen puts it.
           split ? undefined : (
-            <ComposerIconButton
-              icon={RiSettings3Line}
-              accessibilityLabel={t('settings.title')}
-              onPress={() => router.push('/settings')}
-            />
+            <View style={styles.actions}>
+              <ComposerIconButton
+                icon={RiPhoneLine}
+                accessibilityLabel={t('calls.title')}
+                onPress={() => router.push('/calls')}
+              />
+              <ComposerIconButton
+                icon={RiSlideshow3Line}
+                accessibilityLabel={t('stories.title')}
+                onPress={openUpdates}
+              />
+              <ComposerIconButton
+                icon={RiSettings3Line}
+                accessibilityLabel={t('settings.title')}
+                onPress={() => router.push('/settings')}
+              />
+            </View>
           )
         }
       />
@@ -165,6 +183,8 @@ export function ConversationList() {
         ) : (
           <ChatList
             chats={chats}
+            // Where Bloom's own list puts the stories row.
+            header={<StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />}
             selectedId={selectedId}
             loading={summaries.length === 0 && sync === 'syncing'}
             onChatPress={open}
@@ -190,6 +210,7 @@ export function ConversationList() {
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   search: { paddingHorizontal: 12, paddingBottom: 8 },
+  actions: { flexDirection: 'row', alignItems: 'center' },
   notice: { paddingHorizontal: 16, paddingBottom: 8 },
   content: { paddingBottom: 24 },
 });

@@ -21,7 +21,7 @@ import { createConversationResponseSchema, listConversationsResponseSchema, type
 import type { Context } from "../context";
 import { InvalidStateError, NotFoundError } from "../errors";
 import type { ConversationRecord } from "../storage/records";
-import type { ConversationView } from "../types";
+import type { ConversationView, TimelineContent } from "../types";
 import { base64Decode, base64Encode, randomBytes } from "../util/bytes";
 import { uuidV7 } from "../util/ids";
 import { describeError } from "../util/logger";
@@ -34,6 +34,21 @@ export const REACH_THROTTLE_MS = 60_000;
  * than in a minute.
  */
 export const REACH_RETRY_MS = 5_000;
+
+/**
+ * What a conversation's `lastMessage` may be: everything somebody SENT, which
+ * is every kind but the two a list row cannot speak for — an item this device
+ * could not decrypt, and a system note the app writes itself. A new message
+ * kind belongs here, or the row keeps showing the one before it.
+ */
+const LAST_MESSAGE_KINDS = new Set<TimelineContent["kind"]>([
+  "text",
+  "media",
+  "poll",
+  "location",
+  "contact",
+  "deleted",
+]);
 
 export class ConversationsService {
   private views = new Map<string, ConversationView>();
@@ -93,7 +108,7 @@ export class ConversationsService {
     const { ctx } = this;
     const state = ctx.groups.get(record.id);
     const timeline = ctx.messages.timeline(record.id);
-    const lastMessage = [...timeline].reverse().find((i) => i.content.kind === "text" || i.content.kind === "media" || i.content.kind === "deleted");
+    const lastMessage = [...timeline].reverse().find((i) => LAST_MESSAGE_KINDS.has(i.content.kind));
     const me = record.members.find((m) => m.accountId === ctx.accountId);
     const joined = !!state && ctx.engine.isActive(state) && !record.removed;
     const memberAccountIds = record.members.filter((m) => m.state === "joined").map((m) => m.accountId);

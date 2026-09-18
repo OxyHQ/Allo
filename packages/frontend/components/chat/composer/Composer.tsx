@@ -10,17 +10,30 @@ import {
   type AttachmentMenuItem,
   type ChatComposerSuggestion,
 } from '@oxy.so/bloom/chat-composer';
-import { RiAttachment2, RiCameraLine, RiFileTextLine, RiGalleryLine } from '@oxy.so/bloom/icons';
+import {
+  RiAttachment2,
+  RiBarChartHorizontalLine,
+  RiCameraLine,
+  RiContactsBookLine,
+  RiFileTextLine,
+  RiGalleryLine,
+  RiMapPinLine,
+} from '@oxy.so/bloom/icons';
 import { toast } from '@oxy.so/bloom/toast';
+import type { ContactDraft, PlaceDraft, PollDraft } from '@allo/core';
 
 import {
   captureMediaAttachment,
+  pickContact,
   pickDocumentAttachments,
   pickMediaAttachments,
+  pickPlace,
   toVoiceAttachment,
   type PickedAttachments,
 } from '@/lib/chat/attachments';
+import { logger } from '@/utils/logger';
 import { EmojiButton } from './EmojiButton';
+import { PollComposer } from './PollComposer';
 import { applyMention, mentionFragment, type MentionFragment } from './mentions';
 import { stagedTile, withCaption, type StagedAttachment } from './staging';
 import { useVoiceRecording } from './useVoiceRecording';
@@ -49,6 +62,16 @@ interface ComposerProps {
   mentionables?: readonly Mentionable[];
   onSendText: (text: string, target: ComposerTarget | null) => Promise<void>;
   onSendAttachments: (attachments: PickedAttachments) => Promise<void>;
+  /**
+   * The three that are not files. Each one goes as its OWN message the moment
+   * it is chosen, rather than staging beside a caption: a poll, a place and a
+   * card are each a whole message, and there is nothing to write underneath
+   * them. So they never touch the draft, and picking one while a draft is being
+   * typed leaves the draft where it was.
+   */
+  onSendPoll: (poll: PollDraft) => Promise<void>;
+  onSendPlace: (place: PlaceDraft) => Promise<void>;
+  onSendContact: (contact: ContactDraft) => Promise<void>;
   onTyping: (on: boolean) => void;
 }
 
@@ -90,11 +113,15 @@ export function Composer({
   mentionables = NOBODY,
   onSendText,
   onSendAttachments,
+  onSendPoll,
+  onSendPlace,
+  onSendContact,
   onTyping,
 }: ComposerProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [staged, setStaged] = useState<readonly StagedAttachment[]>([]);
+  const [composingPoll, setComposingPoll] = useState(false);
   const [mention, setMention] = useState<MentionFragment | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const voice = useVoiceRecording();
@@ -240,25 +267,73 @@ export function Composer({
       { id: 'gallery', label: t('composer.attach.gallery'), icon: RiGalleryLine },
       ...(IS_NATIVE ? [{ id: 'camera', label: t('composer.attach.camera'), icon: RiCameraLine }] : []),
       { id: 'file', label: t('composer.attach.file'), icon: RiFileTextLine },
+      { id: 'location', label: t('composer.attach.location'), icon: RiMapPinLine },
+      // A browser has no address book, so there is no picker to open there.
+      ...(IS_NATIVE ? [{ id: 'contact', label: t('composer.attach.contact'), icon: RiContactsBookLine }] : []),
+      { id: 'poll', label: t('composer.attach.poll'), icon: RiBarChartHorizontalLine },
     ],
     [t],
   );
 
-  /** Picking STAGES; nothing leaves until the composer is sent. */
-  const pick = useCallback(async (source: string) => {
-    const picked =
-      source === 'camera'
-        ? await captureMediaAttachment()
-        : source === 'file'
-          ? await pickDocumentAttachments()
-          : await pickMediaAttachments();
-    if (picked.length === 0) return;
-    const added = picked.map((file) => {
-      stagedSeq.current += 1;
-      return { id: `staged-${stagedSeq.current}`, file };
-    });
-    setStaged((current) => [...current, ...added]);
-  }, []);
+  /**
+   * A place, from this device, sent on its own. Saying no to the permission is
+   * an answer, not a failure, so it passes in silence; a position that could
+   * not be read says so.
+   */
+  const attachPlace = useCallback(async () => {
+    const picked = await pickPlace();
+    if (!picked.ok) {
+      if (picked.reason === 'unavailable') toast.error(t('composer.attach.placeUnavailable'));
+      return;
+    }
+    await onSendPlace(picked.place);
+  }, [onSendPlace, t]);
+
+  /** Somebody from the address book, as a card. */
+  const attachContact = useCallback(async () => {
+    const contact = await pickContact();
+    if (!contact) return;
+    await onSendContact(contact);
+  }, [onSendContact]);
+
+  /** Picking a FILE stages; nothing leaves until the composer is sent. The other three send themselves. */
+  const pick = useCallback(
+    async (source: string) => {
+      if (source === 'poll') {
+        setComposingPoll(true);
+        return;
+      }
+      if (source === 'location') {
+        await attachPlace();
+        return;
+      }
+      if (source === 'contact') {
+        await attachContact();
+        return;
+      }
+      const picked =
+        source === 'camera'
+          ? await captureMediaAttachment()
+          : source === 'file'
+            ? await pickDocumentAttachments()
+            : await pickMediaAttachments();
+      if (picked.length === 0) return;
+      const added = picked.map((file) => {
+        stagedSeq.current += 1;
+        return { id: `staged-${stagedSeq.current}`, file };
+      });
+      setStaged((current) => [...current, ...added]);
+    },
+    [attachContact, attachPlace],
+  );
+
+  const sendPoll = useCallback(
+    (poll: PollDraft) => {
+      setComposingPoll(false);
+      void onSendPoll(poll);
+    },
+    [onSendPoll],
+  );
 
   const unstage = useCallback((id: string) => {
     setStaged((current) => current.filter((item) => item.id !== id));
@@ -331,6 +406,7 @@ export function Composer({
   const canAttach = notice === undefined && target?.kind !== 'edit';
 
   return (
+    <>
     <ChatComposer
       value={value}
       onValueChange={onValueChange}
@@ -349,7 +425,13 @@ export function Composer({
       onSelectSuggestion={acceptMention}
       leading={
         canAttach ? (
-          <AttachmentMenu items={attachItems} onSelect={(id) => void pick(id)} label={t('composer.attach.label')}>
+          <AttachmentMenu
+            items={attachItems}
+            onSelect={(id) => {
+              pick(id).catch((error: unknown) => logger.warn('[composer] an attachment could not be added', error));
+            }}
+            label={t('composer.attach.label')}
+          >
             <ComposerIconButton icon={RiAttachment2} accessibilityLabel={t('composer.attach.label')} />
           </AttachmentMenu>
         ) : undefined
@@ -359,5 +441,10 @@ export function Composer({
       onEscape={mention || target ? onEscape : undefined}
       labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
     />
+    {/* Mounted beside the composer rather than inside the menu: the menu closes
+        on a selection, and a sheet that unmounts with its trigger closes with
+        it. */}
+    <PollComposer open={composingPoll} onClose={() => setComposingPoll(false)} onSend={sendPoll} />
+    </>
   );
 }
