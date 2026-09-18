@@ -7,15 +7,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConversation, useConversationActions, useSyncState, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ChatBackground, ChatEmptyState, ChatHeader } from '@oxy.so/bloom/chat-screen';
+import { ChatSearchField } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import { RiDeleteBinLine, RiInformationLine, RiMore2Line } from '@oxy.so/bloom/icons';
+import {
+  RiArrowGoBackLine,
+  RiDeleteBinLine,
+  RiFileCopyLine,
+  RiInformationLine,
+  RiMore2Line,
+  RiPencilLine,
+} from '@oxy.so/bloom/icons';
+import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
+import * as Clipboard from 'expo-clipboard';
 
-import { Composer, type ComposerTarget } from '@/components/chat/composer/Composer';
+import { Composer, type ComposerTarget, type Mentionable } from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
+import { MessageMedia } from '@/components/chat/media/MessageMedia';
 import { Transcript } from '@/components/chat/transcript/Transcript';
-import type { MessageActions } from '@/components/chat/transcript/MessageRow';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { collectViewerItems } from '@/lib/chat/attachmentViewer';
@@ -33,6 +43,15 @@ import { toUpload } from '@/lib/chat/upload';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { confirmDialog } from '@/utils/alerts';
 import { logger } from '@/utils/logger';
+
+/** What this screen does to a message it is pointed at. */
+interface MessageActions {
+  reply: (id: string) => void;
+  edit: (id: string) => void;
+  remove: (id: string) => void;
+  react: (id: string, emoji: string) => void;
+  openMedia: (id: string) => void;
+}
 
 /** A readable measure for a bubble once the conversation has a pane to itself. */
 const WIDE_BUBBLE_MAX_WIDTH = 560;
@@ -54,6 +73,10 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const ctx = useChatContext(view?.memberAccountIds ?? []);
   const viewer = useRef<MediaViewerHandle>(null);
   const [target, setTarget] = useState<ComposerTarget | null>(null);
+  // Searching filters the loaded history: this device has no other history to search.
+  const [search, setSearch] = useState<string | null>(null);
+  /** The message whose actions are open. One menu for the screen, as Bloom draws one. */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const isGroup = view?.kind === 'group';
 
   // Where "unread messages" goes is decided once, from the count as the
@@ -82,6 +105,37 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     [items, ctx, isGroup, unreadAnchor, unreachable, split],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+
+  const matches = useMemo(() => {
+    const needle = search?.trim().toLocaleLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => row.text?.toLocaleLowerCase().includes(needle));
+  }, [rows, search]);
+
+  /** Who `@` offers: the group's other members, named by the people layer. */
+  const mentionables = useMemo<Mentionable[]>(() => {
+    if (!isGroup) return [];
+    return (view?.memberAccountIds ?? [])
+      .filter((id) => id !== ctx.me)
+      .map((id) => {
+        const person = ctx.person(id);
+        return { id, label: person?.displayName ?? '', handle: person?.handle, avatar: person?.avatar };
+      })
+      .filter((person) => person.label !== '');
+  }, [ctx, isGroup, view?.memberAccountIds]);
+
+  const bubbleLabels = useMemo<Partial<MessageBubbleLabels>>(
+    () => ({
+      deleted: t('message.deleted'),
+      replyTo: t('message.replyTo'),
+      addReaction: t('message.addReaction'),
+      pending: t('message.pending'),
+      failed: t('message.failed'),
+      selected: t('message.selected'),
+      retry: t('message.retry'),
+    }),
+    [t],
+  );
 
   // The actions read the latest timeline through a ref, so they keep one
   // identity for the screen's life and a new message does not re-render every row.
@@ -131,6 +185,55 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   );
 
   const { edit, send, sendMedia, setTyping, loadOlder } = timeline;
+  /**
+   * What `MessageList` draws: the projection, plus this screen's gestures and
+   * the media node a bubble carries. Built here rather than in a component of
+   * our own, because Bloom's list renders the bubbles itself.
+   */
+  const listItems = useMemo<MessageListItem[]>(
+    () =>
+      matches.map((row) => {
+        const source = sources.get(row.id);
+        const content = source?.content;
+        const settled = source !== undefined && source.sendState !== 'pending' && source.sendState !== 'failed';
+        return {
+          ...row,
+          media:
+            content?.kind === 'media' ? (
+              <MessageMedia media={content.media} tone={row.direction} onOpen={() => actions.openMedia(row.id)} />
+            ) : undefined,
+          onLongPress: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
+          onContextMenu: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
+          onToggleReaction: settled ? (emoji: string) => actions.react(row.id, emoji) : undefined,
+          onSwipeReply: settled ? () => actions.reply(row.id) : undefined,
+        };
+      }),
+    [actions, matches, sources],
+  );
+
+  /** The actions the open message allows, in the order a reader expects them. */
+  const menuSource = menuFor ? sources.get(menuFor) : undefined;
+  const menuItems = useMemo(() => {
+    if (!menuSource) return [];
+    const settled = menuSource.sendState !== 'pending' && menuSource.sendState !== 'failed';
+    const entries = [];
+    if (settled) entries.push({ id: 'reply', label: t('message.reply'), icon: RiArrowGoBackLine });
+    if (menuSource.content.kind === 'text') entries.push({ id: 'copy', label: t('message.copy'), icon: RiFileCopyLine });
+    if (menuSource.isOwn && settled && menuSource.content.kind === 'text') {
+      entries.push({ id: 'edit', label: t('message.edit'), icon: RiPencilLine });
+    }
+    if (menuSource.isOwn && settled) {
+      entries.push({
+        id: 'delete',
+        label: t('message.delete'),
+        icon: RiDeleteBinLine,
+        variant: 'destructive' as const,
+        separated: true,
+      });
+    }
+    return entries;
+  }, [menuSource, t]);
+
   const sendText = useCallback(
     async (text: string, composing: ComposerTarget | null) => {
       try {
@@ -194,7 +297,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;
   const other = view.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
-  const handle = other ? ctx.person(other)?.handle : undefined;
+  const otherPerson = other ? ctx.person(other) : undefined;
+  const handle = otherPerson?.handle;
   const faces = conversationFaces(view, ctx);
 
   return (
@@ -202,6 +306,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       <View style={{ paddingTop: split ? 0 : insets.top }}>
         <ChatHeader
           title={title}
+          marker={otherPerson?.verified ? 'verified' : undefined}
+          markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
           avatar={faces ? <GroupAvatar faces={faces} size={40} /> : undefined}
           avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
           avatarName={title}
@@ -211,6 +317,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           connectingLabel={t('chat.connecting')}
           onPressBack={split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
           backLabel={t('common.back')}
+          onPressSearch={() => setSearch((current) => (current === null ? '' : null))}
+          searchLabel={t('chat.info.search')}
           onPressHeader={openInfo}
           openInfoLabel={t('chat.info.open')}
           renderMore={() => (
@@ -238,19 +346,32 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           divider
         />
       </View>
+      {search !== null && (
+        <View style={styles.search}>
+          <ChatSearchField
+            value={search}
+            onChangeText={setSearch}
+            onClear={() => setSearch(null)}
+            placeholder={t('chat.search.inConversation')}
+            autoFocus
+          />
+        </View>
+      )}
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
         <ChatBackground variant="pattern" style={styles.root}>
-          {items.length === 0 && timeline.reachedStart ? (
+          {matches.length === 0 && search !== null ? (
+            <ChatEmptyState title={t('chat.search.empty')} />
+          ) : items.length === 0 && timeline.reachedStart ? (
             <ChatEmptyState description={t('chat.empty.conversation')} notice={t('chat.e2ee')} />
           ) : (
             <Transcript
-              items={rows}
-              sources={sources}
+              items={listItems}
               isGroup={isGroup}
               typing={timeline.typing}
+              unreadCount={view.unreadCount}
               reachedStart={timeline.reachedStart}
               onLoadOlder={onLoadOlder}
-              actions={actions}
+              labels={bubbleLabels}
             />
           )}
         </ChatBackground>
@@ -260,12 +381,45 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             onClearTarget={() => setTarget(null)}
             notice={view.joined ? undefined : t('chat.notJoined')}
             note={unreachable?.banner}
+            mentionables={mentionables}
             onSendText={sendText}
             onSendAttachments={sendAttachments}
             onTyping={onTyping}
           />
         </View>
       </KeyboardAvoidingView>
+      {/* One menu for the screen: Bloom draws a dropdown on the web and a sheet
+          on a phone, and a message opens it through its own long press. */}
+      <MessageContextMenu
+        open={menuFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setMenuFor(null);
+        }}
+        label={t('message.actions')}
+        items={menuItems}
+        reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
+        selectedReaction={menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))?.key}
+        onSelectReaction={(emoji) => {
+          if (menuFor) actions.react(menuFor, emoji);
+          setMenuFor(null);
+        }}
+        onSelect={(action) => {
+          const id = menuFor;
+          setMenuFor(null);
+          if (!id) return;
+          if (action === 'reply') actions.reply(id);
+          else if (action === 'edit') actions.edit(id);
+          else if (action === 'delete') actions.remove(id);
+          else if (action === 'copy') {
+            const source = sources.get(id);
+            if (source?.content.kind === 'text') {
+              void Clipboard.setStringAsync(source.content.body).then(() => toast.success(t('message.copied')));
+            }
+          }
+        }}
+      >
+        <View style={styles.menuAnchor} />
+      </MessageContextMenu>
       <MediaViewer ref={viewer} />
     </View>
   );
@@ -273,4 +427,6 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
+  search: { paddingHorizontal: 12, paddingVertical: 8 },
+  menuAnchor: { position: 'absolute', left: 24, bottom: 96, height: 0, width: 0 },
 });

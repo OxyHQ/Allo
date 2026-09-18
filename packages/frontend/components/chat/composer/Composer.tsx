@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, type TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   AttachmentMenu,
@@ -8,6 +8,7 @@ import {
   ComposerIconButton,
   VoiceRecorder,
   type AttachmentMenuItem,
+  type ChatComposerSuggestion,
 } from '@oxy.so/bloom/chat-composer';
 import { RiAttachment2, RiCameraLine, RiFileTextLine, RiGalleryLine } from '@oxy.so/bloom/icons';
 import { toast } from '@oxy.so/bloom/toast';
@@ -19,12 +20,23 @@ import {
   toVoiceAttachment,
   type PickedAttachments,
 } from '@/lib/chat/attachments';
+import { EmojiButton } from './EmojiButton';
+import { applyMention, mentionFragment, type MentionFragment } from './mentions';
+import { stagedTile, withCaption, type StagedAttachment } from './staging';
 import { useVoiceRecording } from './useVoiceRecording';
 
 /** What the composer is doing to an existing message, if anything. */
 export type ComposerTarget =
   | { kind: 'reply'; id: string; title: string; preview: string }
   | { kind: 'edit'; id: string; body: string; preview: string };
+
+/** Somebody `@` can name in this conversation. */
+export interface Mentionable {
+  id: string;
+  label: string;
+  handle?: string;
+  avatar?: string;
+}
 
 interface ComposerProps {
   target: ComposerTarget | null;
@@ -33,6 +45,8 @@ interface ComposerProps {
   notice?: string;
   /** A line above the input that informs without blocking it. */
   note?: string | null;
+  /** Who `@` offers. Empty (the default) turns mention suggestions off entirely. */
+  mentionables?: readonly Mentionable[];
   onSendText: (text: string, target: ComposerTarget | null) => Promise<void>;
   onSendAttachments: (attachments: PickedAttachments) => Promise<void>;
   onTyping: (on: boolean) => void;
@@ -43,16 +57,51 @@ const TYPING_REFRESH_MS = 5000;
 /** …and a stop this long after the last keystroke. */
 const TYPING_IDLE_MS = 3000;
 
+/** Rows offered for an `@`. Bloom scrolls past about five. */
+const MENTION_LIMIT = 8;
+
+/** A stable empty default, so the suggestion memo does not rebuild every render. */
+const NOBODY: readonly Mentionable[] = [];
+
 // The camera picker is a native flow; recording works on both (expo-audio uses
 // MediaRecorder on the web).
 const IS_NATIVE = Platform.OS !== 'web';
 
-export function Composer({ target, onClearTarget, notice, note, onSendText, onSendAttachments, onTyping }: ComposerProps) {
+/**
+ * Where the insertion point is.
+ *
+ * On web the field IS the DOM node — react-native-web forwards the host element
+ * as the ref, which is what Bloom's own autosize reads — so the caret is
+ * exactly where the person put it. React Native has no way to READ a selection
+ * (only to set one), and `ChatComposer` forwards no `onSelectionChange`, so the
+ * end of the draft is the honest answer there: it is where somebody typing is.
+ */
+function caretIn(field: TextInput | null, text: string): number {
+  const node = field as unknown as { selectionStart?: number | null } | null;
+  const at = node?.selectionStart;
+  return typeof at === 'number' ? at : text.length;
+}
+
+export function Composer({
+  target,
+  onClearTarget,
+  notice,
+  note,
+  mentionables = NOBODY,
+  onSendText,
+  onSendAttachments,
+  onTyping,
+}: ComposerProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
+  const [staged, setStaged] = useState<readonly StagedAttachment[]>([]);
+  const [mention, setMention] = useState<MentionFragment | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const voice = useVoiceRecording();
+  const field = useRef<TextInput | null>(null);
   const lastTypingAt = useRef(0);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stagedSeq = useRef(0);
 
   // Editing starts from the message's own text.
   const [shownTarget, setShownTarget] = useState(target);
@@ -70,9 +119,8 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
 
   useEffect(() => stopTyping, [stopTyping]);
 
-  const onValueChange = useCallback(
+  const noteTyping = useCallback(
     (next: string) => {
-      setValue(next);
       if (next.length === 0) {
         stopTyping();
         return;
@@ -88,19 +136,103 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
     [onTyping, stopTyping],
   );
 
+  /** Put the caret back where the edit left it (web; native keeps its own). */
+  const restoreCaret = useCallback((at: number) => {
+    const node = field.current as unknown as
+      | { focus?: () => void; setSelectionRange?: (start: number, end: number) => void }
+      | null;
+    if (!node?.setSelectionRange) return;
+    requestAnimationFrame(() => {
+      node.focus?.();
+      node.setSelectionRange?.(at, at);
+    });
+  }, []);
+
+  const onValueChange = useCallback(
+    (next: string) => {
+      setValue(next);
+      noteTyping(next);
+      setMention(mentionables.length > 0 ? mentionFragment(next, caretIn(field.current, next)) : null);
+      setActiveIndex(0);
+    },
+    [mentionables.length, noteTyping],
+  );
+
+  /** Writes into the draft at the caret rather than at the end. */
+  const insertAtCaret = useCallback(
+    (insert: string) => {
+      const at = caretIn(field.current, value);
+      setValue(value.slice(0, at) + insert + value.slice(at));
+      noteTyping(insert);
+      setMention(null);
+      restoreCaret(at + insert.length);
+    },
+    [noteTyping, restoreCaret, value],
+  );
+
+  const suggestions = useMemo<ChatComposerSuggestion[]>(() => {
+    if (!mention) return [];
+    const needle = mention.query.toLowerCase();
+    return mentionables
+      .filter(
+        (person) =>
+          needle.length === 0 ||
+          person.label.toLowerCase().includes(needle) ||
+          (person.handle?.toLowerCase().includes(needle) ?? false),
+      )
+      .slice(0, MENTION_LIMIT)
+      .map((person) => ({
+        id: person.id,
+        label: person.label,
+        handle: person.handle ? `@${person.handle}` : undefined,
+        avatar: person.avatar,
+      }));
+  }, [mention, mentionables]);
+
+  const acceptMention = useCallback(
+    (suggestion: ChatComposerSuggestion) => {
+      if (!mention) return;
+      const person = mentionables.find((candidate) => candidate.id === suggestion.id);
+      const applied = applyMention(value, mention, person?.handle ?? person?.label ?? suggestion.label);
+      setValue(applied.value);
+      setMention(null);
+      setActiveIndex(0);
+      restoreCaret(applied.caret);
+    },
+    [mention, mentionables, restoreCaret, value],
+  );
+
+  /**
+   * Text alone, files alone, or both — and when there are both, the text is the
+   * first file's caption rather than a message of its own.
+   *
+   * A reply cannot carry a file: `sendMedia` takes no `replyTo`, so a send that
+   * has anything staged goes as media and the reply target is dropped with the
+   * rest of the draft.
+   */
   const send = useCallback(
     (text: string) => {
       const body = text.trim();
-      if (!body) return;
+      const pending = staged;
+      if (!body && pending.length === 0) return;
       setValue('');
+      setMention(null);
       stopTyping();
       onClearTarget();
-      onSendText(body, target).catch(() => {
-        // The screen reports the failure; the text comes back so it is not lost.
+      if (pending.length === 0) {
+        onSendText(body, target).catch(() => {
+          // The screen reports the failure; the text comes back so it is not lost.
+          setValue(text);
+        });
+        return;
+      }
+      setStaged([]);
+      onSendAttachments(withCaption(pending, body)).catch(() => {
         setValue(text);
+        setStaged(pending);
       });
     },
-    [onClearTarget, onSendText, stopTyping, target],
+    [onClearTarget, onSendAttachments, onSendText, staged, stopTyping, target],
   );
 
   const attachItems = useMemo<AttachmentMenuItem[]>(
@@ -112,18 +244,27 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
     [t],
   );
 
-  const pick = useCallback(
-    async (source: string) => {
-      const picked =
-        source === 'camera'
-          ? await captureMediaAttachment()
-          : source === 'file'
-            ? await pickDocumentAttachments()
-            : await pickMediaAttachments();
-      if (picked.length > 0) await onSendAttachments(picked);
-    },
-    [onSendAttachments],
-  );
+  /** Picking STAGES; nothing leaves until the composer is sent. */
+  const pick = useCallback(async (source: string) => {
+    const picked =
+      source === 'camera'
+        ? await captureMediaAttachment()
+        : source === 'file'
+          ? await pickDocumentAttachments()
+          : await pickMediaAttachments();
+    if (picked.length === 0) return;
+    const added = picked.map((file) => {
+      stagedSeq.current += 1;
+      return { id: `staged-${stagedSeq.current}`, file };
+    });
+    setStaged((current) => [...current, ...added]);
+  }, []);
+
+  const unstage = useCallback((id: string) => {
+    setStaged((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  const tiles = useMemo(() => staged.map(stagedTile), [staged]);
 
   const startVoice = useCallback(async () => {
     if (!(await voice.start())) toast.error(t('composer.voice.permission'));
@@ -145,6 +286,15 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
     if (target?.kind === 'edit') setValue('');
     onClearTarget();
   }, [onClearTarget, target]);
+
+  /** Escape closes the suggestion list first; it is the thing in the way. */
+  const onEscape = useCallback(() => {
+    if (mention) {
+      setMention(null);
+      return;
+    }
+    if (target) cancelTarget();
+  }, [cancelTarget, mention, target]);
 
   const targetBanner = target ? (
     <ComposerBanner
@@ -175,24 +325,38 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
     />
   ) : undefined;
 
+  // Editing a message means editing its TEXT: `edit` replaces a body and has no
+  // way to add a file to one, so the attach menu goes away for the duration the
+  // way the mic already does.
+  const canAttach = notice === undefined && target?.kind !== 'edit';
+
   return (
     <ChatComposer
       value={value}
       onValueChange={onValueChange}
       onSend={send}
+      inputRef={field}
       placeholder={t('composer.placeholder')}
       notice={notice}
       banner={banner}
       recorder={recorder}
+      attachments={tiles}
+      onRemoveAttachment={unstage}
+      suggestions={suggestions}
+      suggestionKind="mention"
+      activeIndex={activeIndex}
+      onActiveIndexChange={setActiveIndex}
+      onSelectSuggestion={acceptMention}
       leading={
-        notice === undefined ? (
+        canAttach ? (
           <AttachmentMenu items={attachItems} onSelect={(id) => void pick(id)} label={t('composer.attach.label')}>
             <ComposerIconButton icon={RiAttachment2} accessibilityLabel={t('composer.attach.label')} />
           </AttachmentMenu>
         ) : undefined
       }
-      onMicPress={target?.kind === 'edit' ? undefined : () => void startVoice()}
-      onEscape={target ? cancelTarget : undefined}
+      emojiSlot={notice === undefined ? <EmojiButton onSelect={insertAtCaret} /> : undefined}
+      onMicPress={target?.kind === 'edit' || staged.length > 0 ? undefined : () => void startVoice()}
+      onEscape={mention || target ? onEscape : undefined}
       labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
     />
   );
