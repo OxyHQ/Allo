@@ -22,7 +22,7 @@ import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import * as Clipboard from 'expo-clipboard';
 
-import { Composer, type ComposerTarget } from '@/components/chat/composer/Composer';
+import { Composer, type ComposerTarget, type Mentionable } from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
 import { MessageMedia } from '@/components/chat/media/MessageMedia';
 import { Transcript } from '@/components/chat/transcript/Transcript';
@@ -111,6 +111,18 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     if (!needle) return rows;
     return rows.filter((row) => row.text?.toLocaleLowerCase().includes(needle));
   }, [rows, search]);
+
+  /** Who `@` offers: the group's other members, named by the people layer. */
+  const mentionables = useMemo<Mentionable[]>(() => {
+    if (!isGroup) return [];
+    return (view?.memberAccountIds ?? [])
+      .filter((id) => id !== ctx.me)
+      .map((id) => {
+        const person = ctx.person(id);
+        return { id, label: person?.displayName ?? '', handle: person?.handle, avatar: person?.avatar };
+      })
+      .filter((person) => person.label !== '');
+  }, [ctx, isGroup, view?.memberAccountIds]);
 
   const bubbleLabels = useMemo<Partial<MessageBubbleLabels>>(
     () => ({
@@ -369,6 +381,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             onClearTarget={() => setTarget(null)}
             notice={view.joined ? undefined : t('chat.notJoined')}
             note={unreachable?.banner}
+            mentionables={mentionables}
             onSendText={sendText}
             onSendAttachments={sendAttachments}
             onTyping={onTyping}

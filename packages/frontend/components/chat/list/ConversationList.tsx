@@ -12,7 +12,7 @@ import {
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton } from '@oxy.so/bloom/chat-composer';
-import { RiDeleteBinLine, RiEditBoxLine, RiSettings3Line } from '@oxy.so/bloom/icons';
+import { RiDeleteBinLine, RiSettings3Line } from '@oxy.so/bloom/icons';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -121,11 +121,16 @@ export function ConversationList() {
         title={t('chat.title')}
         safeArea={!split}
         actions={
-          <ComposerIconButton
-            icon={split ? RiEditBoxLine : RiSettings3Line}
-            accessibilityLabel={split ? t('chat.new.title') : t('settings.title')}
-            onPress={() => router.push(split ? '/new' : '/settings')}
-          />
+          // The rail carries settings on a wide window; a phone has no rail, so
+          // the header does. Starting a conversation is the FAB below, which is
+          // where Bloom's own conversations screen puts it.
+          split ? undefined : (
+            <ComposerIconButton
+              icon={RiSettings3Line}
+              accessibilityLabel={t('settings.title')}
+              onPress={() => router.push('/settings')}
+            />
+          )
         }
       />
       <View style={styles.search}>
@@ -170,13 +175,14 @@ export function ConversationList() {
           />
         )}
       </ScrollView>
-      {!split && (
-        <NewChatButton
-          accessibilityLabel={t('chat.new.title')}
-          onPress={() => router.push('/new')}
-          placement="bottom-right"
-        />
-      )}
+      <NewChatButton
+        accessibilityLabel={t('chat.new.title')}
+        onPress={() => router.push('/new')}
+        placement="bottom-right"
+        // The brand's own accent: Bloom's Fab defaults to the tertiary one,
+        // which under a green preset is a magenta nobody asked for.
+        variant="primary"
+      />
     </View>
   );
 }
