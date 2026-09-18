@@ -381,7 +381,7 @@ export class InstanceManager {
 
   /**
    * Another account's active instances that pass the chain check. An account
-   * the server has never seen (404: it has no Allo instance at all) and one
+   * the server has never seen (an empty list today; older servers answered 404, tolerated below) and one
    * whose instances are all inactive (an empty list) both answer no trusted
    * instance: the account can still be a member, it just cannot be reached
    * until it installs Allo, and the elector rule adds its first device then.

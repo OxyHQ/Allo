@@ -68,7 +68,7 @@ describe("members without an instance", () => {
     expect(conv.joined).toBe(true);
     expect(conv.memberAccountIds.sort()).toEqual([aliceId, bobId].sort());
     expect(conv.unreachableMemberAccountIds).toEqual([bobId]);
-    expect(requestLog(mark).some((r) => r.route.endsWith("/accounts/:accountId/instances") && r.status === 404)).toBe(true);
+    expect(requestLog(mark).some((r) => r.route.endsWith("/accounts/:accountId/instances") && r.status === 200)).toBe(true); // an empty listing, not an error
     const bobAtCreate = await memberRow(conv.id, bobId);
     expect(bobAtCreate.state).toBe("joined");
     expect(bobAtCreate.leftAt).toBeNull();

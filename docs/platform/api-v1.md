@@ -116,7 +116,7 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | --- | --- | --- | --- | --- | --- |
 | POST | `/v1/instances` | oxy | `RegisterInstanceRequest` | `RegisterInstanceResponse` | `validation_failed` |
 | GET | `/v1/instances` | oxy | — | `ListInstancesResponse` | — |
-| GET | `/v1/accounts/:accountId/instances` | oxy | — | `ListAccountInstancesResponse` (`PublicInstance[]`, active and revoked, never pending: a chain whose approver was revoked later must still verify) | `not_found` |
+| GET | `/v1/accounts/:accountId/instances` | oxy | — | `ListAccountInstancesResponse` (`PublicInstance[]`, active and revoked, never pending: a chain whose approver was revoked later must still verify; an account with no instance answers `[]`, never 404) | — |
 | GET | `/v1/instances/pending` | instance-signed | — | `ListPendingEnrollmentsResponse` | — |
 | POST | `/v1/instances/:id/approve` | instance-signed | `ApproveInstanceRequest` | `InstanceResponse` | `not_found`, `forbidden`, `unauthorized` (bad approval signature), `validation_failed` |
 | POST | `/v1/instances/:id/reject` | instance-signed | — | `InstanceResponse` | `not_found`, `forbidden` |

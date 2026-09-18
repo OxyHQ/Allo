@@ -21,7 +21,6 @@ import {
   setInstancePushToken,
   setInstanceTransferKey,
 } from "../../services/platform/instanceService";
-import { notFound } from "../../utils/httpErrors";
 import { asyncRoute } from "./asyncRoute";
 import { parseBody, parseParam } from "./validate";
 
@@ -50,9 +49,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     "/accounts/:accountId/instances",
     asyncRoute(async (req, res) => {
       const accountId = parseParam(accountIdSchema, req.params.accountId, "accountId");
-      const instances = await listPublicInstances(accountId);
-      if (instances === null) throw notFound("Account not found");
-      res.json({ instances });
+      res.json({ instances: await listPublicInstances(accountId) });
     }),
   );
 

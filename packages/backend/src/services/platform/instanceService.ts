@@ -121,15 +121,19 @@ export async function listOwnInstances(accountId: string, deps: InstanceServiceD
  * revoked — what it approved still chains ("verified but not trusted"), while
  * an approver missing from the listing makes the whole chain refuse. A
  * pending instance is nobody's yet and its challenge is still a secret.
- * Null when Allo has never seen the account.
+ *
+ * An account Allo has never seen answers an EMPTY list, not 404: "no device
+ * yet" is a state a client asks about on purpose (a chat opened with someone
+ * who has not installed Allo polls this until they do), and every browser
+ * prints a 4xx to the console on each poll. The listing also reveals nothing
+ * about whether an Oxy account exists that the empty list does not.
  */
 export async function listPublicInstances(
   accountId: string,
   deps: InstanceServiceDeps = {},
-): Promise<PublicInstance[] | null> {
+): Promise<PublicInstance[]> {
   const db = deps.db ?? getDb();
   const all = await listInstancesByAccount(accountId, db);
-  if (all.length === 0) return null;
   return all.filter((row) => row.status !== "pending").map(toPublicInstance);
 }
 
