@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useConversationActions, useSyncState } from '@allo/react';
 import {
+  ChatFolderTabs,
   ChatList,
   ChatSearchField,
   ChatSearchResults,
@@ -41,20 +42,37 @@ export function ConversationList() {
   const { leave } = useConversationActions();
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
+  const [folder, setFolder] = useState('all');
 
   const selectedId = split ? (conversationIdFromPath(pathname) ?? undefined) : undefined;
   const searching = query.trim().length > 0;
 
   const chats = useMemo<ChatSummary[]>(
     () =>
-      summaries.map((chat) => ({
-        ...chat,
-        swipeActions: {
-          right: [{ key: LEAVE, label: t('chat.leave.action'), icon: RiDeleteBinLine, tone: 'negative' as const }],
-        },
-      })),
-    [summaries, t],
+      summaries
+        .filter((chat) =>
+          folder === 'unread' ? (chat.unreadCount ?? 0) > 0 : folder === 'groups' ? chat.kind === 'group' : true,
+        )
+        .map((chat) => ({
+          ...chat,
+          swipeActions: {
+            right: [{ key: LEAVE, label: t('chat.leave.action'), icon: RiDeleteBinLine, tone: 'negative' as const }],
+          },
+        })),
+    [folder, summaries, t],
   );
+
+  /** Only offered once there is something to filter: two rows need no folders. */
+  const folders = useMemo(() => {
+    const unread = summaries.reduce((total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0), 0);
+    const groups = summaries.filter((chat) => chat.kind === 'group').length;
+    if (summaries.length < 5 && unread === 0) return [];
+    return [
+      { key: 'all', label: t('chat.folder.all') },
+      { key: 'unread', label: t('chat.folder.unread'), unreadCount: unread || undefined },
+      ...(groups > 0 ? [{ key: 'groups', label: t('chat.folder.groups') }] : []),
+    ];
+  }, [summaries, t]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -118,6 +136,15 @@ export function ConversationList() {
           placeholder={t('chat.search.placeholder')}
         />
       </View>
+      {folders.length > 0 && (
+        <ChatFolderTabs
+          folders={folders}
+          value={folder}
+          onValueChange={setFolder}
+          accessibilityLabel={t('chat.folder.label')}
+          divider
+        />
+      )}
       <HistoryTransferBanner />
       {sync === 'offline' && (
         <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>{t('chat.sync.offline')}</Text>
