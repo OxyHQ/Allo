@@ -678,5 +678,17 @@
   "transfer.receiving": "Recibiendo el historial de otro dispositivo",
   "transfer.sendingTo": "Enviando el historial a {{name}}",
   "transfer.sending": "Enviando el historial a otro dispositivo",
-  "transfer.progress": "{{done}} de {{total}}"
+  "transfer.progress": "{{done}} de {{total}}",
+  "chat.unreachable.dm": "{{name}} aún no ha configurado Allo. Tus mensajes se entregarán cuando se una.",
+  "chat.unreachable.dmUnnamed": "Esta persona aún no ha configurado Allo. Tus mensajes se entregarán cuando se una.",
+  "chat.unreachable.group_one": "{{count}} miembro aún no ha configurado Allo; recibirá los mensajes nuevos cuando se una.",
+  "chat.unreachable.group_other": "{{count}} miembros aún no han configurado Allo; recibirán los mensajes nuevos cuando se unan.",
+  "chat.hold.dm": "Esperando a que {{name}} se una",
+  "chat.hold.dmUnnamed": "Esperando a que esta persona se una",
+  "chat.hold.group_one": "Esperando a que {{count}} miembro se una",
+  "chat.hold.group_other": "Esperando a que {{count}} miembros se unan",
+  "chat.waiting.dm": "Esperando a {{name}}",
+  "chat.waiting.dmUnnamed": "Esperando a esta persona",
+  "chat.waiting.group_one": "Esperando a {{count}} miembro",
+  "chat.waiting.group_other": "Esperando a {{count}} miembros"
 }

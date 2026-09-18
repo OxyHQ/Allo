@@ -5,7 +5,7 @@ import { colors } from '@/styles/colors';
 import { useTheme } from '@/hooks/useTheme';
 import { MESSAGING_CONSTANTS } from '@/constants/messaging';
 import { useMessagePreferencesStore } from '@/stores';
-import type { MessageReadStatus } from '@/lib/chat/model';
+import type { MessageHoldReason, MessageReadStatus } from '@/lib/chat/model';
 import { MessageMetadata } from './MessageMetadata';
 
 /**
@@ -40,6 +40,9 @@ export interface MessageBubbleProps {
   messageType?: MessageType;
   /** Read status for sent messages. `failed` draws an error, not the clock. */
   readStatus?: MessageReadStatus;
+  /** Why a pending message is held, when it is; drawn as the clock with `holdLabel` as its accessible name. */
+  holdReason?: MessageHoldReason;
+  holdLabel?: string;
   /** Whether the message was edited */
   isEdited?: boolean;
   /** Custom font size for this message (if adjusted via send button) */
@@ -84,6 +87,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
   isCloseToPrevious = false,
   messageType = 'user',
   readStatus,
+  holdReason,
+  holdLabel,
   isEdited = false,
   fontSize,
   bubbleColor,
@@ -181,6 +186,8 @@ export const MessageBubble = memo<MessageBubbleProps>(({
                 isSent={isSent}
                 isEdited={isEdited}
                 readStatus={readStatus}
+                holdReason={holdReason}
+                holdLabel={holdLabel}
                 showTimestamp={showTimestamp}
                 variant="bubble"
               />
@@ -203,6 +210,14 @@ export const MessageBubble = memo<MessageBubbleProps>(({
     prevProps.showTimestamp !== nextProps.showTimestamp ||
     prevProps.isCloseToPrevious !== nextProps.isCloseToPrevious ||
     prevProps.messageType !== nextProps.messageType ||
+    // The mark and its label change without the id changing: a sent message is
+    // delivered and then read, and a held one is released when the recipient
+    // installs the app. Left out of the comparison, the bubble kept drawing
+    // the first mark it was given.
+    prevProps.readStatus !== nextProps.readStatus ||
+    prevProps.holdReason !== nextProps.holdReason ||
+    prevProps.holdLabel !== nextProps.holdLabel ||
+    prevProps.isEdited !== nextProps.isEdited ||
     prevProps.bubbleColor !== nextProps.bubbleColor ||
     prevProps.textColor !== nextProps.textColor ||
     prevProps.fontSize !== nextProps.fontSize

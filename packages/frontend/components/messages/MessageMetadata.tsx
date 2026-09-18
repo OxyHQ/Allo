@@ -7,8 +7,8 @@ import { MsgDblCheckIcon } from '@/assets/icons/msgdblcheck-icon';
 import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
 import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
 import { MsgFailedIcon } from '@/assets/icons/msgfailed-icon';
-import { statusMark, statusTone, type MessageStatusMark } from '@/components/messages/messageStatus';
-import type { MessageReadStatus } from '@/lib/chat/model';
+import { isHeld, statusMark, statusTone, type MessageStatusMark } from '@/components/messages/messageStatus';
+import type { MessageHoldReason, MessageReadStatus } from '@/lib/chat/model';
 
 /** The picture for each mark. Which mark a status gets is `messageStatus.ts`. */
 const MARK_ICONS: Record<
@@ -26,6 +26,15 @@ export interface MessageMetadataProps {
   isSent?: boolean;
   isEdited?: boolean;
   readStatus?: MessageReadStatus;
+  /** Why a pending message is being held, when it is. See `isHeld` in `messageStatus.ts`. */
+  holdReason?: MessageHoldReason;
+  /**
+   * What the clock says to a screen reader while the message is held:
+   * "Waiting for <name> to join". Already translated by the caller, which is
+   * the one that knows who the conversation is waiting for. Ignored unless the
+   * message is actually held.
+   */
+  holdLabel?: string;
   showTimestamp?: boolean;
   variant?: 'default' | 'bubble';
 }
@@ -52,6 +61,8 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   isSent = false,
   isEdited = false,
   readStatus,
+  holdReason,
+  holdLabel,
   showTimestamp = true,
   variant = 'default',
 }) => {
@@ -148,8 +159,16 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   }
 
   if (statusIcon) {
+    // A held echo keeps the clock but tells assistive technology why it is
+    // still there; a screen reader announcing "sending" for a message that
+    // waits until somebody installs the app would be wrong for days.
+    const held = isHeld(readStatus, holdReason) && holdLabel !== undefined;
     metadataParts.push(
-      <View key="status" style={styles.readIndicator}>
+      <View
+        key="status"
+        style={styles.readIndicator}
+        {...(held ? { accessible: true, accessibilityLabel: holdLabel, testID: 'message-status-held' } : {})}
+      >
         {statusIcon}
       </View>
     );

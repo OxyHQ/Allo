@@ -43,6 +43,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useTheme } from '@/hooks/useTheme';
 import { useOxy } from '@oxy.so/services';
 import { useChatConversations } from '@/hooks/useChatConversations';
+import { useUnreachableMembers } from '@/hooks/useUnreachableMembers';
 import {
     useConversationSwipePreferencesStore,
     useUsersStore,
@@ -124,6 +125,7 @@ interface ConversationRowStyles {
     conversationTimestampUnread: TextStyle;
     conversationBottomRow: ViewStyle;
     conversationMessage: TextStyle;
+    conversationMessageHeld: TextStyle;
     unreadBadge: ViewStyle;
     unreadText: TextStyle;
 }
@@ -181,6 +183,9 @@ const ConversationRow = React.memo(function ConversationRow({
     // Reactive: subscribes to this conversation's participant user cache.
     const displayName = useConversationDisplayName(item, currentUserId);
     const avatar = useConversationAvatar(item, currentUserId);
+    // "Waiting for <name>" in place of the preview while the last message is
+    // an own echo held for somebody who has not set up Allo.
+    const { waiting } = useUnreachableMembers(item);
     const otherParticipants = getOtherParticipants(item, currentUserId);
     const participantCount = getParticipantCount(item, currentUserId);
     const leftEnabled = leftSwipeAction !== 'none';
@@ -272,8 +277,12 @@ const ConversationRow = React.memo(function ConversationRow({
                     </ThemedText>
                 </View>
                 <View style={styles.conversationBottomRow}>
-                    <ThemedText style={styles.conversationMessage} numberOfLines={1}>
-                        {item.lastMessage}
+                    <ThemedText
+                        style={[styles.conversationMessage, item.lastMessageHold !== undefined && styles.conversationMessageHeld]}
+                        numberOfLines={1}
+                        testID={item.lastMessageHold !== undefined ? 'conversation-waiting' : undefined}
+                    >
+                        {item.lastMessageHold !== undefined ? (waiting ?? '') : item.lastMessage}
                     </ThemedText>
                     {item.unreadCount > 0 && (
                         <View style={styles.unreadBadge}>
@@ -647,6 +656,9 @@ export default function ConversationsList() {
             color: theme.colors.textSecondary || colors.COLOR_BLACK_LIGHT_5,
             flex: 1,
             marginRight: 8,
+        },
+        conversationMessageHeld: {
+            fontStyle: 'italic',
         },
         unreadBadge: {
             backgroundColor: colors.primaryColor,

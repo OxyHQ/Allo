@@ -97,7 +97,11 @@ activity first) and `get(id)`; `createDirect(accountId)` and
 `createGroup(accountIds)`, both of which claim key packages for every trusted
 instance of every member and post the group's first commit with the create;
 `addMember`, `removeMember`, `leave`, `rename` (an encrypted `conversation`
-message), `refresh()`.
+message), `refresh()`. Neither create rejects a member who has no instance:
+somebody who has not installed Allo is a joined member with no leaf, listed in
+the view's `unreachableMemberAccountIds`, and the SDK adds their first device
+on its own when it appears (`crypto.md` section 5). `createDirect` throws only
+for a DM with oneself (`InvalidStateError`) or a real failure.
 
 `client.messages` (`messages/service.ts`): `timeline(id)`; `send(id, text,
 { replyTo })`, `edit`, `remove`, `react` (a toggle), `markRead` (local at
@@ -173,9 +177,15 @@ replaced only on change, so React sees stable references between emissions.
 status, `isThis`, approver, timestamps), `PendingEnrollmentView` (the
 instance, the challenge, and its `fingerprint`), `ConversationView` (kind,
 app, `title` from the encrypted name or `null`, member account ids, own
-role, epoch, `joined`, `lastMessage`, `unreadCount`, activity time),
-`TimelineItemView` (server id or local key, seq or `null`, sender account and
-instance, `isOwn`, `sendState`, `content`, `reactions`, `replyTo`),
+role, epoch, `joined`, `unreachableMemberAccountIds` — joined members other
+than me with no active leaf, which is who has not set up Allo yet; empty while
+this instance has no group state — `lastMessage`, `unreadCount`, activity
+time), `TimelineItemView` (server id or local key, seq or `null`, sender
+account and instance, `isOwn`, `sendState`, `content`, `reactions`,
+`replyTo`, and on a `pending` own echo an optional `holdReason`:
+`no_reachable_member` when the outbox is deliberately not sending it because
+nobody else in the conversation could read it; released on its own, never
+stored, never set on a failed send),
 `TimelineContent` (`text`, `media`, `deleted`, `undecryptable` with a reason,
 `system`), `MediaView` (with an optional `thumbnail: { ref, width, height }`)
 and `MediaRef`, `UploadMediaMeta` (with an optional `thumbnail`),

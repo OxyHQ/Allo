@@ -192,6 +192,29 @@ the phrase loses history, and the screens say so rather than implying the
 server can help. The screens and the banner are specified with the Phase 3
 change and built alongside it; `navigationTargets` covers the new routes.
 
+**Chatting with somebody who has not installed Allo works, and the app says
+what is happening rather than refusing.** Any Oxy user is a valid participant:
+`createDirect`/`createGroup` no longer reject an account with no instance, so
+`useCreateConversation` and the screens behind it (`new.tsx`, the profile
+"message" button) have no "not found" case to catch and show only real
+failures. The SDK lists such people in `ConversationView.unreachableMemberAccountIds`
+and, while NOBODY else in the conversation can read, holds each own message
+`pending` with `holdReason: 'no_reachable_member'`; both are projected in
+`lib/chat/model.ts` (`unreachableMemberAccountIds`, `lastMessageHold`,
+`Message.holdReason`). The words are one hook, `useUnreachableMembers`, and
+three places draw them: `UnreachableMembersBanner` above the composer in
+`ConversationView` ("<Name> hasn't set up Allo yet. Your messages will be
+delivered when they join."; a group counts them), the held echo's clock, which
+`MessageMetadata` gives the accessible name "Waiting for <Name> to join"
+(`isHeld` in `messageStatus.ts` keeps the label off anything but a pending
+message), and the list row, which shows "Waiting for <Name>" in place of the
+preview. The composer is never disabled for this, the name comes through the
+people layer and an id never reaches the screen ("this person" while the
+lookup is out), and nothing here polls: the server nudges the conversation
+when the person's first device activates and the SDK's elector adds it.
+`__tests__/allo/unreachableBanner.test.tsx` runs the whole thing over a real
+`@allo/core` client and the fake server, both ends.
+
 ## Key features
 
 - **Authentication:** `Authorization: Bearer` carries an Oxy token, read by

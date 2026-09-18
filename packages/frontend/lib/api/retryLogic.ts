@@ -222,7 +222,7 @@ export class CircuitBreaker {
     } catch (error: unknown) {
       // A 4xx is a definitive answer from a healthy server: the request was
       // rejected, the service is fine. Counting those toward the breaker lets
-      // an ordinary "not found" — a recipient with no registered device, say —
+      // an ordinary "not found" — a profile handle nobody owns, say —
       // trip the circuit and take down unrelated calls. Only server faults
       // (5xx), an explicit back-off (429), a timeout (408), and transport
       // failures (no status at all) mean the backend is actually in trouble.

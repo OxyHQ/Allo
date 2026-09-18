@@ -709,5 +709,17 @@
   "transfer.receiving": "Receiving history from another device",
   "transfer.sendingTo": "Sending history to {{name}}",
   "transfer.sending": "Sending history to another device",
-  "transfer.progress": "{{done}} of {{total}}"
+  "transfer.progress": "{{done}} of {{total}}",
+  "chat.unreachable.dm": "{{name}} hasn't set up Allo yet. Your messages will be delivered when they join.",
+  "chat.unreachable.dmUnnamed": "This person hasn't set up Allo yet. Your messages will be delivered when they join.",
+  "chat.unreachable.group_one": "{{count}} member hasn't set up Allo yet; they will receive new messages when they join.",
+  "chat.unreachable.group_other": "{{count}} members haven't set up Allo yet; they will receive new messages when they join.",
+  "chat.hold.dm": "Waiting for {{name}} to join",
+  "chat.hold.dmUnnamed": "Waiting for this person to join",
+  "chat.hold.group_one": "Waiting for {{count}} member to join",
+  "chat.hold.group_other": "Waiting for {{count}} members to join",
+  "chat.waiting.dm": "Waiting for {{name}}",
+  "chat.waiting.dmUnnamed": "Waiting for this person",
+  "chat.waiting.group_one": "Waiting for {{count}} member",
+  "chat.waiting.group_other": "Waiting for {{count}} members"
 }

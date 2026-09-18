@@ -672,5 +672,17 @@
   "transfer.receiving": "Ricezione della cronologia da un altro dispositivo",
   "transfer.sendingTo": "Invio della cronologia a {{name}}",
   "transfer.sending": "Invio della cronologia a un altro dispositivo",
-  "transfer.progress": "{{done}} di {{total}}"
+  "transfer.progress": "{{done}} di {{total}}",
+  "chat.unreachable.dm": "{{name}} non ha ancora configurato Allo. I tuoi messaggi saranno consegnati quando si unirà.",
+  "chat.unreachable.dmUnnamed": "Questa persona non ha ancora configurato Allo. I tuoi messaggi saranno consegnati quando si unirà.",
+  "chat.unreachable.group_one": "{{count}} membro non ha ancora configurato Allo; riceverà i nuovi messaggi quando si unirà.",
+  "chat.unreachable.group_other": "{{count}} membri non hanno ancora configurato Allo; riceveranno i nuovi messaggi quando si uniranno.",
+  "chat.hold.dm": "In attesa che {{name}} si unisca",
+  "chat.hold.dmUnnamed": "In attesa che questa persona si unisca",
+  "chat.hold.group_one": "In attesa che {{count}} membro si unisca",
+  "chat.hold.group_other": "In attesa che {{count}} membri si uniscano",
+  "chat.waiting.dm": "In attesa di {{name}}",
+  "chat.waiting.dmUnnamed": "In attesa di questa persona",
+  "chat.waiting.group_one": "In attesa di {{count}} membro",
+  "chat.waiting.group_other": "In attesa di {{count}} membri"
 }

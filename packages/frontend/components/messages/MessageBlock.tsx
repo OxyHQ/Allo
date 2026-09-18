@@ -28,6 +28,12 @@ export interface MessageBlockProps {
    */
   onMediaPress?: (message: Message, mediaId: string, index: number) => void;
   onMediaLongPress?: (message: Message, mediaId: string, index: number, position: { x: number; y: number; width?: number; height?: number }) => void;
+  /**
+   * What a held echo's clock says to a screen reader: "Waiting for <name> to
+   * join". The conversation knows who it is waiting for; the block only hands
+   * it to the bubbles whose message carries a `holdReason`.
+   */
+  holdLabel?: string;
 }
 
 /**
@@ -64,6 +70,7 @@ export const MessageBlock = memo<MessageBlockProps>(({
   onMessageLongPress,
   onMediaPress,
   onMediaLongPress,
+  holdLabel,
 }) => {
   const theme = useTheme();
 
@@ -317,6 +324,8 @@ export const MessageBlock = memo<MessageBlockProps>(({
             timestamp: message.timestamp,
             showTimestamp: message.messageType !== 'ai',
             readStatus: message.readStatus,
+            holdReason: message.holdReason,
+            holdLabel,
           };
           return attachment.kind === 'file' ? (
             <FileBubble key={`attachment-${message.id}`} {...shared} />
@@ -370,6 +379,8 @@ export const MessageBlock = memo<MessageBlockProps>(({
                       isCloseToPrevious={isCloseToPrevious}
                       messageType={message.messageType || 'user'}
                       readStatus={message.readStatus}
+                      holdReason={message.holdReason}
+                      holdLabel={holdLabel}
                       isEdited={message.isEdited === true}
                       fontSize={message.fontSize} // Use custom font size if set
                     />
