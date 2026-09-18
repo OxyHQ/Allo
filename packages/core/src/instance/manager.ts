@@ -290,6 +290,10 @@ export class InstanceManager {
         this.own = this.own.map((i) => (i.id === res.instance.id ? res.instance : i));
         this.listView = null;
         this.deps.log.info?.("transfer key uploaded");
+        // The own view carries the key too: drop the cached snapshot and tell
+        // `instance` subscribers, or `current()` keeps answering `null` until
+        // the next listing happens to change something else.
+        this.emitInstance();
         this.deps.emitter.emit("instances");
       } catch (error) {
         this.deps.log.warn?.("transfer key upload failed", { error: describeError(error) });

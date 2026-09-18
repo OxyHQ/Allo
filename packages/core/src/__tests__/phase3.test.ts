@@ -250,9 +250,13 @@ describe("history transfer between instances of one account", () => {
     server.instances.get(id)!.transferPublicKey = null; // a Phase 2 row
     server.requestLog.length = 0;
     const bob2 = await makeClient(server, "acc-bob-0001", "Bob", "ios", { storage, secrets });
-    await waitFor(() => server.instances.get(id)!.transferPublicKey === key);
+    // The server has the key as soon as the PUT handler runs; the client's own
+    // record follows when the response is processed. Wait for the latter, or a
+    // slow runner reads `current()` between the two (measured: green locally
+    // three times, red on the first CI run).
+    await waitFor(() => bob2.client.instance.current()?.transferPublicKey === key);
+    expect(server.instances.get(id)!.transferPublicKey).toBe(key);
     expect(server.requestLog.filter((r) => r.method === "PUT" && r.path === "/v1/instances/me/transfer-key")).toHaveLength(1);
-    expect(bob2.client.instance.current()?.transferPublicKey).toBe(key);
     // the raw transfer secret never reaches storage
     expect(bytesInclude(storage.dump(), (await secrets.get("allo.transfer-key.acc-bob-0001.allo"))!)).toBe(false);
     await stopAll(bob2);
