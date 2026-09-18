@@ -1,17 +1,15 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { FlashList, type ListRenderItem } from '@shopify/flash-list';
 import { useConversationActions, useSyncState } from '@allo/react';
 import {
-  ChatListItem,
-  ChatListItemSkeleton,
+  ChatList,
   ChatSearchField,
+  ChatSearchResults,
   NewChatButton,
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { ComposerIconButton } from '@oxy.so/bloom/chat-composer';
 import { RiDeleteBinLine, RiEditBoxLine, RiSettings3Line } from '@oxy.so/bloom/icons';
 import { PageHeader } from '@oxy.so/bloom/page-header';
@@ -29,8 +27,9 @@ import { conversationIdFromPath } from '@/utils/routeUtils';
 const LEAVE = 'leave';
 
 /**
- * Every conversation, newest first. The whole screen on a phone; the list pane
- * beside the open conversation on a wide layout.
+ * Every conversation, newest first — Bloom's `ChatList`, with the search field
+ * as its header the way Bloom's own conversations screen composes it. The whole
+ * screen on a phone; the list pane beside the open conversation on a wide one.
  */
 export function ConversationList() {
   const router = useRouter();
@@ -43,18 +42,36 @@ export function ConversationList() {
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
 
-  const selectedId = split ? conversationIdFromPath(pathname) : null;
+  const selectedId = split ? (conversationIdFromPath(pathname) ?? undefined) : undefined;
+  const searching = query.trim().length > 0;
 
-  const leaveAction = useMemo(
-    () => ({ right: [{ key: LEAVE, label: t('chat.leave.action'), icon: RiDeleteBinLine, tone: 'negative' as const }] }),
-    [t],
+  const chats = useMemo<ChatSummary[]>(
+    () =>
+      summaries.map((chat) => ({
+        ...chat,
+        swipeActions: {
+          right: [{ key: LEAVE, label: t('chat.leave.action'), icon: RiDeleteBinLine, tone: 'negative' as const }],
+        },
+      })),
+    [summaries, t],
   );
 
-  const rows = useMemo(() => {
+  const results = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    const matching = needle ? summaries.filter((chat) => chat.name.toLocaleLowerCase().includes(needle)) : summaries;
-    return matching.map((chat) => ({ ...chat, swipeActions: leaveAction }));
-  }, [summaries, query, leaveAction]);
+    if (!needle) return [];
+    return summaries
+      .filter((chat) => chat.name.toLocaleLowerCase().includes(needle))
+      .map((chat) => ({
+        id: chat.id,
+        kind: 'chat' as const,
+        name: chat.name,
+        avatar: chat.avatar,
+        faces: chat.faces,
+        chatKind: chat.kind,
+        detail: chat.preview?.text ?? chat.preview?.attachment?.label,
+        time: chat.time,
+      }));
+  }, [query, summaries]);
 
   const confirmLeave = useCallback(
     async (id: string) => {
@@ -78,24 +95,7 @@ export function ConversationList() {
     [leave, router, selectedId, t],
   );
 
-  const renderItem = useCallback<ListRenderItem<ChatSummary>>(
-    ({ item }) => {
-      const { id, ...row } = item;
-      return (
-        <ChatListItem
-          {...row}
-          selected={id === selectedId}
-          onPress={() => router.push(`/c/${id}`)}
-          onAction={(key) => {
-            if (key === LEAVE) void confirmLeave(id);
-          }}
-        />
-      );
-    },
-    [confirmLeave, router, selectedId],
-  );
-
-  const loading = summaries.length === 0 && sync === 'syncing';
+  const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -104,22 +104,11 @@ export function ConversationList() {
         safeArea={!split}
         border="none"
         actions={
-          <View style={styles.actions}>
-            {!split && (
-              <ComposerIconButton
-                icon={RiSettings3Line}
-                accessibilityLabel={t('settings.title')}
-                onPress={() => router.push('/settings')}
-              />
-            )}
-            {split && (
-              <ComposerIconButton
-                icon={RiEditBoxLine}
-                accessibilityLabel={t('chat.new.title')}
-                onPress={() => router.push('/new')}
-              />
-            )}
-          </View>
+          <ComposerIconButton
+            icon={split ? RiEditBoxLine : RiSettings3Line}
+            accessibilityLabel={split ? t('chat.new.title') : t('settings.title')}
+            onPress={() => router.push(split ? '/new' : '/settings')}
+          />
         }
       />
       <View style={styles.search}>
@@ -134,23 +123,27 @@ export function ConversationList() {
       {sync === 'offline' && (
         <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>{t('chat.sync.offline')}</Text>
       )}
-      {loading ? (
-        <ChatListItemSkeleton count={8} />
-      ) : (
-        <FlashList
-          data={rows}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          extraData={selectedId}
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <ChatEmptyState
-              title={query ? t('chat.search.empty') : t('chat.empty.title')}
-              description={query ? undefined : t('chat.empty.description')}
-            />
-          }
-        />
-      )}
+      <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {searching ? (
+          <ChatSearchResults
+            query={query}
+            results={results}
+            onResultPress={open}
+            labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
+          />
+        ) : (
+          <ChatList
+            chats={chats}
+            selectedId={selectedId}
+            loading={summaries.length === 0 && sync === 'syncing'}
+            onChatPress={open}
+            onChatAction={(action, id) => {
+              if (action === LEAVE) void confirmLeave(id);
+            }}
+            labels={{ emptyTitle: t('chat.empty.title'), emptyDescription: t('chat.empty.description') }}
+          />
+        )}
+      </ScrollView>
       {!split && (
         <NewChatButton
           accessibilityLabel={t('chat.new.title')}
@@ -164,7 +157,7 @@ export function ConversationList() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
-  actions: { flexDirection: 'row', gap: 4 },
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   notice: { paddingHorizontal: 16, paddingBottom: 8 },
+  content: { paddingBottom: 24 },
 });

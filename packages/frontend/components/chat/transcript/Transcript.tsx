@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list';
@@ -15,7 +15,7 @@ import {
   type MessageListEntry,
   type MessageListItem,
 } from '@oxy.so/bloom/message-bubble';
-import { ScrollToBottomButton } from '@oxy.so/bloom/chat-screen';
+import { ChatDateHeader, ScrollToBottomButton } from '@oxy.so/bloom/chat-screen';
 
 import { MessageRow, type MessageActions } from './MessageRow';
 
@@ -68,6 +68,11 @@ export const Transcript = memo(function Transcript({
   const { t } = useTranslation();
   const list = useRef<FlashListRef<MessageListEntry>>(null);
   const [scrolledUp, setScrolledUp] = useState(false);
+  // The day the reader is looking at, and whether they are moving: the floating
+  // pill says where they are while a scroll is going on, and fades after it.
+  const [day, setDay] = useState('');
+  const [scrolling, setScrolling] = useState(false);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const entries = useMemo(() => splitLongRuns(groupMessages(items)), [items]);
 
@@ -130,7 +135,31 @@ export const Transcript = memo(function Transcript({
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     setScrolledUp(contentSize.height - layoutMeasurement.height - contentOffset.y > SCROLLED_UP_PX);
+    setScrolling(true);
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = setTimeout(() => setScrolling(false), 900);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (settle.current) clearTimeout(settle.current);
+    },
+    [],
+  );
+
+  const onViewable = useRef(({ viewableItems }: { viewableItems: { item: MessageListEntry }[] }) => {
+    const first = viewableItems[0]?.item;
+    if (!first) return;
+    const label =
+      first.kind === 'date'
+        ? first.label
+        : first.kind === 'group'
+          ? first.messages[0]?.item.dateLabel
+          : first.kind === 'system' || first.kind === 'call'
+            ? first.item.dateLabel
+            : undefined;
+    if (label) setDay(label);
+  }).current;
 
   return (
     <View style={styles.root}>
@@ -149,8 +178,10 @@ export const Transcript = memo(function Transcript({
         scrollEventThrottle={64}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
+        onViewableItemsChanged={onViewable}
         ListFooterComponent={typing ? <TypingBubble label={t('chat.typing.someone')} /> : null}
       />
+      <ChatDateHeader label={day} visible={scrolling && day !== ''} />
       <View style={styles.floating} pointerEvents="box-none">
         <ScrollToBottomButton
           visible={scrolledUp}

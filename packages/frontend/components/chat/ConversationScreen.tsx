@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConversation, useConversationActions, useSyncState, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ChatBackground, ChatEmptyState, ChatHeader } from '@oxy.so/bloom/chat-screen';
+import { ChatSearchField } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
 import { RiDeleteBinLine, RiInformationLine, RiMore2Line } from '@oxy.so/bloom/icons';
 import { useTheme } from '@oxy.so/bloom/theme';
@@ -54,6 +55,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const ctx = useChatContext(view?.memberAccountIds ?? []);
   const viewer = useRef<MediaViewerHandle>(null);
   const [target, setTarget] = useState<ComposerTarget | null>(null);
+  // Searching filters the loaded history: this device has no other history to search.
+  const [search, setSearch] = useState<string | null>(null);
   const isGroup = view?.kind === 'group';
 
   // Where "unread messages" goes is decided once, from the count as the
@@ -82,6 +85,12 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     [items, ctx, isGroup, unreadAnchor, unreachable, split],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+
+  const matches = useMemo(() => {
+    const needle = search?.trim().toLocaleLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) => row.text?.toLocaleLowerCase().includes(needle));
+  }, [rows, search]);
 
   // The actions read the latest timeline through a ref, so they keep one
   // identity for the screen's life and a new message does not re-render every row.
@@ -211,6 +220,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           connectingLabel={t('chat.connecting')}
           onPressBack={split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
           backLabel={t('common.back')}
+          onPressSearch={() => setSearch((current) => (current === null ? '' : null))}
+          searchLabel={t('chat.info.search')}
           onPressHeader={openInfo}
           openInfoLabel={t('chat.info.open')}
           renderMore={() => (
@@ -238,13 +249,26 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           divider
         />
       </View>
+      {search !== null && (
+        <View style={styles.search}>
+          <ChatSearchField
+            value={search}
+            onChangeText={setSearch}
+            onClear={() => setSearch(null)}
+            placeholder={t('chat.search.inConversation')}
+            autoFocus
+          />
+        </View>
+      )}
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
         <ChatBackground variant="pattern" style={styles.root}>
-          {items.length === 0 && timeline.reachedStart ? (
+          {matches.length === 0 && search !== null ? (
+            <ChatEmptyState title={t('chat.search.empty')} />
+          ) : items.length === 0 && timeline.reachedStart ? (
             <ChatEmptyState description={t('chat.empty.conversation')} notice={t('chat.e2ee')} />
           ) : (
             <Transcript
-              items={rows}
+              items={matches}
               sources={sources}
               isGroup={isGroup}
               typing={timeline.typing}
@@ -273,4 +297,5 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
+  search: { paddingHorizontal: 12, paddingVertical: 8 },
 });
