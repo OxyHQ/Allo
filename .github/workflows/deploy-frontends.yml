@@ -7,7 +7,13 @@ on:
     paths:
       - '.github/workflows/deploy-frontends.yml'
       - 'packages/frontend/**'
+      # The web bundle embeds the SDK: a change in any of these three packages
+      # is a change in what allo.you serves, even when packages/frontend is
+      # untouched. Measured on 2026-09-18: a core-only fix (#145) merged, the
+      # backend redeployed, and allo.you kept serving the bundle with the bug.
       - 'packages/shared-types/**'
+      - 'packages/core/**'
+      - 'packages/react/**'
       - 'package.json'
       - 'bun.lock'
 
