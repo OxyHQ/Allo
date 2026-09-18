@@ -22,7 +22,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
-import { CryptoEngine, base64Decode, base64Encode, generateSigningKey, keyPackageRefFromWire, signRequest, type SigningKeyPair } from "@allo/core";
+import { CryptoEngine, base64Decode, base64Encode, generateSigningKey, keyPackageRefFromWire, signEnrollmentApproval, signRequest, type SigningKeyPair } from "@allo/core";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { INSTANCE_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, type SubmitEventRequest } from "@allo/shared-types";
 import * as schema from "../../db/schema";
 import { logger } from "../../utils/logger";
@@ -224,11 +225,25 @@ describe("self-join by external commit", () => {
     // could be added with, so the elector path is closed.
     const bobDesktop = await h.makeClient(bobId, "Bob desktop", "desktop");
     expect(bobDesktop.client.instance.state()).toBe("pending-approval");
-    await bobIos.client.instance.refreshPending();
-    const [pending] = bobIos.client.instance.pending();
-    expect(pending.instance.id).toBe(bobDesktop.client.instanceId);
-    await bobIos.client.instance.approve(pending.instance.id, pending.challenge);
+    const challenge = bobDesktop.client.instance.current()?.enrollment?.challenge;
+    expect(challenge).toBeTruthy();
+    // The phone is stopped BEFORE it approves, and the approval goes through the
+    // raw signed API with the phone's own key: a running phone client would
+    // reconcile right after approving and add the desktop itself, which on a
+    // slow runner lands before stop() and turns this into an elector scenario.
     await bobIos.client.stop();
+    const phoneSecret = await bobIos.secrets.get(`allo.instance-key.${bobId}.allo`);
+    expect(phoneSecret).toBeTruthy();
+    const phoneKey: SigningKeyPair = { secretKey: phoneSecret!, publicKey: ed25519.getPublicKey(phoneSecret!) };
+    const approval = await signedFetch(bobId, bobIos.client.instanceId!, phoneKey, "POST", `/v1/instances/${bobDesktop.client.instanceId}/approve`, {
+      approvalSignature: signEnrollmentApproval(phoneKey, {
+        accountId: bobId,
+        newInstanceId: bobDesktop.client.instanceId!,
+        newSigningPublicKey: bobDesktop.client.instance.current()!.signingPublicKey,
+        challenge: challenge!,
+      }),
+    });
+    expect(approval.status).toBe(200);
     const epochBefore = (await conversationRow(conv.id)).currentEpoch;
     expect((await leavesOf(conv.id)).filter((l) => l.accountId === bobId && l.state === "active")).toHaveLength(1);
     expect(await leafRow(conv.id, bobDesktop.client.instanceId!)).toBeNull();
