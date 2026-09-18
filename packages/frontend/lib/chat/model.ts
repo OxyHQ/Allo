@@ -171,6 +171,51 @@ export function unreachableCopy(view: ConversationView, ctx: ChatContext): Unrea
   };
 }
 
+/**
+ * The line in place of the composer while this device cannot read or send
+ * here yet, or `null` once it can. `busy` says a spinner belongs next to it:
+ *
+ * - `joining`: the device is joining by itself from the stored GroupInfo
+ *   (`crypto.md` section 5); nobody else is needed and it is over in a sync.
+ * - `waiting_for_member`: the server holds no GroupInfo for the current epoch
+ *   (a conversation whose last commit predates the field), so a member's
+ *   device has to add this one — and it can only do that while it is online.
+ *   Also what a removed or left member reads.
+ */
+export interface JoinNotice {
+  text: string;
+  busy: boolean;
+}
+
+export function joinNotice(view: ConversationView, t: Translate): JoinNotice | null {
+  switch (view.joinState) {
+    case 'joined':
+      return null;
+    case 'joining':
+      return { text: t('chat.joining'), busy: true };
+    case 'waiting_for_member':
+      return { text: `${t('chat.notJoined')} ${t('chat.notJoinedHint')}`, busy: false };
+  }
+}
+
+/**
+ * What takes the composer's place, or `null` when the person can type. The
+ * integrity failure comes first and stays: this device refused a commit the
+ * server accepted (a joiner it could not verify), so the group moved on
+ * without it and nothing sent from here reaches anybody. The SDK never clears
+ * it and the app offers no way out — fail closed (`crypto.md` section 5).
+ * `error` says it is drawn as a failure, not as a wait.
+ */
+export interface ComposerNotice extends JoinNotice {
+  error: boolean;
+}
+
+export function composerNotice(view: ConversationView, t: Translate): ComposerNotice | null {
+  if (view.integrity === 'refused_commit') return { text: t('chat.integrity.refused'), busy: false, error: true };
+  const join = joinNotice(view, t);
+  return join ? { ...join, error: false } : null;
+}
+
 function chatPreview(view: ConversationView, ctx: ChatContext): ChatPreview | undefined {
   const last = view.lastMessage;
   if (!last) return undefined;
@@ -225,6 +270,12 @@ export interface TranscriptOptions {
    * measure in pixels once it has the room.
    */
   bubbleMaxWidth?: number;
+  /**
+   * The same for an echo held as `epoch_stalled`: the outbox stopped sending
+   * because this device's epoch cannot catch up with the server's (see
+   * {@link composerNotice}); the SDK releases it on its own if it ever does.
+   */
+  stalledLabel?: string | null;
 }
 
 function reactionsOf(item: TimelineItemView, me: string | undefined): MessageReaction[] | undefined {
@@ -261,6 +312,7 @@ export function transcriptItems(
   const byId = new Map(items.map((item) => [item.id, item]));
   return items.map((item) => {
     const sentAt = new Date(item.sentAt);
+    const holdLabel = !item.isOwn || !item.holdReason ? undefined : item.holdReason === 'epoch_stalled' ? options.stalledLabel : options.holdLabel;
     const base: MessageListItem = {
       id: item.id,
       direction: item.isOwn ? 'outgoing' : 'incoming',
@@ -277,7 +329,7 @@ export function transcriptItems(
       failed: item.sendState === 'failed',
       reactions: reactionsOf(item, ctx.me),
       replyTo: replyPreview(item, byId, ctx),
-      labels: item.isOwn && item.holdReason && options.holdLabel ? { pending: options.holdLabel } : undefined,
+      labels: holdLabel ? { pending: holdLabel } : undefined,
     };
     const content = item.content;
     switch (content.kind) {

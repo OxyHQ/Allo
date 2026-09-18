@@ -82,7 +82,7 @@ Issue section 8 steps, mapped to the API (details in `api-v1.md`):
 | 3. It requests authorisation with a one-time challenge | `POST /v1/instances` returns `pending` and a random challenge when the account already has an active instance |
 | 4. Another authorised instance approves | An active instance signs the challenge, new id and new public key and calls `POST /v1/instances/:id/approve`; any active instance may approve, no specific device is required |
 | 5. Allo records the public credential | The approver id and approval signature are stored on the instance and served to other accounts |
-| 6. Authorised conversations incorporate the new instance | The account's lowest-id active leaf in each conversation claims a key package and commits an Add; the new instance joins from the welcome |
+| 6. Authorised conversations incorporate the new instance | The new instance joins each of the account's conversations by itself: it fetches the GroupInfo the last committer stored and posts an MLS external commit, which every member admits only after verifying its credential against the account's approval chain; nobody else has to be online. Where no GroupInfo is stored (a conversation last committed before the field existed) the account's lowest-id active leaf claims a key package and commits an Add, and the new instance joins from the welcome |
 | 7. What history it can recover is decided separately | See section 7: an E2EE offer from a verified instance of the same account, or the account's encrypted backup with its recovery phrase; never the live group state |
 
 Bootstrap: an account with zero active instances gets an active instance on
@@ -93,9 +93,12 @@ could approve instead is designed, not built.
 
 A valid login by itself does not let the server create an endpoint that can
 decrypt: the server never holds key package private parts and cannot author a
-welcome.
+welcome, nor an external commit, which is signed by the joiner's own key over
+a credential every member checks against the chain.
 
-Status: built in this change (steps 1 to 6); step 7 built in Phase 3.
+Status: built in this change (steps 1 to 6); step 7 built in Phase 3; the
+self-join in step 6 with the external-join change, the elector remaining as
+its fallback.
 
 ## 7. History versus live state
 
@@ -103,7 +106,10 @@ Three separate concerns (issue section 9):
 
 1. **Receiving future messages.** Being an active leaf. Built in this change.
 2. **Joining the current state of the conversation.** The MLS welcome at the
-   epoch of the add. Built in this change.
+   epoch of the add, or the instance's own external commit from the stored
+   GroupInfo, which also recovers a device that lost its group state
+   (`crypto.md` section 5). Built in this change; the external commit with
+   the external-join change.
 3. **Recovering old messages.** An encrypted history archive independent of
    the live group state: the decrypted timeline, conversation metadata and
    media keys of one instance, encrypted on the device in chunks under a key

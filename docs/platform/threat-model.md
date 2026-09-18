@@ -61,7 +61,12 @@ that verifies a key without containing it.
   model below, not of MLS alone.
 - Group membership is agreed by the members, in the group. The server cannot
   add a leaf: an add is a commit plus a welcome authored by an existing
-  member's instance, and a leaf that was never welcomed holds no secrets.
+  member's instance, and a leaf that was never welcomed holds no secrets. A
+  leaf can also add itself, by an external commit built from the GroupInfo
+  the server stores with every commit (`crypto.md` section 5); the server
+  cannot author one of those either, because it is signed by the joiner's own
+  key over a credential every member verifies before the library sees the
+  commit, and a leaf the members refused holds nothing.
 
 MLS does not give: history for instances that joined later, backup, push
 content, identity binding to Oxy accounts, sync, or media.
@@ -94,6 +99,18 @@ content, identity binding to Oxy accounts, sync, or media.
   the account owner sees it in the devices screen); a self-custodied recovery
   mechanism that can approve instead is designed and not built. The Phase 3
   recovery phrase unlocks the backup and approves nothing.
+- **Admission of a self-joining instance.** A stored GroupInfo lets anybody
+  who can read it build an external commit; who gets in is decided by the
+  members, not by the GroupInfo. Every member checks the joiner's leaf
+  against the account's verified approval chain — the credential
+  `accountId:instanceId` must name an instance in that chain carrying exactly
+  the leaf's signing key — and refuses a key or an instance id already active
+  in the tree unless the same commit removes it (a resync of the device's own
+  leaf). A commit that fails is dropped and the member's state is untouched,
+  so a forged joiner changes nothing and reads nothing. The server's gate
+  (a `joined` member row, a request signed by an instance of that account,
+  the added leaf being exactly the sender) keeps strangers from reading the
+  GroupInfo at all; the chain check is what keeps them out of the group.
 - **Revocation.** Any active instance of the account, or the instance itself,
   can revoke an instance. The server marks it revoked, refuses its signature
   from then on, disconnects its sockets, marks its leaves removed pending, and
@@ -127,6 +144,15 @@ content, identity binding to Oxy accounts, sync, or media.
   typing traffic; typing payloads themselves are MLS application messages the
   server cannot read and does not store.
 - Push tokens and which instance is on which platform and app.
+- The latest GroupInfo of every conversation: the group id, epoch, transcript
+  and tree hashes, `external_pub`, and every leaf's credential
+  (`accountId:instanceId`), signature and HPKE public keys, capabilities and
+  lifetime. Nothing in it is new to the server — it already holds every
+  leaf's account and instance in `conversation_leaves` and every signature
+  key from the key packages it serves — and nothing in it is secret;
+  `external_pub` is a public key and the confirmation tag a MAC it cannot
+  check. To anybody else it would be membership disclosure, which is why
+  reading it takes a member row.
 - DM pairing: `dm_key` is `${appId}:${accountA}:${accountB}` in the clear so
   DMs are idempotent.
 - History offers: that one exists, which instance offered to which and when,
@@ -199,7 +225,7 @@ verifies it in the tree), `open` (not built in this change).
 | Blobs contain no plaintext media | Files are encrypted client-side with a random per-file key before `POST /v1/blobs`; the key travels inside the E2EE `media` message; thumbnails likewise. | met by design |
 | Logs and push contain no content | Logger sanitiser redacts ids, tokens, urls; push body is the literal "New message" with `{ conversationId, eventId }`. | met by design |
 | A stolen Oxy token cannot decrypt history | Instance-signed routes refuse a token alone; a new instance registered with the token is `pending` until an active instance approves it, and even when active it receives only events from the epoch it is welcomed at. The TOFU window (no active instance) remains the exception and is documented in section 4. | met by design, TOFU exception open |
-| Server cannot silently add a reader | Adds are commits plus welcomes signed by a member instance; the server has no key package private part and cannot author a welcome. It can fabricate membership rows and control events, which clients treat as metadata, never as keys. | met by design |
+| Server cannot silently add a reader | Adds are commits plus welcomes signed by a member instance; the server has no key package private part and cannot author a welcome. An external commit from the stored GroupInfo is signed by the joiner's own key over a credential every member verifies against the account's chain before the library sees it, so a joiner the server invents is refused by every member with their state untouched; a substituted tree fails the signed tree hash, and a stale GroupInfo produces a join at a past epoch that every member refuses. It can fabricate membership rows and control events, which clients treat as metadata, never as keys. | met by design and by test (core `join.test.ts` j4; engine mutation tests) |
 | Key substitution is detectable or rejected | Instance public keys are stored once; `(account_id, signing_public_key)` is unique; approvals are signed by an existing instance over the new key and the challenge, and the challenge is published once the instance is approved. `@allo/core` verifies the whole chain up to the bootstrap root before it claims a key package, and the approving device and the pending device both display the same challenge fingerprint for an out-of-band comparison. | met by design and by test (core `signing.test.ts`, e2e (i)); the bootstrap instance itself is trust-on-first-use |
 
 ### Multi-device (issue section 23)
@@ -211,3 +237,5 @@ verifies it in the tree), `open` (not built in this change).
 | Revoking an installation cuts future access | Section 4, revocation: signature refused, sockets dropped, Remove commit at the next epoch. | met by design |
 | A new installation recovers only the permitted history | It decrypts live traffic from its welcome epoch onward. Old messages reach it only through an offer whose donor it verified as an active, chain-verified instance of the same account with a valid manifest signature, opened with its own transfer key, or through the account's backup with the recovery phrase, refused before download on a wrong phrase or a foreign writer. A pending-approval instance recovers nothing until approved. | met by design and by test (core `phase3.test.ts` t1, t2, b1; backend `history.realdb.test.ts`, `backups.realdb.test.ts`; integration `phase3.realdb.test.ts` in this change) |
 | Desktop is first class without a primary phone | Approval can be given by any active instance; `platform` admits `desktop` and `node`; nothing in the API distinguishes a phone. | met by design |
+| A new device joins with no other device online | It fetches the GroupInfo the last committer stored and joins by external commit; the members admit it from the chain, not from the server's word. A conversation from before stored GroupInfos still waits for an elector, and the app says so. | met by design and by test (core `join.test.ts` j1, j2, j6, j7; backend `groupInfo.realdb.test.ts`; app `joinNotice.test.tsx`) |
+| A device that lost its group state recovers it alone | One resync commit by the same instance replaces its own leaf; membership is unchanged and nothing sent before it becomes readable. Losing the signing key too makes it a new instance. | met by design and by test (core `join.test.ts` j3, j3b) |

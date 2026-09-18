@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { ActivityIndicator, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   AttachmentMenu,
@@ -8,8 +8,10 @@ import {
   ComposerIconButton,
   VoiceRecorder,
   type AttachmentMenuItem,
+  type ChatComposerIcon,
 } from '@oxy.so/bloom/chat-composer';
-import { RiAttachment2, RiCameraLine, RiFileTextLine, RiGalleryLine } from '@oxy.so/bloom/icons';
+import { RiAttachment2, RiCameraLine, RiErrorWarningLine, RiFileTextLine, RiGalleryLine } from '@oxy.so/bloom/icons';
+import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 
 import {
@@ -31,6 +33,10 @@ interface ComposerProps {
   onClearTarget: () => void;
   /** Read-only, with this line in place of the input. */
   notice?: string;
+  /** The notice is about something under way: a spinner takes the icon's place. */
+  noticeBusy?: boolean;
+  /** The notice is a failure, not a wait: the icon is drawn in the error colour. */
+  noticeError?: boolean;
   /** A line above the input that informs without blocking it. */
   note?: string | null;
   onSendText: (text: string, target: ComposerTarget | null) => Promise<void>;
@@ -47,7 +53,18 @@ const TYPING_IDLE_MS = 3000;
 // MediaRecorder on the web).
 const IS_NATIVE = Platform.OS !== 'web';
 
-export function Composer({ target, onClearTarget, notice, note, onSendText, onSendAttachments, onTyping }: ComposerProps) {
+/** Bloom draws the notice icon at 16px in the secondary icon colour; a spinner in the same slot and colour. */
+const BusyNoticeIcon: ChatComposerIcon = ({ fill }) => (
+  <ActivityIndicator size="small" color={typeof fill === 'string' ? fill : undefined} testID="composer-notice-busy" />
+);
+
+/** The failure glyph in the theme's error colour, whatever secondary tint Bloom passes. */
+const ErrorNoticeIcon: ChatComposerIcon = ({ width, height }) => {
+  const theme = useTheme();
+  return <RiErrorWarningLine width={width} height={height} fill={theme.colors.error} />;
+};
+
+export function Composer({ target, onClearTarget, notice, noticeBusy, noticeError, note, onSendText, onSendAttachments, onTyping }: ComposerProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const voice = useVoiceRecording();
@@ -182,6 +199,7 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
       onSend={send}
       placeholder={t('composer.placeholder')}
       notice={notice}
+      noticeIcon={noticeBusy ? BusyNoticeIcon : noticeError ? ErrorNoticeIcon : undefined}
       banner={banner}
       recorder={recorder}
       leading={

@@ -115,7 +115,10 @@ and listed, not a draft.
 (from claimed key package bytes) and Remove proposals (leaf indexes) and
 returns the wire commit, the Welcome when anything was added, and `next`, the
 state after the commit. The input state is untouched. Commits carry the
-ratchet tree extension, so a joiner needs nothing beyond the Welcome.
+ratchet tree extension, so a joiner needs nothing beyond the Welcome. Every
+commit also carries, in the same request, the GroupInfo of the epoch it
+creates (`CommitInfo.groupInfo`, from `next`), which is what lets a device
+join with no Welcome at all (section 5).
 
 **Pending commit.** The outbox (`outbox/engine.ts`) persists `next` and the
 exact request as a `pendingCommit` record before sending, keeps the pre-commit
@@ -139,7 +142,11 @@ finds which of the Welcome's KeyPackageRefs it holds, fetches the conversation
 summary first (so an unreachable server retries the delivery without consuming
 anything), takes the private half out of the stock, and joins. The epoch it
 joined at is recorded as `joinedEpoch`; nothing before it is decryptable here,
-and the sync loop skips events older than it.
+and the sync loop skips events older than it. That is joining by Welcome, the
+way an instance somebody added gets in. A device that is a member with no
+leaf does not wait for that: it joins by its own external commit from the
+GroupInfo the server stores (section 5), and `joinedEpoch` is recorded the
+same way.
 
 **Epoch gating.** `processIncoming` reads the epoch off the wire before the
 library sees the message. A future epoch throws `FutureEpochError` with the
@@ -239,7 +246,134 @@ relates them.
 
 ## 5. Membership rules the SDK runs on its own
 
-These run without a user action; they are what makes multi-device work.
+These run without a user action; they are what makes multi-device work. The
+first makes a device join on its own. The two elector rules after it are the
+fallback for a conversation with no stored GroupInfo, and what resolves a race
+between a device joining itself and a member adding it: the server's epoch
+check makes one lose, and the loser finds the work done.
+
+### Joining by yourself (external commits)
+
+**What the committer publishes.** The author of every commit publishes, in the
+same `POST /v1/conversations/:id/events` request as the commit and as a
+required field of it (`CommitInfo.groupInfo`), the MLS GroupInfo of the epoch
+the commit creates: the group context, the `external_pub` extension and the
+ratchet tree, serialized, at most 256 KiB
+(`CryptoEngine.publishGroupInfo(next)`). A creator whose first request carries
+no commit, because there was nobody to add, publishes the epoch-0 GroupInfo
+the same way. `external_pub` is a public key derived from the epoch's
+`external_secret`; nothing in a GroupInfo is secret (section 9).
+
+**What the server stores and who may read it.** One row per conversation,
+the latest epoch's (`conversation_group_info`: epoch, signer instance, bytes),
+written in the commit's transaction, so "commit accepted but no GroupInfo for
+its epoch" cannot happen. `GET /v1/conversations/:id/group-info` returns it,
+or `null` when the stored one is not the current epoch's, and only to an
+instance whose account holds a `joined` member row — the same gate as every
+read, because to anybody else the leaves inside it are membership disclosure.
+The server never parses the bytes.
+
+**How a device joins.** After every sync (`ConversationsService.reconcile`,
+before either elector rule), in each conversation where this instance's
+account is a joined member and this instance holds no active leaf, it fetches
+the stored GroupInfo and, when one exists for the current epoch, builds an
+external commit from it (`CryptoEngine.joinExternal`: RFC 9420 section
+12.4.3.2, one `ExternalInit`, a `path` with its own fresh leaf, nothing else)
+and posts it as an ordinary `mls_commit` with `kind: 'external'`,
+`addedLeaves` naming exactly itself, no Welcome, and the GroupInfo of the new
+epoch. The server admits it on a member row rather than a leaf, activates the
+sender's leaf at `newEpoch` at once (there is no Welcome to wait for), and
+delivers the commit to every other active leaf. The joiner adopts the new
+state only when the server acknowledges the commit, exactly as for any
+pending commit (section 2). Nobody else has to be online: a new account's
+first device, a new device of a member account, and a device whose Welcome
+never came all join this way.
+
+**Admission is the members' decision, not the GroupInfo's.** Anybody holding
+the GroupInfo can build an external commit; that is what it is for. Whether
+it takes is decided by every existing member, and before the library sees the
+message, because the library's own callback sees only the `external_init`
+and no leaf: `processIncoming` reads the joiner's leaf off the wire
+(`sender: new_member_commit`, `path.leafNode`) and refuses the commit unless
+the credential parses as `accountId:instanceId`, that instance is in the
+account's verified approval chain (section 6) with exactly that signing key,
+and no active leaf already carries the key or the instance id — unless the
+same commit removes it, which is a resync. A refused commit is dropped with a
+warning and the state untouched (`JoinRefusedError`): the members stay at
+their epoch, and a forged joiner has joined nothing. The server's own check
+is weaker on purpose — a member row for the sender's account, a request
+signed by one of its instances, and the added leaf being exactly the sender —
+because the chain is verified by clients, not by the server's word.
+
+**After a refusal: fail closed.** A refused commit is one the server has
+already accepted — its epoch moved, every other device that admitted the
+joiner moved with it, and this device did not. From then on nothing this
+device encrypts is at the group's epoch, so every send is answered
+`epoch_conflict`, and the sync that normally resolves one brings only the
+commit it will not take. The SDK records the first such refusal on the
+conversation (`ConversationView.integrity: 'refused_commit'`, with
+`refusedEpoch` and `refusalReason`; persisted, never cleared by the SDK), and
+the outbox stops the loop: after three conflicts without local progress an
+item is held (`holdReason: 'epoch_stalled'`) under an exponential backoff, and
+released only if the local epoch ever advances. The app says the conversation
+cannot continue securely and offers nothing else — no retry, no dismiss, no
+"trust this device" — because every way out is either accepting the joiner it
+could not verify or discarding what it knows. A sound conversation can end up
+here only through the server (or a member's account) letting in an instance
+outside the chain, which is exactly what the notice reports; an ordinary
+epoch race never sets it, because its sync moves the epoch.
+
+**The race with the elector.** An elector that has not yet seen the new leaf
+may add the same instance in the same instant, or two devices of one account
+may both join at one epoch. The loser's answer is `409 epoch_conflict`; it
+discards its pending state, syncs, refetches the GroupInfo and tries again, at
+most three times per sync (`MAX_JOIN_ATTEMPTS`), and stops when the sync shows
+it already holds a leaf. The elector, for its part, finds the instance with a
+leaf and adds nothing.
+
+**Resync after lost state.** A device that lost its group state — the record
+is gone, or does not decode — while the server still lists its leaf active
+joins the same way with `resync: true`: the external commit also removes its
+own former leaf (the RFC allows at most one Remove, of the joiner's own leaf),
+is posted as `kind: 'resync'` with `removedLeaves` naming exactly its own
+instance, and the server replaces the leaf row instead of refusing a second
+leaf for an instance that has one. One commit, no other device involved,
+membership unchanged; nothing sent before it is readable here, as after any
+join. The SDK runs it on the second sync that finds the state missing, not
+the first, so a Welcome for a leaf an elector added a moment ago is not raced
+by a needless resync. A device that lost its signing key as well is not a
+resync: it is a new instance, and enrolls and joins as one.
+
+**What the server cannot do with it.** Forge a join: the commit is signed by
+the joiner's leaf key over a credential every member verifies against the
+chain, so a leaf the server invents is refused by every member. Substitute a
+tree: the tree hash is inside the signed GroupInfo and the joiner validates
+the tree it was given against it. Fork the group with a stale GroupInfo: the
+join built from one is at a past epoch, which every member refuses, and the
+joiner adopts nothing until the server acknowledges the commit, so a stale
+GroupInfo costs one round trip and nothing else.
+
+**Two library gaps, handled in the wrapper** (`spikes/mls/RESULTS-external-join.md`
+section 7, to report upstream). `ts-mls` does not compare the committer's own
+leaf against the tree for signature-key uniqueness, so the same key rejoining
+without a Remove would be accepted as a second leaf; the admission rule above
+refuses that before the library runs. And it reports no "removed from group"
+to a member whose leaf a resync removed — the old copy of a resynced state —
+but an `InternalError`; the engine treats that error, after a Remove of its
+own leaf index, as `removedSelf`, so a stale copy can neither send nor read
+what follows.
+
+**Old conversations.** A conversation whose last commit predates the field
+has no stored GroupInfo. A device that finds `null` waits for an elector
+below, and `ConversationView.joinState` says which of the two is happening
+(`joining` or `waiting_for_member`). Once per conversation per session, a
+member that holds an active leaf checks that the server holds a GroupInfo for
+its current epoch and `PUT`s its own when not
+(`PUT /v1/conversations/:id/group-info`, current epoch only, `409
+epoch_conflict` otherwise), so every conversation somebody still opens becomes
+joinable without a commit.
+
+### The elector rules
 
 **Adding the account's own instances.** After every sync
 (`ConversationsService.reconcile`), in each conversation where this instance
@@ -247,7 +381,11 @@ is the lowest instance id among its account's leaves, it claims a key package
 for every trusted, active own instance that has no leaf and no pending add,
 and commits the Add. The lowest-id rule is the elector: with several devices
 online, one of them commits and the others do nothing; if two race anyway the
-server's epoch check makes one lose and rebuild (section 2).
+server's epoch check makes one lose and rebuild (section 2). With a stored
+GroupInfo the new instance has usually joined itself by the time the elector
+looks; the rule then finds it holding a leaf and adds nothing, and still
+offers it history once (section 14), because the offer follows the leaf, not
+the Add.
 
 **Adding a member's first device.** A joined member with no leaf at all — no
 device when the conversation was created, or none left — is the second
@@ -268,7 +406,9 @@ no leaf; the nudged conversation's next reconcile skips the throttle. So in
 the ordinary case the device is added within a sync of installing the app,
 with no polling at all. Once the account holds one leaf, its own elector
 (the first rule above) adds its further devices, and this rule has nothing to
-do.
+do. With a stored GroupInfo the first device joins itself the moment it is
+active and this rule never runs for it; the nudge still matters, because it
+is what wakes the electors of a conversation that has none.
 
 **The outbox hold.** While a conversation has other joined members and none of
 them has a leaf, an application message would be encrypted for nobody who
@@ -448,7 +588,15 @@ backups it sees the manifest in the clear (kind, conversation and event
 counts, chunk blob ids, the plaintext digest, creation time), the chunk
 sizes, which instance offered to which and when it was consumed, when the
 account's backup was last written and by which instance, and the sealed key
-and `keyCheck`, which are opaque without the key (sections 14 and 15). It
+and `keyCheck`, which are opaque without the key (sections 14 and 15). Of
+every conversation it holds the latest GroupInfo (section 5): the group id,
+the epoch, the confirmed transcript hash and the tree hash, `external_pub`,
+and for every leaf its credential (`accountId:instanceId`), signature and
+HPKE public keys, capabilities and lifetime. None of that is new to it — it
+already holds every leaf's account and instance in `conversation_leaves` and
+every signature key from the key packages it serves — and none of it is
+secret: `external_pub` is a public key and the confirmation tag is a MAC it
+cannot verify. It
 holds no key to any ciphertext, and a group name, a read receipt, a delivery
 receipt, a reaction and a typing frame are all inside the ciphertext. The
 full list, and what is deliberately not defended, is `threat-model.md`
@@ -475,6 +623,12 @@ instead.
   makes a new one.
 - **Push previews.** The notification body is still "New message"; nothing
   decrypts on the push path.
+- **A resync the other copy is told about.** A resync replaces the device's
+  own leaf; an old copy of that state, if one still exists somewhere, learns
+  it only by failing to follow (the wrapper turns the library's error into
+  `removedSelf`, section 5), and nobody's screen announces it. Losing the
+  group state together with the signing key is not a resync at all: that
+  device is a new instance and enrolls again.
 - **Per-account typing attribution.** The SDK reports that somebody is typing,
   not who (section 3).
 - **Key package pruning.** Packages carry the library's default lifetime and
@@ -516,7 +670,9 @@ the spike's section 3 is where they were found.
    discarded and the intent rebuilt. A Welcome leaves the device only in the
    same request as its commit, so nobody joins an epoch the group never
    reached. A key package spent in a lost commit was never applied to the tree
-   and may be reused.
+   and may be reused. The GroupInfo of an epoch leaves the device only in the
+   same request as the commit that creates it, so the server never holds one
+   for an epoch the group did not reach.
 
 3. **One live copy of every state.** Exactly one `GroupState` per conversation
    is in memory, every advance of it (encrypting, decrypting, committing,
@@ -529,13 +685,22 @@ the spike's section 3 is where they were found.
    decrypted application messages, conversation metadata and media keys, and
    nothing from `groupState`, `keyPackage` or `pendingCommit`. Importing one
    writes `event` records at epoch 0 and touches no group; a new leaf still
-   joins from its Welcome. A donor's live secrets leaving the device inside an
-   archive would make two instances share one leaf.
+   joins from its Welcome or by its own external commit. A donor's live
+   secrets leaving the device inside an archive would make two instances
+   share one leaf.
+
+5. **A joiner is admitted before the library sees it.** An external commit's
+   leaf is checked against the account's verified chain, its signing key, and
+   the tree's existing keys and instance ids before `processIncoming` hands
+   the message to `ts-mls` (section 5), because the library neither shows the
+   leaf to its callback nor enforces key uniqueness for the committer's own
+   leaf. A refused commit leaves the state untouched.
 
 A change that adds a path which encrypts, decrypts or commits outside
 `GroupRegistry` and the mutex, or which delivers a Welcome by another route,
 or which lets a message skip the epoch check, or which puts MLS state into an
-archive, has broken one of these even if every test passes.
+archive, or which lets an external commit reach the library unchecked, has
+broken one of these even if every test passes.
 
 ## 12. The transfer key
 

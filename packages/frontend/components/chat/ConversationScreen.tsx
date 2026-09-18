@@ -23,6 +23,7 @@ import type { PickedAttachments } from '@/lib/chat/attachments';
 import {
   conversationAvatar,
   conversationFaces,
+  composerNotice,
   conversationTitle,
   firstUnreadId,
   previewText,
@@ -78,8 +79,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         firstUnreadId: unreadAnchor ?? undefined,
         holdLabel: unreachable?.hold,
         bubbleMaxWidth: split ? WIDE_BUBBLE_MAX_WIDTH : undefined,
+        stalledLabel: t('chat.hold.stalled'),
       }),
-    [items, ctx, isGroup, unreadAnchor, unreachable, split],
+    [items, ctx, isGroup, unreadAnchor, unreachable, split, t],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -196,6 +198,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const other = view.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
   const handle = other ? ctx.person(other)?.handle : undefined;
   const faces = conversationFaces(view, ctx);
+  const notice = composerNotice(view, t);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -258,7 +261,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           <Composer
             target={target}
             onClearTarget={() => setTarget(null)}
-            notice={view.joined ? undefined : t('chat.notJoined')}
+            notice={notice?.text}
+            noticeBusy={notice?.busy}
+            noticeError={notice?.error}
             note={unreachable?.banner}
             onSendText={sendText}
             onSendAttachments={sendAttachments}
