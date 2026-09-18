@@ -16,13 +16,19 @@ export { useTimeline, DEFAULT_TIMELINE_PAGE_SIZE, type Timeline, type TimelineOp
 export { useMediaFile, type MediaFile, type MediaFileStatus } from "./hooks/useMediaFile";
 export { useSyncState } from "./hooks/useSyncState";
 export { useAlloErrors } from "./hooks/useAlloErrors";
+export { useHistoryTransfer, type HistoryTransfer } from "./hooks/useHistoryTransfer";
+export { useBackup, type Backup } from "./hooks/useBackup";
 export { MediaCache, DEFAULT_MEDIA_CACHE_SIZE, mediaKey } from "./mediaCache";
 
 // View-model types, re-exported so a screen imports one package.
 export type {
   AlloClient,
   AlloClientOptions,
+  BackupStatus,
   ConversationView,
+  HistoryOfferView,
+  HistoryPhase,
+  HistoryProgress,
   InstanceState,
   InstanceView,
   LoadOlderResult,
@@ -37,4 +43,4 @@ export type {
   TimelineItemView,
   UploadMediaMeta,
 } from "@allo/core";
-export { AlloError, type AlloErrorCodeName } from "@allo/core";
+export { AlloError, RecoveryPhraseError, UntrustedInstanceError, type AlloErrorCodeName } from "@allo/core";
