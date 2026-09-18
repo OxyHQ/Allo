@@ -82,9 +82,16 @@ packages/
   shared-types/   @allo/shared-types  TypeScript type definitions
 ```
 
+The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
+chat-screen, message-bubble, message-media, chat-composer, chat-people) in
+Bloom's split `AppShell`; `packages/frontend/ARCHITECTURE.md` maps every screen.
+Nothing is hand-built that Bloom has, and a missing piece is added to Bloom and
+released, never patched in the app. Import Bloom by subpath only.
+
 NativeWind is on a **prerelease** (a `5.0.0-preview` tag), paired with Tailwind
-v4 and `react-native-css` v3. Expect preview-grade breakage and check the exact
-tag in `packages/frontend/package.json` before blaming your own code.
+v4 and `react-native-css` v3, and is there only for Bloom's design tokens: the
+app's own components use `StyleSheet` with theme colours. Check the exact tag in
+`packages/frontend/package.json` before blaming your own code.
 
 ## Data storage: PostgreSQL, and nothing else
 
@@ -136,9 +143,10 @@ frontend. `utils/api.ts` survives ONLY for profile settings, the directory and
 reports.
 
 **`lib/allo/` is the only place the frontend constructs the client.** Screens
-use `@allo/react` hooks and the projections in `lib/chat/model.ts`
-(`TimelineItemView` → `Message`, `ConversationView` → `Conversation`, so the
-message components kept their shapes). The seam holds every platform adapter:
+use `@allo/react` hooks and the pure projections in `lib/chat/model.ts`
+(`ConversationView` → Bloom's `ChatSummary`, `TimelineItemView` → Bloom's
+`MessageListItem`, names and times already strings), fed by
+`hooks/useChatContext.ts`. The seam holds every platform adapter:
 `storage.native.ts` (expo-sqlite, one `kv` table, `batch` in a transaction) and
 `storage.web.ts` (IndexedDB), `secrets.native.ts` (expo-secure-store,
 `WHEN_UNLOCKED_THIS_DEVICE_ONLY`) and `secrets.web.ts`, `session.ts` (the
@@ -199,21 +207,18 @@ what is happening rather than refusing.** Any Oxy user is a valid participant:
 "message" button) have no "not found" case to catch and show only real
 failures. The SDK lists such people in `ConversationView.unreachableMemberAccountIds`
 and, while NOBODY else in the conversation can read, holds each own message
-`pending` with `holdReason: 'no_reachable_member'`; both are projected in
-`lib/chat/model.ts` (`unreachableMemberAccountIds`, `lastMessageHold`,
-`Message.holdReason`). The words are one hook, `useUnreachableMembers`, and
-three places draw them: `UnreachableMembersBanner` above the composer in
-`ConversationView` ("<Name> hasn't set up Allo yet. Your messages will be
-delivered when they join."; a group counts them), the held echo's clock, which
-`MessageMetadata` gives the accessible name "Waiting for <Name> to join"
-(`isHeld` in `messageStatus.ts` keeps the label off anything but a pending
-message), and the list row, which shows "Waiting for <Name>" in place of the
-preview. The composer is never disabled for this, the name comes through the
+`pending` with `holdReason: 'no_reachable_member'`. The words are one pure
+function, `unreachableCopy` in `lib/chat/model.ts`, and three places draw them:
+a note banner above the composer in `ConversationScreen` ("<Name> hasn't set up
+Allo yet. Your messages will be delivered when they join."; a group counts
+them), the held message's clock, whose accessible name `transcriptItems` sets to
+"Waiting for <Name> to join" (only on a held own message), and the list row,
+whose preview `chatSummary` replaces with "Waiting for <Name>". The composer is never disabled for this, the name comes through the
 people layer and an id never reaches the screen ("this person" while the
 lookup is out), and nothing here polls: the server nudges the conversation
 when the person's first device activates and the SDK's elector adds it.
-`__tests__/allo/unreachableBanner.test.tsx` runs the whole thing over a real
-`@allo/core` client and the fake server, both ends.
+`__tests__/allo/unreachableBanner.test.tsx` runs that data path over a real
+`@allo/core` client and the fake server, both ends, with the real English copy.
 
 ## Key features
 
@@ -234,16 +239,16 @@ when the person's first device activates and the SDK's elector adds it.
   object URL on web); a voice note or a document is not fetched until played or
   opened. `UploadMediaMeta.thumbnail` (`{ bytes, mime, width, height }`) sends
   a rendered preview as a second encrypted blob named by the same `media`
-  message, and `MediaView.thumbnail.ref` fetches it alone; `ConversationView`
-  passes the rendered thumbnail to `sendMedia`, and `MediaCarousel` prefers
-  it over the original when drawing a bubble. Delivery receipts
+  message, and `MediaView.thumbnail.ref` fetches it alone; `lib/chat/upload.ts`
+  reads the rendered thumbnail for `sendMedia`, and `MessageMedia` draws it in
+  the bubble; the original is fetched only when Bloom's gallery opens. Delivery receipts
   are encrypted `delivered` messages: an own bubble shows `delivered` once
   another account's device has it and `read` once a read receipt covers it.
-- **Conversation themes** are a preference of THIS device
-  (`stores/conversationThemeStore.ts`), no longer shared with participants.
-  There is no archive; a swipe "delete" LEAVES the conversation.
-- **Real time:** the SDK's socket. The calls screen renders mock data and has no
-  transport behind it.
+- **There is no archive;** the list's swipe action LEAVES the conversation.
+- **Real time:** the SDK's socket. There are no calls, stories, polls or
+  locations yet: the SDK has nothing behind them, so the app draws none of them
+  (Bloom has the UI — `call-ui`, `chat-people`'s stories, `message-media`'s
+  polls and locations — for when it does).
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.
@@ -254,8 +259,8 @@ when the person's first device activates and the SDK's elector adds it.
   `oxyServices.getProfileByUsername` — **a handle, never an id**; see
   `hooks/useSenderInfo.ts` for what passing an id to it did in production. A
   profile here is who somebody is plus a button to talk to them, not a feed:
-  `components/profile/ProfileIdentity.tsx` draws the person and is shared with
-  the conversation-details pane.
+  `components/profile/ProfileIdentity.tsx` draws the person. A conversation's
+  details are Bloom's `ChatInfoPanel` (`components/chat/info/ConversationInfo.tsx`).
 - **Privacy settings:** five rows, and the shapes differ on purpose — one switch
   in the list (online status), one chooser screen (visibility), three list
   screens (blocked, restricted, hidden words, the first two sharing
@@ -270,14 +275,12 @@ when the person's first device activates and the SDK's elector adds it.
 
 ## Theming
 
-`BloomThemeProvider` in `app/_layout.tsx`, with mode and colorPreset from
-`appearanceStore`.
-
-Components use `useTheme()` from `@/hooks/useTheme`, a thin wrapper over
-`@oxy.so/bloom`'s theme hook that adds Allo-specific chat-bubble colors
-(`messageBubble*`, `chatBackground`) from the user's conversation theme in
-`styles/colorThemes.ts`. Never hardcode colors; always use `theme.colors.*`.
-`styles/colors.ts` is reserved for SVG icon defaults only.
+Bloom's, and nothing else. `BloomProvider` in `app/_layout.tsx` takes `mode`
+and `colorPreset` from the account's appearance settings
+(`stores/appearanceStore.ts`, through `lib/theme.ts`, which maps a stored name
+Bloom does not know to Allo's `green`). Every colour is `useTheme().colors.*`
+from `@oxy.so/bloom/theme`; never a literal. There are no per-conversation
+themes and no app colour tables.
 
 ## Dependency gotchas
 

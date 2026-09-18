@@ -1,222 +1,95 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Stack, usePathname } from 'expo-router';
-import { useTheme } from '@/hooks/useTheme';
-import { useOptimizedMediaQuery } from '@/hooks/useOptimizedMediaQuery';
-import { ThemedView } from '@/components/ThemedView';
-import { ContactDetails } from '@/components/ContactDetails';
-import { EmptyState } from '@/components/shared/EmptyState';
-import ConversationsList from './index';
-import { useChatConversations } from '@/hooks/useChatConversations';
+import { Slot, Stack, usePathname, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services';
-import { getContactInfo, getGroupInfo } from '@/utils/conversationUtils';
-import { BREAKPOINTS } from '@/constants/responsive';
-import { FeatureErrorBoundary } from '@/components/ErrorBoundary';
-import { ProfileScreen } from '@/components/profile/ProfileScreen';
-import { profileHandleFromPathname } from '@/lib/profile/handle';
+import { useTotalUnread } from '@allo/react';
+import { AppShell } from '@oxy.so/bloom/app-shell';
+import { RiChat3Fill, RiChat3Line, RiSettings3Fill, RiSettings3Line } from '@oxy.so/bloom/icons';
+import type { SidebarProps } from '@oxy.so/bloom/sidebar';
 
-const ConversationViewWrapper = ({ conversationId }: { conversationId: string }) => {
-  try {
-    const ConversationView = require('./c/[id]').default;
-    return <ConversationView conversationId={conversationId} />;
-  } catch (error) {
-    console.error('Failed to load conversation view:', error);
-    return null;
-  }
-};
+import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
+import { ConversationList } from '@/components/chat/list/ConversationList';
+import { SettingsMenu } from '@/components/settings/SettingsMenu';
+import { SPLIT_FROM, useSplitLayout } from '@/hooks/useSplitLayout';
+import { profileHref } from '@/lib/profile/handle';
+import { useChatPaneStore } from '@/stores/chatPaneStore';
+import { conversationIdFromPath, isSettingsPath } from '@/utils/routeUtils';
 
+/**
+ * The signed-in app. On a phone, a stack: the list, and each screen pushed over
+ * it. From `SPLIT_FROM` up, Bloom's split shell: the navigation rail, the list
+ * pane (conversations, or the settings menu inside settings), the route as the
+ * detail pane, and a conversation's info beside it when asked for.
+ */
 export default function ChatLayout() {
-  const theme = useTheme();
+  const split = useSplitLayout();
+  return split ? <SplitShell /> : <Stack screenOptions={{ headerShown: false }} />;
+}
+
+function SplitShell() {
+  const router = useRouter();
   const pathname = usePathname();
+  const { t } = useTranslation();
+  const { user } = useOxy();
+  const unread = useTotalUnread();
+  const infoOpen = useChatPaneStore((state) => state.infoOpen);
+  const closeInfo = useChatPaneStore((state) => state.closeInfo);
 
-  const isLargeScreen = useOptimizedMediaQuery({ minWidth: 768 });
-  const isExtraLargeScreen = useOptimizedMediaQuery({ minWidth: BREAKPOINTS.DESKTOP });
+  const inSettings = isSettingsPath(pathname);
+  const conversationId = conversationIdFromPath(pathname);
 
-  const { user: currentUser } = useOxy();
-  const conversations = useChatConversations();
+  const sidebar = useMemo<Omit<SidebarProps, 'mobile' | 'onClose'>>(() => {
+    const ownProfile = profileHref(user?.username);
+    return {
+      variant: 'rail',
+      surface: 'docked',
+      selected: inSettings ? 'settings' : 'chats',
+      items: [
+        {
+          key: 'chats',
+          label: t('chat.title'),
+          icon: RiChat3Line,
+          activeIcon: RiChat3Fill,
+          badge: unread > 0 ? unread : undefined,
+          onPress: () => router.push('/'),
+        },
+        {
+          key: 'settings',
+          label: t('settings.title'),
+          icon: RiSettings3Line,
+          activeIcon: RiSettings3Fill,
+          onPress: () => router.push('/settings'),
+        },
+      ],
+      account: user
+        ? {
+            name: user.name?.displayName || user.username,
+            avatar: { source: user.avatar ?? undefined },
+            manageLabel: t('profile.view'),
+            onManage: ownProfile ? () => router.push(ownProfile) : undefined,
+          }
+        : undefined,
+    };
+  }, [inSettings, router, t, unread, user]);
 
-  const isSettingsRoute = pathname?.includes('/settings');
-  const isSettingsIndexRoute = pathname === '/(chat)/settings' || pathname?.endsWith('/settings');
-  const isNestedSettingsRoute = isSettingsRoute && !isSettingsIndexRoute;
-  const isNewChatRoute = pathname === '/(chat)/new' || pathname === '/new' || pathname?.endsWith('/new');
-  // A profile, for the same reason: `/@alice` reaches this layout as an ordinary
-  // path, and without a branch for it the sidebar's own "Profile" row would open
-  // a screen that this pane immediately paints "select a conversation" over.
-  const profileHandle = profileHandleFromPathname(pathname);
-
-  const conversationIdMatch = pathname?.match(/\/c\/([^/]+)$/);
-  const isConversationRoute = conversationIdMatch &&
-    !pathname.includes('/settings') &&
-    !isNewChatRoute;
-
-  const activeConversation = useMemo(() => {
-    if (isConversationRoute && conversationIdMatch) {
-      return conversations.find(c => c.id === conversationIdMatch[1]);
-    }
-    return null;
-  }, [isConversationRoute, conversationIdMatch, conversations]);
-
-  const showContactDetails = isExtraLargeScreen && activeConversation;
-
-  const contactDetailsProps = useMemo(() => {
-    if (activeConversation) {
-      const contactInfo = getContactInfo(activeConversation);
-      const groupInfo = getGroupInfo(activeConversation);
-
-      return {
-        conversationId: activeConversation.id,
-        conversationType: activeConversation.type,
-        contactName: contactInfo?.name || groupInfo?.name || activeConversation.name,
-        contactUsername: contactInfo?.username,
-        contactAvatar: contactInfo?.avatar || groupInfo?.avatar || activeConversation.avatar,
-        isOnline: contactInfo?.isOnline,
-        lastSeen: contactInfo?.lastSeen,
-        participants: activeConversation.participants,
-        groupName: groupInfo?.name,
-        groupAvatar: groupInfo?.avatar,
-        currentUserId: currentUser?.id,
-        myRole: activeConversation.myRole,
-      };
-    }
-
-    return null;
-  }, [activeConversation, currentUser?.id]);
-
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      flex: 1,
-      flexDirection: 'row',
-      backgroundColor: theme.colors.background,
-    },
-    leftPane: {
-      width: 350,
-      borderRightWidth: 1,
-      borderRightColor: theme.colors.border,
-      backgroundColor: theme.colors.background,
-    },
-    rightPane: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    middlePaneWithBorder: {
-      borderRightWidth: 1,
-      borderRightColor: theme.colors.border,
-    },
-    thirdPane: {
-      width: 350,
-      backgroundColor: theme.colors.background,
-    },
-    mobileContainer: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-  }), [theme.colors.background, theme.colors.border]);
-
-  if (isLargeScreen) {
-    const ChatSettings = isSettingsRoute ? require('./settings/index').default : null;
-
-    return (
-      <ThemedView style={styles.container}>
-        <View style={styles.leftPane}>
-          {/* Cada panel lleva su propia frontera de error. Sin esto, un fallo de
-              render en cualquiera de ellos sube hasta la frontera raíz y
-              sustituye la aplicación entera por una pantalla de disculpa —
-              incluida la lista de conversaciones, que probablemente estaba
-              perfectamente. */}
-          <FeatureErrorBoundary featureName="Chats">
-            {isSettingsRoute && ChatSettings ? (
-              <ChatSettings />
-            ) : (
-              <ConversationsList />
-            )}
-          </FeatureErrorBoundary>
-        </View>
-
-        <View style={[
-          styles.rightPane,
-          showContactDetails && styles.middlePaneWithBorder
-        ]}>
-          {isNestedSettingsRoute ? (
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: theme.colors.background },
-              }}
-            >
-              {/* First level nested routes */}
-              <Stack.Screen name="settings/appearance" />
-              <Stack.Screen name="settings/language" />
-              <Stack.Screen name="settings/privacy" />
-              <Stack.Screen name="settings/profile-customization" />
-              <Stack.Screen name="settings/devices" />
-              {/* Second level nested routes under privacy. Online status is not
-                  among them: it is one boolean, and it is a switch in the list. */}
-              <Stack.Screen name="settings/privacy/profile-visibility" />
-              <Stack.Screen name="settings/privacy/restricted" />
-              <Stack.Screen name="settings/privacy/blocked" />
-              <Stack.Screen name="settings/privacy/hidden-words" />
-            </Stack>
-          ) : profileHandle !== null ? (
-            <ProfileScreen handle={profileHandle} />
-          ) : isNewChatRoute ? (
-            // Show new chat screen
-            (() => {
-              try {
-                const NewChatScreen = require('./new').default;
-                return <NewChatScreen />;
-              } catch (error) {
-                console.error('Failed to load new chat screen:', error);
-                return null;
-              }
-            })()
-          ) : isConversationRoute && conversationIdMatch ? (
-            // Show conversation detail from /c/:id route
-            // Use the wrapper component that handles the require path correctly
-            <ConversationViewWrapper conversationId={conversationIdMatch[1]} />
-          ) : (
-            <EmptyState
-              imageSource={require('@/assets/images/welcome.png')}
-              title="Select a conversation"
-              subtitle="Choose a conversation from the list to start messaging"
-            />
-          )}
-        </View>
-
-        {/* 3rd Pane - Contact Details */}
-        {showContactDetails && contactDetailsProps && (
-          <View style={styles.thirdPane}>
-            <ContactDetails {...contactDetailsProps} />
-          </View>
-        )}
-      </ThemedView>
-    );
-  }
-
-  // On small screens, use standard stack navigation for all routes
   return (
-    <ThemedView style={styles.mobileContainer}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: theme.colors.background },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="new" />
-        <Stack.Screen name="c/[id]" />
-        <Stack.Screen name="u/[id]" />
-        <Stack.Screen name="[username]" />
-        <Stack.Screen name="settings/index" />
-        <Stack.Screen name="settings/appearance" />
-        <Stack.Screen name="settings/language" />
-        <Stack.Screen name="settings/privacy" />
-        <Stack.Screen name="settings/privacy/profile-visibility" />
-        <Stack.Screen name="settings/privacy/blocked" />
-        <Stack.Screen name="settings/privacy/restricted" />
-        <Stack.Screen name="settings/privacy/hidden-words" />
-        <Stack.Screen name="settings/profile-customization" />
-        <Stack.Screen name="settings/devices" />
-      </Stack>
-    </ThemedView>
+    <AppShell
+      variant="split"
+      scroll="fixed"
+      header={null}
+      paneScroll={false}
+      splitFrom={SPLIT_FROM}
+      sidebar={sidebar}
+      list={inSettings ? <SettingsMenu /> : <ConversationList />}
+      info={
+        conversationId && infoOpen ? (
+          <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
+        ) : undefined
+      }
+      pane="detail"
+      resizeLabel={t('chat.resize')}
+    >
+      <Slot />
+    </AppShell>
   );
 }

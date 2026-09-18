@@ -1,24 +1,8 @@
 import React from 'react';
 import { Platform } from 'react-native';
 import { usePathname } from 'expo-router';
+import Head from 'expo-router/head';
 import { useTranslation } from 'react-i18next';
-
-// Only import Head on web to avoid native errors
-type HeadComponent = React.ComponentType<{ children?: React.ReactNode }>;
-let Head: HeadComponent | null = null;
-if (Platform.OS === 'web') {
-  try {
-    // Try multiple import methods for compatibility
-    const expoRouterHead = require('expo-router/head') as {
-      Head?: HeadComponent;
-      default?: HeadComponent;
-    };
-    Head = expoRouterHead.Head || expoRouterHead.default || null;
-  } catch (e) {
-    // Head not available - will return null component
-    console.warn('SEO: expo-router/head not available', e);
-  }
-}
 
 export interface SEOProps {
   title?: string;
@@ -26,98 +10,39 @@ export interface SEOProps {
   image?: string;
   url?: string;
   type?: 'website' | 'article' | 'profile';
-  siteName?: string;
-  twitterHandle?: string;
-  author?: string;
-  publishedTime?: string;
-  modifiedTime?: string;
 }
 
-const defaultSEO = {
-  siteName: 'Allo',
-  twitterHandle: '@allo',
-  type: 'website' as const,
-};
+const ORIGIN = 'https://allo.you';
 
-export const SEO: React.FC<SEOProps> = ({
-  title,
-  description,
-  image,
-  url,
-  type = 'website',
-  siteName,
-  twitterHandle = defaultSEO.twitterHandle,
-  author,
-  publishedTime,
-  modifiedTime,
-}) => {
+/** Web document metadata for the current page. Renders nothing on native. */
+export function SEO({ title, description, image, url, type = 'website' }: SEOProps) {
   const pathname = usePathname();
   const { t } = useTranslation();
-  
-  // Generate full URL
-  const fullUrl = url || (Platform.OS === 'web' && typeof window !== 'undefined'
-    ? `${window.location.origin}${pathname}`
-    : `https://allo.you${pathname}`);
 
-  // Use provided siteName or translated default
-  const finalSiteName = siteName || t('seo.siteName', { defaultValue: defaultSEO.siteName });
-  
-  // Default title if not provided (translated)
-  const pageTitle = title || t('seo.defaultTitle', { defaultValue: `${finalSiteName} - Private Messaging` });
+  if (Platform.OS !== 'web') return null;
 
-  // Default description if not provided (translated)
-  const pageDescription = description || t('seo.defaultDescription', {
-    defaultValue: `Message privately with ${finalSiteName} and stay connected with the people who matter.`,
-    siteName: finalSiteName
-  });
-
-  // Default image (you should add your logo/image)
-  const pageImage = image || 'https://allo.you/og-image.png';
-
-  // Only render on web
-  if (Platform.OS !== 'web' || !Head) {
-    return null;
-  }
+  const siteName = t('seo.siteName', { defaultValue: 'Allo' });
+  const pageTitle = title || t('seo.defaultTitle', { defaultValue: siteName });
+  const pageDescription = description || t('seo.defaultDescription', { defaultValue: '' });
+  const origin = typeof window !== 'undefined' ? window.location.origin : ORIGIN;
+  const fullUrl = url || `${origin}${pathname}`;
+  const pageImage = image || `${ORIGIN}/og-image.png`;
 
   return (
     <Head>
-      {/* Primary Meta Tags */}
       <title>{pageTitle}</title>
-      <meta name="title" content={pageTitle} />
       <meta name="description" content={pageDescription} />
-      
-      {/* Open Graph / Facebook */}
       <meta property="og:type" content={type} />
       <meta property="og:url" content={fullUrl} />
       <meta property="og:title" content={pageTitle} />
       <meta property="og:description" content={pageDescription} />
       <meta property="og:image" content={pageImage} />
       <meta property="og:site_name" content={siteName} />
-      
-      {/* Twitter Card */}
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:url" content={fullUrl} />
       <meta name="twitter:title" content={pageTitle} />
       <meta name="twitter:description" content={pageDescription} />
       <meta name="twitter:image" content={pageImage} />
-      {twitterHandle && <meta name="twitter:site" content={twitterHandle} />}
-      {twitterHandle && <meta name="twitter:creator" content={twitterHandle} />}
-      
-      {/* Article specific tags */}
-      {type === 'article' && (
-        <>
-          {author && <meta property="article:author" content={author} />}
-          {publishedTime && <meta property="article:published_time" content={publishedTime} />}
-          {modifiedTime && <meta property="article:modified_time" content={modifiedTime} />}
-        </>
-      )}
-      
-      {/* Additional meta tags */}
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="canonical" href={fullUrl} />
     </Head>
   );
-};
-
-export default SEO;
-
+}

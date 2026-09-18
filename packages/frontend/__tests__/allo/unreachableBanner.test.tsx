@@ -2,13 +2,10 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createAlloClient, testing, type AlloClient } from '@allo/core';
-import { AlloProvider, useTimeline } from '@allo/react';
+import { AlloProvider, useConversation, useTimeline } from '@allo/react';
 
-import { UnreachableMembersBanner } from '@/components/conversation/UnreachableMembersBanner';
-import { MessageBubble } from '@/components/messages/MessageBubble';
-import { useConversation } from '@/hooks/useConversation';
-import { useUnreachableMembers } from '@/hooks/useUnreachableMembers';
-import { messagesFromItems } from '@/lib/chat/model';
+import { useChatContext } from '@/hooks/useChatContext';
+import { transcriptItems, unreachableCopy } from '@/lib/chat/model';
 
 /**
  * CHATTING WITH SOMEBODY WHO HAS NOT INSTALLED ALLO, drawn over a REAL
@@ -16,54 +13,28 @@ import { messagesFromItems } from '@/lib/chat/model';
  *
  * Alice opens a DM with Bob, whom the server has never seen. The SDK creates
  * it anyway, names Bob in `unreachableMemberAccountIds`, and holds what Alice
- * sends with `holdReason` until Bob's first device is added. This mounts the
- * pieces `ConversationView` composes for that — the banner above the
- * composer, and a bubble whose clock carries the hold as its accessible name
- * — the way `postLoginTree.test.tsx` mounts the list, and checks the words on
- * screen at both ends: Bob's name and never his id while he is unreachable,
- * and nothing at all once his device joins and the echo is released.
+ * sends with `holdReason` until Bob's first device is added. This draws the
+ * data `ConversationScreen` composes for that — the note above the composer,
+ * and the accessible name of a held message's clock — with the app's real
+ * English copy, and checks the words at both ends: Bob's name and never his id
+ * while he is unreachable, and nothing at all once his device joins and the
+ * message is released.
  *
- * `ConversationView` itself is not mounted: it pulls in FlashList, Reanimated,
- * the router and the bottom sheet, none of which this asserts anything about.
- * What it does assert is the same data path that component draws from.
+ * `ConversationScreen` itself is not mounted: it pulls in FlashList,
+ * Reanimated and the router, none of which this asserts anything about. What
+ * it does assert is the same data path that screen draws from.
  */
 
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      backgroundSecondary: '#eee',
-      card: '#fff',
-      text: '#000',
-      textSecondary: '#444',
-      textTertiary: '#888',
-      primary: '#0a0',
-      info: '#00a',
-      border: '#ccc',
-      error: '#c00',
-      shadow: '#000',
-      messageBubbleSent: '#dfd',
-      messageBubbleReceived: '#fff',
-      messageBubbleSentText: '#000',
-      messageBubbleReceivedText: '#000',
-    },
-  }),
-}));
-
-// The bubble reads the text-size preference from the app's store index, which
-// drags in `zustand/middleware/immer` — ESM that jest does not transform. The
-// bubble needs one number from it.
-jest.mock('@/stores', () => ({
-  useMessagePreferencesStore: (selector: (state: { messageTextSize: number }) => unknown) => selector({ messageTextSize: 16 }),
-}));
-
-jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, fallback: string, options?: Record<string, unknown>) =>
-      (fallback ?? _key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
-  }),
-}));
+jest.mock('react-i18next', () => {
+  const en: Record<string, string> = jest.requireActual('@/locales/en.json');
+  return {
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) =>
+        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+      i18n: { language: 'en-US' },
+    }),
+  };
+});
 
 const ALICE = 'acc-reach-alice';
 const BOB = 'acc-reach-bob';
@@ -106,30 +77,29 @@ function makeClient(server: FakeServer, accountId: string, name: string): AlloCl
   });
 }
 
-/** The composer's surroundings and the timeline, as `ConversationView` draws them. */
+/** The note above the composer and the held messages, as `ConversationScreen` projects them. */
 function Screen({ conversationId }: { conversationId: string }) {
-  const conversation = useConversation(conversationId);
-  const { hold } = useUnreachableMembers(conversation);
+  const view = useConversation(conversationId);
   const { items } = useTimeline(conversationId);
-  const messages = React.useMemo(() => messagesFromItems(items), [items]);
+  const ctx = useChatContext(view?.memberAccountIds ?? []);
+  const copy = view ? unreachableCopy(view, ctx) : null;
+  const rows = React.useMemo(
+    () => transcriptItems(items, ctx, { isGroup: false, holdLabel: copy?.hold }),
+    [items, ctx, copy?.hold],
+  );
   return (
     <View>
-      {messages.map((message) => (
-        <MessageBubble
-          key={message.id}
-          id={message.id}
-          text={message.text}
-          timestamp={message.timestamp}
-          isSent={message.isSent}
-          showSenderName={false}
-          showTimestamp
-          messageType="user"
-          readStatus={message.readStatus}
-          holdReason={message.holdReason}
-          holdLabel={hold ?? undefined}
-        />
+      {rows.map((row) => (
+        <View key={row.id}>
+          <Text>{row.text ?? ''}</Text>
+          {row.labels?.pending ? <View testID="message-status-held" accessibilityLabel={row.labels.pending} /> : null}
+        </View>
       ))}
-      <UnreachableMembersBanner conversation={conversation} />
+      {copy?.banner ? (
+        <View testID="unreachable-members-banner">
+          <Text>{copy.banner}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

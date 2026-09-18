@@ -39,10 +39,10 @@ This package contains the complete React Native application that runs on Android
 
 ### User Experience
 - Universal app: Android, iOS, and Web
-- User profiles (`app/(chat)/u/[id].tsx`)
+- The whole UI is [Bloom](https://www.npmjs.com/package/@oxy.so/bloom)'s messaging family (chat list, transcript, composer, info panel) in its split shell; see `ARCHITECTURE.md`
+- Profiles at `/@handle` (`app/(chat)/[username].tsx`)
 - Multi-language support (English, Spanish, Italian)
-- Responsive design and theming
-- Modern UI with custom icons and animations
+- Light, dark and every free Bloom colour preset, following the account across devices
 
 Push notifications go through the platform: see
 [Push Notifications](#push-notifications) below.
@@ -50,11 +50,12 @@ Push notifications go through the platform: see
 ## Tech Stack
 - [Expo](https://expo.dev/) SDK 57 & React Native 0.86 (React 19.2)
 - TypeScript
-- NativeWind 5 (preview) — Tailwind CSS for React Native, paired with `tailwindcss` 4.3
+- Bloom UI (`@oxy.so/bloom`) — every component and the theme; imported by subpath only
+- NativeWind 5 (preview) with `tailwindcss` 4.3, only for Bloom's design tokens
 - Zustand (state management)
 - i18next (internationalization)
 - Expo Router (file-based routing)
-- Custom SVG icons
+- FlashList for the conversation list and the transcript
 - Expo Notifications, Secure Store, Camera, Video, Image Picker
 - **`@allo/core` + `@allo/react`** - The Allo platform SDK: MLS end-to-end encryption, sync, outbox, media, devices (see [`docs/platform/`](../../docs/platform/))
 - **expo-sqlite / IndexedDB** - The SDK's encrypted store, per platform
@@ -62,32 +63,26 @@ Push notifications go through the platform: see
 
 ## Project Structure
 ```
-├── app/                # App entry, screens, and routing
-│   └── ...
-├── components/         # UI components
-├── assets/             # Images, icons, fonts
-├── constants/          # App-wide constants
-├── context/            # React context providers
-├── hooks/              # Custom React hooks
-├── lib/                # Library code
+├── app/                # Routes (Expo Router); see ARCHITECTURE.md
+├── components/
+│   ├── chat/           # The messaging UI: list, transcript, composer, media, info
+│   ├── shell/          # Page frame and empty detail pane
+│   ├── settings/       # Settings menu and shared settings screens
+│   └── ...             # Profile, backup, lifecycle banners, providers
+├── hooks/              # Data hooks over @allo/react and Oxy
+├── lib/
 │   ├── allo/           # THE seam to the SDK: the only place a client is built (see below)
-│   ├── chat/           # Chat view-model types, projections, pickers, viewer arithmetic
+│   ├── chat/           # Pure projections (SDK → Bloom shapes), formatting, pickers, uploads
 │   └── ...
-├── locales/            # i18n translation files (en, es, it)
-├── plugins/            # Expo config plugins
-├── scripts/            # Utility scripts
+├── locales/            # i18n bundles (en, es, it), flat dotted keys
 ├── metro/              # Stub modules Metro is pointed at for the MLS engine (see metro.config.js)
-├── stores/             # State management (Zustand): UI state, preferences, the people cache
-│   └── ...
-├── styles/             # Global styles and colors
-├── types/              # TypeScript types
-├── utils/              # Utility functions
-├── __mocks__/          # Jest manual mocks
-├── __tests__/          # Jest suites
+├── plugins/            # Expo config plugins
+├── stores/             # Zustand: the people cache, appearance, a few UI flags
+├── styles/global.css   # Tailwind + Bloom design tokens
+├── utils/              # API client, storage, logging, alerts, routes
+├── __mocks__/ __tests__/
 ├── app.config.js       # Expo app configuration
-├── config.ts           # Base URLs and third-party keys
-├── package.json        # Project metadata and dependencies
-└── ...
+└── config.ts           # Base URLs and third-party keys
 ```
 
 ## The messaging seam: `lib/allo/`

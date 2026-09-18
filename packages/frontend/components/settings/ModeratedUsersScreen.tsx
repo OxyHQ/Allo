@@ -1,29 +1,23 @@
 import React, { useCallback, useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { router } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-
-import { Search } from '@oxy.so/bloom/search';
-import { Button } from '@oxy.so/bloom/button';
-import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
-import { toast } from '@oxy.so/bloom/toast';
 import { useOxy } from '@oxy.so/services';
+import { GlyphButton } from '@oxy.so/bloom/button';
+import { ContactRow } from '@oxy.so/bloom/chat-people';
+import { RiCloseCircleLine } from '@oxy.so/bloom/icons';
+import { Search } from '@oxy.so/bloom/search';
+import { SettingsListGroup } from '@oxy.so/bloom/settings-list';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { toast } from '@oxy.so/bloom/toast';
+import { Muted } from '@oxy.so/bloom/typography';
 
-import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
-import Avatar from '@/components/Avatar';
-import { Header } from '@/components/layout/Header';
-import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Page } from '@/components/shell/Page';
 import {
   useAddModeratedUser,
   useModeratedUsers,
   useRemoveModeratedUser,
   type ModeratedUser,
 } from '@/hooks/usePrivacySettings';
-import { useTheme } from '@/hooks/useTheme';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import type { ModerationList } from '@/lib/privacy/api';
 import { confirmDialog } from '@/utils/alerts';
@@ -81,6 +75,7 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
 
   const add = useCallback(
     (candidate: SearchedUser) => {
+      if (addUser.isPending) return;
       if (candidate.id === viewer?.id) {
         toast.error(t(props.selfKey));
         return;
@@ -109,11 +104,8 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
         destructive: true,
       });
       if (!confirmed) return;
-
       removeUser.mutate(user.id, {
-        onSuccess: () => {
-          toast.success(t(props.removedKey));
-        },
+        onSuccess: () => toast.success(t(props.removedKey)),
         onError: (error: unknown) => {
           logger.error(`[Privacy] Could not remove from ${props.list}:`, error);
           toast.error(getErrorMessage(error) || t(props.removeFailedKey));
@@ -123,167 +115,86 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
     [props, removeUser, t],
   );
 
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        searchField: {
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 4,
-        },
-        row: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: theme.colors.border,
-        },
-        rowText: {
-          flex: 1,
-          marginLeft: 12,
-        },
-        name: {
-          fontSize: 16,
-          fontWeight: '500',
-          color: theme.colors.text,
-        },
-        handle: {
-          fontSize: 14,
-          color: theme.colors.textSecondary,
-          marginTop: 2,
-        },
-        centred: {
-          alignItems: 'center',
-          paddingVertical: 24,
-        },
-      }),
-    [theme],
-  );
-
   const searchResults = search.results.filter((candidate) => !alreadyListed.has(candidate.id));
   const isSearching = search.term.trim().length > 0;
 
+  const note = (key: string) => <Muted style={styles.note}>{t(key)}</Muted>;
+
   return (
-    <ThemedView className="flex-1">
-      <Header
-        options={{
-          title: t(props.titleKey),
-          leftComponents: [
-            <HeaderIconButton key="back" onPress={() => router.back()}>
-              <BackArrowIcon size={20} color={theme.colors.text} />
-            </HeaderIconButton>,
-          ],
-        }}
-        hideBottomBorder={true}
-        disableSticky={true}
+    <Page title={t(props.titleKey)}>
+      <Search
+        label={t(props.searchPlaceholderKey)}
+        value={search.term}
+        onChangeText={search.setTerm}
+        onClearText={search.clear}
+        autoCapitalize="none"
+        autoCorrect={false}
       />
 
-      <View style={styles.searchField}>
-        <Search
-          placeholder={t(props.searchPlaceholderKey)}
-          value={search.term}
-          onChangeText={search.setTerm}
-          onClearText={search.clear}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-
-      <ScrollView className="flex-1" contentContainerClassName="pb-6" keyboardShouldPersistTaps="handled">
-        {isSearching ? (
-          search.tooShort ? (
-            <View style={styles.centred}>
-              <ThemedText style={styles.handle}>
-                {t('settings.privacy.searchTooShort')}
-              </ThemedText>
-            </View>
-          ) : search.searching ? (
-            <View style={styles.centred}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-            </View>
-          ) : searchResults.length === 0 ? (
-            <View style={styles.centred}>
-              <ThemedText style={styles.handle}>{t('settings.privacy.noUsersFound')}</ThemedText>
-            </View>
-          ) : (
-            searchResults.map((candidate) => (
-              <View key={candidate.id} style={styles.row}>
-                <Avatar
-                  size={40}
-                  source={candidate.avatar ? { uri: candidate.avatar } : undefined}
-                  label={candidate.displayName.charAt(0).toUpperCase()}
-                />
-                <View style={styles.rowText}>
-                  <ThemedText style={styles.name} numberOfLines={1}>
-                    {candidate.displayName}
-                  </ThemedText>
-                  <ThemedText style={styles.handle} numberOfLines={1}>
-                    @{candidate.handle}
-                  </ThemedText>
-                </View>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  disabled={addUser.isPending}
-                  onPress={() => add(candidate)}
-                >
-                  {t('settings.privacy.add')}
-                </Button>
-              </View>
-            ))
-          )
-        ) : loading ? (
+      {isSearching ? (
+        search.tooShort ? (
+          note('settings.privacy.searchTooShort')
+        ) : search.searching ? (
           <View style={styles.centred}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <ActivityIndicator color={theme.colors.primary} />
           </View>
-        ) : failed ? (
-          <View style={styles.centred}>
-            <ThemedText style={styles.handle}>{t('settings.privacy.loadError')}</ThemedText>
-          </View>
-        ) : users.length === 0 ? (
-          <EmptyState
-            lottieSource={require('@/assets/lottie/welcome.json')}
-            title={t(props.emptyKey)}
-            subtitle={t(props.descriptionKey)}
-          />
+        ) : searchResults.length === 0 ? (
+          note('settings.privacy.noUsersFound')
         ) : (
-          <View className="px-4 pt-4">
-            <SettingsListGroup title={t(props.titleKey)} footer={t(props.descriptionKey)}>
-              {users.map((user) => (
-                <SettingsListItem
-                  key={user.id}
-                  icon={
-                    <Avatar
-                      size={28}
-                      source={user.avatar ? { uri: user.avatar } : undefined}
-                      label={(user.displayName ?? user.id).charAt(0).toUpperCase()}
-                    />
-                  }
-                  title={user.displayName ?? t('settings.privacy.unknownAccount')}
-                  description={user.handle ? `@${user.handle}` : user.id}
-                  showChevron={false}
-                  rightElement={
-                    <TouchableOpacity
-                      accessibilityRole="button"
-                      accessibilityLabel={t(props.removeActionKey)}
-                      disabled={removeUser.isPending}
-                      onPress={() => {
-                        void remove(user);
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="close-circle" size={22} color={theme.colors.error} />
-                    </TouchableOpacity>
-                  }
+          <SettingsListGroup>
+            {searchResults.map((candidate) => (
+              <ContactRow
+                key={candidate.id}
+                id={candidate.id}
+                name={candidate.displayName}
+                avatar={candidate.avatar}
+                subtitle={`@${candidate.handle}`}
+                actionLabel={t('settings.privacy.add')}
+                onAction={() => add(candidate)}
+              />
+            ))}
+          </SettingsListGroup>
+        )
+      ) : loading ? (
+        <View style={styles.centred}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : failed ? (
+        note('settings.privacy.loadError')
+      ) : users.length === 0 ? (
+        <View style={styles.centred}>
+          {note(props.emptyKey)}
+          {note(props.descriptionKey)}
+        </View>
+      ) : (
+        <SettingsListGroup title={t(props.titleKey)} footer={t(props.descriptionKey)}>
+          {users.map((user) => (
+            <ContactRow
+              key={user.id}
+              id={user.id}
+              name={user.displayName ?? t('settings.privacy.unknownAccount')}
+              avatar={user.avatar}
+              subtitle={user.handle ? `@${user.handle}` : user.id}
+              trailingSlot={
+                <GlyphButton
+                  icon={RiCloseCircleLine}
+                  color={theme.colors.error}
+                  accessibilityLabel={t(props.removeActionKey)}
+                  disabled={removeUser.isPending}
+                  onPress={() => void remove(user)}
                 />
-              ))}
-            </SettingsListGroup>
-          </View>
-        )}
-      </ScrollView>
-    </ThemedView>
+              }
+            />
+          ))}
+        </SettingsListGroup>
+      )}
+    </Page>
   );
 }
+
+const styles = StyleSheet.create({
+  centred: { alignItems: 'center', paddingVertical: 24, gap: 6 },
+  note: { textAlign: 'center', paddingVertical: 12 },
+});
 
 export default ModeratedUsersScreen;

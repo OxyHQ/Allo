@@ -1,70 +1,41 @@
 import React from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { OxySignInButton } from '@oxy.so/services';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useTheme } from '@/hooks/useTheme';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Text } from '@oxy.so/bloom/typography';
 
+import { SEO } from '@/components/SEO';
+
+/** Signed out: what Allo is, and the one way in — an Oxy account. */
 export default function WelcomeScreen() {
-    const theme = useTheme();
+  const { t } = useTranslation();
+  const theme = useTheme();
 
-    return (
-        <ThemedView style={styles.container}>
-            <View style={styles.animationContainer}>
-                <Image
-                    source={require('@/assets/images/welcome.png')}
-                    style={styles.welcomeImage}
-                    resizeMode="contain"
-                />
-            </View>
-
-            <ThemedText style={[styles.title, { color: theme.colors.text }]}>
-                Welcome to Allo
-            </ThemedText>
-
-            <Text style={[styles.privacyText, { color: theme.colors.textSecondary }]}>
-                Read our{' '}
-                <Text style={{ color: theme.colors.primary }}>Privacy Policy</Text>
-                . Tap &quot;Continue&quot; to accept the{' '}
-                <Text style={{ color: theme.colors.primary }}>Terms of Service</Text>.
-            </Text>
-
-            <View style={styles.signInButtonContainer}>
-                <OxySignInButton />
-            </View>
-        </ThemedView>
-    );
+  return (
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <SEO title={t('seo.home.title')} description={t('seo.home.description')} />
+      <View style={styles.column}>
+        <Image source={require('@/assets/images/welcome.png')} style={styles.artwork} resizeMode="contain" accessibilityIgnoresInvertColors />
+        <View style={styles.copy}>
+          <Text variant="title-1-semibold" accessibilityRole="header" style={styles.centered}>
+            {t('auth.welcome.title')}
+          </Text>
+          <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+            {t('auth.welcome.subtitle')}
+          </Text>
+        </View>
+        <OxySignInButton />
+      </View>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 32,
-    },
-    animationContainer: {
-        marginBottom: 40,
-    },
-    welcomeImage: {
-        width: 280,
-        height: 280,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        marginBottom: 24,
-        textAlign: 'center',
-    },
-    privacyText: {
-        fontSize: 14,
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 32,
-        maxWidth: 340,
-    },
-    signInButtonContainer: {
-        width: '100%',
-        maxWidth: 400,
-    },
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  column: { width: '100%', maxWidth: 400, alignItems: 'center', gap: 32 },
+  artwork: { width: 240, height: 240 },
+  copy: { gap: 8 },
+  centered: { textAlign: 'center' },
 });

@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createAlloClient, testing, type AlloClient } from '@allo/core';
 import { AlloProvider } from '@allo/react';
+import { BloomThemeProvider } from '@oxy.so/bloom/theme';
 
 import { EnrollmentGate } from '@/lib/allo/EnrollmentGate';
 
@@ -13,24 +14,9 @@ import { EnrollmentGate } from '@/lib/allo/EnrollmentGate';
  * `pending-approval` and sees the approval screen, then the app once the
  * first approves it; a revoked device sees the start-over screen.
  *
- * The screens are rendered with the theme hook mocked (they read colours
- * from it and nothing else) and translations answering their defaults.
+ * The screens are rendered inside Bloom's theme provider, with translations
+ * answering their defaults.
  */
-
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      backgroundSecondary: '#eee',
-      text: '#000',
-      textSecondary: '#444',
-      primary: '#0a0',
-      border: '#ccc',
-      error: '#c00',
-    },
-  }),
-}));
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }),
@@ -60,11 +46,13 @@ function mount(client: AlloClient) {
   let renderer: TestRenderer.ReactTestRenderer | undefined;
   act(() => {
     renderer = TestRenderer.create(
-      <AlloProvider client={client}>
-        <EnrollmentGate>
-          <Text>THE APP</Text>
-        </EnrollmentGate>
-      </AlloProvider>,
+      <BloomThemeProvider mode="light" fonts={false}>
+        <AlloProvider client={client}>
+          <EnrollmentGate>
+            <Text>THE APP</Text>
+          </EnrollmentGate>
+        </AlloProvider>
+      </BloomThemeProvider>,
     );
   });
   if (!renderer) throw new Error('did not mount');

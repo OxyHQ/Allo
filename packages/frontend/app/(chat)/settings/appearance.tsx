@@ -1,335 +1,116 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-} from 'react-native';
-import Slider from '@react-native-community/slider';
-import { useAppearanceStore } from '@/stores/appearanceStore';
-import { colors as baseColors } from '@/styles/colors';
-import { Header } from '@/components/layout/Header';
-import { HeaderIconButton } from '@/components/layout/HeaderIconButton';
-import { BackArrowIcon } from '@/assets/icons/back-arrow-icon';
-import { router, type Href } from 'expo-router';
-import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
-import { ThemedView } from '@/components/ThemedView';
-import { useTheme } from '@/hooks/useTheme';
-import { useMessagePreferencesStore } from '@/stores';
-import { MESSAGING_CONSTANTS } from '@/constants/messaging';
-import { MessageBubble } from '@/components/messages/MessageBubble';
-import { LogoIcon } from '@/assets/logo';
-import { COLOR_THEMES } from '@/styles/colorThemes';
-import { SPACING, SPACING_CLASSES } from '@/constants/spacing';
+  SegmentedControl,
+  SegmentedControlItem,
+  SegmentedControlItemText,
+} from '@oxy.so/bloom/segmented-control';
+import { SettingsListGroup } from '@oxy.so/bloom/settings-list';
+import { COLOR_PRESET_REGISTRY, FREE_COLOR_NAMES, useTheme, type AppColorName } from '@oxy.so/bloom/theme';
+import { toast } from '@oxy.so/bloom/toast';
+import { Muted, Text } from '@oxy.so/bloom/typography';
 
-// App icon options (visual only for now)
-const APP_ICONS = [
-  { id: 'default', label: 'Default', bgColor: '#1D9BF0', logoColor: '#FFFFFF' },
-  { id: 'default-x', label: 'Default X', bgColor: '#000000', logoColor: '#FFFFFF' },
-  { id: 'classic', label: 'Classic', bgColor: '#21C063', logoColor: '#FFFFFF' },
-  { id: 'classic-x', label: 'Classic X', bgColor: '#718096', logoColor: '#FFFFFF' },
-];
+import { Page } from '@/components/shell/Page';
+import { colorPresetFromSetting, THEME_MODES, themeModeFromSetting } from '@/lib/theme';
+import { useAppearanceStore, type AppearanceSettings } from '@/stores/appearanceStore';
 
-const FONT_SIZE_MIN = 12;
-const FONT_SIZE_MAX = 24;
+type Mode = (typeof THEME_MODES)[number];
 
+const MODE_LABELS: Record<Mode, string> = {
+  system: 'settings.appearance.mode.system',
+  light: 'settings.appearance.mode.light',
+  dark: 'settings.appearance.mode.dark',
+};
+
+const FREE = new Set<AppColorName>(FREE_COLOR_NAMES);
+const PRESETS = COLOR_PRESET_REGISTRY.filter((preset) => FREE.has(preset.name));
+
+/**
+ * Light, dark or the system's, and a colour preset. Both live in the account's
+ * appearance settings, which `BloomProvider` reads, so a choice re-themes the
+ * app as soon as the store has it and follows the account to other devices.
+ */
 export default function AppearanceSettingsScreen() {
-  const mySettings = useAppearanceStore((state) => state.mySettings);
-  const loading = useAppearanceStore((state) => state.loading);
-  const loadMySettings = useAppearanceStore((state) => state.loadMySettings);
-  const updateMySettings = useAppearanceStore((state) => state.updateMySettings);
+  const { t } = useTranslation();
   const theme = useTheme();
+  const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
+  const mode = themeModeFromSetting(appearance?.themeMode) as Mode;
+  const preset = colorPresetFromSetting(appearance?.colorTheme);
+  const current = PRESETS.find((entry) => entry.name === preset);
 
-  const messageTextSize = useMessagePreferencesStore((state) => state.messageTextSize);
-  const setMessageTextSize = useMessagePreferencesStore((state) => state.setMessageTextSize);
-
-  const [selectedColorThemeId, setSelectedColorThemeId] = useState('classic');
-  const [selectedThemeMode, setSelectedThemeMode] = useState<'light' | 'dark' | 'system'>('system');
-  const [selectedIconId, setSelectedIconId] = useState('default');
-  const [autoNightMode, setAutoNightMode] = useState(false);
-
-  useEffect(() => {
-    loadMySettings();
-  }, [loadMySettings]);
-
-  // Derive selected color theme and mode from current settings
-  useEffect(() => {
-    if (mySettings) {
-      const mode = mySettings.appearance?.themeMode || 'system';
-      const colorTheme = mySettings.appearance?.colorTheme || 'classic';
-      setSelectedThemeMode(mode);
-      setSelectedColorThemeId(colorTheme);
-    }
-  }, [mySettings]);
-
-  // Get the effective theme mode (resolve 'system' to light or dark based on device settings)
-  const effectiveMode = useMemo(() => {
-    if (selectedThemeMode === 'system') {
-      return theme.isDark ? 'dark' : 'light';
-    }
-    return selectedThemeMode;
-  }, [selectedThemeMode, theme.isDark]);
-
-  const selectedColorTheme = useMemo(
-    () => COLOR_THEMES.find((t) => t.id === selectedColorThemeId) || COLOR_THEMES[0],
-    [selectedColorThemeId]
-  );
-
-  const selectedVariant = useMemo(
-    () => selectedColorTheme[effectiveMode],
-    [selectedColorTheme, effectiveMode]
-  );
-
-  const onSelectColorTheme = useCallback(
-    async (colorTheme: (typeof COLOR_THEMES)[0]) => {
-      setSelectedColorThemeId(colorTheme.id);
-      await updateMySettings({
-        appearance: {
-          themeMode: selectedThemeMode,
-          colorTheme: colorTheme.id,
-          primaryColor: colorTheme.primaryColor,
-        },
-      });
+  const save = useCallback(
+    async (next: Partial<AppearanceSettings>) => {
+      const store = useAppearanceStore.getState();
+      // The store applies it optimistically and puts the old value back on failure.
+      const saved = await store.updateMySettings({ appearance: { themeMode: mode, colorTheme: preset, ...next } });
+      if (!saved && useAppearanceStore.getState().error) toast.error(t('settings.appearance.saveError'));
     },
-    [updateMySettings, selectedThemeMode]
-  );
-
-  const onSelectThemeMode = useCallback(
-    async (mode: 'light' | 'dark' | 'system') => {
-      setSelectedThemeMode(mode);
-      await updateMySettings({
-        appearance: {
-          themeMode: mode,
-          colorTheme: selectedColorThemeId,
-          primaryColor: selectedColorTheme.primaryColor,
-        },
-      });
-    },
-    [updateMySettings, selectedColorThemeId, selectedColorTheme]
-  );
-
-  const onTextSizeChange = useCallback(
-    (value: number) => {
-      setMessageTextSize(Math.round(value));
-    },
-    [setMessageTextSize]
+    [mode, preset, t],
   );
 
   return (
-    <ThemedView className="flex-1">
-      <Header
-        options={{
-          title: 'Appearance',
-          leftComponents: [
-            <HeaderIconButton key="back" onPress={() => router.back()}>
-              <BackArrowIcon size={20} color={theme.colors.text} />
-            </HeaderIconButton>,
-          ],
-        }}
-        hideBottomBorder={true}
-        disableSticky={true}
-      />
-      <ScrollView className={SPACING_CLASSES.screen} showsVerticalScrollIndicator={false}>
-        {/* THEME MODE */}
-        <Text className={SPACING_CLASSES.sectionTitle} style={{ color: theme.colors.textSecondary }}>
-          THEME MODE
-        </Text>
-        <View className={`flex-row gap-${SPACING.content.gap} mb-${SPACING.content.gapLarge}`}>
-          {(['light', 'dark', 'system'] as const).map((mode) => {
-            const isSelected = selectedThemeMode === mode;
-            const modeLabels = { light: 'Light', dark: 'Dark', system: 'System' };
-            return (
-              <TouchableOpacity
-                key={mode}
-                className={`flex-1 py-${SPACING.item.gap} px-${SPACING.item.paddingHorizontal} rounded-xl border items-center justify-center`}
-                style={{
-                  backgroundColor: isSelected ? selectedColorTheme.primaryColor : theme.colors.card,
-                  borderColor: theme.colors.border,
-                }}
-                onPress={() => onSelectThemeMode(mode)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  className="text-[15px]"
-                  style={{
-                    color: isSelected ? '#FFFFFF' : theme.colors.text,
-                    fontWeight: isSelected ? '600' : '400',
-                  }}
-                >
-                  {modeLabels[mode]}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+    <Page title={t('settings.preferences.appearance')}>
+      <SettingsListGroup title={t('settings.appearance.theme')}>
+        <View style={styles.section}>
+          <SegmentedControl
+            label={t('settings.appearance.theme')}
+            type="radio"
+            value={mode}
+            onChange={(value) => void save({ themeMode: value as Mode })}
+            style={styles.stretch}
+          >
+            {THEME_MODES.map((value) => (
+              <SegmentedControlItem key={value} value={value}>
+                <SegmentedControlItemText>{t(MODE_LABELS[value])}</SegmentedControlItemText>
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
         </View>
+      </SettingsListGroup>
 
-        {/* COLOR THEME */}
-        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
-          COLOR THEME
-        </Text>
-
-        {/* Live chat preview using real MessageBubble components */}
-        <View
-          className={`rounded-2xl border p-${SPACING.card.padding} mb-${SPACING.content.gapLarge}`}
-          style={{ backgroundColor: selectedVariant.chatBackground, borderColor: theme.colors.border }}
-        >
-          <MessageBubble
-            key={`preview-received-${selectedColorThemeId}-${effectiveMode}`}
-            id="preview-received"
-            text="Good morning! 👋&#10;Do you know what time it is?"
-            timestamp={new Date(2025, 0, 1, 0, 20)}
-            isSent={false}
-            senderName="Bob Harris"
-            showSenderName={true}
-            showTimestamp={true}
-            readStatus="read"
-            bubbleColor={selectedVariant.bubbleReceived}
-            textColor={selectedVariant.textReceived}
-          />
-          <View className={`h-${SPACING.content.gapSmall}`} />
-          <MessageBubble
-            key={`preview-sent-${selectedColorThemeId}-${effectiveMode}`}
-            id="preview-sent"
-            text="It's morning in Tokyo 😎"
-            timestamp={new Date(2025, 0, 1, 0, 20)}
-            isSent={true}
-            showSenderName={false}
-            showTimestamp={true}
-            readStatus="read"
-            bubbleColor={selectedVariant.bubbleSent}
-            textColor={selectedVariant.textSent}
-          />
-        </View>
-
-        {/* Color theme picker */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className={`pb-${SPACING.content.gapLarge}`}
-          contentContainerStyle={{ gap: 12 }}
-        >
-          {COLOR_THEMES.map((colorTheme) => {
-            const isSelected = selectedColorThemeId === colorTheme.id;
-            const variant = colorTheme[effectiveMode];
-            return (
-              <TouchableOpacity
-                key={colorTheme.id}
-                className="w-[90px] rounded-xl overflow-hidden items-center"
-                style={{
-                  borderColor: isSelected ? colorTheme.primaryColor : theme.colors.border,
-                  borderWidth: isSelected ? 2.5 : 1,
-                }}
-                onPress={() => onSelectColorTheme(colorTheme)}
-                activeOpacity={0.8}
-              >
-                {/* Mini preview */}
-                <View className="w-full h-[60px] p-2.5 justify-between" style={{ backgroundColor: variant.chatBackground }}>
-                  <View
-                    className="w-[60%] h-3.5 rounded-[7px] self-start"
-                    style={{ backgroundColor: variant.bubbleReceived }}
-                  />
-                  <View
-                    className="w-[50%] h-3.5 rounded-[7px] self-end"
-                    style={{ backgroundColor: variant.bubbleSent }}
-                  />
-                </View>
-                <Text
-                  className="text-[13px] py-2"
-                  style={{
-                    color: isSelected ? colorTheme.primaryColor : theme.colors.text,
-                    fontWeight: isSelected ? '600' : '400',
-                  }}
+      <SettingsListGroup title={t('settings.appearance.color')} footer={t('settings.appearance.syncNote')}>
+        <View style={styles.section}>
+          {current ? <Text style={[styles.presetName, { color: theme.colors.text }]}>{current.displayName}</Text> : null}
+          <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel={t('settings.appearance.color')}>
+            {PRESETS.map((entry) => {
+              const selected = entry.name === preset;
+              return (
+                <Pressable
+                  key={entry.name}
+                  onPress={() => void save({ colorTheme: entry.name })}
+                  accessibilityRole="radio"
+                  accessibilityLabel={entry.displayName}
+                  aria-checked={selected}
+                  style={[styles.ring, { borderColor: selected ? theme.colors.text : 'transparent' }]}
                 >
-                  {colorTheme.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Chat Background + Auto-Night Mode */}
-        <SettingsListGroup>
-          <SettingsListItem
-            title="Chat Background"
-            onPress={() => router.push('/settings/chat-background' as Href)}
-          />
-          <SettingsListItem
-            title="Auto-Night Mode"
-            rightElement={
-              <Switch
-                value={autoNightMode}
-                onValueChange={setAutoNightMode}
-                trackColor={{ false: theme.colors.border, true: selectedColorTheme.primaryColor }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor={theme.colors.border}
-              />
-            }
-          />
-        </SettingsListGroup>
-
-        {/* TEXT SIZE */}
-        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
-          TEXT SIZE
-        </Text>
-        <View
-          className={`rounded-2xl border flex-row items-center ${SPACING_CLASSES.listItem}`}
-          style={{ backgroundColor: theme.colors.card, borderColor: theme.colors.border }}
-        >
-          <Text className="text-sm" style={{ color: theme.colors.text }}>A</Text>
-          <Slider
-            style={{ flex: 1, marginHorizontal: 8 }}
-            minimumValue={FONT_SIZE_MIN}
-            maximumValue={FONT_SIZE_MAX}
-            step={1}
-            value={messageTextSize}
-            onValueChange={onTextSizeChange}
-            minimumTrackTintColor={selectedColorTheme.primaryColor}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={selectedColorTheme.primaryColor}
-          />
-          <Text className="text-[22px]" style={{ color: theme.colors.text }}>A</Text>
+                  {/* The preset's own seed colour: data from Bloom, not a hardcoded paint. */}
+                  <View style={[styles.swatch, { backgroundColor: entry.hex }]} />
+                </Pressable>
+              );
+            })}
+          </View>
+          {current ? <Muted>{current.description}</Muted> : null}
         </View>
-
-        {/* APP ICON */}
-        <Text className={`${SPACING_CLASSES.sectionTitle} ${SPACING_CLASSES.sectionGap}`} style={{ color: theme.colors.textSecondary }}>
-          APP ICON
-        </Text>
-        <View className={`flex-row gap-${SPACING.item.paddingHorizontal} py-1`}>
-          {APP_ICONS.map((appIcon) => {
-            const isSelected = selectedIconId === appIcon.id;
-            return (
-              <TouchableOpacity
-                key={appIcon.id}
-                className="items-center"
-                onPress={() => setSelectedIconId(appIcon.id)}
-                activeOpacity={0.8}
-              >
-                <View
-                  className="w-16 h-16 rounded-2xl items-center justify-center"
-                  style={{
-                    backgroundColor: appIcon.bgColor,
-                    borderColor: isSelected ? theme.colors.primary : 'transparent',
-                    borderWidth: isSelected ? 2.5 : 0,
-                  }}
-                >
-                  <LogoIcon size={28} color={appIcon.logoColor} />
-                </View>
-                <Text
-                  className="text-xs mt-1.5"
-                  style={{
-                    color: isSelected ? theme.colors.primary : theme.colors.textSecondary,
-                    fontWeight: isSelected ? '600' : '400',
-                  }}
-                >
-                  {appIcon.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
-    </ThemedView>
+      </SettingsListGroup>
+    </Page>
   );
 }
 
+const SWATCH = 32;
+
+const styles = StyleSheet.create({
+  section: { padding: 12, gap: 12 },
+  stretch: { alignSelf: 'stretch' },
+  presetName: { fontSize: 15, fontWeight: '500' },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  ring: {
+    width: SWATCH + 8,
+    height: SWATCH + 8,
+    borderRadius: (SWATCH + 8) / 2,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatch: { width: SWATCH, height: SWATCH, borderRadius: SWATCH / 2 },
+});

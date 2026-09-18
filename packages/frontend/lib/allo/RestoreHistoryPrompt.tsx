@@ -25,12 +25,17 @@
  * suspense off and every string has an inline default.
  */
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAlloClient, useBackup, useConversations, useInstanceState } from '@allo/react';
+import { Button } from '@oxy.so/bloom/button';
+import { Card } from '@oxy.so/bloom/card';
+import { IconCircle } from '@oxy.so/bloom/icon-circle';
+import { RiHistoryLine } from '@oxy.so/bloom/icons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Text } from '@oxy.so/bloom/typography';
 
-import { useTheme } from '@/hooks/useTheme';
 import { useRestorePromptStore } from '@/stores/restorePromptStore';
 import { logger } from '@/utils/logger';
 
@@ -79,94 +84,39 @@ interface RestoreHistoryCardProps {
 
 export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
-  const styles = useCardStyles();
+  const theme = useTheme();
   return (
     <View style={styles.host} pointerEvents="box-none">
-      <View style={styles.card} accessibilityRole="alert" testID="restore-prompt">
-        <Text style={styles.title}>{t('restorePrompt.title', 'Restore your history?')}</Text>
-        <Text style={styles.body}>
-          {t('restorePrompt.body', 'This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.')}
-        </Text>
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={onNotNow} style={styles.secondaryButton} accessibilityRole="button" testID="restore-prompt-not-now">
-            <Text style={styles.secondaryButtonText}>{t('restorePrompt.notNow', 'Not now')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onRestore} style={styles.primaryButton} accessibilityRole="button" testID="restore-prompt-restore">
-            <Text style={styles.primaryButtonText}>{t('restorePrompt.restore', 'Restore')}</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.frame} accessibilityRole="alert" testID="restore-prompt">
+        <Card variant="elevated" elevation="m" radius="radius-20" style={styles.card}>
+          <View style={styles.heading}>
+            <IconCircle icon={RiHistoryLine} size="lg" />
+            <View style={styles.copy}>
+              <Text variant="headline-semibold">{t('restorePrompt.title', 'Restore your history?')}</Text>
+              <Text variant="body-regular" style={{ color: theme.colors.textSecondary }}>
+                {t('restorePrompt.body', 'This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.')}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.actions}>
+            <Button variant="secondary" onPress={onNotNow} testID="restore-prompt-not-now">
+              {t('restorePrompt.notNow', 'Not now')}
+            </Button>
+            <Button onPress={onRestore} testID="restore-prompt-restore">
+              {t('restorePrompt.restore', 'Restore')}
+            </Button>
+          </View>
+        </Card>
       </View>
     </View>
   );
 }
 
-function useCardStyles() {
-  const theme = useTheme();
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        host: {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          padding: 16,
-          paddingBottom: 96,
-          alignItems: 'center',
-        },
-        card: {
-          width: '100%',
-          maxWidth: 480,
-          padding: 16,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.card,
-          gap: 8,
-          shadowColor: theme.colors.shadow,
-          shadowOpacity: 0.15,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 6,
-        },
-        title: {
-          fontSize: 16,
-          fontWeight: '700',
-          color: theme.colors.text,
-        },
-        body: {
-          fontSize: 14,
-          lineHeight: 20,
-          color: theme.colors.textSecondary,
-        },
-        actions: {
-          flexDirection: 'row',
-          justifyContent: 'flex-end',
-          gap: 8,
-          marginTop: 4,
-        },
-        primaryButton: {
-          paddingVertical: 10,
-          paddingHorizontal: 20,
-          borderRadius: 20,
-          backgroundColor: theme.colors.primary,
-        },
-        primaryButtonText: {
-          fontSize: 14,
-          fontWeight: '600',
-          color: theme.colors.background,
-        },
-        secondaryButton: {
-          paddingVertical: 10,
-          paddingHorizontal: 16,
-          borderRadius: 20,
-        },
-        secondaryButtonText: {
-          fontSize: 14,
-          fontWeight: '600',
-          color: theme.colors.primary,
-        },
-      }),
-    [theme],
-  );
-}
+const styles = StyleSheet.create({
+  host: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: 96, alignItems: 'center' },
+  frame: { width: '100%', maxWidth: 480 },
+  card: { padding: 16, gap: 16 },
+  heading: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  copy: { flex: 1, gap: 4 },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+});

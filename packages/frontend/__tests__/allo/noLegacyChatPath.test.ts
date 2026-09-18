@@ -44,15 +44,12 @@ const CHAT_PATH_PREFIXES = [
   'app/(chat)/settings/devices.tsx',
   'app/(chat)/settings/backup.tsx',
   'components/backup/',
+  'components/chat/',
   'components/conversation/',
-  'components/messages/',
-  'components/media/',
-  'components/ContactDetails.tsx',
-  'hooks/useConversation',
-  'hooks/useChatConversations',
+  'hooks/useChat',
   'hooks/useCreateConversation',
-  'hooks/useSenderInfo',
   'hooks/usePerson',
+  'stores/chatPaneStore',
 ];
 
 const LEGACY_ENDPOINT = /\/(conversations|messages|devices)(\/|$|\?)/;
@@ -189,8 +186,10 @@ describe('no legacy chat path', () => {
   const { findings, scanned } = census();
 
   it('parsed enough of the app to mean anything', () => {
-    // A walker that found nothing would make every assertion below pass.
-    expect(scanned).toBeGreaterThanOrEqual(150);
+    // A walker that found nothing would make every assertion below pass. The
+    // floor is the Bloom rewrite's size (about a hundred files) with headroom,
+    // not the older UI's: that one had half again as many.
+    expect(scanned).toBeGreaterThanOrEqual(90);
   });
 
   it('imports socket.io-client nowhere', () => {
@@ -224,7 +223,7 @@ describe('no legacy chat path', () => {
         return [io, AsyncStorage, createAlloClient, sio, mod];
       }
     `;
-    const control = findingsFor('components/messages/Offending.tsx', offending);
+    const control = findingsFor('components/chat/Offending.tsx', offending);
     expect(control.filter((f) => f.rule === 1)).toHaveLength(3);
     expect(control.filter((f) => f.rule === 2)).toHaveLength(1);
     expect(control.filter((f) => f.rule === 3)).toHaveLength(2);
@@ -240,7 +239,7 @@ describe('no legacy chat path', () => {
         return [useTimeline, api.get('profile/settings/me')] as [unknown, Promise<ConversationView>];
       }
     `;
-    expect(findingsFor('components/messages/Fine.tsx', allowed)).toEqual([]);
+    expect(findingsFor('components/chat/Fine.tsx', allowed)).toEqual([]);
     // AsyncStorage in a preference store is off the chat path and permitted.
     expect(findingsFor('stores/somePreference.ts', "import AsyncStorage from '@react-native-async-storage/async-storage'; export default AsyncStorage;")).toEqual([]);
     // A value import of @allo/core inside lib/allo/ is the one place it belongs.

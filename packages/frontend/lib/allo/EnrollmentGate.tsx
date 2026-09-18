@@ -10,15 +10,20 @@
  * between `start()` beginning and the instance existing, and renders the app
  * so the shell is on screen while the SDK opens its store.
  *
- * Plain React Native primitives and `theme.colors.*` only. It is mounted at
- * boot, so nothing here may suspend: `useTranslation` is called with suspense
- * off, and every string has an inline default.
+ * It is mounted at boot, so nothing here may suspend: `useTranslation` is
+ * called with suspense off, and every string has an inline default.
  */
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useState, type ReactNode } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAlloClient, useInstanceState } from '@allo/react';
-import { useTheme } from '@/hooks/useTheme';
+import { Button } from '@oxy.so/bloom/button';
+import { Card } from '@oxy.so/bloom/card';
+import { IconCircle } from '@oxy.so/bloom/icon-circle';
+import { RiShieldLine, RiSmartphoneLine } from '@oxy.so/bloom/icons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Text } from '@oxy.so/bloom/typography';
+
 import { logger } from '@/utils/logger';
 
 export interface EnrollmentGateProps {
@@ -64,30 +69,43 @@ interface PendingApprovalScreenProps {
 
 export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, onSignOut }: PendingApprovalScreenProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
-  const styles = useGateStyles();
+  const theme = useTheme();
   return (
-    <View style={styles.container} accessibilityRole="summary">
-      <ActivityIndicator color={styles.spinner.color} />
-      <Text style={styles.title}>{t('enrollment.pending.title', 'Approve this device')}</Text>
-      <Text style={styles.body}>
-        {t(
-          'enrollment.pending.body',
-          'Open Allo on a device that is already signed in, go to Settings, then Devices, and approve this one. That device shows a verification code for it; check the device name matches before you approve.',
-        )}
-      </Text>
-      {deviceName ? <Text style={styles.detail}>{deviceName}</Text> : null}
-      {fingerprint ? (
-        <Text style={styles.fingerprint} accessibilityLabel={t('enrollment.fingerprint', 'Verification code')}>
-          {fingerprint}
-        </Text>
+    <GateFrame
+      icon={<IconCircle icon={RiSmartphoneLine} />}
+      title={t('enrollment.pending.title', 'Approve this device')}
+      description={t(
+        'enrollment.pending.body',
+        'Open Allo on a device that is already signed in, go to Settings, then Devices, and approve this one. That device shows a verification code for it; check the device name matches before you approve.',
+      )}
+    >
+      {deviceName || fingerprint ? (
+        <Card variant="filled" radius="radius-16" style={styles.codeCard}>
+          {deviceName ? (
+            <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
+              {deviceName}
+            </Text>
+          ) : null}
+          {fingerprint ? (
+            <Text
+              variant="title-1-semibold"
+              style={styles.fingerprint}
+              accessibilityLabel={t('enrollment.fingerprint', 'Verification code')}
+              selectable
+            >
+              {fingerprint}
+            </Text>
+          ) : null}
+        </Card>
       ) : null}
-      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+      <ActivityIndicator color={theme.colors.primary} />
+      {errorMessage ? <ErrorLine message={errorMessage} /> : null}
       {onSignOut ? (
-        <TouchableOpacity onPress={onSignOut} style={styles.secondaryButton} accessibilityRole="button">
-          <Text style={styles.secondaryButtonText}>{t('settings.signOut', 'Sign out')}</Text>
-        </TouchableOpacity>
+        <Button variant="secondary" onPress={onSignOut}>
+          {t('settings.signOut', 'Sign out')}
+        </Button>
       ) : null}
-    </View>
+    </GateFrame>
   );
 }
 
@@ -98,7 +116,6 @@ interface RevokedScreenProps {
 
 export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
-  const styles = useGateStyles();
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -116,107 +133,69 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
   }, [onStartOver]);
 
   return (
-    <View style={styles.container} accessibilityRole="summary">
-      <Text style={styles.title}>{t('enrollment.revoked.title', 'This device was removed')}</Text>
-      <Text style={styles.body}>
-        {t(
-          'enrollment.revoked.body',
-          'Another of your devices removed this one from your account. Its keys are gone. You can start over, which enrols it again as a new device.',
-        )}
-      </Text>
-      {failure ? <Text style={styles.error}>{failure}</Text> : null}
-      <TouchableOpacity
+    <GateFrame
+      icon={<IconCircle icon={RiShieldLine} />}
+      title={t('enrollment.revoked.title', 'This device was removed')}
+      description={t(
+        'enrollment.revoked.body',
+        'Another of your devices removed this one from your account. Its keys are gone. You can start over, which enrols it again as a new device.',
+      )}
+    >
+      {failure ? <ErrorLine message={failure} /> : null}
+      <Button
+        size="large"
+        loading={busy}
         onPress={() => {
           void startOver();
         }}
-        disabled={busy}
-        style={[styles.primaryButton, busy && styles.disabled]}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: busy }}
       >
-        {busy ? <ActivityIndicator color={styles.primaryButtonText.color} /> : <Text style={styles.primaryButtonText}>{t('enrollment.revoked.startOver', 'Start over')}</Text>}
-      </TouchableOpacity>
+        {t('enrollment.revoked.startOver', 'Start over')}
+      </Button>
       {onSignOut ? (
-        <TouchableOpacity onPress={onSignOut} style={styles.secondaryButton} accessibilityRole="button">
-          <Text style={styles.secondaryButtonText}>{t('settings.signOut', 'Sign out')}</Text>
-        </TouchableOpacity>
+        <Button variant="text" onPress={onSignOut}>
+          {t('settings.signOut', 'Sign out')}
+        </Button>
       ) : null}
+    </GateFrame>
+  );
+}
+
+/**
+ * A whole-screen status page: the icon, what happened, then what can be done
+ * about it. Drawn from primitives rather than a chat-screen empty state, which
+ * would pull the animation runtime into the boot path for a static page.
+ */
+function GateFrame({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]} accessibilityRole="summary">
+      <View style={styles.column}>
+        {icon}
+        <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
+          {title}
+        </Text>
+        <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+          {description}
+        </Text>
+        {children}
+      </View>
     </View>
   );
 }
 
-function useGateStyles() {
+function ErrorLine({ message }: { message: string }) {
   const theme = useTheme();
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        container: {
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingHorizontal: 32,
-          gap: 16,
-          backgroundColor: theme.colors.background,
-        },
-        spinner: { color: theme.colors.primary },
-        title: {
-          fontSize: 22,
-          fontWeight: '700',
-          textAlign: 'center',
-          color: theme.colors.text,
-        },
-        body: {
-          fontSize: 15,
-          lineHeight: 22,
-          textAlign: 'center',
-          color: theme.colors.textSecondary,
-        },
-        detail: {
-          fontSize: 14,
-          color: theme.colors.textSecondary,
-        },
-        fingerprint: {
-          fontSize: 24,
-          fontWeight: '700',
-          letterSpacing: 2,
-          fontVariant: ['tabular-nums'],
-          color: theme.colors.text,
-          paddingVertical: 12,
-          paddingHorizontal: 20,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.backgroundSecondary,
-        },
-        error: {
-          fontSize: 13,
-          textAlign: 'center',
-          color: theme.colors.error,
-        },
-        primaryButton: {
-          minWidth: 200,
-          paddingVertical: 14,
-          paddingHorizontal: 24,
-          borderRadius: 24,
-          alignItems: 'center',
-          backgroundColor: theme.colors.primary,
-        },
-        primaryButtonText: {
-          fontSize: 16,
-          fontWeight: '600',
-          color: theme.colors.background,
-        },
-        secondaryButton: {
-          paddingVertical: 12,
-          paddingHorizontal: 24,
-        },
-        secondaryButtonText: {
-          fontSize: 15,
-          fontWeight: '500',
-          color: theme.colors.primary,
-        },
-        disabled: { opacity: 0.6 },
-      }),
-    [theme],
+  return (
+    <Text variant="body-2-regular" style={[styles.centered, { color: theme.colors.error }]}>
+      {message}
+    </Text>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  column: { alignItems: 'center', gap: 16, width: '100%', maxWidth: 400 },
+  codeCard: { alignSelf: 'stretch', alignItems: 'center', gap: 4, paddingVertical: 16, paddingHorizontal: 20 },
+  fingerprint: { letterSpacing: 2, fontVariant: ['tabular-nums'], textAlign: 'center' },
+  centered: { textAlign: 'center' },
+});

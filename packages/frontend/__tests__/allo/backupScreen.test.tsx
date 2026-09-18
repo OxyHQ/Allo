@@ -19,12 +19,12 @@ import { BackupPanel } from '@/components/backup/BackupPanel';
  *    friendly message and downloads nothing; the right phrase fills the
  *    conversation and the timeline, and the panel then reads "Backup is on".
  *
- * Bloom's list group and toast, the confirm dialog, the theme hook and the
- * translations are replaced with the plainest thing that renders: the panel
- * reads colours and strings from them and nothing else.
+ * Bloom's components, the confirm dialog, the theme hook and the translations
+ * are replaced with the plainest thing that renders: the panel reads colours
+ * and strings from them, and presses and types through them, and nothing else.
  */
 
-jest.mock('@/hooks/useTheme', () => ({
+jest.mock('@oxy.so/bloom/theme', () => ({
   useTheme: () => ({
     isDark: false,
     colors: {
@@ -38,25 +38,63 @@ jest.mock('@/hooks/useTheme', () => ({
       border: '#ccc',
       error: '#c00',
       success: '#080',
-      info: '#08f',
-      shadow: '#000',
     },
   }),
 }));
 
-jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, fallback: string, options?: Record<string, unknown>) =>
-      fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
-  }),
-}));
+/** The English bundle, interpolated: what a person reading English sees. */
+jest.mock('react-i18next', () => {
+  const en = jest.requireActual<Record<string, string>>('@/locales/en.json');
+  return {
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) =>
+        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+    }),
+  };
+});
+
+jest.mock('@oxy.so/bloom/typography', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  return { Text: ReactNative.Text, Muted: ReactNative.Text };
+});
 
 jest.mock('@oxy.so/bloom/settings-list', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
+  const text = (value?: string) => (value ? ReactModule.createElement(ReactNative.Text, null, value) : null);
   return {
     SettingsListGroup: ({ title, children }: { title?: string; children: React.ReactNode }) =>
-      ReactModule.createElement(ReactNative.View, null, title ? ReactModule.createElement(ReactNative.Text, null, title) : null, children),
+      ReactModule.createElement(ReactNative.View, null, text(title), children),
+    SettingsListItem: ({ title, description, value }: { title: string; description?: string; value?: string }) =>
+      ReactModule.createElement(ReactNative.View, null, text(title), text(description), text(value)),
+  };
+});
+
+jest.mock('@oxy.so/bloom/button', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  const ReactModule = jest.requireActual<typeof import('react')>('react');
+  return {
+    Button: ({ children, onPress, disabled }: { children?: React.ReactNode; onPress?: () => void; disabled?: boolean }) =>
+      ReactModule.createElement(ReactNative.Pressable, { onPress, disabled }, ReactModule.createElement(ReactNative.Text, null, children)),
+  };
+});
+
+jest.mock('@oxy.so/bloom/textarea', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  const ReactModule = jest.requireActual<typeof import('react')>('react');
+  return {
+    Textarea: (props: import('react-native').TextInputProps) => ReactModule.createElement(ReactNative.TextInput, props),
+  };
+});
+
+jest.mock('@oxy.so/bloom/icons', () => {
+  const none = () => null;
+  return {
+    RiCheckboxBlankCircleLine: none,
+    RiCheckboxCircleFill: none,
+    RiFileCopyLine: none,
+    RiShieldCheckLine: none,
+    RiShieldLine: none,
   };
 });
 

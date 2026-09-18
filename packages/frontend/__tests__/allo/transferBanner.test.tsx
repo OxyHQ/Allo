@@ -2,6 +2,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { HistoryProgress, InstanceView } from '@allo/react';
+import { BloomThemeProvider } from '@oxy.so/bloom/theme';
 
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
 
@@ -23,13 +24,6 @@ jest.mock('@allo/react', () => ({
   useOwnInstances: () => ({ instances: mockInstances, revoke: jest.fn(), refresh: jest.fn() }),
 }));
 
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    isDark: false,
-    colors: { backgroundSecondary: '#eee', textSecondary: '#444' },
-  }),
-}));
-
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (_key: string, fallback: string, options?: Record<string, unknown>) =>
@@ -49,13 +43,26 @@ function instance(id: string, displayName: string): InstanceView {
   } as unknown as InstanceView;
 }
 
+function Banner() {
+  return (
+    <BloomThemeProvider mode="light" fonts={false}>
+      <HistoryTransferBanner />
+    </BloomThemeProvider>
+  );
+}
+
 function render(): TestRenderer.ReactTestRenderer {
   let renderer: TestRenderer.ReactTestRenderer | undefined;
   act(() => {
-    renderer = TestRenderer.create(<HistoryTransferBanner />);
+    renderer = TestRenderer.create(<Banner />);
   });
   if (!renderer) throw new Error('did not mount');
   return renderer;
+}
+
+/** Whether the banner is on screen at all; the theme provider around it always is. */
+function drawn(renderer: TestRenderer.ReactTestRenderer): boolean {
+  return renderer.root.findAll((node) => node.props.testID === 'history-transfer-banner').length > 0;
 }
 
 function text(renderer: TestRenderer.ReactTestRenderer): string {
@@ -70,7 +77,8 @@ describe('HistoryTransferBanner', () => {
 
   it('draws nothing while idle', () => {
     const renderer = render();
-    expect(renderer.toJSON()).toBeNull();
+    expect(drawn(renderer)).toBe(false);
+    expect(text(renderer)).toBe('');
   });
 
   it('names the donor while receiving, with the fraction once the total is known', () => {
@@ -104,8 +112,9 @@ describe('HistoryTransferBanner', () => {
     expect(text(renderer)).toBe('Sending history to Bob desktop');
     mockProgress = { phase: 'idle', done: 0, total: 0 };
     act(() => {
-      renderer.update(<HistoryTransferBanner />);
+      renderer.update(<Banner />);
     });
-    expect(renderer.toJSON()).toBeNull();
+    expect(drawn(renderer)).toBe(false);
+    expect(text(renderer)).toBe('');
   });
 });

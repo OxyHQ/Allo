@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useHistoryTransfer, useOwnInstances } from '@allo/react';
-
-import { useTheme } from '@/hooks/useTheme';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Text } from '@oxy.so/bloom/typography';
 
 /**
  * "Receiving history from <device>" — drawn above the conversation list while
@@ -21,7 +21,7 @@ export function HistoryTransferBanner() {
   const { progress } = useHistoryTransfer();
   const { instances } = useOwnInstances();
   const { t } = useTranslation();
-  const styles = useStyles();
+  const theme = useTheme();
 
   const text = useMemo(() => {
     if (progress.phase === 'idle') return null;
@@ -43,28 +43,21 @@ export function HistoryTransferBanner() {
 
   if (text === null) return null;
   return (
-    <View style={styles.banner} accessibilityRole="progressbar" accessibilityLiveRegion="polite" testID="history-transfer-banner">
-      <Text style={styles.text}>{text}</Text>
+    <View
+      style={[styles.banner, { backgroundColor: theme.colors.primarySubtle }]}
+      accessibilityRole="progressbar"
+      accessibilityLiveRegion="polite"
+      testID="history-transfer-banner"
+    >
+      <ActivityIndicator size="small" color={theme.colors.primarySubtleForeground} />
+      <Text variant="caption-1-medium" numberOfLines={1} style={[styles.text, { color: theme.colors.primarySubtleForeground }]}>
+        {text}
+      </Text>
     </View>
   );
 }
 
-function useStyles() {
-  const theme = useTheme();
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        banner: {
-          paddingHorizontal: 16,
-          paddingVertical: 6,
-          backgroundColor: theme.colors.backgroundSecondary,
-        },
-        text: {
-          fontSize: 12,
-          color: theme.colors.textSecondary,
-          textAlign: 'center',
-        },
-      }),
-    [theme],
-  );
-}
+const styles = StyleSheet.create({
+  banner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  text: { flexShrink: 1 },
+});
