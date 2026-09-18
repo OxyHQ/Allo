@@ -4,7 +4,9 @@
  * package claims, dm_key idempotency, per-conversation seq, epoch CAS,
  * fan-out to leaves except the sender, welcome to recipients only,
  * per-instance delivery stream with cursors, blobs, socket nudges, history
- * offers between same-account instances, one backup per account). Every
+ * offers between same-account instances, one backup per account, members
+ * without a leaf and the nudge to their conversations' leaves when their
+ * first instance becomes active). Every
  * request body is validated with the shared-types zod schemas, so a drift
  * between SDK and contract fails a test here.
  */
@@ -536,7 +538,21 @@ export class FakeAlloServer implements SocketHost {
       pushProvider: null,
     };
     this.instances.set(inst.id, inst);
+    if (inst.status === "active") this.nudgeLeaflessMemberships(inst.accountId);
     return json(201, { instance: toClient(inst), enrollment: inst.status === "active" ? "active" : "pending", ...(inst.challenge ? { challenge: inst.challenge } : {}) });
+  }
+
+  /**
+   * An instance of `accountId` just became active (bootstrap or approval). Every
+   * conversation where the account is a joined member with no active leaf tells
+   * its active leaves to sync, so their elector can add the new device now.
+   */
+  private nudgeLeaflessMemberships(accountId: string): void {
+    for (const conv of this.conversations.values()) {
+      if (conv.members.get(accountId)?.state !== "joined") continue;
+      if ([...conv.leaves.values()].some((l) => l.accountId === accountId && l.state === "active")) continue;
+      for (const [instanceId, leaf] of conv.leaves) if (leaf.state === "active") this.emitTo(instanceId, "sync.nudge", { conversationId: conv.id });
+    }
   }
 
   private approve(approver: FakeInstance, target: FakeInstance, body: Uint8Array): Response {
@@ -553,6 +569,7 @@ export class FakeAlloServer implements SocketHost {
     target.enrollmentChallenge = target.challenge; // published once signed
     target.challenge = null;
     this.emitTo(target.id, "instance.approved", { instanceId: target.id });
+    this.nudgeLeaflessMemberships(target.accountId);
     return json(200, { instance: toClient(target) });
   }
 
@@ -762,6 +779,7 @@ export class FakeAlloServer implements SocketHost {
     }
     conv.epoch = commit.newEpoch;
     this.deliver(conv, event, activeOthers);
+    const hadLeaf = new Set([...conv.leaves.values()].filter((l) => l.state === "active").map((l) => l.accountId));
     for (const added of commit.addedLeaves) {
       conv.leaves.set(added.instanceId, { accountId: added.accountId, state: "active", addedEpoch: commit.newEpoch });
       if (!conv.members.has(added.accountId)) conv.members.set(added.accountId, { role: "member", state: "joined", joinedAt: this.iso() });
@@ -771,9 +789,11 @@ export class FakeAlloServer implements SocketHost {
       const l = conv.leaves.get(removed);
       if (l) l.state = "removed";
     }
+    // An account whose last leaf this commit removed is out. One that never had a leaf (invited before it
+    // installed Allo) stays a joined member: the elector adds its first device when it appears.
     for (const [accountId, member] of conv.members) {
       const hasLeaf = [...conv.leaves.values()].some((l) => l.accountId === accountId && l.state === "active");
-      if (!hasLeaf && member.state === "joined") member.state = "removed";
+      if (!hasLeaf && hadLeaf.has(accountId) && member.state === "joined") member.state = "removed";
     }
     if (commit.welcome) {
       const welcome = this.append(conv, { kind: "mls_welcome", epoch: commit.newEpoch, senderAccountId: sender.accountId, senderInstanceId: sender.id, payload: commit.welcome.payload, blobIds: [] });

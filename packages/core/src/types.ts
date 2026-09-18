@@ -180,6 +180,13 @@ export interface TimelineItemView {
   content: TimelineContent;
   reactions: Array<{ key: string; accountIds: string[] }>;
   replyTo?: string;
+  /**
+   * Only on a `pending` own echo: why the outbox is not sending it yet.
+   * `no_reachable_member`: no other member of the conversation has a device
+   * that could read it (see `ConversationView.unreachableMemberAccountIds`);
+   * the item is released on its own once one appears. Derived, never stored.
+   */
+  holdReason?: "no_reachable_member";
 }
 
 export interface ConversationView {
@@ -193,6 +200,13 @@ export interface ConversationView {
   epoch: number;
   /** Whether this instance holds an active MLS leaf: it can read and send. */
   joined: boolean;
+  /**
+   * Joined members other than me with NO active leaf in the group: accounts
+   * that have not installed Allo (or whose devices are all gone). Nothing
+   * sent now reaches them; the conversation's elector adds their first
+   * device when it appears. Empty while this instance has no group state.
+   */
+  unreachableMemberAccountIds: string[];
   lastMessage?: TimelineItemView;
   unreadCount: number;
   lastActivityAt: string;

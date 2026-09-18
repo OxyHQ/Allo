@@ -430,16 +430,20 @@ describe("end to end over the fake server", () => {
 });
 
 describe("contract details", () => {
-  it("a DM with an account the server has never seen fails with NotFoundError; one whose instances are all revoked is created with no other leaf", async () => {
+  it("a DM with an account the server has never seen, or whose instances are all revoked, is created with no other leaf and the account unreachable", async () => {
     const server = fakeServer();
     const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
-    const { NotFoundError } = await import("../errors");
-    await expect(alice.client.conversations.createDirect("acc-nobody-01")).rejects.toBeInstanceOf(NotFoundError);
+    const nobody = await alice.client.conversations.createDirect("acc-nobody-01");
+    expect(nobody.joined).toBe(true);
+    expect(nobody.memberAccountIds.sort()).toEqual(["acc-alice-01", "acc-nobody-01"]);
+    expect(nobody.unreachableMemberAccountIds).toEqual(["acc-nobody-01"]);
+    expect(server.conversations.get(nobody.id)!.leaves.size).toBe(1);
     const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
     await bob.client.instance.revoke(bob.client.instanceId!);
     await waitFor(() => bob.client.instance.state() === "revoked");
     const conv = await alice.client.conversations.createDirect("acc-bob-0001");
     expect(conv.joined).toBe(true);
+    expect(conv.unreachableMemberAccountIds).toEqual(["acc-bob-0001"]);
     expect(server.conversations.get(conv.id)!.leaves.size).toBe(1);
     await stopAll(alice, bob);
   });
