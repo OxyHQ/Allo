@@ -29,7 +29,8 @@ Every non-2xx answer is `ErrorResponse`:
 | `forbidden` | 403 | authenticated, but not allowed: not a member, not the owner, another account's instance |
 | `not_found` | 404 | the conversation, instance, event or blob does not exist for this caller |
 | `validation_failed` | 400 | the body or query did not satisfy its schema; `details` carries the zod issues |
-| `epoch_conflict` | 409 | an event at a stale epoch; `details: EpochConflictDetails` `{ currentEpoch }` |
+| `epoch_conflict` | 409 | an event at a stale epoch, or a `PUT group-info` for an epoch that is not the current one; `details: EpochConflictDetails` `{ currentEpoch }` |
+| `group_info_missing` | 409 | an `external` or `resync` commit, but the server holds no `GroupInfo` for the conversation's current epoch (its last commit predates the field); wait for an elector |
 | `instance_not_active` | 403 | the signing instance is still `pending` |
 | `instance_revoked` | 403 | the signing instance is `revoked` |
 | `key_packages_exhausted` | 409 | a claim found nothing for a required instance |
@@ -203,7 +204,8 @@ whose stock drops below the low-water mark is sent `keypackages.low`.
 `memberAccountIds` names the OTHER members: exactly one for a `dm`, 0..255 for
 a `group`, no duplicates; the creator is implied. `initialCommit` is a
 `SubmitEventRequest` that must be an `mls_commit` at epoch 0 (its `commit`
-adds the other leaves, its `welcome` lets them in) and is appended in the same
+adds the other leaves, its `welcome` lets them in, and its `groupInfo` is the
+GroupInfo of epoch 1, like every commit's) and is appended in the same
 transaction. A DM is unique per pair on `dmKeyFor(appId, a, b)` =
 `${appId}:${sorted a}:${sorted b}`; a second creation returns the existing one
 with `created: false` and HTTP 200, and the caller joins it by adding leaves.
@@ -224,19 +226,57 @@ message.
 `SubmitEventRequest` is `{ idempotencyKey, kind: mls_commit|mls_proposal|app_message, epoch, payload: base64 ≤1 MiB, commit?: CommitInfo, blobIds?: 0..16 }`.
 The schema enforces that `commit` is present exactly when `kind` is
 `mls_commit`, and that `commit.newEpoch === epoch + 1`. `CommitInfo` is
-`{ newEpoch, addedLeaves: [{ instanceId, accountId }], removedLeaves: [instanceId], welcome?: { payload, recipients: [instanceId] (1..) } }`.
+`{ newEpoch, kind?: member|external|resync, addedLeaves: [{ instanceId, accountId }], removedLeaves: [instanceId], welcome?: { payload, recipients: [instanceId] (1..) }, groupInfo: base64 }`.
+
+`groupInfo` is REQUIRED on every commit: the serialized MLS `GroupInfo` of
+`newEpoch`, with the `external_pub` and `ratchet_tree` extensions, at most
+`GROUP_INFO_MAX_BYTES` (256 KiB) of bytes, `GROUP_INFO_MAX_BASE64` encoded.
+The server stores it for the conversation (see [Group info](#group-info-groupinfots))
+in the same transaction as the commit, so "commit accepted but no GroupInfo for
+the new epoch" cannot happen. Both a member committer and an external joiner
+hold the new state at the moment they post.
+
+`commit.kind` (`CommitKind`, default `member`) says how the commit was
+authored, and the schema enforces its shape:
+
+| kind | `addedLeaves` | `removedLeaves` | `welcome` | who may send it |
+| --- | --- | --- | --- | --- |
+| `member` | any | any | optional | a member holding an active leaf (or the creator's first commit) |
+| `external` | exactly one | none | forbidden | an account with a `joined` member row and NO active leaf on this instance |
+| `resync` | exactly one | exactly one | forbidden | an instance that already holds a leaf and lost its group state |
+
+For `external` and `resync` the server further checks what only it can: the one
+added leaf is `{ accountId: sender.accountId, instanceId: sender.instanceId }`
+and, for `resync`, the one removed leaf is the sender's own instance. Anything
+else is `403 forbidden`. `SubmitEventRequestInput` and `CommitInfoInput` are
+the pre-default types a client builds (where `kind` may be omitted).
 
 Server rules, one transaction under `FOR UPDATE` on the conversation:
 
-- the sender holds an active leaf (or is the creator making the first commit);
+- the sender holds an active leaf (or is the creator making the first commit),
+  except for an `external` commit, whose sender needs only a `joined` member
+  row for its account, and a `resync` commit, whose sender needs a leaf that is
+  `active` or `removed` without a `removedEpoch`;
 - `epoch` must equal the current epoch, else `409 epoch_conflict` with
-  `details.currentEpoch`;
+  `details.currentEpoch`; an external joiner that loses the race refetches the
+  GroupInfo and tries again;
 - an `app_message` or `mls_proposal` is delivered to every active leaf but the
   sender;
 - an `mls_commit` advances the epoch, is delivered to every leaf active at the
   old epoch (removed ones included, so they learn it), moves added leaves to
-  `pending_welcome` and removed ones to `removed`, and turns `welcome` into a
-  separate `mls_welcome` event delivered only to its recipients;
+  `pending_welcome` and removed ones to `removed`, turns `welcome` into a
+  separate `mls_welcome` event delivered only to its recipients, and stores
+  `groupInfo` as the conversation's GroupInfo for `newEpoch`;
+- an `external` commit makes the sender's leaf `active` at `newEpoch`
+  immediately (there is no Welcome to wait for) and is delivered to every other
+  active leaf, never to the sender; the DM rule ("a dm cannot gain a third
+  account") is unchanged, since the joiner's account is already `joined`;
+- a `resync` commit REPLACES the sender's leaf row (`active` at `newEpoch`,
+  `addedEpoch = newEpoch`) rather than being refused for an instance that
+  already holds an active leaf; membership is unchanged;
+- an `external` or `resync` commit when the server holds no GroupInfo for the
+  current epoch is `409 group_info_missing`; the joiner waits for an elector
+  (the old path) instead;
 - a replay of `(senderInstanceId, idempotencyKey)` with the same body returns
   the original `{ event }` and 200; a different body is `idempotency_conflict`;
 - `seq` is dense per conversation; deliveries are written in the same
@@ -247,6 +287,45 @@ A `control` event has `senderAccountId` = `SERVER_SENDER_ID` (`allo:server`),
 `senderInstanceId: null`, and a payload that is the base64 of a `ControlEvent`
 JSON: `{ t: "instance_revoked", instanceId, accountId }`,
 `{ t: "member_left", accountId }` or `{ t: "conversation_created" }`.
+
+### Group info (`groupInfo.ts`)
+
+| method | path | auth | request | response | errors |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/v1/conversations/:id/group-info` | instance-signed | — | `GroupInfoResponse` `{ groupInfo: StoredGroupInfo \| null }` | `not_found`, `forbidden` |
+| PUT | `/v1/conversations/:id/group-info` | instance-signed | `PutGroupInfoRequest` `{ epoch, data }` | `204` | `not_found`, `forbidden`, `validation_failed`, `epoch_conflict`, `payload_too_large` |
+
+The stored `GroupInfo` is what a device that is a member with no active leaf
+joins from, by MLS external commit, with nobody else online: the elector rules
+("This device is being added…") become the fallback for a conversation that
+has none. One row per conversation, for the CURRENT epoch only, replaced by
+every `mls_commit` (`CommitInfo.groupInfo`). The server never reads its bytes.
+
+`StoredGroupInfo` is `{ epoch, signerInstanceId, data: base64, createdAt }`:
+the epoch it describes, the instance whose commit (or re-publish) produced it,
+and the serialized GroupInfo (`external_pub` + `ratchet_tree`, ≤ 256 KiB of
+bytes).
+
+- `GET` is gated by a `joined` member row for the caller's account, like every
+  read; holding a leaf is NOT required, because the caller is precisely a
+  device that holds none yet. `groupInfo: null` means the server holds nothing
+  for the current epoch — a conversation whose last commit predates the field —
+  and the caller waits for an elector as before. It is never a 404 for a
+  conversation the caller is a member of.
+- `PUT` re-publishes for the current epoch only. The caller must hold an
+  `active` leaf (it is the one with the state to publish from), and `epoch`
+  must equal the conversation's current epoch, else `409 epoch_conflict` with
+  `details.currentEpoch`. It exists for conversations whose last commit
+  predates the field: a member that finds `groupInfo: null` publishes once, and
+  the leafless device can join on its next sync.
+- No socket event announces a new GroupInfo; the joiner fetches on demand.
+
+Admission is not the GroupInfo: anybody with a member row can read it. Every
+member's engine validates the joiner of an external commit before processing
+it — the leaf's credential is `accountId:instanceId`, that instance must be in
+the account's verified chain with that signing key, and no active leaf may
+already carry the key or the id unless the same commit removes it (`resync`).
+A commit that fails is dropped and the member's state untouched.
 
 ### Sync (`sync.ts`)
 

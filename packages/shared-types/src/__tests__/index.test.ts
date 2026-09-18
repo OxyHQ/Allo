@@ -15,6 +15,7 @@ describe("index re-exports every module", () => {
       "uploadKeyPackagesRequestSchema", // keyPackages
       "createConversationRequestSchema", // conversations
       "submitEventRequestSchema", // events
+      "groupInfoResponseSchema", // groupInfo
       "encodeCursor", // sync
       "uploadBlobResponseSchema", // blobs
       "decodeAppMessage", // appMessage

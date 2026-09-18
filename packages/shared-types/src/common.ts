@@ -76,6 +76,7 @@ export const ALLO_ERROR_CODES = [
   "not_found",
   "validation_failed",
   "epoch_conflict",
+  "group_info_missing",
   "instance_not_active",
   "instance_revoked",
   "key_packages_exhausted",

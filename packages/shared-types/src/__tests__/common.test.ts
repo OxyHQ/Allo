@@ -132,9 +132,10 @@ describe("errorResponseSchema", () => {
     expect(errorResponseSchema.safeParse({ error: "not_found", message: "no" }).success).toBe(false);
     expect(errorResponseSchema.safeParse({ error: { code: "", message: "no" } }).success).toBe(false);
   });
-  it("the closed set has thirteen codes and epoch_conflict details carry the epoch", () => {
-    expect(ALLO_ERROR_CODES).toHaveLength(15);
+  it("the closed set has sixteen codes and epoch_conflict details carry the epoch", () => {
+    expect(ALLO_ERROR_CODES).toHaveLength(16);
     expect(alloErrorCodeSchema.safeParse("epoch_conflict").success).toBe(true);
+    expect(alloErrorCodeSchema.safeParse("group_info_missing").success).toBe(true);
     expect(alloErrorCodeSchema.safeParse("transfer_key_missing").success).toBe(true);
     expect(alloErrorCodeSchema.safeParse("backup_not_found").success).toBe(true);
     expect(alloErrorCodeSchema.safeParse("teapot").success).toBe(false);

@@ -24,6 +24,9 @@ export * from "./conversations";
 // The event log and event submission
 export * from "./events";
 
+// The stored GroupInfo a leafless member joins from (external commit)
+export * from "./groupInfo";
+
 // The delivery stream, cursors and socket events
 export * from "./sync";
 
