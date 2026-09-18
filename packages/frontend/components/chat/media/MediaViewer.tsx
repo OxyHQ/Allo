@@ -27,13 +27,19 @@ export interface MediaViewerHandle {
  */
 export function MediaViewer({ ref }: { ref: Ref<MediaViewerHandle> }) {
   const gallery = useRef<ZoomableMediaGalleryHandle>(null);
-  const [item, setItem] = useState<ViewerItem | null>(null);
-  useImperativeHandle(ref, () => ({ open: setItem }), []);
+  // The nonce makes every press a new mount: the same picture reopens, which a
+  // key of the message id alone would not (React would reuse the open guard).
+  const [request, setRequest] = useState<{ item: ViewerItem; nonce: number } | null>(null);
+  useImperativeHandle(
+    ref,
+    () => ({ open: (item: ViewerItem) => setRequest((current) => ({ item, nonce: (current?.nonce ?? 0) + 1 })) }),
+    [],
+  );
 
   return (
     <>
       <ZoomableMediaGallery ref={gallery} videoControls />
-      {item && <OpenItem key={item.key} item={item} gallery={gallery} />}
+      {request && <OpenItem key={`${request.item.key}:${request.nonce}`} item={request.item} gallery={gallery} />}
     </>
   );
 }

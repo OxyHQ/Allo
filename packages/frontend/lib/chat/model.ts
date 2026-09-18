@@ -219,6 +219,12 @@ export interface TranscriptOptions {
   firstUnreadId?: string;
   /** The accessible name of a held message's clock; see {@link unreachableCopy}. */
   holdLabel?: string | null;
+  /**
+   * How wide a bubble may get. Bloom's 78% of the pane is right on a phone and
+   * an unreadable line on a desktop-width conversation, so the screen passes a
+   * measure in pixels once it has the room.
+   */
+  bubbleMaxWidth?: number;
 }
 
 function reactionsOf(item: TimelineItemView, me: string | undefined): MessageReaction[] | undefined {
@@ -264,6 +270,7 @@ export function transcriptItems(
       dateKey: dayKey(sentAt),
       dateLabel: formatDay(sentAt, ctx.now, ctx.locale, ctx.t),
       unreadBefore: item.id === options.firstUnreadId,
+      maxWidth: options.bubbleMaxWidth,
       time: formatTime(sentAt, ctx.locale),
       status: item.isOwn ? deliveryStatus(item.sendState) : undefined,
       pending: item.sendState === 'pending',

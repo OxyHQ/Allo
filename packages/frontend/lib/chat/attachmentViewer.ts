@@ -1,10 +1,11 @@
 /**
- * The gallery a full-screen viewer pages through: every picture and video in
- * the loaded timeline, in order, one page per message.
+ * Every picture and video in the loaded timeline, in order, one entry per
+ * message: what a viewer can open.
  *
- * The page opens on the ORIGINAL — the only thing full screen means — and keeps
- * the sender's thumbnail as the preview drawn while the original downloads, so
- * the wait is not a black screen.
+ * A page opens on the ORIGINAL, which is the only thing full screen means, and
+ * an original exists only once it has been downloaded and decrypted — so the
+ * viewer opens one entry at a time (`components/chat/media/MediaViewer.tsx`)
+ * rather than handing Bloom's gallery a set of URIs it does not have yet.
  */
 import type { MediaRef, TimelineItemView } from '@allo/core';
 
@@ -13,7 +14,6 @@ export interface ViewerItem {
   readonly key: string;
   readonly kind: 'image' | 'video';
   readonly ref: MediaRef;
-  readonly previewRef: MediaRef | undefined;
   readonly mime: string;
   readonly filename: string;
 }
@@ -28,16 +28,9 @@ export function collectViewerItems(items: readonly TimelineItemView[]): ViewerIt
       key: item.id,
       kind: media.kind,
       ref: media.ref,
-      previewRef: media.thumbnail?.ref,
       mime: media.mime,
       filename: media.filename,
     });
   }
   return out;
-}
-
-/** An index into a gallery that may have changed underneath it, kept in range. */
-export function clampViewerIndex(index: number, count: number): number {
-  if (count <= 0 || index < 0) return 0;
-  return Math.min(index, count - 1);
 }

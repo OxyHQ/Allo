@@ -4,9 +4,11 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useConversation, useSyncState, useTimeline } from '@allo/react';
+import { useConversation, useConversationActions, useSyncState, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ChatBackground, ChatEmptyState, ChatHeader } from '@oxy.so/bloom/chat-screen';
+import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
+import { RiDeleteBinLine, RiInformationLine, RiMore2Line } from '@oxy.so/bloom/icons';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 
@@ -32,6 +34,9 @@ import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { confirmDialog } from '@/utils/alerts';
 import { logger } from '@/utils/logger';
 
+/** A readable measure for a bubble once the conversation has a pane to itself. */
+const WIDE_BUBBLE_MAX_WIDTH = 560;
+
 /** One conversation: its header, its messages and the composer. */
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const router = useRouter();
@@ -43,6 +48,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const { t } = useTranslation();
   const toggleInfo = useChatPaneStore((state) => state.toggleInfo);
   const sync = useSyncState();
+  const { leave } = useConversationActions();
   const view = useConversation(conversationId);
   const timeline = useTimeline(conversationId);
   const ctx = useChatContext(view?.memberAccountIds ?? []);
@@ -71,8 +77,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         isGroup,
         firstUnreadId: unreadAnchor ?? undefined,
         holdLabel: unreachable?.hold,
+        bubbleMaxWidth: split ? WIDE_BUBBLE_MAX_WIDTH : undefined,
       }),
-    [items, ctx, isGroup, unreadAnchor, unreachable],
+    [items, ctx, isGroup, unreadAnchor, unreachable, split],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -163,8 +170,27 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   );
   const onLoadOlder = useCallback(() => void loadOlder(), [loadOlder]);
 
+  const confirmLeave = useCallback(async () => {
+    const ok = await confirmDialog({
+      title: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
+      message: t('chat.leave.confirm'),
+      okText: t('chat.leave.action'),
+      cancelText: t('common.cancel'),
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await leave(conversationId);
+      router.replace('/');
+    } catch (error) {
+      logger.error('[Conversation] leave failed', error);
+      toast.error(t('chat.leave.failed'));
+    }
+  }, [conversationId, isGroup, leave, router, t]);
+
   if (!view) return null;
 
+  const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;
   const other = view.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
@@ -185,8 +211,30 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           connectingLabel={t('chat.connecting')}
           onPressBack={split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
           backLabel={t('common.back')}
-          onPressHeader={infoBeside ? toggleInfo : () => router.push(`/c/${conversationId}/info`)}
+          onPressHeader={openInfo}
           openInfoLabel={t('chat.info.open')}
+          renderMore={() => (
+            <MessageContextMenu
+              label={t('chat.actions')}
+              reactions={false}
+              items={[
+                { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
+                {
+                  id: 'leave',
+                  label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
+                  icon: RiDeleteBinLine,
+                  variant: 'destructive',
+                  separated: true,
+                },
+              ]}
+              onSelect={(action) => {
+                if (action === 'info') openInfo();
+                else void confirmLeave();
+              }}
+            >
+              <ComposerIconButton icon={RiMore2Line} accessibilityLabel={t('chat.actions')} />
+            </MessageContextMenu>
+          )}
           divider
         />
       </View>
