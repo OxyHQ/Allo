@@ -15,7 +15,7 @@ import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/Med
 import { Transcript } from '@/components/chat/transcript/Transcript';
 import type { MessageActions } from '@/components/chat/transcript/MessageRow';
 import { useChatContext } from '@/hooks/useChatContext';
-import { useSplitLayout } from '@/hooks/useSplitLayout';
+import { useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { collectViewerItems } from '@/lib/chat/attachmentViewer';
 import type { PickedAttachments } from '@/lib/chat/attachments';
 import {
@@ -36,6 +36,8 @@ import { logger } from '@/utils/logger';
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const router = useRouter();
   const split = useSplitLayout();
+  // Below the third column the info is a route of its own, so the press always lands somewhere.
+  const infoBeside = useInfoPane();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -183,7 +185,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           connectingLabel={t('chat.connecting')}
           onPressBack={split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
           backLabel={t('common.back')}
-          onPressHeader={split ? toggleInfo : () => router.push(`/c/${conversationId}/info`)}
+          onPressHeader={infoBeside ? toggleInfo : () => router.push(`/c/${conversationId}/info`)}
           openInfoLabel={t('chat.info.open')}
           divider
         />

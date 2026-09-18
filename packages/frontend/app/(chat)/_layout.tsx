@@ -10,7 +10,7 @@ import type { SidebarProps } from '@oxy.so/bloom/sidebar';
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
 import { ConversationList } from '@/components/chat/list/ConversationList';
 import { SettingsMenu } from '@/components/settings/SettingsMenu';
-import { SPLIT_FROM, useSplitLayout } from '@/hooks/useSplitLayout';
+import { INFO_FROM, SPLIT_FROM, useSplitLayout } from '@/hooks/useSplitLayout';
 import { profileHref } from '@/lib/profile/handle';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { conversationIdFromPath, isSettingsPath } from '@/utils/routeUtils';
@@ -79,6 +79,7 @@ function SplitShell() {
       header={null}
       paneScroll={false}
       splitFrom={SPLIT_FROM}
+      infoFrom={INFO_FROM}
       sidebar={sidebar}
       list={inSettings ? <SettingsMenu /> : <ConversationList />}
       info={

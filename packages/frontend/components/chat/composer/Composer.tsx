@@ -43,6 +43,8 @@ const TYPING_REFRESH_MS = 5000;
 /** …and a stop this long after the last keystroke. */
 const TYPING_IDLE_MS = 3000;
 
+// The camera picker is a native flow; recording works on both (expo-audio uses
+// MediaRecorder on the web).
 const IS_NATIVE = Platform.OS !== 'web';
 
 export function Composer({ target, onClearTarget, notice, note, onSendText, onSendAttachments, onTyping }: ComposerProps) {
@@ -180,7 +182,7 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
           </AttachmentMenu>
         ) : undefined
       }
-      onMicPress={IS_NATIVE && target?.kind !== 'edit' ? () => void startVoice() : undefined}
+      onMicPress={target?.kind === 'edit' ? undefined : () => void startVoice()}
       onEscape={target ? onClearTarget : undefined}
       labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
     />
