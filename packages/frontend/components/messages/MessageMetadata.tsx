@@ -7,7 +7,7 @@ import { MsgDblCheckIcon } from '@/assets/icons/msgdblcheck-icon';
 import { MsgCheckIcon } from '@/assets/icons/msgcheck-icon';
 import { MsgPendingIcon } from '@/assets/icons/msgpending-icon';
 import { MsgFailedIcon } from '@/assets/icons/msgfailed-icon';
-import { statusMark, type MessageStatusMark } from '@/components/messages/messageStatus';
+import { statusMark, statusTone, type MessageStatusMark } from '@/components/messages/messageStatus';
 import type { MessageReadStatus } from '@/lib/chat/model';
 
 /** The picture for each mark. Which mark a status gets is `messageStatus.ts`. */
@@ -102,16 +102,20 @@ export const MessageMetadata = memo<MessageMetadataProps>(({
   }), [isBubbleVariant, isSent, theme, timestampColor]);
 
   const readIndicatorColor = useMemo(() => {
-    // A failure is the one status that keeps its own colour inside a bubble.
-    // Everything else on that background is deliberately quiet, and a mark the
-    // user is meant to act on cannot be.
-    if (readStatus === 'failed') {
+    // Which tone a status gets is `messageStatus.ts`; this only picks the
+    // colour for it. `error` keeps its own colour even inside a bubble, because
+    // a mark the user is meant to act on cannot be quiet; `accent` is what
+    // tells read from delivered, since both draw two ticks — inside a bubble
+    // it is the theme's info colour rather than the primary, which is often
+    // the bubble itself.
+    const tone = readStatus ? statusTone(readStatus) : 'quiet';
+    if (tone === 'error') {
       return theme.colors.error;
     }
     if (isBubbleVariant) {
-      return timestampColor;
+      return tone === 'accent' ? theme.colors.info : timestampColor;
     }
-    if (readStatus === 'read') {
+    if (tone === 'accent') {
       return colors.buttonPrimary || colors.primaryColor || theme.colors.primary || '#007AFF';
     }
     return colors.messageTimestamp || theme.colors.textSecondary || '#999999';

@@ -211,9 +211,9 @@ change and built alongside it; `navigationTargets` covers the new routes.
   object URL on web); a voice note or a document is not fetched until played or
   opened. `UploadMediaMeta.thumbnail` (`{ bytes, mime, width, height }`) sends
   a rendered preview as a second encrypted blob named by the same `media`
-  message, and `MediaView.thumbnail.ref` fetches it alone; `sendMedia` is
-  specified to pass the rendered thumbnail with the Phase 3 change, and until
-  it does receivers download the original to draw a bubble. Delivery receipts
+  message, and `MediaView.thumbnail.ref` fetches it alone; `ConversationView`
+  passes the rendered thumbnail to `sendMedia`, and `MediaCarousel` prefers
+  it over the original when drawing a bubble. Delivery receipts
   are encrypted `delivered` messages: an own bubble shows `delivered` once
   another account's device has it and `read` once a read receipt covers it.
 - **Conversation themes** are a preference of THIS device

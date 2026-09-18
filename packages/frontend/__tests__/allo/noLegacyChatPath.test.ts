@@ -42,6 +42,8 @@ const CHAT_PATH_PREFIXES = [
   'app/(chat)/c/',
   'app/(chat)/_layout.tsx',
   'app/(chat)/settings/devices.tsx',
+  'app/(chat)/settings/backup.tsx',
+  'components/backup/',
   'components/conversation/',
   'components/messages/',
   'components/media/',

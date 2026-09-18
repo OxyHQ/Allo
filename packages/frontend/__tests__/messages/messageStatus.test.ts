@@ -1,4 +1,4 @@
-import { statusMark } from '@/components/messages/messageStatus';
+import { statusMark, statusTone } from '@/components/messages/messageStatus';
 
 /**
  * Which mark a message's status draws.
@@ -24,8 +24,27 @@ describe('statusMark', () => {
     expect(statusMark('sent')).toBe('tick');
   });
 
+  it('draws a delivered message as two ticks, apart from a sent one', () => {
+    // The delivered receipt says a recipient's device has the message; one
+    // tick would say only that the server does, which was already known.
+    expect(statusMark('delivered')).toBe('double-tick');
+    expect(statusMark('delivered')).not.toBe(statusMark('sent'));
+  });
+
   it('draws a read message as two ticks', () => {
     expect(statusMark('read')).toBe('double-tick');
+  });
+
+  it('tells read from delivered by tone, since both draw two ticks', () => {
+    expect(statusTone('delivered')).toBe('quiet');
+    expect(statusTone('read')).toBe('accent');
+    expect(statusTone('read')).not.toBe(statusTone('delivered'));
+  });
+
+  it('keeps every mark before read quiet and the failure its own tone', () => {
+    expect(statusTone('pending')).toBe('quiet');
+    expect(statusTone('sent')).toBe('quiet');
+    expect(statusTone('failed')).toBe('error');
   });
 
   it('gives failed and pending different marks', () => {
@@ -39,6 +58,7 @@ describe('statusMark', () => {
 
     for (const status of statuses) {
       expect(statusMark(status)).toBeDefined();
+      expect(statusTone(status)).toBeDefined();
     }
   });
 });

@@ -18,14 +18,39 @@ export type MessageStatusMark = 'clock' | 'tick' | 'double-tick' | 'error';
 
 const MARKS: Record<MessageReadStatus, MessageStatusMark> = {
   pending: 'clock',
+  // The server has it: one tick.
   sent: 'tick',
-  // One tick each. They differ in what the sender knows — the homeserver has it,
-  // versus their device has it — and Allo has never drawn them apart.
-  delivered: 'tick',
+  // Their device has it — a delivered receipt came back from a recipient
+  // instance: two ticks, in the quiet colour.
+  delivered: 'double-tick',
+  // They read it: the same two ticks, in the accent colour. Mark and tone
+  // together are what tell delivered and read apart.
   read: 'double-tick',
   failed: 'error',
 };
 
 export function statusMark(readStatus: MessageReadStatus): MessageStatusMark {
   return MARKS[readStatus];
+}
+
+/**
+ * Which colour the mark is drawn in.
+ *
+ * `quiet` is the timestamp's colour; `accent` is the one that says "read" and
+ * is the only thing that distinguishes read from delivered, since both draw
+ * two ticks; `error` is the one colour that keeps its own even inside a bubble,
+ * because a mark the user is meant to act on cannot be quiet.
+ */
+export type MessageStatusTone = 'quiet' | 'accent' | 'error';
+
+const TONES: Record<MessageReadStatus, MessageStatusTone> = {
+  pending: 'quiet',
+  sent: 'quiet',
+  delivered: 'quiet',
+  read: 'accent',
+  failed: 'error',
+};
+
+export function statusTone(readStatus: MessageReadStatus): MessageStatusTone {
+  return TONES[readStatus];
 }
