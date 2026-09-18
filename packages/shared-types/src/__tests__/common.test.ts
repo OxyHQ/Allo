@@ -9,6 +9,7 @@ import {
   base64UrlSchema,
   ed25519PublicKeySchema,
   ed25519SignatureSchema,
+  x25519PublicKeySchema,
   EMPTY_BODY_SHA256_HEX,
   epochConflictDetailsSchema,
   errorResponseSchema,
@@ -92,6 +93,12 @@ describe("key and digest shapes", () => {
     expect(ed25519PublicKeySchema.safeParse(SIGNATURE).success).toBe(false);
     expect(ed25519SignatureSchema.safeParse(PUBKEY).success).toBe(false);
   });
+  it("an X25519 public key is 44 base64 chars, like the Ed25519 one", () => {
+    expect(x25519PublicKeySchema.safeParse(PUBKEY).success).toBe(true);
+    expect(x25519PublicKeySchema.safeParse(SIGNATURE).success).toBe(false);
+    expect(x25519PublicKeySchema.safeParse(PUBKEY.slice(0, 43)).success).toBe(false);
+    expect(x25519PublicKeySchema.safeParse("not base64!" + PUBKEY.slice(11)).success).toBe(false);
+  });
   it("sha256 hex is lowercase and 64 long", () => {
     expect(sha256HexSchema.safeParse(EMPTY_BODY_SHA256_HEX).success).toBe(true);
     expect(sha256HexSchema.safeParse(EMPTY_BODY_SHA256_HEX.toUpperCase()).success).toBe(false);
@@ -126,8 +133,10 @@ describe("errorResponseSchema", () => {
     expect(errorResponseSchema.safeParse({ error: { code: "", message: "no" } }).success).toBe(false);
   });
   it("the closed set has thirteen codes and epoch_conflict details carry the epoch", () => {
-    expect(ALLO_ERROR_CODES).toHaveLength(13);
+    expect(ALLO_ERROR_CODES).toHaveLength(15);
     expect(alloErrorCodeSchema.safeParse("epoch_conflict").success).toBe(true);
+    expect(alloErrorCodeSchema.safeParse("transfer_key_missing").success).toBe(true);
+    expect(alloErrorCodeSchema.safeParse("backup_not_found").success).toBe(true);
     expect(alloErrorCodeSchema.safeParse("teapot").success).toBe(false);
     expect(epochConflictDetailsSchema.safeParse({ currentEpoch: 7 }).success).toBe(true);
     expect(epochConflictDetailsSchema.safeParse({ currentEpoch: "7" }).success).toBe(false);

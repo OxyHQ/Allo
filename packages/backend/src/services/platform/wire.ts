@@ -7,13 +7,16 @@
  */
 
 import type {
+  AccountBackup,
   ClientInstance,
   ConversationEvent,
   ConversationSummary,
+  HistoryOffer,
   PublicInstance,
 } from "@allo/shared-types";
 import type { ConversationRow, LeafRow, MemberRow } from "../../db/platform/conversationRepository";
 import type { EventReadRow } from "../../db/platform/eventRepository";
+import type { AccountBackupRow, HistoryOfferRow } from "../../db/platform/historyRepository";
 import type { InstanceRow } from "../../db/platform/instanceRepository";
 
 const iso = (date: Date): string => date.toISOString();
@@ -27,6 +30,7 @@ export function toClientInstance(row: InstanceRow): ClientInstance {
     platform: row.platform,
     displayName: row.displayName,
     signingPublicKey: row.signingPublicKey,
+    transferPublicKey: row.transferPublicKey,
     status: row.status,
     enrolledAt: isoOrNull(row.enrolledAt),
     revokedAt: isoOrNull(row.revokedAt),
@@ -57,10 +61,42 @@ export function toPublicInstance(row: InstanceRow): PublicInstance {
     appId: row.appId,
     platform: row.platform,
     signingPublicKey: row.signingPublicKey,
+    transferPublicKey: row.transferPublicKey,
     approvedByInstanceId: row.approvedByInstanceId,
     approvalSignature: row.approvalSignature,
     enrollmentChallenge: publishedChallenge(row),
     status: row.status,
+  };
+}
+
+/**
+ * The offer as the recipient (and the donor, in its `POST` answer) sees it,
+ * sealed key included: that is what the row is for. `manifest` is the stored
+ * jsonb, which was parsed with `archiveManifestSchema` on the way in.
+ */
+export function toHistoryOffer(row: HistoryOfferRow): HistoryOffer {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    donorInstanceId: row.donorInstanceId,
+    recipientInstanceId: row.recipientInstanceId,
+    manifest: row.manifest,
+    sealedKey: row.sealedKey,
+    manifestSignature: row.manifestSignature,
+    status: row.status,
+    createdAt: iso(row.createdAt),
+    expiresAt: iso(row.expiresAt),
+  };
+}
+
+export function toAccountBackup(row: AccountBackupRow): AccountBackup {
+  return {
+    accountId: row.accountId,
+    instanceId: row.instanceId,
+    manifest: row.manifest,
+    keyCheck: row.keyCheck,
+    manifestSignature: row.manifestSignature,
+    updatedAt: iso(row.updatedAt),
   };
 }
 

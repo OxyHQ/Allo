@@ -5,7 +5,8 @@
  * members, leaving, naming (an E2EE `conversation` message), and the
  * multi-device elector rule: after every sync, in each conversation where
  * this instance is the lowest-id active leaf of its account, it adds any
- * trusted active instance of the account that has no leaf.
+ * trusted active instance of the account that has no leaf — and, once per
+ * such instance, offers it this instance's history (`HistoryService.autoOffer`).
  */
 import { createConversationResponseSchema, listConversationsResponseSchema, type ConversationSummary, type SubmitEventRequest } from "@allo/shared-types";
 import type { Context } from "../context";
@@ -276,6 +277,8 @@ export class ConversationsService {
     try {
       const own = ctx.instance.trustedOwnInstances().trusted.filter((i) => i.status === "active" && i.id !== ctx.instanceId);
       if (own.length === 0) return;
+      /** Own instances that share, or are being given, a leaf in a conversation this instance is the elector of. */
+      const electorFor = new Set<string>();
       for (const conversationId of ctx.groups.ids()) {
         const state = ctx.groups.get(conversationId)!;
         const record = ctx.model.conversations.get(conversationId);
@@ -290,8 +293,10 @@ export class ConversationsService {
             .filter((i) => i.kind === "commit" && i.state === "pending")
             .flatMap((i) => i.commit?.adds.map((a) => a.instanceId) ?? []),
         );
+        for (const i of own) if (present.has(i.id) || pendingAdds.has(i.id)) electorFor.add(i.id);
         const missing = own.filter((i) => !present.has(i.id) && !pendingAdds.has(i.id));
         if (missing.length === 0) continue;
+        for (const i of missing) electorFor.add(i.id);
         try {
           const claimed = await ctx.instance.claimKeyPackages(missing.map((i) => i.id));
           if (claimed.keyPackages.length === 0) continue;
@@ -304,6 +309,8 @@ export class ConversationsService {
           ctx.log.warn?.("could not add own instances", { conversationId, error: describeError(error) });
         }
       }
+      // Not awaited: exporting and uploading an archive must not hold the sync loop; autoOffer never throws and dedupes.
+      if (electorFor.size) void ctx.history.autoOffer([...electorFor]);
     } finally {
       this.reconciling = false;
     }

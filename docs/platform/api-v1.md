@@ -35,6 +35,8 @@ Every non-2xx answer is `ErrorResponse`:
 | `key_packages_exhausted` | 409 | a claim found nothing for a required instance |
 | `idempotency_conflict` | 409 | the idempotency key was used before with a different body |
 | `payload_too_large` | 413 | event payload, blob or body over its bound |
+| `transfer_key_missing` | 409 | a history offer names a recipient that has no `transferPublicKey` yet |
+| `backup_not_found` | 404 | `DELETE /v1/accounts/me/backup` when the account has no backup |
 | `rate_limited` | 429 | slow down |
 | `unavailable` | 503 | a dependency is down; retry, do not sign out |
 | `internal` | 500 | a bug |
@@ -121,6 +123,7 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | POST | `/v1/instances/:id/revoke` | instance-signed | — | `InstanceResponse` | `not_found`, `forbidden` |
 | PUT | `/v1/instances/me/push` | instance-signed | `SetPushTokenRequest` | `204` | `validation_failed` |
 | DELETE | `/v1/instances/me/push` | instance-signed | — | `204` | — |
+| PUT | `/v1/instances/me/transfer-key` | instance-signed | `SetTransferKeyRequest` `{ transferPublicKey }` | `InstanceResponse` | `validation_failed` |
 
 Registration is the bootstrap rule: an account with zero active instances
 gets `enrollment: "active"` at once; otherwise the answer is `"pending"` with
@@ -128,12 +131,22 @@ a `challenge` (32 random bytes, base64url) and the instance waits for an
 approval. `RegisterInstanceResponse` refuses a pending answer without a
 challenge and an active one with one.
 
+`RegisterInstanceRequest` is `{ appId, platform, displayName, signingPublicKey, transferPublicKey }`.
+`transferPublicKey` is the instance's raw 32-byte X25519 public key, base64
+(`x25519PublicKeySchema`, 44 chars), the key a donor seals an archive key to
+when it offers this instance its history (see "History" below). It is
+REQUIRED at registration.
+
 `ClientInstance` (own account's view) carries `enrolledAt`, `revokedAt`,
-`lastSeenAt`, `approvedByInstanceId`, `approvalSignature` and `enrollmentChallenge` (published once approved, `null` before and for the bootstrap instance) as
+`lastSeenAt`, `approvedByInstanceId`, `approvalSignature`, `enrollmentChallenge` (published once approved, `null` before and for the bootstrap instance) and `transferPublicKey` as
 always-present, nullable fields, mirroring the columns behind them.
+`transferPublicKey` is `null` only on an instance registered before the field
+existed; such an instance sets it with `PUT /v1/instances/me/transfer-key`
+(`SetTransferKeyRequest`, answered with the instance after), and until it does
+an offer to it is refused with `transfer_key_missing`.
 `PublicInstance` (another account's view) is the subset needed to verify an
 enrollment chain and address an MLS leaf: id, accountId, appId, platform,
-signingPublicKey, approvedByInstanceId, approvalSignature, enrollmentChallenge, status.
+signingPublicKey, transferPublicKey, approvedByInstanceId, approvalSignature, enrollmentChallenge, status.
 
 `revoke` may be called by any active instance of the account, or by the
 instance on itself. It marks every active leaf of the instance for removal and
@@ -265,6 +278,141 @@ travels only inside a `media` app message. A blob nobody references expires
 seven days after upload; one referenced from an event's `blobIds` is kept.
 Bound: `DEFAULT_MAX_BLOB_BYTES` (25 MiB) unless the deployment says otherwise.
 
+### History (`archive.ts`, `historyOffers.ts`)
+
+How a new instance gets its timeline. A new instance is a new MLS leaf and
+live group state is NEVER copied between instances; history reaches it by an
+end-to-end-encrypted transfer from another instance of the same account (an
+offer), or by an encrypted backup (next section). The server stores ciphertext
+chunks, a signed manifest and a sealed key, and can open none of them.
+
+| method | path | auth | request | response | errors |
+| --- | --- | --- | --- | --- | --- |
+| POST | `/v1/instances/:id/history-offers` | instance-signed | `CreateHistoryOfferRequest` (`:id` is the recipient and must equal `recipientInstanceId`) | `HistoryOfferResponse` `{ offer }` | `validation_failed` (a non-`transfer` manifest included), `not_found` (recipient, or a chunk blob), `forbidden` (recipient is another account's, or a chunk blob is), `instance_not_active` (recipient), `transfer_key_missing`, `unauthorized` (bad manifest signature) |
+| GET | `/v1/instances/me/history-offers` | instance-signed | — | `ListHistoryOffersResponse` `{ offers }` — the caller's `pending` offers | — |
+| POST | `/v1/instances/me/history-offers/:id/consume` | instance-signed | — | `HistoryOfferResponse` `{ offer }` with `status: "consumed"` | `not_found` (not the caller's, or not pending) |
+
+`HistoryOffer` is `{ id, accountId, donorInstanceId, recipientInstanceId, manifest: ArchiveManifest, sealedKey, manifestSignature, status: pending|consumed|expired, createdAt, expiresAt }`.
+`CreateHistoryOfferRequest` is `{ recipientInstanceId, manifest, sealedKey, manifestSignature }`.
+
+Server rules for creating an offer: the donor (the signing instance) is
+active; the recipient is an active instance of the SAME account and has a
+`transferPublicKey` (else `409 transfer_key_missing`); every
+`manifest.chunkBlobIds` entry exists and belongs to the donor's account;
+`manifestSignature` verifies against the DONOR's signing key over
+`archiveManifestMessage(manifest)`; one pending offer per (donor, recipient) —
+a newer one marks the older `expired`. The offer expires `HISTORY_OFFER_TTL_MS`
+(7 days) after creation. On creation the server emits `history.offer
+{ offerId }` to `instance:<recipient>`. Blobs referenced by an offer are kept
+while it is pending and released for collection a day after it is consumed,
+expired or replaced.
+
+The recipient trusts nothing the server says about the donor. Before
+downloading a chunk it verifies the donor's enrollment chain, verifies
+`manifestSignature` against the donor's signing key, and opens `sealedKey`
+with its own transfer key; it imports only from a VERIFIED same-account
+instance.
+
+#### The archive
+
+`Archive` (`archiveV1Schema`) is the plaintext an instance exports. It exists
+only on devices:
+
+```ts
+type ArchiveV1 = {
+  v: 1; createdAt: iso; accountId; appId;
+  conversations: Array<{ id; kind; appId; title: string | null; memberAccountIds: string[]; createdAt }>;
+  events: Array<{ conversationId; eventId; seq; senderAccountId; senderInstanceId: string | null; sentAt; message: AppMessage }>;
+  mediaKeys: Array<{ conversationId; blobId; key: base64; nonce: base64; sha256: hex; thumbnail?: { blobId; key; nonce; sha256 } }>;
+};
+```
+
+Every event carries its DECRYPTED `AppMessage`, never MLS ciphertext.
+`encodeArchive` produces UTF-8 JSON (validating first, so a malformed archive
+is never encrypted); `decodeArchive` parses and validates, throwing
+`ArchiveDecodeError` on anything else — including an event whose `message` is
+not an `AppMessage`.
+
+The archive is encrypted client-side as CHUNKS: the `encodeArchive` bytes are
+split into pieces of at most `ARCHIVE_CHUNK_MAX_BYTES` (4 MiB); each piece is
+AES-256-GCM under the 32-byte archive key with a random 12-byte nonce PREFIXED
+to the ciphertext and the AAD `archiveChunkAad(i, n)` =
+`"allo-archive-v1:" + i + "/" + n` (`ARCHIVE_CHUNK_AAD_PREFIX`, index and
+total, so a chunk cannot be dropped, duplicated or reordered without the
+decryption failing); each chunk is uploaded as one blob through `POST /v1/blobs`.
+
+#### The manifest
+
+`ArchiveManifest` (`archiveManifestSchema`) is what the server stores about an
+archive:
+
+```ts
+type ArchiveManifest = {
+  v: 1; kind: "transfer" | "backup"; createdAt: iso;
+  conversationCount: number; eventCount: number;
+  chunkBlobIds: string[];   // 1..512, in order
+  plaintextSha256: hex;     // of the whole encodeArchive output, checked after decryption
+};
+```
+
+The producer signs it with its instance Ed25519 key over the UTF-8 bytes of
+`archiveManifestMessage(manifest)`, byte for byte:
+
+```
+"allo-archive-manifest-v1\n" + canonicalJson(manifest)
+```
+
+`canonicalJson` is JSON with object keys sorted recursively, no whitespace and
+`undefined` members omitted, so two producers serialising the same manifest
+sign the same bytes. `kind` is inside the signed bytes:
+`createHistoryOfferRequestSchema` refuses a manifest whose kind is not
+`transfer` and `putBackupRequestSchema` one whose kind is not `backup`, so a
+signature made for one cannot be replayed as the other.
+
+#### Sealing the archive key
+
+For a transfer, `sealedKey` is the 32-byte archive key sealed to the
+recipient's `transferPublicKey` with HPKE base mode, X25519-HKDF-SHA256 /
+AES-128-GCM, info `HISTORY_KEY_SEAL_INFO` = `"allo-history-key-v1"`; the wire
+value is `enc || ct`, base64 (`sealedKeySchema`, at most 4096 chars).
+
+### Backups (`backups.ts`)
+
+One encrypted archive per account, unlocked by a recovery phrase the user
+holds and the server never sees. If every device and the phrase are lost,
+history is gone.
+
+| method | path | auth | request | response | errors |
+| --- | --- | --- | --- | --- | --- |
+| PUT | `/v1/accounts/me/backup` | instance-signed | `PutBackupRequest` | `BackupResponse` `{ backup }` — replaces the previous backup | `validation_failed` (a non-`backup` manifest included), `not_found` / `forbidden` (a chunk blob), `unauthorized` (bad manifest signature) |
+| GET | `/v1/accounts/me/backup` | instance-signed | — | `BackupResponse` `{ backup: AccountBackup \| null }` — `null` when the account has none | — |
+| DELETE | `/v1/accounts/me/backup` | instance-signed | — | `204` | `backup_not_found` |
+
+`PutBackupRequest` is `{ manifest (kind "backup"), keyCheck, manifestSignature }`;
+`AccountBackup` is `{ accountId, instanceId, manifest, keyCheck, manifestSignature, updatedAt }`,
+where `instanceId` is the instance that wrote it and whose key verifies
+`manifestSignature` (checked at `PUT` time against the writing instance). The
+chunk blobs are kept while the backup exists and released a day after it is
+replaced or deleted.
+
+#### The backup key
+
+Derivation is a client concern, but the contract fixes it so every client
+derives the same key:
+
+- 12-word BIP39 (English) phrase → 128-bit entropy;
+- `HKDF-SHA256(ikm = entropy, salt = BACKUP_KDF_SALT, info = accountId)` →
+  32-byte backup key, with `BACKUP_KDF_SALT` = `"allo-backup-v1"`;
+- the backup key IS the archive key: the chunks are encrypted under it exactly
+  as described above.
+
+`keyCheck` is `HMAC-SHA256(key = backup key, message = BACKUP_KEY_CHECK_MESSAGE)`
+with `BACKUP_KEY_CHECK_MESSAGE` = `"allo-backup-key-check-v1"`, base64 of the
+32-byte output (`backupKeyCheckSchema`, 44 chars). A client that derives a key
+from a typed phrase compares its own HMAC to the stored `keyCheck` and refuses
+a wrong phrase before downloading a single chunk. The server stores and
+returns `keyCheck` and learns nothing from it.
+
 ### Directory (unchanged)
 
 `GET /api/directory/*` keeps its existing contract (`DirectoryUser`,
@@ -286,6 +434,7 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 | `keypackages.low` | server → client | `KeyPackagesLowEvent` `{ available }` | upload more key packages |
 | `typing` | client → server, server → client | `TypingEvent` `{ conversationId, ciphertext }` | an MLS application message carrying a `typing` app message; relayed to the conversation's other leaves, never stored |
 | `presence` | server → client | `PresenceEvent` `{ accountId, online }` | best effort, for accounts sharing a conversation |
+| `history.offer` | server → client (`instance:<recipient>`) | `HistoryOfferEvent` `{ offerId }` | another instance of the account offered this one its history; pull `GET /v1/instances/me/history-offers` and verify the donor before accepting |
 
 ## The application message (`appMessage.ts`)
 
@@ -293,11 +442,18 @@ Not a route. `AppMessage` is the plaintext a client hands to MLS; the server
 never sees it. `encodeAppMessage` produces UTF-8 JSON (validating first, so a
 malformed envelope is never encrypted) and `decodeAppMessage` parses and
 validates, throwing `AppMessageDecodeError` on anything else. `v` is `1`;
-`t` is one of `text`, `edit`, `delete`, `reaction`, `read`, `media`,
-`conversation`, `typing`. `EventRef` names another message as
+`t` is one of `text`, `edit`, `delete`, `reaction`, `read`, `delivered`,
+`media`, `conversation`, `typing`. `EventRef` names another message as
 `{ kind: "event", conversationId, eventId }` once the server has assigned an
 id, or `{ kind: "local", conversationId, idempotencyKey }` while it is still
 the sender's local echo. A `media` message carries the blob id, the 32-byte
 content key, the nonce, the ciphertext digest, mime, filename, plaintext size,
 `kind: image|video|audio|voice|file`, optional dimensions, duration, caption
 and an encrypted thumbnail of the same shape.
+
+`{ v: 1, t: "delivered", upTo: EventRef }` is a delivery receipt: a RECEIVING
+instance sends it once it has imported everything up to `upTo`, encrypted like
+`read`, so the server learns nothing. A receiver acts on it only when it comes
+from another ACCOUNT (a DM's other party, or any other member of a group) and
+marks its own items with `seq ≤ upTo` as delivered unless they are already
+read; one from its own account's other instances is ignored.

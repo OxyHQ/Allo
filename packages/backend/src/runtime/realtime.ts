@@ -7,6 +7,7 @@
  */
 
 import type {
+  HistoryOfferEvent,
   InstanceApprovedEvent,
   InstanceRevokedEvent,
   KeyPackagesLowEvent,
@@ -21,6 +22,8 @@ export interface Realtime {
   instanceApproved(instanceId: string, event: InstanceApprovedEvent): void;
   instanceRevoked(accountId: string, event: InstanceRevokedEvent): void;
   keyPackagesLow(instanceId: string, event: KeyPackagesLowEvent): void;
+  /** `history.offer` to the recipient instance's room: another instance of its account offered it history. */
+  historyOffer(instanceId: string, event: HistoryOfferEvent): void;
   typing(instanceIds: readonly string[], event: TypingEvent): void;
   presence(accountIds: readonly string[], event: PresenceEvent): void;
   /** Whether at least one socket of the instance is connected — across every task when the Redis adapter is attached. */
@@ -35,6 +38,7 @@ export const NOOP_REALTIME: Realtime = {
   instanceApproved: () => undefined,
   instanceRevoked: () => undefined,
   keyPackagesLow: () => undefined,
+  historyOffer: () => undefined,
   typing: () => undefined,
   presence: () => undefined,
   isInstanceConnected: async () => false,

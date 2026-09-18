@@ -51,6 +51,7 @@ import {
 
 // Conversation peek preview
 import { ConversationPeekPreview } from '@/components/conversation/ConversationPeekPreview';
+import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
 
 // Utils
 import { colors } from '@/styles/colors';
@@ -1002,6 +1003,7 @@ export default function ConversationsList() {
                         <ThemedText style={styles.syncBannerText}>{t('chat.sync.offline', 'Offline — showing what this device has')}</ThemedText>
                     </View>
                 )}
+                <HistoryTransferBanner />
 
                 <>
                     {isFirstSync ? (

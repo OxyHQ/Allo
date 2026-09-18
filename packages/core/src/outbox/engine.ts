@@ -239,6 +239,7 @@ export class OutboxEngine {
       case "reaction":
         return { ...message, target: fix(message.target) };
       case "read":
+      case "delivered":
         return { ...message, upTo: fix(message.upTo) };
       default:
         return message;
@@ -277,6 +278,13 @@ export class OutboxEngine {
         const key = { blobId: message.blobId, conversationId: item.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };
         batch.putJson("mediaKey", key.blobId, key);
         ctx.model.mediaKeys.set(key.blobId, key);
+        if (message.thumbnail) {
+          const t = message.thumbnail;
+          const known = ctx.model.mediaKeys.get(t.blobId);
+          const tk = { blobId: t.blobId, conversationId: item.conversationId, key: t.key, nonce: t.nonce, sha256: t.sha256, mime: known?.mime ?? "image/*", size: known?.size ?? 0 };
+          batch.putJson("mediaKey", tk.blobId, tk);
+          ctx.model.mediaKeys.set(tk.blobId, tk);
+        }
       }
       await ctx.store.commit(batch);
       ctx.model.putEvent(record);

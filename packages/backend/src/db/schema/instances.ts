@@ -24,6 +24,12 @@ export type InstancePushProvider = (typeof PUSH_PROVIDERS)[number];
  * `signing_public_key` is the raw 32-byte Ed25519 public key, base64. Unique
  * per account so the same key cannot enrol twice under one account.
  *
+ * `transfer_public_key` is the raw 32-byte X25519 public key, base64, that a
+ * donor instance seals an archive key to (`history_offers.sealed_key`). Nullable
+ * because Phase 2 rows predate it; such an instance sets it through
+ * `PUT /v1/instances/me/transfer-key`, and until then an offer to it is refused
+ * with `transfer_key_missing`.
+ *
  * `push_token` is a credential for a third party's push service and is
  * registered in `protectedColumns.ts`: it never leaves the process in a
  * response. The pair CHECK keeps a provider and a token together — half a
@@ -42,6 +48,7 @@ export const clientInstances = pgTable(
     platform: text({ enum: PLATFORMS }).notNull(),
     displayName: text().notNull(),
     signingPublicKey: text().notNull(),
+    transferPublicKey: text(),
     status: text({ enum: INSTANCE_STATUSES }).notNull().default("pending"),
     /**
      * base64url. Null for the bootstrap instance; issued at a non-first

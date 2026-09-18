@@ -18,19 +18,27 @@ Related: `docs/adr/0001-clean-break-platform.md`, `concepts.md`, `api-v1.md`,
 | Instance signing key (Ed25519) | The platform secret store of one instance (SecureStore on native, IndexedDB-wrapped on web) | That instance only |
 | Local storage key (AES-256-GCM at rest) | Same secret store | That instance only |
 | Key package private parts | Instance local storage | That instance only |
+| Transfer private key (X25519) | The same secret store; the public half is registered with the instance and published | That instance only; a donor seals an archive key to the public half |
+| Archive key (a fresh random 32-byte key per history offer) | The donor's memory for the length of the offer; on the server only HPKE-sealed to the recipient's transfer key | The donor and the one recipient |
+| Backup key (derived from the recovery phrase) | The secret store of every instance that enabled or restored the backup; on the server only as a key check (an HMAC of a fixed string) | Those instances, and whoever holds the phrase |
+| Recovery phrase (12 BIP39 words) | The user, and nowhere else: returned once by `enable()`, never persisted or logged by the SDK, and specified never to be persisted by the app | The user |
+| History archive plaintext (decrypted timelines, conversation metadata, media keys) | Only on a device, before encryption and after decryption; on the server as chunked AES-256-GCM ciphertext under the archive or backup key | The account's own instances that produced or opened it |
 | Membership metadata (which accounts and instances are in which conversation, roles, epochs) | Backend Postgres, in the clear | Backend, and members through the API |
 | Delivery and presence metadata (who sent an event, when, to which instances, online state, typing activity) | Backend Postgres and Socket.IO rooms | Backend; presence and typing are relayed to members |
 | Push tokens | `client_instances` row | Backend |
 
 The backend holds ciphertext, sizes, timestamps, identifiers and public keys.
-It holds no key that opens any ciphertext.
+It holds no key that opens any ciphertext: the sealed archive key opens only
+with a recipient's transfer private key, and the backup key check is an HMAC
+that verifies a key without containing it.
 
 ## 2. Actors
 
 | Actor | Capability assumed |
 |---|---|
 | Curious or compromised Allo backend | Reads every table and blob; can drop, delay, reorder or replay events; can forge control events and API responses. |
-| Attacker with a stolen Oxy token | Can call the Oxy-only routes as the account: list instances, register a new (pending) instance. Cannot sign as an existing instance. |
+| Attacker with a stolen Oxy token | Can call the Oxy-only routes as the account: list instances, register a new (pending) instance. Cannot sign as an existing instance, and so cannot read the backup record or a history offer, both instance-signed routes. |
+| Attacker with the recovery phrase | Holds what derives the backup key. Alone it opens nothing: the backup is fetched by an instance-signed route, so the attacker also needs an active instance of the account (an Oxy session and either an approval or the bootstrap window). With both, reads the whole archived history. |
 | Attacker with a stolen device or a copy of its storage | Has whatever the OS credential and secret store released. |
 | Malicious other member | Is a legitimate MLS member: reads everything sent to the group, can add or remove per the server's authorization rules, can leak content. |
 | Our own delivery service acting as a malicious homeserver equivalent | Same as the compromised backend, specifically: tries to insert a member or an instance into a group. |
@@ -84,7 +92,8 @@ content, identity binding to Oxy accounts, sync, or media.
   user who revoked or lost every device. The mitigation in this design is
   visibility (other members see an unapproved root instance in the chain and
   the account owner sees it in the devices screen); a self-custodied recovery
-  mechanism that can approve instead is designed for Phase 3 and not built.
+  mechanism that can approve instead is designed and not built. The Phase 3
+  recovery phrase unlocks the backup and approves nothing.
 - **Revocation.** Any active instance of the account, or the instance itself,
   can revoke an instance. The server marks it revoked, refuses its signature
   from then on, disconnects its sockets, marks its leaves removed pending, and
@@ -93,6 +102,17 @@ content, identity binding to Oxy accounts, sync, or media.
   Between revocation and that commit the revoked instance can still decrypt
   events of the current epoch it receives by other means; it no longer
   receives them from the server.
+- **History only from a verified instance of the same account.** A new
+  instance receives an offer's archive key sealed to its own transfer key,
+  and its SDK accepts an offer only after it has verified, from the listing
+  and never from the server's word, that the donor is an active instance of
+  this account whose approval chain checks out and whose published key signed
+  the manifest; the server checks the signature too, so a forged offer never
+  reaches an inbox. A backup is restored only after the phrase's derived key
+  passes the key check and the writing instance's signature verifies the same
+  way. Neither path carries MLS state: the archive holds decrypted messages
+  and media keys, and a new leaf still joins from its Welcome
+  (`crypto.md` sections 12 to 15).
 
 ## 5. What the server can still see
 
@@ -109,6 +129,18 @@ content, identity binding to Oxy accounts, sync, or media.
 - Push tokens and which instance is on which platform and app.
 - DM pairing: `dm_key` is `${appId}:${accountA}:${accountB}` in the clear so
   DMs are idempotent.
+- History offers: that one exists, which instance offered to which and when,
+  when it was consumed or expired, the manifest in the clear (its kind, the
+  number of conversations and events, the chunk blob ids, the plaintext
+  digest and creation time), the chunk sizes (so the approximate size of the
+  account's history) and the sealed key, which is opaque. Not the
+  conversation ids, members or content, nor any media key.
+- Backups: that the account has one, which instance wrote it and when, how
+  often it is refreshed (the refresh policy leaks roughly how much the account
+  talks: a refresh after every 20 events or 24 hours), the same manifest
+  fields and chunk sizes, and the key check, which reveals nothing without
+  the key. Whether the phrase was ever typed anywhere, and a wrong phrase
+  being refused, are decided on the device and never reach the server.
 
 This metadata is the price of a server-relayed design and is not hidden from
 the operator. Group names are not in this list: they are E2EE messages.
@@ -126,9 +158,22 @@ the operator. Group names are not in this list: they are E2EE messages.
 - **Metadata.** Section 5 in full.
 - **Traffic analysis.** Sizes and timing of ciphertext and of socket nudges.
   No padding or cover traffic is planned.
-- **Losing every instance and all recovery material.** History is
-  irrecoverable by design. There is no server-side reset that can produce
-  plaintext because the server never had it.
+- **Losing every instance and the recovery phrase.** History is
+  irrecoverable by design. The server holds chunks encrypted under a key
+  derived from the phrase and never had the key; there is no reset that can
+  produce plaintext. A backup that was never enabled is the same loss.
+- **A stolen recovery phrase together with an active instance.** The phrase
+  is the whole secret of the backup; nothing on the server rate-limits or
+  notices its use, because the key check is verified on the device. The
+  attacker still needs an active instance of the account to fetch the backup,
+  which is the enrollment approval or the trust-on-first-use window above.
+  The phrase approves nothing and cannot revoke, and `disable()` from any
+  active instance deletes the server copy.
+- **A compromised donor instance.** The elector offers a new own instance its
+  history automatically once it has added it. A malicious own instance (one
+  that was approved) can therefore hand a new one a doctored archive; the
+  signature proves who wrote it, not that it is true. The reverse, a
+  stranger's instance offering, is refused before download.
 - **A malicious member.** MLS authenticates members; it does not stop one from
   leaking, screenshotting or running a modified client.
 - **Denial of service by the backend.** It can refuse to relay, drop
@@ -164,5 +209,5 @@ verifies it in the tree), `open` (not built in this change).
 | Three installations send and receive with the first switched off | Every active instance is its own MLS leaf; the sender's device is not needed for anybody else's delivery. Core test scenario "3 instances / 2 accounts exchange". | met by design |
 | Messages sent from one device appear on the user's other devices | The sender's other instances are leaves of the same group and receive the same fan-out. | met by design |
 | Revoking an installation cuts future access | Section 4, revocation: signature refused, sockets dropped, Remove commit at the next epoch. | met by design |
-| A new installation recovers only the permitted history | Currently it recovers none: it decrypts from its welcome epoch onward. History transfer and encrypted backup with user-held recovery material are Phase 3. | open (history transfer not built) |
+| A new installation recovers only the permitted history | It decrypts live traffic from its welcome epoch onward. Old messages reach it only through an offer whose donor it verified as an active, chain-verified instance of the same account with a valid manifest signature, opened with its own transfer key, or through the account's backup with the recovery phrase, refused before download on a wrong phrase or a foreign writer. A pending-approval instance recovers nothing until approved. | met by design and by test (core `phase3.test.ts` t1, t2, b1; backend `history.realdb.test.ts`, `backups.realdb.test.ts`; integration `phase3.realdb.test.ts` in this change) |
 | Desktop is first class without a primary phone | Approval can be given by any active instance; `platform` admits `desktop` and `node`; nothing in the API distinguishes a phone. | met by design |

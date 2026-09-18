@@ -23,7 +23,9 @@ describe("end to end over the fake server", () => {
     const onBob = await waitForText(bob, conv.id, "hi bob");
     expect(onBob.isOwn).toBe(false);
     expect(onBob.senderAccountId).toBe("acc-alice-01");
-    await waitFor(() => alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey)?.sendState === "accepted");
+    // Bob's instance answers with an encrypted `delivered` receipt as soon as it imports the message, so by the time
+    // this polls the echo may already have moved past `accepted`.
+    await waitFor(() => ["accepted", "delivered"].includes(alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey)?.sendState ?? ""));
     const accepted = alice.client.messages.timeline(conv.id).find((i) => i.localKey === aliceKey)!;
     expect(accepted.id).toBe(onBob.id);
     expect(alice.client.messages.timeline(conv.id).filter((i) => i.content.kind === "text")).toHaveLength(1);
@@ -88,7 +90,8 @@ describe("end to end over the fake server", () => {
     await waitFor(() => (server.keyPackages.get(bobDesktop.client.instanceId!)?.length ?? 0) > 0);
     await bobIos.client.sync.now();
     await waitJoined(bobDesktop, conv.id, 10_000);
-    expect(bobDesktop.client.messages.timeline(conv.id).filter((i) => i.content.kind === "text")).toHaveLength(0); // history before the join is not readable
+    // History before the join is not decryptable from the log; it arrives by E2EE transfer from Bob-ios (the elector) instead.
+    await waitForText(bobDesktop, conv.id, "before desktop", 10_000);
 
     await alice.client.messages.send(conv.id, "after desktop");
     await waitForText(bobIos, conv.id, "after desktop");

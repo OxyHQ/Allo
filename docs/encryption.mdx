@@ -1,6 +1,6 @@
 ---
 title: Encryption
-description: What runs now (MLS groups, the instance model, encrypted storage on the device), where the detail lives, and the gaps the new engine still has.
+description: What runs now (MLS groups, the instance model, encrypted storage on the device, E2EE history transfer and the recovery-phrase backup), where the detail lives, and the gaps the new engine still has.
 order: 2
 ---
 
@@ -42,8 +42,28 @@ commit its removal. Sections 6 and 7 of the crypto page.
 
 **Media.** A file is encrypted on the device with a fresh random key under
 AES-256-GCM, uploaded as an opaque blob under an unguessable id, and the key,
-nonce and digest travel only inside the encrypted `media` message. The server
-checks size and digest and nothing else. Section 4 of the crypto page.
+nonce and digest travel only inside the encrypted `media` message; a
+thumbnail is a second blob under its own key, named by the same message. The
+server checks size and digest and nothing else. Section 4 of the crypto page.
+
+**History for a new device.** A new instance is a new MLS leaf and decrypts
+live traffic from its Welcome onward; old messages reach it as an encrypted
+archive of decrypted timelines and media keys, never as group state. Two
+paths, both end to end. A transfer: the device that added the new instance
+to the account's groups offers its archive once, chunked and encrypted under
+a fresh key that is HPKE-sealed to the new instance's X25519 transfer key,
+with the manifest signed by the donor; the new instance accepts on its own
+only after verifying, from the listing and never from the server's word,
+that the donor is an active instance of the same account whose approval
+chain checks out and whose key signed the manifest. A backup: one archive
+per account under a key derived from a 12-word recovery phrase
+(BIP39 → HKDF-SHA256 bound to the account id), shown once and stored
+nowhere; a wrong phrase is refused before any download by a key check, and
+the writing instance's signature is verified before import. The server
+stores chunks (`blobs`), `history_offers` and `account_backups`, keeps a
+chunk while an offer or the backup names it and a day after, and opens none
+of it. Delivery receipts are encrypted messages like read receipts. Sections
+12 to 16 of the crypto page.
 
 **Storage on the device.** Everything the SDK persists (group states, key
 package private halves, decrypted timelines, the outbox, media keys) is
@@ -60,15 +80,24 @@ the acceptance tests of the issue are in the
 These are properties the engine does not yet have. Each has a place in the
 [roadmap](./platform/roadmap).
 
-- **No history transfer and no backup.** A new instance decrypts from the
-  epoch it was welcomed at; nothing before it is readable there. Losing every
-  instance loses history, and the server cannot help because it never had
-  plaintext. `client.history.*` throws `NotImplementedError`.
-- **Trust on first use for the first instance.** When an account has no
-  active instance, whoever holds a valid Oxy token becomes the root of the
-  approval chain. That window includes a user who lost or revoked every
-  device. A recovery mechanism that could approve instead is designed and not
-  built.
+- **Losing every device and the recovery phrase loses history.** The server
+  holds chunks under a key it never had and cannot help. A backup that was
+  never enabled is the same loss. The phrase alone is not enough either:
+  restoring needs an active instance, so a device awaiting approval restores
+  after it is approved, and only the first instance on an account with none
+  left can restore at once.
+- **The recovery phrase approves nothing.** Trust on first use for the first
+  instance is unchanged: when an account has no active instance, whoever
+  holds a valid Oxy token becomes the root of the approval chain, and that
+  window includes a user who lost or revoked every device. A recovery
+  mechanism that could approve instead is designed and not built.
+- **A stolen phrase plus an active instance reads the whole backup.** The
+  key check is verified on the device, so nothing on the server notices or
+  rate-limits a phrase being tried. `disable()` from any active instance
+  deletes the server copy.
+- **The elector offers history once, ever, per new device.** An offer that
+  expired unconsumed after seven days is not repeated on its own;
+  `client.history.offerTo` from any active device makes a new one.
 - **A revoked instance keeps the current epoch until a remaining leaf commits
   the Remove.** It no longer receives events from the server, but ciphertext
   of that epoch it obtains by other means is readable to it until then.
@@ -86,16 +115,19 @@ These are properties the engine does not yet have. Each has a place in the
   visible to the operator.
 - **Malicious JavaScript on the web origin** runs with the page's authority
   and can use the keys. CSP and Trusted Types are designed, not built.
-- **No delivery receipts, no per-account typing attribution, no thumbnail
-  upload, no key package pruning.** Listed with what the tree does instead in
-  section 10 of the crypto page.
+- **No per-account typing attribution, no push previews, no key package
+  pruning.** Listed with what the tree does instead in section 10 of the
+  crypto page.
 - **A compromised endpoint reads plaintext after decryption.** Encryption is
   end to end, not end to eye.
 
 ## Where the code is
 
 `packages/core/src/crypto/` (engine, provider, request signing and the chain
-check, at-rest cipher), `packages/core/src/sync/` and `outbox/` (epoch
-gating, pending commits, the queue), `packages/backend/src/middleware/instanceAuth.ts`
-and `services/platform/` (the server's half). The wire contract is
+check, at-rest cipher, the transfer key, archive chunking, the backup key),
+`packages/core/src/history/` and `backup/` (export, import, offers, the
+backup lifecycle), `packages/core/src/sync/` and `outbox/` (epoch gating,
+pending commits, the queue), `packages/backend/src/middleware/instanceAuth.ts`
+and `services/platform/` (the server's half, `historyService.ts` and
+`backupService.ts` included). The wire contract is
 [API v1](./platform/api-v1).

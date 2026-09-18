@@ -18,6 +18,8 @@ import { createConversationRoutes } from "./conversations";
 import { createEventRoutes } from "./events";
 import { createSyncRoutes } from "./sync";
 import { createBlobReadRoutes } from "./blobs";
+import { createHistoryRoutes } from "./history";
+import { createBackupRoutes } from "./backups";
 
 export interface V1RouterDeps {
   /** `requireInstance()` from `middleware/instanceAuth.ts`, or a test double. */
@@ -32,5 +34,7 @@ export function createV1Router(deps: V1RouterDeps): Router {
   router.use(createEventRoutes(deps));
   router.use(createSyncRoutes(deps));
   router.use(createBlobReadRoutes(deps));
+  router.use(createHistoryRoutes(deps));
+  router.use(createBackupRoutes(deps));
   return router;
 }

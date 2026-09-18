@@ -3,7 +3,8 @@
  * the backend enforces (bootstrap enrollment, approval signatures, key
  * package claims, dm_key idempotency, per-conversation seq, epoch CAS,
  * fan-out to leaves except the sender, welcome to recipients only,
- * per-instance delivery stream with cursors, blobs, socket nudges). Every
+ * per-instance delivery stream with cursors, blobs, socket nudges, history
+ * offers between same-account instances, one backup per account). Every
  * request body is validated with the shared-types zod schemas, so a drift
  * between SDK and contract fails a test here.
  */
@@ -20,6 +21,11 @@ import {
   TIMESTAMP_HEADER,
   ackSyncRequestSchema,
   approveInstanceRequestSchema,
+  archiveManifestMessage,
+  createHistoryOfferRequestSchema,
+  HISTORY_OFFER_TTL_MS,
+  putBackupRequestSchema,
+  setTransferKeyRequestSchema,
   base64UrlEncode,
   claimKeyPackagesRequestSchema,
   createConversationRequestSchema,
@@ -35,8 +41,10 @@ import {
   submitEventRequestSchema,
   syncQuerySchema,
   uploadKeyPackagesRequestSchema,
+  type AccountBackup,
   type ClientInstance,
   type ControlEvent,
+  type HistoryOffer,
   type ConversationEvent,
   type ConversationSummary,
   type PublicInstance,
@@ -70,6 +78,15 @@ export interface FakeConversation {
   createdByInstanceId: string;
   createdAt: string;
   events: ConversationEvent[];
+}
+
+export interface FakeBlob {
+  bytes: Uint8Array;
+  sha256: string;
+  uploaderInstanceId: string;
+  accountId: string;
+  /** `null` while an offer or a backup references the blob; otherwise when the collector may reap it. */
+  expiresAt: string | null;
 }
 
 interface Delivery {
@@ -110,7 +127,9 @@ export class FakeAlloServer implements SocketHost {
   readonly instances = new Map<string, FakeInstance>();
   readonly keyPackages = new Map<string, Array<{ ciphersuite: number; ref: string; data: string }>>();
   readonly conversations = new Map<string, FakeConversation>();
-  readonly blobs = new Map<string, { bytes: Uint8Array; sha256: string; uploaderInstanceId: string }>();
+  readonly blobs = new Map<string, FakeBlob>();
+  readonly historyOffers = new Map<string, HistoryOffer>();
+  readonly backups = new Map<string, AccountBackup>();
   readonly deliveries: Delivery[] = [];
   readonly requestLog: RequestLogEntry[] = [];
   readonly faults: FaultRule[] = [];
@@ -150,6 +169,7 @@ export class FakeAlloServer implements SocketHost {
       platform: instance.platform ?? "web",
       displayName: instance.displayName ?? "injected",
       signingPublicKey: instance.signingPublicKey,
+      transferPublicKey: instance.transferPublicKey ?? null,
       status: instance.status ?? "active",
       enrolledAt: instance.enrolledAt ?? now,
       revokedAt: instance.revokedAt ?? null,
@@ -315,6 +335,43 @@ export class FakeAlloServer implements SocketHost {
         .map((i) => ({ instance: toClient(i), challenge: i.challenge }));
       return json(200, { pending });
     }
+    if (method === "PUT" && path === "/v1/instances/me/transfer-key") {
+      const me = signed();
+      const req = this.parse(setTransferKeyRequestSchema, body);
+      me.transferPublicKey = req.transferPublicKey;
+      return json(200, { instance: toClient(me) });
+    }
+    if (method === "GET" && path === "/v1/instances/me/history-offers") {
+      const me = signed();
+      this.expireOffers();
+      const offers = [...this.historyOffers.values()].filter((o) => o.recipientInstanceId === me.id && o.status === "pending");
+      return json(200, { offers });
+    }
+    if (method === "POST" && (m = path.match(/^\/v1\/instances\/me\/history-offers\/([^/]+)\/consume$/))) {
+      const me = signed();
+      this.expireOffers();
+      const offer = this.historyOffers.get(m[1]);
+      if (!offer || offer.recipientInstanceId !== me.id) throw new HttpError(404, "not_found", "history offer");
+      if (offer.status !== "pending") throw new HttpError(403, "forbidden", `offer is ${offer.status}`);
+      offer.status = "consumed";
+      this.releaseBlobs(offer.manifest.chunkBlobIds);
+      return json(200, { offer });
+    }
+    if (method === "POST" && (m = path.match(/^\/v1\/instances\/([^/]+)\/history-offers$/))) {
+      return this.createHistoryOffer(signed(), m[1], body);
+    }
+    if (path === "/v1/accounts/me/backup") {
+      const me = signed();
+      if (method === "GET") return json(200, { backup: this.backups.get(accountId) ?? null });
+      if (method === "PUT") return this.putBackup(me, body);
+      if (method === "DELETE") {
+        const existing = this.backups.get(accountId);
+        if (!existing) throw new HttpError(404, "backup_not_found", "no backup");
+        this.backups.delete(accountId);
+        this.releaseBlobs(existing.manifest.chunkBlobIds);
+        return new Response(null, { status: 204 });
+      }
+    }
     if (method === "PUT" && path === "/v1/instances/me/push") {
       const me = signed();
       const req = this.parse(setPushTokenRequestSchema, body);
@@ -436,7 +493,7 @@ export class FakeAlloServer implements SocketHost {
       if (!digest || digest !== sha256Hex(body)) throw new HttpError(400, "validation_failed", "digest");
       if (body.byteLength > DEFAULT_MAX_BLOB_BYTES) throw new HttpError(413, "payload_too_large", "blob");
       const blobId = hexEncode(randomBytes(32));
-      this.blobs.set(blobId, { bytes: body, sha256: digest, uploaderInstanceId: me.id });
+      this.blobs.set(blobId, { bytes: body, sha256: digest, uploaderInstanceId: me.id, accountId: me.accountId, expiresAt: this.isoAt(this.now() + 24 * 3600 * 1000) });
       return json(201, { blobId, size: body.byteLength });
     }
     if (method === "GET" && (m = path.match(/^\/v1\/blobs\/([^/]+)$/))) {
@@ -465,6 +522,7 @@ export class FakeAlloServer implements SocketHost {
       platform: req.platform,
       displayName: req.displayName,
       signingPublicKey: req.signingPublicKey,
+      transferPublicKey: req.transferPublicKey,
       status: bootstrap ? "active" : "pending",
       enrolledAt: bootstrap ? now : null,
       revokedAt: null,
@@ -514,6 +572,99 @@ export class FakeAlloServer implements SocketHost {
     this.emitToAccount(target.accountId, "instance.revoked", { instanceId: target.id });
     for (const s of this.sockets.get(target.id) ?? []) s.dropFromServer();
     return json(200, { instance: toClient(target) });
+  }
+
+  // ---- history offers and backups -----------------------------------------
+
+  /** Chunk blobs an offer or a backup names must exist and belong to the producer's account; they stop expiring. */
+  private retainChunks(chunkBlobIds: string[], accountId: string): void {
+    for (const id of chunkBlobIds) {
+      const blob = this.blobs.get(id);
+      if (!blob || blob.accountId !== accountId) throw new HttpError(404, "not_found", `chunk blob ${id}`);
+    }
+    for (const id of chunkBlobIds) this.blobs.get(id)!.expiresAt = null;
+  }
+
+  /** A chunk goes back on the collector's clock only once no pending offer and no backup names it. */
+  private releaseBlobs(chunkBlobIds: string[]): void {
+    const referenced = new Set<string>();
+    for (const o of this.historyOffers.values()) if (o.status === "pending") for (const id of o.manifest.chunkBlobIds) referenced.add(id);
+    for (const b of this.backups.values()) for (const id of b.manifest.chunkBlobIds) referenced.add(id);
+    for (const id of chunkBlobIds) {
+      const blob = this.blobs.get(id);
+      if (blob && !referenced.has(id)) blob.expiresAt = this.isoAt(this.now() + 24 * 3600 * 1000);
+    }
+  }
+
+  private expireOffers(): void {
+    const now = this.iso();
+    for (const o of this.historyOffers.values()) {
+      if (o.status === "pending" && o.expiresAt <= now) {
+        o.status = "expired";
+        this.releaseBlobs(o.manifest.chunkBlobIds);
+      }
+    }
+  }
+
+  private createHistoryOffer(donor: FakeInstance, recipientPath: string, body: Uint8Array): Response {
+    const req = this.parse(createHistoryOfferRequestSchema, body);
+    if (req.recipientInstanceId !== recipientPath) throw new HttpError(400, "validation_failed", "recipient in path and body differ");
+    if (req.recipientInstanceId === donor.id) throw new HttpError(400, "validation_failed", "an instance cannot offer history to itself");
+    const recipient = this.instances.get(req.recipientInstanceId);
+    // Another account's instance is not distinguishable from a missing one.
+    if (!recipient || recipient.accountId !== donor.accountId) throw new HttpError(404, "not_found", "recipient instance");
+    if (recipient.status !== "active") throw new HttpError(403, "forbidden", `recipient is ${recipient.status}`);
+    if (!recipient.transferPublicKey) throw new HttpError(409, "transfer_key_missing", "recipient has no transfer key");
+    if (!ed25519.verify(base64Decode(req.manifestSignature), utf8Encode(archiveManifestMessage(req.manifest)), base64Decode(donor.signingPublicKey))) {
+      throw new HttpError(401, "unauthorized", "manifest signature does not verify");
+    }
+    for (const id of req.manifest.chunkBlobIds) {
+      const blob = this.blobs.get(id);
+      if (!blob || blob.accountId !== donor.accountId) throw new HttpError(404, "not_found", `chunk blob ${id}`);
+    }
+    this.expireOffers();
+    for (const o of this.historyOffers.values()) {
+      if (o.status === "pending" && o.donorInstanceId === donor.id && o.recipientInstanceId === recipient.id) {
+        o.status = "expired";
+        this.releaseBlobs(o.manifest.chunkBlobIds);
+      }
+    }
+    this.retainChunks(req.manifest.chunkBlobIds, donor.accountId);
+    const offer: HistoryOffer = {
+      id: uuidV7(this.now()),
+      accountId: donor.accountId,
+      donorInstanceId: donor.id,
+      recipientInstanceId: recipient.id,
+      manifest: req.manifest,
+      sealedKey: req.sealedKey,
+      manifestSignature: req.manifestSignature,
+      status: "pending",
+      createdAt: this.iso(),
+      expiresAt: this.isoAt(this.now() + HISTORY_OFFER_TTL_MS),
+    };
+    this.historyOffers.set(offer.id, offer);
+    this.emitTo(recipient.id, "history.offer", { offerId: offer.id });
+    return json(201, { offer });
+  }
+
+  private putBackup(me: FakeInstance, body: Uint8Array): Response {
+    const req = this.parse(putBackupRequestSchema, body);
+    if (!ed25519.verify(base64Decode(req.manifestSignature), utf8Encode(archiveManifestMessage(req.manifest)), base64Decode(me.signingPublicKey))) {
+      throw new HttpError(401, "unauthorized", "manifest signature does not verify");
+    }
+    this.retainChunks(req.manifest.chunkBlobIds, me.accountId);
+    const previous = this.backups.get(me.accountId);
+    const backup: AccountBackup = {
+      accountId: me.accountId,
+      instanceId: me.id,
+      manifest: req.manifest,
+      keyCheck: req.keyCheck,
+      manifestSignature: req.manifestSignature,
+      updatedAt: this.iso(),
+    };
+    this.backups.set(me.accountId, backup);
+    if (previous) this.releaseBlobs(previous.manifest.chunkBlobIds);
+    return json(200, { backup });
   }
 
   // ---- conversations -------------------------------------------------------
@@ -660,6 +811,10 @@ export class FakeAlloServer implements SocketHost {
   private iso(): string {
     return new Date(this.now()).toISOString();
   }
+
+  private isoAt(ms: number): string {
+    return new Date(ms).toISOString();
+  }
 }
 
 export function createFakeAlloServer(): FakeAlloServer {
@@ -679,7 +834,18 @@ function toClient(i: FakeInstance): ClientInstance {
 }
 
 function toPublic(i: FakeInstance): PublicInstance {
-  return { id: i.id, accountId: i.accountId, appId: i.appId, platform: i.platform, signingPublicKey: i.signingPublicKey, approvedByInstanceId: i.approvedByInstanceId, approvalSignature: i.approvalSignature, enrollmentChallenge: i.enrollmentChallenge, status: i.status };
+  return {
+    id: i.id,
+    accountId: i.accountId,
+    appId: i.appId,
+    platform: i.platform,
+    signingPublicKey: i.signingPublicKey,
+    transferPublicKey: i.transferPublicKey,
+    approvedByInstanceId: i.approvedByInstanceId,
+    approvalSignature: i.approvalSignature,
+    enrollmentChallenge: i.enrollmentChallenge,
+    status: i.status,
+  };
 }
 
 function json(status: number, body: unknown): Response {

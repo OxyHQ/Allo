@@ -1,7 +1,10 @@
 /**
  * The timeline projection: stored events (server order) plus pending outbox
- * items (local echoes), folded so edits, deletes, reactions and read
- * receipts land on the items they target. Pure: no I/O, no clocks.
+ * items (local echoes), folded so edits, deletes, reactions, read and
+ * delivery receipts land on the items they target. Pure: no I/O, no clocks.
+ * An own item is `read` when another account's `read` covers it, else
+ * `delivered` when another account's `delivered` does; a receipt from an own
+ * instance moves nothing, and `read` is never downgraded.
  */
 import type { AppMessage, EventRef } from "@allo/shared-types";
 import type { EventRecord, OutboxItemRecord } from "../storage/records";
@@ -26,6 +29,7 @@ export function project(input: ProjectionInput): TimelineItemView[] {
   const byId = new Map<string, Working>();
   const byLocalKey = new Map<string, Working>();
   const readUpTo = new Map<string, number>(); // other account → max seq read
+  const deliveredUpTo = new Map<string, number>(); // other account → max seq delivered
 
   const resolve = (ref: EventRef): Working | undefined => {
     if (ref.conversationId !== conversationId) return undefined;
@@ -68,6 +72,13 @@ export function project(input: ProjectionInput): TimelineItemView[] {
         const t = resolve(message.upTo);
         const s = t?.item.seq ?? null;
         if (s !== null) readUpTo.set(sender, Math.max(readUpTo.get(sender) ?? 0, s));
+        break;
+      }
+      case "delivered": {
+        if (sender === accountId) break;
+        const t = resolve(message.upTo);
+        const s = t?.item.seq ?? null;
+        if (s !== null) deliveredUpTo.set(sender, Math.max(deliveredUpTo.get(sender) ?? 0, s));
         break;
       }
       default:
@@ -135,9 +146,13 @@ export function project(input: ProjectionInput): TimelineItemView[] {
   }
 
   const maxRead = Math.max(0, ...readUpTo.values());
+  const maxDelivered = Math.max(0, ...deliveredUpTo.values());
   return order.map((w) => {
     const item = w.item;
-    if (item.isOwn && item.seq !== null && item.sendState === "accepted" && item.seq <= maxRead) item.sendState = "read";
+    if (item.isOwn && item.seq !== null && item.sendState === "accepted") {
+      if (item.seq <= maxRead) item.sendState = "read";
+      else if (item.seq <= maxDelivered) item.sendState = "delivered";
+    }
     item.reactions = [...w.reactions.entries()].filter(([, set]) => set.size > 0).map(([key, set]) => ({ key, accountIds: [...set] }));
     return item;
   });

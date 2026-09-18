@@ -61,6 +61,11 @@ export function signEnrollmentApproval(
   return base64Encode(ed25519.sign(utf8Encode(enrollmentApprovalMessage(input)), key.secretKey));
 }
 
+/** base64 Ed25519 signature over an arbitrary UTF-8 message (archive manifests; see `archiveManifestMessage`). */
+export function signUtf8(key: SigningKeyPair, message: string): string {
+  return base64Encode(ed25519.sign(utf8Encode(message), key.secretKey));
+}
+
 export function verifyEd25519(publicKeyB64: string, message: string, signatureB64: string): boolean {
   try {
     return ed25519.verify(base64Decode(signatureB64), utf8Encode(message), base64Decode(publicKeyB64));

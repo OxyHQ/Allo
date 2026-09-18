@@ -340,6 +340,11 @@ export class Dispatcher {
     if (message.t === "conversation" && message.name !== undefined) next = { ...next, name: message.name };
     if (message.t === "text" || message.t === "media") next = { ...next, lastActivityAt: event.createdAt };
     if (next !== conv) w.setConv(next);
+    // A message from ANOTHER account was imported: tell its sender, throttled. Own instances' messages get no receipt.
+    if ((message.t === "text" || message.t === "media") && event.senderAccountId !== ctx.accountId) {
+      const conversationId = event.conversationId;
+      w.after.push(() => ctx.messages.noteDelivered(conversationId));
+    }
     if (message.t === "media") {
       const key = { blobId: message.blobId, conversationId: event.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };
       w.batch.putJson("mediaKey", key.blobId, key);

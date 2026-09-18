@@ -107,6 +107,8 @@ the SDK is *constructed*, and every platform adapter it needs lives there:
 | `push.ts` | The device push token → `client.instance.setPushToken`, once permission is granted; cleared on sign-out |
 | `useMediaUri.ts` + `mediaSink.*.ts` | A `MediaRef` → a URI a player can open: a cache file on native, an object URL on web, released on unmount |
 | `AlloRoot.tsx` + `EnrollmentGate.tsx` | Client lifecycle (one per signed-in account; stop on switch, `reset()` on sign-out) and the approval / revoked screens |
+| `RestoreHistoryPrompt.tsx` | "Restore your history?", asked once of a fresh device whose account has a backup on the server (see [Backup and recovery](#backup-and-recovery)) |
+| `recoveryPhrase.ts` | The phrase normalisation the SDK applies, re-exported so the backup screen counts words the way `restore()` will |
 
 A source scan, `__tests__/allo/noLegacyChatPath.test.ts`, keeps it that way:
 no `socket.io-client`, no AsyncStorage on the chat path, no legacy messaging
@@ -263,25 +265,95 @@ and [`docs/platform/`](../../docs/platform/).
 The Jest suites run under the `jest-expo` preset, which is why `bun run test`
 here is not interchangeable with `bun test`.
 
-### Device-First Architecture
+### History on a new device
 
-- **Local Storage**: All messages are stored locally using AsyncStorage (offline-first)
-- **Offline Support**: App works completely offline, messages sync when online
+A device that is approved into an account has no history: MLS keys are per
+leaf, and nothing before this device's join epoch is decryptable with them.
+Two things in `@allo/core` bring history across, and the app's part in each is
+small.
 
-### Message Flow
+#### Transfer
 
-1. User types message → encrypted locally (static ECDH + AES-256-GCM), or sent as plaintext if encryption fails
-2. Message stored locally in AsyncStorage (offline-first)
-3. Message POSTed to the server, which relays it to the recipient
-4. Recipient receives the message → decrypts locally if it was encrypted
-5. Message displayed in conversation
+Automatic. The device that adds a newly approved device to the account's
+groups offers its history once, end-to-end encrypted to the new device's
+transfer key, and the new device accepts on its own — only from a verified,
+active instance of the same account (`UntrustedInstanceError` otherwise). The
+app makes no decision about trust. It draws a banner above the conversation
+list, `components/conversation/HistoryTransferBanner.tsx`, while
+`useHistoryTransfer().progress.phase !== 'idle'`: "Receiving history from
+<device>" (the donor from `fromInstanceId`, named through `useOwnInstances()`,
+or a generic line for a device the list does not know) or "Sending history to
+<device>", with `done of total` once the total is known. `pendingOffers` and
+`accept()` exist in the hook for an offer the SDK would not take by itself;
+no screen lists them yet.
 
-### Security Settings
+#### Backup and recovery
 
-Access security settings via: **Settings → Security & Encryption**
+**Settings → Backup and recovery** (`app/(chat)/settings/backup.tsx`, the
+panel in `components/backup/BackupPanel.tsx`, the hook `useBackup()`):
 
-- **Encryption Status**: View encryption initialization status
-- **Device ID**: View your device's registered device ID
+- **Status:** on or off on this device, when the last backup was made and how
+  many events it covered, and whether the server holds one for the account —
+  which is only known after `refreshStatus()` has asked, so the panel asks once
+  on mount and draws "checking" until the answer lands.
+- **Turn on** calls `enable()` and shows the 12-word recovery phrase ONCE, in a
+  numbered grid with a copy button. The panel refuses to let the words go, and
+  the route refuses to be left (back arrow, hardware back, swipe), until "I
+  wrote them down" is ticked. **The app never persists the phrase:** it lives in
+  the panel's state while on screen and nowhere once it is not — not in a store,
+  not in a log, not in a preference. The SDK keeps only the key derived from it.
+- **Back up now** (`refresh()`) and **Turn off** (`disable()`, behind a
+  confirm) once it is on. The SDK also refreshes on its own after enough new
+  events.
+- **Restore from recovery phrase** appears when `status.remote?.exists` and the
+  backup is not enabled here: a paste-friendly 12-word input (lower-cased,
+  whitespace-normalised before `restore(phrase)`). A wrong phrase is refused by
+  the SDK before anything is downloaded and drawn as a friendly message
+  (`RecoveryPhraseError`); anything else is a generic failure.
+
+Why the restore section keys on the server's answer and never on an empty
+list: a fresh device already sees the account's conversation rows — `joined:
+false`, empty timelines — before it has restored anything.
+
+**First run.** `lib/allo/RestoreHistoryPrompt.tsx`, mounted by `AlloRoot`,
+asks "Restore your history?" once: the instance is active, the server holds a
+backup (asked once per client), the backup is not enabled here, no timeline on
+this device has anything in it, and this instance has not answered before.
+"Restore" opens the backup screen; "Not now" is remembered for this instance in
+`stores/restorePromptStore.ts` — a preference, like the conversation themes,
+and keyed by instance id so a device that starts over is asked afresh. It is a
+card over the bottom of the app, never a gate: the app is usable behind it and
+boot does not wait for it.
+
+**What cannot be offered:** restore on a pending device. `client.backup.restore`
+and `refreshStatus` both refuse a non-active instance, so the approval screen
+cannot even say whether a backup exists; approval comes first. Losing every
+device and the phrase loses history, and the screens say so rather than
+implying the server can help.
+
+`__tests__/allo/backupScreen.test.tsx` drives the panel against a real
+`@allo/core` client over the fake server — enable, the confirm gate, a wrong
+phrase, the right phrase from a second install of the same account —
+and `__tests__/allo/transferBanner.test.tsx` covers the banner's states.
+
+### Message status marks
+
+`components/messages/messageStatus.ts` maps a message's `readStatus` to a mark
+and a tone, and `MessageMetadata` only draws them: pending is the clock, `sent`
+one tick (the server has it), `delivered` two ticks in the quiet colour (a
+recipient's device sent a delivered receipt), `read` the same two ticks in the
+accent colour, `failed` the error mark in its own colour even inside a bubble.
+`__tests__/messages/messageStatus.test.ts` pins the table.
+
+### Thumbnails
+
+`lib/chat/attachments.ts` renders a JPEG thumbnail for every picture and video
+the sender picks, and `ConversationView` passes its bytes in
+`UploadMediaMeta.thumbnail` so the SDK encrypts and uploads it as a second blob
+whose key travels in the same `media` message. A receiver's bubble
+(`MediaCarousel`) draws `thumbnailRef` when there is one and downloads the
+original only for the viewer. A thumbnail that cannot be read is dropped and the
+attachment still goes.
 
 ## Push Notifications
 

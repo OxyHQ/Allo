@@ -15,7 +15,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useRouter, usePathname, useSegments } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { toast } from '@oxy.so/bloom/toast';
-import { useTimeline } from '@allo/react';
+import { useTimeline, type UploadMediaMeta } from '@allo/react';
 
 // Components
 import { ThemedView } from '@/components/ThemedView';
@@ -566,7 +566,7 @@ export default function ConversationView({ conversationId: propConversationId }:
     }
     for (const attachment of attachments) {
       try {
-        await sendMedia(await readAttachmentBytes(attachment.uri), uploadMeta(attachment));
+        await sendMedia(await readAttachmentBytes(attachment.uri), await uploadMeta(attachment));
       } catch (error) {
         logger.error('[Conversation] an attachment could not be sent:', error);
         toast.error(getErrorMessage(error) || 'The attachment could not be sent.');
@@ -1234,9 +1234,19 @@ export default function ConversationView({ conversationId: propConversationId }:
   );
 }
 
-/** What the SDK is told about an attachment: the picker's description, minus the URI it has already read. */
-function uploadMeta(attachment: AlloOutgoingAttachment) {
-  return {
+/**
+ * What the SDK is told about an attachment: the picker's description, minus
+ * the URI it has already read, plus the rendered thumbnail's bytes.
+ *
+ * The thumbnail is the sender's to make — nobody else can read the original —
+ * and it is what a receiver's bubble draws before, or instead of, downloading
+ * the picture (`MediaCarousel` prefers `thumbnailRef` when there is one). The
+ * SDK encrypts it as a second blob whose key travels in the same `media`
+ * message. One that cannot be read is dropped rather than fatal: the
+ * attachment still goes, and the receiver falls back to the original.
+ */
+async function uploadMeta(attachment: AlloOutgoingAttachment): Promise<UploadMediaMeta> {
+  const meta: UploadMediaMeta = {
     kind: attachment.kind,
     filename: attachment.filename,
     mime: attachment.mimetype,
@@ -1245,4 +1255,18 @@ function uploadMeta(attachment: AlloOutgoingAttachment) {
     durationMs: attachment.durationMs,
     caption: attachment.caption,
   };
+  const thumbnail = attachment.thumbnail;
+  if (thumbnail) {
+    try {
+      meta.thumbnail = {
+        bytes: await readAttachmentBytes(thumbnail.uri),
+        mime: thumbnail.mimetype,
+        width: thumbnail.width,
+        height: thumbnail.height,
+      };
+    } catch (error) {
+      logger.warn('[Conversation] the thumbnail could not be read; sending without one', error);
+    }
+  }
+  return meta;
 }

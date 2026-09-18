@@ -171,6 +171,9 @@ describe('every route the app navigates to exists', () => {
     expect(routes).toContain('/c/:param');
     expect(routes).toContain('/settings/privacy');
     expect(routes).toContain('/settings/privacy/blocked');
+    // Backup and recovery: pushed from the settings list and from the first-run
+    // restore prompt in `lib/allo/RestoreHistoryPrompt.tsx`.
+    expect(routes).toContain('/settings/backup');
     // The profile segment. `[username]` sits at the root of the `(chat)` group,
     // so it normalises to a single `:param` — which is also why it doubles as
     // the catch-all for unknown one-segment paths.

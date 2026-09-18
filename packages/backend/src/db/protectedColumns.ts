@@ -36,4 +36,13 @@ export const PROTECTED_COLUMNS = {
   conversation_events: ["payload"],
   blob_bytes: ["data"],
   client_instances: ["pushToken"],
+  /**
+   * Archive key material. `sealed_key` is the archive key sealed to ONE
+   * recipient's transfer key and is for that recipient alone; `key_check` is
+   * an HMAC under the backup key, which a wrong-phrase guesser could grind
+   * against offline. Both are returned by exactly the routes that hand them to
+   * their owner (`historyRepository.ts` names the opt-in) and by no listing.
+   */
+  history_offers: ["sealedKey"],
+  account_backups: ["keyCheck"],
 } as const;

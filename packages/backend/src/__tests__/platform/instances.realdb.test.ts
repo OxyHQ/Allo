@@ -25,6 +25,7 @@ import {
   createPlatformHarness,
   expectParses,
   generateEd25519,
+  generateX25519,
   signMessage,
   TestInstance,
   USER_HEADER,
@@ -95,9 +96,54 @@ describe("POST /v1/instances", () => {
     const response = await request(h.app)
       .post("/v1/instances")
       .set(USER_HEADER, account)
-      .send({ appId: "allo", platform: "web", displayName: "dup", signingPublicKey: key.publicKeyBase64 });
+      .send({
+        appId: "allo",
+        platform: "web",
+        displayName: "dup",
+        signingPublicKey: key.publicKeyBase64,
+        transferPublicKey: generateX25519().publicKeyBase64,
+      });
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("idempotency_conflict");
+  });
+});
+
+describe("the transfer key", () => {
+  it("is stored at registration and serialised on both the own and the public projection", async () => {
+    const account = accountId();
+    const me = await TestInstance.register(h.app, account);
+    expect(me.registration.instance.transferPublicKey).toBe(me.transferKey.publicKeyBase64);
+    const other = await request(h.app).get(`/v1/accounts/${account}/instances`).set(USER_HEADER, accountId("stranger"));
+    const parsed = expectParses(listAccountInstancesResponseSchema, other.body);
+    expect(parsed.instances[0].transferPublicKey).toBe(me.transferKey.publicKeyBase64);
+  });
+
+  it("is required at registration", async () => {
+    const response = await request(h.app)
+      .post("/v1/instances")
+      .set(USER_HEADER, accountId())
+      .send({ appId: "allo", platform: "web", displayName: "old client", signingPublicKey: generateEd25519().publicKeyBase64 });
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("validation_failed");
+  });
+
+  it("PUT /v1/instances/me/transfer-key sets it on a row that has none (a Phase 2 instance) and answers with the instance", async () => {
+    const me = await TestInstance.register(h.app, accountId());
+    await h.db.update(schema.clientInstances).set({ transferPublicKey: null }).where(eq(schema.clientInstances.id, me.id));
+    let own = expectParses(listInstancesResponseSchema, (await request(h.app).get("/v1/instances").set(USER_HEADER, me.accountId)).body);
+    expect(own.instances[0].transferPublicKey).toBeNull();
+
+    const fresh = generateX25519();
+    const response = await me.signed("put", "/v1/instances/me/transfer-key", { transferPublicKey: fresh.publicKeyBase64 });
+    expect(response.status).toBe(200);
+    expect(expectParses(instanceResponseSchema, response.body).instance.transferPublicKey).toBe(fresh.publicKeyBase64);
+    own = expectParses(listInstancesResponseSchema, (await request(h.app).get("/v1/instances").set(USER_HEADER, me.accountId)).body);
+    expect(own.instances[0].transferPublicKey).toBe(fresh.publicKeyBase64);
+
+    const malformed = await me.signed("put", "/v1/instances/me/transfer-key", { transferPublicKey: "not-a-key" });
+    expect(malformed.status).toBe(400);
+    const unsigned = await request(h.app).put("/v1/instances/me/transfer-key").set(USER_HEADER, me.accountId).send({ transferPublicKey: fresh.publicKeyBase64 });
+    expect(unsigned.status).toBe(401);
   });
 });
 
@@ -118,7 +164,7 @@ describe("GET /v1/instances and /v1/accounts/:accountId/instances", () => {
     // Never a pending one: it is not somebody another account can address.
     expect(otherParsed.instances.map((i) => i.id)).toEqual([first.id]);
     expect(Object.keys(otherParsed.instances[0]).sort()).toEqual(
-      ["accountId", "appId", "approvalSignature", "approvedByInstanceId", "enrollmentChallenge", "id", "platform", "signingPublicKey", "status"].sort(),
+      ["accountId", "appId", "approvalSignature", "approvedByInstanceId", "enrollmentChallenge", "id", "platform", "signingPublicKey", "status", "transferPublicKey"].sort(),
     );
     expect(JSON.stringify(other.body)).not.toContain("secret-token");
     expect(JSON.stringify(other.body)).not.toContain("displayName");
@@ -367,12 +413,24 @@ describe("revocation", () => {
     const a = await request(h.app)
       .post("/v1/instances")
       .set(USER_HEADER, account)
-      .send({ appId: "allo", platform: "web", displayName: "one", signingPublicKey: generateEd25519().publicKeyBase64 });
+      .send({
+        appId: "allo",
+        platform: "web",
+        displayName: "one",
+        signingPublicKey: generateEd25519().publicKeyBase64,
+        transferPublicKey: generateX25519().publicKeyBase64,
+      });
     expectParses(registerInstanceResponseSchema, a.body);
     const b = await request(h.app)
       .post("/v1/instances")
       .set(USER_HEADER, account)
-      .send({ appId: "allo", platform: "web", displayName: "two", signingPublicKey: generateEd25519().publicKeyBase64 });
+      .send({
+        appId: "allo",
+        platform: "web",
+        displayName: "two",
+        signingPublicKey: generateEd25519().publicKeyBase64,
+        transferPublicKey: generateX25519().publicKeyBase64,
+      });
     expectParses(registerInstanceResponseSchema, b.body);
   });
 });

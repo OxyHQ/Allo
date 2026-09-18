@@ -226,10 +226,19 @@ function makeHpke(cs: CipherSuite): Hpke {
   } as Hpke;
 }
 
+/**
+ * The HPKE suite DHKEM(X25519, HKDF-SHA256) / HKDF-SHA256 / AES-128-GCM over
+ * noble only. MLS uses it through {@link nobleCryptoProvider}; the history
+ * transfer (`crypto/transfer.ts`) uses it directly to seal an archive key.
+ */
+export function createNobleHpkeSuite(): CipherSuite {
+  return new CipherSuite({ kem: new NobleDhkemX25519(), kdf: new NobleHkdfSha256(), aead: new NobleAes128Gcm() });
+}
+
 export const nobleCryptoProvider: CryptoProvider = {
   async getCiphersuiteImpl(cs: Ciphersuite): Promise<CiphersuiteImpl> {
     if (cs.name !== NOBLE_SUITE_NAME) throw new Error(`nobleCryptoProvider: unsupported suite ${cs.name}`);
-    const suite = new CipherSuite({ kem: new NobleDhkemX25519(), kdf: new NobleHkdfSha256(), aead: new NobleAes128Gcm() });
+    const suite = createNobleHpkeSuite();
     return { hash, kdf, signature, hpke: makeHpke(suite), rng, name: cs.name };
   },
 };

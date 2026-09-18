@@ -7,7 +7,7 @@
  *            conversation list and sync.
  *   stop()   disconnect and stop every loop and timer.
  *   reset()  revoke this instance (best effort), wipe its namespace and its
- *            secrets. For sign-out.
+ *            secrets (signing, storage, transfer and backup keys). For sign-out.
  */
 import { AtRestCipher } from "./crypto/atRest";
 import { CryptoEngine } from "./crypto/engine";
@@ -17,6 +17,9 @@ import { GroupRegistry } from "./conversations/groups";
 import { InvalidStateError } from "./errors";
 import { Emitter } from "./events/emitter";
 import { HistoryService } from "./history/service";
+import { BackupService } from "./backup/service";
+import { transferKeyName } from "./crypto/transfer";
+import { backupKeyName } from "./crypto/backupKey";
 import { InstanceManager, instanceKeyName } from "./instance/manager";
 import { MediaService } from "./media/service";
 import { MessagesService } from "./messages/service";
@@ -30,7 +33,10 @@ import { Realtime } from "./sync/realtime";
 import { HttpClient } from "./transport/http";
 import type {
   AlloClientOptions,
+  BackupStatus,
   ConversationView,
+  HistoryOfferView,
+  HistoryProgress,
   InstanceState,
   InstanceView,
   LoadOlderResult,
@@ -104,10 +110,33 @@ export interface AlloClient {
     flush(): Promise<void>;
   };
   history: {
-    requestFrom(instanceId: string): Promise<never>;
-    enableBackup(): Promise<never>;
+    /** Topic `history`. Referentially stable between emissions. */
+    progress(): HistoryProgress;
+    /** Offers to THIS instance, as last listed. `refreshOffers()` re-lists; the SDK also does so on a nudge and after syncs. */
+    pendingOffers(): HistoryOfferView[];
+    refreshOffers(): Promise<void>;
+    /** Verifies the donor (an active, chain-verified instance of this account) and the manifest, then downloads, decrypts and imports. */
+    accept(offerId: string): Promise<void>;
+    /** Exports this instance's history to another active, verified instance of the account. Automatic for newly added instances; manual here. */
+    offerTo(instanceId: string): Promise<void>;
+  };
+  backup: {
+    /** Topic `backup`. Referentially stable between emissions. */
+    status(): BackupStatus;
+    /** Asks the server whether a backup exists (`status().remote`). */
+    refreshStatus(): Promise<void>;
+    /** Returns the 12-word recovery phrase ONCE. The SDK keeps only the derived key. */
+    enable(): Promise<string>;
+    refresh(): Promise<void>;
+    disable(): Promise<void>;
+    /** Refuses a wrong phrase before downloading anything (`RecoveryPhraseError`). */
+    restore(phrase: string): Promise<void>;
   };
 }
+
+const IDLE_PROGRESS: HistoryProgress = { phase: "idle", done: 0, total: 0 };
+const NO_OFFERS: HistoryOfferView[] = [];
+const NO_BACKUP: BackupStatus = { enabled: false, lastBackupAt: null, eventCount: 0, remote: null, busy: false };
 
 export function createAlloClient(options: AlloClientOptions): AlloClient {
   const log = options.logger ?? silentLogger;
@@ -143,6 +172,9 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     }
     c.sync.start();
     c.outbox.start();
+    c.backup.start();
+    await c.instance.ensureTransferKey();
+    c.history.offersStale = true;
     await c.sync.now().catch(() => undefined);
     c.outbox.kick();
   };
@@ -198,6 +230,10 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.outbox = new OutboxEngine(c);
     c.sync = new SyncEngine(c);
     c.realtime = new Realtime(c);
+    c.history = new HistoryService(c);
+    await c.history.load();
+    c.backup = new BackupService(c, options.backupDebounceMs);
+    await c.backup.load();
     c.onInstanceActivated = () => void activate();
     ctx = c;
     started = true;
@@ -222,6 +258,8 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.sync.stop();
     ctx.outbox.stop();
     ctx.messages.stop();
+    ctx.history.stop();
+    ctx.backup.stop();
     await ctx.outbox.idle().catch(() => undefined);
     started = false;
     activated = false;
@@ -243,13 +281,13 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       await new AlloStore(options.storage, cipher, new Namespace(options.appId, accountId)).wipeAccount();
       await options.secrets.delete(instanceKeyName(accountId, options.appId));
       await options.secrets.delete(storageKeyName(accountId, options.appId));
+      await options.secrets.delete(transferKeyName(accountId, options.appId));
+      await options.secrets.delete(backupKeyName(accountId, options.appId));
     }
     ctx = null;
     emitter.emit("instance");
     emitter.emit("conversations");
   };
-
-  const history = new HistoryService();
 
   return {
     get accountId() {
@@ -313,6 +351,20 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       now: () => requireCtx().sync.now(),
       flush: () => requireCtx().outbox.idle(),
     },
-    history,
+    history: {
+      progress: () => ctx?.history.progress() ?? IDLE_PROGRESS,
+      pendingOffers: () => ctx?.history.pendingOffers() ?? NO_OFFERS,
+      refreshOffers: () => requireCtx().history.refreshOffers(),
+      accept: (id) => requireCtx().history.accept(id),
+      offerTo: (id) => requireCtx().history.offerTo(id).then(() => undefined),
+    },
+    backup: {
+      status: () => ctx?.backup.status() ?? NO_BACKUP,
+      refreshStatus: () => requireCtx().backup.refreshStatus(),
+      enable: () => requireCtx().backup.enable(),
+      refresh: () => requireCtx().backup.refresh(),
+      disable: () => requireCtx().backup.disable(),
+      restore: (phrase) => requireCtx().backup.restore(phrase),
+    },
   };
 }

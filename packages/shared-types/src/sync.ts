@@ -12,6 +12,7 @@ import {
   base64UrlDecode,
   base64UrlEncode,
   conversationIdSchema,
+  idSchema,
   instanceIdSchema,
   nonNegativeIntSchema,
 } from "./common";
@@ -132,6 +133,16 @@ export const presenceEventSchema = z.object({
 });
 export type PresenceEvent = z.infer<typeof presenceEventSchema>;
 
+/**
+ * Server → client, to the recipient instance: another instance of the same
+ * account has offered it history. Pull `GET /v1/instances/me/history-offers`
+ * and verify the donor before accepting anything; the nudge itself proves nothing.
+ */
+export const historyOfferEventSchema = z.object({
+  offerId: idSchema,
+});
+export type HistoryOfferEvent = z.infer<typeof historyOfferEventSchema>;
+
 export const SERVER_TO_CLIENT_EVENTS = {
   "sync.nudge": syncNudgeEventSchema,
   "instance.approved": instanceApprovedEventSchema,
@@ -139,6 +150,7 @@ export const SERVER_TO_CLIENT_EVENTS = {
   "keypackages.low": keyPackagesLowEventSchema,
   typing: typingEventSchema,
   presence: presenceEventSchema,
+  "history.offer": historyOfferEventSchema,
 } as const;
 
 export const CLIENT_TO_SERVER_EVENTS = {

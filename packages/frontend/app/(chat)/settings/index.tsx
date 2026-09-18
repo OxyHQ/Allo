@@ -544,6 +544,12 @@ export default function SettingsScreen() {
                         description={t('settings.devicesDesc', 'Approve a new device, or remove one')}
                         onPress={() => router.push('/settings/devices')}
                     />
+                    <SettingsListItem
+                        icon={<IconComponent name="cloud-upload-outline" size={20} color={theme.colors.textSecondary} />}
+                        title={t('backup.title', 'Backup and recovery')}
+                        description={t('settings.backupDesc', 'Keep an encrypted copy of your history, and restore it on a new device')}
+                        onPress={() => router.push('/settings/backup')}
+                    />
                 </SettingsListGroup>
 
                 {/* App Preferences */}

@@ -20,6 +20,7 @@ import {
 } from "@allo/shared-types";
 import { CIPHERSUITE_ID, type CryptoEngine, type Identity, type KeyPackageBundle } from "../crypto/engine";
 import { generateSigningKey, publicKeyBase64, signEnrollmentApproval, signingKeyFromSecret, verifyInstanceChain, type SigningKeyPair } from "../crypto/signing";
+import { TRANSFER_KEY_BYTES, generateTransferKey, transferKeyFromSecret, transferKeyName, type TransferKeyPair } from "../crypto/transfer";
 import { InstanceNotActiveError, InvalidStateError, NotFoundError, TransportError } from "../errors";
 import type { Emitter } from "../events/emitter";
 import { keyPackageRecordSchema, type InstanceRecord, type KeyPackageRecord } from "../storage/records";
@@ -62,6 +63,8 @@ export interface InstanceManagerDeps {
 export class InstanceManager {
   private record: InstanceRecord | undefined;
   private key: SigningKeyPair | undefined;
+  private transferKey: TransferKeyPair | undefined;
+  private transferKeyUpload: Promise<void> | null = null;
   private store: InstanceStore | undefined;
   private model: Model | undefined;
   private own: ClientInstance[] = [];
@@ -111,6 +114,17 @@ export class InstanceManager {
     return this.store;
   }
 
+  /** The raw 32-byte X25519 private transfer key. Only the history service opens sealed keys with it. */
+  get transferSecretKey(): Uint8Array {
+    if (!this.transferKey) throw new InvalidStateError("instance is not registered");
+    return this.transferKey.secretKey;
+  }
+
+  get transferPublicKeyBase64(): string {
+    if (!this.transferKey) throw new InvalidStateError("instance is not registered");
+    return base64Encode(this.transferKey.publicKey);
+  }
+
   bindModel(model: Model): void {
     this.model = model;
   }
@@ -127,6 +141,7 @@ export class InstanceManager {
     const keyName = instanceKeyName(accountId, appId);
     let secret = await secrets.get(keyName);
     const existing = await rootStore.getSelf();
+    this.transferKey = await this.loadOrCreateTransferKey();
     if (existing && secret && secret.length === 32) {
       const key = signingKeyFromSecret(secret);
       if (publicKeyBase64(key) === existing.signingPublicKey) {
@@ -154,7 +169,7 @@ export class InstanceManager {
       const res = await this.deps.http.request({
         method: "POST",
         path: "/v1/instances",
-        body: { appId, platform: this.deps.platform, displayName: this.deps.displayName, signingPublicKey: publicKey },
+        body: { appId, platform: this.deps.platform, displayName: this.deps.displayName, signingPublicKey: publicKey, transferPublicKey: this.transferPublicKeyBase64 },
         schema: registerInstanceResponseSchema,
       });
       instance = res.instance;
@@ -175,6 +190,7 @@ export class InstanceManager {
       platform: instance.platform,
       displayName: instance.displayName,
       signingPublicKey: instance.signingPublicKey,
+      transferPublicKey: instance.transferPublicKey,
       status: instance.status,
       challenge,
       approvedByInstanceId: instance.approvedByInstanceId,
@@ -197,20 +213,24 @@ export class InstanceManager {
     this.own = res.instances;
     this.listView = null;
     const me = res.instances.find((i) => i.id === this.record?.id);
-    if (me && me.status !== this.record.status) {
+    if (me && (me.status !== this.record.status || me.transferPublicKey !== this.record.transferPublicKey)) {
+      const statusChanged = me.status !== this.record.status;
       const next: InstanceRecord = {
         ...this.record,
         status: me.status,
+        transferPublicKey: me.transferPublicKey,
         approvedByInstanceId: me.approvedByInstanceId,
         approvalSignature: me.approvalSignature,
       };
       await this.deps.rootStore.setSelf(next);
       this.record = next;
-      this.emitInstance();
+      if (statusChanged) this.emitInstance();
       if (next.status === "revoked") this.deps.onRevoked?.();
     } else if (!me && this.record.status !== "revoked") {
       this.deps.log.warn?.("this instance is no longer listed by the server");
     }
+    // A Phase 2 instance (no transfer key on the server), or an adopted one whose key was minted anew: upload ours.
+    if (this.isActive && this.transferKey && this.record.transferPublicKey !== this.transferPublicKeyBase64) void this.ensureTransferKey();
     // The listing carries fields (enrolledAt, lastSeenAt…) the current view shows. The cached snapshot is
     // replaced ONLY when the view actually changed, and that replacement always comes with an emission.
     if (this.currentCache !== undefined) {
@@ -230,6 +250,54 @@ export class InstanceManager {
     void this.deps.rootStore.setSelf(this.record).catch(() => undefined);
     this.emitInstance();
     this.deps.onRevoked?.();
+  }
+
+  private async loadOrCreateTransferKey(): Promise<TransferKeyPair> {
+    const { secrets, accountId, appId } = this.deps;
+    const name = transferKeyName(accountId, appId);
+    const stored = await secrets.get(name);
+    if (stored && stored.length === TRANSFER_KEY_BYTES) return transferKeyFromSecret(stored);
+    const fresh = generateTransferKey();
+    await secrets.set(name, fresh.secretKey);
+    const check = await secrets.get(name);
+    if (!check || !bytesEqual(check, fresh.secretKey)) throw new InvalidStateError("secret store did not persist the transfer key");
+    return fresh;
+  }
+
+  /**
+   * Makes the server's `transferPublicKey` for this instance ours. A no-op
+   * when it already is; otherwise `PUT /v1/instances/me/transfer-key` — the
+   * upgrade path of an instance registered before the field existed, and of
+   * one adopted after a storage wipe. Best effort, at most one in flight.
+   */
+  ensureTransferKey(): Promise<void> {
+    if (!this.record || !this.transferKey || !this.isActive) return Promise.resolve();
+    if (this.record.transferPublicKey === this.transferPublicKeyBase64) return Promise.resolve();
+    if (this.transferKeyUpload) return this.transferKeyUpload;
+    this.transferKeyUpload = (async () => {
+      try {
+        const res = await this.deps.http.request({
+          method: "PUT",
+          path: "/v1/instances/me/transfer-key",
+          body: { transferPublicKey: this.transferPublicKeyBase64 },
+          schema: instanceResponseSchema,
+          signer: this.signer,
+        });
+        if (this.record) {
+          this.record = { ...this.record, transferPublicKey: res.instance.transferPublicKey };
+          await this.deps.rootStore.setSelf(this.record);
+        }
+        this.own = this.own.map((i) => (i.id === res.instance.id ? res.instance : i));
+        this.listView = null;
+        this.deps.log.info?.("transfer key uploaded");
+        this.deps.emitter.emit("instances");
+      } catch (error) {
+        this.deps.log.warn?.("transfer key upload failed", { error: describeError(error) });
+      } finally {
+        this.transferKeyUpload = null;
+      }
+    })();
+    return this.transferKeyUpload;
   }
 
   async refreshPending(): Promise<void> {
@@ -328,6 +396,11 @@ export class InstanceManager {
 
   ownInstances(): ClientInstance[] {
     return this.own;
+  }
+
+  /** One of the account's instances from the cached listing. */
+  ownInstance(instanceId: string): ClientInstance | undefined {
+    return this.own.find((i) => i.id === instanceId);
   }
 
   // ---- key package stock ---------------------------------------------------
@@ -445,6 +518,7 @@ export class InstanceManager {
       platform: this.record.platform,
       displayName: this.record.displayName,
       signingPublicKey: this.record.signingPublicKey,
+      transferPublicKey: this.record.transferPublicKey,
       status: this.record.status,
       isThis: true,
       approvedByInstanceId: this.record.approvedByInstanceId,
@@ -463,6 +537,7 @@ export class InstanceManager {
       platform: i.platform,
       displayName: i.displayName,
       signingPublicKey: i.signingPublicKey,
+      transferPublicKey: i.transferPublicKey,
       status: i.status,
       isThis: i.id === this.record?.id,
       approvedByInstanceId: i.approvedByInstanceId,
@@ -491,6 +566,7 @@ function toPublic(i: ClientInstance): PublicInstance {
     appId: i.appId,
     platform: i.platform,
     signingPublicKey: i.signingPublicKey,
+    transferPublicKey: i.transferPublicKey,
     approvedByInstanceId: i.approvedByInstanceId,
     approvalSignature: i.approvalSignature,
     enrollmentChallenge: i.enrollmentChallenge,

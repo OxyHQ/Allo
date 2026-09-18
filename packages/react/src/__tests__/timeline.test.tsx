@@ -33,8 +33,11 @@ describe("useTimeline", () => {
     expect(echo.isOwn).toBe(true);
     expect(echo.seq).toBeNull();
     server.setOffline(alice.client.instanceId!, false);
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("accepted"), { timeout: 10_000 });
+    // accepted once the server has it; bob's delivered receipt may already have moved it on by the time this polls
+    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).not.toBe("pending"), { timeout: 10_000 });
     const accepted = aliceHook.result.current.items.find((i) => i.localKey === localKey)!;
+    expect(["accepted", "delivered"]).toContain(accepted.sendState);
+    expect(accepted.seq).not.toBeNull();
 
     // the other party sees it
     await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(["hi bob"]));
@@ -131,5 +134,38 @@ describe("useTimeline", () => {
       await bob.client.messages.setTyping(conv.id, false);
     });
     await rtlWaitFor(() => expect(result.current.typing).toBe(false));
+  });
+
+  it("an own message becomes delivered once the other account's client has synced it, then read, and is never downgraded", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    started.push(alice, bob);
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+
+    const aliceHook = renderAlloHook(alice.client, () => useTimeline(conv.id));
+    const bobHook = renderAlloHook(bob.client, () => useTimeline(conv.id));
+    let localKey = "";
+    await act(async () => {
+      localKey = await aliceHook.result.current.send("are you there");
+    });
+    await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(["are you there"]));
+    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("delivered"), { timeout: 10_000 });
+    // the receipt is an encrypted app message: the server never saw the word
+    for (const e of server.eventsOf(conv.id)) expect(e.payload.includes("delivered")).toBe(false);
+
+    await act(async () => {
+      await bobHook.result.current.markRead();
+    });
+    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("read"), { timeout: 10_000 });
+
+    // bob's trailing delivered receipt for the second message must not move the first back
+    let second = "";
+    await act(async () => {
+      second = await aliceHook.result.current.send("still there?");
+    });
+    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === second)?.sendState).toBe("delivered"), { timeout: 10_000 });
+    expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("read");
   });
 });

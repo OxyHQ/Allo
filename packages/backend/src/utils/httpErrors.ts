@@ -26,6 +26,8 @@ export const STATUS_BY_CODE: Readonly<Record<AlloErrorCode, number>> = {
   key_packages_exhausted: 409,
   idempotency_conflict: 409,
   payload_too_large: 413,
+  transfer_key_missing: 409,
+  backup_not_found: 404,
   rate_limited: 429,
   unavailable: 503,
   internal: 500,

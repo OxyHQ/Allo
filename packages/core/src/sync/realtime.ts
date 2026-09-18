@@ -67,6 +67,9 @@ export class Realtime {
       const parsed = SERVER_TO_CLIENT_EVENTS["keypackages.low"].safeParse(payload);
       if (parsed.success) void ctx.instance.topUpKeyPackages(parsed.data.available).catch((error) => ctx.log.debug?.("top-up failed", { error: describeError(error) }));
     });
+    socket.on("history.offer", (payload) => {
+      if (SERVER_TO_CLIENT_EVENTS["history.offer"].safeParse(payload).success) ctx.history.onOfferNudge();
+    });
     socket.on("typing", (payload) => {
       const parsed = SERVER_TO_CLIENT_EVENTS.typing.safeParse(payload);
       if (parsed.success) void ctx.messages.onTyping(parsed.data.conversationId, parsed.data.ciphertext);

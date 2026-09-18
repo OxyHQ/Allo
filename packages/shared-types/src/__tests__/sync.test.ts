@@ -4,6 +4,7 @@ import {
   CLIENT_TO_SERVER_EVENTS,
   decodeCursor,
   encodeCursor,
+  historyOfferEventSchema,
   INITIAL_CURSOR,
   instanceApprovedEventSchema,
   instanceRevokedEventSchema,
@@ -86,10 +87,10 @@ describe("sync response / query / ack", () => {
 });
 
 describe("socket events", () => {
-  it("names the namespace and the six server events, one client event", () => {
+  it("names the namespace and the seven server events, one client event", () => {
     expect(SOCKET_NAMESPACE).toBe("/v1");
     expect(Object.keys(SERVER_TO_CLIENT_EVENTS).sort()).toEqual(
-      ["instance.approved", "instance.revoked", "keypackages.low", "presence", "sync.nudge", "typing"].sort(),
+      ["history.offer", "instance.approved", "instance.revoked", "keypackages.low", "presence", "sync.nudge", "typing"].sort(),
     );
     expect(Object.keys(CLIENT_TO_SERVER_EVENTS)).toEqual(["typing"]);
   });
@@ -107,6 +108,9 @@ describe("socket events", () => {
     expect(typingEventSchema.safeParse({ conversationId: UUID_V7, on: true }).success).toBe(false);
     expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: true }).success).toBe(true);
     expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: "yes" }).success).toBe(false);
+    expect(historyOfferEventSchema.safeParse({ offerId: UUID_V7 }).success).toBe(true);
+    expect(historyOfferEventSchema.safeParse({ offerId: 7 }).success).toBe(false);
+    expect(historyOfferEventSchema.safeParse({}).success).toBe(false);
   });
   it("the handler map types line up with the schemas", () => {
     const handlers: ServerToClientEvents = {
@@ -116,7 +120,8 @@ describe("socket events", () => {
       "keypackages.low": (p) => void p.available.toFixed(),
       typing: (p) => void p.ciphertext,
       presence: (p) => void p.online,
+      "history.offer": (p) => void p.offerId,
     };
-    expect(Object.keys(handlers)).toHaveLength(6);
+    expect(Object.keys(handlers)).toHaveLength(7);
   });
 });

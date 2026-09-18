@@ -33,7 +33,9 @@ export type RecordKind =
   | "cursor"
   | "keyPackage"
   | "mediaKey"
-  | "queued";
+  | "queued"
+  | "historyOffered"
+  | "backupState";
 
 export class InstanceNamespace {
   constructor(

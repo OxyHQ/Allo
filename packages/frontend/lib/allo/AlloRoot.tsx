@@ -30,6 +30,7 @@ import { logger } from '@/utils/logger';
 import { createAppAlloClient } from './client';
 import { EnrollmentGate } from './EnrollmentGate';
 import { clearPushToken, onPushPermissionGranted, registerPushToken } from './push';
+import { RestoreHistoryPrompt } from './RestoreHistoryPrompt';
 
 interface Held {
   accountId: string;
@@ -89,6 +90,8 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
         }}
       >
         {children}
+        {/* Asked once of a fresh device whose account has a backup; never holds boot. */}
+        <RestoreHistoryPrompt />
       </EnrollmentGate>
     </AlloProvider>
   );

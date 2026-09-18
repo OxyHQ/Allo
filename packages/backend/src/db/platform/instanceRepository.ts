@@ -28,6 +28,8 @@ export interface InsertInstanceInput {
   platform: InstancePlatform;
   displayName: string;
   signingPublicKey: string;
+  /** Raw 32-byte X25519 public key, base64. Required at registration since Phase 3. */
+  transferPublicKey: string;
   status: InstanceStatus;
   enrollmentChallenge: string | null;
 }
@@ -46,6 +48,7 @@ export async function insertInstance(
       platform: input.platform,
       displayName: input.displayName,
       signingPublicKey: input.signingPublicKey,
+      transferPublicKey: input.transferPublicKey,
       status: input.status,
       enrollmentChallenge: input.enrollmentChallenge,
       enrolledAt: input.status === "active" ? now : null,
@@ -163,6 +166,23 @@ export async function revokeInstance(
       pushToken: null,
       updatedAt: now,
     })
+    .where(eq(clientInstances.id, id))
+    .returning(INSTANCE_COLUMNS);
+  return row ?? null;
+}
+
+/**
+ * Set the transfer key of an instance registered before the column existed
+ * (or rotate it). Returns the row after, null when the instance does not exist.
+ */
+export async function setTransferPublicKey(
+  id: string,
+  transferPublicKey: string,
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<InstanceRow | null> {
+  const [row] = await db
+    .update(clientInstances)
+    .set({ transferPublicKey, updatedAt: new Date() })
     .where(eq(clientInstances.id, id))
     .returning(INSTANCE_COLUMNS);
   return row ?? null;
