@@ -43,6 +43,8 @@ const TYPING_REFRESH_MS = 5000;
 /** …and a stop this long after the last keystroke. */
 const TYPING_IDLE_MS = 3000;
 
+// The camera picker is a native flow; recording works on both (expo-audio uses
+// MediaRecorder on the web).
 const IS_NATIVE = Platform.OS !== 'web';
 
 export function Composer({ target, onClearTarget, notice, note, onSendText, onSendAttachments, onTyping }: ComposerProps) {
@@ -129,8 +131,20 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
 
   const sendVoice = useCallback(async () => {
     const recording = await voice.finish();
-    if (recording) await onSendAttachments([toVoiceAttachment(recording.uri, recording.durationMs / 1000)]);
-  }, [onSendAttachments, voice]);
+    if (!recording) {
+      toast.error(t('composer.voice.tooShort'));
+      return;
+    }
+    await onSendAttachments([
+      toVoiceAttachment(recording.uri, recording.durationMs / 1000, recording.mimetype),
+    ]);
+  }, [onSendAttachments, t, voice]);
+
+  /** Cancelling an edit takes its text with it — otherwise the next send posts a copy. */
+  const cancelTarget = useCallback(() => {
+    if (target?.kind === 'edit') setValue('');
+    onClearTarget();
+  }, [onClearTarget, target]);
 
   const targetBanner = target ? (
     <ComposerBanner
@@ -138,10 +152,7 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
       title={target.kind === 'edit' ? t('composer.editing') : target.title}
       preview={target.preview}
       closeLabel={t('common.cancel')}
-      onClose={() => {
-        if (target.kind === 'edit') setValue('');
-        onClearTarget();
-      }}
+      onClose={cancelTarget}
     />
   ) : undefined;
 
@@ -180,8 +191,8 @@ export function Composer({ target, onClearTarget, notice, note, onSendText, onSe
           </AttachmentMenu>
         ) : undefined
       }
-      onMicPress={IS_NATIVE && target?.kind !== 'edit' ? () => void startVoice() : undefined}
-      onEscape={target ? onClearTarget : undefined}
+      onMicPress={target?.kind === 'edit' ? undefined : () => void startVoice()}
+      onEscape={target ? cancelTarget : undefined}
       labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
     />
   );

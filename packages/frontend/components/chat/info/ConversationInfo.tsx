@@ -2,14 +2,16 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useConversation, useConversationActions } from '@allo/react';
+import { useConversation, useConversationActions, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { MemberList, type MemberListItem } from '@oxy.so/bloom/chat-people';
-import { ChatInfoPanel, type ChatInfoAction, type ChatInfoPanelVariant } from '@oxy.so/bloom/chat-screen';
-import { RiDoorOpenLine, RiDeleteBinLine, RiUserLine } from '@oxy.so/bloom/icons';
+import { ChatInfoPanel, type ChatInfoAction, type ChatInfoPanelVariant, type ChatInfoTab } from '@oxy.so/bloom/chat-screen';
+import { Button } from '@oxy.so/bloom/button';
+import { RiFileTextLine, RiImageLine, RiUserLine } from '@oxy.so/bloom/icons';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { toast } from '@oxy.so/bloom/toast';
 
+import { SharedFiles, SharedMedia } from '@/components/chat/info/SharedAttachments';
 import { useChatContext } from '@/hooks/useChatContext';
 import { conversationAvatar, conversationFaces, conversationTitle } from '@/lib/chat/model';
 import { profileHref } from '@/lib/profile/handle';
@@ -31,6 +33,7 @@ export function ConversationInfo({ conversationId, variant, onClose }: Conversat
   const router = useRouter();
   const { t } = useTranslation();
   const view = useConversation(conversationId);
+  const { items } = useTimeline(conversationId);
   const { leave, rename, removeMember } = useConversationActions();
   const ctx = useChatContext(view?.memberAccountIds ?? []);
   // The field follows the title until it is edited, and again whenever the title changes.
@@ -60,6 +63,7 @@ export function ConversationInfo({ conversationId, variant, onClose }: Conversat
         const person = ctx.person(id);
         return {
           id,
+          // Your own row carries no remove action: leaving is a different thing, with its own confirmation.
           name: id === ctx.me ? t('chat.you') : (person?.displayName ?? ''),
           avatar: person?.avatar,
           subtitle: person?.handle ? `@${person.handle}` : undefined,
@@ -127,18 +131,23 @@ export function ConversationInfo({ conversationId, variant, onClose }: Conversat
 
   const title = conversationTitle(view, ctx);
   const faces = conversationFaces(view, ctx);
+  const tabs: ChatInfoTab[] = [
+    {
+      value: 'media',
+      label: t('chat.details.media'),
+      icon: RiImageLine,
+      content: <SharedMedia items={items} onOpen={() => router.push(`/c/${view.id}`)} />,
+    },
+    {
+      value: 'files',
+      label: t('chat.details.files'),
+      icon: RiFileTextLine,
+      content: <SharedFiles items={items} />,
+    },
+  ];
   const actions: ChatInfoAction[] = other
     ? [{ key: 'profile', label: t('chat.info.profile'), icon: RiUserLine, onPress: () => openProfile(other) }]
     : [];
-  const destructive: ChatInfoAction[] = [
-    {
-      key: 'leave',
-      label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-      icon: isGroup ? RiDoorOpenLine : RiDeleteBinLine,
-      tone: 'negative',
-      onPress: () => void confirmLeave(),
-    },
-  ];
 
   return (
     <ChatInfoPanel
@@ -168,23 +177,29 @@ export function ConversationInfo({ conversationId, variant, onClose }: Conversat
           </View>
         ) : undefined
       }
-      destructiveActions={destructive}
+      tabs={tabs}
     >
       {isGroup && (
         <MemberList
           title={t('chat.details.participants')}
           members={members}
           onMemberPress={openProfile}
-          onRemove={canManage ? (id) => void confirmRemove(id) : undefined}
+          onRemove={canManage ? (id) => (id === ctx.me ? undefined : void confirmRemove(id)) : undefined}
           onAddMembers={canManage ? () => router.push(`/new?addTo=${view.id}`) : undefined}
           addMembersLabel={t('chat.group.addMember')}
           labels={{ remove: t('chat.group.removeMember'), owner: t('chat.role.owner'), admin: t('chat.role.admin') }}
         />
       )}
+      <View style={styles.leave}>
+        <Button variant="destructive" size="medium" onPress={() => void confirmLeave()}>
+          {isGroup ? t('chat.leave.group') : t('chat.leave.conversation')}
+        </Button>
+      </View>
     </ChatInfoPanel>
   );
 }
 
 const styles = StyleSheet.create({
   rename: { paddingHorizontal: 16 },
+  leave: { padding: 16 },
 });

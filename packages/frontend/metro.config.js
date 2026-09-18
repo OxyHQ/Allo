@@ -72,9 +72,29 @@ const TS_MLS_OPTIONAL_PEERS = new Set([
   '@noble/post-quantum',
 ]);
 
+// LOCAL HARNESS (ALLO_HARNESS=1): the Oxy session and the Allo client are
+// replaced by in-memory stand-ins so every chat screen can be opened in a
+// browser without an account. Never set in CI or a release build.
+const HARNESS = process.env.ALLO_HARNESS === '1';
+const HARNESS_ALIASES = HARNESS
+  ? new Map([
+      ['@oxy.so/services', path.resolve(__dirname, 'harness/oxy-services.tsx')],
+      ['@oxy.so/core', path.resolve(__dirname, 'harness/oxy-core.ts')],
+      ['@/lib/allo/client', path.resolve(__dirname, 'harness/client.ts')],
+    ])
+  : new Map();
+
 const defaultResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const harnessAlias = HARNESS_ALIASES.get(moduleName);
+  if (harnessAlias && !context.originModulePath.includes('/harness/')) {
+    return { type: 'sourceFile', filePath: harnessAlias };
+  }
+  // `./client` only where AlloRoot asks for it — the SDK has a module of that name too.
+  if (HARNESS && moduleName === './client' && context.originModulePath.endsWith('/lib/allo/AlloRoot.tsx')) {
+    return { type: 'sourceFile', filePath: path.resolve(__dirname, 'harness/client.ts') };
+  }
   if (NODE_CRYPTO_NAMES.has(moduleName)) {
     return { type: 'sourceFile', filePath: EMPTY_MODULE };
   }

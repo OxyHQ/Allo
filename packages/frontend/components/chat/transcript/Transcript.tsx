@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list';
 import type { TimelineItemView } from '@allo/core';
 import {
+  bubblePositions,
   DateSeparator,
   MessageGroup,
   SystemMessage,
@@ -43,7 +44,11 @@ function splitLongRuns(entries: MessageListEntry[]): MessageListEntry[] {
     if (entry.kind !== 'group' || entry.messages.length <= MAX_RUN) return [entry];
     const chunks: MessageListEntry[] = [];
     for (let start = 0; start < entry.messages.length; start += MAX_RUN) {
-      const messages = entry.messages.slice(start, start + MAX_RUN);
+      const slice = entry.messages.slice(start, start + MAX_RUN);
+      // Each chunk is drawn as its own group, so its corners are its own: keeping
+      // the whole run's positions would leave a `middle` bubble at either seam.
+      const positions = bubblePositions(slice.length);
+      const messages = slice.map(({ item }, index) => ({ item, position: positions[index] ?? 'single' }));
       chunks.push({ ...entry, key: `${entry.key}-${messages[0].item.id}`, messages });
     }
     return chunks;

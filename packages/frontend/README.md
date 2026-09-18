@@ -85,6 +85,17 @@ Push notifications go through the platform: see
 └── config.ts           # Base URLs and third-party keys
 ```
 
+## Looking at the chat screens without an account
+
+`ALLO_HARNESS=1 npx expo start --web` swaps two modules for in-memory
+stand-ins (`harness/`, wired in `metro.config.js`): the Oxy session becomes a
+fixed person, and the Allo client is built against `@allo/core`'s fake server
+with a DM and a group already seeded. Every chat screen then opens in a browser
+with no backend and no sign-in, which is how the UI is reviewed against
+[Bloom's chat stories](https://github.com/OxyHQ/Bloom). It is a development
+tool: without that environment variable not one of those files is resolved, and
+nothing in `app/`, `components/` or `lib/` imports them.
+
 ## The messaging seam: `lib/allo/`
 
 Screens and components never import `@allo/core` for a value; they use the

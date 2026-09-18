@@ -285,19 +285,28 @@ async function saveThumbnail(
 /**
  * A recording from the composer's microphone, as an attachment.
  *
- * `durationSeconds` is what `MicSendButton` reports; the attachment carries
+ * `durationSeconds` is what the recorder reports; the attachment carries
  * milliseconds. Getting that conversion wrong would put "0:00" under every
  * voice message in every client.
+ *
+ * `mimetype` is what the recorder says it produced. It matters on the web,
+ * where the URI is a `blob:` with no extension: without it the filename
+ * fallback names the recording `.jpg` and every receiver is told a voice note
+ * is a picture.
  */
 export function toVoiceAttachment(
   uri: string,
   durationSeconds: number,
+  mimetype?: string,
 ): AlloOutgoingAttachment {
-  const filename = fallbackFilename(uri, false, 'voice');
+  const recorded = mimetype?.split(';')[0];
+  const filename = recorded
+    ? `voice-${Date.now().toString(36)}.${recorded.split('/')[1] ?? 'm4a'}`
+    : fallbackFilename(uri, false, 'voice');
   return {
     kind: 'voice',
     filename,
-    mimetype: mimetypeFromName(filename, false),
+    mimetype: recorded ?? mimetypeFromName(filename, false),
     uri,
     durationMs: Math.round(durationSeconds * 1000),
   };
