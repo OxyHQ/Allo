@@ -1,17 +1,18 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
-import { createAlloClient, testing, type AlloClient } from '@allo/core';
-import { AlloProvider, useOwnInstances, useTimeline } from '@allo/react';
+import { createAlloClient, testing, type AlloClient, type MediaView } from '@allo/core';
+import { AlloProvider, useConversation, useOwnInstances, useTimeline } from '@allo/react';
+import { BloomThemeProvider } from '@oxy.so/bloom/theme';
+import type { MessageListItem } from '@oxy.so/bloom/message-bubble';
 
 import { EnrollmentGate } from '@/lib/allo/EnrollmentGate';
 import { RestoreHistoryPrompt } from '@/lib/allo/RestoreHistoryPrompt';
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
-import { useChatConversations } from '@/hooks/useChatConversations';
-import { usePerson } from '@/hooks/usePerson';
-import { messagesFromItems, type Conversation, type Message } from '@/lib/chat/model';
-import { useConversationAvatar, useConversationDisplayName } from '@/utils/conversationUtils';
+import { useChatContext } from '@/hooks/useChatContext';
+import { useChatSummaries } from '@/hooks/useChatSummaries';
+import { transcriptItems } from '@/lib/chat/model';
 
 /**
  * THE POST-LOGIN TREE, the way `AlloRoot` composes it, against a REAL
@@ -30,28 +31,10 @@ import { useConversationAvatar, useConversationDisplayName } from '@/utils/conve
  * sees as minified React error #185 after signing in.
  */
 
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    isDark: false,
-    colors: {
-      background: '#fff',
-      backgroundSecondary: '#eee',
-      card: '#fff',
-      text: '#000',
-      textSecondary: '#444',
-      textTertiary: '#888',
-      primary: '#0a0',
-      border: '#ccc',
-      error: '#c00',
-      shadow: '#000',
-    },
-  }),
-}));
-
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback: string, options?: Record<string, unknown>) =>
-      (fallback ?? _key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+    t: (key: string, fallback?: unknown) => (typeof fallback === 'string' ? fallback : key),
+    i18n: { language: 'en-US' },
   }),
 }));
 
@@ -105,72 +88,64 @@ function makeClient(server: FakeServer, accountId: string, name: string): AlloCl
   });
 }
 
-/** The conversation list's data path: the list hook, the banner, and a row per conversation drawn through the people layer. */
-function ConversationList({ currentUserId, onOpen }: { currentUserId: string; onOpen?: (conversation: Conversation) => void }) {
-  const conversations = useChatConversations();
+/** The conversation list's data path: the summaries hook, the banner, and a row per conversation. */
+function ConversationList() {
+  const summaries = useChatSummaries();
   const { instances } = useOwnInstances();
   return (
     <View>
       <HistoryTransferBanner />
       <Text testID="device-count">{String(instances.length)}</Text>
-      {conversations.map((conversation) => (
-        <ConversationRow key={conversation.id} conversation={conversation} currentUserId={currentUserId} onOpen={onOpen} />
+      {summaries.map((chat) => (
+        <View key={chat.id} testID={`row-${chat.id}`}>
+          <Text testID={`row-name-${chat.id}`}>{chat.name}</Text>
+          <Text testID={`row-preview-${chat.id}`}>{chat.preview?.text ?? chat.preview?.attachment?.label ?? ''}</Text>
+        </View>
       ))}
     </View>
   );
 }
 
-function ConversationRow({ conversation, currentUserId, onOpen }: { conversation: Conversation; currentUserId: string; onOpen?: (conversation: Conversation) => void }) {
-  const name = useConversationDisplayName(conversation, currentUserId);
-  const avatar = useConversationAvatar(conversation, currentUserId);
-  React.useEffect(() => {
-    onOpen?.(conversation);
-  }, [conversation, onOpen]);
-  return (
-    <View testID={`row-${conversation.id}`}>
-      <Text testID={`row-name-${conversation.id}`}>{name}</Text>
-      <Text testID={`row-avatar-${conversation.id}`}>{avatar ?? ''}</Text>
-      <Text testID={`row-preview-${conversation.id}`}>{conversation.lastMessage}</Text>
-    </View>
-  );
-}
-
-/** The conversation view's data path: the timeline projected into messages, each sender drawn through the people layer, media through `useMediaUri`. */
+/** The conversation screen's data path: the timeline projected into rows through the people layer, media through `useMediaUri`. */
 function ConversationScreen({ conversationId }: { conversationId: string }) {
+  const view = useConversation(conversationId);
   const { items, typing } = useTimeline(conversationId);
-  const messages = React.useMemo(() => messagesFromItems(items), [items]);
+  const ctx = useChatContext(view?.memberAccountIds ?? []);
+  const rows = React.useMemo(() => transcriptItems(items, ctx, { isGroup: false }), [items, ctx]);
+  const sources = React.useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   return (
     <View testID={`conversation-${conversationId}`}>
       <Text>{typing ? 'typing' : ''}</Text>
-      {messages.map((message) => (
-        <MessageRow key={message.id} message={message} />
-      ))}
+      {rows.map((row) => {
+        const content = sources.get(row.id)?.content;
+        return <MessageRow key={row.id} row={row} media={content?.kind === 'media' ? content.media : undefined} />;
+      })}
     </View>
   );
 }
 
-function MessageRow({ message }: { message: Message }) {
-  const sender = usePerson(message.senderId);
-  const media = message.media?.[0];
-  const thumb = useMediaUri(media?.thumbnailRef ?? media?.ref, media?.mime ?? 'application/octet-stream', media !== undefined);
+function MessageRow({ row, media }: { row: MessageListItem; media?: MediaView }) {
+  const thumb = useMediaUri(media?.thumbnail?.ref ?? media?.ref, media?.mime ?? 'application/octet-stream', media !== undefined);
   return (
-    <View testID={`message-${message.id}`}>
-      <Text testID={`sender-${message.id}`}>{sender?.displayName ?? ''}</Text>
-      <Text testID={`text-${message.id}`}>{message.text}</Text>
-      <Text testID={`media-${message.id}`}>{thumb.uri}</Text>
+    <View testID={`message-${row.id}`}>
+      <Text testID={`sender-${row.id}`}>{row.senderId ?? ''}</Text>
+      <Text testID={`text-${row.id}`}>{row.text ?? ''}</Text>
+      <Text testID={`media-${row.id}`}>{thumb.uri}</Text>
     </View>
   );
 }
 
-function App({ client, currentUserId, openConversationId }: { client: AlloClient; currentUserId: string; openConversationId?: string }) {
+function App({ client, openConversationId }: { client: AlloClient; openConversationId?: string }) {
   return (
-    <AlloProvider client={client}>
-      <EnrollmentGate>
-        <ConversationList currentUserId={currentUserId} />
-        {openConversationId ? <ConversationScreen conversationId={openConversationId} /> : null}
-        <RestoreHistoryPrompt />
-      </EnrollmentGate>
-    </AlloProvider>
+    <BloomThemeProvider mode="light" fonts={false}>
+      <AlloProvider client={client}>
+        <EnrollmentGate>
+          <ConversationList />
+          {openConversationId ? <ConversationScreen conversationId={openConversationId} /> : null}
+          <RestoreHistoryPrompt />
+        </EnrollmentGate>
+      </AlloProvider>
+    </BloomThemeProvider>
   );
 }
 
@@ -220,7 +195,7 @@ describe('the post-login tree', () => {
     let thrown: unknown;
     try {
       act(() => {
-        renderer = TestRenderer.create(<App client={alice} currentUserId="acc-tree-alice" />);
+        renderer = TestRenderer.create(<App client={alice} />);
       });
     } catch (error) {
       thrown = error;
@@ -252,7 +227,7 @@ describe('the post-login tree', () => {
 
     // 4. The conversation view opens on it; Bob sends a text and a picture with a thumbnail.
     act(() => {
-      renderer!.update(<App client={alice} currentUserId="acc-tree-alice" openConversationId={conversationId} />);
+      renderer!.update(<App client={alice} openConversationId={conversationId} />);
     });
     await act(async () => {
       await bob.messages.send(conversationId, 'hello from bob');
@@ -278,7 +253,7 @@ describe('the post-login tree', () => {
     const messageTexts = renderer.root.findAll((n) => n.props.testID?.startsWith('text-') && n.type === Text).map((n) => String(React.Children.toArray(n.props.children).join('')));
     expect(messageTexts).toContain('hello from bob');
     const senders = renderer.root.findAll((n) => n.props.testID?.startsWith('sender-') && n.type === Text).map((n) => String(React.Children.toArray(n.props.children).join('')));
-    expect(senders).toContain('Bob');
+    expect(senders).toContain('acc-tree-bob');
     expect(text(renderer, `row-preview-${conversationId}`)).not.toBe('');
     expect(reported.filter(isLoopReport)).toEqual([]);
 

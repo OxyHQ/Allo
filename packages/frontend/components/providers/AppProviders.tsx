@@ -8,7 +8,7 @@ import React, { memo, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { MenuProvider } from 'react-native-popup-menu';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { OxyProvider, useOxy } from '@oxy.so/services';
@@ -16,8 +16,6 @@ import { ImageResolverProvider, type ImageResolver } from '@oxy.so/bloom/image-r
 import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { BottomSheetProvider } from '@/context/BottomSheetContext';
-import { HomeRefreshProvider } from '@/context/HomeRefreshContext';
 import i18n, { setLanguage } from '@/lib/i18n';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/constants';
 import { OXY_BASE_URL, OXY_CLIENT_ID } from '@/config';
@@ -63,6 +61,7 @@ export const AppProviders = memo(function AppProviders({
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <OxyProvider
             baseURL={OXY_BASE_URL}
@@ -77,21 +76,16 @@ export const AppProviders = memo(function AppProviders({
           >
             <MediaResolverProvider>
               <I18nextProvider i18n={i18n}>
-                <BottomSheetProvider>
-                  <MenuProvider>
-                    <ErrorBoundary>
-                      <HomeRefreshProvider>
-                        {children}
-                        <ConnectionStatusToasts />
-                        <StatusBar style="auto" />
-                      </HomeRefreshProvider>
-                    </ErrorBoundary>
-                  </MenuProvider>
-                </BottomSheetProvider>
+                <ErrorBoundary>
+                  {children}
+                  <ConnectionStatusToasts />
+                  <StatusBar style="auto" />
+                </ErrorBoundary>
               </I18nextProvider>
             </MediaResolverProvider>
           </OxyProvider>
         </QueryClientProvider>
+        </KeyboardProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

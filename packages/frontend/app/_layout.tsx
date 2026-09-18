@@ -11,290 +11,112 @@ import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
-import { Fab } from '@oxy.so/bloom/fab';
-import { RiEditLine } from '@oxy.so/bloom/icons';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
+import { useOxy } from '@oxy.so/services';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
-import { Stack, usePathname, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState, memo } from "react";
-import { AppState, Platform, StyleSheet, View, type AppStateStatus } from "react-native";
+import { Stack } from 'expo-router';
+import React, { useEffect, useState, type ReactNode } from 'react';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 
-// Components
 import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
-import { SideBar } from "@/components/SideBar";
-import { BottomBar } from "@/components/layout/BottomBar";
-import { BottomChromeProvider } from '@/context/BottomChromeContext';
-import { ThemedView } from "@/components/ThemedView";
 import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
-
-// Hooks
-import { useIsScreenNotMobile } from "@/hooks/useOptimizedMediaQuery";
-import { useKeyboardVisibility } from '@/hooks/useKeyboardVisibility';
-import { useTheme } from '@/hooks/useTheme';
-import { useOxy } from '@oxy.so/services';
-import { useTranslation } from 'react-i18next';
-
-// Utils
-import { routeMatchers } from '@/utils/routeUtils';
-
-// Services & Utils
-import { AppInitializer } from '@/lib/appInitializer';
 import { AlloRoot } from '@/lib/allo/AlloRoot';
+import { AppInitializer } from '@/lib/appInitializer';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
+import { colorPresetFromSetting, themeModeFromSetting } from '@/lib/theme';
+import { useAppearanceStore } from '@/stores/appearanceStore';
 
-// Styles
 import '../styles/global.css';
 
-// NATIVE ONLY: hold the OS splash so it stays visible until the app has finished
-// running init, then hide it in `RootLayout` once `appIsReady`
-// flips. This makes the native OS splash the SINGLE splash on native (Allo's
-// paper-plane logo centered on #0B0B0F + the Oxy branding pinned to the bottom,
-// configured via `@oxy.so/expo-splash` in app.config.js). The custom
-// `AppSplashScreen` React overlay is gated to web only. The helper is a no-op on
-// web internally, so no Platform guard is needed here.
+// NATIVE ONLY: hold the OS splash until init has run; `useHideNativeSplashWhenReady`
+// releases it. A no-op on web, where `AppSplashScreen` covers the same window.
 preventNativeSplashAutoHide();
 
-// Types
-interface SplashState {
-  initializationComplete: boolean;
-  startFade: boolean;
-  fadeComplete: boolean;
-}
+const IS_WEB = Platform.OS === 'web';
 
-interface MainLayoutProps {
-  isScreenNotMobile: boolean;
-}
-
-/**
- * MainLayout Component
- * Memoized to prevent unnecessary re-renders when parent updates
- */
-const MainLayout: React.FC<MainLayoutProps> = memo(({ isScreenNotMobile }) => {
-  const theme = useTheme();
-  const pathname = usePathname();
-  const router = useRouter();
-  const { user: currentUser } = useOxy();
-  const { t } = useTranslation();
-  const keyboardVisible = useKeyboardVisibility();
-
-  const needsAuth = !currentUser;
-  const isConversationRoute = routeMatchers.isConversationRoute(pathname);
-  const bottomChromeVisible = !isScreenNotMobile && !isConversationRoute && !keyboardVisible;
-  const shouldShowComposeFab = bottomChromeVisible && routeMatchers.isHomeRoute(pathname) && !needsAuth;
-
-  const styles = useMemo(() => StyleSheet.create({
-    container: {
-      flex: 1,
-      width: '100%',
-      marginHorizontal: 'auto',
-      flexDirection: isScreenNotMobile ? 'row' : 'column',
-      backgroundColor: theme.colors.background,
-    },
-    mainContent: {
-      marginHorizontal: isScreenNotMobile ? 'auto' : 0,
-      justifyContent: 'space-between',
-      flexDirection: isScreenNotMobile ? 'row' : 'column',
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    mainContentWrapper: {
-      flex: isScreenNotMobile ? 2.2 : 1,
-      position: 'relative',
-      ...(isScreenNotMobile ? {
-        borderLeftWidth: 0.5,
-        borderRightWidth: 0.5,
-        borderColor: theme.colors.border,
-      } : {}),
-      backgroundColor: theme.colors.background,
-    },
-  }), [isScreenNotMobile, theme.colors.background, theme.colors.border]);
-
+/** Bloom, driven by the account's appearance settings. */
+function ThemeRoot({ children }: { children: ReactNode }) {
+  const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
   return (
-    <BottomChromeProvider visible={bottomChromeVisible}>
-      <View style={styles.container}>
-        {isScreenNotMobile && <SideBar />}
-        <View style={styles.mainContent}>
-          <ThemedView style={styles.mainContentWrapper}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(chat)" redirect={needsAuth} />
-            <Stack.Screen name="(auth)" redirect={!needsAuth} />
-            <Stack.Screen name="calls" />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          {shouldShowComposeFab && (
-            <Fab
-              accessibilityLabel={t('New Chat')}
-              icon={<RiEditLine />}
-              onPress={() => router.push('/new')}
-              placement="bottom-right"
-              variant="tertiary"
-            />
-          )}
-          </ThemedView>
-        </View>
-        <BottomBar />
-      </View>
-    </BottomChromeProvider>
+    <BloomProvider
+      fonts
+      mode={themeModeFromSetting(appearance?.themeMode)}
+      colorPreset={colorPresetFromSetting(appearance?.colorTheme)}
+      // Web shows its own splash while fonts load; native is still behind the OS splash.
+      onFontsLoading={IS_WEB ? <AppSplashScreen /> : null}
+    >
+      {children}
+    </BloomProvider>
   );
-});
+}
 
-MainLayout.displayName = 'MainLayout';
+/** Signed out, the chat group redirects to sign-in, and the other way round. */
+function RootStack() {
+  const { user } = useOxy();
+  const signedIn = Boolean(user);
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(chat)" redirect={!signedIn} />
+      <Stack.Screen name="(auth)" redirect={signedIn} />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
+}
 
-export default function RootLayout() {
-  const [appIsReady, setAppIsReady] = useState(false);
-  const [splashState, setSplashState] = useState<SplashState>({
-    initializationComplete: false,
-    startFade: false,
-    fadeComplete: false,
-  });
-
-  const isScreenNotMobile = useIsScreenNotMobile();
-  const queryClient = useMemo(() => new QueryClient(QUERY_CLIENT_CONFIG), []);
-
-  // NATIVE ONLY: once the app is ready to render real UI, hide the held OS splash.
-  // Because the OS splash stayed up until this exact moment, there is no blank gap
-  // between it and the first real frame. No-op on web (the OS splash was never
-  // held there; the custom overlay handles the transition).
-  useHideNativeSplashWhenReady(appIsReady);
-
-  // WEB ONLY: the custom <AppSplashScreen> calls this when its fade-out finishes.
-  // Native never renders the custom splash, so this never fires there — which is
-  // why native readiness must NOT depend on `fadeComplete` (see the readiness
-  // gate below).
-  const handleSplashFadeComplete = useCallback(() => {
-    setSplashState((prev) => ({ ...prev, fadeComplete: true }));
-  }, []);
-
-  const initializeApp = useCallback(async () => {
-    const result = await AppInitializer.initializeApp();
-
-    if (!result.success) {
-      console.error('App initialization failed:', result.error);
-    }
-
-    setSplashState((prev) => ({ ...prev, initializationComplete: true }));
-  }, []);
-
-
-  useEffect(() => {
-    AppInitializer.initializeI18n().catch((error) => {
-      console.error('Failed to initialize i18n:', error);
-    });
-  }, []);
-
-  useEffect(() => {
-    AppInitializer.loadEagerSettings();
-  }, []);
-
+/** Keeps React Query's online and focus state in step with the device. */
+function useDeviceSignals() {
   useEffect(() => {
     const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
       onlineManager.setOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
     });
-
     const stopMonitoring = startConnectionMonitoring();
-
-    const onAppStateChange = (status: AppStateStatus) => {
+    const appState = AppState.addEventListener('change', (status: AppStateStatus) => {
       focusManager.setFocused(status === 'active');
-    };
-    const appStateSub = AppState.addEventListener('change', onAppStateChange);
-
+    });
     return () => {
       unsubscribeNetInfo();
       stopMonitoring();
-      appStateSub.remove();
+      appState.remove();
     };
+  }, []);
+}
+
+export default function RootLayout() {
+  const [queryClient] = useState(() => new QueryClient(QUERY_CLIENT_CONFIG));
+  const [initialized, setInitialized] = useState(false);
+  // Web fades its splash out before the app appears; native has no such splash.
+  const [splashFaded, setSplashFaded] = useState(!IS_WEB);
+  const ready = initialized && splashFaded;
+
+  useDeviceSignals();
+  useHideNativeSplashWhenReady(ready);
+
+  useEffect(() => {
+    AppInitializer.initializeI18n().catch((error) => console.error('Failed to initialize i18n:', error));
+    AppInitializer.initializeApp().finally(() => setInitialized(true));
   }, []);
 
   useEffect(() => {
-    if (splashState.initializationComplete) return;
-    initializeApp();
-  }, [initializeApp, splashState.initializationComplete]);
-
-  useEffect(() => {
-    if (splashState.initializationComplete && !splashState.startFade) {
-      setSplashState((prev) => ({ ...prev, startFade: true }));
-    }
-  }, [splashState.initializationComplete, splashState.startFade]);
-
-  // Readiness gate.
-  // - WEB keeps the fade-gated flow: the custom <AppSplashScreen> renders, starts
-  //   fading when init completes, and its `onFadeComplete` sets `fadeComplete`.
-  //   So web readiness = init complete AND the custom splash has finished fading.
-  // - NATIVE renders NO custom splash (the held OS splash covers the screen), so
-  //   `onFadeComplete` never fires and readiness must NOT depend on `fadeComplete`
-  //   — otherwise the held OS splash would hang forever. Native readiness = init
-  //   complete only.
-  useEffect(() => {
-    if (appIsReady) return;
-    const ready =
-      Platform.OS === 'web'
-        ? splashState.initializationComplete && splashState.fadeComplete
-        : splashState.initializationComplete;
-    if (ready) {
-      setAppIsReady(true);
-    }
-  }, [appIsReady, splashState.initializationComplete, splashState.fadeComplete]);
-
-  useEffect(() => {
-    if (appIsReady) {
-      AppInitializer.initializeDeferred();
-    }
-  }, [appIsReady]);
-
-  const appContent = useMemo(() => {
-    if (!appIsReady) {
-      // WEB: the custom splash covers font-load + init and fades out; its
-      // `onFadeComplete` gates `appIsReady`. NATIVE renders null — the held OS
-      // splash is on top, so nothing underneath needs to paint.
-      return Platform.OS === 'web' ? (
-        <AppSplashScreen
-          startFade={splashState.startFade}
-          onFadeComplete={handleSplashFadeComplete}
-        />
-      ) : null;
-    }
-
-    return (
-      <AppProviders queryClient={queryClient}>
-        {/* The messaging client lives under the Oxy provider and above every
-            screen: `AlloRoot` builds it once the session names an account and
-            gates the app on this device's enrollment. */}
-        <AlloRoot>
-          {Platform.OS !== 'web' && (
-            <NotificationPermissionGate
-              appIsReady={appIsReady}
-              initializationComplete={splashState.initializationComplete}
-            />
-          )}
-          <MainLayout isScreenNotMobile={isScreenNotMobile} />
-        </AlloRoot>
-      </AppProviders>
-    );
-  }, [
-    appIsReady,
-    splashState.startFade,
-    splashState.initializationComplete,
-    isScreenNotMobile,
-    handleSplashFadeComplete,
-    queryClient,
-  ]);
+    if (ready) void AppInitializer.initializeDeferred();
+  }, [ready]);
 
   return (
-    // The single Bloom root: theme + haptics + scroll restoration + tab-bar
-    // minimize progress. `imageResolver` is NOT passed here — Allo's resolver
-    // needs `useOxy()`, so it stays as its own provider under OxyProvider (see
-    // AppProviders); a nested ImageResolverProvider is what the app reads.
-    <BloomProvider
-      fonts
-      // WEB shows the custom splash while fonts load; NATIVE shows nothing here
-      // because the held OS splash is already covering the screen.
-      onFontsLoading={Platform.OS === 'web' ? <AppSplashScreen /> : null}
-    >
-      <ThemedView style={{ flex: 1 }}>
-        {appContent}
-      </ThemedView>
-    </BloomProvider>
+    <ThemeRoot>
+      {ready ? (
+        <AppProviders queryClient={queryClient}>
+          {/* The messaging client lives under the Oxy provider and above every
+              screen: `AlloRoot` builds it once the session names an account and
+              gates the app on this device's enrollment. */}
+          <AlloRoot>
+            {!IS_WEB && <NotificationPermissionGate />}
+            <RootStack />
+          </AlloRoot>
+        </AppProviders>
+      ) : IS_WEB ? (
+        <AppSplashScreen startFade={initialized} onFadeComplete={() => setSplashFaded(true)} />
+      ) : null}
+    </ThemeRoot>
   );
 }

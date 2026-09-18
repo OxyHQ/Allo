@@ -1,19 +1,8 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams } from 'expo-router';
 
-/**
- * Legacy route handler for /u/:id
- *
- * This route is deprecated. It now simply redirects to /c/:id
- * which handles both direct and group conversations.
- *
- * Kept for backwards compatibility.
- */
+/** `/u/:id`, an old link shape: a conversation now lives at `/c/:id`. */
 export default function LegacyUserConversationRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-
-  if (!id) {
-    return null;
-  }
-
+  if (!id) return null;
   return <Redirect href={`/c/${id}`} />;
 }
