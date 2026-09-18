@@ -159,9 +159,55 @@ export interface MediaView {
   thumbnail?: { ref: MediaRef; width: number; height: number };
 }
 
+/** One option of a poll, with the answers folded in. */
+export interface PollOptionView {
+  id: string;
+  label: string;
+  /** How many accounts chose it, counting each account once. */
+  votes: number;
+  /** Whether the viewer is one of them. */
+  mine: boolean;
+  /**
+   * Who chose it, when the poll did not ask for anonymity. Empty on an
+   * anonymous poll: the votes are still readable by every member — the server
+   * cannot see either — so the SDK declines to hand out names the sender asked
+   * it not to show.
+   */
+  accountIds: string[];
+}
+
+export interface PollView {
+  question: string;
+  options: PollOptionView[];
+  /** Accounts that answered, counting each once. */
+  totalVotes: number;
+  multiple: boolean;
+  anonymous: boolean;
+  /** Whether the viewer has answered. */
+  voted: boolean;
+}
+
+export interface PlaceView {
+  latitude: number;
+  longitude: number;
+  label?: string;
+  address?: string;
+}
+
+export interface ContactCardView {
+  name: string;
+  /** Set when the card names an Oxy account, so a screen can open a conversation with them. */
+  accountId?: string;
+  handle?: string;
+  phone?: string;
+}
+
 export type TimelineContent =
   | { kind: "text"; body: string; isEdited: boolean }
   | { kind: "media"; media: MediaView }
+  | { kind: "poll"; poll: PollView }
+  | { kind: "location"; place: PlaceView }
+  | { kind: "contact"; contact: ContactCardView }
   | { kind: "deleted" }
   | { kind: "undecryptable"; reason: string }
   | { kind: "system"; text: string };
@@ -179,6 +225,8 @@ export interface TimelineItemView {
   sendState: SendState;
   content: TimelineContent;
   reactions: Array<{ key: string; accountIds: string[] }>;
+  /** Pinned for everybody in the conversation. See the `pin` app message. */
+  pinned?: boolean;
   replyTo?: string;
   /**
    * Only on a `pending` own echo: why the outbox is not sending it yet.
@@ -264,6 +312,34 @@ export interface BackupStatus {
   remote: { exists: boolean; updatedAt: string | null } | null;
   /** A refresh or a restore is running. */
   busy: boolean;
+}
+
+/** What `messages.sendPoll` takes. The ids are assigned by the SDK. */
+export interface PollDraft {
+  question: string;
+  /** Two to twelve, in the order they are drawn. */
+  options: readonly string[];
+  /** Whether a voter may choose more than one. Default false. */
+  multiple?: boolean;
+  /** Ask clients not to name the voters. Default false; see `PollView.anonymous`. */
+  anonymous?: boolean;
+}
+
+/** What `messages.sendLocation` takes. */
+export interface PlaceDraft {
+  latitude: number;
+  longitude: number;
+  label?: string;
+  address?: string;
+}
+
+/** What `messages.sendContact` takes. */
+export interface ContactDraft {
+  name: string;
+  /** Set it when the card names an Oxy account. */
+  accountId?: string;
+  handle?: string;
+  phone?: string;
 }
 
 export interface SendOptions {

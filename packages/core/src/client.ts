@@ -42,6 +42,9 @@ import type {
   LoadOlderResult,
   MediaRef,
   PendingEnrollmentView,
+  PollDraft,
+  PlaceDraft,
+  ContactDraft,
   SendOptions,
   SubscriptionTopic,
   SyncState,
@@ -88,6 +91,16 @@ export interface AlloClient {
   messages: {
     timeline(conversationId: string): TimelineItemView[];
     send(conversationId: string, text: string, options?: SendOptions): Promise<string>;
+    /** A poll. Resolves to the local key of the echo. */
+    sendPoll(conversationId: string, poll: PollDraft): Promise<string>;
+    /** This account's answer, which replaces the one before it; an empty list retracts. */
+    vote(conversationId: string, targetId: string, optionIds: readonly string[]): Promise<void>;
+    /** A place: the coordinates are the sender's, and nothing is resolved here. */
+    sendLocation(conversationId: string, place: PlaceDraft): Promise<string>;
+    /** Somebody's card. */
+    sendContact(conversationId: string, contact: ContactDraft): Promise<string>;
+    /** Pins a message for everybody in the conversation, or takes the pin off. */
+    setPinned(conversationId: string, targetId: string, pinned: boolean): Promise<void>;
     edit(conversationId: string, targetId: string, body: string): Promise<void>;
     remove(conversationId: string, targetId: string): Promise<void>;
     react(conversationId: string, targetId: string, key: string): Promise<void>;
@@ -350,6 +363,11 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     messages: {
       timeline: (id) => ctx?.messages.timeline(id) ?? NO_TIMELINE,
       send: (id, text, o) => requireCtx().messages.send(id, text, o),
+      sendPoll: (id, poll) => requireCtx().messages.sendPoll(id, poll),
+      vote: (id, t, optionIds) => requireCtx().messages.vote(id, t, optionIds),
+      sendLocation: (id, place) => requireCtx().messages.sendLocation(id, place),
+      sendContact: (id, contact) => requireCtx().messages.sendContact(id, contact),
+      setPinned: (id, t, pinned) => requireCtx().messages.setPinned(id, t, pinned),
       edit: (id, t, body) => requireCtx().messages.edit(id, t, body),
       remove: (id, t) => requireCtx().messages.remove(id, t),
       react: (id, t, key) => requireCtx().messages.react(id, t, key),
