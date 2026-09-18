@@ -7,6 +7,26 @@
  * leaf and member changes and the delivery rows are one write or none, and a
  * caller handing it the pool would commit each on its own.
  *
+ * An `mls_commit` is one of three kinds (`CommitInfo.kind`), and the kind
+ * decides who may append it:
+ *
+ * - `member`: the sender holds an active leaf. Adds, removes, updates.
+ * - `external`: an MLS external commit by a device with NO leaf. What admits
+ *   it is its account's `joined` member row (an account invited before it
+ *   installed Allo has one) plus the stored GroupInfo it joined from, whose
+ *   authenticity the members verify. The added leaf is exactly the sender and
+ *   is `active` at `newEpoch` at once: there is no Welcome to wait for.
+ * - `resync`: an external commit by a device that already holds a leaf and
+ *   lost its group state. Added and removed leaf are both the sender; its leaf
+ *   row is REPLACED rather than refused as "already holds an active leaf".
+ *
+ * Every accepted commit stores `commit.groupInfo` for `newEpoch` in the same
+ * transaction ({@link upsertGroupInfo}), so "commit accepted but no GroupInfo
+ * for the new epoch" cannot happen. The server never raises
+ * `group_info_missing` on a commit: a joiner posts an external commit only
+ * once it HOLDS a GroupInfo, and whether one exists is what `GET …/group-info`
+ * answers (`null`), on which the client decides to wait for an elector.
+ *
  * `payload` is a protected column; the two readers that return it
  * ({@link listEvents}, and the sync stream in `deliveryRepository.ts`) name it
  * explicitly.
@@ -35,6 +55,7 @@ import {
   type LeafRow,
 } from "./conversationRepository";
 import { insertDeliveries } from "./deliveryRepository";
+import { upsertGroupInfo } from "./groupInfoRepository";
 
 export type EventRow = typeof conversationEvents.$inferSelect;
 
@@ -134,7 +155,22 @@ export async function appendClientEvent(
 
   const leaves = await listLeaves(conversationId, tx);
   const senderLeaf = leaves.find((leaf) => leaf.instanceId === sender.instanceId);
-  if (!senderLeaf || senderLeaf.state !== "active") {
+  // Who may append depends on how a commit was authored (module comment);
+  // everything that is not an external commit needs an active leaf.
+  const commitKind = request.kind === "mls_commit" ? (request.commit?.kind ?? "member") : "member";
+  if (commitKind === "external") {
+    // The sender has no leaf yet; its account's `joined` row is the admission.
+    // A `left` or `removed` account is not re-admitted by its own hand.
+    if (member.state !== "joined") throw forbidden("This account is no longer a member of the conversation");
+  } else if (commitKind === "resync") {
+    // A resync replaces the sender's own leaf, so it must hold one: active, or
+    // `removed` with no epoch (a server-side removal no commit has confirmed).
+    if (member.state !== "joined") throw forbidden("This account is no longer a member of the conversation");
+    const holdsLeaf =
+      senderLeaf !== undefined &&
+      (senderLeaf.state === "active" || (senderLeaf.state === "removed" && senderLeaf.removedEpoch === null));
+    if (!holdsLeaf) throw forbidden("This instance holds no leaf in the conversation to resync");
+  } else if (!senderLeaf || senderLeaf.state !== "active") {
     throw forbidden("This instance holds no active leaf in the conversation");
   }
 
@@ -183,6 +219,29 @@ export async function appendClientEvent(
   const members = await listMembers(conversationId, tx);
   const joined = new Set(members.filter((m) => m.state === "joined").map((m) => m.accountId));
 
+  // A self-join (external or resync) adds exactly the sender and, for a
+  // resync, removes exactly the sender. The schema fixed the COUNTS; only the
+  // server knows who signed the request, so WHO is checked here and is not
+  // trusted to the schema either: a joiner naming any other instance — even
+  // another of its own account — is refused.
+  const selfJoin = commit.kind === "external" || commit.kind === "resync";
+  if (selfJoin) {
+    const [added] = commit.addedLeaves;
+    if (commit.addedLeaves.length !== 1 || added.instanceId !== sender.instanceId || added.accountId !== sender.accountId) {
+      throw validationFailed(`a ${commit.kind} commit adds exactly the sender's own leaf`, { instanceId: sender.instanceId });
+    }
+    if (commit.welcome !== undefined) throw validationFailed(`a ${commit.kind} commit carries no welcome`);
+    const expectedRemoved = commit.kind === "resync" ? [sender.instanceId] : [];
+    if (commit.removedLeaves.length !== expectedRemoved.length || commit.removedLeaves.some((id, i) => id !== expectedRemoved[i])) {
+      throw validationFailed(
+        commit.kind === "resync"
+          ? "a resync commit removes exactly the sender's own former leaf"
+          : "an external commit removes no leaf",
+        { instanceId: sender.instanceId },
+      );
+    }
+  }
+
   // Added leaves: real, active instances of the account the commit names.
   const addedIds = commit.addedLeaves.map((leaf) => leaf.instanceId);
   if (new Set(addedIds).size !== addedIds.length) throw validationFailed("an instance is added twice");
@@ -196,7 +255,9 @@ export async function appendClientEvent(
       throw validationFailed("an added instance belongs to another account", { instanceId: added.instanceId });
     }
     const current = leaves.find((leaf) => leaf.instanceId === added.instanceId);
-    if (current?.state === "active") {
+    // A resync names the sender's own live leaf on both sides: a replace, not a
+    // second leaf. Every other kind must not add a leaf that already exists.
+    if (current?.state === "active" && commit.kind !== "resync") {
       throw validationFailed("an added instance already holds an active leaf", { instanceId: added.instanceId });
     }
     // A DM has exactly two accounts; a group may grow, and any member may grow it.
@@ -206,9 +267,11 @@ export async function appendClientEvent(
   }
 
   // Removed leaves: present, and either the sender's own account or removed by an owner/admin.
+  // A resync's removed leaf is the sender's own, replaced by the upsert below
+  // rather than marked removed after it; it is not a removal.
   const mayRemoveOthers = member.role === "owner" || member.role === "admin";
   const removedLeaves: LeafRow[] = [];
-  for (const instanceId of commit.removedLeaves) {
+  for (const instanceId of commit.kind === "resync" ? [] : commit.removedLeaves) {
     const leaf = leaves.find((l) => l.instanceId === instanceId);
     const removable = leaf && (leaf.state === "active" || (leaf.state === "removed" && leaf.removedEpoch === null));
     if (!removable) {
@@ -259,7 +322,9 @@ export async function appendClientEvent(
         // Added leaves pass through `pending_welcome` and are `active` at the
         // new epoch once the welcome exists for them; a commit that adds a leaf
         // without welcoming it leaves it pending, which a later commit can fix.
-        state: welcomed.has(added.instanceId) ? "active" : "pending_welcome",
+        // A self-join has no welcome and needs none: the joiner holds the new
+        // state already, so its leaf is active at `newEpoch` at once.
+        state: selfJoin || welcomed.has(added.instanceId) ? "active" : "pending_welcome",
         addedEpoch: newEpoch,
       },
       tx,
@@ -313,6 +378,13 @@ export async function appendClientEvent(
   }
 
   await updateConversationCounters(conversationId, { currentEpoch: epoch, lastSeq: seq }, tx);
+  // The GroupInfo of the epoch this commit created, from the committer's new
+  // state. Same transaction as the commit: accepted-but-unjoinable is not a
+  // state the conversation can be in.
+  await upsertGroupInfo(
+    { conversationId, epoch: newEpoch, signerInstanceId: sender.instanceId, data: Buffer.from(commit.groupInfo, "base64") },
+    tx,
+  );
   return {
     event: { id: commitEvent.id, seq: commitEvent.seq, createdAt: commitEvent.createdAt },
     replayed: false,

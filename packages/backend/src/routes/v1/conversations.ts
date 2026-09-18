@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { conversationIdSchema, createConversationRequestSchema } from "@allo/shared-types";
+import { conversationIdSchema, createConversationRequestSchema, putGroupInfoRequestSchema } from "@allo/shared-types";
 import { getRequiredInstance } from "../../middleware/instanceAuth";
 import { getRealtime } from "../../runtime/realtime";
 import {
@@ -9,6 +9,7 @@ import {
   listConversations,
   type Caller,
 } from "../../services/platform/conversationService";
+import { getGroupInfo, putGroupInfo } from "../../services/platform/groupInfoService";
 import { asyncRoute } from "./asyncRoute";
 import { parseBody, parseParam } from "./validate";
 
@@ -52,6 +53,28 @@ export function createConversationRoutes(deps: { instanceAuth: RequestHandler })
       const id = parseParam(conversationIdSchema, req.params.id, "id");
       await leaveConversation(callerOf(req), id);
       res.status(204).end();
+    }),
+  );
+
+  /**
+   * The stored GroupInfo a leafless member joins from (`groupInfoService.ts`).
+   * The body of the `PUT` is `{ epoch, data: base64 }`: opaque public MLS
+   * material the server stores and never parses.
+   */
+  router.get(
+    "/conversations/:id/group-info",
+    asyncRoute(async (req, res) => {
+      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      res.json(await getGroupInfo(callerOf(req), id));
+    }),
+  );
+
+  router.put(
+    "/conversations/:id/group-info",
+    asyncRoute(async (req, res) => {
+      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const body = parseBody(putGroupInfoRequestSchema, req);
+      res.json(await putGroupInfo(callerOf(req), id, body));
     }),
   );
 

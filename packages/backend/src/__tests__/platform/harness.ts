@@ -336,7 +336,7 @@ export async function dmBetween(app: express.Express, options: { stock?: number 
       epoch: 0,
       payload: base64("commit-0"),
       commit: {
-        newEpoch: 1,
+        newEpoch: 1, groupInfo: base64("gi-1"),
         addedLeaves: [{ instanceId: b.id, accountId: b.accountId }],
         removedLeaves: [],
         welcome: { payload: base64("welcome-0"), recipients: [b.id] },
