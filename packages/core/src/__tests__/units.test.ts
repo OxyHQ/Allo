@@ -55,3 +55,48 @@ describe("fake server contract validation", () => {
     await stopAll(alice);
   });
 });
+
+describe("the facade before start() and after reset()", () => {
+  it("answers every subscribable getter with the same reference on every call", async () => {
+    // `useSyncExternalStore` re-renders whenever two consecutive reads differ by identity, and
+    // the app mounts its screens over a client that has not finished `start()` yet.
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-unstarted", "Alice", "web", undefined, false);
+    const { client } = alice;
+    const reads = () => ({
+      instances: client.instance.list(),
+      pending: client.instance.pending(),
+      current: client.instance.current(),
+      conversations: client.conversations.list(),
+      conversation: client.conversations.get("nope"),
+      timeline: client.messages.timeline("nope"),
+      unread: client.messages.unreadCount("nope"),
+      typing: client.messages.isTyping("nope"),
+      progress: client.history.progress(),
+      offers: client.history.pendingOffers(),
+      backup: client.backup.status(),
+      state: client.instance.state(),
+      sync: client.sync.state(),
+    });
+    const first = reads();
+    const second = reads();
+    for (const key of Object.keys(first) as (keyof typeof first)[]) expect(second[key], key).toBe(first[key]);
+    expect(first.instances).toEqual([]);
+    expect(first.timeline).toEqual([]);
+    expect(first.state).toBe("unregistered");
+    // A shared empty answer must not be mutable through one caller.
+    expect(() => (first.conversations as unknown[]).push(1)).toThrow();
+
+    await client.start();
+    expect(client.instance.state()).toBe("active");
+    expect(client.instance.list()).toHaveLength(1);
+
+    await client.reset();
+    const after = reads();
+    expect(reads().instances).toBe(after.instances);
+    expect(reads().conversations).toBe(after.conversations);
+    expect(reads().timeline).toBe(after.timeline);
+    expect(after.state).toBe("unregistered");
+    await stopAll(alice);
+  });
+});
