@@ -6,9 +6,16 @@
  * per-instance delivery stream with cursors, blobs, socket nudges, history
  * offers between same-account instances, one backup per account, members
  * without a leaf and the nudge to their conversations' leaves when their
- * first instance becomes active). Every
+ * first instance becomes active, the stored GroupInfo with its GET/PUT
+ * gating and the `external` / `resync` commit rules). Every
  * request body is validated with the shared-types zod schemas, so a drift
  * between SDK and contract fails a test here.
+ *
+ * `keepGroupInfo = false` makes the server drop every GroupInfo it is handed
+ * (`GET` answers `null`, `PUT` is accepted and forgotten): every conversation
+ * then behaves as one whose commits predate the field, which is how a test
+ * exercises the elector fallback deterministically. `group_info_missing` is
+ * never raised here, as on the backend: every commit carries one.
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
@@ -36,6 +43,7 @@ import {
   encodeCursor,
   enrollmentApprovalMessage,
   listEventsQuerySchema,
+  putGroupInfoRequestSchema,
   registerInstanceRequestSchema,
   setPushTokenRequestSchema,
   signedRequestMessage,
@@ -50,6 +58,7 @@ import {
   type ConversationEvent,
   type ConversationSummary,
   type PublicInstance,
+  type StoredGroupInfo,
   type SubmitEventRequest,
 } from "@allo/shared-types";
 import type { z } from "zod";
@@ -132,6 +141,10 @@ export class FakeAlloServer implements SocketHost {
   readonly blobs = new Map<string, FakeBlob>();
   readonly historyOffers = new Map<string, HistoryOffer>();
   readonly backups = new Map<string, AccountBackup>();
+  /** The latest GroupInfo per conversation, replaced by every commit and by `PUT …/group-info`. */
+  readonly groupInfos = new Map<string, StoredGroupInfo>();
+  /** See the header: `false` simulates conversations whose commits predate `CommitInfo.groupInfo`. */
+  keepGroupInfo = true;
   readonly deliveries: Delivery[] = [];
   readonly requestLog: RequestLogEntry[] = [];
   readonly faults: FaultRule[] = [];
@@ -449,6 +462,23 @@ export class FakeAlloServer implements SocketHost {
       void me;
       return new Response(null, { status: 204 });
     }
+    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/group-info$/))) {
+      const me = signed();
+      const conv = this.memberConversation(m[1], accountId);
+      if (method === "GET") {
+        // A leaf is NOT required: the caller is precisely a device that holds none yet. A member that left or was removed is told so.
+        if (conv.members.get(accountId)?.state !== "joined") throw new HttpError(403, "forbidden", "not a joined member");
+        const stored = this.groupInfos.get(conv.id);
+        return json(200, { groupInfo: stored && stored.epoch === conv.epoch ? stored : null });
+      }
+      if (method === "PUT") {
+        const req = this.parse(putGroupInfoRequestSchema, body);
+        if (conv.leaves.get(me.id)?.state !== "active") throw new HttpError(403, "forbidden", "sender holds no active leaf");
+        if (req.epoch !== conv.epoch) throw new HttpError(409, "epoch_conflict", "not the current epoch", { currentEpoch: conv.epoch });
+        this.storeGroupInfo(conv, req.epoch, me.id, req.data);
+        return new Response(null, { status: 204 });
+      }
+    }
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/events$/)) && method === "POST") {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
@@ -759,34 +789,61 @@ export class FakeAlloServer implements SocketHost {
 
   private submitEvent(conv: FakeConversation, sender: FakeInstance, req: SubmitEventRequest): { id: string; seq: number; createdAt: string } {
     const leaf = conv.leaves.get(sender.id);
-    if (!leaf || leaf.state !== "active") throw new HttpError(403, "forbidden", "sender holds no active leaf");
+    const kind = req.kind === "mls_commit" ? req.commit!.kind : "member";
+    // Who may send: an active leaf, except an external joiner (a joined member row is enough — it holds no leaf,
+    // by definition) and a resync (a leaf to replace; the backend also takes one removed without a removedEpoch).
+    if (kind === "external") {
+      if (conv.members.get(sender.accountId)?.state !== "joined") throw new HttpError(403, "forbidden", "sender is not a joined member");
+      if (leaf?.state === "active") throw new HttpError(403, "forbidden", "sender already holds an active leaf; resync instead");
+    } else if (kind === "resync") {
+      if (leaf?.state !== "active") throw new HttpError(403, "forbidden", "sender holds no leaf to resync");
+    } else if (!leaf || leaf.state !== "active") throw new HttpError(403, "forbidden", "sender holds no active leaf");
     if (req.epoch !== conv.epoch) throw new HttpError(409, "epoch_conflict", "stale epoch", { currentEpoch: conv.epoch });
     const activeOthers = [...conv.leaves.entries()].filter(([id, l]) => l.state === "active" && id !== sender.id).map(([id]) => id);
-    const event = this.append(conv, { kind: req.kind, epoch: req.epoch, senderAccountId: sender.accountId, senderInstanceId: sender.id, payload: req.payload, blobIds: req.blobIds ?? [] });
     if (req.kind !== "mls_commit") {
+      const event = this.append(conv, { kind: req.kind, epoch: req.epoch, senderAccountId: sender.accountId, senderInstanceId: sender.id, payload: req.payload, blobIds: req.blobIds ?? [] });
       this.deliver(conv, event, activeOthers);
       return { id: event.id, seq: event.seq, createdAt: event.createdAt };
     }
     const commit = req.commit!;
+    // A self-join adds exactly the sender and, for a resync, removes exactly the sender: the schema fixed the
+    // counts, the server alone knows who signed the request.
+    if (kind !== "member") {
+      const [added] = commit.addedLeaves;
+      if (added.instanceId !== sender.id || added.accountId !== sender.accountId) {
+        throw new HttpError(400, "validation_failed", `a ${kind} commit adds exactly the sender's own leaf`, { instanceId: sender.id });
+      }
+      if (commit.welcome) throw new HttpError(400, "validation_failed", `a ${kind} commit carries no welcome`);
+      const expectedRemoved = kind === "resync" ? [sender.id] : [];
+      if (JSON.stringify(commit.removedLeaves) !== JSON.stringify(expectedRemoved)) {
+        throw new HttpError(400, "validation_failed", kind === "resync" ? "a resync commit removes exactly the sender's own former leaf" : "an external commit removes no leaf");
+      }
+    }
     for (const added of commit.addedLeaves) {
       const inst = this.instances.get(added.instanceId);
       if (!inst || inst.status !== "active" || inst.accountId !== added.accountId) throw new HttpError(403, "forbidden", "added instance is not an active instance of that account");
+      if (conv.leaves.get(added.instanceId)?.state === "active" && kind !== "resync") {
+        throw new HttpError(400, "validation_failed", "an added instance already holds an active leaf", { instanceId: added.instanceId });
+      }
       if (commit.welcome && !commit.welcome.recipients.includes(added.instanceId)) throw new HttpError(400, "validation_failed", "welcome recipients must be the added leaves");
     }
     if (commit.welcome) {
       for (const r of commit.welcome.recipients) if (!commit.addedLeaves.some((a) => a.instanceId === r)) throw new HttpError(400, "validation_failed", "welcome recipient is not an added leaf");
     }
+    const event = this.append(conv, { kind: req.kind, epoch: req.epoch, senderAccountId: sender.accountId, senderInstanceId: sender.id, payload: req.payload, blobIds: req.blobIds ?? [] });
     conv.epoch = commit.newEpoch;
-    this.deliver(conv, event, activeOthers);
+    this.storeGroupInfo(conv, commit.newEpoch, sender.id, commit.groupInfo);
+    this.deliver(conv, event, activeOthers); // an external joiner authored it and is never a recipient
     const hadLeaf = new Set([...conv.leaves.values()].filter((l) => l.state === "active").map((l) => l.accountId));
+    // Removes first: a resync names the sender on both sides and the add below REPLACES the row.
+    for (const removed of kind === "resync" ? [] : commit.removedLeaves) {
+      const l = conv.leaves.get(removed);
+      if (l) l.state = "removed";
+    }
     for (const added of commit.addedLeaves) {
       conv.leaves.set(added.instanceId, { accountId: added.accountId, state: "active", addedEpoch: commit.newEpoch });
       if (!conv.members.has(added.accountId)) conv.members.set(added.accountId, { role: "member", state: "joined", joinedAt: this.iso() });
       else conv.members.get(added.accountId)!.state = "joined";
-    }
-    for (const removed of commit.removedLeaves) {
-      const l = conv.leaves.get(removed);
-      if (l) l.state = "removed";
     }
     // An account whose last leaf this commit removed is out. One that never had a leaf (invited before it
     // installed Allo) stays a joined member: the elector adds its first device when it appears.
@@ -799,6 +856,11 @@ export class FakeAlloServer implements SocketHost {
       this.deliver(conv, welcome, commit.welcome.recipients);
     }
     return { id: event.id, seq: event.seq, createdAt: event.createdAt };
+  }
+
+  private storeGroupInfo(conv: FakeConversation, epoch: number, signerInstanceId: string, data: string): void {
+    if (!this.keepGroupInfo) return;
+    this.groupInfos.set(conv.id, { epoch, signerInstanceId, data, createdAt: this.iso() });
   }
 
   private appendControl(conv: FakeConversation, control: ControlEvent, recipients: string[]): void {

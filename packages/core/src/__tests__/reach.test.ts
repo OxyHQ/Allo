@@ -5,6 +5,12 @@
  * a joined member with no leaf, application messages nobody else could read are
  * held in the outbox, and the conversation's elector adds the account's first
  * device when the server nudges the conversation (or on its next look).
+ *
+ * Since self-join, a leafless member's device joins by itself from the stored
+ * GroupInfo and the elector rules are the fallback. Every server here drops
+ * its GroupInfo (`keepGroupInfo = false`), which is what a conversation whose
+ * commits predate the field looks like, so these tests keep exercising the
+ * fallback deterministically; `join.test.ts` covers the self-join path.
  */
 import { describe, expect, it } from "vitest";
 import type { Platform } from "@allo/shared-types";
@@ -18,6 +24,13 @@ const ALICE = "acc-alice-01";
 const BOB = "acc-bob-0001";
 const CAROL = "acc-carol-01";
 
+/** A server that holds no GroupInfo: the elector path is the only way in. */
+function legacyServer(): FakeAlloServer {
+  const server = fakeServer();
+  server.keepGroupInfo = false;
+  return server;
+}
+
 const pendingOf = (c: TestClient, conversationId: string) => c.client.messages.timeline(conversationId).filter((i) => i.sendState === "pending");
 const commitsBy = (server: FakeAlloServer, conversationId: string, instanceId: string | null) =>
   server.eventsOf(conversationId).filter((e) => e.kind === "mls_commit" && e.senderInstanceId === instanceId);
@@ -26,7 +39,7 @@ const lookupsOf = (server: FakeAlloServer, accountId: string) => server.requestL
 
 /** A server and clients on ONE steerable clock, so a test can walk past the elector's one-minute throttle without waiting it out. */
 function clockedServer() {
-  const server = fakeServer();
+  const server = legacyServer();
   let clock = Date.now();
   server.now = () => clock;
   const client = async (accountId: string, name: string, platform: Platform): Promise<TestClient> => {
@@ -53,7 +66,7 @@ function clockedServer() {
 
 describe("members without an instance", () => {
   it("(a) a DM with an account that never installed Allo: created, held, then delivered once the account's first device is added", async () => {
-    const server = fakeServer();
+    const server = legacyServer();
     const alice = await makeClient(server, ALICE, "Alice", "web");
 
     // (d) the 404 for a never-seen account is not an error here
@@ -103,7 +116,7 @@ describe("members without an instance", () => {
   });
 
   it("(b) a group with one reachable and one instance-less member sends at once; the late member gets the welcome but no earlier history", async () => {
-    const server = fakeServer();
+    const server = legacyServer();
     const alice = await makeClient(server, ALICE, "Alice", "web");
     const bob = await makeClient(server, BOB, "Bob", "ios");
     const group = await alice.client.conversations.createGroup([BOB, CAROL]);
@@ -219,7 +232,7 @@ describe("members without an instance", () => {
   });
 
   it("(f) a device listed before its key packages are up is retried within seconds, once; a second miss waits the full throttle", async () => {
-    const server = fakeServer();
+    const server = legacyServer();
     const alice = await makeClient(server, ALICE, "Alice", "web");
     const conv = await alice.client.conversations.createDirect(BOB);
     // Bob's first upload fails: he is active and listed, with nothing to claim.

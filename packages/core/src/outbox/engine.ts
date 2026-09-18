@@ -22,7 +22,7 @@ import { encodeAppMessage, submitEventResponseSchema, type AppMessage, type Even
 import type { Context } from "../context";
 import { EpochConflictError, InstanceNotActiveError, InvalidStateError, TransportError } from "../errors";
 import { Model } from "../storage/model";
-import { pendingCommitRecordSchema, type EventRecord, type OutboxCommitIntent, type OutboxItemRecord } from "../storage/records";
+import { pendingCommitRecordSchema, type EventRecord, type OutboxCommitIntent, type OutboxItemRecord, type PendingCommitRecord } from "../storage/records";
 import { base64Decode, base64Encode } from "../util/bytes";
 import { uuidV7 } from "../util/ids";
 import { backoffMs, sleep } from "../util/async";
@@ -316,8 +316,14 @@ export class OutboxEngine {
       await this.markFailed(item, "empty commit");
       return true;
     }
-    // A pending state from an earlier attempt (crash or lost answer): resend the identical request.
-    const pending = await ctx.store.getJson("pendingCommit", item.conversationId, pendingCommitRecordSchema);
+    // A pending state from an earlier attempt (crash or lost answer): resend the identical request. One whose
+    // stored request no longer parses (written before `commit.groupInfo` was required) is rebuilt instead.
+    let pending: PendingCommitRecord | undefined;
+    try {
+      pending = await ctx.store.getJson("pendingCommit", item.conversationId, pendingCommitRecordSchema);
+    } catch (error) {
+      ctx.log.warn?.("pending commit record unreadable; rebuilding the commit", { conversationId: item.conversationId, error: describeError(error) });
+    }
     let request: SubmitEventRequest;
     let nextBytes: Uint8Array;
     let added: Array<{ instanceId: string; accountId: string }> = [];
@@ -376,9 +382,12 @@ export class OutboxEngine {
       payload: base64Encode(result.commit),
       commit: {
         newEpoch: epoch + 1,
+        kind: "member",
         addedLeaves: result.added,
         removedLeaves: removes,
         ...(result.welcome && adds.length ? { welcome: { payload: base64Encode(result.welcome), recipients: adds.map((a) => a.instanceId) } } : {}),
+        // The GroupInfo of the new epoch travels with the commit, so a member's device with no leaf can join by itself.
+        groupInfo: base64Encode(result.groupInfo),
       },
     };
     const nextBytes = ctx.engine.serializeGroup(result.next);

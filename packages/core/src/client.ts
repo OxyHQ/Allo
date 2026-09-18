@@ -240,7 +240,8 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     await c.model.load(c.store);
     c.instance.bindModel(c.model);
     c.groups = new GroupRegistry(engine, c.store);
-    await c.groups.load();
+    const undecodable = await c.groups.load();
+    if (undecodable.length) log.warn?.("group state could not be decoded; a resync will replace it", { count: undecodable.length });
     c.messages = new MessagesService(c);
     c.conversations = new ConversationsService(c);
     c.outbox = new OutboxEngine(c);

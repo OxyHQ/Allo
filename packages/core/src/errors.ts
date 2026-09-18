@@ -53,9 +53,24 @@ export class NotImplementedError extends AlloError {
 }
 
 export class DecryptError extends AlloError {
-  override readonly name = "DecryptError";
+  override readonly name: string = "DecryptError";
   constructor(reason: string, options?: { cause?: unknown }) {
     super("decrypt_failed", reason, options);
+  }
+}
+
+/**
+ * An external commit (a self-join or a resync) whose joiner this member does
+ * not admit: its credential names an instance outside the account's verified
+ * chain, its signing key is not the enrolled one, or the key or the instance
+ * is already active in the tree and the commit does not remove that leaf. The
+ * commit is dropped and the state untouched; `code` stays `decrypt_failed`
+ * because to the caller it is a handshake message that was not applied.
+ */
+export class JoinRefusedError extends DecryptError {
+  override readonly name = "JoinRefusedError";
+  constructor(reason: string) {
+    super(`external join refused: ${reason}`);
   }
 }
 

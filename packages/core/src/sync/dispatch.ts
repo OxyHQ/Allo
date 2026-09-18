@@ -21,13 +21,13 @@ import {
   type ConversationSummary,
 } from "@allo/shared-types";
 import type { Context } from "../context";
-import { DecryptError, FutureEpochError } from "../errors";
+import { DecryptError, FutureEpochError, JoinRefusedError } from "../errors";
 import { Model } from "../storage/model";
 import { pendingCommitRecordSchema, type ConversationRecord, type EventRecord } from "../storage/records";
 import type { StoreBatch } from "../storage/store";
 import { base64Decode, utf8Decode } from "../util/bytes";
 import { describeError } from "../util/logger";
-import type { GroupState } from "../crypto/engine";
+import type { GroupState, JoinerAdmission } from "../crypto/engine";
 
 export interface DispatchOutcome {
   /** A commit or a join changed the epoch: replay what was queued for the conversation. */
@@ -199,6 +199,15 @@ export class Dispatcher {
     w.record({ message: null, failure: null, system, localKey: null });
   }
 
+  /** The chain verdict the engine asks for when admitting an external joiner: the account's trusted active instances and their enrolled keys. */
+  private readonly admission: JoinerAdmission = {
+    trustedInstancesOf: async (accountId) => {
+      const { trusted, refused } = await this.ctx.instance.trustedInstancesOf(accountId);
+      if (refused.size) this.ctx.log.warn?.("instances refused by the approval chain", { accountId, count: refused.size });
+      return trusted.map((i) => ({ id: i.id, signingPublicKey: i.signingPublicKey }));
+    },
+  };
+
   private isElector(candidates: Array<{ instanceId: string }>): boolean {
     if (candidates.length === 0) return false;
     return candidates.map((c) => c.instanceId).sort()[0] === this.ctx.instanceId;
@@ -283,12 +292,20 @@ export class Dispatcher {
     }
     let result;
     try {
-      result = await ctx.engine.processIncoming(state, base64Decode(event.payload));
+      const payload = base64Decode(event.payload);
+      // An external commit (a device joining or resyncing by itself) is admitted BEFORE the library
+      // processes it: the leaf on the wire must name the server-authenticated sender, and the engine
+      // checks that sender against its account's verified chain and against the tree (engine invariant 6).
+      const joiner = ctx.engine.externalJoinerOf(payload);
+      if (joiner && (joiner.accountId !== event.senderAccountId || joiner.instanceId !== event.senderInstanceId)) {
+        throw new JoinRefusedError(`the leaf names ${joiner.accountId}:${joiner.instanceId}, the sender is ${event.senderAccountId}:${event.senderInstanceId}`);
+      }
+      result = await ctx.engine.processIncoming(state, payload, joiner ? this.admission : undefined);
     } catch (error) {
       if (error instanceof FutureEpochError) throw error;
       if (error instanceof DecryptError) {
         ctx.log.warn?.("handshake message rejected", { conversationId: event.conversationId, error: describeError(error) });
-        w.record({ message: null, failure: null, system: null, localKey: null });
+        w.record({ message: null, failure: error instanceof JoinRefusedError ? "joiner_refused" : null, system: null, localKey: null });
         return false;
       }
       throw error;

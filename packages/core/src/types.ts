@@ -201,6 +201,17 @@ export interface ConversationView {
   /** Whether this instance holds an active MLS leaf: it can read and send. */
   joined: boolean;
   /**
+   * How this instance stands towards the group. `joined` is `joined === true`.
+   * `joining`: it holds no leaf yet but a stored GroupInfo exists (or has not
+   * been asked for yet), so it is joining by itself, with nobody else needed;
+   * also a device whose group state is lost while the server still lists its
+   * leaf, which resyncs the same way. `waiting_for_member`: the server holds no
+   * GroupInfo for the current epoch (a conversation whose last commit predates
+   * the field), so a member's device has to add this one — "This device is
+   * being added…" — and that is also what a removed or left member reads.
+   */
+  joinState: "joined" | "joining" | "waiting_for_member";
+  /**
    * Joined members other than me with NO active leaf in the group: accounts
    * that have not installed Allo (or whose devices are all gone). Nothing
    * sent now reaches them; the conversation's elector adds their first
