@@ -269,6 +269,7 @@ export class Dispatcher {
       lastReadSeq: existing?.lastReadSeq ?? 0,
       removed: joinedEpoch !== null ? false : (existing?.removed ?? false),
       lastActivityAt: existing?.lastActivityAt ?? summary.createdAt,
+      refusedCommit: existing?.refusedCommit ?? null,
     };
   }
 
@@ -305,6 +306,10 @@ export class Dispatcher {
       if (error instanceof FutureEpochError) throw error;
       if (error instanceof DecryptError) {
         ctx.log.warn?.("handshake message rejected", { conversationId: event.conversationId, error: describeError(error) });
+        if (error instanceof JoinRefusedError && event.kind === "mls_commit" && conv && !conv.refusedCommit) {
+          // The server accepted this commit and moved on; this device did not. Said once, kept for good: fail closed.
+          w.setConv({ ...conv, refusedCommit: { epoch: event.epoch, reason: error.message } });
+        }
         w.record({ message: null, failure: error instanceof JoinRefusedError ? "joiner_refused" : null, system: null, localKey: null });
         return false;
       }

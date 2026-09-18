@@ -46,6 +46,8 @@ export const conversationRecordSchema = z.object({
   /** Whether this instance ever held a leaf that is now removed. */
   removed: z.boolean(),
   lastActivityAt: z.string(),
+  /** The first commit this device refused for admission reasons after the server accepted it (`ConversationView.integrity`). */
+  refusedCommit: z.object({ epoch: z.number().int().min(0), reason: z.string() }).nullable().default(null),
 });
 export type ConversationRecord = z.infer<typeof conversationRecordSchema>;
 

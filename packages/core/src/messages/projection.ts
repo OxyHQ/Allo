@@ -18,6 +18,8 @@ export interface ProjectionInput {
   instanceId: string;
   /** Why pending echoes are not being sent, when the outbox holds this conversation. */
   holdReason?: TimelineItemView["holdReason"];
+  /** Outbox item ids the outbox holds as `epoch_stalled`; wins over `holdReason` for those items. */
+  stalledItemIds?: ReadonlySet<string>;
 }
 
 interface Working {
@@ -137,7 +139,7 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       isOwn: true,
       sendState: o.state === "failed" ? "failed" : "pending",
       reactions: [],
-      ...(o.state !== "failed" && input.holdReason ? { holdReason: input.holdReason } : {}),
+      ...(o.state !== "failed" && input.stalledItemIds?.has(o.id) ? { holdReason: "epoch_stalled" as const } : o.state !== "failed" && input.holdReason ? { holdReason: input.holdReason } : {}),
     };
     if (m.t === "text") {
       add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });

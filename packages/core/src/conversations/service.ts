@@ -151,6 +151,8 @@ export class ConversationsService {
       epoch: state ? ctx.engine.epochOf(state) : 0,
       joined,
       joinState,
+      integrity: record.refusedCommit ? "refused_commit" : "ok",
+      ...(record.refusedCommit ? { refusedEpoch: record.refusedCommit.epoch, refusalReason: record.refusedCommit.reason } : {}),
       unreachableMemberAccountIds: this.unreachableMembersOf(record.id),
       lastMessage,
       unreadCount: ctx.messages.unreadCount(record.id),
@@ -285,6 +287,7 @@ export class ConversationsService {
       lastReadSeq: existing?.lastReadSeq ?? 0,
       removed: existing?.removed ?? false,
       lastActivityAt: existing?.lastActivityAt ?? summary.createdAt,
+      refusedCommit: existing?.refusedCommit ?? null,
     };
   }
 
@@ -624,6 +627,7 @@ export class ConversationsService {
         lastReadSeq: existing?.lastReadSeq ?? 0,
         removed: false,
         lastActivityAt: existing?.lastActivityAt ?? summary.createdAt,
+        refusedCommit: existing?.refusedCommit ?? null,
       };
       const event: EventRecord = {
         id: accepted.id,

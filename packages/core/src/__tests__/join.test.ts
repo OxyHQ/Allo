@@ -59,6 +59,33 @@ async function signedFetch(server: FakeAlloServer, accountId: string, instanceId
   });
 }
 
+/**
+ * Somebody with Bob's Oxy session plants a second "bootstrap root" on his account: active on the server,
+ * refused by the chain (a second unapproved instance). It reads the GroupInfo — any member row may — builds a
+ * perfectly valid external commit for itself and posts it. The server cannot tell: a joined member row is all
+ * it checks, so the conversation's epoch advances. Returns the planted instance.
+ */
+async function plantForgedJoin(server: FakeAlloServer, conversationId: string) {
+  const key = generateSigningKey();
+  const planted = server.injectInstance({ accountId: BOB, signingPublicKey: publicKeyBase64(key), approvedByInstanceId: null });
+  const gi = await signedFetch(server, BOB, planted.id, key, "GET", `/v1/conversations/${conversationId}/group-info`);
+  expect(gi.status).toBe(200);
+  const stored = (await gi.json()).groupInfo as { epoch: number; data: string };
+  const e = await engine();
+  const forged = e.createIdentity({ accountId: BOB, instanceId: planted.id, signingKey: key });
+  const join = await e.joinExternal(forged, base64Decode(stored.data), { resync: false });
+  const request: SubmitEventRequest = {
+    idempotencyKey: `forged-join-${planted.id}`,
+    kind: "mls_commit",
+    epoch: join.epoch,
+    payload: base64Encode(join.commit),
+    commit: { newEpoch: join.epoch + 1, kind: "external", addedLeaves: [{ accountId: BOB, instanceId: planted.id }], removedLeaves: [], groupInfo: base64Encode(join.groupInfo) },
+  };
+  const res = await signedFetch(server, BOB, planted.id, key, "POST", `/v1/conversations/${conversationId}/events`, request);
+  expect(res.status).toBe(200);
+  return planted;
+}
+
 describe("self-join by external commit", () => {
   it("(j1) Alice's DM with a not-yet-installed Bob, Alice offline: Bob joins himself; Alice processes the commit on restart; messages both ways", async () => {
     const server = fakeServer();
@@ -211,27 +238,9 @@ describe("self-join by external commit", () => {
     const conv = await alice.client.conversations.createDirect(BOB);
     await waitJoined(bob, conv.id);
     const epochBefore = alice.client.conversations.get(conv.id)!.epoch;
-    // Somebody with Bob's Oxy session plants a second "bootstrap root" on his account: active on the server,
-    // refused by the chain (a second unapproved instance). It reads the GroupInfo — any member row may — and
-    // builds a perfectly valid external commit for it.
-    const key = generateSigningKey();
-    const planted = server.injectInstance({ accountId: BOB, signingPublicKey: publicKeyBase64(key), approvedByInstanceId: null });
-    const gi = await signedFetch(server, BOB, planted.id, key, "GET", `/v1/conversations/${conv.id}/group-info`);
-    expect(gi.status).toBe(200);
-    const stored = (await gi.json()).groupInfo as { epoch: number; data: string };
-    const e = await engine();
-    const forged = e.createIdentity({ accountId: BOB, instanceId: planted.id, signingKey: key });
-    const join = await e.joinExternal(forged, base64Decode(stored.data), { resync: false });
-    const request: SubmitEventRequest = {
-      idempotencyKey: "forged-join-1",
-      kind: "mls_commit",
-      epoch: join.epoch,
-      payload: base64Encode(join.commit),
-      commit: { newEpoch: join.epoch + 1, kind: "external", addedLeaves: [{ accountId: BOB, instanceId: planted.id }], removedLeaves: [], groupInfo: base64Encode(join.groupInfo) },
-    };
-    const res = await signedFetch(server, BOB, planted.id, key, "POST", `/v1/conversations/${conv.id}/events`, request);
-    expect(res.status).toBe(200); // the server cannot tell: a joined member row is all it checks
+    const planted = await plantForgedJoin(server, conv.id);
     expect(server.conversations.get(conv.id)!.epoch).toBe(epochBefore + 1);
+    const e = await engine();
 
     // Both members receive the commit. Neither adopts it.
     await flush(alice, bob);
@@ -521,5 +530,70 @@ describe("CryptoEngine: external join", () => {
     await expect(e.processIncoming(seen.next, msg.ciphertext)).rejects.toThrow();
     await expect(e.encryptApplication(seen.next, utf8Encode("x"))).rejects.toThrow();
     expect(new TextDecoder().decode((await e.processIncoming(resync.next, msg.ciphertext)).plaintext)).toBe("only the new copy");
+  });
+});
+
+describe("a refused commit: integrity and the epoch-conflict cap", () => {
+  it("(i1) after refusing a forged joiner the conversation reports refused_commit, and a later send stops after 3 POSTs, held as epoch_stalled", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, ALICE, "Alice", "web");
+    const bob = await makeClient(server, BOB, "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect(BOB);
+    await waitJoined(bob, conv.id);
+    expect(alice.client.conversations.get(conv.id)?.integrity).toBe("ok");
+    const epochBefore = alice.client.conversations.get(conv.id)!.epoch;
+    await plantForgedJoin(server, conv.id);
+    await flush(alice, bob);
+    for (const c of [alice, bob]) {
+      const view = c.client.conversations.get(conv.id)!;
+      expect(view.integrity).toBe("refused_commit");
+      expect(view.refusedEpoch).toBe(epochBefore);
+      expect(view.refusalReason).toMatch(/not in the verified chain/);
+      expect(view.epoch).toBe(epochBefore);
+      expect(c.client.conversations.get(conv.id)).toBe(view); // stable
+    }
+    // persisted: a restart still knows
+    await bob.client.stop();
+    const bob2 = await makeClient(server, BOB, "Bob", "ios", { storage: bob.storage, secrets: bob.secrets });
+    expect(bob2.client.conversations.get(conv.id)?.integrity).toBe("refused_commit");
+
+    const posts = () => server.requestLog.filter((r) => r.method === "POST" && r.path === `/v1/conversations/${conv.id}/events` && r.instanceId === alice.client.instanceId);
+    const before = posts().length;
+    const key = await alice.client.messages.send(conv.id, "after the forgery");
+    await alice.client.sync.flush(); // the loop returns once the item is held
+    const tried = posts().length - before;
+    expect(tried).toBeLessThanOrEqual(3);
+    expect(tried).toBeGreaterThan(0);
+    expect(posts().slice(before).every((r) => r.status === 409)).toBe(true);
+    await sleep(300);
+    expect(posts().length - before).toBe(tried); // held: no further sends inside the first backoff second
+    const item = alice.client.messages.timeline(conv.id).find((i) => i.localKey === key)!;
+    expect(item.sendState).toBe("pending");
+    expect(item.holdReason).toBe("epoch_stalled");
+    expect(server.eventsOf(conv.id).filter((e) => e.kind === "app_message" && e.senderInstanceId === alice.client.instanceId)).toHaveLength(0);
+    await stopAll(alice, bob2);
+  });
+
+  it("(i2) an ordinary race 409 still resolves through the sync and sets neither integrity nor a stall", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, ALICE, "Alice", "web");
+    const bob = await makeClient(server, BOB, "Bob", "ios");
+    const carol = await makeClient(server, CAROL, "Carol", "android");
+    const group = await alice.client.conversations.createGroup([BOB]);
+    await waitJoined(bob, group.id);
+    await Promise.all([alice.client.conversations.addMember(group.id, CAROL), bob.client.conversations.addMember(group.id, CAROL)]);
+    await flush(alice, bob);
+    await waitJoined(carol, group.id, 10_000);
+    await flush(alice, bob, carol);
+    expect(server.requestLog.some((r) => r.status === 409)).toBe(true);
+    await alice.client.messages.send(group.id, "three of us");
+    await waitForText(carol, group.id, "three of us");
+    for (const c of [alice, bob, carol]) {
+      const view = c.client.conversations.get(group.id)!;
+      expect(view.integrity).toBe("ok");
+      expect(view.refusedEpoch).toBeUndefined();
+      expect(c.client.messages.timeline(group.id).every((i) => i.holdReason === undefined)).toBe(true);
+    }
+    await stopAll(alice, bob, carol);
   });
 });

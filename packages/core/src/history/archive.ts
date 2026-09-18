@@ -125,6 +125,7 @@ export async function importArchive(ctx: Context, archive: Archive, onProgress?:
               lastReadSeq: 0,
               removed: false,
               lastActivityAt: c.createdAt,
+              refusedCommit: null,
             }
           : {
               id: c.id,
@@ -140,6 +141,7 @@ export async function importArchive(ctx: Context, archive: Archive, onProgress?:
               lastReadSeq: 0,
               removed: false,
               lastActivityAt: c.createdAt,
+              refusedCommit: null,
             },
       );
     }
