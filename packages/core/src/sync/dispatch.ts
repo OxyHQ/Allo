@@ -25,7 +25,7 @@ import { DecryptError, FutureEpochError, JoinRefusedError } from "../errors";
 import { Model } from "../storage/model";
 import { pendingCommitRecordSchema, type ConversationRecord, type EventRecord } from "../storage/records";
 import type { StoreBatch } from "../storage/store";
-import { base64Decode, utf8Decode } from "../util/bytes";
+import { base64Decode, base64Encode, utf8Decode } from "../util/bytes";
 import { describeError } from "../util/logger";
 import type { GroupState, JoinerAdmission } from "../crypto/engine";
 
@@ -219,8 +219,26 @@ export class Dispatcher {
     const { ctx } = this;
     const id = w.event.conversationId;
     if (w.state && ctx.engine.isActive(w.state) && !w.conv?.removed) {
-      ctx.log.debug?.("welcome for a conversation already joined; ignored", { conversationId: id });
-      return false;
+      /**
+       * Normally a Welcome for a conversation we are already in is a
+       * duplicate and ignoring it is right. It is NOT right when the
+       * conversation's GROUP has been replaced under us — a re-key, done by
+       * the member who could not otherwise get in (`mayRekeyDirect`). Our
+       * state then belongs to a group this conversation no longer has, and
+       * ignoring the Welcome leaves the two of us in separate rooms, each
+       * sending messages the other cannot read and neither of us told.
+       *
+       * The group id is the discriminator, and the server's is the truth. The
+       * extra read costs one request on a path that is otherwise a rare
+       * duplicate, and missing a re-key is permanent — this event is recorded
+       * as handled either way.
+       */
+      const current = await this.fetchSummary(id);
+      if (current.mlsGroupId === base64Encode(ctx.engine.groupIdOf(w.state))) {
+        ctx.log.debug?.("welcome for a conversation already joined; ignored", { conversationId: id });
+        return false;
+      }
+      ctx.log.info?.("this conversation's group was replaced; joining the new one", { conversationId: id });
     }
     const welcome = base64Decode(w.event.payload);
     const ref = ctx.engine.welcomeRefs(welcome).find((r) => ctx.instance.hasKeyPackage(r));
