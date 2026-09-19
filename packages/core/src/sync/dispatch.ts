@@ -15,7 +15,7 @@ import {
   AppMessageDecodeError,
   controlEventSchema,
   conversationResponseSchema,
-  decodeAppMessage,
+  decodeAppMessageOrIgnore,
   type AppMessage,
   type ConversationEvent,
   type ConversationSummary,
@@ -317,13 +317,18 @@ export class Dispatcher {
     if (event.senderInstanceId === ctx.instanceId) return; // ours; the outbox recorded it
     let message: AppMessage | null = null;
     let failure: string | null = null;
+    let ignorable = false;
     try {
       const result = await ctx.engine.processIncoming(state, base64Decode(event.payload));
       w.setState(result.next);
       if (result.kind !== "application" || !result.plaintext) failure = "not_an_application_message";
       else {
         try {
-          message = decodeAppMessage(result.plaintext);
+          // A control kind from a newer client decodes to `null`: nothing to
+          // act on, and nothing to draw. Only a message this build genuinely
+          // cannot read becomes a failure the timeline reports.
+          message = decodeAppMessageOrIgnore(result.plaintext);
+          if (message === null) ignorable = true;
         } catch (error) {
           failure = error instanceof AppMessageDecodeError ? "unsupported_message" : "undecodable";
         }
@@ -333,6 +338,7 @@ export class Dispatcher {
       if (error instanceof DecryptError) failure = "undecryptable";
       else throw error;
     }
+    if (ignorable) return; // a control kind this build does not know: recorded as nothing
     if (message?.t === "typing") return; // never stored
     w.record({ message, failure, system: null, localKey: null });
     if (!conv || !message) return;

@@ -443,7 +443,11 @@ never sees it. `encodeAppMessage` produces UTF-8 JSON (validating first, so a
 malformed envelope is never encrypted) and `decodeAppMessage` parses and
 validates, throwing `AppMessageDecodeError` on anything else. `v` is `1`;
 `t` is one of `text`, `edit`, `delete`, `reaction`, `read`, `delivered`,
-`media`, `conversation`, `typing`. `EventRef` names another message as
+`media`, `conversation`, `poll`, `poll_vote`, `location`, `contact`, `pin`,
+`typing`. A control kind carries `ctl: true`, and a receiver decodes with
+`decodeAppMessageOrIgnore`, which answers `null` for a marked kind it does not
+know rather than reporting a message it cannot read — so a kind added in a
+later release is ignored in silence by the releases before it. `EventRef` names another message as
 `{ kind: "event", conversationId, eventId }` once the server has assigned an
 id, or `{ kind: "local", conversationId, idempotencyKey }` while it is still
 the sender's local echo. A `media` message carries the blob id, the 32-byte

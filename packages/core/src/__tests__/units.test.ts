@@ -122,6 +122,23 @@ describe("polls, pins, places and cards", () => {
   });
 });
 
+describe("a control kind this build does not know", () => {
+  it("draws nothing, while a message it genuinely cannot read still says so", () => {
+    // What the dispatcher records in each case: an ignorable control message
+    // is recorded as neither a message nor a failure; a broken one as a
+    // failure. The difference is the whole point of the `ctl` marker.
+    const events: EventRecord[] = [
+      ev({ id: "e1", seq: 1, senderAccountId: "them", message: { v: 1, t: "text", body: "before" } }),
+      ev({ id: "e2", seq: 2, senderAccountId: "them", message: null }),
+      ev({ id: "e3", seq: 3, senderAccountId: "them", message: null, failure: "unsupported_message" }),
+      ev({ id: "e4", seq: 4, senderAccountId: "them", message: { v: 1, t: "text", body: "after" } }),
+    ];
+    const items = project({ conversationId: "c", events, outbox: [], accountId: "me", instanceId: "i" });
+    expect(items.map((i) => i.id)).toEqual(["e1", "e3", "e4"]);
+    expect(items[1].content).toEqual({ kind: "undecryptable", reason: "unsupported_message" });
+  });
+});
+
 describe("fake server contract validation", () => {
   it("rejects a body that drifts from the shared-types schema with validation_failed", async () => {
     const server = fakeServer();

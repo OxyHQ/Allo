@@ -230,6 +230,38 @@ export const appMessageSchema = z.discriminatedUnion("t", [
 export type AppMessage = z.infer<typeof appMessageSchema>;
 export type AppMessageKind = AppMessage["t"];
 
+/**
+ * A CONTROL message this client does not know, which says so itself.
+ *
+ * `ctl: true` is the sender's promise that a receiver which ignores this
+ * message entirely loses nothing a person would see — it drives something
+ * (a call, a receipt, a device's own housekeeping) rather than being
+ * something somebody wrote.
+ *
+ * Without it, an unknown `t` is a decode failure, and a decode failure is
+ * drawn in the conversation as "this message could not be decrypted". Every
+ * control kind added after a release would therefore litter the timeline of
+ * every device still on the release before it. That is why this lands BEFORE
+ * the first kind that needs it: the clients in the field have to learn to
+ * ignore before there is anything to ignore.
+ *
+ * This schema is only ever used to DECODE. A build that knows the kind parses
+ * it as itself, and every control kind declares `ctl: z.literal(true)` in its
+ * own schema so the marker survives `encodeAppMessage`, which strips what the
+ * matching schema does not name.
+ *
+ * A CONTENT kind — something a person sent and would expect to see — must NOT
+ * carry the marker. An old client saying "this message could not be
+ * displayed" is right about a message it cannot draw, and wrong only about
+ * machinery.
+ */
+export const unknownControlMessageSchema = z.object({
+  v,
+  t: z.string().min(1).max(64),
+  ctl: z.literal(true),
+});
+export type UnknownControlMessage = z.infer<typeof unknownControlMessageSchema>;
+
 export class AppMessageDecodeError extends Error {
   override readonly name = "AppMessageDecodeError";
   constructor(message: string, options?: { cause?: unknown }) {
@@ -250,13 +282,32 @@ export function encodeAppMessage(message: AppMessage): Uint8Array {
 
 /** The inverse of {@link encodeAppMessage}. Throws {@link AppMessageDecodeError} on anything else. */
 export function decodeAppMessage(bytes: Uint8Array): AppMessage {
-  let json: unknown;
+  const parsed = appMessageSchema.safeParse(parseJson(bytes));
+  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+  return parsed.data;
+}
+
+/**
+ * {@link decodeAppMessage}, but `null` for a message this build should ignore
+ * rather than report: a control kind from a newer client, marked `ctl: true`
+ * (see {@link unknownControlMessageSchema}).
+ *
+ * This is the function a RECEIVER uses. `null` means "nothing to do and
+ * nothing to show"; a throw still means a message this build cannot read and
+ * should say so about.
+ */
+export function decodeAppMessageOrIgnore(bytes: Uint8Array): AppMessage | null {
+  const json = parseJson(bytes);
+  const parsed = appMessageSchema.safeParse(json);
+  if (parsed.success) return parsed.data;
+  if (unknownControlMessageSchema.safeParse(json).success) return null;
+  throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+}
+
+function parseJson(bytes: Uint8Array): unknown {
   try {
-    json = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch (cause) {
     throw new AppMessageDecodeError("AppMessage is not UTF-8 JSON", { cause });
   }
-  const parsed = appMessageSchema.safeParse(json);
-  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
-  return parsed.data;
 }
