@@ -24,6 +24,7 @@ export async function makeClient(
   platform: Platform = "web",
   persisted?: { storage: MemoryStorage; secrets: MemorySecrets },
   start = true,
+  extra: Partial<Parameters<typeof createAlloClient>[0]> = {},
 ): Promise<TestClient> {
   const storage = persisted?.storage ?? new MemoryStorage();
   const secrets = persisted?.secrets ?? new MemorySecrets();
@@ -46,6 +47,7 @@ export async function makeClient(
         }
       : undefined,
     keyPackageTarget: 6,
+    ...extra,
   });
   if (start) await client.start();
   return { client, storage, secrets, accountId, name };

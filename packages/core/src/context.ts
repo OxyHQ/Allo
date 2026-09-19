@@ -17,6 +17,7 @@ import type { OutboxEngine } from "./outbox/engine";
 import type { SyncEngine } from "./sync/engine";
 import type { ConversationsService } from "./conversations/service";
 import type { MessagesService } from "./messages/service";
+import type { CallsService } from "./calls/service";
 import type { PresenceService } from "./presence/service";
 import type { StatusService } from "./statuses/service";
 import type { Realtime } from "./sync/realtime";
@@ -51,6 +52,7 @@ export class Context {
   conversations!: ConversationsService;
   messages!: MessagesService;
   realtime!: Realtime;
+  calls!: CallsService;
   presence!: PresenceService;
   statuses!: StatusService;
   history!: HistoryService;

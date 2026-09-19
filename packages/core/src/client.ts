@@ -35,6 +35,7 @@ import { Model } from "./storage/model";
 import { Namespace } from "./storage/namespace";
 import { storageKeyName } from "./crypto/atRest";
 import { SyncEngine } from "./sync/engine";
+import { CallsService, type CallView } from "./calls/service";
 import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
 import { StatusService } from "./statuses/service";
 import { Realtime } from "./sync/realtime";
@@ -113,6 +114,23 @@ export interface AlloClient {
    * is gone too — it was written under keys this wipe removes.
    */
   reclaimAccount(): Promise<void>;
+  /**
+   * Calls. The state machine, the signalling and the fingerprint check are
+   * here; the media is the `media` adapter the host supplies (ADR 0002,
+   * Decision 5). Without one a call still rings, is answered, declined and
+   * ended — it simply carries no audio.
+   */
+  calls: {
+    /** The call this device is in, or `null`. One at a time, as a phone does. */
+    current(): CallView | null;
+    /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
+    start(conversationId: string, mode?: "voice" | "video"): Promise<CallView>;
+    answer(): Promise<void>;
+    decline(): Promise<void>;
+    end(): Promise<void>;
+    setMuted(muted: boolean): Promise<void>;
+    setCameraEnabled(on: boolean): Promise<void>;
+  };
   subscribe(topic: SubscriptionTopic, listener: () => void): () => void;
   onError(listener: (error: unknown) => void): () => void;
 
@@ -383,6 +401,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.outbox = new OutboxEngine(c);
     c.sync = new SyncEngine(c);
     c.presence = new PresenceService(c);
+    c.calls = new CallsService(c, options.media);
     c.statuses = new StatusService(c);
     c.realtime = new Realtime(c);
     c.history = new HistoryService(c);
@@ -486,6 +505,15 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     stop,
     reset,
     reclaimAccount,
+    calls: {
+      current: () => ctx?.calls.current() ?? null,
+      start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? "voice"),
+      answer: () => requireCtx().calls.answer(),
+      decline: () => requireCtx().calls.decline(),
+      end: () => requireCtx().calls.end(),
+      setMuted: (muted) => requireCtx().calls.setMuted(muted),
+      setCameraEnabled: (on) => requireCtx().calls.setCameraEnabled(on),
+    },
     subscribe: (topic, listener) => emitter.subscribe(topic, listener),
     onError: (listener) => emitter.onError(listener),
     instance: {

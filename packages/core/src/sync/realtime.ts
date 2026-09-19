@@ -82,6 +82,16 @@ export class Realtime {
       const parsed = SERVER_TO_CLIENT_EVENTS.typing.safeParse(payload);
       if (parsed.success) void ctx.messages.onTyping(parsed.data.conversationId, parsed.data.ciphertext);
     });
+    // Somebody is calling this device; the offer itself arrives encrypted, in
+    // the conversation, like every other part of the signalling.
+    socket.on("call.incoming", (payload) => {
+      ctx.calls.onIncoming(payload);
+    });
+    // The server is the authority on who answered: a device that lost the race
+    // is told here rather than deciding for itself.
+    socket.on("call.updated", (payload) => {
+      ctx.calls.onUpdated(payload);
+    });
     socket.on("presence", (payload) => {
       ctx.presence.onPresence(payload);
     });

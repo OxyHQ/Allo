@@ -397,6 +397,16 @@ export class Dispatcher {
      * devices — and is bounded by this event's own seq, so a message that
      * crossed it in flight survives.
      */
+    /** Signalling: the offer, the answer, the candidates and the end, all encrypted. */
+    if (message.t === "call") {
+      const conversationId = event.conversationId;
+      const payload = message;
+      w.after.push(() =>
+        ctx.calls
+          .onCallMessage(conversationId, payload)
+          .catch((error) => ctx.log.warn?.("handling a call message failed", { error: describeError(error) })),
+      );
+    }
     if (message.t === "clear_history") {
       const conversationId = event.conversationId;
       const upTo = event.seq - 1;
