@@ -45,6 +45,16 @@ export const conversationRecordSchema = z.object({
   lastReadSeq: z.number().int().min(0),
   /** Whether this instance ever held a leaf that is now removed. */
   removed: z.boolean(),
+  /**
+   * Everything at or below this seq was DELETED on this device, by a
+   * "delete conversation" here or a `clear_history` from somebody in it.
+   *
+   * The rows are gone, so this is not a filter over them; what it holds is the
+   * line, so a conversation with nothing newer stays out of the list and comes
+   * back the moment somebody says something. Absent on records written before
+   * the feature existed, which reads as "nothing was ever cleared".
+   */
+  clearedUpToSeq: z.number().int().min(0).optional(),
   lastActivityAt: z.string(),
 });
 export type ConversationRecord = z.infer<typeof conversationRecordSchema>;

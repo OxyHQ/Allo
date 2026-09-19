@@ -47,6 +47,7 @@ import { report } from '@/lib/moderation/report';
 import { addModeratedUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { logger } from '@/utils/logger';
 
 interface ConversationInfoProps {
@@ -74,7 +75,7 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
   const { t } = useTranslation();
   const view = useConversation(conversationId);
   const { items } = useTimeline(conversationId);
-  const { leave, rename } = useConversationActions();
+  const { leave, clearHistory, rename } = useConversationActions();
   const ctx = useChatContext(view?.memberAccountIds ?? []);
   const [memberQuery, setMemberQuery] = useState('');
 
@@ -148,6 +149,32 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
       toast.error(t('chat.leave.failed'));
     }
   }, [isGroup, leave, onClose, router, t, view]);
+
+  /**
+   * A DM is DELETED, not left: leaving a conversation with one other person is
+   * not a thing a messenger offers, and this row used to say "Delete
+   * conversation" over an action that left the MLS group.
+   */
+  const confirmDelete = useCallback(async () => {
+    if (!view) return;
+    const answer = await askDeleteConversation({
+      title: t('chat.delete.title'),
+      description: t('chat.delete.confirm'),
+      alsoForThemLabel: t('chat.delete.alsoFor', { name: conversationTitle(view, ctx) || t('chat.someone') }),
+      confirmLabel: t('chat.delete.action'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!answer.confirmed) return;
+    try {
+      await clearHistory(view.id, { forEveryone: answer.forEveryone });
+      toast.success(t('chat.delete.done'));
+      onClose();
+      router.replace('/');
+    } catch (error) {
+      logger.error('[ConversationInfo] delete failed', error);
+      toast.error(t('chat.delete.failed'));
+    }
+  }, [clearHistory, ctx, onClose, router, t, view]);
 
   const confirmBlock = useCallback(async () => {
     if (!other) return;
@@ -266,13 +293,21 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
           },
         ]
       : []),
-    {
-      key: 'leave',
-      label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-      icon: isGroup ? RiDoorOpenLine : RiDeleteBinLine,
-      tone: 'negative',
-      onPress: () => void confirmLeave(),
-    },
+    isGroup
+      ? {
+          key: 'leave',
+          label: t('chat.leave.group'),
+          icon: RiDoorOpenLine,
+          tone: 'negative' as const,
+          onPress: () => void confirmLeave(),
+        }
+      : {
+          key: 'delete',
+          label: t('chat.delete.title'),
+          icon: RiDeleteBinLine,
+          tone: 'negative' as const,
+          onPress: () => void confirmDelete(),
+        },
   ];
 
   return (

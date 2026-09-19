@@ -5,6 +5,7 @@
  * over the socket (encrypted, never stored), and unread counts.
  */
 import { decodeAppMessage, encodeAppMessage, type AppMessage, type EventRef } from "@allo/shared-types";
+import { Model } from "../storage/model";
 import type { Context } from "../context";
 import { InvalidStateError, NotFoundError } from "../errors";
 import type { ContactDraft, LoadOlderResult, PlaceDraft, PollDraft, SendOptions, TimelineItemView } from "../types";
@@ -166,6 +167,54 @@ export class MessagesService {
     const target = this.find(conversationId, targetId);
     const mine = target.reactions.find((r) => r.key === key)?.accountIds.includes(this.ctx.accountId) ?? false;
     await this.ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "reaction", target: this.refFor(conversationId, targetId), key, op: mine ? "remove" : "add" });
+  }
+
+  /**
+   * DELETE this conversation's history on this device, and optionally ask
+   * everybody else in it to do the same.
+   *
+   * The local half is a real delete: the event rows go, not a filter over
+   * them. `clearedUpToSeq` keeps the line so a conversation with nothing newer
+   * stays out of the list and comes back the moment somebody speaks.
+   *
+   * The remote half is a REQUEST and the screen that offers it says so. In an
+   * end-to-end encrypted system the other copy sits on the other person's
+   * device under keys only they hold; `clear_history` asks their app, and
+   * their app obeys. Nothing here can reach in and make it true.
+   */
+  async clearHistory(conversationId: string, options: { forEveryone?: boolean } = {}): Promise<void> {
+    const { ctx } = this;
+    const record = ctx.model.conversations.get(conversationId);
+    if (!record) throw new NotFoundError(`conversation ${conversationId}`);
+    // Sent BEFORE the local wipe: the outbox item is one more event in this
+    // conversation, and it must not be caught by the line it is asking for.
+    if (options.forEveryone) await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "clear_history", ctl: true });
+    await this.applyClear(conversationId, record.lastSeq);
+  }
+
+  /**
+   * Drops everything at or below `seq` and remembers the line.
+   *
+   * Called by {@link clearHistory} for this device and by the sync dispatcher
+   * when a `clear_history` arrives — from the other person, or from another of
+   * this account's own devices, which is why there is no sender check.
+   * Idempotent: a lower line never undoes a higher one.
+   */
+  async applyClear(conversationId: string, seq: number): Promise<void> {
+    const { ctx } = this;
+    const record = ctx.model.conversations.get(conversationId);
+    if (!record) return;
+    if ((record.clearedUpToSeq ?? -1) >= seq) return;
+    const dropped = ctx.model.dropEventsUpTo(conversationId, seq);
+    const next = { ...record, clearedUpToSeq: seq };
+    const batch = ctx.store.batch();
+    for (const event of dropped) batch.delete("event", Model.eventId(event));
+    batch.putJson("conversation", next.id, next);
+    await ctx.store.commit(batch);
+    ctx.model.conversations.set(next.id, next);
+    this.invalidate(conversationId);
+    ctx.conversations.invalidate(conversationId);
+    ctx.log.info?.("conversation history deleted on this device", { conversationId, events: dropped.length });
   }
 
   /** Marks everything read locally now; sends a `read` receipt at most once per 5 s per conversation. */

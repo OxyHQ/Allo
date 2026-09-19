@@ -50,6 +50,20 @@ export class Model {
     m.set(record.id, record);
   }
 
+  /** Forgets every event of a conversation at or below `seq`. Returns what was dropped, so the caller can delete the rows. */
+  dropEventsUpTo(conversationId: string, seq: number): EventRecord[] {
+    const m = this.events.get(conversationId);
+    if (!m) return [];
+    const dropped: EventRecord[] = [];
+    for (const [id, record] of m) {
+      if (record.seq <= seq) {
+        dropped.push(record);
+        m.delete(id);
+      }
+    }
+    return dropped;
+  }
+
   /** Events of a conversation in seq order. */
   eventsOf(conversationId: string): EventRecord[] {
     const m = this.events.get(conversationId);
