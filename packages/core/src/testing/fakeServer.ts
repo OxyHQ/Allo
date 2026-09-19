@@ -151,6 +151,11 @@ export class FakeAlloServer implements SocketHost {
   readonly backups = new Map<string, AccountBackup>();
   /** The latest GroupInfo per conversation, replaced by every commit and by `PUT …/group-info`. */
   readonly groupInfos = new Map<string, StoredGroupInfo>();
+  /** Calls, with only what the server has to know: who is rung, who won, how it ended. */
+  readonly calls = new Map<
+    string,
+    { id: string; conversationId: string; initiatorAccountId: string; initiatorInstanceId: string; mode: "voice" | "video"; state: "ringing" | "active" | "ended"; group: boolean; relayed: boolean; rung: string[]; answeredBy: string | null; startedAt: string; endReason: string | null }
+  >();
   /** See the header: `false` simulates conversations whose commits predate `CommitInfo.groupInfo`. */
   keepGroupInfo = true;
   readonly deliveries: Delivery[] = [];
@@ -611,6 +616,78 @@ export class FakeAlloServer implements SocketHost {
       void me;
       return json(200, { keyPackages, missing });
     }
+    // ---- calls: the fork, the race, and nothing about the media ----------
+    if (method === "POST" && path === "/v1/calls") {
+      const me = signed();
+      const req = JSON.parse(utf8Decode(body)) as { idempotencyKey: string; conversationId: string; mode: "voice" | "video" };
+      const conv = this.conversations.get(req.conversationId);
+      if (!conv || conv.members.get(accountId)?.state !== "joined") throw new HttpError(404, "not_found", "conversation");
+      const others = [...conv.members.entries()].filter(([id, m]) => m.state === "joined" && id !== accountId).map(([id]) => id);
+      const rung = others.flatMap((a) => this.instancesOf(a).filter((i) => i.status === "active").map((i) => i.id));
+      const group = others.length > 1;
+      const call = {
+        id: uuidV7(this.now()),
+        conversationId: req.conversationId,
+        initiatorAccountId: accountId,
+        initiatorInstanceId: me.id,
+        mode: req.mode,
+        state: "ringing" as const,
+        group,
+        relayed: group,
+        rung,
+        answeredBy: null,
+        startedAt: this.iso(),
+        endReason: null,
+      };
+      this.calls.set(call.id, call);
+      for (const instanceId of rung) {
+        this.emitTo(instanceId, "call.incoming", {
+          callId: call.id,
+          conversationId: call.conversationId,
+          initiatorAccountId: accountId,
+          mode: call.mode,
+          group,
+        });
+      }
+      return json(201, { call: this.callWire(call) });
+    }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/ice$/)) && method === "GET") {
+      signed();
+      const call = this.calls.get(m[1]);
+      if (!call) throw new HttpError(404, "not_found", "call");
+      return json(200, {
+        iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+        expiresAt: new Date(this.now() + 3_600_000).toISOString(),
+        relayOnly: call.relayed,
+      });
+    }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/)) && method === "POST") {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call) throw new HttpError(404, "not_found", "call");
+      const action = m[2];
+      if (action === "answer") {
+        // First to answer wins; the losers are told who did.
+        if (call.state !== "ringing") throw new HttpError(409, "idempotency_conflict", "the call is not ringing");
+        call.state = "active";
+        call.answeredBy = me.id;
+      } else if (action === "decline") {
+        call.state = "ended";
+        call.endReason = "declined";
+      } else {
+        call.state = "ended";
+        const req = body.length ? (JSON.parse(utf8Decode(body)) as { reason?: string }) : {};
+        call.endReason = req.reason ?? "hangup";
+      }
+      const update = {
+        callId: call.id,
+        state: call.state,
+        answeredByInstanceId: call.answeredBy,
+        endReason: call.endReason,
+      };
+      for (const instanceId of [...call.rung, call.initiatorInstanceId]) this.emitTo(instanceId, "call.updated", update);
+      return json(200, { call: this.callWire(call) });
+    }
     if (method === "POST" && path === "/v1/conversations") return this.createConversation(signed(), body);
     if (method === "GET" && path === "/v1/conversations") {
       const me = signed();
@@ -1070,6 +1147,31 @@ export class FakeAlloServer implements SocketHost {
       if (req.initialCommit) this.submitEvent(conv, me, req.initialCommit);
       return { status: 201, body: { conversation: this.summary(conv, me.id), created: true } };
     });
+  }
+
+  private callWire(call: NonNullable<ReturnType<FakeAlloServer["calls"]["get"]>>) {
+    return {
+      id: call.id,
+      conversationId: call.conversationId,
+      initiatorAccountId: call.initiatorAccountId,
+      initiatorInstanceId: call.initiatorInstanceId,
+      mode: call.mode,
+      state: call.state,
+      relayed: call.relayed,
+      group: call.group,
+      participants: call.rung.map((instanceId) => ({
+        accountId: this.instances.get(instanceId)?.accountId ?? "",
+        instanceId,
+        state: call.answeredBy === instanceId ? ("joined" as const) : ("ringing" as const),
+        joinedAt: call.answeredBy === instanceId ? call.startedAt : null,
+        leftAt: null,
+      })),
+      startedAt: call.startedAt,
+      answeredAt: call.answeredBy ? call.startedAt : null,
+      endedAt: call.state === "ended" ? this.iso() : null,
+      endReason: call.endReason as null,
+      ringExpiresAt: call.state === "ringing" ? new Date(this.now() + 45_000).toISOString() : null,
+    };
   }
 
   private withIdempotency(instanceId: string, key: string, body: Uint8Array, run: () => { status: number; body: unknown }): Response {

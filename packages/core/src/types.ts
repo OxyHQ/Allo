@@ -93,6 +93,12 @@ export interface AlloClientOptions {
   now?: () => number;
   /** Key packages kept on the server. Default 20. */
   keyPackageTarget?: number;
+  /**
+   * How a call's audio and video are carried. Omitted, the SDK still rings,
+   * answers, declines and ends — it simply carries no media (ADR 0002,
+   * Decision 5).
+   */
+  media?: import("./calls/media").CallMediaAdapter;
   /** Live sync interval in ms. Default 30 000. */
   syncIntervalMs?: number;
   /** How long after a sync that makes a backup due the automatic refresh waits, ms. Default 10 000. */
@@ -384,6 +390,7 @@ export interface LoadOlderResult {
 
 export type SubscriptionTopic =
   | "conversations"
+  | "call"
   | "presence"
   | "statuses"
   | `timeline:${string}`

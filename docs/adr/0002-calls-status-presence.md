@@ -186,6 +186,69 @@ control is recorded and projected as nothing at all. This lands first, on its
 own, so that the clients in the field learn to ignore before there is anything
 to ignore.
 
+## Decision 5: WebRTC does not live in `@allo/core`, and the seam is an adapter
+
+The SDK cannot own the media, and it must own everything else about a call.
+
+`@allo/core` is headless by construction: it runs in Node under `vitest`
+against the fake server, and that is what makes the MLS paths, the outbox and
+the sync engine testable at all. `RTCPeerConnection` does not exist there, and
+neither does a microphone. So the call service splits the way every other
+platform difference in this SDK already does — storage, secrets, the session
+and the people directory are all injected — and the media is one more injected
+adapter.
+
+**`@allo/core` owns everything that is not platform-specific**, because all of
+it is either protocol or security:
+
+- the client state machine (`idle → ringing → connecting → active → ended`),
+  reconciled against the server's, which is the authority on who answered;
+- the HTTP calls, and signalling as encrypted `call` messages carried by the
+  same outbox and sync path as any other message, so they inherit its
+  ordering, retries and end-to-end encryption instead of reimplementing them;
+- **the DTLS fingerprint check.** The fingerprint arrives inside the encrypted
+  offer, and comparing it against the one the local peer connection reports is
+  the entire reason a 1:1 call is end to end encrypted (Decision 1). A
+  comparison done in the app is one each platform can get wrong differently;
+- the per-sender frame-key schedule for a group: generate, distribute, rotate
+  on a membership change;
+- `CallView`, and the `call_log` message written when it ends.
+
+**The app owns what cannot be anywhere else**: the `RTCPeerConnection` or the
+LiveKit `Room`, the microphone and camera tracks, audio routing, and the
+platform's own call UI (CallKit, Telecom).
+
+The seam is one interface, `CallMediaAdapter`, supplied at construction like
+`storage` and `secrets`. It is deliberately DUMB: every decision — whether the
+call is relay-only, when to rotate a key, when candidates go out, which
+fingerprint is acceptable — stays in core, and the adapter executes and
+reports. A wide adapter is where this kind of code rots, so the interface
+carries no policy.
+
+A client built without one can still ring, be rung, decline and end; it simply
+carries no audio. That is what the app does today and what a test does for
+ever.
+
+**Why not the alternatives.** Putting the state machine in the app duplicates
+it per platform and moves the fingerprint check out of the one place it can be
+got right once. Putting WebRTC into core behind an optional peer dependency
+makes core untestable in Node, which is the property the whole package is
+built around — it is what `matrix-js-sdk` does and what people complain about.
+A separate `@allo/calls` package would be a sixth workspace package with its
+own build and version for one consumer.
+
+**One implementation, not two.** The frontend already targets web and native
+from a single codebase, and `@livekit/react-native` registers the WebRTC
+globals, so `lib/calls/` is written once; only registering those globals and
+the audio session need a platform file.
+
+**What this costs, measured rather than assumed.** RN's LiveKit E2EE is
+AES-128 whatever key size is asked for, and derives keys differently on web and
+native, so a mixed room cannot decrypt; `livekit/react-native-webrtc#88`
+(open, unanswered since 2026-06) has iOS video decoding to zero frames on
+Android with E2EE on. A two-device iOS↔Android spike therefore comes before
+any group-video UI. Group voice shows no such report.
+
 ## Consequences
 
 - The server gains three metadata surfaces it did not have: call sessions,
