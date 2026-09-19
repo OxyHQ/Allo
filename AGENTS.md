@@ -367,8 +367,8 @@ instance the fake server is made to list as an unapproved active root.
   with a deadline; the client keeps the deadline it verified in the signature
   rather than a later claim; and a status already decrypted on a device is that
   device's, which the screens say rather than implying a remote delete.
-- **Calls: the server half is built, the client half is not, and the screens
-  still say so.** The backend runs the part a client cannot — who may ring
+- **Calls connect. What is missing is the ring on a closed app and the relay.**
+  The backend runs the part a client cannot — who may ring
   (a joined member, never across a block), the fork across a callee's devices,
   first-to-answer-wins as an UPDATE guarded on the state, the ring nobody
   answered, and whether the media is relayed (`relayed = group || either side
@@ -381,16 +381,30 @@ instance the fake server is made to list as an unapproved active root.
   none, and only a device that has ANSWERED gets one; `identity` is the
   instance, because a per-sender key is per device, and the grant opens no data
   channel because nothing rides LiveKit's.
-  What is still missing is `@allo/core`'s call service (encrypted signalling,
-  the client state machine, the injected media seam — WebRTC cannot live in
-  core, which runs in Node under test) and the native ring (CallKit, Telecom,
-  a `phoneCall` foreground service). Until then
-  `packages/frontend/lib/phase2/calls.ts` holds that state in memory for the
-  life of the tab, the screens (`/calls`, `/c/:id/call`) are built on Bloom's
-  `call-ui` and carry a notice that nothing is connected, and their sample data
-  is marked `DEMO_*`. The status route is `/updates` because Metro's dev server
-  answers `/status` itself, and a screen that cannot be opened while developing
-  is a screen nobody checks.
+  The client half is `packages/core/src/calls/` — the state machine, the
+  signalling and the rule that a description with no `a=fingerprint` ends the
+  call rather than connecting it. **There is no comparison of fingerprints and
+  there cannot be one**: the SDP is an MLS message, so the encrypted copy is
+  the only copy, and WebRTC binds the peer's certificate to the line inside it
+  without being asked. WebRTC itself cannot live in core, which runs in Node
+  under test, so the media is an injected `CallMediaAdapter`
+  (`packages/frontend/lib/calls/webrtc.ts`, one implementation for both
+  platforms) and a client built without one still rings, answers, declines and
+  ends — it just carries no audio.
+  **`/c/:id/call` is the app's ONE dialler.** Opening it with no call in
+  progress places one and nothing else calls `start`; every other entry point
+  pushes the route. A screen that navigated AND dialled placed two calls per
+  press, twice — once from the conversation header, then again from the
+  call-back row after the first was fixed.
+  What is still missing: the native ring (CallKit, Telecom, a `phoneCall`
+  foreground service), so a phone with the app closed does not ring; the
+  remote video on the stage (`StagePlaceholder` stands in, and the screens say
+  so); the speaker, screen sharing, the camera flip and hold, which are simply
+  not passed to Bloom, because Bloom draws a control when it is handed a
+  HANDLER and a control nothing can do is a prop nobody passes; and coturn, so
+  a relayed call cannot connect. The status route is `/updates` because
+  Metro's dev server answers `/status` itself, and a screen that cannot be
+  opened while developing is a screen nobody checks.
 - **The relay and the SFU are read at BOOT, in `runtimeApp.ts`, or they are not
   read at all.** `getIceConfig()`'s lazy fallback parses an EMPTY environment,
   so for as long as nothing called `setIceConfig` every deployment served STUN

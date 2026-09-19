@@ -6,7 +6,7 @@ import { CallMinimisedPill } from '@oxy.so/bloom/call-ui';
 
 import { usePerson } from '@/hooks/usePerson';
 import { useCallActions } from '@allo/react';
-import { useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
+import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
 
 /**
  * THE MINIMISED CALL, FLOATING OVER WHATEVER SCREEN YOU WENT TO.
@@ -41,12 +41,12 @@ export function CallPill() {
       duration={duration === '' ? undefined : duration}
       statusText={duration === '' ? t('calls.status.connecting') : undefined}
       muted={session.muted}
-      onMutedChange={(muted) => void calls.setMuted(muted).catch(() => undefined)}
+      onMutedChange={(muted) => void calls.setMuted(muted).catch(reportCallError)}
       onExpand={() => {
         setMinimised(false);
         router.push(`/c/${session.conversationId}/call`);
       }}
-      onEndCall={() => void calls.end().catch(() => undefined)}
+      onEndCall={() => void calls.end().catch(reportCallError)}
       labels={{
         mute: t('calls.control.mute'),
         unmute: t('calls.control.unmute'),

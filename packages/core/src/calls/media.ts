@@ -5,9 +5,9 @@
  * `RTCPeerConnection` and no microphone. So the media is injected, the way
  * storage, secrets, the session and the people directory already are, and the
  * SDK keeps everything that is protocol or security: the state machine, the
- * signalling (encrypted `call` messages through the ordinary outbox), the
- * DTLS fingerprint check that makes a 1:1 call end to end encrypted, and the
- * per-sender frame-key schedule for a group.
+ * signalling (encrypted `call` messages through the ordinary outbox), the rule
+ * that a description with no DTLS fingerprint is refused, and the per-sender
+ * frame-key schedule for a group.
  *
  * **The adapter is deliberately dumb.** It holds no policy: it is never asked
  * to decide whether a call is relayed, when a key rotates, when candidates go
@@ -20,16 +20,18 @@
  * app did before the media landed.
  */
 
-/** An SDP together with the DTLS fingerprint the SDK will seal and compare. */
+/**
+ * An SDP, and nothing beside it.
+ *
+ * The DTLS fingerprint is IN the SDP — `a=fingerprint` — and that is the only
+ * copy that means anything: WebRTC binds the peer's certificate to the line in
+ * the description it was handed, so a fingerprint carried alongside would be a
+ * second copy nothing verifies against. The adapter used to report one here
+ * and the SDK dropped it before the message went out, which is exactly how
+ * much it was worth. The SDK reads the line itself when it needs it.
+ */
 export interface SessionDescription {
   sdp: string;
-  /**
-   * The `a=fingerprint` line's value, exactly as the local peer connection
-   * reports it. The SDK sends it inside the ENCRYPTED offer and checks the
-   * one that comes back, which is the whole of Decision 1: a server that
-   * swapped it would be swapping a value the MLS group already authenticated.
-   */
-  fingerprint: string;
 }
 
 export interface CallMediaPlan {

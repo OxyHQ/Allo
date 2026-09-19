@@ -43,6 +43,37 @@ export function project(input: ProjectionInput): TimelineItemView[] {
   };
   const refId = (ref: EventRef): string => (ref.kind === "event" ? ref.eventId : ref.idempotencyKey);
 
+  /**
+   * The item a message is ON ITS OWN, or `null` when it is not one — a
+   * reaction, an edit, a receipt, which fold onto another item instead.
+   *
+   * ONE dispatch, and both loops below use it. They carried a copy each, so
+   * every new message kind was two edits; forget the second and the kind
+   * appears once it has synced but not while it is still in the outbox — and
+   * silently, because each chain typechecks perfectly well without the other.
+   */
+  const standalone = (
+    m: AppMessage,
+    isOwn: boolean,
+  ): { content: TimelineItemView["content"]; replyTo?: string; votes?: boolean } | null => {
+    switch (m.t) {
+      case "text":
+        return { content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined };
+      case "media":
+        return { content: { kind: "media", media: mediaView(conversationId, m) } };
+      case "poll":
+        return { content: { kind: "poll", poll: pollView(m) }, votes: true };
+      case "location":
+        return { content: { kind: "location", place: placeView(m) } };
+      case "contact":
+        return { content: { kind: "contact", contact: contactView(m) } };
+      case "call_log":
+        return { content: { kind: "call", call: callLogView(m, isOwn) } };
+      default:
+        return null;
+    }
+  };
+
   const add = (w: Working): void => {
     order.push(w);
     byId.set(w.item.id, w);
@@ -133,18 +164,9 @@ export function project(input: ProjectionInput): TimelineItemView[] {
     }
     if (!e.message) continue;
     const m = e.message;
-    if (m.t === "text") {
-      add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });
-    } else if (m.t === "media") {
-      add({ item: { ...base, content: { kind: "media", media: mediaView(conversationId, m) } }, reactions: new Map() });
-    } else if (m.t === "poll") {
-      add({ item: { ...base, content: { kind: "poll", poll: pollView(m) } }, reactions: new Map(), votes: new Map() });
-    } else if (m.t === "location") {
-      add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
-    } else if (m.t === "contact") {
-      add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
-    } else if (m.t === "call_log") {
-      add({ item: { ...base, content: { kind: "call", call: callLogView(m, base.isOwn) } }, reactions: new Map() });
+    const entry = standalone(m, isOwn);
+    if (entry) {
+      add({ item: { ...base, content: entry.content, replyTo: entry.replyTo }, reactions: new Map(), ...(entry.votes ? { votes: new Map() } : {}) });
     } else {
       apply(m, e.senderAccountId, isOwn, e.seq);
     }
@@ -166,18 +188,9 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       reactions: [],
       ...(o.state !== "failed" && input.stalledItemIds?.has(o.id) ? { holdReason: "epoch_stalled" as const } : o.state !== "failed" && input.holdReason ? { holdReason: input.holdReason } : {}),
     };
-    if (m.t === "text") {
-      add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });
-    } else if (m.t === "media") {
-      add({ item: { ...base, content: { kind: "media", media: mediaView(conversationId, m) } }, reactions: new Map() });
-    } else if (m.t === "poll") {
-      add({ item: { ...base, content: { kind: "poll", poll: pollView(m) } }, reactions: new Map(), votes: new Map() });
-    } else if (m.t === "location") {
-      add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
-    } else if (m.t === "contact") {
-      add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
-    } else if (m.t === "call_log") {
-      add({ item: { ...base, content: { kind: "call", call: callLogView(m, base.isOwn) } }, reactions: new Map() });
+    const entry = standalone(m, true);
+    if (entry) {
+      add({ item: { ...base, content: entry.content, replyTo: entry.replyTo }, reactions: new Map(), ...(entry.votes ? { votes: new Map() } : {}) });
     } else if (o.state !== "failed") {
       apply(m, accountId, true, null);
     }

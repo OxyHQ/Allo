@@ -6,13 +6,11 @@ import { useOxy } from '@oxy.so/services';
 import { useCallActions, useConversation } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import {
-  CallControlButton,
   CallScreen,
   GroupCallGrid,
   IncomingCallScreen,
   type GroupCallParticipant,
 } from '@oxy.so/bloom/call-ui';
-import { RiPauseLine } from '@oxy.so/bloom/icons';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
 
@@ -20,8 +18,7 @@ import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { StagePlaceholder } from '@/components/phase2/StagePlaceholder';
 import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
-import { logger } from '@/utils/logger';
-import { useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
+import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
 
 /**
  * `/c/:id/call` — THE CALL ITSELF.
@@ -31,19 +28,19 @@ import { useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session'
  * `CallMinimisedPill` — once it has been collapsed. A call with more than one
  * other person fills the stage with `GroupCallGrid`; a one-to-one video call
  * gets a placeholder frame, because `remoteVideo` is a `ReactNode` slot and
- * there is no media to put in it.
+ * the screen does not draw the tracks yet.
  *
- * **There is no WebRTC here, and no microphone is opened.** The progression
- * from `calling` to `active` is timers in this file standing in for a
- * signalling server that does not exist; every control writes to
- * `lib/phase2/calls.ts` and stops there. The screen says so in its own subtitle
- * rather than in a banner that would cover the stage.
+ * **This route is the app's ONE dialler.** Opening it with no call in progress
+ * places one; nothing else in the app calls `start`. Every entry point — the
+ * conversation header, a call-back row, the incoming banner — pushes this
+ * route instead, so "one press, one call" is a property of there being a
+ * single call site rather than a rule written in a comment.
+ *
+ * The controls the platform cannot do yet are simply NOT PASSED. Bloom draws a
+ * control when it is handed a handler, so leaving the speaker, screen sharing,
+ * the camera flip and hold out is how the screen says it cannot do them —
+ * better than a button that moves and changes nothing, which is what they were.
  */
-/** A call action that failed. Logged, never swallowed, and never a crash on a screen somebody is on. */
-function reportCallError(error: unknown): void {
-  logger.error('[call] action failed', error);
-}
-
 export default function CallRoute() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: 'voice' | 'video' }>();
   const { t } = useTranslation();
@@ -53,12 +50,7 @@ export default function CallRoute() {
   const conversation = useConversation(id ?? '');
   const session = useCallSession();
 
-  /**
-   * The call itself is the SDK's; this screen only asks. What is NOT here is
-   * as deliberate as what is: the speaker, screen sharing, the camera's facing
-   * and hold are not things the platform can do yet, so their buttons do
-   * nothing rather than pretending — see the notice the screen draws.
-   */
+  /** The call itself is the SDK's; this screen only asks. */
   const calls = useCallActions();
   const answer = useCallback(() => void calls.answer().catch(reportCallError), [calls]);
   const decline = useCallback(() => void calls.decline().catch(reportCallError), [calls]);
@@ -67,11 +59,6 @@ export default function CallRoute() {
   const setVideo = useCallback((on: boolean) => void calls.setCameraEnabled(on).catch(reportCallError), [calls]);
   const setMinimised = useCallUi((state) => state.setMinimised);
   const movePip = useCallUi((state) => state.setPipCorner);
-  const noop = useCallback((..._ignored: unknown[]) => undefined, []);
-  const setSpeaker = noop;
-  const setScreenSharing = noop;
-  const flipCamera = noop;
-  const setHold = noop;
 
   /**
    * Who is on the call. The live call knows; before one exists the members of
@@ -87,13 +74,6 @@ export default function CallRoute() {
 
   const { person } = useChatContext(peerAccountIds);
 
-  /**
-   * Placing the call this route is about, once.
-   *
-   * The ref is what stops it starting again the moment it is hung up: ending a
-   * call clears the session, and without the guard this effect would read that
-   * as "no call yet" and dial again.
-   */
   /**
    * Opening `/c/:id/call` with no call in progress PLACES one — the screen is
    * reached by pressing call, and a screen that showed nothing would be a
@@ -122,15 +102,15 @@ export default function CallRoute() {
         : t('calls.withOthers', { name: names[0], count: names.length - 1 }));
   const avatar = peerAccountIds.length === 1 ? person(peerAccountIds[0])?.avatar : undefined;
 
+  // Nobody else's mic, voice level or screen is reported by the platform, so
+  // a tile says who is there and no more. An invented `speaking` dot is worse
+  // than none: it moves, so it reads as information.
   const participants = useMemo<GroupCallParticipant[]>(
     () => [
       ...(session?.peers ?? []).map((peer) => ({
         id: peer.accountId,
         name: person(peer.accountId)?.displayName ?? someone,
         avatar: person(peer.accountId)?.avatar,
-        muted: peer.muted,
-        speaking: peer.speaking,
-        presenting: peer.presenting,
       })),
       {
         id: user?.id ?? 'me',
@@ -164,7 +144,9 @@ export default function CallRoute() {
     );
   }
 
-  const notConnected = t('calls.stageNotice');
+  // What the stage cannot do — the video is not drawn here yet. It used to say
+  // "nothing sent", which stopped being true the moment the media landed.
+  const stageNotice = t('calls.stageNotice');
 
   const hangUp = () => {
     end();
@@ -178,7 +160,6 @@ export default function CallRoute() {
         avatar={avatar}
         mode={session.mode}
         answerMode="slide"
-        subtitle={notConnected}
         onAccept={answer}
         onDecline={() => {
           decline();
@@ -208,7 +189,7 @@ export default function CallRoute() {
       formatMuted={(name) => t('calls.mutedPerson', { name })}
     />
   ) : (
-    <StagePlaceholder label={notConnected} />
+    <StagePlaceholder label={stageNotice} />
   );
 
   /**
@@ -225,7 +206,10 @@ export default function CallRoute() {
     <CallScreen
       mode={stageMode}
       name={title}
-      subtitle={notConnected}
+      // Only where the stage is: a voice call has no video to be missing, so
+      // saying so under somebody's name would be answering a question nobody
+      // asked.
+      subtitle={stageMode === 'video' ? stageNotice : undefined}
       avatar={avatar}
       status={session.status}
       duration={duration === '' ? undefined : duration}
@@ -242,55 +226,37 @@ export default function CallRoute() {
         if (!session.minimised) router.push('/calls');
       }}
       controls={{
+        // Mute, the camera and adding somebody are handed handlers; the
+        // speaker, screen sharing and the camera flip are not, so Bloom leaves
+        // them out of the bar entirely. That is the honest way to say the
+        // platform cannot do them — see this file's header.
         muted: session.muted,
         onMutedChange: setMuted,
-        speaker: session.speaker,
-        onSpeakerChange: setSpeaker,
         videoOn: session.videoOn,
         onVideoChange: setVideo,
-        onFlipCamera: session.videoOn ? flipCamera : undefined,
-        screenSharing: session.screenSharing,
-        onScreenShareChange: setScreenSharing,
         onAddParticipant: () => router.push(`/new?addTo=${session.conversationId}`),
         onEndCall: hangUp,
         showLabels: true,
         labels: {
           mute: t('calls.control.mute'),
           unmute: t('calls.control.unmute'),
-          speakerOn: t('calls.control.speakerOn'),
-          speakerOff: t('calls.control.speakerOff'),
           videoOn: t('calls.control.videoOn'),
           videoOff: t('calls.control.videoOff'),
-          flipCamera: t('calls.control.flip'),
-          screenShareOn: t('calls.control.shareOn'),
-          screenShareOff: t('calls.control.shareOff'),
           addParticipant: t('calls.control.add'),
           endCall: t('calls.control.end'),
         },
-        // `children` is where Bloom puts an extra control, between the toggles
-        // and the end button. Hold is a state this app models and Bloom has no
-        // key for, which is exactly what the slot is for.
-        children: (
-          <CallControlButton
-            icon={RiPauseLine}
-            label={session.status === 'onHold' ? t('calls.control.resume') : t('calls.control.hold')}
-            active={session.status === 'onHold'}
-            size="large"
-            showLabel
-            onPress={() => setHold(session.status !== 'onHold')}
-          />
-        ),
       }}
+      // `labels` is partial, and the four statuses below are the only ones
+      // `CallView['phase']` has. Bloom's `calling`, `reconnecting` and
+      // `onHold` are unreachable here, so naming them would be writing copy
+      // for a screen nobody can get to.
       labels={{
         minimise: t('calls.minimise'),
         chat: t('chat.title'),
         participants: t('calls.participants'),
-        calling: t('calls.status.calling'),
         ringing: t('calls.status.ringing'),
         connecting: t('calls.status.connecting'),
         active: t('calls.status.active'),
-        reconnecting: t('calls.status.reconnecting'),
-        onHold: t('calls.status.onHold'),
         ended: t('calls.status.ended'),
         movePip: () => t('calls.movePip'),
       }}

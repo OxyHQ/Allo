@@ -440,6 +440,10 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.backup.stop();
     ctx.presence.stop();
     ctx.statuses.stop();
+    // Last of the services, and the one with a device attached: stopping the
+    // client during a call has to release the microphone and the camera, not
+    // just stop listening to them.
+    ctx.calls.stop();
     await ctx.outbox.idle().catch(() => undefined);
     started = false;
     activated = false;

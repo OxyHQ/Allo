@@ -88,13 +88,18 @@ audience resolved on the device. Nothing about a status is persisted locally —
 its key lives in memory with its decrypted envelope, so it is gone when the
 status is.
 
-Calls are NOT. There is no signalling and no media anywhere in the platform,
-so `lib/phase2/calls.ts`
-holds that state in memory for the life of the tab and the screens say so in
-their own words (`components/phase2/NotConnectedNotice.tsx`). Its header
-states exactly what a transport must supply to replace it, and it exports a
-`DEMO_*` constant that is the only sample data to delete. Nothing there opens a
-socket, touches a microphone or persists anything.
+Calls are real too, and the frontend's share of them is small on purpose: the
+state machine and the encrypted signalling are `@allo/core`, reached through
+`useCall` / `useCallActions` / `useCallHistory`. What lives here is the media
+(`lib/calls/webrtc.ts`, the `RTCPeerConnection`, the microphone and the camera,
+one implementation for web and native) and two projections —
+`lib/calls/session.ts` for the ONE live call, `lib/calls/history.ts` for every
+finished one, read out of the `call_log` messages rather than a store of its
+own. `/c/:id/call` is the only place in the app that dials; everything else
+pushes that route. The screens still carry a notice
+(`components/phase2/NotConnectedNotice.tsx`) because two things really are
+missing — a phone with the app closed does not ring, and a relayed call has no
+relay to use.
 
 ## Theme
 
