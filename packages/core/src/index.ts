@@ -3,6 +3,9 @@
  * Node-only API; one code path for Node, browsers and Hermes.
  */
 export { createAlloClient, type AlloClient, type ResetOutcome } from "./client";
+/** The media seam a host supplies for calls (ADR 0002, Decision 5). */
+export type { CallMediaAdapter, CallMediaPlan, CallRoomTicket, SessionDescription } from "./calls/media";
+export type { CallPhase, CallView } from "./calls/service";
 export * from "./types";
 export {
   AlloError,
