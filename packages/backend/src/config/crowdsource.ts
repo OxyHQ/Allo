@@ -9,17 +9,22 @@ import * as z from "zod";
  * ONCE, at boot, instead of being read as `process.env.X` in four places where a
  * typo is a silent `undefined`.
  *
- * ## `CROWDSOURCE_APP_ID` is absent on purpose
+ * ## Neither `CROWDSOURCE_APP_ID` nor `CROWDSOURCE_SERVICE_KEY` is defined here
  *
  * The variable names come from the packages, not from §14.6's table.
- * `@oxy.so/crowdsource` reads `CROWDSOURCE_SERVICE_KEY` — the applicationId,
- * credentialId and secret as ONE opaque value — and `CROWDSOURCE_BASE_URL`;
- * `@oxy.so/crowdsource-express` reads `CROWDSOURCE_WEBHOOK_SECRET` and
- * `CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`.
+ * `@crowdsource.you/core/express` reads `CROWDSOURCE_WEBHOOK_SECRET` and
+ * `CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS`; `CROWDSOURCE_BASE_URL` is ours, and
+ * points a local checkout at a local CrowdSource.
  *
- * §14.6's `CROWDSOURCE_APP_ID` is deliberately NOT defined here. The applicationId
- * is derived from the credential, so a separate variable holding one could only
- * ever agree with the credential by luck and disagree with it by accident — and a
+ * `CROWDSOURCE_SERVICE_KEY` went with `crowdSourceForOxyService()`: Allo presents
+ * the Oxy service token it can already mint and CrowdSource resolves the tenant
+ * from the Oxy application that token names (oxy ADR 0026). A key nothing reads
+ * is worse than no key — it is a secret somebody keeps rotating, and a boot check
+ * that fails a deployment for omitting a value with no effect.
+ *
+ * §14.6's `CROWDSOURCE_APP_ID` was never defined and still is not. The
+ * applicationId is CrowdSource's answer about who this token is, so a variable
+ * holding one could only ever agree by luck and disagree by accident — and a
  * configurable applicationId is an IDOR: it is the surface through which one
  * deployment could open, read or resolve cases in another application's tenant.
  * The tenancy model exists to prevent exactly that, so the value must have no
@@ -70,7 +75,6 @@ const httpOrigin = z
 const crowdSourceEnvSchema = z
   .object({
     CROWDSOURCE_ENABLED: booleanFromEnv(false),
-    CROWDSOURCE_SERVICE_KEY: optionalString(),
     CROWDSOURCE_BASE_URL: z.preprocess(emptyAsUndefined, httpOrigin.optional()),
     /**
      * A 16-character floor rather than merely "present": this secret is the ONLY
@@ -94,22 +98,19 @@ const crowdSourceEnvSchema = z
   })
   .superRefine((environment, context) => {
     /**
-     * A half-configured integration is worse than a disabled one. With a service
-     * key and no webhook secret, reports leave and no decision can ever be
-     * verified coming back; with a webhook secret and no service key, a receiver
-     * waits for decisions about cases that were never opened. Neither gap raises
-     * an error at the moment it matters — someone eventually asks why a case never
-     * came back — so both directions are required together, at boot, or not at all.
+     * A half-configured integration is worse than a disabled one: reports leave
+     * and no decision can ever be verified coming back, which raises no error at
+     * the moment it matters — someone eventually asks why a case never came back.
+     *
+     * Only the webhook secret is left to require. The outbound half used to be
+     * `CROWDSOURCE_SERVICE_KEY` and is now an identity rather than a variable, so
+     * a deployment that cannot authenticate is reported by the client at boot
+     * (`crowdSourceForOxyService` logs its reason once) instead of refusing to
+     * start — a local checkout has no workload identity and must still take
+     * reports.
      */
     if (!environment.CROWDSOURCE_ENABLED) return;
 
-    if (!environment.CROWDSOURCE_SERVICE_KEY) {
-      context.addIssue({
-        code: "custom",
-        path: ["CROWDSOURCE_SERVICE_KEY"],
-        message: "is required when CROWDSOURCE_ENABLED=true",
-      });
-    }
     if (!environment.CROWDSOURCE_WEBHOOK_SECRET) {
       context.addIssue({
         code: "custom",
@@ -122,7 +123,6 @@ const crowdSourceEnvSchema = z
 
 export interface CrowdSourceConfig {
   readonly enabled: boolean;
-  readonly serviceKey?: string;
   readonly baseUrl?: string;
   readonly webhookSecret?: string;
   readonly webhookPreviousSecret?: string;
@@ -137,7 +137,6 @@ export function loadCrowdSourceConfig(
   const parsed = crowdSourceEnvSchema.parse(environment);
   return Object.freeze({
     enabled: parsed.CROWDSOURCE_ENABLED,
-    serviceKey: parsed.CROWDSOURCE_SERVICE_KEY,
     baseUrl: parsed.CROWDSOURCE_BASE_URL,
     webhookSecret: parsed.CROWDSOURCE_WEBHOOK_SECRET,
     webhookPreviousSecret: parsed.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS,

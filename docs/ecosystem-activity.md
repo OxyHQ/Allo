@@ -4,9 +4,12 @@ The backend publishes aggregate traffic and its infrastructure heartbeat to the
 Oxy API, which broadcasts changes to the website dashboard. Collection runs in
 the service process regardless of whether somebody opens the dashboard.
 
-Enable with `OXY_ECOSYSTEM_ACTIVITY_ENABLED=true`, `AWS_REGION`, and a registered
-Oxy application credential (`ALLO_OXY_SERVICE_API_KEY` and `ALLO_OXY_SERVICE_API_SECRET`).
-An invalid activation value or missing required configuration fails at boot.
+Enable with `OXY_ECOSYSTEM_ACTIVITY_ENABLED=true`, `AWS_REGION`, and an Oxy
+service identity. On the infrastructure that identity is the ECS task role, which
+the SDK attests for a service token (oxy ADR 0026) — nothing to provision. A
+process that cannot attest, a developer's machine, falls back to the
+`ALLO_OXY_SERVICE_API_KEY` / `ALLO_OXY_SERVICE_API_SECRET` pair. An invalid
+activation value, or neither identity, fails at boot.
 Disabled collection emits a warning; it must not be interpreted as zero traffic.
 Provision credentials and enable the flag in the deployment before claiming coverage.
 

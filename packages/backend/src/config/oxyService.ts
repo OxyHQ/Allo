@@ -1,9 +1,24 @@
+import { canAttestWorkloadIdentity } from "@oxy.so/core/server";
 import * as z from "zod";
 
 import { logger } from "../utils/logger";
 
 /**
  * Allo's own credential for calling the Oxy API as itself.
+ *
+ * ## The deployment no longer carries one
+ *
+ * Under oxy ADR 0026 a first-party service proves what it IS — a signed
+ * `GetCallerIdentity` for the ECS task role, which Oxy replays to AWS — and gets
+ * back the same short-lived service token the key pair used to buy. `@oxy.so/core`
+ * falls back to that whenever no pair is configured, so the pair is now a LOCAL
+ * convenience: a developer's laptop can attest nothing, and this is how it borrows
+ * Allo's identity when it wants the server-to-server path.
+ *
+ * Which is why {@link canAuthenticateAsOxyService} exists and why nothing here
+ * treats an absent pair as "unauthenticated" any more. It stopped being the same
+ * question the day the task role could answer it, and a log line saying a working
+ * deployment has no credential is how somebody ends up putting one back.
  *
  * ## Optional, and worth saying why
  *
@@ -102,6 +117,27 @@ export interface ServiceAuthConfigurable {
 }
 
 /**
+ * Whether this process can act as Allo against Oxy at all.
+ *
+ * Two ways, and a deployment has one of them without anybody configuring it: in
+ * ECS the task role attests (oxy ADR 0026 — a signed `GetCallerIdentity` Oxy
+ * replays to AWS, with no secret anywhere) and elsewhere the key pair above does.
+ * A local checkout has neither, which is the honest answer to "is this on here".
+ *
+ * A capability, not a variable. Every caller that used to read the pair was asking
+ * this and getting the right answer only while a secret was the only identity
+ * there was; asked this way, removing the pair from the task definition changes
+ * nothing.
+ */
+export function canAuthenticateAsOxyService(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    canAttestWorkloadIdentity(environment) || loadOxyServiceCredential(environment) !== undefined
+  );
+}
+
+/**
  * Hands the credential to the SDK, if there is one. Returns whether it did.
  *
  * The log line names neither value — not even the public key, which identifies
@@ -113,10 +149,20 @@ export function configureOxyServiceAuth(
 ): boolean {
   const credential = loadOxyServiceCredential(environment);
   if (credential === undefined) {
-    logger.info(
-      "[Oxy] no service credential configured — directory lookups will call Oxy anonymously, " +
-        "which every one of those routes allows",
-    );
+    /**
+     * Three outcomes, not two, because "no pair" and "no identity" stopped being
+     * the same thing. On the infrastructure the SDK attests the task role and the
+     * calls that wanted a service token still get one; only the third line
+     * describes a process that will genuinely call Oxy anonymously.
+     */
+    if (canAttestWorkloadIdentity(environment)) {
+      logger.info("[Oxy] no service key pair; the SDK attests this task role instead");
+    } else {
+      logger.info(
+        "[Oxy] no Oxy service identity: neither a key pair nor an attestable task role. " +
+          "Directory lookups will call Oxy anonymously, which every one of those routes allows",
+      );
+    }
     return false;
   }
 
