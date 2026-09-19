@@ -35,7 +35,7 @@ import { RiShieldLine, RiSmartphoneLine } from '@oxy.so/bloom/icons';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
 
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 export interface EnrollmentGateProps {
@@ -90,14 +90,14 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
 
   const reclaim = useCallback(async () => {
     if (!onReclaim) return;
-    const confirmed = await confirmDialog({
+    const confirmed = await confirm({
       title: t('enrollment.reclaim.title', 'Use this device instead?'),
-      message: t(
+      description: t(
         'enrollment.reclaim.body',
         'Your other devices will be signed out, and messages kept only on them will be lost — this device cannot read what they hold. Do this only when you cannot reach a device that is already signed in.',
       ),
-      okText: t('enrollment.reclaim.confirm', 'Use this device'),
-      cancelText: t('common.cancel', 'Cancel'),
+      confirmLabel: t('enrollment.reclaim.confirm', 'Use this device'),
+      cancelLabel: t('common.cancel', 'Cancel'),
       destructive: true,
     });
     if (!confirmed) return;

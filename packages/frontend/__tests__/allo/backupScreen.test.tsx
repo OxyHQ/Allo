@@ -106,10 +106,12 @@ jest.mock('@oxy.so/bloom/toast', () => ({
   },
 }));
 
+// This suite needs BOTH answers, so it doubles Bloom's surfaces itself rather
+// than taking the always-confirm stand-in the runner maps in.
 let mockConfirmAnswer = true;
-jest.mock('@/utils/alerts', () => ({
-  confirmDialog: async () => mockConfirmAnswer,
-  alertDialog: async () => undefined,
+jest.mock('@oxy.so/bloom/surfaces', () => ({
+  confirm: async () => mockConfirmAnswer,
+  alert: () => undefined,
 }));
 
 const { createFakeAlloServer, FakeSession, MemorySecrets, MemoryStorage, until } = testing;
