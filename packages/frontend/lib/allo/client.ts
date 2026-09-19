@@ -19,6 +19,7 @@ import type { Platform as AlloPlatform } from '@allo/shared-types';
 import { ALLO_PLATFORM_URL } from '@/config';
 import { logger } from '@/utils/logger';
 import { people } from './people';
+import { createCallMedia } from '@/lib/calls/webrtc';
 import { createSecrets } from './secrets';
 import { createSessionAdapter, type OxySessionSource } from './session';
 import { createStorage } from './storage';
@@ -76,6 +77,10 @@ export async function createAppAlloClient({ oxy }: AppAlloClientOptions): Promis
     session: createSessionAdapter(oxy),
     storage,
     secrets: createSecrets(),
+    // The media half of a call. The SDK owns the state machine, the
+    // signalling and the fingerprint; this owns the peer connection and the
+    // microphone, and nothing else (ADR 0002, Decision 5).
+    media: createCallMedia(),
     people,
     logger: {
       debug: (message, fields) => logger.debug(`[allo] ${message}`, fields),
