@@ -13,6 +13,9 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
   BLOB_SHA256_HEADER,
+  CLIENT_TO_SERVER_EVENTS,
+  PRESENCE_TTL_MS,
+  presenceQuerySchema,
   DEFAULT_MAX_BLOB_BYTES,
   EMPTY_BODY_SHA256_HEX,
   INITIAL_CURSOR,
@@ -49,7 +52,10 @@ import {
   type HistoryOffer,
   type ConversationEvent,
   type ConversationSummary,
+  type PresenceState,
+  type PresenceWatchEvent,
   type PublicInstance,
+  type TypingEvent,
   type SubmitEventRequest,
 } from "@allo/shared-types";
 import type { z } from "zod";
@@ -216,6 +222,75 @@ export class FakeAlloServer implements SocketHost {
     return { instanceId: inst.id, accountId };
   }
 
+  /**
+   * Presence, modelled the way the backend models it: a heartbeat with a
+   * deadline, a watch set per socket, and the four visibility rules. A test
+   * that watches an account it shares nothing with must see nothing, or the
+   * rule is only in the backend's suite.
+   */
+  private readonly beats = new Map<string, Map<string, number>>();
+  private readonly lastSeen = new Map<string, number>();
+  private readonly watching = new Map<FakeSocket, string[]>();
+  /** Accounts that have turned their own presence off, keyed by account id. */
+  readonly presenceHidden = new Set<string>();
+  /** `blocker -> blocked`, either direction cutting presence. */
+  readonly blocks = new Set<string>();
+
+  private beat(accountId: string, instanceId: string): void {
+    const forAccount = this.beats.get(accountId) ?? new Map<string, number>();
+    forAccount.set(instanceId, this.now() + PRESENCE_TTL_MS);
+    this.beats.set(accountId, forAccount);
+    this.lastSeen.set(accountId, this.now());
+  }
+
+  private isOnline(accountId: string): boolean {
+    const forAccount = this.beats.get(accountId);
+    if (!forAccount) return false;
+    for (const [instanceId, deadline] of forAccount) if (deadline <= this.now()) forAccount.delete(instanceId);
+    return forAccount.size > 0;
+  }
+
+  private sharesConversation(a: string, b: string): boolean {
+    for (const conv of this.conversations.values()) {
+      const members = [...conv.members.entries()].filter(([, m]) => m.state === "joined").map(([accountId]) => accountId);
+      if (members.includes(a) && members.includes(b)) return true;
+    }
+    return false;
+  }
+
+  private presenceVisible(viewer: string, subject: string): boolean {
+    if (viewer === subject) return false;
+    if (this.presenceHidden.has(viewer) || this.presenceHidden.has(subject)) return false;
+    if (this.blocks.has(`${viewer}:${subject}`) || this.blocks.has(`${subject}:${viewer}`)) return false;
+    return this.sharesConversation(viewer, subject);
+  }
+
+  presenceFor(viewer: string, accountIds: readonly string[]): { presence: PresenceState[]; publishing: boolean } {
+    const publishing = !this.presenceHidden.has(viewer);
+    const presence = accountIds.map((accountId) => {
+      if (!publishing || !this.presenceVisible(viewer, accountId)) return { accountId, online: false, lastSeenAt: null };
+      const online = this.isOnline(accountId);
+      const seen = this.lastSeen.get(accountId);
+      return {
+        accountId,
+        online,
+        lastSeenAt: online || !seen ? null : new Date(Math.floor(seen / 60_000) * 60_000).toISOString(),
+      };
+    });
+    return { presence, publishing };
+  }
+
+  /** Tell every socket watching `accountId` what it looks like to that socket now. */
+  private pushPresence(accountId: string): void {
+    for (const [socket, watched] of this.watching) {
+      if (!watched.includes(accountId) || !socket.instanceId) continue;
+      const viewer = this.instances.get(socket.instanceId)?.accountId;
+      if (!viewer) continue;
+      const [state] = this.presenceFor(viewer, [accountId]).presence;
+      socket.receive("presence", state);
+    }
+  }
+
   attach(socket: FakeSocket, instanceId: string): void {
     let set = this.sockets.get(instanceId);
     if (!set) {
@@ -223,20 +298,57 @@ export class FakeAlloServer implements SocketHost {
       this.sockets.set(instanceId, set);
     }
     set.add(socket);
+    const inst = this.instances.get(instanceId);
+    if (inst?.status === "active") {
+      this.beat(inst.accountId, instanceId);
+      this.pushPresence(inst.accountId);
+    }
   }
 
   detach(socket: FakeSocket): void {
-    if (socket.instanceId) this.sockets.get(socket.instanceId)?.delete(socket);
+    this.watching.delete(socket);
+    if (!socket.instanceId) return;
+    this.sockets.get(socket.instanceId)?.delete(socket);
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst || (this.sockets.get(socket.instanceId)?.size ?? 0) > 0) return;
+    this.beats.get(inst.accountId)?.delete(socket.instanceId);
+    this.lastSeen.set(inst.accountId, this.now());
+    this.pushPresence(inst.accountId);
   }
 
+  /**
+   * Client → server. Every frame is parsed with the SAME schema the backend
+   * parses it with (`CLIENT_TO_SERVER_EVENTS`), so a drift between the SDK
+   * and the contract fails a test here rather than in production.
+   */
   onClientEvent(socket: FakeSocket, event: string, payload: unknown): void {
-    if (event !== "typing" || !socket.instanceId) return;
-    const p = payload as { conversationId?: string; ciphertext?: string };
-    const conv = p.conversationId ? this.conversations.get(p.conversationId) : undefined;
-    if (!conv || typeof p.ciphertext !== "string") return;
-    if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
-    for (const [instanceId, leaf] of conv.leaves) {
-      if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+    if (!socket.instanceId) return;
+    const schema = CLIENT_TO_SERVER_EVENTS[event as keyof typeof CLIENT_TO_SERVER_EVENTS];
+    if (!schema) return;
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) return;
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst) return;
+
+    if (event === "typing") {
+      const p = parsed.data as TypingEvent;
+      const conv = this.conversations.get(p.conversationId);
+      if (!conv) return;
+      if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
+      for (const [instanceId, leaf] of conv.leaves) {
+        if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+      }
+      return;
+    }
+
+    if (event === "presence.watch") {
+      const accountIds = (parsed.data as PresenceWatchEvent).accountIds;
+      this.watching.set(socket, [...accountIds]);
+      return;
+    }
+
+    if (event === "presence.heartbeat" && inst.status === "active") {
+      this.beat(inst.accountId, inst.id);
     }
   }
 
@@ -462,6 +574,12 @@ export class FakeAlloServer implements SocketHost {
       if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
       const events = conv.events.filter((e) => e.seq > q.data.after);
       return json(200, { events: events.slice(0, q.data.limit), hasMore: events.length > q.data.limit });
+    }
+    if (method === "GET" && path === "/v1/presence") {
+      const me = signed();
+      const q = presenceQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+      if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
+      return json(200, this.presenceFor(me.accountId, q.data.accountIds));
     }
     if (method === "GET" && path === "/v1/sync") {
       const me = signed();

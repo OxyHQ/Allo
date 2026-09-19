@@ -273,9 +273,19 @@ when the person's first device activates and the SDK's elector adds it.
   in either order agree. `ConversationView.lastMessage` must list every kind a
   row can speak for (`LAST_MESSAGE_KINDS` in `conversations/service.ts`) or the
   list keeps showing the message before it.
-- **Calls, status updates and presence are the frontend only, and say so.**
-  There is no signalling, no media and no presence in the platform, so
-  `packages/frontend/lib/phase2/{calls,stories,presence}.ts` hold that state in
+- **Presence is a watch set, and it is reciprocal.** A client says which
+  accounts it is SHOWING (`presence.watch`), beats every 30 s, and hears about
+  those accounts and no others; online is that heartbeat still being inside its
+  75 s deadline, held in Redis, and last seen is one coarse row per account in
+  `account_presence`. Four rules are enforced in `presenceService.ts`: an
+  account that hides its own presence receives nobody else's, you may only ask
+  about accounts you share a conversation with, a block cuts both directions,
+  and hidden, blocked, unknown and offline are all the same answer — a client
+  that could tell them apart could tell it had been blocked. The old shape
+  (announce to every co-member on connect) is gone.
+- **Calls and status updates are the frontend only, and say so.**
+  There is no signalling and no media in the platform, so
+  `packages/frontend/lib/phase2/{calls,stories}.ts` hold that state in
   memory for the life of the tab, the screens (`/calls`, `/c/:id/call`,
   `/updates`) are built on Bloom's `call-ui` and `chat-people` and each carries
   a notice that nothing is connected. Every one of those files documents what a
@@ -300,9 +310,10 @@ when the person's first device activates and the SDK's elector adds it.
   screens (blocked, restricted, hidden words, the first two sharing
   `components/settings/ModeratedUsersScreen.tsx`). The stored document
   (`backend/src/models/UserSettings.ts`) still carries Mention's feed fields
-  (`allowTags`, `hide*Counts`); Allo names none of them. **Nothing acts on any of
-  these settings yet** — `Block` and `Restrict` are written and never read, and
-  no route consults `hiddenWords` or `showOnlineStatus` — which is why the
+  (`allowTags`, `hide*Counts`); Allo names none of them. **`showOnlineStatus`
+  is the one setting the platform acts on**, and a block now cuts presence in
+  both directions (ADR 0002); `hiddenWords` and `Restrict` are still written
+  and never read, and a block still stops no message, which is why those
   screens say so rather than implying protection.
 - **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
   dotted key per entry at the top level, not nested objects.

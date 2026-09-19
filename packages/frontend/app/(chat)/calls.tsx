@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { usePresence } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { CallHistoryList, IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
 import { RiPhoneLine } from '@oxy.so/bloom/icons';
@@ -10,9 +11,9 @@ import { Muted } from '@oxy.so/bloom/typography';
 
 import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { Page } from '@/components/shell/Page';
+import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog, useCallSession, useCallsStore } from '@/lib/phase2/calls';
-import { usePresence } from '@/lib/phase2/presence';
 
 /**
  * `/calls` — THE CALL LOG.
@@ -114,7 +115,7 @@ export default function CallsScreen() {
   const arriving = session !== null && session.incoming && session.status === 'ringing';
   const callerId = session?.peers[0]?.accountId;
   const caller = person(callerId ?? '');
-  const callerPresence = usePresence(callerId);
+  const callerPresence = usePresence(callerId ? [callerId] : []);
 
   return (
     <Page title={t('calls.title')}>
@@ -125,7 +126,7 @@ export default function CallsScreen() {
           name={caller?.displayName ?? someone}
           avatar={caller?.avatar}
           mode={session.mode}
-          status={callerPresence.status}
+          status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
           onAccept={() => {
             answer();
             router.push(`/c/${session.conversationId}/call`);

@@ -88,7 +88,6 @@ export function recordedRealtime(): RecordedRealtime {
     typing(instanceIds, event) {
       r.typings.push({ instanceIds: [...instanceIds], conversationId: event.conversationId });
     },
-    presence() {},
     async isInstanceConnected(instanceId) {
       return r.connected.has(instanceId);
     },

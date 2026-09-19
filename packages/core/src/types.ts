@@ -355,6 +355,7 @@ export interface LoadOlderResult {
 
 export type SubscriptionTopic =
   | "conversations"
+  | "presence"
   | `timeline:${string}`
   | "instance"
   | "instances"
@@ -363,5 +364,20 @@ export type SubscriptionTopic =
   | "history"
   | "backup"
   | "error";
+
+/**
+ * One account's presence, as this device knows it.
+ *
+ * `known` is false until the server has answered for this account at all —
+ * which is different from "offline", and is what stops a list drawing every
+ * row as away while the first read is in flight. It is NOT the difference
+ * between offline and hidden: those two are the same answer on purpose.
+ */
+export interface PresenceView {
+  readonly online: boolean;
+  /** Truncated to the minute by the server, and null while the account is online. */
+  readonly lastSeenAt: string | null;
+  readonly known: boolean;
+}
 
 export type { AppMessage };

@@ -37,6 +37,7 @@ export {
   RECOVERY_PHRASE_WORDS,
 } from "./crypto/backupKey";
 export { backupDue, BACKUP_AUTO_REFRESH_EVENTS, BACKUP_AUTO_REFRESH_AGE_MS } from "./backup/service";
+export { PRESENCE_UNKNOWN } from "./presence/service";
 export { challengeFingerprint, instanceKeyName } from "./instance/manager";
 export { project as projectTimeline } from "./messages/projection";
 export type { Logger } from "./util/logger";
@@ -44,7 +45,9 @@ export { base64Encode, base64Decode } from "./util/bytes";
 export {
   encodeAppMessage,
   decodeAppMessage,
+  decodeAppMessageOrIgnore,
   appMessageSchema,
+  PRESENCE_HEARTBEAT_MS,
   AppMessageDecodeError,
   type AppMessage,
   type AppMessageKind,

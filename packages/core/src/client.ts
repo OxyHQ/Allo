@@ -29,14 +29,17 @@ import { Model } from "./storage/model";
 import { Namespace } from "./storage/namespace";
 import { storageKeyName } from "./crypto/atRest";
 import { SyncEngine } from "./sync/engine";
+import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
 import { Realtime } from "./sync/realtime";
 import { HttpClient } from "./transport/http";
+import { PRESENCE_HEARTBEAT_MS } from "@allo/shared-types";
 import type {
   AlloClientOptions,
   BackupStatus,
   ConversationView,
   HistoryOfferView,
   HistoryProgress,
+  PresenceView,
   InstanceState,
   InstanceView,
   LoadOlderResult,
@@ -122,6 +125,25 @@ export interface AlloClient {
     /** Resolves once the outbox has drained. */
     flush(): Promise<void>;
   };
+  /**
+   * Who is online, for the accounts this client says it is SHOWING. Topic
+   * `presence`. Nothing is persisted and nothing is remembered across a
+   * restart: a dot restored from disk is a claim the device cannot make.
+   */
+  presence: {
+    /** The accounts being drawn. Replaces the previous set; an empty one stops the updates. */
+    watch(accountIds: readonly string[]): Promise<void>;
+    /** Stable between changes. `known: false` until the server has answered for this account. */
+    of(accountId: string): PresenceView;
+    /**
+     * Whether THIS account publishes its own presence — and so whether it may
+     * see anybody else's, which is the same switch. False means every answer
+     * above is the hidden one and the app should say why.
+     */
+    publishing(): boolean;
+    /** Bumped on every change: what a UI subscribes to, since a map is not a comparable snapshot. */
+    version(): number;
+  };
   history: {
     /** Topic `history`. Referentially stable between emissions. */
     progress(): HistoryProgress;
@@ -201,6 +223,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.sync.start();
     c.outbox.start();
     c.backup.start();
+    c.presence.start(PRESENCE_HEARTBEAT_MS);
     await c.instance.ensureTransferKey();
     c.history.offersStale = true;
     await c.sync.now().catch(() => undefined);
@@ -258,6 +281,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.conversations = new ConversationsService(c);
     c.outbox = new OutboxEngine(c);
     c.sync = new SyncEngine(c);
+    c.presence = new PresenceService(c);
     c.realtime = new Realtime(c);
     c.history = new HistoryService(c);
     await c.history.load();
@@ -290,6 +314,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.messages.stop();
     ctx.history.stop();
     ctx.backup.stop();
+    ctx.presence.stop();
     await ctx.outbox.idle().catch(() => undefined);
     started = false;
     activated = false;
@@ -380,6 +405,12 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     media: {
       upload: (id, bytes, meta) => new MediaService(requireCtx()).upload(id, bytes, meta),
       download: (ref, options) => new MediaService(requireCtx()).download(ref, options),
+    },
+    presence: {
+      watch: (accountIds) => (ctx ? ctx.presence.watch(accountIds) : Promise.resolve()),
+      of: (accountId) => ctx?.presence.of(accountId) ?? PRESENCE_UNKNOWN,
+      publishing: () => ctx?.presence.publishing ?? true,
+      version: () => ctx?.presence.version ?? 0,
     },
     sync: {
       state: () => ctx?.sync.state ?? "idle",

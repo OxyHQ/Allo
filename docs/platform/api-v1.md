@@ -420,6 +420,29 @@ returns `keyCheck` and learns nothing from it.
 `DirectoryAssetUrlResponse`, and the `ApiErrorResponse` / `ApiSuccessResponse`
 envelope in `api.ts`). It is Oxy-authenticated and not part of `/v1`.
 
+## Presence (`presence.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `GET /v1/presence?accountIds=a,b,c` | instance | — | `PresenceResponse` `{ presence: PresenceState[], publishing }` |
+
+The socket carries the changes; this is how a screen starts, before anything
+has changed. Four rules decide what comes back, and they are enforced here
+rather than asked of the client:
+
+1. **Reciprocity.** An account whose `privacy_show_online_status` is off
+   publishes nothing and receives nothing — `publishing: false`, and every
+   state hidden.
+2. **A shared conversation.** Only accounts the asker shares one with are
+   answered honestly. Presence is not a directory lookup.
+3. **Blocks, both directions.** Either side of a block hides both.
+4. **One answer for all of it.** Hidden, blocked, unknown and plainly offline
+   are all `{ online: false, lastSeenAt: null }`. A client that could tell
+   them apart could tell it had been blocked.
+
+`lastSeenAt` is truncated to the minute and is `null` while the account is
+online, so the two facts are never read as one.
+
 ## Socket events (`sync.ts`)
 
 Namespace `/v1`, authenticated as above. Payload schemas are the values of
@@ -433,7 +456,9 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 | `instance.revoked` | server → client (`account:<id>`) | `InstanceRevokedEvent` `{ instanceId }` | an instance of the account was revoked |
 | `keypackages.low` | server → client | `KeyPackagesLowEvent` `{ available }` | upload more key packages |
 | `typing` | client → server, server → client | `TypingEvent` `{ conversationId, ciphertext }` | an MLS application message carrying a `typing` app message; relayed to the conversation's other leaves, never stored |
-| `presence` | server → client | `PresenceEvent` `{ accountId, online }` | best effort, for accounts sharing a conversation |
+| `presence` | server → client | `PresenceState` `{ accountId, online, lastSeenAt }` | one account of THIS socket's watch set changed. Never a broadcast: a socket hears only about what it asked for |
+| `presence.watch` | client → server | `PresenceWatchEvent` `{ accountIds }` | the accounts this client is SHOWING, at most 200. Replaces the previous set; an empty list stops the updates |
+| `presence.heartbeat` | client → server | `{}` | this instance is still here. Presence is a heartbeat with a 75 s deadline, not an open socket — a socket survives a sleeping phone |
 | `history.offer` | server → client (`instance:<recipient>`) | `HistoryOfferEvent` `{ offerId }` | another instance of the account offered this one its history; pull `GET /v1/instances/me/history-offers` and verify the donor before accepting |
 
 ## The application message (`appMessage.ts`)

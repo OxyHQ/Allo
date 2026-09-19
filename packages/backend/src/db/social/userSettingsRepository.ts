@@ -28,7 +28,7 @@
  * "normalising" a new row with a literal it could get wrong.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { uuidv7 } from "@oxy.so/db";
 import type { AlloDatabase } from "../index";
 import { userSettings } from "../schema/social";
@@ -147,6 +147,25 @@ async function readUserSettings(
  * every read of an existing row — moving `updated_at` and `xmin` for a call
  * that changed nothing.
  */
+/**
+ * Which of these accounts publish their online status.
+ *
+ * An account with no settings row publishes: `privacy_show_online_status`
+ * defaults to true in the schema, and a row is only written the first time
+ * somebody opens the settings screen. So absence means the default, never
+ * "unknown" — and reading it any other way would make presence depend on
+ * whether a person had ever visited a screen.
+ */
+export async function showOnlineStatusOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, show: userSettings.privacyShowOnlineStatus })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));
+  return new Set(accountIds.filter((accountId) => !hidden.has(accountId)));
+}
+
 export async function ensureUserSettings(
   db: AlloDatabase,
   oxyUserId: string,

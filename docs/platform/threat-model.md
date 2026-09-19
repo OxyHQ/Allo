@@ -123,9 +123,13 @@ content, identity binding to Oxy accounts, sync, or media.
 - The membership graph across all users and its evolution over time.
 - Blob sizes, upload times, uploader instance, and which events reference
   which blobs (declared by the sender for garbage collection).
-- Presence (online per account, best effort) and the existence and timing of
-  typing traffic; typing payloads themselves are MLS application messages the
-  server cannot read and does not store.
+- Presence: which accounts have a device beating right now, when each was last
+  connected (to the minute, in `account_presence`), and which accounts each
+  socket asked to WATCH — that last one is a screen's contents, and is new with
+  ADR 0002. The rules in `presence.ts` bound what other USERS see; they bound
+  nothing about the operator, who computes all of it.
+- The existence and timing of typing traffic; typing payloads themselves are
+  MLS application messages the server cannot read and does not store.
 - Push tokens and which instance is on which platform and app.
 - DM pairing: `dm_key` is `${appId}:${accountA}:${accountB}` in the clear so
   DMs are idempotent.

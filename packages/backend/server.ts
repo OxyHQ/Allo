@@ -23,6 +23,7 @@ import { assertPreMigrationsCurrent } from "./src/runtime/migrationGate";
 import { setRealtime } from "./src/runtime/realtime";
 import { createSocketServer } from "./src/runtime/socket";
 import { attachSocketRedisAdapter } from "./src/runtime/socketRedisAdapter";
+import { closePresenceStore, createPresenceStore, setPresenceStore } from "./src/runtime/presenceStore";
 import { createRuntimeApp } from "./src/runtimeApp";
 import { startModerationOutboxDispatcher, stopModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
 import { blobMaxBytes } from "./src/services/platform/blobService";
@@ -53,10 +54,14 @@ function validateEnvironment(): { databaseUrl: string; port: number } {
 const { app, oxy } = createRuntimeApp();
 const server = http.createServer(app);
 
+let presenceHub: { stop(): void } | null = null;
+
 async function stopWorkers(): Promise<void> {
   stopExpirySweep();
   stopModerationOutboxDispatcher();
-  await Promise.allSettled([stopDeliveryWorker(), stopBlobGc()]);
+  presenceHub?.stop();
+  presenceHub = null;
+  await Promise.allSettled([stopDeliveryWorker(), stopBlobGc(), closePresenceStore()]);
 }
 
 export async function bootServer(): Promise<void> {
@@ -72,7 +77,13 @@ export async function bootServer(): Promise<void> {
     }
     markMigrationsComplete();
 
+    // Presence lives in Redis when there is one, because an account's devices
+    // land on whichever task the load balancer chose; without it the store is
+    // this process's memory and says so.
+    setPresenceStore(await createPresenceStore());
+
     const sockets = createSocketServer(server, { oxy });
+    presenceHub = sockets.presence;
     setRealtime(sockets.realtime);
     await attachSocketRedisAdapter(sockets.io);
 

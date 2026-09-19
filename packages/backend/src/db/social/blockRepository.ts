@@ -20,7 +20,7 @@
  * enforce, in a layer that cannot produce the 400 the caller needs.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { uuidv7 } from "@oxy.so/db";
 import type { AlloDatabase } from "../index";
 import { blocks } from "../schema/social";
@@ -50,6 +50,34 @@ export async function listBlockedUserIds(db: AlloDatabase, userId: string): Prom
     .where(eq(blocks.userId, userId))
     .orderBy(desc(blocks.createdAt), desc(blocks.id));
   return rows.map((row) => row.blockedId);
+}
+
+/**
+ * Which of `others` are on either side of a block with `userId`.
+ *
+ * Both directions in one query, because for everything a block is meant to
+ * stop — a ring, a status update, an online dot — the direction does not
+ * matter. Somebody who blocked you must not be reachable BY you either, or
+ * blocking them tells them they were blocked.
+ */
+export async function blockedEitherWay(
+  db: AlloDatabase,
+  userId: string,
+  others: readonly string[],
+): Promise<Set<string>> {
+  if (others.length === 0) return new Set();
+  const rows = await db
+    .select({ userId: blocks.userId, blockedId: blocks.blockedId })
+    .from(blocks)
+    .where(
+      or(
+        and(eq(blocks.userId, userId), inArray(blocks.blockedId, [...others])),
+        and(eq(blocks.blockedId, userId), inArray(blocks.userId, [...others])),
+      ),
+    );
+  const cut = new Set<string>();
+  for (const row of rows) cut.add(row.userId === userId ? row.blockedId : row.userId);
+  return cut;
 }
 
 /**

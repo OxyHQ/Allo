@@ -1,6 +1,10 @@
 /**
  * The seam between domain code and Socket.IO.
  *
+ * Presence is deliberately NOT here. Everything below is a room emit a route
+ * or a worker asks for; presence is per SOCKET, decided by what that socket
+ * said it was showing, and it belongs to `presenceHub.ts`.
+ *
  * Routes and workers emit through {@link getRealtime}; without a server set
  * (tests, one-shot scripts) every call is a no-op. Importing this module never
  * creates a server. `src/runtime/socket.ts` builds the real implementation.
@@ -11,7 +15,6 @@ import type {
   InstanceApprovedEvent,
   InstanceRevokedEvent,
   KeyPackagesLowEvent,
-  PresenceEvent,
   SyncNudgeEvent,
   TypingEvent,
 } from "@allo/shared-types";
@@ -25,7 +28,6 @@ export interface Realtime {
   /** `history.offer` to the recipient instance's room: another instance of its account offered it history. */
   historyOffer(instanceId: string, event: HistoryOfferEvent): void;
   typing(instanceIds: readonly string[], event: TypingEvent): void;
-  presence(accountIds: readonly string[], event: PresenceEvent): void;
   /** Whether at least one socket of the instance is connected — across every task when the Redis adapter is attached. */
   isInstanceConnected(instanceId: string): Promise<boolean>;
   /** Disconnect every socket of the instance; the next handshake is refused by the signature check. */
@@ -40,7 +42,6 @@ export const NOOP_REALTIME: Realtime = {
   keyPackagesLow: () => undefined,
   historyOffer: () => undefined,
   typing: () => undefined,
-  presence: () => undefined,
   isInstanceConnected: async () => false,
   disconnectInstance: async () => undefined,
 };

@@ -12,8 +12,14 @@
  * verified instance, never from client input.
  *
  * Inbound `typing` is relayed to the other ACTIVE leaves of the conversation
- * and stored nowhere. Presence is best effort: on connect and disconnect the
- * accounts sharing a conversation with this one hear `presence`.
+ * and stored nowhere.
+ *
+ * Presence is a `PresenceHub` (`presenceHub.ts`): a connected instance beats,
+ * a client says which accounts it is SHOWING, and it hears about those and
+ * nothing else. The old shape — announce to every account sharing any
+ * conversation, on connect and on the last disconnect — is gone; it told
+ * screens about accounts they were not drawing and made an online dot cheap
+ * to scrape.
  */
 
 import type http from "node:http";
@@ -27,10 +33,11 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from "@allo/shared-types";
-import { findActiveLeaf, listAccountsSharingConversations, listLeaves } from "../db/platform/conversationRepository";
+import { findActiveLeaf, listLeaves } from "../db/platform/conversationRepository";
 import { authenticateInstance, type AuthenticatedInstance, type InstanceAuthDeps } from "../middleware/instanceAuth";
 import { logger } from "../utils/logger";
 import { APP_ORIGINS } from "../app";
+import { PresenceHub } from "./presenceHub";
 import type { Realtime } from "./realtime";
 
 export interface SocketAuthProvider {
@@ -67,6 +74,7 @@ export interface SocketRuntime {
   io: SocketIOServer;
   namespace: V1Namespace;
   realtime: Realtime;
+  presence: PresenceHub;
 }
 
 export function createSocketServer(server: http.Server, deps: SocketServerDeps): SocketRuntime {
@@ -139,9 +147,6 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     typing(instanceIds, event) {
       for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("typing", event);
     },
-    presence(accountIds, event) {
-      for (const id of accountIds) namespace.to(accountRoom(id)).emit("presence", event);
-    },
     async isInstanceConnected(instanceId) {
       const sockets = await namespace.in(instanceRoom(instanceId)).fetchSockets();
       return sockets.length > 0;
@@ -151,6 +156,9 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     },
   };
 
+  const presence = new PresenceHub();
+  presence.start();
+
   namespace.on("connection", (socket) => {
     const instance = socket.data.instance;
     if (!instance) {
@@ -158,7 +166,7 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
       return;
     }
     void socket.join([instanceRoom(instance.id), accountRoom(instance.accountId)]);
-    if (instance.status === "active") void announcePresence(instance.accountId, true, realtime);
+    void presence.attach(socket, instance).catch((error: unknown) => logger.debug("presence attach failed", error));
 
     socket.on("typing", (payload) => {
       void relayTyping(instance, payload, realtime).catch((error: unknown) => {
@@ -166,15 +174,20 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
       });
     });
 
+    socket.on("presence.watch", (payload) => {
+      void presence.watch(socket, payload).catch((error: unknown) => logger.debug("presence watch failed", error));
+    });
+
+    socket.on("presence.heartbeat", () => {
+      void presence.heartbeat(instance).catch((error: unknown) => logger.debug("presence heartbeat failed", error));
+    });
+
     socket.on("disconnect", () => {
-      void (async () => {
-        const remaining = await namespace.in(accountRoom(instance.accountId)).fetchSockets();
-        if (remaining.length === 0) await announcePresence(instance.accountId, false, realtime);
-      })().catch(() => undefined);
+      void presence.detach(socket, instance).catch((error: unknown) => logger.debug("presence detach failed", error));
     });
   });
 
-  return { io, namespace, realtime };
+  return { io, namespace, realtime, presence };
 }
 
 /** Verify the sender holds an active leaf, then re-emit to the other active leaves. Never stored. */
@@ -187,13 +200,4 @@ export async function relayTyping(sender: AuthenticatedInstance, payload: unknow
     .filter((leaf) => leaf.state === "active" && leaf.instanceId !== sender.id)
     .map((leaf) => leaf.instanceId);
   realtime.typing(others, parsed.data);
-}
-
-async function announcePresence(accountId: string, online: boolean, realtime: Realtime): Promise<void> {
-  try {
-    const audience = await listAccountsSharingConversations(accountId);
-    realtime.presence(audience, { accountId, online });
-  } catch (error: unknown) {
-    logger.debug("presence announcement failed", error);
-  }
 }
