@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { conversationIdSchema, createConversationRequestSchema } from "@allo/shared-types";
+import { conversationIdSchema, createConversationRequestSchema, resetConversationRequestSchema } from "@allo/shared-types";
 import { getRequiredInstance } from "../../middleware/instanceAuth";
 import { getRealtime } from "../../runtime/realtime";
 import {
@@ -7,6 +7,7 @@ import {
   getConversation,
   leaveConversation,
   listConversations,
+  resetConversation,
   type Caller,
 } from "../../services/platform/conversationService";
 import { asyncRoute } from "./asyncRoute";
@@ -43,6 +44,23 @@ export function createConversationRoutes(deps: { instanceAuth: RequestHandler })
     asyncRoute(async (req, res) => {
       const id = parseParam(conversationIdSchema, req.params.id, "id");
       res.json({ conversation: await getConversation(callerOf(req), id) });
+    }),
+  );
+
+  /**
+   * Revive a conversation whose MLS group has no active leaf left. The rule —
+   * that the group is provably dead — is enforced in the service, because it
+   * is the only thing standing between this and a way to take over a live
+   * conversation.
+   */
+  router.post(
+    "/conversations/:id/reset",
+    asyncRoute(async (req, res) => {
+      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const body = parseBody(resetConversationRequestSchema, req);
+      const result = await resetConversation(callerOf(req), id, body);
+      if (result.nudges.length > 0) getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
+      res.json({ conversation: result.conversation });
     }),
   );
 

@@ -17,7 +17,13 @@
  *   packages for their trusted active instances and commits the Add. Once
  *   the account holds one leaf, its own elector adds its further devices.
  */
-import { createConversationResponseSchema, listConversationsResponseSchema, type ConversationSummary, type SubmitEventRequest } from "@allo/shared-types";
+import {
+  createConversationResponseSchema,
+  listConversationsResponseSchema,
+  resetConversationResponseSchema,
+  type ConversationSummary,
+  type SubmitEventRequest,
+} from "@allo/shared-types";
 import type { Context } from "../context";
 import { InvalidStateError, NotFoundError } from "../errors";
 import type { ConversationRecord } from "../storage/records";
@@ -54,6 +60,8 @@ export class ConversationsService {
   private views = new Map<string, ConversationView>();
   private listCache: ConversationView[] | null = null;
   private reconciling = false;
+  /** Conversations a revive has been attempted for, so a permanent failure is not retried every refresh. */
+  private readonly reviving = new Set<string>();
   /** `${conversationId}/${accountId}` → when the elector may look that account up again. */
   private readonly reachNextAt = new Map<string, number>();
   /** Keys whose last attempt was the quick retry: a second miss waits the full throttle, so a device that never uploads key packages is not polled every few seconds. */
@@ -340,6 +348,22 @@ export class ConversationsService {
     const { ctx } = this;
     if (!ctx.instance.isActive) return;
     const res = await ctx.http.request({ method: "GET", path: "/v1/conversations", schema: listConversationsResponseSchema, signer: ctx.signer });
+    /**
+     * Conversations whose MLS group has lost EVERY active leaf.
+     *
+     * Nothing can be committed to such a group again, so nobody can add this
+     * device to it and nobody ever will — and a DM converges on its `dm_key`,
+     * so there is no second conversation to start instead. Left alone it is a
+     * person you can never message again. The condition is the same one the
+     * server enforces on `/reset`, so a race with somebody else reviving it
+     * just loses and is picked up by the next refresh.
+     */
+    const dead = res.conversations.filter(
+      (summary) =>
+        summary.myLeafState !== "active" &&
+        summary.leaves.every((leaf) => leaf.state !== "active") &&
+        summary.members.some((m) => m.accountId === ctx.accountId && m.state === "joined"),
+    );
     await ctx.mutex.run(async () => {
       for (const summary of res.conversations) {
         const existing = ctx.model.conversations.get(summary.id);
@@ -357,6 +381,79 @@ export class ConversationsService {
         }
       }
     });
+    for (const summary of dead) {
+      if (this.reviving.has(summary.id)) continue;
+      this.reviving.add(summary.id);
+      try {
+        await this.revive(summary.id);
+      } catch (error) {
+        ctx.log.warn?.("could not revive a conversation with no live device", { conversationId: summary.id, error: describeError(error) });
+      }
+    }
+  }
+
+  /**
+   * Rebuild the MLS group under a conversation that has lost every active
+   * leaf, keeping the conversation itself.
+   *
+   * This is `create` again, with two differences: the conversation row already
+   * exists, so its id, its members and its `dm_key` are kept; and the server
+   * refuses unless the old group is provably dead, which is what stops it
+   * being a way into a live conversation.
+   *
+   * Everything sent before stays unreadable. It already was: no one holds the
+   * keys, and neither a history transfer nor a backup carries MLS state, so a
+   * group with no live leaf had no way back before this existed.
+   */
+  async revive(conversationId: string): Promise<ConversationView> {
+    const { ctx } = this;
+    ctx.instance.assertActive();
+    const record = ctx.model.conversations.get(conversationId);
+    if (!record) throw new NotFoundError(`no such conversation: ${conversationId}`);
+    const others = record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId).map((m) => m.accountId);
+
+    const targets = await this.trustedLeafTargets([ctx.accountId, ...others], new Set([ctx.instanceId]));
+    const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
+    const groupId = randomBytes(16);
+    const state = await ctx.engine.createGroup(ctx.identity, groupId);
+    let initialCommit: SubmitEventRequest | undefined;
+    let next = state;
+    if (claimed.keyPackages.length > 0) {
+      const result = await ctx.engine.commit(state, { addKeyPackages: claimed.keyPackages.map((k) => base64Decode(k.data)) });
+      next = result.next;
+      initialCommit = {
+        idempotencyKey: uuidV7(ctx.now()),
+        kind: "mls_commit",
+        epoch: 0,
+        payload: base64Encode(result.commit),
+        commit: {
+          newEpoch: 1,
+          addedLeaves: result.added,
+          removedLeaves: [],
+          ...(result.welcome ? { welcome: { payload: base64Encode(result.welcome), recipients: claimed.keyPackages.map((k) => k.instanceId) } } : {}),
+        },
+      };
+    }
+    const res = await ctx.http.request({
+      method: "POST",
+      path: `/v1/conversations/${conversationId}/reset`,
+      body: { mlsGroupId: base64Encode(groupId), idempotencyKey: uuidV7(ctx.now()), ...(initialCommit ? { initialCommit } : {}) },
+      schema: resetConversationResponseSchema,
+      signer: ctx.signer,
+    });
+    const summary = res.conversation;
+    await ctx.mutex.run(async () => {
+      const batch = ctx.store.batch();
+      ctx.groups.stage(batch, summary.id, next);
+      const rebuilt = { ...this.recordFromSummary(summary, ctx.engine.epochOf(next)), removed: false };
+      batch.putJson("conversation", rebuilt.id, rebuilt);
+      await ctx.store.commit(batch);
+      ctx.groups.commitInMemory(summary.id, next);
+      ctx.model.conversations.set(rebuilt.id, rebuilt);
+    });
+    ctx.log.info?.("revived a conversation whose group had no live device", { conversationId, added: claimed.keyPackages.length });
+    this.invalidate(conversationId);
+    return this.get(conversationId)!;
   }
 
   /** The elector rules for adds. Runs after each sync; cheap when there is nothing to do. */
@@ -418,9 +515,29 @@ export class ConversationsService {
           if (nudged) this.reachRetried.delete(key);
           try {
             const { trusted, refused } = await ctx.instance.trustedInstancesOf(accountId);
-            if (refused.size) ctx.log.warn?.("instances refused by the approval chain", { accountId, count: refused.size });
+            /**
+             * A REVOKED instance is "refused" too, and saying so as a chain
+             * failure is a lie that costs an evening: an account everybody
+             * signed out of has every instance revoked and no active one, and
+             * the honest reading of that is "nobody is there", not "somebody
+             * is forging approvals". So the two are counted apart, and the
+             * chain one is the only one worth a warning.
+             */
+            const forged = [...refused.values()].filter((why) => !why.startsWith("status is")).length;
+            if (forged) ctx.log.warn?.("instances refused by the approval chain", { accountId, count: forged });
             const targets = trusted.filter((i) => !present.has(i.id));
-            if (targets.length === 0) continue;
+            if (targets.length === 0) {
+              // The branch that used to say nothing at all, which is why a
+              // conversation stuck like this looked like it was still working.
+              ctx.log.info?.("nobody to add for this member", {
+                conversationId,
+                accountId,
+                trusted: trusted.length,
+                revoked: refused.size - forged,
+                forged,
+              });
+              continue;
+            }
             const claimed = await ctx.instance.claimKeyPackages(targets.map((i) => i.id));
             if (claimed.keyPackages.length === 0) {
               // Listed, but its key packages are not up yet (it registered moments ago): ask again soon, once.

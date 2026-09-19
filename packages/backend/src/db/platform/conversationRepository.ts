@@ -94,6 +94,26 @@ export async function updateConversationCounters(
     .where(eq(conversations.id, id));
 }
 
+/**
+ * Point a conversation at a NEW MLS group, at epoch 0.
+ *
+ * For `resetConversation` only, and only once the service has proved the old
+ * group has no active leaf: the row, its id, its members and its `dm_key` are
+ * kept, and the group underneath is replaced. `lastSeq` is NOT rewound — the
+ * event log is append-only and the old ciphertext stays where it is, unreadable
+ * as it already was.
+ */
+export async function replaceConversationGroup(
+  id: string,
+  mlsGroupId: string,
+  tx: AlloTransaction,
+): Promise<void> {
+  await tx
+    .update(conversations)
+    .set({ mlsGroupId, currentEpoch: 0, updatedAt: new Date() })
+    .where(eq(conversations.id, id));
+}
+
 // --- members -----------------------------------------------------------------
 
 export interface UpsertMemberInput {
