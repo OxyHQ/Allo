@@ -425,11 +425,32 @@ export class ConversationsService {
         summary.leaves.every((leaf) => leaf.state !== "active") &&
         summary.members.some((m) => m.accountId === ctx.accountId && m.state === "joined"),
     );
+    /** Conversations whose group was replaced under us; dropped after the pass, then rejoined. */
+    const stale: string[] = [];
     await ctx.mutex.run(async () => {
       for (const summary of res.conversations) {
         const existing = ctx.model.conversations.get(summary.id);
         if (!existing) {
           await this.storeSummary(summary, null);
+          continue;
+        }
+        /**
+         * OUR GROUP IS NOT THIS CONVERSATION'S ANY MORE.
+         *
+         * A re-key (`mayRekeyDirect`) replaces the MLS group under a
+         * conversation. A device that was offline keeps the old state, and if
+         * it also missed or ignored the Welcome it would go on encrypting for
+         * a group nobody else is in — messages sent into a room of one, and
+         * nothing saying so. The group id is the check, and dropping the stale
+         * state is the repair: the join path then lets this device back in
+         * from the new group's GroupInfo, which the re-key published.
+         */
+        const state = ctx.groups.get(summary.id);
+        if (state && summary.mlsGroupId !== base64Encode(ctx.engine.groupIdOf(state))) {
+          ctx.log.warn?.("this conversation's group was replaced; dropping the stale state and rejoining", {
+            conversationId: summary.id,
+          });
+          stale.push(summary.id);
           continue;
         }
         const members = summary.members.map((m) => ({ accountId: m.accountId, role: m.role, state: m.state }));
@@ -442,6 +463,19 @@ export class ConversationsService {
         }
       }
     });
+    // The stale ones lose their group state; the join path takes it from there,
+    // letting this device back in from the new group's GroupInfo.
+    for (const conversationId of stale) {
+      await ctx.mutex.run(async () => {
+        const batch = ctx.store.batch();
+        ctx.groups.drop(batch, conversationId);
+        await ctx.store.commit(batch);
+      });
+      this.joinStatus.delete(conversationId);
+      this.rekeyTried.delete(conversationId);
+      this.invalidate(conversationId);
+    }
+    if (stale.length) await this.reconcile();
     for (const summary of dead) {
       if (this.reviving.has(summary.id)) continue;
       this.reviving.add(summary.id);

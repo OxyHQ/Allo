@@ -49,4 +49,40 @@ describe("the other side after a re-key", () => {
     await waitForText(alice2, conversation.id, "yes");
     await stopAll(alice2, bobAgain);
   }, 40_000);
+
+  it("repairs a device that ALREADY missed the welcome and is talking to nobody", async () => {
+    const server = fakeServer();
+    server.keepGroupInfo = false;
+    const alice = await makeClient(server, "acc-rj2-a", "Alice phone");
+    const bob = await makeClient(server, "acc-rj2-b", "Bob");
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.messages.send(conversation.id, "before");
+    await alice.client.sync.flush();
+    await waitForText(bob, conversation.id, "before");
+    await bob.client.stop();
+    await alice.client.stop();
+
+    server.instancesOf("acc-rj2-a").forEach((i) => (i.status = "revoked"));
+    const g = server.conversations.get(conversation.id)!;
+    for (const [id, leaf] of g.leaves) if (leaf.accountId === "acc-rj2-a") g.leaves.set(id, { ...leaf, state: "removed" });
+
+    const alice2 = await makeClient(server, "acc-rj2-a", "Alice laptop");
+    await waitFor(() => alice2.client.conversations.get(conversation.id)?.joined === true, 10_000);
+
+    // The Welcome is GONE from the log — the shape of a device that already
+    // processed it and ignored it, which no later pass will undo.
+    g.events = g.events.filter((e) => e.kind !== "mls_welcome");
+
+    await alice2.client.messages.send(conversation.id, "are you there");
+    await alice2.client.sync.flush();
+
+    const bobAgain = await makeClient(server, "acc-rj2-b", "Bob", "web", { storage: bob.storage, secrets: bob.secrets });
+    await waitFor(() => texts(bobAgain.client.messages.timeline(conversation.id)).includes("are you there"), 15_000);
+    expect(texts(bobAgain.client.messages.timeline(conversation.id))).toContain("are you there");
+
+    await bobAgain.client.messages.send(conversation.id, "yes");
+    await bobAgain.client.sync.flush();
+    await waitForText(alice2, conversation.id, "yes");
+    await stopAll(alice2, bobAgain);
+  }, 40_000);
 });
