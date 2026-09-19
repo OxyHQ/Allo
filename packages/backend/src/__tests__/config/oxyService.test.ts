@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { configureOxyServiceAuth, loadOxyServiceCredential } from "../../config/oxyService";
+import {
+  canAuthenticateAsOxyService,
+  configureOxyServiceAuth,
+  loadOxyServiceCredential,
+} from "../../config/oxyService";
 
 /**
  * Allo's own credential for calling Oxy as itself.
@@ -90,5 +94,35 @@ describe("handing the credential to the SDK", () => {
 
     expect(configureOxyServiceAuth(client, {})).toBe(false);
     expect(client.configureServiceAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe("whether this process has an Oxy identity at all", () => {
+  /**
+   * The distinction the deployment now depends on. `configureOxyServiceAuth`
+   * returning false stopped meaning "unauthenticated" the day the task role could
+   * prove what this process is (oxy ADR 0026), so anything that wants to know
+   * whether to offer a feature has to ask THIS rather than read the pair.
+   *
+   * `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` is set by ECS on every task and by
+   * nothing else, which is what `canAttestWorkloadIdentity` reads.
+   */
+  it("says yes for a task that can attest, with no credential anywhere", () => {
+    expect(
+      canAuthenticateAsOxyService({ AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/v2/credentials/x" }),
+    ).toBe(true);
+  });
+
+  it("says yes for a local checkout holding the pair", () => {
+    expect(
+      canAuthenticateAsOxyService({
+        ALLO_OXY_SERVICE_API_KEY: API_KEY,
+        ALLO_OXY_SERVICE_API_SECRET: API_SECRET,
+      }),
+    ).toBe(true);
+  });
+
+  it("says no when there is neither", () => {
+    expect(canAuthenticateAsOxyService({})).toBe(false);
   });
 });

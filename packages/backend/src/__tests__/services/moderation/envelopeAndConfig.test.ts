@@ -285,22 +285,35 @@ describe("crowdsource configuration", () => {
     expect(config.enforcementMode).toBe("observe");
   });
 
-  it("requires both directions once enabled", () => {
+  it("requires the return path once enabled", () => {
     /**
      * A half-configured integration is worse than a disabled one: reports leave and
-     * nothing can come back, or the reverse. Both gaps are invisible until somebody
-     * asks why a case never returned.
+     * nothing can come back, and the gap is invisible until somebody asks why a
+     * case never returned.
+     *
+     * Only the return path is a variable now. The outbound half was
+     * `CROWDSOURCE_SERVICE_KEY` and is an Oxy service identity since
+     * `crowdSourceForOxyService()`, so its absence is reported by the client
+     * rather than refusing the boot.
      */
-    expect(() =>
-      loadCrowdSourceConfig({ CROWDSOURCE_ENABLED: "true" }),
-    ).toThrow(/CROWDSOURCE_SERVICE_KEY/);
+    expect(() => loadCrowdSourceConfig({ CROWDSOURCE_ENABLED: "true" })).toThrow(
+      /CROWDSOURCE_WEBHOOK_SECRET/,
+    );
+  });
 
-    expect(() =>
-      loadCrowdSourceConfig({
-        CROWDSOURCE_ENABLED: "true",
-        CROWDSOURCE_SERVICE_KEY: "key",
-      }),
-    ).toThrow(/CROWDSOURCE_WEBHOOK_SECRET/);
+  it("has no surface for a CrowdSource service key", () => {
+    /**
+     * The key is not merely unused: a config that still ACCEPTED one would keep
+     * it alive in every `.env`, every parameter store and every rotation runbook,
+     * for a value nothing reads. Setting it must change nothing.
+     */
+    const config = loadCrowdSourceConfig({
+      CROWDSOURCE_ENABLED: "true",
+      CROWDSOURCE_SERVICE_KEY: "cs_live_should_be_ignored",
+      CROWDSOURCE_WEBHOOK_SECRET: "a-secret-of-sufficient-length",
+    });
+    expect(Object.keys(config)).not.toContain("serviceKey");
+    expect(JSON.stringify(config)).not.toContain("cs_live_should_be_ignored");
   });
 
   it("rejects a webhook secret short enough to brute-force", () => {
@@ -311,7 +324,6 @@ describe("crowdsource configuration", () => {
     expect(() =>
       loadCrowdSourceConfig({
         CROWDSOURCE_ENABLED: "true",
-        CROWDSOURCE_SERVICE_KEY: "key",
         CROWDSOURCE_WEBHOOK_SECRET: "tooshort",
       }),
     ).toThrow();
@@ -320,7 +332,6 @@ describe("crowdsource configuration", () => {
   it("accepts a fully configured environment", () => {
     const config = loadCrowdSourceConfig({
       CROWDSOURCE_ENABLED: "true",
-      CROWDSOURCE_SERVICE_KEY: "key",
       CROWDSOURCE_WEBHOOK_SECRET: "a-secret-of-sufficient-length",
       CROWDSOURCE_BASE_URL: "https://crowdsource.oxy.so/",
     });
@@ -332,8 +343,8 @@ describe("crowdsource configuration", () => {
   it("has no surface for an application id at all", () => {
     /**
      * `CROWDSOURCE_APP_ID` is the IDOR the tenancy model exists to prevent: the
-     * applicationId comes off the service credential, and a variable holding one
-     * could only agree with the credential by luck. Setting it must change nothing.
+     * applicationId is CrowdSource's answer about who this token is, and a variable
+     * holding one could only agree with it by luck. Setting it must change nothing.
      */
     const config = loadCrowdSourceConfig({ CROWDSOURCE_APP_ID: "some-other-tenant" });
     expect(Object.keys(config)).not.toContain("applicationId");
