@@ -23,6 +23,32 @@ beforeEach(() => {
   h.realtime.reset();
 });
 
+/**
+ * Reading the stock without uploading is what stops the stock from growing for
+ * ever: nothing expires a key package and no sweep collects one, so a client
+ * that can only learn the count BY uploading has to assume zero at every start
+ * and upload a full target's worth each time.
+ */
+describe("GET /v1/key-packages", () => {
+  it("answers the unconsumed count, and counts only this instance's own", async () => {
+    const me = await TestInstance.register(h.app, accountId());
+    const other = await TestInstance.register(h.app, accountId());
+
+    const empty = await me.signed("get", "/v1/key-packages");
+    expect(empty.status).toBe(200);
+    expect(expectParses(uploadKeyPackagesResponseSchema, empty.body)).toEqual({ available: 0 });
+
+    await me.signed("put", "/v1/key-packages", { keyPackages: [keyPackageUpload(), keyPackageUpload()] }).expect(200);
+    await other.signed("put", "/v1/key-packages", { keyPackages: [keyPackageUpload()] }).expect(200);
+    expect((await me.signed("get", "/v1/key-packages")).body).toEqual({ available: 2 });
+    expect((await other.signed("get", "/v1/key-packages")).body).toEqual({ available: 1 });
+
+    // A claimed package is consumed, and the count says so.
+    await other.signed("post", "/v1/key-packages/claim", { instanceIds: [me.id] }).expect(200);
+    expect((await me.signed("get", "/v1/key-packages")).body).toEqual({ available: 1 });
+  });
+});
+
 describe("PUT /v1/key-packages", () => {
   it("stores the packages and answers the available count", async () => {
     const me = await TestInstance.register(h.app, accountId());

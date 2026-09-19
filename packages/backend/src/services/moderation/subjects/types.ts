@@ -3,7 +3,7 @@
  *
  * §5 opens by naming the mistake to avoid: designing moderation around `post`,
  * `comment`, `room` or `product`. CrowdSource's side of that is already solved —
- * the Case Envelope knows nothing about any of them, and `@oxy.so/crowdsource`
+ * the Case Envelope knows nothing about any of them, and `@crowdsource.you/core`
  * composes one from a description of the material. What is left for an
  * application is a translation problem, and this file is the whole of it:
  *
@@ -40,7 +40,7 @@
  * than by a condition somebody could relax.
  */
 
-import type { ContextInput, ReportSubjectInput, ResourceInput } from "@oxy.so/crowdsource";
+import type { ContextInput, ReportSubjectInput, ResourceInput } from "@crowdsource.you/core";
 
 /**
  * The reported types a provider may be registered for: the ones whose identifier

@@ -453,3 +453,47 @@ describe("contract details", () => {
     await stopAll(alice, bob);
   });
 });
+
+describe("polls, places and cards over the wire", () => {
+  it("a poll travels, a vote from the other side folds into it, and each of the three is a conversation's last message", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-alice-01", "Alice", "web");
+    const bob = await makeClient(server, "acc-bob-0001", "Bob", "ios");
+    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    await waitJoined(bob, conv.id);
+
+    const pollKey = await alice.client.messages.sendPoll(conv.id, {
+      question: "Thursday or Friday?",
+      options: ["Thursday", "Friday"],
+      multiple: false,
+    });
+    await flush(alice, bob);
+    await waitFor(() => bob.client.messages.timeline(conv.id).some((i) => i.content.kind === "poll"));
+    const onBob = bob.client.messages.timeline(conv.id).find((i) => i.content.kind === "poll")!;
+    expect(onBob.content.kind === "poll" && onBob.content.poll.question).toBe("Thursday or Friday?");
+    // The preview a list row draws: the poll, not the text before it.
+    expect(bob.client.conversations.get(conv.id)?.lastMessage?.content.kind).toBe("poll");
+
+    const option = onBob.content.kind === "poll" ? onBob.content.poll.options[1].id : "";
+    await bob.client.messages.vote(conv.id, onBob.id, [option]);
+    await flush(bob, alice);
+    const mine = alice.client.messages.timeline(conv.id).find((i) => i.localKey === pollKey || i.id === onBob.id)!;
+    await waitFor(() => {
+      const item = alice.client.messages.timeline(conv.id).find((i) => i.id === mine.id)!;
+      return item.content.kind === "poll" && item.content.poll.totalVotes === 1;
+    });
+    const folded = alice.client.messages.timeline(conv.id).find((i) => i.id === mine.id)!;
+    expect(folded.content.kind === "poll" && folded.content.poll.options[1].votes).toBe(1);
+    expect(folded.content.kind === "poll" && folded.content.poll.voted).toBe(false);
+
+    await alice.client.messages.sendLocation(conv.id, { latitude: 41.38, longitude: 2.18, label: "The canal" });
+    await flush(alice, bob);
+    await waitFor(() => bob.client.conversations.get(conv.id)?.lastMessage?.content.kind === "location");
+
+    await alice.client.messages.sendContact(conv.id, { name: "Teodor", accountId: "acc-teo-0001" });
+    await flush(alice, bob);
+    await waitFor(() => bob.client.conversations.get(conv.id)?.lastMessage?.content.kind === "contact");
+
+    await stopAll(alice, bob);
+  });
+});

@@ -138,7 +138,7 @@ describe("rooms and relays", () => {
     setRealtime(sockets.realtime);
     const revokedEvent = new Promise<unknown>((resolve) => sb.socket.once("instance.revoked", resolve));
     const disconnected = new Promise<string>((resolve) => sb.socket.once("disconnect", resolve));
-    await revokeInstance({ id: b.id, accountId: b.accountId }, b.id, { db: h.db });
+    await revokeInstance(b.accountId, b.id, { db: h.db });
     expect(await revokedEvent).toEqual({ instanceId: b.id });
     expect(await disconnected).toBe("io server disconnect");
     expect(await sockets.realtime.isInstanceConnected(b.id)).toBe(false);

@@ -53,6 +53,9 @@ export interface RecordedRealtime extends Realtime {
   revoked: { accountId: string; instanceId: string }[];
   low: { instanceId: string; available: number }[];
   historyOffers: { instanceId: string; offerId: string }[];
+  statusPosts: { instanceId: string; statusId: string }[];
+  callRings: { instanceId: string; callId: string }[];
+  callUpdates: { instanceId: string; callId: string; state: string; endReason: string | null }[];
   typings: { instanceIds: string[]; conversationId: string }[];
   disconnected: string[];
   /** Instances `isInstanceConnected` answers true for. */
@@ -67,6 +70,9 @@ export function recordedRealtime(): RecordedRealtime {
     revoked: [],
     low: [],
     historyOffers: [],
+    statusPosts: [],
+    callRings: [],
+    callUpdates: [],
     typings: [],
     disconnected: [],
     connected: new Set(),
@@ -82,13 +88,21 @@ export function recordedRealtime(): RecordedRealtime {
     keyPackagesLow(instanceId, event) {
       r.low.push({ instanceId, available: event.available });
     },
+    statusPosted(instanceId, event) {
+      r.statusPosts.push({ instanceId, statusId: event.statusId });
+    },
+    callIncoming(instanceId, event) {
+      r.callRings.push({ instanceId, callId: event.callId });
+    },
+    callUpdated(instanceId, event) {
+      r.callUpdates.push({ instanceId, callId: event.callId, state: event.state, endReason: event.endReason });
+    },
     historyOffer(instanceId, event) {
       r.historyOffers.push({ instanceId, offerId: event.offerId });
     },
     typing(instanceIds, event) {
       r.typings.push({ instanceIds: [...instanceIds], conversationId: event.conversationId });
     },
-    presence() {},
     async isInstanceConnected(instanceId) {
       return r.connected.has(instanceId);
     },
@@ -101,6 +115,9 @@ export function recordedRealtime(): RecordedRealtime {
       r.revoked = [];
       r.low = [];
       r.historyOffers = [];
+      r.statusPosts = [];
+      r.callRings = [];
+      r.callUpdates = [];
       r.typings = [];
       r.disconnected = [];
       r.connected.clear();
@@ -318,6 +335,39 @@ export function expectParses<S extends ZodType>(schema: S, body: unknown): Retur
     );
   }
   return result.data as ReturnType<S["parse"]>;
+}
+
+/** Three accounts, one active instance each, and a group created by `a` adding `b` and `c`. */
+export async function groupOfThree(app: express.Express) {
+  const a = await TestInstance.register(app, accountId("ga"));
+  const b = await TestInstance.register(app, accountId("gb"));
+  const c = await TestInstance.register(app, accountId("gc"));
+  await b.stockKeyPackages(3);
+  await c.stockKeyPackages(3);
+  const created = await a.signed("post", "/v1/conversations", {
+    kind: "group",
+    mlsGroupId: mlsGroupId(),
+    memberAccountIds: [b.accountId, c.accountId],
+    idempotencyKey: `create-group-${Date.now()}-${Math.random()}`,
+    initialCommit: {
+      idempotencyKey: `commit0-group-${Date.now()}-${Math.random()}`,
+      kind: "mls_commit",
+      epoch: 0,
+      payload: base64("commit-0"),
+      commit: {
+        newEpoch: 1,
+        groupInfo: base64("gi-1"),
+        addedLeaves: [
+          { instanceId: b.id, accountId: b.accountId },
+          { instanceId: c.id, accountId: c.accountId },
+        ],
+        removedLeaves: [],
+        welcome: { payload: base64("welcome-0"), recipients: [b.id, c.id] },
+      },
+    },
+  });
+  if (created.status !== 201) throw new Error(`group create failed: ${created.status} ${JSON.stringify(created.body)}`);
+  return { a, b, c, conversationId: created.body.conversation.id as string };
 }
 
 /** Two accounts, one active instance each with key packages, and a DM created by `a` adding `b`. */

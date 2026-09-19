@@ -1,5 +1,5 @@
 {
-  "id": "aa691cdb-f2d2-4e03-ae7b-5fc36f8422b1",
+  "id": "00093c79-3864-4f59-aca7-f898ebd83eb1",
   "prevId": "5fc90315-4cba-46ec-8bb5-ffa7de07ef36",
   "version": "7",
   "dialect": "postgresql",
@@ -137,76 +137,6 @@
         "blobs_size_check": {
           "name": "blobs_size_check",
           "value": "\"blobs\".\"size\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.conversation_group_info": {
-      "name": "conversation_group_info",
-      "schema": "",
-      "columns": {
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "epoch": {
-          "name": "epoch",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "signer_instance_id": {
-          "name": "signer_instance_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data": {
-          "name": "data",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "date_trunc('milliseconds', now())"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "date_trunc('milliseconds', now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "conversation_group_info_conversation_id_conversations_id_fk": {
-          "name": "conversation_group_info_conversation_id_conversations_id_fk",
-          "tableFrom": "conversation_group_info",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "conversation_group_info_epoch_check": {
-          "name": "conversation_group_info_epoch_check",
-          "value": "\"conversation_group_info\".\"epoch\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -2208,6 +2138,38 @@
           "value": "length(last_delivery_error) <= 2000"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.account_presence": {
+      "name": "account_presence",
+      "schema": "",
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.blocks": {

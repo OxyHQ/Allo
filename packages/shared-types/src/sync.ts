@@ -6,6 +6,9 @@
  * form, and a client stores it, hands it back, and compares nothing.
  */
 import { z } from "zod";
+import { presenceHeartbeatEventSchema, presenceStateSchema, presenceWatchEventSchema } from "./presence";
+import { callIncomingEventSchema, callUpdatedEventSchema } from "./calls";
+import { statusPostedEventSchema } from "./statuses";
 import {
   accountIdSchema,
   base64Schema,
@@ -126,11 +129,12 @@ export const typingEventSchema = z.object({
 });
 export type TypingEvent = z.infer<typeof typingEventSchema>;
 
-/** Server → client, best effort, for accounts sharing a conversation. */
-export const presenceEventSchema = z.object({
-  accountId: accountIdSchema,
-  online: z.boolean(),
-});
+/**
+ * Server → client: one account of this client's WATCH SET changed. The rules
+ * deciding what a client may see are in `presence.ts`; the payload is the
+ * same shape the REST route answers with, so a client folds both the same way.
+ */
+export const presenceEventSchema = presenceStateSchema;
 export type PresenceEvent = z.infer<typeof presenceEventSchema>;
 
 /**
@@ -151,10 +155,15 @@ export const SERVER_TO_CLIENT_EVENTS = {
   typing: typingEventSchema,
   presence: presenceEventSchema,
   "history.offer": historyOfferEventSchema,
+  "status.posted": statusPostedEventSchema,
+  "call.incoming": callIncomingEventSchema,
+  "call.updated": callUpdatedEventSchema,
 } as const;
 
 export const CLIENT_TO_SERVER_EVENTS = {
   typing: typingEventSchema,
+  "presence.watch": presenceWatchEventSchema,
+  "presence.heartbeat": presenceHeartbeatEventSchema,
 } as const;
 
 export type ServerToClientEventName = keyof typeof SERVER_TO_CLIENT_EVENTS;

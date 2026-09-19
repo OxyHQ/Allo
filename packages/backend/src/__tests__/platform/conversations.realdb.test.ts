@@ -8,6 +8,7 @@ import { asc, eq } from "drizzle-orm";
 import {
   conversationResponseSchema,
   createConversationResponseSchema,
+  errorResponseSchema,
   listConversationsResponseSchema,
   SERVER_SENDER_ID,
 } from "@allo/shared-types";
@@ -215,5 +216,93 @@ describe("POST /v1/conversations/:id/leave", () => {
     expect((await b.signed("get", "/v1/conversations")).body.conversations).toEqual([]);
     await b.signed("post", `/v1/conversations/${conversationId}/leave`).expect(204);
     expect((await a.signed("get", `/v1/conversations/${conversationId}`)).body.conversation.lastSeq).toBe(3);
+  });
+});
+
+/**
+ * Reviving a conversation whose MLS group lost every active leaf.
+ *
+ * The state is reachable in normal use — the only device in the group is
+ * revoked, or the last member signs out — and it is terminal without this
+ * route: nothing can be committed to a group with no live leaf, so nobody can
+ * be added back, and a DM converges on its `dm_key` so there is no second
+ * conversation to start instead.
+ */
+describe("POST /v1/conversations/:id/reset", () => {
+  it("is refused while ANY device is still in the group, which is what stops it being a takeover", async () => {
+    const { a, b, conversationId } = await dmBetween(h.app);
+    const response = await b.signed("post", `/v1/conversations/${conversationId}/reset`, {
+      mlsGroupId: mlsGroupId(),
+      idempotencyKey: `reset-${Date.now()}-${Math.random()}`,
+    });
+    expect(response.status).toBe(409);
+    expect(expectParses(errorResponseSchema, response.body).error.code).toBe("idempotency_conflict");
+  });
+
+  /**
+   * The real shape of it: every device in the group is revoked, and one of the
+   * members enrols a NEW one. That account is still a joined member and has an
+   * active instance; what it does not have, and can never be given, is a leaf.
+   */
+  async function deadGroup() {
+    const { a, b, conversationId, created } = await dmBetween(h.app);
+    await a.signed("post", `/v1/instances/${a.id}/revoke`).expect(200);
+    await b.signed("post", `/v1/instances/${b.id}/revoke`).expect(200);
+    // b comes back on a new device: the account has no active instance, so it
+    // bootstraps active — and lands in a conversation it cannot speak in.
+    const b2 = await TestInstance.register(h.app, b.accountId);
+    expect(b2.registration.enrollment).toBe("active");
+    return { a, b, b2, conversationId, created };
+  }
+
+  it("revives it once the group is provably dead, keeping the id, the members and the dm_key", async () => {
+    const { a, b, b2, conversationId } = await deadGroup();
+
+    const dead = expectParses(conversationResponseSchema, (await b2.signed("get", `/v1/conversations/${conversationId}`)).body);
+    expect(dead.conversation.leaves.every((leaf) => leaf.state !== "active")).toBe(true);
+    expect(dead.conversation.myLeafState).toBeNull();
+    const lastSeqBefore = dead.conversation.lastSeq;
+
+    const group = mlsGroupId();
+    const revived = await b2.signed("post", `/v1/conversations/${conversationId}/reset`, {
+      mlsGroupId: group,
+      idempotencyKey: `reset-${Date.now()}-${Math.random()}`,
+    });
+    expect(revived.status).toBe(200);
+    const parsed = expectParses(conversationResponseSchema, revived.body);
+    expect(parsed.conversation.id).toBe(conversationId);
+    expect(parsed.conversation.mlsGroupId).toBe(group);
+    expect(parsed.conversation.epoch).toBe(0);
+    expect(parsed.conversation.myLeafState).toBe("active");
+    // The members are untouched, so the DM is still between the same two people.
+    expect(parsed.conversation.members.map((m) => m.accountId).sort()).toEqual([a.accountId, b.accountId].sort());
+    // The event log is append-only: the old ciphertext stays where it is.
+    expect(parsed.conversation.lastSeq).toBe(lastSeqBefore);
+
+    // And it is idempotent: the same group posted twice resets once.
+    const again = await b2.signed("post", `/v1/conversations/${conversationId}/reset`, {
+      mlsGroupId: group,
+      idempotencyKey: `reset-${Date.now()}-${Math.random()}`,
+    });
+    expect(again.status).toBe(200);
+    expect(again.body.conversation.mlsGroupId).toBe(group);
+  });
+
+  it("refuses a group id another conversation owns, and a caller who is not a member", async () => {
+    const { b2, conversationId } = await deadGroup();
+    const other = await dmBetween(h.app);
+
+    const stolen = await b2.signed("post", `/v1/conversations/${conversationId}/reset`, {
+      mlsGroupId: other.created.body.conversation.mlsGroupId,
+      idempotencyKey: `reset-${Date.now()}-${Math.random()}`,
+    });
+    expect(stolen.status).toBe(409);
+
+    const stranger = await TestInstance.register(h.app, accountId("stranger-reset"));
+    const refused = await stranger.signed("post", `/v1/conversations/${conversationId}/reset`, {
+      mlsGroupId: mlsGroupId(),
+      idempotencyKey: `reset-${Date.now()}-${Math.random()}`,
+    });
+    expect(refused.status).toBe(404);
   });
 });

@@ -1,6 +1,6 @@
 import { act } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useBackup, useConversation, useConversations, useHistoryTransfer, useInstanceState, useOwnInstances, usePendingEnrollments, useSyncState, useTimeline, useUnreadCount } from "../index";
+import { useBackup, useCall, useCallHistory, useConversation, useConversations, useHistoryTransfer, useInstanceState, useOwnInstances, usePendingEnrollments, useSyncState, useTimeline, useUnreadCount } from "../index";
 import { fakeServer, makeClient, renderAlloHook, stopAll, waitFor, waitJoined, type TestClient } from "./helpers";
 
 describe("useHistoryTransfer / useBackup referential stability", () => {
@@ -151,5 +151,45 @@ describe("hooks over a client that has not started", () => {
     } finally {
       console.error = original;
     }
+  });
+});
+
+/**
+ * A getter that builds a new value on every call is a RENDER LOOP when it is
+ * handed to `useSyncExternalStore` directly: React reads a new snapshot each
+ * render and renders again. That is minified React error #185, and
+ * `client.calls.history()` — which scans the conversations and builds a fresh
+ * array — shipped that way and crashed the app the first time somebody pressed
+ * call. `useVersionedClientSnapshot` is the answer; this is the guard.
+ */
+describe("useCallHistory referential stability", () => {
+  const started: TestClient[] = [];
+  afterEach(async () => {
+    await stopAll(...started.splice(0));
+  });
+
+  it("keeps its identity across re-renders even though the getter builds a new array", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-callst-a", "Alice");
+    started.push(alice);
+    await alice.client.conversations.createDirect("acc-callst-b");
+
+    let renders = 0;
+    const { result, rerender } = renderAlloHook(
+      alice.client,
+      ({ tick }: { tick: number }) => {
+        renders++;
+        return { tick, history: useCallHistory(), call: useCall() };
+      },
+      { initialProps: { tick: 0 } },
+    );
+    const before = result.current;
+    rerender({ tick: 1 });
+    rerender({ tick: 2 });
+
+    // Three renders, not an unbounded number, and the same array each time.
+    expect(renders).toBe(3);
+    expect(result.current.history).toBe(before.history);
+    expect(result.current.call).toBe(before.call);
   });
 });

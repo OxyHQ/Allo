@@ -4,6 +4,7 @@ import type { Person } from '@/lib/allo/people';
 import {
   chatSummary,
   composerNotice,
+  pinnedMessages,
   conversationTitle,
   deliveryStatus,
   firstUnreadId,
@@ -310,5 +311,95 @@ describe('previewText', () => {
       },
     });
     expect(previewText(voice, t)).toBe('chat.attachment.voice');
+  });
+});
+
+/**
+ * POLLS, PLACES AND CARDS in the two places a message is reduced to one line.
+ *
+ * A row has room for a glyph and a line, and "Poll" says less than the question
+ * does — so these three keep Bloom's glyph and spend the line on their own
+ * words. A wrong mapping here is a conversation list that reads "Photo" next to
+ * a poll, which nobody files a bug about either.
+ */
+describe('previewText and the list row, for a poll, a place and a card', () => {
+  const poll = item({
+    content: {
+      kind: 'poll',
+      poll: {
+        question: 'When should we do the handover?',
+        options: [{ id: 'a', label: 'Thursday', votes: 2, mine: true, accountIds: ['acc-me', 'acc-alice'] }],
+        totalVotes: 2,
+        multiple: false,
+        anonymous: false,
+        voted: true,
+      },
+    },
+  });
+  const place = item({
+    content: { kind: 'location', place: { latitude: 41.38879, longitude: 2.18994, label: 'Casa del Puerto' } },
+  });
+  const nowhere = item({ content: { kind: 'location', place: { latitude: 0, longitude: 0 } } });
+  const card = item({ content: { kind: 'contact', contact: { name: 'Marta Ferreira', phone: '+34600112233' } } });
+
+  it('says what the message is: the question, the place, the name', () => {
+    expect(previewText(poll, t)).toBe('When should we do the handover?');
+    expect(previewText(place, t)).toBe('Casa del Puerto');
+    expect(previewText(card, t)).toBe('Marta Ferreira');
+  });
+
+  it('names an unnamed place rather than showing an empty line', () => {
+    expect(previewText(nowhere, t)).toBe('chat.attachment.location');
+  });
+
+  it("draws Bloom's own glyph for each, with the message's words beside it", () => {
+    expect(chatSummary(view({ lastMessage: poll }), ctx).preview).toEqual({
+      sender: undefined,
+      attachment: { kind: 'poll', label: 'When should we do the handover?' },
+    });
+    expect(chatSummary(view({ lastMessage: place }), ctx).preview).toEqual({
+      sender: undefined,
+      attachment: { kind: 'location', label: 'Casa del Puerto' },
+    });
+    expect(chatSummary(view({ lastMessage: card }), ctx).preview).toEqual({
+      sender: undefined,
+      attachment: { kind: 'contact', label: 'Marta Ferreira' },
+    });
+  });
+
+  it('still names the sender in a group, the way an attachment row does', () => {
+    const summary = chatSummary(
+      view({ kind: 'group', memberAccountIds: ['acc-me', 'acc-alice', 'acc-bob'], lastMessage: poll }),
+      ctx,
+    );
+    expect(summary.preview).toEqual({
+      sender: 'Alice',
+      attachment: { kind: 'poll', label: 'When should we do the handover?' },
+    });
+  });
+
+  it('leaves the bubble itself textless: the media slot draws the whole thing', () => {
+    const [drawnPoll, drawnPlace, drawnCard] = transcriptItems([poll, place, card], ctx, { isGroup: false });
+    expect(drawnPoll.text).toBeUndefined();
+    expect(drawnPlace.text).toBeUndefined();
+    expect(drawnCard.text).toBeUndefined();
+  });
+});
+
+describe('pinnedMessages', () => {
+  it('draws the pinned ones oldest first, with who wrote each and what it says', () => {
+    const items = [
+      item({ id: 'a', content: { kind: 'text', body: 'first', isEdited: false } }),
+      item({ id: 'b', pinned: true, content: { kind: 'text', body: 'bring the tape', isEdited: false } }),
+      item({ id: 'c', isOwn: true, senderAccountId: 'acc-me', pinned: true, content: { kind: 'text', body: 'eight o clock', isEdited: false } }),
+    ];
+    expect(pinnedMessages(items, ctx)).toEqual([
+      { id: 'b', preview: 'bring the tape', author: 'Alice' },
+      { id: 'c', preview: 'eight o clock', author: 'chat.you' },
+    ]);
+  });
+
+  it('is empty when nothing is pinned, so the bar never draws', () => {
+    expect(pinnedMessages([item(), item({ id: 'b' })], ctx)).toEqual([]);
   });
 });

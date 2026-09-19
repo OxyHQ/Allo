@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import type { ReportInput } from "@oxy.so/crowdsource";
+import type { ReportInput } from "@crowdsource.you/core";
 import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from "./reportTaxonomy";
 import { resolveModerationSubject } from "./subjectIdentity";
 import { subjectProviderFor } from "./subjects/registry";
@@ -9,7 +9,7 @@ import type { ModerationReport } from "../../db/moderation/reportRepository";
 /**
  * Turning a stored report into the thing the SDK delivers.
  *
- * `@oxy.so/crowdsource` builds the Case Envelope, and it deliberately does not
+ * `@crowdsource.you/core` builds the Case Envelope, and it deliberately does not
  * export the function that does it. What this module produces is the SDK's
  * `ReportInput` — a description of the material — and the SDK derives the envelope
  * from it: resource ids, relations, digests, pseudonymous principal refs, the

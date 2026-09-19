@@ -93,6 +93,12 @@ export interface AlloClientOptions {
   now?: () => number;
   /** Key packages kept on the server. Default 20. */
   keyPackageTarget?: number;
+  /**
+   * How a call's audio and video are carried. Omitted, the SDK still rings,
+   * answers, declines and ends — it simply carries no media (ADR 0002,
+   * Decision 5).
+   */
+  media?: import("./calls/media").CallMediaAdapter;
   /** Live sync interval in ms. Default 30 000. */
   syncIntervalMs?: number;
   /** How long after a sync that makes a backup due the automatic refresh waits, ms. Default 10 000. */
@@ -159,9 +165,74 @@ export interface MediaView {
   thumbnail?: { ref: MediaRef; width: number; height: number };
 }
 
+/** One option of a poll, with the answers folded in. */
+export interface PollOptionView {
+  id: string;
+  label: string;
+  /** How many accounts chose it, counting each account once. */
+  votes: number;
+  /** Whether the viewer is one of them. */
+  mine: boolean;
+  /**
+   * Who chose it, when the poll did not ask for anonymity. Empty on an
+   * anonymous poll: the votes are still readable by every member — the server
+   * cannot see either — so the SDK declines to hand out names the sender asked
+   * it not to show.
+   */
+  accountIds: string[];
+}
+
+export interface PollView {
+  question: string;
+  options: PollOptionView[];
+  /** Accounts that answered, counting each once. */
+  totalVotes: number;
+  multiple: boolean;
+  anonymous: boolean;
+  /** Whether the viewer has answered. */
+  voted: boolean;
+}
+
+export interface PlaceView {
+  latitude: number;
+  longitude: number;
+  label?: string;
+  address?: string;
+}
+
+export interface ContactCardView {
+  name: string;
+  /** Set when the card names an Oxy account, so a screen can open a conversation with them. */
+  accountId?: string;
+  handle?: string;
+  phone?: string;
+}
+
+/**
+ * A call that happened, as the conversation shows it.
+ *
+ * "Missed" is not a field: it is the RECEIVER's reading of `not_answered` on
+ * an incoming call, and the sender asserting it would be asserting something
+ * about somebody else's attention. `incoming` plus `outcome` is what a screen
+ * needs to say either sentence.
+ */
+export interface CallLogView {
+  callId: string;
+  mode: "voice" | "video";
+  outcome: "answered" | "not_answered" | "declined" | "cancelled" | "failed";
+  /** Whether it came to this account. The same event reads differently at each end. */
+  incoming: boolean;
+  /** How long it lasted, for an answered one. */
+  durationMs?: number;
+}
+
 export type TimelineContent =
   | { kind: "text"; body: string; isEdited: boolean }
   | { kind: "media"; media: MediaView }
+  | { kind: "poll"; poll: PollView }
+  | { kind: "location"; place: PlaceView }
+  | { kind: "contact"; contact: ContactCardView }
+  | { kind: "call"; call: CallLogView }
   | { kind: "deleted" }
   | { kind: "undecryptable"; reason: string }
   | { kind: "system"; text: string };
@@ -179,6 +250,8 @@ export interface TimelineItemView {
   sendState: SendState;
   content: TimelineContent;
   reactions: Array<{ key: string; accountIds: string[] }>;
+  /** Pinned for everybody in the conversation. See the `pin` app message. */
+  pinned?: boolean;
   replyTo?: string;
   /**
    * Only on a `pending` own echo: why the outbox is not sending it yet.
@@ -295,6 +368,34 @@ export interface BackupStatus {
   busy: boolean;
 }
 
+/** What `messages.sendPoll` takes. The ids are assigned by the SDK. */
+export interface PollDraft {
+  question: string;
+  /** Two to twelve, in the order they are drawn. */
+  options: readonly string[];
+  /** Whether a voter may choose more than one. Default false. */
+  multiple?: boolean;
+  /** Ask clients not to name the voters. Default false; see `PollView.anonymous`. */
+  anonymous?: boolean;
+}
+
+/** What `messages.sendLocation` takes. */
+export interface PlaceDraft {
+  latitude: number;
+  longitude: number;
+  label?: string;
+  address?: string;
+}
+
+/** What `messages.sendContact` takes. */
+export interface ContactDraft {
+  name: string;
+  /** Set it when the card names an Oxy account. */
+  accountId?: string;
+  handle?: string;
+  phone?: string;
+}
+
 export interface SendOptions {
   /** The id (or local key) of the message replied to. */
   replyTo?: string;
@@ -308,6 +409,9 @@ export interface LoadOlderResult {
 
 export type SubscriptionTopic =
   | "conversations"
+  | "call"
+  | "presence"
+  | "statuses"
   | `timeline:${string}`
   | "instance"
   | "instances"
@@ -316,5 +420,66 @@ export type SubscriptionTopic =
   | "history"
   | "backup"
   | "error";
+
+/**
+ * One account's presence, as this device knows it.
+ *
+ * `known` is false until the server has answered for this account at all —
+ * which is different from "offline", and is what stops a list drawing every
+ * row as away while the first read is in flight. It is NOT the difference
+ * between offline and hidden: those two are the same answer on purpose.
+ */
+export interface PresenceView {
+  readonly online: boolean;
+  /** Truncated to the minute by the server, and null while the account is online. */
+  readonly lastSeenAt: string | null;
+  readonly known: boolean;
+}
+
+/** What a status update looks like on a screen. The media is fetched on demand. */
+export interface StatusView {
+  readonly id: string;
+  readonly authorAccountId: string;
+  readonly kind: "text" | "image" | "video";
+  readonly caption?: string;
+  readonly hasMedia: boolean;
+  readonly createdAt: string;
+  /** 24 hours after it was posted. The client drops it then, whatever the server still holds. */
+  readonly expiresAt: string;
+  readonly mine: boolean;
+  /** Whether this device has told the author it was seen. Always true for your own. */
+  readonly seen: boolean;
+}
+
+/**
+ * Who a status goes to, decided on the device.
+ *
+ * `all` is every account this device shares a conversation with — the server
+ * is never asked for a contact list. `only` and `except` narrow that, and an
+ * account outside it cannot be reached by naming it.
+ */
+export interface StatusAudience {
+  readonly mode: "all" | "only" | "except";
+  readonly accountIds: readonly string[];
+}
+
+export interface StatusDraft {
+  readonly kind: "text" | "image" | "video";
+  readonly caption?: string;
+  readonly media?: {
+    readonly bytes: Uint8Array;
+    readonly mime: string;
+    readonly width?: number;
+    readonly height?: number;
+    readonly durationMs?: number;
+  };
+  readonly audience: StatusAudience;
+}
+
+/** Who saw one of yours: the names that publish a receipt, and the count of everybody. */
+export interface StatusViewerView {
+  readonly accounts: readonly string[];
+  readonly total: number;
+}
 
 export type { AppMessage };

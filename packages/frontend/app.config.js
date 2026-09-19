@@ -104,14 +104,9 @@ return {
                 appleMobileWebAppStatusBarStyle: "default",
                 appleMobileWebAppTitle: "Allo",
                 applicationName: "Allo",
-                msapplicationTileColor: "#4F46E5",
+                msapplicationTileColor: "#10b981",
                 msapplicationConfig: "/browserconfig.xml"
             },
-            build: {
-          babel: {
-            include: ['@expo/vector-icons'],
-          },
-        },
         // Add Metro configuration for better module resolution
         metro: {
           resolver: {

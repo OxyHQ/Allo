@@ -6,8 +6,14 @@
  *            instance is active — top up key packages, pull the server's
  *            conversation list and sync.
  *   stop()   disconnect and stop every loop and timer.
- *   reset()  revoke this instance (best effort), wipe its namespace and its
- *            secrets (signing, storage, transfer and backup keys). For sign-out.
+ *   reset()  revoke this instance, then wipe its namespace and its secrets
+ *            (signing, storage, transfer and backup keys). For sign-out, and
+ *            it reports whether the revoke landed: a wipe that could not tell
+ *            the server leaves an instance behind that no device can prove it
+ *            owns. Call it while the session is alive.
+ *   reclaimAccount()
+ *            the way back when the account's only active devices are gone:
+ *            revoke them with the Oxy session and register this one afresh.
  */
 import { AtRestCipher } from "./crypto/atRest";
 import { CryptoEngine } from "./crypto/engine";
@@ -29,19 +35,30 @@ import { Model } from "./storage/model";
 import { Namespace } from "./storage/namespace";
 import { storageKeyName } from "./crypto/atRest";
 import { SyncEngine } from "./sync/engine";
+import { CallsService, type CallHistoryEntry, type CallView } from "./calls/service";
+import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
+import { StatusService } from "./statuses/service";
 import { Realtime } from "./sync/realtime";
 import { HttpClient } from "./transport/http";
+import { PRESENCE_HEARTBEAT_MS } from "@allo/shared-types";
 import type {
   AlloClientOptions,
   BackupStatus,
   ConversationView,
   HistoryOfferView,
   HistoryProgress,
+  PresenceView,
+  StatusDraft,
+  StatusView,
+  StatusViewerView,
   InstanceState,
   InstanceView,
   LoadOlderResult,
   MediaRef,
   PendingEnrollmentView,
+  PollDraft,
+  PlaceDraft,
+  ContactDraft,
   SendOptions,
   SubscriptionTopic,
   SyncState,
@@ -51,13 +68,71 @@ import type {
 import { Mutex } from "./util/async";
 import { describeError, silentLogger } from "./util/logger";
 
+/**
+ * What `reset()` managed to tell the server before it wiped this device.
+ *
+ * The revoke is the half that needs a live Oxy session, and the wipe is the
+ * half that cannot fail. An instance this device can no longer prove it owns —
+ * wiped locally, still `active` on the server — is a GHOST: it holds an
+ * approval slot nobody can use, and while it is the account's only active
+ * instance every new device enrols as `pending` with nothing able to approve
+ * it. So the outcome is returned rather than logged: a caller that wipes a
+ * device has to be able to say what is still listed.
+ */
+export type ResetOutcome =
+  | { revoked: "done" }
+  /** Nothing was active to revoke: never registered, still pending, or already revoked. */
+  | { revoked: "not-needed" }
+  /** The wipe happened and the server still lists this instance as active. */
+  | { revoked: "failed"; instanceId: string; reason: string };
+
 export interface AlloClient {
   readonly accountId: string;
   /** The instance id once registered. */
   readonly instanceId: string | null;
   start(): Promise<void>;
   stop(): Promise<void>;
-  reset(): Promise<void>;
+  /**
+   * Leaves this device: revokes the instance, then wipes its namespace and
+   * every secret. Call it while the Oxy session is still alive — the revoke
+   * is authenticated with it — and read the outcome; see {@link ResetOutcome}.
+   */
+  reset(): Promise<ResetOutcome>;
+  /**
+   * Takes the account over from devices that are gone, and makes THIS one its
+   * only device.
+   *
+   * The way back for somebody who cannot be approved because there is nobody
+   * left to approve them: every instance the account still calls `active` is
+   * revoked with the Oxy session, this device's local state is wiped, and it
+   * registers again — into an account with no active instance, which is the
+   * bootstrap case, so it comes back `active`.
+   *
+   * It is destructive and the screen that offers it has to say so: the other
+   * devices are signed out, and history that lives only on them is gone, since
+   * nothing here can decrypt what they hold. Everything already on this device
+   * is gone too — it was written under keys this wipe removes.
+   */
+  reclaimAccount(): Promise<void>;
+  /**
+   * Calls. The state machine, the signalling and the fingerprint check are
+   * here; the media is the `media` adapter the host supplies (ADR 0002,
+   * Decision 5). Without one a call still rings, is answered, declined and
+   * ended — it simply carries no audio.
+   */
+  calls: {
+    /** The call this device is in, or `null`. One at a time, as a phone does. */
+    current(): CallView | null;
+    /** Every call this device knows about, newest first. Read out of the conversations, which is where the log lives. */
+    history(): CallHistoryEntry[];
+    /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
+    start(conversationId: string, mode?: "voice" | "video"): Promise<CallView>;
+    answer(): Promise<void>;
+    decline(): Promise<void>;
+    end(): Promise<void>;
+    setMuted(muted: boolean): Promise<void>;
+    setCameraEnabled(on: boolean): Promise<void>;
+  };
   subscribe(topic: SubscriptionTopic, listener: () => void): () => void;
   onError(listener: (error: unknown) => void): () => void;
 
@@ -88,10 +163,29 @@ export interface AlloClient {
   messages: {
     timeline(conversationId: string): TimelineItemView[];
     send(conversationId: string, text: string, options?: SendOptions): Promise<string>;
+    /** A poll. Resolves to the local key of the echo. */
+    sendPoll(conversationId: string, poll: PollDraft): Promise<string>;
+    /** This account's answer, which replaces the one before it; an empty list retracts. */
+    vote(conversationId: string, targetId: string, optionIds: readonly string[]): Promise<void>;
+    /** A place: the coordinates are the sender's, and nothing is resolved here. */
+    sendLocation(conversationId: string, place: PlaceDraft): Promise<string>;
+    /** Somebody's card. */
+    sendContact(conversationId: string, contact: ContactDraft): Promise<string>;
+    /** Pins a message for everybody in the conversation, or takes the pin off. */
+    setPinned(conversationId: string, targetId: string, pinned: boolean): Promise<void>;
     edit(conversationId: string, targetId: string, body: string): Promise<void>;
     remove(conversationId: string, targetId: string): Promise<void>;
     react(conversationId: string, targetId: string, key: string): Promise<void>;
     markRead(conversationId: string): Promise<void>;
+    /**
+     * Deletes this conversation's history on THIS device, and with
+     * `forEveryone` asks everybody else in it to do the same.
+     *
+     * The local half is a real delete. The remote half is a request their app
+     * obeys — in an end-to-end encrypted system the other copy is on their
+     * device under their keys — and the screen offering it has to say so.
+     */
+    clearHistory(conversationId: string, options?: { forEveryone?: boolean }): Promise<void>;
     setTyping(conversationId: string, on: boolean): Promise<void>;
     isTyping(conversationId: string): boolean;
     /** `limit` defaults to 50. */
@@ -108,6 +202,45 @@ export interface AlloClient {
     now(): Promise<void>;
     /** Resolves once the outbox has drained. */
     flush(): Promise<void>;
+  };
+  /**
+   * Who is online, for the accounts this client says it is SHOWING. Topic
+   * `presence`. Nothing is persisted and nothing is remembered across a
+   * restart: a dot restored from disk is a claim the device cannot make.
+   */
+  /**
+   * Status updates: one ciphertext, a key sealed per device, 24 hours. Topic
+   * `statuses`. Nothing is persisted — the deadline is the promise, and a
+   * status restored from disk would outlive it.
+   */
+  statuses: {
+    /** Everything this device can read, newest first. Referentially stable between emissions. */
+    list(): readonly StatusView[];
+    /** Post one. The audience is resolved on this device; the server never sees a contact list. */
+    post(draft: StatusDraft): Promise<string>;
+    /** Tell the author it was seen. Whether your name travels is your own setting. */
+    view(statusId: string): Promise<void>;
+    /** Who saw one of YOURS. The server refuses this from anybody else. */
+    viewers(statusId: string): Promise<StatusViewerView>;
+    /** Take one of yours down before its deadline. */
+    remove(statusId: string): Promise<void>;
+    /** The picture or video, decrypted. Nothing is fetched until this is called. */
+    media(statusId: string, options?: { signal?: AbortSignal }): Promise<Uint8Array>;
+    refresh(): Promise<void>;
+  };
+  presence: {
+    /** The accounts being drawn. Replaces the previous set; an empty one stops the updates. */
+    watch(accountIds: readonly string[]): Promise<void>;
+    /** Stable between changes. `known: false` until the server has answered for this account. */
+    of(accountId: string): PresenceView;
+    /**
+     * Whether THIS account publishes its own presence — and so whether it may
+     * see anybody else's, which is the same switch. False means every answer
+     * above is the hidden one and the app should say why.
+     */
+    publishing(): boolean;
+    /** Bumped on every change: what a UI subscribes to, since a map is not a comparable snapshot. */
+    version(): number;
   };
   history: {
     /** Topic `history`. Referentially stable between emissions. */
@@ -148,6 +281,7 @@ const EMPTY_LIST: never[] = Object.freeze([]) as never[];
 const NO_INSTANCES: InstanceView[] = EMPTY_LIST;
 const NO_PENDING: PendingEnrollmentView[] = EMPTY_LIST;
 const NO_CONVERSATIONS: ConversationView[] = EMPTY_LIST;
+const NO_CALLS: CallHistoryEntry[] = EMPTY_LIST;
 const NO_TIMELINE: TimelineItemView[] = EMPTY_LIST;
 const IDLE_PROGRESS: HistoryProgress = { phase: "idle", done: 0, total: 0 };
 const NO_OFFERS: HistoryOfferView[] = EMPTY_LIST;
@@ -188,6 +322,8 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.sync.start();
     c.outbox.start();
     c.backup.start();
+    c.presence.start(PRESENCE_HEARTBEAT_MS);
+    c.statuses.start();
     await c.instance.ensureTransferKey();
     c.history.offersStale = true;
     await c.sync.now().catch(() => undefined);
@@ -200,6 +336,27 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     if (!accountId) throw new InvalidStateError("no Oxy account in session");
     const cipher = await AtRestCipher.open(options.secrets, accountId, options.appId);
     const rootStore = new AlloStore(options.storage, cipher, new Namespace(options.appId, accountId));
+    /**
+     * The storage key was minted just now and this account already has rows.
+     * Those rows were written under a key that no longer exists, so nothing
+     * can ever read them again — not this device, not a later one, not an
+     * attacker with the disk. Reading one raises "stored value failed
+     * authentication" out of `start()`, and a device that cannot start is a
+     * device with no way back.
+     *
+     * So drop them, loudly. What survives is the instance SIGNING key, which
+     * lives under its own name in the secret store: with it the registration
+     * below meets `idempotency_conflict` and ADOPTS the instance this device
+     * already has, staying active rather than asking to be approved. History
+     * is what is lost, and it was lost before this ran.
+     */
+    if (cipher.mintedFresh) {
+      const orphaned = await options.storage.list(rootStore.ns.accountPrefix);
+      if (orphaned.length > 0) {
+        log.error?.("the storage key is gone; dropping the rows it encrypted", { rows: orphaned.length });
+        await rootStore.wipeAccount();
+      }
+    }
     const engine = await CryptoEngine.create(options.crypto);
     const http = new HttpClient({
       baseUrl: options.baseUrl.replace(/\/+$/, ""),
@@ -246,6 +403,9 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.conversations = new ConversationsService(c);
     c.outbox = new OutboxEngine(c);
     c.sync = new SyncEngine(c);
+    c.presence = new PresenceService(c);
+    c.calls = new CallsService(c, options.media);
+    c.statuses = new StatusService(c);
     c.realtime = new Realtime(c);
     c.history = new HistoryService(c);
     await c.history.load();
@@ -278,20 +438,30 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.messages.stop();
     ctx.history.stop();
     ctx.backup.stop();
+    ctx.presence.stop();
+    ctx.statuses.stop();
     await ctx.outbox.idle().catch(() => undefined);
     started = false;
     activated = false;
   };
 
-  const reset = async (): Promise<void> => {
+  const reset = async (): Promise<ResetOutcome> => {
     const c = ctx;
     await stop();
     const accountId = c?.accountId ?? options.session.getAccountId();
+    let outcome: ResetOutcome = { revoked: "not-needed" };
     if (c && c.instance.isActive) {
+      const instanceId = c.instanceId;
       try {
-        await c.instance.revoke(c.instanceId);
+        await c.instance.revoke(instanceId);
+        outcome = { revoked: "done" };
       } catch (error) {
-        log.warn?.("self-revoke on reset failed", { error: describeError(error) });
+        // Not "best effort" any more: what is left behind is an instance this
+        // device can no longer prove it owns, and the caller is the only one
+        // in a position to say so.
+        const reason = describeError(error);
+        log.error?.("self-revoke on reset failed; this instance is still listed", { instanceId, reason });
+        outcome = { revoked: "failed", instanceId, reason };
       }
     }
     if (accountId) {
@@ -305,6 +475,26 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx = null;
     emitter.emit("instance");
     emitter.emit("conversations");
+    return outcome;
+  };
+
+  const reclaimAccount = async (): Promise<void> => {
+    const c = ctx;
+    if (!c) throw new InvalidStateError("client is not started");
+    const mine = c.instance.current?.id ?? null;
+    const listed = await c.instance.listWithSession();
+    const active = listed.filter((i) => i.status === "active");
+    log.warn?.("reclaiming the account from devices that cannot approve", { revoking: active.length });
+    for (const instance of active) {
+      // `mine` is pending in the case this exists for, so it is not in here;
+      // skipping it is belt and braces for the case where it somehow is.
+      if (instance.id === mine) continue;
+      await c.instance.revokeWithSession(instance.id);
+    }
+    // Local state was written under keys the wipe removes, and every group
+    // this device was in has just lost its other members' devices anyway.
+    await reset();
+    await start();
   };
 
   return {
@@ -317,6 +507,17 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     start,
     stop,
     reset,
+    reclaimAccount,
+    calls: {
+      current: () => ctx?.calls.current() ?? null,
+      history: () => ctx?.calls.history() ?? NO_CALLS,
+      start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? "voice"),
+      answer: () => requireCtx().calls.answer(),
+      decline: () => requireCtx().calls.decline(),
+      end: () => requireCtx().calls.end(),
+      setMuted: (muted) => requireCtx().calls.setMuted(muted),
+      setCameraEnabled: (on) => requireCtx().calls.setCameraEnabled(on),
+    },
     subscribe: (topic, listener) => emitter.subscribe(topic, listener),
     onError: (listener) => emitter.onError(listener),
     instance: {
@@ -351,10 +552,16 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     messages: {
       timeline: (id) => ctx?.messages.timeline(id) ?? NO_TIMELINE,
       send: (id, text, o) => requireCtx().messages.send(id, text, o),
+      sendPoll: (id, poll) => requireCtx().messages.sendPoll(id, poll),
+      vote: (id, t, optionIds) => requireCtx().messages.vote(id, t, optionIds),
+      sendLocation: (id, place) => requireCtx().messages.sendLocation(id, place),
+      sendContact: (id, contact) => requireCtx().messages.sendContact(id, contact),
+      setPinned: (id, t, pinned) => requireCtx().messages.setPinned(id, t, pinned),
       edit: (id, t, body) => requireCtx().messages.edit(id, t, body),
       remove: (id, t) => requireCtx().messages.remove(id, t),
       react: (id, t, key) => requireCtx().messages.react(id, t, key),
       markRead: (id) => requireCtx().messages.markRead(id),
+      clearHistory: (id, options) => requireCtx().messages.clearHistory(id, options ?? {}),
       setTyping: (id, on) => requireCtx().messages.setTyping(id, on),
       isTyping: (id) => ctx?.messages.isTyping(id) ?? false,
       loadOlder: (id, before, limit) => requireCtx().messages.loadOlder(id, before, limit),
@@ -363,6 +570,21 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     media: {
       upload: (id, bytes, meta) => new MediaService(requireCtx()).upload(id, bytes, meta),
       download: (ref, options) => new MediaService(requireCtx()).download(ref, options),
+    },
+    statuses: {
+      list: () => ctx?.statuses.list() ?? EMPTY_LIST,
+      post: (draft) => requireCtx().statuses.post(draft),
+      view: (statusId) => requireCtx().statuses.view(statusId),
+      viewers: (statusId) => requireCtx().statuses.viewers(statusId),
+      remove: (statusId) => requireCtx().statuses.remove(statusId),
+      media: (statusId, options) => requireCtx().statuses.media(statusId, options),
+      refresh: () => requireCtx().statuses.refresh(),
+    },
+    presence: {
+      watch: (accountIds) => (ctx ? ctx.presence.watch(accountIds) : Promise.resolve()),
+      of: (accountId) => ctx?.presence.of(accountId) ?? PRESENCE_UNKNOWN,
+      publishing: () => ctx?.presence.publishing ?? true,
+      version: () => ctx?.presence.version ?? 0,
     },
     sync: {
       state: () => ctx?.sync.state ?? "idle",

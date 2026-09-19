@@ -1,0 +1,146 @@
+import React, { useCallback, useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useCallActions, usePresence } from '@allo/react';
+import { CallHistoryList, IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
+import { Muted } from '@oxy.so/bloom/typography';
+
+import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
+import { Page } from '@/components/shell/Page';
+import { presenceDot } from '@/lib/presence';
+import { useChatContext } from '@/hooks/useChatContext';
+import { callHistorySections } from '@/lib/phase2/calls';
+import { useCallLog, useCallSession } from '@/lib/calls/session';
+import { toast } from '@oxy.so/bloom/toast';
+import { logger } from '@/utils/logger';
+
+/**
+ * `/calls` — THE CALL LOG.
+ *
+ * Bloom's `CallHistoryList` in day sections, with the incoming banner above it
+ * when a call is arriving. Every string the rows draw is decided in
+ * `lib/phase2/calls.ts`; the list formats nothing. The minimised-call pill is
+ * not drawn here — `app/(chat)/_layout.tsx` mounts one for the whole app.
+ *
+ * **Nothing here places a call.** The log is sample data held in this tab and
+ * the call-back button opens the local call screen, which has no media behind
+ * it — the notice at the top says so, because a log that looks like a log and a
+ * button that looks like a button otherwise promise a telephone.
+ */
+export default function CallsScreen() {
+  const { t, i18n } = useTranslation();
+  const router = useRouter();
+  const log = useCallLog();
+  const session = useCallSession();
+  const calls = useCallActions();
+
+  const accountIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const entry of log) for (const id of entry.peerAccountIds) ids.add(id);
+    for (const peer of session?.peers ?? []) ids.add(peer.accountId);
+    return [...ids];
+  }, [log, session]);
+  const { person, now } = useChatContext(accountIds);
+
+  const someone = t('calls.someone');
+  const nameFor = useCallback(
+    (ids: readonly string[]) => {
+      const names = ids.map((id) => person(id)?.displayName).filter((name): name is string => Boolean(name));
+      if (names.length === 0) return someone;
+      if (names.length === 1) return names[0];
+      return t('calls.withOthers', { name: names[0], count: names.length - 1 });
+    },
+    [person, someone, t],
+  );
+  const avatarFor = useCallback(
+    (ids: readonly string[]) => (ids.length === 1 ? person(ids[0])?.avatar : undefined),
+    [person],
+  );
+
+  const sections = useMemo(
+    () => callHistorySections(log, { now, locale: i18n.language, t, nameFor, avatarFor }),
+    [avatarFor, i18n.language, log, nameFor, now, t],
+  );
+
+  const directionLabels = useMemo<Record<CallDirection, string>>(
+    () => ({
+      incoming: t('calls.direction.incoming'),
+      outgoing: t('calls.direction.outgoing'),
+      missed: t('calls.direction.missed'),
+      declined: t('calls.direction.declined'),
+    }),
+    [t],
+  );
+
+  const entryById = useMemo(() => new Map(log.map((entry) => [entry.id, entry])), [log]);
+
+  const callBack = useCallback(
+    (id: string) => {
+      const entry = entryById.get(id);
+      if (!entry) return;
+      router.push(`/c/${entry.conversationId}/call`);
+      void calls.start(entry.conversationId, entry.mode).catch((error: unknown) => {
+        logger.error('[calls] calling back failed', error);
+        toast.error(t('calls.failed'));
+      });
+    },
+    [calls, entryById, router, t],
+  );
+
+  const openConversation = useCallback(
+    (id: string) => {
+      const entry = entryById.get(id);
+      if (entry) router.push(`/c/${entry.conversationId}`);
+    },
+    [entryById, router],
+  );
+
+  const arriving = session !== null && session.incoming && session.status === 'ringing';
+  const callerId = session?.peers[0]?.accountId;
+  const caller = person(callerId ?? '');
+  const callerPresence = usePresence(callerId ? [callerId] : []);
+
+  return (
+    <Page title={t('calls.title')}>
+      <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
+
+      {arriving ? (
+        <IncomingCallBanner
+          name={caller?.displayName ?? someone}
+          avatar={caller?.avatar}
+          mode={session.mode}
+          status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
+          onAccept={() => {
+            void calls.answer().catch((error: unknown) => logger.error('[calls] answering failed', error));
+            router.push(`/c/${session.conversationId}/call`);
+          }}
+          onDecline={() => void calls.decline().catch((error: unknown) => logger.error('[calls] declining failed', error))}
+          onPress={() => router.push(`/c/${session.conversationId}/call`)}
+          labels={{
+            accept: t('calls.control.accept'),
+            decline: t('calls.control.decline'),
+            voice: t('calls.incoming.voice'),
+            video: t('calls.incoming.video'),
+          }}
+        />
+      ) : null}
+
+      <CallHistoryList
+        sections={sections}
+        onItemPress={openConversation}
+        onCallBack={callBack}
+        labels={{
+          ...directionLabels,
+          callBack: (name: string) => t('calls.callBack', { name }),
+        }}
+        emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
+      />
+
+    </Page>
+  );
+}
+
+const styles = StyleSheet.create({
+  empty: { paddingVertical: 24, textAlign: 'center' },
+});

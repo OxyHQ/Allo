@@ -15,7 +15,7 @@ import {
   AppMessageDecodeError,
   controlEventSchema,
   conversationResponseSchema,
-  decodeAppMessage,
+  decodeAppMessageOrIgnore,
   type AppMessage,
   type ConversationEvent,
   type ConversationSummary,
@@ -25,7 +25,7 @@ import { DecryptError, FutureEpochError, JoinRefusedError } from "../errors";
 import { Model } from "../storage/model";
 import { pendingCommitRecordSchema, type ConversationRecord, type EventRecord } from "../storage/records";
 import type { StoreBatch } from "../storage/store";
-import { base64Decode, utf8Decode } from "../util/bytes";
+import { base64Decode, base64Encode, utf8Decode } from "../util/bytes";
 import { describeError } from "../util/logger";
 import type { GroupState, JoinerAdmission } from "../crypto/engine";
 
@@ -219,8 +219,26 @@ export class Dispatcher {
     const { ctx } = this;
     const id = w.event.conversationId;
     if (w.state && ctx.engine.isActive(w.state) && !w.conv?.removed) {
-      ctx.log.debug?.("welcome for a conversation already joined; ignored", { conversationId: id });
-      return false;
+      /**
+       * Normally a Welcome for a conversation we are already in is a
+       * duplicate and ignoring it is right. It is NOT right when the
+       * conversation's GROUP has been replaced under us — a re-key, done by
+       * the member who could not otherwise get in (`mayRekeyDirect`). Our
+       * state then belongs to a group this conversation no longer has, and
+       * ignoring the Welcome leaves the two of us in separate rooms, each
+       * sending messages the other cannot read and neither of us told.
+       *
+       * The group id is the discriminator, and the server's is the truth. The
+       * extra read costs one request on a path that is otherwise a rare
+       * duplicate, and missing a re-key is permanent — this event is recorded
+       * as handled either way.
+       */
+      const current = await this.fetchSummary(id);
+      if (current.mlsGroupId === base64Encode(ctx.engine.groupIdOf(w.state))) {
+        ctx.log.debug?.("welcome for a conversation already joined; ignored", { conversationId: id });
+        return false;
+      }
+      ctx.log.info?.("this conversation's group was replaced; joining the new one", { conversationId: id });
     }
     const welcome = base64Decode(w.event.payload);
     const ref = ctx.engine.welcomeRefs(welcome).find((r) => ctx.instance.hasKeyPackage(r));
@@ -339,13 +357,18 @@ export class Dispatcher {
     if (event.senderInstanceId === ctx.instanceId) return; // ours; the outbox recorded it
     let message: AppMessage | null = null;
     let failure: string | null = null;
+    let ignorable = false;
     try {
       const result = await ctx.engine.processIncoming(state, base64Decode(event.payload));
       w.setState(result.next);
       if (result.kind !== "application" || !result.plaintext) failure = "not_an_application_message";
       else {
         try {
-          message = decodeAppMessage(result.plaintext);
+          // A control kind from a newer client decodes to `null`: nothing to
+          // act on, and nothing to draw. Only a message this build genuinely
+          // cannot read becomes a failure the timeline reports.
+          message = decodeAppMessageOrIgnore(result.plaintext);
+          if (message === null) ignorable = true;
         } catch (error) {
           failure = error instanceof AppMessageDecodeError ? "unsupported_message" : "undecodable";
         }
@@ -355,6 +378,7 @@ export class Dispatcher {
       if (error instanceof DecryptError) failure = "undecryptable";
       else throw error;
     }
+    if (ignorable) return; // a control kind this build does not know: recorded as nothing
     if (message?.t === "typing") return; // never stored
     w.record({ message, failure, system: null, localKey: null });
     if (!conv || !message) return;
@@ -366,6 +390,27 @@ export class Dispatcher {
     if ((message.t === "text" || message.t === "media") && event.senderAccountId !== ctx.accountId) {
       const conversationId = event.conversationId;
       w.after.push(() => ctx.messages.noteDelivered(conversationId));
+    }
+    /**
+     * Somebody in this conversation deleted it and asked everybody to. Applies
+     * whoever sent it — the other person, or another of this account's own
+     * devices — and is bounded by this event's own seq, so a message that
+     * crossed it in flight survives.
+     */
+    /** Signalling: the offer, the answer, the candidates and the end, all encrypted. */
+    if (message.t === "call") {
+      const conversationId = event.conversationId;
+      const payload = message;
+      w.after.push(() =>
+        ctx.calls
+          .onCallMessage(conversationId, payload)
+          .catch((error) => ctx.log.warn?.("handling a call message failed", { error: describeError(error) })),
+      );
+    }
+    if (message.t === "clear_history") {
+      const conversationId = event.conversationId;
+      const upTo = event.seq - 1;
+      w.after.push(() => ctx.messages.applyClear(conversationId, upTo));
     }
     if (message.t === "media") {
       const key = { blobId: message.blobId, conversationId: event.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };

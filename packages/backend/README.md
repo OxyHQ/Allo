@@ -104,8 +104,9 @@ CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
 
 # Allo's own credential for calling the Oxy API as itself (optional; both or
-# neither). Every Oxy route the directory uses is public, so the lookups work
-# without it — see "People directory" below.
+# neither; LOCAL only — the deployment attests its task role instead). Every Oxy
+# route the directory uses is public, so the lookups work without it — see
+# "People directory" below.
 ALLO_OXY_SERVICE_API_KEY=
 ALLO_OXY_SERVICE_API_SECRET=
 
@@ -228,6 +229,15 @@ No service credential is required, for the same reason. Setting
 `ALLO_OXY_SERVICE_API_KEY` / `ALLO_OXY_SERVICE_API_SECRET` only changes how the
 bulk lookup authenticates; see `src/config/oxyService.ts`, which also documents
 the console.oxy.so step that mints them.
+
+**The deployment carries neither.** Under oxy ADR 0026 a first-party service
+proves what it IS — a signed `GetCallerIdentity` for its ECS task role, which Oxy
+replays to AWS — and gets back the same short-lived service token the key pair
+used to buy, so `@oxy.so/core` needs nothing in a parameter store. The pair is
+how a machine that can attest nothing borrows Allo's identity. Anything deciding
+whether this process has an Oxy identity must therefore call
+`canAuthenticateAsOxyService()` rather than read the two variables: they stopped
+being the same question the day the task role could answer it.
 
 ### Health
 
@@ -510,7 +520,7 @@ This package is part of the Allo monorepo and integrates with:
 - Integrates with `@oxy.so/core` for authentication, CORS and rate limiting. This
   package does not depend on `@oxy.so/services` — that is the React Native SDK
   and is a frontend dependency only.
-- Uses `@oxy.so/crowdsource*` for the moderation pipeline
+- Uses `@crowdsource.you/*` for the moderation pipeline
 
 ## Notes
 

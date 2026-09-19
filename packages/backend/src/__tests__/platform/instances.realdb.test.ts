@@ -223,6 +223,37 @@ describe("GET /v1/instances and /v1/accounts/:accountId/instances", () => {
     expect(parsed.instances[1].enrollmentChallenge).toBe(second.registration.challenge);
   });
 
+  /**
+   * `DELETE /v1/instances/:id`: the Oxy session removes a device of its own
+   * account without that device's key.
+   *
+   * It exists because the signed route cannot reach the case that matters: an
+   * account whose last ACTIVE instance is gone — cleared site data, a lost
+   * phone — has no key left to sign with, so a newly enrolled device waits on
+   * an approval nothing can give, and the account is finished. The trade is in
+   * `docs/platform/threat-model.md`.
+   */
+  it("lets the Oxy session revoke its own account's instance, and only its own", async () => {
+    const account = accountId();
+    const ghost = await TestInstance.register(h.app, account);
+    expect(ghost.registration.instance.status).toBe("active");
+
+    // A stranger's session may not touch it, and learns nothing: not_found,
+    // the same answer an instance that does not exist gets.
+    const stranger = await request(h.app).delete(`/v1/instances/${ghost.id}`).set(USER_HEADER, accountId("stranger"));
+    expect(stranger.status).toBe(404);
+    expect(expectParses(errorResponseSchema, stranger.body).error.code).toBe("not_found");
+
+    const response = await request(h.app).delete(`/v1/instances/${ghost.id}`).set(USER_HEADER, account);
+    expect(response.status).toBe(200);
+    expect(expectParses(instanceResponseSchema, response.body).instance.status).toBe("revoked");
+
+    // Which is the whole point: the account has no active instance now, so the
+    // next device to register bootstraps active instead of waiting.
+    const next = await TestInstance.register(h.app, account, { platform: "ios" });
+    expect(next.registration.enrollment).toBe("active");
+  });
+
   it("answers an empty list for an account Allo has never seen (a state, not an error)", async () => {
     const response = await request(h.app).get(`/v1/accounts/${accountId("nobody")}/instances`).set(USER_HEADER, accountId());
     expect(response.status).toBe(200);

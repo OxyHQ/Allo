@@ -533,7 +533,7 @@ describe("the allow-list is checked against the real table", () => {
     // it. This is the gate that makes the tuple and the table one fact.
     expect([...UPDATABLE_USER_SETTINGS_COLUMNS].sort()).toEqual(schemaColumns);
     // Anti-vacuity: a traversal returning nothing would satisfy the equality above.
-    expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(20);
+    expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(22);
   });
 
   it("excludes identity and timestamp columns", async () => {

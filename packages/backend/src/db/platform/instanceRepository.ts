@@ -85,6 +85,25 @@ export async function listInstancesByAccount(
     .orderBy(asc(clientInstances.createdAt), asc(clientInstances.id));
 }
 
+/**
+ * Every ACTIVE instance of these accounts, in one query.
+ *
+ * What a fan-out needs: a ring goes to every device of every callee, and doing
+ * that as one lookup per account is how a group call becomes a dozen round
+ * trips before it makes a sound.
+ */
+export async function listActiveInstancesForAccounts(
+  accountIds: readonly string[],
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<InstanceRow[]> {
+  if (accountIds.length === 0) return [];
+  return db
+    .select(INSTANCE_COLUMNS)
+    .from(clientInstances)
+    .where(and(inArray(clientInstances.accountId, [...accountIds]), eq(clientInstances.status, "active")))
+    .orderBy(asc(clientInstances.accountId), asc(clientInstances.createdAt), asc(clientInstances.id));
+}
+
 export async function listInstancesByAccountAndStatus(
   accountId: string,
   status: InstanceStatus,

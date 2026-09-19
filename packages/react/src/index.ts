@@ -14,6 +14,9 @@ export {
 } from "./hooks/useConversations";
 export { useTimeline, DEFAULT_TIMELINE_PAGE_SIZE, type Timeline, type TimelineOptions } from "./hooks/useTimeline";
 export { useMediaFile, type MediaFile, type MediaFileStatus } from "./hooks/useMediaFile";
+export { useCall, useCallActions, useCallHistory, type CallActions } from "./hooks/useCall";
+export { usePresence, type Presence } from "./hooks/usePresence";
+export { useStatuses, type Statuses } from "./hooks/useStatuses";
 export { useSyncState } from "./hooks/useSyncState";
 export { useAlloErrors } from "./hooks/useAlloErrors";
 export { useHistoryTransfer, type HistoryTransfer } from "./hooks/useHistoryTransfer";
@@ -35,6 +38,11 @@ export type {
   MediaRef,
   MediaView,
   PendingEnrollmentView,
+  PresenceView,
+  StatusAudience,
+  StatusDraft,
+  StatusView,
+  StatusViewerView,
   SendOptions,
   SendState,
   SubscriptionTopic,

@@ -20,6 +20,10 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
   BLOB_SHA256_HEADER,
+  CLIENT_TO_SERVER_EVENTS,
+  PRESENCE_TTL_MS,
+  createStatusRequestSchema,
+  presenceQuerySchema,
   DEFAULT_MAX_BLOB_BYTES,
   EMPTY_BODY_SHA256_HEX,
   INITIAL_CURSOR,
@@ -45,6 +49,7 @@ import {
   listEventsQuerySchema,
   putGroupInfoRequestSchema,
   registerInstanceRequestSchema,
+  resetConversationRequestSchema,
   setPushTokenRequestSchema,
   signedRequestMessage,
   socketAuthSchema,
@@ -57,8 +62,11 @@ import {
   type HistoryOffer,
   type ConversationEvent,
   type ConversationSummary,
+  type PresenceState,
+  type PresenceWatchEvent,
   type PublicInstance,
   type StoredGroupInfo,
+  type TypingEvent,
   type SubmitEventRequest,
 } from "@allo/shared-types";
 import type { z } from "zod";
@@ -143,6 +151,11 @@ export class FakeAlloServer implements SocketHost {
   readonly backups = new Map<string, AccountBackup>();
   /** The latest GroupInfo per conversation, replaced by every commit and by `PUT …/group-info`. */
   readonly groupInfos = new Map<string, StoredGroupInfo>();
+  /** Calls, with only what the server has to know: who is rung, who won, how it ended. */
+  readonly calls = new Map<
+    string,
+    { id: string; conversationId: string; initiatorAccountId: string; initiatorInstanceId: string; mode: "voice" | "video"; state: "ringing" | "active" | "ended"; group: boolean; relayed: boolean; rung: string[]; answeredBy: string | null; startedAt: string; endReason: string | null }
+  >();
   /** See the header: `false` simulates conversations whose commits predate `CommitInfo.groupInfo`. */
   keepGroupInfo = true;
   readonly deliveries: Delivery[] = [];
@@ -229,6 +242,120 @@ export class FakeAlloServer implements SocketHost {
     return { instanceId: inst.id, accountId };
   }
 
+  /**
+   * Presence, modelled the way the backend models it: a heartbeat with a
+   * deadline, a watch set per socket, and the four visibility rules. A test
+   * that watches an account it shares nothing with must see nothing, or the
+   * rule is only in the backend's suite.
+   */
+  private readonly beats = new Map<string, Map<string, number>>();
+  private readonly lastSeen = new Map<string, number>();
+  private readonly watching = new Map<FakeSocket, string[]>();
+  /**
+   * Status updates: the ciphertext, the per-device sealed keys, and who has
+   * viewed. The same three refusals the backend makes — not there, no shared
+   * conversation, blocked — so a client that skipped one fails a test here.
+   */
+  readonly statuses = new Map<string, {
+    id: string;
+    authorAccountId: string;
+    authorInstanceId: string;
+    payload: string;
+    nonce: string;
+    sha256: string;
+    blobIds: string[];
+    signature: string;
+    idempotencyKey: string;
+    createdAt: string;
+    expiresAt: string;
+    state: "live" | "deleted";
+    keys: Map<string, string>;
+    views: Map<string, boolean>;
+  }>();
+  /** Accounts that publish no status view receipt. */
+  readonly statusReceiptsOff = new Set<string>();
+  /**
+   * A server that keeps serving a status past its deadline — which is exactly
+   * what a dishonest one would do, and what the client's own clock is for.
+   */
+  keepExpiredStatuses = false;
+
+  /** Accounts that have turned their own presence off, keyed by account id. */
+  readonly presenceHidden = new Set<string>();
+  /** `blocker -> blocked`, either direction cutting presence. */
+  readonly blocks = new Set<string>();
+
+  private beat(accountId: string, instanceId: string): void {
+    const forAccount = this.beats.get(accountId) ?? new Map<string, number>();
+    forAccount.set(instanceId, this.now() + PRESENCE_TTL_MS);
+    this.beats.set(accountId, forAccount);
+    this.lastSeen.set(accountId, this.now());
+  }
+
+  private isOnline(accountId: string): boolean {
+    const forAccount = this.beats.get(accountId);
+    if (!forAccount) return false;
+    for (const [instanceId, deadline] of forAccount) if (deadline <= this.now()) forAccount.delete(instanceId);
+    return forAccount.size > 0;
+  }
+
+  private sharesConversation(a: string, b: string): boolean {
+    for (const conv of this.conversations.values()) {
+      const members = [...conv.members.entries()].filter(([, m]) => m.state === "joined").map(([accountId]) => accountId);
+      if (members.includes(a) && members.includes(b)) return true;
+    }
+    return false;
+  }
+
+  private presenceVisible(viewer: string, subject: string): boolean {
+    if (viewer === subject) return false;
+    if (this.presenceHidden.has(viewer) || this.presenceHidden.has(subject)) return false;
+    if (this.blocks.has(`${viewer}:${subject}`) || this.blocks.has(`${subject}:${viewer}`)) return false;
+    return this.sharesConversation(viewer, subject);
+  }
+
+  presenceFor(viewer: string, accountIds: readonly string[]): { presence: PresenceState[]; publishing: boolean } {
+    const publishing = !this.presenceHidden.has(viewer);
+    const presence = accountIds.map((accountId) => {
+      if (!publishing || !this.presenceVisible(viewer, accountId)) return { accountId, online: false, lastSeenAt: null };
+      const online = this.isOnline(accountId);
+      const seen = this.lastSeen.get(accountId);
+      return {
+        accountId,
+        online,
+        lastSeenAt: online || !seen ? null : new Date(Math.floor(seen / 60_000) * 60_000).toISOString(),
+      };
+    });
+    return { presence, publishing };
+  }
+
+  private statusFor(row: { id: string; authorAccountId: string; authorInstanceId: string; payload: string; nonce: string; sha256: string; blobIds: string[]; signature: string; createdAt: string; expiresAt: string }, sealedKey: string | null) {
+    return {
+      id: row.id,
+      authorAccountId: row.authorAccountId,
+      authorInstanceId: row.authorInstanceId,
+      payload: row.payload,
+      nonce: row.nonce,
+      sha256: row.sha256,
+      blobIds: row.blobIds,
+      sealedKey,
+      signature: row.signature,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+    };
+  }
+
+  /** Tell every socket watching `accountId` what it looks like to that socket now. */
+  private pushPresence(accountId: string): void {
+    for (const [socket, watched] of this.watching) {
+      if (!watched.includes(accountId) || !socket.instanceId) continue;
+      const viewer = this.instances.get(socket.instanceId)?.accountId;
+      if (!viewer) continue;
+      const [state] = this.presenceFor(viewer, [accountId]).presence;
+      socket.receive("presence", state);
+    }
+  }
+
   attach(socket: FakeSocket, instanceId: string): void {
     let set = this.sockets.get(instanceId);
     if (!set) {
@@ -236,20 +363,57 @@ export class FakeAlloServer implements SocketHost {
       this.sockets.set(instanceId, set);
     }
     set.add(socket);
+    const inst = this.instances.get(instanceId);
+    if (inst?.status === "active") {
+      this.beat(inst.accountId, instanceId);
+      this.pushPresence(inst.accountId);
+    }
   }
 
   detach(socket: FakeSocket): void {
-    if (socket.instanceId) this.sockets.get(socket.instanceId)?.delete(socket);
+    this.watching.delete(socket);
+    if (!socket.instanceId) return;
+    this.sockets.get(socket.instanceId)?.delete(socket);
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst || (this.sockets.get(socket.instanceId)?.size ?? 0) > 0) return;
+    this.beats.get(inst.accountId)?.delete(socket.instanceId);
+    this.lastSeen.set(inst.accountId, this.now());
+    this.pushPresence(inst.accountId);
   }
 
+  /**
+   * Client → server. Every frame is parsed with the SAME schema the backend
+   * parses it with (`CLIENT_TO_SERVER_EVENTS`), so a drift between the SDK
+   * and the contract fails a test here rather than in production.
+   */
   onClientEvent(socket: FakeSocket, event: string, payload: unknown): void {
-    if (event !== "typing" || !socket.instanceId) return;
-    const p = payload as { conversationId?: string; ciphertext?: string };
-    const conv = p.conversationId ? this.conversations.get(p.conversationId) : undefined;
-    if (!conv || typeof p.ciphertext !== "string") return;
-    if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
-    for (const [instanceId, leaf] of conv.leaves) {
-      if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+    if (!socket.instanceId) return;
+    const schema = CLIENT_TO_SERVER_EVENTS[event as keyof typeof CLIENT_TO_SERVER_EVENTS];
+    if (!schema) return;
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) return;
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst) return;
+
+    if (event === "typing") {
+      const p = parsed.data as TypingEvent;
+      const conv = this.conversations.get(p.conversationId);
+      if (!conv) return;
+      if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
+      for (const [instanceId, leaf] of conv.leaves) {
+        if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+      }
+      return;
+    }
+
+    if (event === "presence.watch") {
+      const accountIds = (parsed.data as PresenceWatchEvent).accountIds;
+      this.watching.set(socket, [...accountIds]);
+      return;
+    }
+
+    if (event === "presence.heartbeat" && inst.status === "active") {
+      this.beat(inst.accountId, inst.id);
     }
   }
 
@@ -399,6 +563,13 @@ export class FakeAlloServer implements SocketHost {
       me.pushProvider = null;
       return new Response(null, { status: 204 });
     }
+    // Session-authenticated: no `signed()`, because the case this exists for is
+    // an account with no signing key left to sign with.
+    if (method === "DELETE" && (m = path.match(/^\/v1\/instances\/([^/]+)$/))) {
+      const target = this.instances.get(m[1]);
+      if (!target || target.accountId !== accountId) throw new HttpError(404, "not_found", "instance");
+      return this.revoke(target);
+    }
     if (method === "POST" && (m = path.match(/^\/v1\/instances\/([^/]+)\/(approve|reject|revoke)$/))) {
       const me = signed();
       const target = this.instances.get(m[1]);
@@ -410,6 +581,10 @@ export class FakeAlloServer implements SocketHost {
         return json(200, { instance: toClient({ ...target, status: "revoked", revokedAt: this.iso() }) });
       }
       return this.revoke(target);
+    }
+    if (method === "GET" && path === "/v1/key-packages") {
+      const me = signed();
+      return json(200, { available: (this.keyPackages.get(me.id) ?? []).length });
     }
     if (method === "PUT" && path === "/v1/key-packages") {
       const me = signed();
@@ -441,6 +616,78 @@ export class FakeAlloServer implements SocketHost {
       void me;
       return json(200, { keyPackages, missing });
     }
+    // ---- calls: the fork, the race, and nothing about the media ----------
+    if (method === "POST" && path === "/v1/calls") {
+      const me = signed();
+      const req = JSON.parse(utf8Decode(body)) as { idempotencyKey: string; conversationId: string; mode: "voice" | "video" };
+      const conv = this.conversations.get(req.conversationId);
+      if (!conv || conv.members.get(accountId)?.state !== "joined") throw new HttpError(404, "not_found", "conversation");
+      const others = [...conv.members.entries()].filter(([id, m]) => m.state === "joined" && id !== accountId).map(([id]) => id);
+      const rung = others.flatMap((a) => this.instancesOf(a).filter((i) => i.status === "active").map((i) => i.id));
+      const group = others.length > 1;
+      const call = {
+        id: uuidV7(this.now()),
+        conversationId: req.conversationId,
+        initiatorAccountId: accountId,
+        initiatorInstanceId: me.id,
+        mode: req.mode,
+        state: "ringing" as const,
+        group,
+        relayed: group,
+        rung,
+        answeredBy: null,
+        startedAt: this.iso(),
+        endReason: null,
+      };
+      this.calls.set(call.id, call);
+      for (const instanceId of rung) {
+        this.emitTo(instanceId, "call.incoming", {
+          callId: call.id,
+          conversationId: call.conversationId,
+          initiatorAccountId: accountId,
+          mode: call.mode,
+          group,
+        });
+      }
+      return json(201, { call: this.callWire(call) });
+    }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/ice$/)) && method === "GET") {
+      signed();
+      const call = this.calls.get(m[1]);
+      if (!call) throw new HttpError(404, "not_found", "call");
+      return json(200, {
+        iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+        expiresAt: new Date(this.now() + 3_600_000).toISOString(),
+        relayOnly: call.relayed,
+      });
+    }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/)) && method === "POST") {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call) throw new HttpError(404, "not_found", "call");
+      const action = m[2];
+      if (action === "answer") {
+        // First to answer wins; the losers are told who did.
+        if (call.state !== "ringing") throw new HttpError(409, "idempotency_conflict", "the call is not ringing");
+        call.state = "active";
+        call.answeredBy = me.id;
+      } else if (action === "decline") {
+        call.state = "ended";
+        call.endReason = "declined";
+      } else {
+        call.state = "ended";
+        const req = body.length ? (JSON.parse(utf8Decode(body)) as { reason?: string }) : {};
+        call.endReason = req.reason ?? "hangup";
+      }
+      const update = {
+        callId: call.id,
+        state: call.state,
+        answeredByInstanceId: call.answeredBy,
+        endReason: call.endReason,
+      };
+      for (const instanceId of [...call.rung, call.initiatorInstanceId]) this.emitTo(instanceId, "call.updated", update);
+      return json(200, { call: this.callWire(call) });
+    }
     if (method === "POST" && path === "/v1/conversations") return this.createConversation(signed(), body);
     if (method === "GET" && path === "/v1/conversations") {
       const me = signed();
@@ -450,6 +697,37 @@ export class FakeAlloServer implements SocketHost {
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)$/)) && method === "GET") {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
+      return json(200, { conversation: this.summary(conv, me.id) });
+    }
+    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/reset$/)) && method === "POST") {
+      const me = signed();
+      const conv = this.conversations.get(m[1]);
+      if (!conv || conv.members.get(accountId)?.state !== "joined") throw new HttpError(404, "not_found", "conversation");
+      const req = this.parse(resetConversationRequestSchema, body);
+      const mine = conv.leaves.get(me.id);
+      // The caller's own replay: already installed, and this device is the live leaf.
+      if (!(conv.mlsGroupId === req.mlsGroupId && mine?.state === "active")) {
+        // A DM with no GroupInfo has no other way in for a device with no
+        // leaf, so it may be re-keyed; see `mayRekeyDirect` on the server.
+        const alive = [...conv.leaves.values()].filter((leaf) => leaf.state === "active");
+        const ours = [...conv.leaves.values()].filter((leaf) => leaf.accountId === me.accountId);
+        const mayRekey =
+          conv.kind === "dm" &&
+          !ours.some((leaf) => leaf.state === "active") &&
+          ours.some((leaf) => leaf.state === "removed") &&
+          !this.groupInfos.has(conv.id);
+        if (alive.length > 0 && !mayRekey) {
+          throw new HttpError(409, "idempotency_conflict", "the conversation still has an active device");
+        }
+        if ([...this.conversations.values()].some((c) => c.id !== conv.id && c.mlsGroupId === req.mlsGroupId)) {
+          throw new HttpError(409, "idempotency_conflict", "group id in use");
+        }
+        conv.mlsGroupId = req.mlsGroupId;
+        conv.epoch = 0;
+        for (const [id, leaf] of conv.leaves) conv.leaves.set(id, { ...leaf, state: "removed" });
+        conv.leaves.set(me.id, { accountId: me.accountId, state: "active", addedEpoch: 0 });
+        if (req.initialCommit) this.submitEvent(conv, me, req.initialCommit);
+      }
       return json(200, { conversation: this.summary(conv, me.id) });
     }
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/leave$/)) && method === "POST") {
@@ -492,6 +770,105 @@ export class FakeAlloServer implements SocketHost {
       if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
       const events = conv.events.filter((e) => e.seq > q.data.after);
       return json(200, { events: events.slice(0, q.data.limit), hasMore: events.length > q.data.limit });
+    }
+    if (method === "POST" && path === "/v1/statuses") {
+      const me = signed();
+      const req = this.parse(createStatusRequestSchema, body);
+      const existing = [...this.statuses.values()].find(
+        (s) => s.authorInstanceId === me.id && s.idempotencyKey === req.idempotencyKey,
+      );
+      if (existing) return json(201, { status: this.statusFor(existing, null), refused: [] });
+
+      const refused: string[] = [];
+      const keys = new Map<string, string>();
+      for (const recipient of req.recipients) {
+        const instance = this.instances.get(recipient.instanceId);
+        const reachable =
+          instance?.status === "active" &&
+          (instance.accountId === me.accountId ||
+            (this.sharesConversation(me.accountId, instance.accountId) &&
+              !this.blocks.has(`${me.accountId}:${instance.accountId}`) &&
+              !this.blocks.has(`${instance.accountId}:${me.accountId}`)));
+        if (!reachable) {
+          refused.push(recipient.instanceId);
+          continue;
+        }
+        keys.set(recipient.instanceId, recipient.sealedKey);
+      }
+
+      const row = {
+        id: req.id,
+        authorAccountId: me.accountId,
+        authorInstanceId: me.id,
+        payload: req.payload,
+        nonce: req.nonce,
+        sha256: req.sha256,
+        blobIds: req.blobIds,
+        signature: req.signature,
+        idempotencyKey: req.idempotencyKey,
+        createdAt: new Date(this.now()).toISOString(),
+        expiresAt: req.expiresAt,
+        state: "live" as const,
+        keys,
+        views: new Map<string, boolean>(),
+      };
+      this.statuses.set(row.id, row);
+      for (const blobId of req.blobIds) {
+        const blob = this.blobs.get(blobId);
+        if (blob) blob.expiresAt = null;
+      }
+      for (const instanceId of keys.keys()) {
+        this.emitTo(instanceId, "status.posted", { statusId: row.id, authorAccountId: me.accountId });
+      }
+      return json(201, { status: this.statusFor(row, null), refused });
+    }
+
+    if (method === "GET" && path === "/v1/statuses") {
+      const me = signed();
+      const live = [...this.statuses.values()].filter(
+        (s) => s.state === "live" && (this.keepExpiredStatuses || new Date(s.expiresAt).getTime() > this.now()),
+      );
+      const statuses = live
+        .filter((s) => s.keys.has(me.id) || s.authorAccountId === me.accountId)
+        .map((s) => this.statusFor(s, s.keys.get(me.id) ?? null))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return json(200, { statuses });
+    }
+
+    const viewMatch = /^\/v1\/statuses\/([^/]+)\/views$/.exec(path);
+    if (viewMatch) {
+      const me = signed();
+      const row = this.statuses.get(viewMatch[1]);
+      if (!row || row.state !== "live") throw new HttpError(404, "not_found", "no such status");
+      if (method === "POST") {
+        if (row.authorAccountId === me.accountId) return new Response(null, { status: 204 });
+        if (!row.keys.has(me.id)) throw new HttpError(404, "not_found", "no such status");
+        if (!row.views.has(me.accountId)) row.views.set(me.accountId, !this.statusReceiptsOff.has(me.accountId));
+        return new Response(null, { status: 204 });
+      }
+      if (method === "GET") {
+        if (row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+        const views = [...row.views.entries()]
+          .filter(([, published]) => published)
+          .map(([accountId]) => ({ accountId, viewedAt: new Date(this.now()).toISOString() }));
+        return json(200, { views, total: row.views.size });
+      }
+    }
+
+    const statusMatch = /^\/v1\/statuses\/([^/]+)$/.exec(path);
+    if (statusMatch && method === "DELETE") {
+      const me = signed();
+      const row = this.statuses.get(statusMatch[1]);
+      if (!row || row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+      row.state = "deleted";
+      return new Response(null, { status: 204 });
+    }
+
+    if (method === "GET" && path === "/v1/presence") {
+      const me = signed();
+      const q = presenceQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+      if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
+      return json(200, this.presenceFor(me.accountId, q.data.accountIds));
     }
     if (method === "GET" && path === "/v1/sync") {
       const me = signed();
@@ -770,6 +1147,31 @@ export class FakeAlloServer implements SocketHost {
       if (req.initialCommit) this.submitEvent(conv, me, req.initialCommit);
       return { status: 201, body: { conversation: this.summary(conv, me.id), created: true } };
     });
+  }
+
+  private callWire(call: NonNullable<ReturnType<FakeAlloServer["calls"]["get"]>>) {
+    return {
+      id: call.id,
+      conversationId: call.conversationId,
+      initiatorAccountId: call.initiatorAccountId,
+      initiatorInstanceId: call.initiatorInstanceId,
+      mode: call.mode,
+      state: call.state,
+      relayed: call.relayed,
+      group: call.group,
+      participants: call.rung.map((instanceId) => ({
+        accountId: this.instances.get(instanceId)?.accountId ?? "",
+        instanceId,
+        state: call.answeredBy === instanceId ? ("joined" as const) : ("ringing" as const),
+        joinedAt: call.answeredBy === instanceId ? call.startedAt : null,
+        leftAt: null,
+      })),
+      startedAt: call.startedAt,
+      answeredAt: call.answeredBy ? call.startedAt : null,
+      endedAt: call.state === "ended" ? this.iso() : null,
+      endReason: call.endReason as null,
+      ringExpiresAt: call.state === "ringing" ? new Date(this.now() + 45_000).toISOString() : null,
+    };
   }
 
   private withIdempotency(instanceId: string, key: string, body: Uint8Array, run: () => { status: number; body: unknown }): Response {

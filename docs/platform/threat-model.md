@@ -111,14 +111,38 @@ content, identity binding to Oxy accounts, sync, or media.
   (a `joined` member row, a request signed by an instance of that account,
   the added leaf being exactly the sender) keeps strangers from reading the
   GroupInfo at all; the chain check is what keeps them out of the group.
-- **Revocation.** Any active instance of the account, or the instance itself,
-  can revoke an instance. The server marks it revoked, refuses its signature
-  from then on, disconnects its sockets, marks its leaves removed pending, and
-  appends an `instance_revoked` control event. An active leaf commits a
+- **Revocation, and the Oxy session's door into it.** Any active instance of
+  the account, or the instance itself, can revoke an instance. The server
+  marks it revoked, refuses its signature from then on, disconnects its
+  sockets, marks its leaves removed pending, and appends an
+  `instance_revoked` control event. An active leaf commits a
   Remove, after which the revoked instance holds no secret for the next epoch.
   Between revocation and that commit the revoked instance can still decrypt
   events of the current epoch it receives by other means; it no longer
   receives them from the server.
+
+  `DELETE /v1/instances/:id` adds ONE more caller: the account's Oxy session,
+  with no instance signature. This is a deliberate widening, taken because the
+  alternative is worse. An account whose last ACTIVE instance is gone — a
+  browser whose site data was cleared, a phone that was lost, a key that did
+  not survive — has no signing key left to authorise anything with, so a newly
+  enrolled device waits on an approval that can never come and the ACCOUNT is
+  finished. No messenger may do that to somebody, and none does: WhatsApp and
+  Signal both let the account's own credential re-register a device and sign
+  the others out.
+
+  What it costs, stated plainly: **a stolen Oxy token can take the account
+  over going forward.** It can revoke every device and enrol itself into the
+  empty account, which the TOFU bootstrap above then makes active. What it
+  CANNOT do is read what came before — history is end-to-end encrypted and
+  reaches a new device only by an approved transfer or the recovery phrase,
+  neither of which a token grants — and it cannot do it quietly: every device
+  it removes hears `instance.revoked`, lands on "this device was removed", and
+  every other member of every conversation sees the account's instance list
+  change. It is the same shape as a SIM swap against WhatsApp, with the same
+  answer: the account is recoverable, the past is not readable, and the theft
+  is loud. `client.reclaimAccount()` is the legitimate use, offered on the
+  pending-approval screen behind a confirmation that says what is lost.
 - **History only from a verified instance of the same account.** A new
   instance receives an offer's archive key sealed to its own transfer key,
   and its SDK accepts an offer only after it has verified, from the listing
@@ -140,9 +164,27 @@ content, identity binding to Oxy accounts, sync, or media.
 - The membership graph across all users and its evolution over time.
 - Blob sizes, upload times, uploader instance, and which events reference
   which blobs (declared by the sender for garbage collection).
-- Presence (online per account, best effort) and the existence and timing of
-  typing traffic; typing payloads themselves are MLS application messages the
-  server cannot read and does not store.
+- Presence: which accounts have a device beating right now, when each was last
+  connected (to the minute, in `account_presence`), and which accounts each
+  socket asked to WATCH — that last one is a screen's contents, and is new with
+  ADR 0002. The rules in `presence.ts` bound what other USERS see; they bound
+  nothing about the operator, who computes all of it.
+- Calls: that one happened, between which accounts and devices, when it was
+  answered, how long it lasted, how it ended, and whether it was relayed. Not
+  the offer, the candidates, the addresses or the keys — those are encrypted
+  messages it relays. This is a call-metadata table, it is subpoenable, and it
+  is the price of a server that can ring a phone at all. What a person SEES
+  afterwards is not this: the call log is an encrypted message in their
+  conversation.
+- Status updates: that one exists, who wrote it, WHICH DEVICES it was sealed
+  to — the audience, which the server necessarily learns in order to deliver,
+  as WhatsApp's and Signal's do — its size, its deadline, which blobs it names,
+  and who viewed it. Not the words, the picture, or the key: the body is
+  AES-256-GCM under a key that reaches each device HPKE-sealed to its transfer
+  key. A viewer whose receipts are off is counted and not named, and the author
+  cannot tell a missing name from somebody who did not look.
+- The existence and timing of typing traffic; typing payloads themselves are
+  MLS application messages the server cannot read and does not store.
 - Push tokens and which instance is on which platform and app.
 - The latest GroupInfo of every conversation: the group id, epoch, transcript
   and tree hashes, `external_pub`, and every leaf's credential

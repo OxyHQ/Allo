@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { usePathname, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services';
+import { useAlloClient } from '@allo/react';
 import { getNativeLanguageName } from '@oxy.so/core';
 import { ContactRow } from '@oxy.so/bloom/chat-people';
 import {
@@ -27,8 +28,9 @@ import { Page } from '@/components/shell/Page';
 import { useAvatarUrl } from '@/hooks/usePerson';
 import { useSplitLayout } from '@/hooks/useSplitLayout';
 import { announcePushPermissionGranted } from '@/lib/allo/push';
+import { signOutOfAllo } from '@/lib/allo/signOut';
 import { profileHref } from '@/lib/profile/handle';
-import { alertDialog, confirmDialog } from '@/utils/alerts';
+import { alert, confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 import { hasNotificationPermission, requestNotificationPermissions } from '@/utils/notifications';
 
@@ -47,6 +49,7 @@ export function SettingsMenu() {
   const pathname = usePathname();
   const split = useSplitLayout();
   const { user, logout, showBottomSheet, currentLanguage, currentLanguages } = useOxy();
+  const client = useAlloClient();
   const avatarUrl = useAvatarUrl(user?.avatar ?? undefined);
   const notifications = useNotificationPermission();
 
@@ -60,23 +63,26 @@ export function SettingsMenu() {
   const isActive = (target: string) => split && (path === target || path.startsWith(`${target}/`));
 
   const signOut = useCallback(async () => {
-    const confirmed = await confirmDialog({
+    const confirmed = await confirm({
       title: t('settings.signOut'),
-      message: t('settings.signOutMessage'),
-      okText: t('settings.signOut'),
-      cancelText: t('common.cancel'),
+      description: t('settings.signOutMessage'),
+      confirmLabel: t('settings.signOut'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!confirmed) return;
     try {
-      // `AlloRoot` sees the account go and wipes this device's client.
-      await logout();
+      // Leaving is deliberate, so it happens HERE, while the Oxy session is
+      // still alive: the revoke that takes this device off the account is
+      // authenticated with it. `AlloRoot` only ever stops a client.
+      const outcome = await signOutOfAllo(client, logout);
+      if (outcome.revoked === 'failed') toast.error(t('settings.signOutStillListed'));
       router.replace('/');
     } catch (error: unknown) {
       logger.error('[Settings] sign-out failed', error);
       toast.error(t('settings.signOutFailed'));
     }
-  }, [logout, router, t]);
+  }, [client, logout, router, t]);
 
   return (
     <Page title={t('settings.title')}>
@@ -231,7 +237,7 @@ function useNotificationPermission() {
       // The messaging client registers the push token on this signal.
       announcePushPermissionGranted();
     } else {
-      await alertDialog({ title: t('settings.preferences.notifications'), message: t('notification.permission.denied') });
+      alert(t('settings.preferences.notifications'), t('notification.permission.denied'));
     }
   }, [t]);
 

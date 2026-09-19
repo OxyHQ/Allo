@@ -7,6 +7,7 @@
  */
 import {
   claimKeyPackagesResponseSchema,
+  keyPackageStockResponseSchema,
   instanceResponseSchema,
   listAccountInstancesResponseSchema,
   listInstancesResponseSchema,
@@ -152,7 +153,26 @@ export class InstanceManager {
         this.emitInstance();
         return existing;
       }
-      this.deps.log.warn?.("instance record does not match the stored key; re-registering");
+    }
+    /**
+     * Everything below enrols a NEW instance, which on an account that already
+     * has an active one means the "approve this device" screen. That is the
+     * right answer when this device genuinely cannot prove which instance it
+     * is — but it is indistinguishable, from the outside, from a device that
+     * simply lost one of its two halves. So say which half, once, loudly
+     * enough to find in a support log:
+     *
+     *   no-record   the encrypted store has no `self` (cleared site data, a
+     *               new profile, a first run)
+     *   no-key      the record is there and the SIGNING KEY is gone — the
+     *               shape a non-durable secret store produces, and the one
+     *               worth investigating rather than explaining away
+     *   mismatch    both are there and disagree, which means two clients
+     *               raced to enrol on this device
+     */
+    if (existing || secret) {
+      const reason = !existing ? "no-record" : !secret || secret.length !== 32 ? "no-key" : "mismatch";
+      this.deps.log.warn?.("enrolling a new instance rather than resuming", { reason });
     }
     if (!secret || secret.length !== 32) {
       const fresh = generateSigningKey();
@@ -359,6 +379,27 @@ export class InstanceManager {
     else await this.refresh();
   }
 
+  /**
+   * Removes an instance of this account with the OXY SESSION alone — no
+   * `signer`, so no device key is needed.
+   *
+   * The signed `revoke` above is the everyday one. This is for the account
+   * whose last ACTIVE instance is gone: a browser whose site data was
+   * cleared, a lost phone, a key that did not survive. Nothing on this device
+   * can sign for that instance any more, so nothing can approve the device
+   * standing in front of the person now — and the account would be finished.
+   * `client.reclaimAccount()` is the whole move; this is its one request.
+   */
+  async revokeWithSession(instanceId: string): Promise<void> {
+    await this.deps.http.request({ method: "DELETE", path: `/v1/instances/${instanceId}`, schema: instanceResponseSchema });
+  }
+
+  /** Every instance the account has, read with the Oxy session rather than a device key. */
+  async listWithSession(): Promise<ClientInstance[]> {
+    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+    return res.instances;
+  }
+
   // ---- push ----------------------------------------------------------------
 
   async setPushToken(provider: "fcm" | "apns", token: string): Promise<void> {
@@ -419,11 +460,26 @@ export class InstanceManager {
     for (const { value } of await this.instanceStore.listJson("keyPackage", keyPackageRecordSchema)) this.stock.set(value.ref, value);
   }
 
-  /** Uploads until the server holds `keyPackageTarget` unconsumed packages of ours. */
+  /**
+   * Uploads until the server holds `keyPackageTarget` unconsumed packages of
+   * ours.
+   *
+   * `available` comes from the server when it has just counted — the low-stock
+   * nudge, or the answer to the last upload. When it is not known, it is READ
+   * (`GET /v1/key-packages`) rather than assumed. Assuming zero is what a
+   * fresh client used to do on every start, and since nothing expires a key
+   * package and no sweep collects one, each start added a full target's worth
+   * to both stores for ever. Measured in a browser: five reloads turned 21
+   * local rows into 125.
+   */
   async topUpKeyPackages(available?: number): Promise<void> {
     if (!this.isActive) return;
     if (available !== undefined) this.serverAvailable = available;
-    const have = this.serverAvailable ?? 0;
+    if (this.serverAvailable === null) {
+      const stock = await this.deps.http.request({ method: "GET", path: "/v1/key-packages", schema: keyPackageStockResponseSchema, signer: this.signer });
+      this.serverAvailable = stock.available;
+    }
+    const have = this.serverAvailable;
     const need = this.deps.keyPackageTarget - have;
     if (need <= 0) return;
     const bundles = await this.deps.engine.generateKeyPackages(this.identity, Math.min(need, 50));
