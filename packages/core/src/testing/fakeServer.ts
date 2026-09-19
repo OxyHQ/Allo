@@ -563,6 +563,10 @@ export class FakeAlloServer implements SocketHost {
       }
       return this.revoke(target);
     }
+    if (method === "GET" && path === "/v1/key-packages") {
+      const me = signed();
+      return json(200, { available: (this.keyPackages.get(me.id) ?? []).length });
+    }
     if (method === "PUT" && path === "/v1/key-packages") {
       const me = signed();
       const req = this.parse(uploadKeyPackagesRequestSchema, body);

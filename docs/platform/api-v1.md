@@ -194,6 +194,7 @@ it `active`, clears the challenge, and emits `instance.approved` to
 
 | method | path | auth | request | response | errors |
 | --- | --- | --- | --- | --- | --- |
+| GET | `/v1/key-packages` | instance-signed | — | `KeyPackageStockResponse` `{ available }` | — |
 | PUT | `/v1/key-packages` | instance-signed | `UploadKeyPackagesRequest` (1..50 `KeyPackageUpload`) | `UploadKeyPackagesResponse` `{ available }` | `validation_failed`, `idempotency_conflict` (duplicate `ref`) |
 | POST | `/v1/key-packages/claim` | instance-signed | `ClaimKeyPackagesRequest` (1..100 instance ids) | `ClaimKeyPackagesResponse` `{ keyPackages, missing }` | `validation_failed` |
 
@@ -201,6 +202,15 @@ it `active`, clears the challenge, and emits `instance.approved` to
 A claim consumes at most one package per instance, atomically; an instance
 with none left appears in `missing` rather than failing the call. An instance
 whose stock drops below the low-water mark is sent `keypackages.low`.
+
+**Read the stock before topping it up.** Nothing expires a key package and no
+sweep collects one, so whatever is uploaded stays — on the server, and with its
+private half on the device. `GET /v1/key-packages` exists so a client starting
+up can learn the count instead of assuming zero and uploading a full target's
+worth every time; `topUpKeyPackages()` reads it whenever the server has not
+just volunteered the number (the upload's answer, or the `keypackages.low`
+nudge). Measured in a browser before the route existed: five reloads turned 21
+local rows into 125, and the server's stock grew by the target on each one.
 
 ### Conversations (`conversations.ts`)
 

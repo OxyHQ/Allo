@@ -33,6 +33,20 @@ export const uploadKeyPackagesResponseSchema = z.object({
 });
 export type UploadKeyPackagesResponse = z.infer<typeof uploadKeyPackagesResponseSchema>;
 
+/**
+ * `GET /v1/key-packages` — how many unconsumed packages the server holds for
+ * this instance.
+ *
+ * The same number the upload answers with, readable WITHOUT uploading. A
+ * client that cannot ask has to guess, and the only safe guess is zero: it
+ * then uploads a full target's worth on every start, for ever, because a
+ * key package is never expired and never swept. Measured before this route
+ * existed: a browser reloaded five times left 125 rows on disk where 21
+ * belonged.
+ */
+export const keyPackageStockResponseSchema = uploadKeyPackagesResponseSchema;
+export type KeyPackageStockResponse = z.infer<typeof keyPackageStockResponseSchema>;
+
 /** `POST /v1/key-packages/claim` */
 export const claimKeyPackagesRequestSchema = z.object({
   instanceIds: z.array(instanceIdSchema).min(1).max(MAX_KEY_PACKAGE_CLAIMS),
