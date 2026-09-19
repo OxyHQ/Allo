@@ -12,14 +12,20 @@
  * they inherit its ordering, its retries and its end-to-end encryption. The
  * server relays ciphertext and knows only what it must: who is being rung.
  *
- * **The fingerprint check is the whole of the confidentiality claim.** A 1:1
- * call's media is DTLS-SRTP, and what makes it end to end is that the DTLS
- * fingerprint rides INSIDE the encrypted offer and answer: a server that
- * swapped one would be swapping a value the MLS group already authenticated.
- * So the fingerprint that arrives is compared here, once, and a call whose
- * answer does not match the description it carries is ended rather than
- * connected — quietly downgrading to an unauthenticated call would be the
- * worst of both worlds.
+ * **What makes the media end to end is WHERE the fingerprint travels, not a
+ * comparison made here.** A 1:1 call's media is DTLS-SRTP, and the DTLS
+ * fingerprint rides INSIDE the encrypted offer and answer: the SDP is an MLS
+ * message like any other, so the server never sees it and cannot swap it, and
+ * WebRTC itself refuses a peer whose certificate does not match the
+ * `a=fingerprint` of the description it was handed. There is no second copy
+ * to compare against — the encrypted SDP is the only source — so the one rule
+ * this file enforces is that a description arriving WITHOUT a fingerprint is
+ * refused and the call ends. BOTH directions, because an offer with no
+ * fingerprint downgrades the call exactly as an answer with none does.
+ *
+ * Said plainly because an earlier version of this comment was not: it claimed
+ * a comparison, while the code kept a `localFingerprint` nothing read and
+ * derived the answer's fingerprint from the very string it was checking.
  *
  * The SERVER owns who answered. `call.updated` is the authority: a device that
  * lost the race is told, and stops ringing, rather than deciding for itself.
@@ -75,49 +81,72 @@ export interface CallView {
 
 interface Live {
   view: CallView;
-  /** The description we sent or received, kept so the answer's fingerprint can be checked against it. */
-  localFingerprint: string | null;
-  remoteFingerprint: string | null;
+  /**
+   * Whether the media has been given the other side's description yet.
+   *
+   * This is what gates the candidates — WebRTC refuses one before the remote
+   * description — so it is set where the adapter actually accepts a
+   * description and nowhere else. It used to be inferred from "we have seen a
+   * fingerprint", which was true from the moment the offer ARRIVED rather
+   * than from the moment it was accepted, and so let candidates through a
+   * window early.
+   */
+  remoteDescriptionSet: boolean;
   stopCandidates: (() => void) | null;
-  /** Candidates that arrived before the description they belong to. */
-  pendingCandidates: string[];
+}
+
+/** Signalling for a call, waiting for the thing that will use it. */
+interface Pending {
+  callId: string;
   /** The caller's offer, held until this device answers. */
-  pendingOffer: string | null;
+  offer: string | null;
+  /** Candidates that arrived before the description they belong to. */
+  candidates: string[];
 }
 
 export class CallsService {
   private live: Live | null = null;
-  private changes = 0;
   /** A dial is in flight. Set before the first await, so a second one is refused rather than placed. */
   private starting = false;
   /**
-   * Signalling that arrived BEFORE the ring it belongs to.
+   * Signalling with nothing to apply it to YET, keyed by the call it names.
    *
-   * The two travel by different paths with no ordering between them: the
-   * offer is an encrypted message in the conversation, pulled by sync, and
-   * the ring is a socket event. The offer routinely wins, and dropping it
-   * because "there is no call yet" leaves a device ringing with nothing to
-   * answer with — measured, not imagined: it is what the first version did.
+   * Two windows, one buffer. Before the ring: the offer is an encrypted
+   * message in the conversation pulled by sync, the ring is a socket event,
+   * and they travel by paths with no ordering between them — the offer
+   * routinely wins, and dropping it because "there is no call yet" leaves a
+   * device ringing with nothing to answer with. That is measured, not
+   * imagined: it is what the first version did. After the ring: candidates
+   * arrive before the description they belong to, which WebRTC will not take.
    *
-   * So what arrives early is kept, keyed by the call it names, and adopted
-   * when the ring turns up. One call's worth: a second one replaces it,
-   * because a device takes one call at a time anyway.
+   * Keying by call id is what lets it be ONE field. It used to be two that
+   * were copied into each other when the ring landed, with the hand-off
+   * written out per property at the copy site.
+   *
+   * One call's worth: a second replaces it, because a device takes one call
+   * at a time anyway.
    */
-  private early: { callId: string; offer: string | null; candidates: string[] } | null = null;
+  private pending: Pending | null = null;
+  /** The call log, rebuilt on demand and held until the conversations change. */
+  private historyCache: CallHistoryEntry[] | null = null;
+  private readonly unwatchConversations: () => void;
 
   constructor(
     private readonly ctx: Context,
     private readonly media: CallMediaAdapter | undefined,
-  ) {}
+  ) {
+    // The log IS the `call_log` messages, so it changes when a conversation
+    // does. Dropping the cache here is what keeps `history()` to the SDK-wide
+    // contract — a getter safe to call on every render — instead of pushing
+    // that onto every consumer.
+    this.unwatchConversations = ctx.emitter.subscribe("conversations", () => {
+      this.historyCache = null;
+    });
+  }
 
   /** The call this device is in, or `null`. One at a time, which is what a phone does. */
   current(): CallView | null {
     return this.live?.view ?? null;
-  }
-
-  /** Bumped on every change, so a hook has something to compare. */
-  version(): number {
-    return this.changes;
   }
 
   /**
@@ -127,8 +156,16 @@ export class CallsService {
    * log IS the `call_log` messages, which sync, back up and reach every device
    * of both accounts the way any message does. A second store would be a
    * second truth to keep in step.
+   *
+   * The scan is O(every message in the account), so the result is HELD until
+   * a conversation changes: a getter the hooks read on every render may not
+   * allocate on every render, which is the contract every sibling service
+   * keeps. An index maintained from the dispatcher as each `call_log` lands
+   * would be cheaper still; the cache is what makes the scan affordable
+   * without one.
    */
   history(): CallHistoryEntry[] {
+    if (this.historyCache) return this.historyCache;
     const out: CallHistoryEntry[] = [];
     for (const conversation of this.ctx.conversations.list()) {
       for (const item of this.ctx.messages.timeline(conversation.id)) {
@@ -147,7 +184,8 @@ export class CallsService {
         });
       }
     }
-    return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    this.historyCache = out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    return this.historyCache;
   }
 
   // ---- starting, answering, ending -----------------------------------------
@@ -192,20 +230,17 @@ export class CallsService {
           startedAt: call.startedAt,
           answeredAt: null,
         },
-        localFingerprint: null,
-        remoteFingerprint: null,
+        remoteDescriptionSet: false,
         stopCandidates: null,
-        pendingCandidates: [],
-        pendingOffer: null,
       };
+      this.pendingFor(call.id);
       this.invalidate();
 
       // The offer goes out now, so the callee's device has it the moment it answers.
       await this.withMedia(call.id, async (media) => {
         await this.prepare(media, call.id);
         const offer = await media.createOffer();
-        this.live!.localFingerprint = offer.fingerprint;
-        await this.signal(conversationId, { kind: "offer", sdp: offer.sdp, fingerprint: offer.fingerprint });
+        await this.signal(conversationId, { kind: "offer", sdp: offer.sdp });
         this.streamCandidates(conversationId, media);
       });
       return this.live.view;
@@ -296,13 +331,11 @@ export class CallsService {
         startedAt: new Date(this.ctx.now()).toISOString(),
         answeredAt: null,
       },
-      localFingerprint: null,
-      remoteFingerprint: null,
+      remoteDescriptionSet: false,
       stopCandidates: null,
-      pendingCandidates: this.early?.callId === event.callId ? [...this.early.candidates] : [],
-      pendingOffer: this.early?.callId === event.callId ? this.early.offer : null,
     };
-    this.early = null;
+    // Whatever arrived before the ring is already filed under this call id;
+    // there is nothing to move.
     this.invalidate();
   }
 
@@ -338,41 +371,35 @@ export class CallsService {
   // ---- the encrypted signalling --------------------------------------------
 
   /**
-   * A `call` message from the conversation. Every kind arrives this way, and
-   * the ANSWER is where the fingerprint is checked: it has to match the
-   * description it came with, or the call ends.
+   * A `call` message from the conversation. Every kind arrives this way.
+   *
+   * A description with no `a=fingerprint` ends the call, whichever direction
+   * it came from — see the header for why that, and not a comparison, is the
+   * check this file can honestly make.
    */
   async onCallMessage(conversationId: string, message: { callId: string; kind: string; sdp?: string; candidates?: string[]; reason?: string }): Promise<void> {
     const live = this.live;
     if (!live || live.view.id !== message.callId || live.view.conversationId !== conversationId) {
       // Early, or for a call this device is not in. Keep the signalling a ring
       // will need; anything else is not ours to hold.
-      if (message.kind === "offer" && message.sdp) {
-        this.early = { callId: message.callId, offer: message.sdp, candidates: this.early?.callId === message.callId ? this.early.candidates : [] };
-      } else if (message.kind === "ice" && message.candidates) {
-        if (this.early?.callId === message.callId) this.early.candidates.push(...message.candidates);
-        else this.early = { callId: message.callId, offer: null, candidates: [...message.candidates] };
-      }
+      if (message.kind === "offer" && message.sdp) this.pendingFor(message.callId).offer = message.sdp;
+      else if (message.kind === "ice" && message.candidates) this.pendingFor(message.callId).candidates.push(...message.candidates);
       return;
     }
     switch (message.kind) {
       case "offer":
         if (!message.sdp) return;
-        live.remoteFingerprint = fingerprintOf(message.sdp);
-        live.pendingOffer = message.sdp;
-        if (live.view.phase === "connecting") await this.answerOfferIfReady(message.sdp);
+        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated("offer");
+        this.pendingFor(live.view.id).offer = message.sdp;
+        if (live.view.phase === "connecting") await this.answerOfferIfReady();
         break;
       case "answer": {
         if (!message.sdp || !live.view.outgoing) return;
-        const answer: SessionDescription = { sdp: message.sdp, fingerprint: fingerprintOf(message.sdp) };
-        if (!answer.fingerprint) {
-          this.ctx.log.error?.("the answer carries no DTLS fingerprint; ending the call", { callId: live.view.id });
-          await this.end("failed");
-          return;
-        }
-        live.remoteFingerprint = answer.fingerprint;
+        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated("answer");
+        const answer: SessionDescription = { sdp: message.sdp };
         await this.withMedia(live.view.id, async (media) => {
           await media.acceptAnswer(answer);
+          live.remoteDescriptionSet = true;
           await this.drainCandidates(media);
         });
         this.set({ phase: "active", answeredAt: live.view.answeredAt ?? new Date(this.ctx.now()).toISOString() });
@@ -381,8 +408,8 @@ export class CallsService {
       case "ice":
         if (!message.candidates) return;
         await this.withMedia(live.view.id, async (media) => {
-          if (live.remoteFingerprint) await media.addCandidates(message.candidates!);
-          else live.pendingCandidates.push(...message.candidates!);
+          if (live.remoteDescriptionSet) await media.addCandidates(message.candidates!);
+          else this.pendingFor(live.view.id).candidates.push(...message.candidates!);
         });
         break;
       case "end":
@@ -393,21 +420,34 @@ export class CallsService {
   }
 
   /** Builds and sends the answer once BOTH the offer and this device's acceptance exist. */
-  private async answerOfferIfReady(sdp?: string): Promise<void> {
+  private async answerOfferIfReady(): Promise<void> {
     const live = this.live;
     if (!live || live.view.outgoing) return;
-    const offerSdp = sdp ?? live.pendingOffer;
+    const pending = this.pendingFor(live.view.id);
+    const offerSdp = pending.offer;
     if (!offerSdp || live.view.phase !== "connecting") return;
-    live.pendingOffer = null;
+    pending.offer = null;
     await this.withMedia(live.view.id, async (media) => {
       await this.prepare(media, live.view.id);
-      const answer = await media.acceptOffer({ sdp: offerSdp, fingerprint: fingerprintOf(offerSdp) });
-      live.localFingerprint = answer.fingerprint;
-      await this.signal(live.view.conversationId, { kind: "answer", sdp: answer.sdp, fingerprint: answer.fingerprint });
+      const answer = await media.acceptOffer({ sdp: offerSdp });
+      live.remoteDescriptionSet = true;
+      await this.signal(live.view.conversationId, { kind: "answer", sdp: answer.sdp });
       this.streamCandidates(live.view.conversationId, media);
       await this.drainCandidates(media);
     });
     this.set({ phase: "active" });
+  }
+
+  /** A description with no DTLS fingerprint is an unauthenticated call. End it rather than connect it. */
+  private async refuseUnauthenticated(what: "offer" | "answer"): Promise<void> {
+    this.ctx.log.error?.(`the ${what} carries no DTLS fingerprint; ending the call`, { callId: this.live?.view.id });
+    await this.end("failed");
+  }
+
+  /** The buffer for a call, created on first use. Keyed by call id, so nothing is ever copied between two of them. */
+  private pendingFor(callId: string): Pending {
+    if (this.pending?.callId !== callId) this.pending = { callId, offer: null, candidates: [] };
+    return this.pending;
   }
 
   // ---- the parts ------------------------------------------------------------
@@ -439,14 +479,16 @@ export class CallsService {
 
   private async drainCandidates(media: CallMediaAdapter): Promise<void> {
     const live = this.live;
-    if (!live || live.pendingCandidates.length === 0) return;
-    const waiting = live.pendingCandidates.splice(0, live.pendingCandidates.length);
+    if (!live) return;
+    const pending = this.pendingFor(live.view.id);
+    if (pending.candidates.length === 0) return;
+    const waiting = pending.candidates.splice(0, pending.candidates.length);
     await media.addCandidates(waiting);
   }
 
   private async signal(
     conversationId: string,
-    body: { kind: "offer" | "answer" | "ice" | "key" | "end"; sdp?: string; fingerprint?: string; candidates?: string[]; reason?: string },
+    body: { kind: "offer" | "answer" | "ice" | "key" | "end"; sdp?: string; candidates?: string[]; reason?: string },
   ): Promise<void> {
     const live = this.live;
     if (!live) return;
@@ -486,6 +528,7 @@ export class CallsService {
     if (!live || live.view.phase === "ended") return;
     live.stopCandidates?.();
     live.stopCandidates = null;
+    this.pending = null;
     await this.media?.close().catch((error) => this.ctx.log.warn?.("closing the media failed", { error: describeError(error) }));
     const answered = live.view.answeredAt !== null;
     this.set({ phase: "ended", endReason: reason });
@@ -527,13 +570,23 @@ export class CallsService {
   }
 
   private invalidate(): void {
-    this.changes += 1;
     this.ctx.emitter.emit("call");
   }
 
+  /**
+   * The client is going away: an account switch, a sign-out, a reset.
+   *
+   * This CLOSES the media. It used to drop only the candidate listener, which
+   * left the peer connection and — the part that matters — the microphone and
+   * camera running for the life of the process on any device that switched
+   * account mid-call.
+   */
   stop(): void {
+    this.unwatchConversations();
     this.live?.stopCandidates?.();
     if (this.live) this.live.stopCandidates = null;
+    this.pending = null;
+    void this.media?.close().catch((error) => this.ctx.log.warn?.("closing the media failed", { error: describeError(error) }));
   }
 }
 
@@ -545,6 +598,5 @@ export class CallsService {
  * claimed a different one would be claiming something the SDP itself refutes.
  */
 export function fingerprintOf(sdp: string): string {
-  const line = sdp.split(/\r?\n/).find((l) => l.startsWith("a=fingerprint:"));
-  return line ? line.slice("a=fingerprint:".length).trim() : "";
+  return /^a=fingerprint:(.+)$/m.exec(sdp)?.[1].trim() ?? "";
 }

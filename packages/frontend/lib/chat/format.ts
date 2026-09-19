@@ -1,9 +1,9 @@
 /**
- * Dates as the chat screens print them.
+ * Dates and durations as the chat screens print them.
  *
- * Bloom's chat components compute nothing — every time, day and "yesterday"
- * arrives as a string — so the locale and the clock are read here and only
- * here. Each function takes `now` so a test can hold the clock still.
+ * Bloom's chat components compute nothing — every time, day, "yesterday" and
+ * call length arrives as a string — so the locale and the clock are read here
+ * and only here. Each function takes `now` so a test can hold the clock still.
  */
 
 export type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -41,6 +41,23 @@ export function formatDay(date: Date, now: Date, locale: string, t: Translate): 
   return date.toLocaleDateString(locale, sameYear
     ? { day: 'numeric', month: 'long' }
     : { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/**
+ * How long a call ran: `"00:42"`, `"12:07"`, `"1:04:11"` — the hour appears
+ * only once there is one.
+ *
+ * The SAME string on the live call and in the log. They were two functions
+ * that disagreed about padding, so a call showed `4:32` while it was running
+ * and `04:32` in the history row a second later.
+ */
+export function formatCallDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60;
+  const seconds = total % 60;
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
 /** A conversation row's time: the clock today, a weekday this week, then a short date. */

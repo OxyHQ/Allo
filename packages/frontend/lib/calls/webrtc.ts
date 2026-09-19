@@ -1,11 +1,13 @@
 /**
  * THE MEDIA HALF OF A CALL — the app's side of ADR 0002, Decision 5.
  *
- * `@allo/core` owns the state machine, the signalling and the DTLS
- * fingerprint; this owns the `RTCPeerConnection`, the microphone and the
- * camera, and nothing else. It makes no decisions: whether the call is
- * relayed, when candidates go out and which fingerprint is acceptable are all
- * the SDK's, and arrive here as instructions.
+ * `@allo/core` owns the state machine and the signalling; this owns the
+ * `RTCPeerConnection`, the microphone and the camera, and nothing else. It
+ * makes no decisions: whether the call is relayed, when candidates go out and
+ * whether a description is acceptable are all the SDK's, and arrive here as
+ * instructions. It does not read the DTLS fingerprint either — that line
+ * lives in the SDP, the SDK reads it there, and WebRTC enforces it against
+ * the peer's certificate without being asked.
  *
  * **One implementation, not one per platform.** The WebRTC API is the same on
  * both because `@livekit/react-native` registers the globals on a device;
@@ -24,12 +26,6 @@ import { logger } from '@/utils/logger';
 /** How long candidates gather before they go out together. */
 const CANDIDATE_BATCH_MS = 150;
 
-/** The `a=fingerprint` line of a description, which is what the SDK compares. */
-function fingerprintOf(sdp: string): string {
-  const line = sdp.split(/\r?\n/).find((l) => l.startsWith('a=fingerprint:'));
-  return line ? line.slice('a=fingerprint:'.length).trim() : '';
-}
-
 export interface WebRtcCallMedia extends CallMediaAdapter {
   /** The remote audio and video, for a screen to render. Null until the other side's tracks arrive. */
   remoteStream(): MediaStream | null;
@@ -38,8 +34,6 @@ export interface WebRtcCallMedia extends CallMediaAdapter {
 }
 
 export function createCallMedia(): WebRtcCallMedia {
-  registerWebrtcGlobals();
-
   let pc: RTCPeerConnection | null = null;
   let local: MediaStream | null = null;
   let remote: MediaStream | null = null;
@@ -65,11 +59,31 @@ export function createCallMedia(): WebRtcCallMedia {
     return pc;
   };
 
+  /** Everything this adapter holds, released. Idempotent, and the only path that stops a track. */
+  const teardown = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    batch = [];
+    for (const track of local?.getTracks() ?? []) track.stop();
+    local = null;
+    remote = null;
+    pc?.close();
+    pc = null;
+  };
+
   return {
     remoteStream: () => remote,
     localStream: () => local,
 
     async prepare(plan: CallMediaPlan) {
+      // Registering here rather than in the factory keeps the WebRTC module
+      // graph off the sign-in path: the adapter is built for every client, and
+      // most sessions never place a call. It is idempotent, so once per call
+      // costs nothing.
+      registerWebrtcGlobals();
+      // A second `prepare()` without a `close()` used to overwrite `pc` and
+      // strand the previous connection with its tracks still live.
+      teardown();
       // `relayOnly` is the SDK's answer, not a preference: with it on, no host
       // and no server-reflexive candidate is offered, so the other side sees
       // only the relay's address.
@@ -98,8 +112,7 @@ export function createCallMedia(): WebRtcCallMedia {
       const connection = require();
       const offer = await connection.createOffer({});
       await connection.setLocalDescription(offer);
-      const sdp = connection.localDescription?.sdp ?? offer.sdp ?? '';
-      return { sdp, fingerprint: fingerprintOf(sdp) };
+      return { sdp: connection.localDescription?.sdp ?? offer.sdp ?? '' };
     },
 
     async acceptOffer(offer: SessionDescription): Promise<SessionDescription> {
@@ -107,8 +120,7 @@ export function createCallMedia(): WebRtcCallMedia {
       await connection.setRemoteDescription({ type: 'offer', sdp: offer.sdp });
       const answer = await connection.createAnswer();
       await connection.setLocalDescription(answer);
-      const sdp = connection.localDescription?.sdp ?? answer.sdp ?? '';
-      return { sdp, fingerprint: fingerprintOf(sdp) };
+      return { sdp: connection.localDescription?.sdp ?? answer.sdp ?? '' };
     },
 
     async acceptAnswer(answer: SessionDescription) {
@@ -117,14 +129,18 @@ export function createCallMedia(): WebRtcCallMedia {
 
     async addCandidates(candidates: readonly string[]) {
       const connection = require();
-      for (const candidate of candidates) {
-        try {
-          await connection.addIceCandidate({ candidate, sdpMid: '0', sdpMLineIndex: 0 });
-        } catch (error) {
-          // One unusable candidate is normal — the others still connect.
-          logger.debug('[calls] a candidate was refused', error);
-        }
-      }
+      // Together, not one after another: the candidates in a batch are
+      // independent, and on a device each `addIceCandidate` is a bridge round
+      // trip — at the one moment of the call where latency is felt. One
+      // unusable candidate is normal, so each keeps its own catch and the
+      // others still connect.
+      await Promise.all(
+        candidates.map((candidate) =>
+          connection
+            .addIceCandidate({ candidate, sdpMid: '0', sdpMLineIndex: 0 })
+            .catch((error: unknown) => logger.debug('[calls] a candidate was refused', error)),
+        ),
+      );
     },
 
     onCandidates(next) {
@@ -143,15 +159,8 @@ export function createCallMedia(): WebRtcCallMedia {
     },
 
     async close() {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      batch = [];
       listener = null;
-      for (const track of local?.getTracks() ?? []) track.stop();
-      local = null;
-      remote = null;
-      pc?.close();
-      pc = null;
+      teardown();
     },
   };
 }

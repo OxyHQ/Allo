@@ -1,7 +1,7 @@
 import type { CallHistoryEntry, CallView } from "@allo/core";
 import { useCallback, useMemo } from "react";
 import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot, useVersionedClientSnapshot } from "../internal/useClientSnapshot";
+import { useClientSnapshot } from "../internal/useClientSnapshot";
 
 export interface CallActions {
   /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
@@ -53,13 +53,15 @@ export function useCallActions(): CallActions {
  * way any message does. Subscribes to `conversations`, so a call that has just
  * ended appears without a refresh.
  *
- * VERSIONED, because `history()` scans the conversations and builds a new
- * array every call. Handing that to `useSyncExternalStore` directly is a
- * render loop — React sees a new snapshot on every render and renders again —
- * which is what minified React error #185 is, and what this crashed with in
- * production the first time somebody pressed call.
+ * A plain snapshot, because `history()` holds its result until a conversation
+ * changes, like every other getter on the client. It did not at first: it
+ * rebuilt the array on each call, `useSyncExternalStore` saw a new snapshot on
+ * every render and rendered again, and that is minified React error #185 —
+ * which is what this crashed with in production the first time somebody
+ * pressed call. The fix belongs in the service, so the next consumer of
+ * `client.calls.history()` inherits it instead of rediscovering the loop.
  */
 export function useCallHistory(): CallHistoryEntry[] {
   const { client } = useAlloContext();
-  return useVersionedClientSnapshot(client, "conversations", () => client.calls.history());
+  return useClientSnapshot(client, "conversations", () => client.calls.history());
 }

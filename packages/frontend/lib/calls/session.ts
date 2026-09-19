@@ -2,10 +2,10 @@
  * THE LIVE CALL, AS A SCREEN SEES IT.
  *
  * `@allo/core` owns the call: the state machine, the encrypted signalling and
- * the DTLS fingerprint (ADR 0002, Decision 5). This turns its `CallView` into
- * the shape Bloom's `call-ui` family draws, the way `lib/chat/model.ts` turns
- * a `ConversationView` into a `ChatSummary` — a projection, with no state and
- * no decisions of its own.
+ * the rule that an unauthenticated description ends it (ADR 0002, Decision 5).
+ * This turns its `CallView` into the shape Bloom's `call-ui` family draws, the
+ * way `lib/chat/model.ts` turns a `ConversationView` into a `ChatSummary` — a
+ * projection, with no state and no decisions of its own.
  *
  * The one thing kept here is what the SDK has no business knowing: whether the
  * call is COLLAPSED to the pill and which corner the self-view sits in. Those
@@ -14,25 +14,45 @@
  * their laptop.
  *
  * What this file deliberately does NOT invent: who is speaking, who is muted
- * on the other side, screen sharing, and the camera's facing. The platform
- * reports none of it yet, so the fields stay at their honest defaults rather
- * than drawing a dot that means nothing.
+ * on the other side, the speaker route, screen sharing and the camera's
+ * facing. The platform reports none of it, so none of it is a field here — it
+ * used to carry them as constants that could never change, which only meant
+ * the screens had something false to pass on. Bloom draws a control when it is
+ * given a HANDLER, so a control nothing can do is a prop nobody passes.
+ *
+ * Finished calls are `history.ts`. This is the one that is happening.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import type { CallPipCorner, CallStatus } from '@oxy.so/bloom/call-ui';
-import { useCall, useCallHistory } from '@allo/react';
-import type { CallView } from '@allo/core';
-import type { CallDirection } from '@oxy.so/bloom/call-ui';
+import { toast } from '@oxy.so/bloom/toast';
+import { useCall } from '@allo/react';
+
+import i18n from '@/lib/i18n';
+import { formatCallDuration } from '@/lib/chat/format';
+import { logger } from '@/utils/logger';
 
 export type { CallPipCorner, CallStatus };
+
+/**
+ * A call action that failed. ONE policy, for every screen.
+ *
+ * There were three: the call screen logged, the log screen logged and
+ * sometimes toasted, and the pill's `.catch(() => undefined)` swallowed it
+ * whole — so a hang-up that failed from the pill left the pill on screen with
+ * nothing said to the person and nothing written down for anyone else. Both,
+ * always: the person is told, and the reason is in the log.
+ *
+ * `i18n.t` rather than the hook, because a `.catch` is not a render.
+ */
+export function reportCallError(error: unknown): void {
+  logger.error('[calls] action failed', error);
+  toast.error(i18n.t('calls.failed'));
+}
 
 /** One person on a live call, as the group grid draws them. */
 export interface CallPeer {
   readonly accountId: string;
-  readonly muted?: boolean;
-  readonly speaking?: boolean;
-  readonly presenting?: boolean;
 }
 
 /** The one call this device is in, projected for the screens. */
@@ -43,42 +63,19 @@ export interface CallSession {
   readonly mode: 'voice' | 'video';
   /** `true` when somebody called us. Decides which screen the route draws. */
   readonly incoming: boolean;
+  /**
+   * Where the call is. `CallView['phase']` unchanged: Bloom's `CallStatus` is
+   * a superset of it, so there is nothing to translate — this used to go
+   * through a twelve-line switch that returned its argument.
+   */
   readonly status: CallStatus;
   readonly startedAt: number;
   /** When the media connected. Absent until then; the timer counts from it. */
   readonly connectedAt?: number;
   readonly muted: boolean;
   readonly videoOn: boolean;
-  /**
-   * Fixed, because the platform cannot do them yet: routing audio to a
-   * speaker, sharing a screen and flipping a camera are all things
-   * `CallMediaAdapter` does not expose. Drawing them as toggles that move
-   * would be drawing a lie, so their buttons are inert and the screen says so.
-   */
-  readonly speaker: boolean;
-  readonly screenSharing: boolean;
-  readonly cameraFacing: 'front' | 'back';
   readonly minimised: boolean;
   readonly pipCorner: CallPipCorner;
-}
-
-/**
- * Bloom's vocabulary for where a call is.
- *
- * `connecting` is its own state and not a kind of ringing: the person has
- * answered and the media has not arrived, which is a different thing to say.
- */
-function statusOf(phase: CallView['phase']): CallStatus {
-  switch (phase) {
-    case 'ringing':
-      return 'ringing';
-    case 'connecting':
-      return 'connecting';
-    case 'active':
-      return 'active';
-    case 'ended':
-      return 'ended';
-  }
 }
 
 interface CallUiState {
@@ -111,79 +108,51 @@ export function useCallSession(): CallSession | null {
       peers: call.withAccountIds.map((accountId: string) => ({ accountId })),
       mode: call.mode,
       incoming: !call.outgoing,
-      status: statusOf(call.phase),
+      status: call.phase,
       startedAt: Date.parse(call.startedAt),
       connectedAt: call.answeredAt ? Date.parse(call.answeredAt) : undefined,
       muted: call.muted,
       videoOn: call.cameraOn,
-      speaker: false,
-      screenSharing: false,
-      cameraFacing: 'front' as const,
       minimised,
       pipCorner,
     };
   }, [call, minimised, pipCorner]);
 }
 
+/**
+ * ONE clock for every consumer.
+ *
+ * The pill and the call screen are both mounted during a minimised call — the
+ * pill for the whole app, the screen because expo-router keeps it in the stack
+ * behind you — so an interval per hook meant two unsynchronised 1 Hz renders
+ * of two subtrees for the length of the call. This is a single interval,
+ * started when the first consumer appears and cleared when the last one goes.
+ */
+const tickListeners = new Set<() => void>();
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+
+function subscribeToTick(listener: () => void): () => void {
+  tickListeners.add(listener);
+  if (!tickTimer) tickTimer = setInterval(() => { for (const l of [...tickListeners]) l(); }, 1000);
+  return () => {
+    tickListeners.delete(listener);
+    if (tickListeners.size === 0 && tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+  };
+}
+
+const noTick = () => () => undefined;
+
+/** The snapshot is WHOLE SECONDS, so a tick that would print the same string re-renders nothing. */
+const secondNow = () => Math.floor(Date.now() / 1000);
+
 /** How long the call has been connected, already formatted. `""` until it is. */
 export function useCallDuration(session: CallSession | null): string {
   const connectedAt = session?.connectedAt;
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (connectedAt === undefined) return;
-    const tick = () => setElapsed(Date.now() - connectedAt);
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [connectedAt]);
+  // No call, no clock: the pill calls this on every screen of the app.
+  const second = useSyncExternalStore(connectedAt === undefined ? noTick : subscribeToTick, secondNow, secondNow);
   if (connectedAt === undefined) return '';
-  const total = Math.max(0, Math.floor(elapsed / 1000));
-  const seconds = String(total % 60).padStart(2, '0');
-  const minutes = Math.floor(total / 60);
-  if (minutes < 60) return `${minutes}:${seconds}`;
-  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${seconds}`;
-}
-
-/** A finished call, as the history screen lists it. */
-export interface CallLogEntry {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly peerAccountIds: readonly string[];
-  readonly mode: 'voice' | 'video';
-  readonly direction: CallDirection;
-  readonly at: number;
-  readonly durationMs: number;
-}
-
-/**
- * Which of Bloom's four arrows a finished call wears.
- *
- * `missed` and `declined` are READINGS of an incoming call, not facts the
- * caller asserted: the same record is an unanswered outgoing call at the other
- * end, and drawing it as "missed" there would be telling somebody they ignored
- * their own call.
- */
-function directionOf(entry: { incoming: boolean; outcome: string }): CallDirection {
-  if (!entry.incoming) return 'outgoing';
-  if (entry.outcome === 'declined') return 'declined';
-  if (entry.outcome === 'not_answered' || entry.outcome === 'cancelled') return 'missed';
-  return 'incoming';
-}
-
-/** The call log, read out of the conversations where it lives. */
-export function useCallLog(): readonly CallLogEntry[] {
-  const history = useCallHistory();
-  return useMemo(
-    () =>
-      history.map((entry) => ({
-        id: entry.id,
-        conversationId: entry.conversationId,
-        peerAccountIds: entry.withAccountIds,
-        mode: entry.mode,
-        direction: directionOf(entry),
-        at: Date.parse(entry.at),
-        durationMs: entry.durationMs,
-      })),
-    [history],
-  );
+  return formatCallDuration(second * 1000 - connectedAt);
 }

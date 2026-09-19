@@ -10,23 +10,21 @@ import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { Page } from '@/components/shell/Page';
 import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
-import { callHistorySections } from '@/lib/phase2/calls';
-import { useCallLog, useCallSession } from '@/lib/calls/session';
-import { toast } from '@oxy.so/bloom/toast';
-import { logger } from '@/utils/logger';
+import { callHistorySections, useCallLog } from '@/lib/calls/history';
+import { reportCallError, useCallSession } from '@/lib/calls/session';
 
 /**
  * `/calls` — THE CALL LOG.
  *
  * Bloom's `CallHistoryList` in day sections, with the incoming banner above it
  * when a call is arriving. Every string the rows draw is decided in
- * `lib/phase2/calls.ts`; the list formats nothing. The minimised-call pill is
+ * `lib/calls/history.ts`; the list formats nothing. The minimised-call pill is
  * not drawn here — `app/(chat)/_layout.tsx` mounts one for the whole app.
  *
- * **Nothing here places a call.** The log is sample data held in this tab and
- * the call-back button opens the local call screen, which has no media behind
- * it — the notice at the top says so, because a log that looks like a log and a
- * button that looks like a button otherwise promise a telephone.
+ * **Nothing here places a call, and calling back only NAVIGATES.**
+ * `/c/:id/call` is the one dialler in the app; a screen that pushed the route
+ * and also dialled placed two calls per press, which is the bug #172 was meant
+ * to end and this row was the half of it that got missed.
  */
 export default function CallsScreen() {
   const { t, i18n } = useTranslation();
@@ -75,17 +73,14 @@ export default function CallsScreen() {
 
   const entryById = useMemo(() => new Map(log.map((entry) => [entry.id, entry])), [log]);
 
+  // The mode rides in the URL, so re-opening the screen dials the kind of call
+  // the row was rather than falling back to voice.
   const callBack = useCallback(
     (id: string) => {
       const entry = entryById.get(id);
-      if (!entry) return;
-      router.push(`/c/${entry.conversationId}/call`);
-      void calls.start(entry.conversationId, entry.mode).catch((error: unknown) => {
-        logger.error('[calls] calling back failed', error);
-        toast.error(t('calls.failed'));
-      });
+      if (entry) router.push(`/c/${entry.conversationId}/call?mode=${entry.mode}`);
     },
-    [calls, entryById, router, t],
+    [entryById, router],
   );
 
   const openConversation = useCallback(
@@ -112,10 +107,10 @@ export default function CallsScreen() {
           mode={session.mode}
           status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
           onAccept={() => {
-            void calls.answer().catch((error: unknown) => logger.error('[calls] answering failed', error));
+            void calls.answer().catch(reportCallError);
             router.push(`/c/${session.conversationId}/call`);
           }}
-          onDecline={() => void calls.decline().catch((error: unknown) => logger.error('[calls] declining failed', error))}
+          onDecline={() => void calls.decline().catch(reportCallError)}
           onPress={() => router.push(`/c/${session.conversationId}/call`)}
           labels={{
             accept: t('calls.control.accept'),
