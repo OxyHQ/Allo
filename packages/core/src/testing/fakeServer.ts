@@ -41,6 +41,7 @@ import {
   enrollmentApprovalMessage,
   listEventsQuerySchema,
   registerInstanceRequestSchema,
+  resetConversationRequestSchema,
   setPushTokenRequestSchema,
   signedRequestMessage,
   socketAuthSchema,
@@ -606,6 +607,28 @@ export class FakeAlloServer implements SocketHost {
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)$/)) && method === "GET") {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
+      return json(200, { conversation: this.summary(conv, me.id) });
+    }
+    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/reset$/)) && method === "POST") {
+      const me = signed();
+      const conv = this.conversations.get(m[1]);
+      if (!conv || conv.members.get(accountId)?.state !== "joined") throw new HttpError(404, "not_found", "conversation");
+      const req = this.parse(resetConversationRequestSchema, body);
+      const mine = conv.leaves.get(me.id);
+      // The caller's own replay: already installed, and this device is the live leaf.
+      if (!(conv.mlsGroupId === req.mlsGroupId && mine?.state === "active")) {
+        if ([...conv.leaves.values()].some((leaf) => leaf.state === "active")) {
+          throw new HttpError(409, "idempotency_conflict", "the conversation still has an active device");
+        }
+        if ([...this.conversations.values()].some((c) => c.id !== conv.id && c.mlsGroupId === req.mlsGroupId)) {
+          throw new HttpError(409, "idempotency_conflict", "group id in use");
+        }
+        conv.mlsGroupId = req.mlsGroupId;
+        conv.epoch = 0;
+        for (const [id, leaf] of conv.leaves) conv.leaves.set(id, { ...leaf, state: "removed" });
+        conv.leaves.set(me.id, { accountId: me.accountId, state: "active", addedEpoch: 0 });
+        if (req.initialCommit) this.submitEvent(conv, me, req.initialCommit);
+      }
       return json(200, { conversation: this.summary(conv, me.id) });
     }
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/leave$/)) && method === "POST") {

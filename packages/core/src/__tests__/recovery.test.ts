@@ -18,7 +18,7 @@
  *                     exists for.
  */
 import { describe, expect, it } from "vitest";
-import { fakeServer, makeClient, stopAll } from "./e2eHelpers";
+import { fakeServer, makeClient, stopAll, texts } from "./e2eHelpers";
 import { storageKeyName } from "../crypto/atRest";
 import { instanceKeyName } from "../instance/manager";
 
@@ -122,5 +122,63 @@ describe("the key package stock", () => {
     // And the private halves on disk did not multiply either.
     const rows = (await first.storage.list(`allo/allo/acc-stock-0001/`)).filter((key) => key.includes("keyPackage"));
     expect(rows).toHaveLength(afterFirst);
+  }, 30_000);
+});
+
+/**
+ * THE CONVERSATION THAT LOST EVERY DEVICE.
+ *
+ * Reported from the app: after re-enrolling, a DM answered "This device is
+ * still being added to the conversation" and never stopped. It could not:
+ * only a member already in the MLS group can commit an Add, the only leaf that
+ * group ever had belonged to the device that was revoked, and a DM converges
+ * on its `dm_key` — so "start a new conversation with that person" hands back
+ * the same dead row. Two people could never speak again.
+ */
+describe("a conversation with no live device", () => {
+  it("is revived on the next refresh, and messages flow again", async () => {
+    const server = fakeServer();
+    const mine = await makeClient(server, "acc-revive-0001", "Chrome");
+    const conversation = await mine.client.conversations.createDirect("acc-revive-0002");
+    await mine.client.messages.send(conversation.id, "before the lights went out");
+    await mine.client.sync.flush();
+    await mine.client.stop();
+
+    // Every device in the group goes: this is what a sign-out, or the reclaim
+    // of an account whose devices were lost, leaves behind.
+    server.instancesOf("acc-revive-0001").forEach((i) => (i.status = "revoked"));
+    const group = server.conversations.get(conversation.id)!;
+    const deadGroupId = group.mlsGroupId; // a string, not a live reference to the row
+    for (const [id, leaf] of group.leaves) group.leaves.set(id, { ...leaf, state: "removed" });
+
+    // The account comes back on a new device, with nothing of its own.
+    const fresh = await makeClient(server, "acc-revive-0001", "Chrome again");
+    expect(fresh.client.instance.state()).toBe("active");
+
+    const view = fresh.client.conversations.get(conversation.id);
+    expect(view).toBeDefined();
+    // The thing that was broken: this device holds a leaf again, so it can speak.
+    expect(view!.joined).toBe(true);
+    expect(server.conversations.get(conversation.id)!.mlsGroupId).not.toBe(deadGroupId);
+
+    await fresh.client.messages.send(conversation.id, "still here");
+    await fresh.client.sync.flush();
+    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain("still here");
+    await stopAll(fresh);
+  }, 30_000);
+
+  it("leaves a conversation that still has a live device alone", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-revive-0101", "Alice");
+    const bob = await makeClient(server, "acc-revive-0102", "Bob");
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.sync.flush();
+    await bob.client.sync.now();
+
+    const groupBefore = server.conversations.get(conversation.id)!.mlsGroupId;
+    await bob.client.conversations.refresh();
+    // Alice is still in it, so nothing is revived out from under her.
+    expect(server.conversations.get(conversation.id)!.mlsGroupId).toBe(groupBefore);
+    await stopAll(alice, bob);
   }, 30_000);
 });
