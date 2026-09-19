@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
-import { useCallActions, useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
+import { useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
 import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
 import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
@@ -84,7 +84,6 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const toggleInfo = useChatPaneStore((state) => state.toggleInfo);
   const sync = useSyncState();
   const { leave } = useConversationActions();
-  const { start: startRinging } = useCallActions();
   const view = useConversation(conversationId);
   const timeline = useTimeline(conversationId);
   const ctx = useChatContext(view?.memberAccountIds ?? []);
@@ -377,18 +376,18 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
   const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
   /**
-   * Rings every other member's devices. The screen opens first: the SDK
-   * resolves once the SERVER has the call, which is not the same moment, and
-   * a button that does nothing for a round trip reads as broken.
+   * Opens the call screen, which is the ONE place that dials.
+   *
+   * It used to dial here as well, and the screen dialled again when it mounted
+   * and saw no session yet — `start()` is asynchronous, so the screen arrives
+   * before the server has answered. That placed TWO calls per press: one rang
+   * out while the other was being answered. One dialler, and the mode travels
+   * in the route so the screen knows which button was pressed.
    */
   const startCall = (mode: 'voice' | 'video') => {
     const peers = view.memberAccountIds.filter((id) => id !== ctx.me);
     if (peers.length === 0) return;
-    router.push(`/c/${conversationId}/call`);
-    void startRinging(conversationId, mode).catch((error: unknown) => {
-      logger.error('[ConversationScreen] the call could not be placed', error);
-      toast.error(t('calls.failed'));
-    });
+    router.push(`/c/${conversationId}/call?mode=${mode}`);
   };
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;

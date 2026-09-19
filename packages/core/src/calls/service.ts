@@ -88,6 +88,8 @@ interface Live {
 export class CallsService {
   private live: Live | null = null;
   private changes = 0;
+  /** A dial is in flight. Set before the first await, so a second one is refused rather than placed. */
+  private starting = false;
   /**
    * Signalling that arrived BEFORE the ring it belongs to.
    *
@@ -158,45 +160,58 @@ export class CallsService {
     const conversation = ctx.conversations.get(conversationId);
     if (!conversation) throw new NotFoundError(`conversation ${conversationId}`);
 
-    const res = await ctx.http.request({
-      method: "POST",
-      path: "/v1/calls",
-      body: { idempotencyKey: uuidV7(ctx.now()), conversationId, mode },
-      schema: callResponseSchema,
-      signer: ctx.signer,
-    });
-    const call = res.call;
-    this.live = {
-      view: {
-        id: call.id,
-        conversationId,
-        mode,
-        phase: "ringing",
-        outgoing: true,
-        withAccountIds: conversation.memberAccountIds.filter((id) => id !== ctx.accountId),
-        endReason: null,
-        muted: false,
-        cameraOn: mode === "video",
-        startedAt: call.startedAt,
-        answeredAt: null,
-      },
-      localFingerprint: null,
-      remoteFingerprint: null,
-      stopCandidates: null,
-      pendingCandidates: [],
-      pendingOffer: null,
-    };
-    this.invalidate();
+    /**
+     * Set after the checks that cannot fail asynchronously, and before the
+     * first await — which is the whole point. `this.live` is not set until the
+     * server answers, so two dials a few milliseconds apart both passed the
+     * check above and both placed a call; one then rang out while the other
+     * was being answered.
+     */
+    if (this.starting) throw new InvalidStateError("already placing a call");
+    this.starting = true;
+    try {
+      const res = await ctx.http.request({
+        method: "POST",
+        path: "/v1/calls",
+        body: { idempotencyKey: uuidV7(ctx.now()), conversationId, mode },
+        schema: callResponseSchema,
+        signer: ctx.signer,
+      });
+      const call = res.call;
+      this.live = {
+        view: {
+          id: call.id,
+          conversationId,
+          mode,
+          phase: "ringing",
+          outgoing: true,
+          withAccountIds: conversation.memberAccountIds.filter((id) => id !== ctx.accountId),
+          endReason: null,
+          muted: false,
+          cameraOn: mode === "video",
+          startedAt: call.startedAt,
+          answeredAt: null,
+        },
+        localFingerprint: null,
+        remoteFingerprint: null,
+        stopCandidates: null,
+        pendingCandidates: [],
+        pendingOffer: null,
+      };
+      this.invalidate();
 
-    // The offer goes out now: the callee's device has it the moment it answers.
-    await this.withMedia(call.id, async (media) => {
-      await this.prepare(media, call.id);
-      const offer = await media.createOffer();
-      this.live!.localFingerprint = offer.fingerprint;
-      await this.signal(conversationId, { kind: "offer", sdp: offer.sdp, fingerprint: offer.fingerprint });
-      this.streamCandidates(conversationId, media);
-    });
-    return this.live.view;
+      // The offer goes out now, so the callee's device has it the moment it answers.
+      await this.withMedia(call.id, async (media) => {
+        await this.prepare(media, call.id);
+        const offer = await media.createOffer();
+        this.live!.localFingerprint = offer.fingerprint;
+        await this.signal(conversationId, { kind: "offer", sdp: offer.sdp, fingerprint: offer.fingerprint });
+        this.streamCandidates(conversationId, media);
+      });
+      return this.live.view;
+    } finally {
+      this.starting = false;
+    }
   }
 
   /** This device takes the call. The server decides whether it won the race. */
