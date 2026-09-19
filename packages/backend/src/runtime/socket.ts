@@ -147,6 +147,12 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     statusPosted(instanceId, event) {
       namespace.to(instanceRoom(instanceId)).emit("status.posted", event);
     },
+    callIncoming(instanceId, event) {
+      namespace.to(instanceRoom(instanceId)).emit("call.incoming", event);
+    },
+    callUpdated(instanceId, event) {
+      namespace.to(instanceRoom(instanceId)).emit("call.updated", event);
+    },
     typing(instanceIds, event) {
       for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("typing", event);
     },

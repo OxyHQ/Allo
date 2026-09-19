@@ -11,6 +11,8 @@
  */
 
 import type {
+  CallIncomingEvent,
+  CallUpdatedEvent,
   HistoryOfferEvent,
   InstanceApprovedEvent,
   InstanceRevokedEvent,
@@ -30,6 +32,10 @@ export interface Realtime {
   historyOffer(instanceId: string, event: HistoryOfferEvent): void;
   /** `status.posted` to a recipient instance's room: something it holds a key for was posted. */
   statusPosted(instanceId: string, event: StatusPostedEvent): void;
+  /** `call.incoming` to a rung device's room: somebody is calling. */
+  callIncoming(instanceId: string, event: CallIncomingEvent): void;
+  /** `call.updated` to a device that was rung or did the ringing: the call moved. */
+  callUpdated(instanceId: string, event: CallUpdatedEvent): void;
   typing(instanceIds: readonly string[], event: TypingEvent): void;
   /** Whether at least one socket of the instance is connected — across every task when the Redis adapter is attached. */
   isInstanceConnected(instanceId: string): Promise<boolean>;
@@ -45,6 +51,8 @@ export const NOOP_REALTIME: Realtime = {
   keyPackagesLow: () => undefined,
   historyOffer: () => undefined,
   statusPosted: () => undefined,
+  callIncoming: () => undefined,
+  callUpdated: () => undefined,
   typing: () => undefined,
   isInstanceConnected: async () => false,
   disconnectInstance: async () => undefined,

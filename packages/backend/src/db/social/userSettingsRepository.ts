@@ -60,6 +60,7 @@ export const UPDATABLE_USER_SETTINGS_COLUMNS = [
   "privacyAllowAllos",
   "privacyShowOnlineStatus",
   "privacyStatusViewReceipts",
+  "privacyRelayCalls",
   "privacyHideLikeCounts",
   "privacyHideShareCounts",
   "privacyHideReplyCounts",
@@ -182,6 +183,21 @@ export async function statusViewReceiptsOf(db: AlloDatabase, accountIds: readonl
     .where(inArray(userSettings.oxyUserId, [...accountIds]));
   const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));
   return new Set(accountIds.filter((accountId) => !hidden.has(accountId)));
+}
+
+/**
+ * Which of these accounts ask for their calls to be relayed.
+ *
+ * Absent means the default, which is OFF — a direct call is better, and a
+ * setting nobody has opened should not quietly degrade their calls.
+ */
+export async function relayCallsOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, relay: userSettings.privacyRelayCalls })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  return new Set(rows.filter((row) => row.relay).map((row) => row.oxyUserId));
 }
 
 export async function ensureUserSettings(

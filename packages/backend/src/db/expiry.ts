@@ -26,6 +26,7 @@ import { blobs } from "./schema/blobs";
 import { instanceDeliveries } from "./schema/deliveries";
 import { historyOffers } from "./schema/history";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
+import { callParticipants, calls } from "./schema/calls";
 import { statuses, statusKeys, statusViews } from "./schema/statuses";
 import { releaseDueStatusBlobs } from "./platform/statusRepository";
 
@@ -88,6 +89,28 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
       "row's chunk blobs are NOT deleted here: `releaseDueHistoryOffers` runs " +
       "ahead of this sweep in `runExpirySweep` and dates them a day out, so " +
       "the blob sweep above reaps them on its own schedule.",
+  },
+  {
+    table: calls,
+    column: calls.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Call state machines, dated a day out at insert and re-dated to NOW the " +
+      "moment the call ends. Deleting one loses the operational record that a " +
+      "ring happened — who was rung, who answered, how long it lasted — which " +
+      "is metadata and not the user's call log: what a person sees is an " +
+      "encrypted `call_log` message in their conversation, written when the " +
+      "call ended, and that is not touched by this. A row still `ringing` at " +
+      "its deadline cannot reach here: the ring worker settles it long before.",
+  },
+  {
+    table: callParticipants,
+    column: callParticipants.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "One rung device per row, carrying its call's deadline so a sweep needs " +
+      "no join. The cascade from `calls` normally gets there first; this " +
+      "target covers a participant whose call was re-dated when it ended.",
   },
   {
     table: statuses,

@@ -24,10 +24,13 @@ import { setRealtime } from "./src/runtime/realtime";
 import { createSocketServer } from "./src/runtime/socket";
 import { attachSocketRedisAdapter } from "./src/runtime/socketRedisAdapter";
 import { closePresenceStore, createPresenceStore, setPresenceStore } from "./src/runtime/presenceStore";
+import { setIceConfig } from "./src/config/iceRuntime";
+import { readIceConfig } from "./src/config/turn";
 import { createRuntimeApp } from "./src/runtimeApp";
 import { startModerationOutboxDispatcher, stopModerationOutboxDispatcher } from "./src/services/moderation/ModerationOutboxDispatcher";
 import { blobMaxBytes } from "./src/services/platform/blobService";
 import { logger } from "./src/utils/logger";
+import { startCallRingWorker, stopCallRingWorker } from "./src/workers/callRingWorker";
 import { startBlobGc, stopBlobGc } from "./src/workers/blobGc";
 import { startDeliveryWorker, stopDeliveryWorker } from "./src/workers/deliveryWorker";
 
@@ -61,7 +64,7 @@ async function stopWorkers(): Promise<void> {
   stopModerationOutboxDispatcher();
   presenceHub?.stop();
   presenceHub = null;
-  await Promise.allSettled([stopDeliveryWorker(), stopBlobGc(), closePresenceStore()]);
+  await Promise.allSettled([stopDeliveryWorker(), stopBlobGc(), stopCallRingWorker(), closePresenceStore()]);
 }
 
 export async function bootServer(): Promise<void> {
@@ -80,6 +83,8 @@ export async function bootServer(): Promise<void> {
     // Presence lives in Redis when there is one, because an account's devices
     // land on whichever task the load balancer chose; without it the store is
     // this process's memory and says so.
+    // A half-configured relay fails the boot rather than every call.
+    setIceConfig(readIceConfig());
     setPresenceStore(await createPresenceStore());
 
     const sockets = createSocketServer(server, { oxy });
@@ -92,6 +97,7 @@ export async function bootServer(): Promise<void> {
     startModerationOutboxDispatcher();
     startDeliveryWorker({ db });
     startBlobGc({ db });
+    startCallRingWorker({ db });
 
     registerGracefulShutdown({
       server,

@@ -420,6 +420,51 @@ returns `keyCheck` and learns nothing from it.
 `DirectoryAssetUrlResponse`, and the `ApiErrorResponse` / `ApiSuccessResponse`
 envelope in `api.ts`). It is Oxy-authenticated and not part of `/v1`.
 
+## Calls (`calls.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `POST /v1/calls` | instance | `CreateCallRequest` | 201 `{ call }` — rings every active device of every other member |
+| `GET /v1/calls/:id` | instance | — | `{ call }`; the caller and the rung devices only |
+| `GET /v1/calls/:id/ice` | instance | — | `IceServersResponse` `{ iceServers, expiresAt, relayOnly }` |
+| `POST /v1/calls/:id/answer` | instance | — | `{ call }`; 403 when another device won the race |
+| `POST /v1/calls/:id/decline` | instance | — | `{ call }` |
+| `POST /v1/calls/:id/end` | instance | `EndCallRequest` | `{ call }` |
+
+**Nothing about the media is here.** The offer, the answer, the ICE candidates
+and the frame keys are encrypted `call` application messages in the
+conversation — a control kind, so a client that does not know them ignores
+them. The server relays that ciphertext and holds only the state machine it
+cannot do without: a `calls` row, and a `call_participants` row per RUNG
+DEVICE.
+
+The rules:
+
+- **A ring is forked to every active device** of every other joined member,
+  and never across a block in either direction.
+- **Exactly one device wins.** `answer` is an UPDATE guarded on the state, so a
+  second device answering a moment later is told who won instead of joining a
+  call nobody else is on. Its own account's other phones stop ringing; in a
+  group everybody else's keep going.
+- **`relayed` is a property of the CALL.** True for a group, and for a 1:1
+  where either side has `privacy_relay_calls` on — a connection cannot be half
+  relayed. Everybody is told the call is relayed; nobody is told who asked.
+- **`relayOnly` in the ICE answer is what a client sets `iceTransportPolicy`
+  from.** The credential is the 2013 REST scheme every TURN server implements
+  (`username = "<expiry>:<account>"`, `credential = base64(HMAC-SHA1(secret,
+  username))`), valid for an hour, with the account in the username so the
+  relay's own quotas and logs are per account. With no relay configured the
+  answer is STUN alone.
+- **The ring gives up after `CALL_RING_TIMEOUT_MS`** (45 s), which only the
+  server can notice; `workers/callRingWorker.ts` claims and settles each
+  expired ring in one statement, so two tasks sweeping at the same second ring
+  off each call exactly once.
+
+**The call LOG is not these rows.** What a person sees is an encrypted
+`call_log` message written into the conversation when the call ends, so it
+reaches every device of both accounts the way any other message does. These
+rows are operational and the sweep takes them a day later.
+
 ## Status updates (`statuses.ts`)
 
 | route | auth | body | answer |
@@ -500,6 +545,8 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 | `presence` | server → client | `PresenceState` `{ accountId, online, lastSeenAt }` | one account of THIS socket's watch set changed. Never a broadcast: a socket hears only about what it asked for |
 | `presence.watch` | client → server | `PresenceWatchEvent` `{ accountIds }` | the accounts this client is SHOWING, at most 200. Replaces the previous set; an empty list stops the updates |
 | `presence.heartbeat` | client → server | `{}` | this instance is still here. Presence is a heartbeat with a 75 s deadline, not an open socket — a socket survives a sleeping phone |
+| `call.incoming` | server → client (`instance:<rung device>`) | `CallIncomingEvent` `{ callId, conversationId, initiatorAccountId, mode, group }` | somebody is calling this device; the offer itself arrives encrypted, in the conversation |
+| `call.updated` | server → client | `CallUpdatedEvent` `{ callId, state, answeredByInstanceId, endReason }` | the call moved: answered elsewhere, declined, ended, or the ring gave up |
 | `status.posted` | server → client (`instance:<recipient>`) | `StatusPostedEvent` `{ statusId, authorAccountId }` | somebody this device holds a key for posted a status; re-read `GET /v1/statuses` |
 | `history.offer` | server → client (`instance:<recipient>`) | `HistoryOfferEvent` `{ offerId }` | another instance of the account offered this one its history; pull `GET /v1/instances/me/history-offers` and verify the donor before accepting |
 

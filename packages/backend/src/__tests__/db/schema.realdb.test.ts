@@ -96,6 +96,8 @@ describe("the expiry sweep", () => {
     const tables = EXPIRY_SWEEP_TARGETS.map((target) => getTableName(target.table)).sort();
     expect(tables).toEqual([
       "blobs",
+      "call_participants",
+      "calls",
       "history_offers",
       "instance_deliveries",
       "moderation_events",

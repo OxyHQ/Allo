@@ -25,26 +25,32 @@ them are worth rediscovering. Where we depart, the departure is stated.
 
 ## Decision 1: a call is keyed by MLS and rung by the server
 
-**Media keys come from the group, not from the network.** A call's SRTP master
-secret is derived with the MLS exporter (RFC 9420 §8.5) from the conversation's
-current epoch, with the call id in the exporter context so two calls in one
-epoch do not share a key. The caller puts the derivation's parameters, not the
-key, in an encrypted `call` message; every member device derives the same bytes
-and the server derives nothing. This is WhatsApp's shape (the caller fixes the
-key, the key travels inside the E2EE channel, DTLS is not in the trust path)
-expressed in the primitive we already have.
+**Signalling travels inside the E2EE channel; the media keys follow from it.**
+Every offer, answer and batch of ICE candidates is an encrypted `call` message
+in the conversation — a control kind, so a client that does not know it ignores
+it. The server relays ciphertext and learns that a call is being set up, which
+it has to know anyway to ring the other side.
 
-The exporter is a pure read of `keySchedule.exporterSecret`. It advances no
-ratchet and writes no state, so it is the first crypto call in the SDK that
-runs outside `ctx.mutex` — invariant 3 in `crypto.md` is amended in the same
-change to say "every **advance**", so that this is a stated exception rather
-than an apparent violation.
+For a **1:1 call** the media is DTLS-SRTP, and what makes that end to end is
+that the DTLS fingerprints ride inside the encrypted offer and answer: a server
+that swapped one would be swapping a value the MLS group already authenticated.
+This is Signal's shape, and on React Native it is also the only shape — no
+WebRTC binding there lets an application hand SRTP a master secret of its own,
+so WhatsApp's "the caller picks the key" is not available to us and saying we
+did it would be a lie in a document about what we did.
 
-**A group-epoch key is a group-wide key**, and in a group conversation that
-means a member who is not on the call can still derive it. For a DM — every
-1:1 call — the group is exactly the two accounts' devices, so the property is
-the one we want. For a group call it is not, and that is one of the reasons
-group calling is staged separately below.
+For a **group call** through the SFU the frame key is **per sender, random, and
+distributed by its owner** over the same encrypted channel — again Signal's
+model, and the reason is RFC 9605's: SFrame gives no per-sender
+authentication, so the only thing that stops one participant producing media
+attributed to another is that nobody else can derive their key. A key derived
+from the MLS group would be derivable by every member and would throw that
+away. Keys rotate when the membership changes, and the new one is used a few
+seconds after it is distributed so a receiver has it before it is needed.
+
+**So the MLS exporter is not used, and that is a change from this ADR's first
+draft.** It would have been elegant — one epoch-bound secret every member can
+derive — and it is exactly wrong for the property that matters here.
 
 **The server runs the state machine, and we say so.** It holds a `calls` row
 (conversation, initiator, mode, state, timestamps, end reason) and a

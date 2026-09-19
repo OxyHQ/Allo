@@ -12,6 +12,7 @@ import type {
   ConversationEvent,
   ConversationSummary,
   HistoryOffer,
+  Call,
   PublicInstance,
   Status,
 } from "@allo/shared-types";
@@ -19,6 +20,7 @@ import type { ConversationRow, LeafRow, MemberRow } from "../../db/platform/conv
 import type { EventReadRow } from "../../db/platform/eventRepository";
 import type { AccountBackupRow, HistoryOfferRow } from "../../db/platform/historyRepository";
 import type { InstanceRow } from "../../db/platform/instanceRepository";
+import type { CallParticipantRow, CallRow } from "../../db/platform/callRepository";
 import type { StatusRow } from "../../db/platform/statusRepository";
 
 const iso = (date: Date): string => date.toISOString();
@@ -108,6 +110,32 @@ export function toAccountBackup(row: AccountBackupRow): AccountBackup {
  * the one case where the reader already holds the key — and `null` rather than
  * omitted, as everywhere else here.
  */
+/** A call and its rung devices, as any participant may see it. */
+export function toCall(row: CallRow, participants: readonly CallParticipantRow[]): Call {
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    initiatorAccountId: row.initiatorAccountId,
+    initiatorInstanceId: row.initiatorInstanceId,
+    mode: row.mode,
+    state: row.state,
+    relayed: row.relayed,
+    group: row.group,
+    participants: participants.map((one) => ({
+      accountId: one.accountId,
+      instanceId: one.instanceId,
+      state: one.state,
+      joinedAt: isoOrNull(one.joinedAt),
+      leftAt: isoOrNull(one.leftAt),
+    })),
+    startedAt: iso(row.startedAt),
+    answeredAt: isoOrNull(row.answeredAt),
+    endedAt: isoOrNull(row.endedAt),
+    endReason: row.endReason ?? null,
+    ringExpiresAt: isoOrNull(row.ringExpiresAt),
+  };
+}
+
 export function toStatus(row: StatusRow, sealedKey: string | null): Status {
   return {
     id: row.id,

@@ -128,6 +128,13 @@ content, identity binding to Oxy accounts, sync, or media.
   socket asked to WATCH — that last one is a screen's contents, and is new with
   ADR 0002. The rules in `presence.ts` bound what other USERS see; they bound
   nothing about the operator, who computes all of it.
+- Calls: that one happened, between which accounts and devices, when it was
+  answered, how long it lasted, how it ended, and whether it was relayed. Not
+  the offer, the candidates, the addresses or the keys — those are encrypted
+  messages it relays. This is a call-metadata table, it is subpoenable, and it
+  is the price of a server that can ring a phone at all. What a person SEES
+  afterwards is not this: the call log is an encrypted message in their
+  conversation.
 - Status updates: that one exists, who wrote it, WHICH DEVICES it was sealed
   to — the audience, which the server necessarily learns in order to deliver,
   as WhatsApp's and Signal's do — its size, its deadline, which blobs it names,

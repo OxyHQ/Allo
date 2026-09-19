@@ -103,6 +103,13 @@ export const userSettings = pgTable(
      * and WhatsApp's coupling of them is the thing people are surprised by.
      */
     privacyStatusViewReceipts: boolean().notNull().default(true),
+    /**
+     * Whether calls must be relayed so the other side never learns this
+     * account's IP address. Off by default: a direct call is better and the
+     * address is what every calling app exposes. Either side asking is enough
+     * to relay the call, which is why the server reads both.
+     */
+    privacyRelayCalls: boolean().notNull().default(false),
     privacyHideLikeCounts: boolean().notNull().default(false),
     privacyHideShareCounts: boolean().notNull().default(false),
     privacyHideReplyCounts: boolean().notNull().default(false),

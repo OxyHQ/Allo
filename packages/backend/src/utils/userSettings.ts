@@ -54,6 +54,7 @@ export interface UserSettingsDto {
     allowallos: boolean;
     showOnlineStatus: boolean;
     statusViewReceipts: boolean;
+    relayCalls: boolean;
     hideLikeCounts: boolean;
     hideShareCounts: boolean;
     hideReplyCounts: boolean;
@@ -97,6 +98,7 @@ export function toUserSettingsDto(row: UserSettingsRow): UserSettingsDto {
       allowallos: row.privacyAllowAllos,
       showOnlineStatus: row.privacyShowOnlineStatus,
       statusViewReceipts: row.privacyStatusViewReceipts,
+      relayCalls: row.privacyRelayCalls,
       hideLikeCounts: row.privacyHideLikeCounts,
       hideShareCounts: row.privacyHideShareCounts,
       hideReplyCounts: row.privacyHideReplyCounts,
@@ -222,6 +224,8 @@ export function readUserSettingsPatch(body: unknown): UserSettingsPatch {
     if (showOnlineStatus !== undefined) patch.privacyShowOnlineStatus = showOnlineStatus;
     const statusViewReceipts = bool(privacy, "statusViewReceipts");
     if (statusViewReceipts !== undefined) patch.privacyStatusViewReceipts = statusViewReceipts;
+    const relayCalls = bool(privacy, "relayCalls");
+    if (relayCalls !== undefined) patch.privacyRelayCalls = relayCalls;
     const hideLikeCounts = bool(privacy, "hideLikeCounts");
     if (hideLikeCounts !== undefined) patch.privacyHideLikeCounts = hideLikeCounts;
     const hideShareCounts = bool(privacy, "hideShareCounts");

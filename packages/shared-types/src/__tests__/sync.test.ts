@@ -91,6 +91,8 @@ describe("socket events", () => {
     expect(SOCKET_NAMESPACE).toBe("/v1");
     expect(Object.keys(SERVER_TO_CLIENT_EVENTS).sort()).toEqual(
       [
+        "call.incoming",
+        "call.updated",
         "history.offer",
         "instance.approved",
         "instance.revoked",
@@ -136,6 +138,8 @@ describe("socket events", () => {
       presence: (p) => void p.online,
       "history.offer": (p) => void p.offerId,
       "status.posted": (p) => void p.statusId,
+      "call.incoming": (p) => void p.callId,
+      "call.updated": (p) => void p.state,
     };
     // The map is EXHAUSTIVE by type: leaving one out is a tsc failure, which
     // is the point of the assertion rather than the count beside it.

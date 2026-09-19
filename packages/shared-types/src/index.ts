@@ -25,6 +25,9 @@ export * from "./conversations";
 export * from "./events";
 
 // The delivery stream, cursors and socket events
+// Calls: the state machine the server runs, and nothing about the media.
+export * from "./calls";
+
 // Status updates: one ciphertext, a key sealed per device, 24 hours.
 export * from "./statuses";
 

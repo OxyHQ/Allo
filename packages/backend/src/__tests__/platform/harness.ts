@@ -54,6 +54,8 @@ export interface RecordedRealtime extends Realtime {
   low: { instanceId: string; available: number }[];
   historyOffers: { instanceId: string; offerId: string }[];
   statusPosts: { instanceId: string; statusId: string }[];
+  callRings: { instanceId: string; callId: string }[];
+  callUpdates: { instanceId: string; callId: string; state: string; endReason: string | null }[];
   typings: { instanceIds: string[]; conversationId: string }[];
   disconnected: string[];
   /** Instances `isInstanceConnected` answers true for. */
@@ -69,6 +71,8 @@ export function recordedRealtime(): RecordedRealtime {
     low: [],
     historyOffers: [],
     statusPosts: [],
+    callRings: [],
+    callUpdates: [],
     typings: [],
     disconnected: [],
     connected: new Set(),
@@ -86,6 +90,12 @@ export function recordedRealtime(): RecordedRealtime {
     },
     statusPosted(instanceId, event) {
       r.statusPosts.push({ instanceId, statusId: event.statusId });
+    },
+    callIncoming(instanceId, event) {
+      r.callRings.push({ instanceId, callId: event.callId });
+    },
+    callUpdated(instanceId, event) {
+      r.callUpdates.push({ instanceId, callId: event.callId, state: event.state, endReason: event.endReason });
     },
     historyOffer(instanceId, event) {
       r.historyOffers.push({ instanceId, offerId: event.offerId });
@@ -106,6 +116,8 @@ export function recordedRealtime(): RecordedRealtime {
       r.low = [];
       r.historyOffers = [];
       r.statusPosts = [];
+      r.callRings = [];
+      r.callUpdates = [];
       r.typings = [];
       r.disconnected = [];
       r.connected.clear();
