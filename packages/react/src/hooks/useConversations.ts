@@ -34,6 +34,12 @@ export interface ConversationActions {
   addMember(conversationId: string, accountId: string): Promise<void>;
   removeMember(conversationId: string, accountId: string): Promise<void>;
   leave(conversationId: string): Promise<void>;
+  /**
+   * Deletes the conversation's history on this device, and with `forEveryone`
+   * asks everybody else in it to do the same — a request their app obeys, not
+   * a guarantee, which the screen offering it has to say.
+   */
+  clearHistory(conversationId: string, options?: { forEveryone?: boolean }): Promise<void>;
   rename(conversationId: string, name: string): Promise<void>;
   /** Re-pulls the server's conversation list. */
   refresh(): Promise<void>;
@@ -47,10 +53,14 @@ export function useConversationActions(): ConversationActions {
   const addMember = useCallback((conversationId: string, accountId: string) => client.conversations.addMember(conversationId, accountId), [client]);
   const removeMember = useCallback((conversationId: string, accountId: string) => client.conversations.removeMember(conversationId, accountId), [client]);
   const leave = useCallback((conversationId: string) => client.conversations.leave(conversationId), [client]);
+  const clearHistory = useCallback(
+    (conversationId: string, options?: { forEveryone?: boolean }) => client.messages.clearHistory(conversationId, options),
+    [client],
+  );
   const rename = useCallback((conversationId: string, name: string) => client.conversations.rename(conversationId, name), [client]);
   const refresh = useCallback(() => client.conversations.refresh(), [client]);
   return useMemo(
-    () => ({ createDirect, createGroup, addMember, removeMember, leave, rename, refresh }),
-    [createDirect, createGroup, addMember, removeMember, leave, rename, refresh],
+    () => ({ createDirect, createGroup, addMember, removeMember, leave, clearHistory, rename, refresh }),
+    [createDirect, createGroup, addMember, removeMember, leave, clearHistory, rename, refresh],
   );
 }

@@ -157,6 +157,15 @@ export interface AlloClient {
     remove(conversationId: string, targetId: string): Promise<void>;
     react(conversationId: string, targetId: string, key: string): Promise<void>;
     markRead(conversationId: string): Promise<void>;
+    /**
+     * Deletes this conversation's history on THIS device, and with
+     * `forEveryone` asks everybody else in it to do the same.
+     *
+     * The local half is a real delete. The remote half is a request their app
+     * obeys — in an end-to-end encrypted system the other copy is on their
+     * device under their keys — and the screen offering it has to say so.
+     */
+    clearHistory(conversationId: string, options?: { forEveryone?: boolean }): Promise<void>;
     setTyping(conversationId: string, on: boolean): Promise<void>;
     isTyping(conversationId: string): boolean;
     /** `limit` defaults to 50. */
@@ -519,6 +528,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       remove: (id, t) => requireCtx().messages.remove(id, t),
       react: (id, t, key) => requireCtx().messages.react(id, t, key),
       markRead: (id) => requireCtx().messages.markRead(id),
+      clearHistory: (id, options) => requireCtx().messages.clearHistory(id, options ?? {}),
       setTyping: (id, on) => requireCtx().messages.setTyping(id, on),
       isTyping: (id) => ctx?.messages.isTyping(id) ?? false,
       loadOlder: (id, before, limit) => requireCtx().messages.loadOlder(id, before, limit),

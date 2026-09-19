@@ -103,10 +103,20 @@ export class ConversationsService {
     return view;
   }
 
+  /**
+   * The conversations to show.
+   *
+   * A conversation deleted on this device stays out until somebody says
+   * something in it: `clearedUpToSeq` is the line that was deleted, so it
+   * reappears the moment `lastSeq` moves past it. It is never dropped from
+   * storage — the membership is the server's, and a returning message has to
+   * find a conversation to land in.
+   */
   list(): ConversationView[] {
     if (!this.listCache) {
-      this.listCache = [...this.ctx.model.conversations.keys()]
-        .map((id) => this.get(id)!)
+      this.listCache = [...this.ctx.model.conversations.values()]
+        .filter((record) => record.clearedUpToSeq === undefined || record.lastSeq > record.clearedUpToSeq)
+        .map((record) => this.get(record.id)!)
         .sort((a, b) => (a.lastActivityAt > b.lastActivityAt ? -1 : a.lastActivityAt < b.lastActivityAt ? 1 : 0));
     }
     return this.listCache;

@@ -13,12 +13,13 @@ import {
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton } from '@oxy.so/bloom/chat-composer';
-import { RiDeleteBinLine, RiPhoneLine, RiSettings3Line, RiSlideshow3Line } from '@oxy.so/bloom/icons';
+import { RiDeleteBinLine, RiLogoutBoxRLine, RiPhoneLine, RiSettings3Line, RiSlideshow3Line } from '@oxy.so/bloom/icons';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 
+import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
@@ -27,7 +28,17 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 import { conversationIdFromPath } from '@/utils/routeUtils';
 
+/**
+ * What the swipe offers, and it is not the same thing in both cases.
+ *
+ * A GROUP is left: you stop receiving it and the others are told. A DM is
+ * DELETED — its history goes from this device and, if you ask, from theirs —
+ * because leaving a conversation with one other person is not a thing any
+ * messenger offers, and the row used to say "Delete conversation" over a
+ * button that said "Leave" and did neither of the two honestly.
+ */
 const LEAVE = 'leave';
+const DELETE = 'delete';
 
 /**
  * Every conversation, newest first — Bloom's `ChatList`, with the search field
@@ -42,7 +53,7 @@ export function ConversationList() {
   const theme = useTheme();
   const { t } = useTranslation();
   const sync = useSyncState();
-  const { leave } = useConversationActions();
+  const { leave, clearHistory } = useConversationActions();
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('all');
@@ -59,7 +70,11 @@ export function ConversationList() {
         .map((chat) => ({
           ...chat,
           swipeActions: {
-            right: [{ key: LEAVE, label: t('chat.leave.action'), icon: RiDeleteBinLine, tone: 'negative' as const }],
+            right: [
+              chat.kind === 'group'
+                ? { key: LEAVE, label: t('chat.leave.action'), icon: RiLogoutBoxRLine, tone: 'negative' as const }
+                : { key: DELETE, label: t('chat.delete.action'), icon: RiDeleteBinLine, tone: 'negative' as const },
+            ],
           },
         })),
     [folder, summaries, t],
@@ -114,6 +129,30 @@ export function ConversationList() {
       }
     },
     [leave, router, selectedId, t],
+  );
+
+  const confirmDelete = useCallback(
+    async (id: string) => {
+      const name = summaries.find((chat) => chat.id === id)?.name ?? t('chat.someone');
+      const answer = await askDeleteConversation({
+        title: t('chat.delete.title'),
+        description: t('chat.delete.confirm'),
+        // The honest label: it asks their app, which is all an E2EE system can do.
+        alsoForThemLabel: t('chat.delete.alsoFor', { name }),
+        confirmLabel: t('chat.delete.action'),
+        cancelLabel: t('common.cancel'),
+      });
+      if (!answer.confirmed) return;
+      try {
+        await clearHistory(id, { forEveryone: answer.forEveryone });
+        toast.success(t('chat.delete.done'));
+        if (selectedId === id) router.replace('/');
+      } catch (error) {
+        logger.error('[ConversationList] delete failed', error);
+        toast.error(t('chat.delete.failed'));
+      }
+    },
+    [clearHistory, router, selectedId, summaries, t],
   );
 
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
@@ -190,6 +229,7 @@ export function ConversationList() {
             onChatPress={open}
             onChatAction={(action, id) => {
               if (action === LEAVE) void confirmLeave(id);
+              if (action === DELETE) void confirmDelete(id);
             }}
             labels={{ emptyTitle: t('chat.empty.title'), emptyDescription: t('chat.empty.description') }}
           />

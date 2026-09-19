@@ -265,6 +265,31 @@ export const callLogMessageSchema = z.object({
   durationMs: nonNegativeIntSchema.optional(),
 });
 
+/**
+ * "I have deleted this conversation, and I am asking you to delete it too."
+ *
+ * A control kind, so a client that has never heard of it ignores the message
+ * and loses nothing a person would see — their copy simply stays.
+ *
+ * **It is a request, not a guarantee, and every screen that offers it says so.**
+ * In an end-to-end encrypted system the other copy is on the other person's
+ * device, decrypted with keys only they hold; nothing here can reach in and
+ * remove it. What this does is what Telegram's checkbox does minus the
+ * server's help: it asks their app, and their app obeys. A modified client
+ * need not, and neither need a screenshot.
+ *
+ * It carries no bound of its own: everything BEFORE it in the conversation
+ * goes, and anything after it is untouched. The event's own `seq` is the line,
+ * which every receiver already has — a reference to some other event is one
+ * the receiver may never have seen, and a message crossing the request in
+ * flight must not be swallowed by it.
+ */
+export const clearHistoryMessageSchema = z.object({
+  v,
+  t: z.literal("clear_history"),
+  ctl: z.literal(true),
+});
+
 /** Only ever sent over the socket `typing` channel; never stored as an event. */
 export const typingMessageSchema = z.object({
   v,
@@ -288,6 +313,7 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   pinMessageSchema,
   callMessageSchema,
   callLogMessageSchema,
+  clearHistoryMessageSchema,
   typingMessageSchema,
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;

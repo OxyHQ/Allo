@@ -351,6 +351,17 @@ export class Dispatcher {
       const conversationId = event.conversationId;
       w.after.push(() => ctx.messages.noteDelivered(conversationId));
     }
+    /**
+     * Somebody in this conversation deleted it and asked everybody to. Applies
+     * whoever sent it — the other person, or another of this account's own
+     * devices — and is bounded by this event's own seq, so a message that
+     * crossed it in flight survives.
+     */
+    if (message.t === "clear_history") {
+      const conversationId = event.conversationId;
+      const upTo = event.seq - 1;
+      w.after.push(() => ctx.messages.applyClear(conversationId, upTo));
+    }
     if (message.t === "media") {
       const key = { blobId: message.blobId, conversationId: event.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };
       w.batch.putJson("mediaKey", key.blobId, key);
