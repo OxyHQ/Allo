@@ -18,24 +18,35 @@ export function storageKeyName(accountId: string, appId: string): string {
 }
 
 export class AtRestCipher {
-  private constructor(private readonly key: Uint8Array) {}
+  private constructor(
+    private readonly key: Uint8Array,
+    /**
+     * This key was minted just now rather than read back.
+     *
+     * On a first run that is simply true. On a device that already has rows it
+     * means the old key is GONE, and every one of those rows is ciphertext
+     * nobody — not this device, not the server, not an attacker — can ever
+     * read again. A caller that finds both must drop the rows rather than
+     * fail on them for ever; see `client.start()`.
+     */
+    readonly mintedFresh: boolean,
+  ) {}
 
-  /** Loads the account's storage key, minting one on first use. */
+  /** Loads the account's storage key, minting one when there is none to read. */
   static async open(secrets: SecretStore, accountId: string, appId: string): Promise<AtRestCipher> {
     const name = storageKeyName(accountId, appId);
-    let key = await secrets.get(name);
-    if (key === undefined || key.length !== STORAGE_KEY_BYTES) {
-      key = randomBytes(STORAGE_KEY_BYTES);
-      await secrets.set(name, key);
-      const check = await secrets.get(name);
-      if (!check || !bytesEqual(check, key)) throw new StorageError("secret store did not persist the storage key");
-    }
-    return new AtRestCipher(key);
+    const key = await secrets.get(name);
+    if (key !== undefined && key.length === STORAGE_KEY_BYTES) return new AtRestCipher(key, false);
+    const fresh = randomBytes(STORAGE_KEY_BYTES);
+    await secrets.set(name, fresh);
+    const check = await secrets.get(name);
+    if (!check || !bytesEqual(check, fresh)) throw new StorageError("secret store did not persist the storage key");
+    return new AtRestCipher(fresh, true);
   }
 
   static fromKey(key: Uint8Array): AtRestCipher {
     if (key.length !== STORAGE_KEY_BYTES) throw new StorageError("storage key must be 32 bytes");
-    return new AtRestCipher(key);
+    return new AtRestCipher(key, false);
   }
 
   encrypt(storageKey: string, plaintext: Uint8Array): Uint8Array {

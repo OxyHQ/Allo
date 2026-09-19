@@ -2,7 +2,7 @@
  * `@allo/core`: the headless Allo messaging SDK. No React, no Expo, no
  * Node-only API; one code path for Node, browsers and Hermes.
  */
-export { createAlloClient, type AlloClient } from "./client";
+export { createAlloClient, type AlloClient, type ResetOutcome } from "./client";
 export * from "./types";
 export {
   AlloError,

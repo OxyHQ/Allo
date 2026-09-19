@@ -6,8 +6,14 @@
  *            instance is active — top up key packages, pull the server's
  *            conversation list and sync.
  *   stop()   disconnect and stop every loop and timer.
- *   reset()  revoke this instance (best effort), wipe its namespace and its
- *            secrets (signing, storage, transfer and backup keys). For sign-out.
+ *   reset()  revoke this instance, then wipe its namespace and its secrets
+ *            (signing, storage, transfer and backup keys). For sign-out, and
+ *            it reports whether the revoke landed: a wipe that could not tell
+ *            the server leaves an instance behind that no device can prove it
+ *            owns. Call it while the session is alive.
+ *   reclaimAccount()
+ *            the way back when the account's only active devices are gone:
+ *            revoke them with the Oxy session and register this one afresh.
  */
 import { AtRestCipher } from "./crypto/atRest";
 import { CryptoEngine } from "./crypto/engine";
@@ -61,13 +67,52 @@ import type {
 import { Mutex } from "./util/async";
 import { describeError, silentLogger } from "./util/logger";
 
+/**
+ * What `reset()` managed to tell the server before it wiped this device.
+ *
+ * The revoke is the half that needs a live Oxy session, and the wipe is the
+ * half that cannot fail. An instance this device can no longer prove it owns —
+ * wiped locally, still `active` on the server — is a GHOST: it holds an
+ * approval slot nobody can use, and while it is the account's only active
+ * instance every new device enrols as `pending` with nothing able to approve
+ * it. So the outcome is returned rather than logged: a caller that wipes a
+ * device has to be able to say what is still listed.
+ */
+export type ResetOutcome =
+  | { revoked: "done" }
+  /** Nothing was active to revoke: never registered, still pending, or already revoked. */
+  | { revoked: "not-needed" }
+  /** The wipe happened and the server still lists this instance as active. */
+  | { revoked: "failed"; instanceId: string; reason: string };
+
 export interface AlloClient {
   readonly accountId: string;
   /** The instance id once registered. */
   readonly instanceId: string | null;
   start(): Promise<void>;
   stop(): Promise<void>;
-  reset(): Promise<void>;
+  /**
+   * Leaves this device: revokes the instance, then wipes its namespace and
+   * every secret. Call it while the Oxy session is still alive — the revoke
+   * is authenticated with it — and read the outcome; see {@link ResetOutcome}.
+   */
+  reset(): Promise<ResetOutcome>;
+  /**
+   * Takes the account over from devices that are gone, and makes THIS one its
+   * only device.
+   *
+   * The way back for somebody who cannot be approved because there is nobody
+   * left to approve them: every instance the account still calls `active` is
+   * revoked with the Oxy session, this device's local state is wiped, and it
+   * registers again — into an account with no active instance, which is the
+   * bootstrap case, so it comes back `active`.
+   *
+   * It is destructive and the screen that offers it has to say so: the other
+   * devices are signed out, and history that lives only on them is gone, since
+   * nothing here can decrypt what they hold. Everything already on this device
+   * is gone too — it was written under keys this wipe removes.
+   */
+  reclaimAccount(): Promise<void>;
   subscribe(topic: SubscriptionTopic, listener: () => void): () => void;
   onError(listener: (error: unknown) => void): () => void;
 
@@ -261,6 +306,27 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     if (!accountId) throw new InvalidStateError("no Oxy account in session");
     const cipher = await AtRestCipher.open(options.secrets, accountId, options.appId);
     const rootStore = new AlloStore(options.storage, cipher, new Namespace(options.appId, accountId));
+    /**
+     * The storage key was minted just now and this account already has rows.
+     * Those rows were written under a key that no longer exists, so nothing
+     * can ever read them again — not this device, not a later one, not an
+     * attacker with the disk. Reading one raises "stored value failed
+     * authentication" out of `start()`, and a device that cannot start is a
+     * device with no way back.
+     *
+     * So drop them, loudly. What survives is the instance SIGNING key, which
+     * lives under its own name in the secret store: with it the registration
+     * below meets `idempotency_conflict` and ADOPTS the instance this device
+     * already has, staying active rather than asking to be approved. History
+     * is what is lost, and it was lost before this ran.
+     */
+    if (cipher.mintedFresh) {
+      const orphaned = await options.storage.list(rootStore.ns.accountPrefix);
+      if (orphaned.length > 0) {
+        log.error?.("the storage key is gone; dropping the rows it encrypted", { rows: orphaned.length });
+        await rootStore.wipeAccount();
+      }
+    }
     const engine = await CryptoEngine.create(options.crypto);
     const http = new HttpClient({
       baseUrl: options.baseUrl.replace(/\/+$/, ""),
@@ -347,15 +413,23 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     activated = false;
   };
 
-  const reset = async (): Promise<void> => {
+  const reset = async (): Promise<ResetOutcome> => {
     const c = ctx;
     await stop();
     const accountId = c?.accountId ?? options.session.getAccountId();
+    let outcome: ResetOutcome = { revoked: "not-needed" };
     if (c && c.instance.isActive) {
+      const instanceId = c.instanceId;
       try {
-        await c.instance.revoke(c.instanceId);
+        await c.instance.revoke(instanceId);
+        outcome = { revoked: "done" };
       } catch (error) {
-        log.warn?.("self-revoke on reset failed", { error: describeError(error) });
+        // Not "best effort" any more: what is left behind is an instance this
+        // device can no longer prove it owns, and the caller is the only one
+        // in a position to say so.
+        const reason = describeError(error);
+        log.error?.("self-revoke on reset failed; this instance is still listed", { instanceId, reason });
+        outcome = { revoked: "failed", instanceId, reason };
       }
     }
     if (accountId) {
@@ -369,6 +443,26 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx = null;
     emitter.emit("instance");
     emitter.emit("conversations");
+    return outcome;
+  };
+
+  const reclaimAccount = async (): Promise<void> => {
+    const c = ctx;
+    if (!c) throw new InvalidStateError("client is not started");
+    const mine = c.instance.current?.id ?? null;
+    const listed = await c.instance.listWithSession();
+    const active = listed.filter((i) => i.status === "active");
+    log.warn?.("reclaiming the account from devices that cannot approve", { revoking: active.length });
+    for (const instance of active) {
+      // `mine` is pending in the case this exists for, so it is not in here;
+      // skipping it is belt and braces for the case where it somehow is.
+      if (instance.id === mine) continue;
+      await c.instance.revokeWithSession(instance.id);
+    }
+    // Local state was written under keys the wipe removes, and every group
+    // this device was in has just lost its other members' devices anyway.
+    await reset();
+    await start();
   };
 
   return {
@@ -381,6 +475,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     start,
     stop,
     reset,
+    reclaimAccount,
     subscribe: (topic, listener) => emitter.subscribe(topic, listener),
     onError: (listener) => emitter.onError(listener),
     instance: {

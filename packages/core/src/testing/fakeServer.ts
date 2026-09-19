@@ -544,6 +544,13 @@ export class FakeAlloServer implements SocketHost {
       me.pushProvider = null;
       return new Response(null, { status: 204 });
     }
+    // Session-authenticated: no `signed()`, because the case this exists for is
+    // an account with no signing key left to sign with.
+    if (method === "DELETE" && (m = path.match(/^\/v1\/instances\/([^/]+)$/))) {
+      const target = this.instances.get(m[1]);
+      if (!target || target.accountId !== accountId) throw new HttpError(404, "not_found", "instance");
+      return this.revoke(target);
+    }
     if (method === "POST" && (m = path.match(/^\/v1\/instances\/([^/]+)\/(approve|reject|revoke)$/))) {
       const me = signed();
       const target = this.instances.get(m[1]);

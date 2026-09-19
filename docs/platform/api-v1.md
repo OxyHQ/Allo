@@ -117,6 +117,7 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | POST | `/v1/instances` | oxy | `RegisterInstanceRequest` | `RegisterInstanceResponse` | `validation_failed` |
 | GET | `/v1/instances` | oxy | — | `ListInstancesResponse` | — |
 | GET | `/v1/accounts/:accountId/instances` | oxy | — | `ListAccountInstancesResponse` (`PublicInstance[]`, active and revoked, never pending: a chain whose approver was revoked later must still verify; an account with no instance answers `[]`, never 404) | — |
+| DELETE | `/v1/instances/:id` | oxy | — | `InstanceResponse` | `not_found` |
 | GET | `/v1/instances/pending` | instance-signed | — | `ListPendingEnrollmentsResponse` | — |
 | POST | `/v1/instances/:id/approve` | instance-signed | `ApproveInstanceRequest` | `InstanceResponse` | `not_found`, `forbidden`, `unauthorized` (bad approval signature), `validation_failed` |
 | POST | `/v1/instances/:id/reject` | instance-signed | — | `InstanceResponse` | `not_found`, `forbidden` |
@@ -124,6 +125,17 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | PUT | `/v1/instances/me/push` | instance-signed | `SetPushTokenRequest` | `204` | `validation_failed` |
 | DELETE | `/v1/instances/me/push` | instance-signed | — | `204` | — |
 | PUT | `/v1/instances/me/transfer-key` | instance-signed | `SetTransferKeyRequest` `{ transferPublicKey }` | `InstanceResponse` | `validation_failed` |
+
+`DELETE /v1/instances/:id` is the ONE instance route the Oxy session alone can
+call, and it is there for the state the signed one cannot reach: an account
+whose last active instance is gone — cleared site data, a lost phone, a key
+that did not survive — has no signing key left, so a newly enrolled device
+waits on an approval nothing can give. Every major messenger has the same door
+(an account credential re-registers a device and signs the others out); the
+trade is written down in `threat-model.md`. Another account's instance answers
+`not_found`, the same as one that does not exist. `client.reclaimAccount()` is
+the SDK's whole move: revoke each active instance, wipe, register again — into
+an account with no active instance, so the bootstrap rule makes it active.
 
 Registration is the bootstrap rule: an account with zero active instances
 gets `enrollment: "active"` at once; otherwise the answer is `"pending"` with

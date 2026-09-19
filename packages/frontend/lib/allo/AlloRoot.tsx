@@ -11,10 +11,17 @@
  * - The account CHANGES (Oxy's account switcher) → the old client is stopped
  *   and a new one built. Stopped, not reset: switching back later reopens the
  *   same enrolled instance and the same history.
- * - The account goes AWAY (sign-out) → the old client is `reset()`: its push
- *   token is cleared, the instance is revoked best-effort, and its namespace
- *   and secrets are wiped. Signing out is leaving this device; a later sign-in
- *   enrols it afresh.
+ * - The account goes AWAY → the old client is STOPPED, and keeps every key.
+ *
+ * That last one is the rule, not an omission. A missing account here does not
+ * mean somebody signed out: Oxy clears the bearer on an unrecoverable 401 and
+ * reports a locally signed-out session while keeping the stored one, because
+ * it expects to restore it. Wiping the device on that signal revoked nothing
+ * (the revoke needs the bearer that just went) and left an active instance on
+ * the account that no device could prove it owned — which is what turned a
+ * page reload into "approve this device", permanently. Leaving is a
+ * deliberate act and goes through `signOutOfAllo` (`lib/allo/signOut.ts`),
+ * which resets while the session is still alive.
  *
  * Between "signed in" and "client ready" nothing is rendered rather than the
  * app: a screen mounted without a provider would throw on its first hook.
@@ -29,8 +36,9 @@ import { AlloProvider, useAlloClient, useInstanceState } from '@allo/react';
 import { logger } from '@/utils/logger';
 import { createAppAlloClient } from './client';
 import { EnrollmentGate } from './EnrollmentGate';
-import { clearPushToken, onPushPermissionGranted, registerPushToken } from './push';
+import { onPushPermissionGranted, registerPushToken } from './push';
 import { RestoreHistoryPrompt } from './RestoreHistoryPrompt';
+import { signOutOfAllo } from './signOut';
 
 interface Held {
   accountId: string;
@@ -55,8 +63,9 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     if (previous) {
       held.current = null;
       setClient(null);
-      const retire = accountId === null ? signOut(previous.client) : previous.client.stop();
-      retire.catch((error: unknown) => logger.warn('[allo] retiring the previous client failed', error));
+      // Stopped in both cases — an account switch and a session that is not
+      // there right now are the same thing to this device's keys.
+      previous.client.stop().catch((error: unknown) => logger.warn('[allo] retiring the previous client failed', error));
     }
     if (accountId === null) return;
 
@@ -86,7 +95,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       <PushRegistration />
       <EnrollmentGate
         onSignOut={() => {
-          void logout();
+          void signOutOfAllo(client, logout);
         }}
       >
         {children}
@@ -95,11 +104,6 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       </EnrollmentGate>
     </AlloProvider>
   );
-}
-
-async function signOut(client: AlloClient): Promise<void> {
-  await clearPushToken(client);
-  await client.reset();
 }
 
 /** Registers the push token once the instance is active, and again when permission is granted later. */

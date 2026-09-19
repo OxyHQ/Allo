@@ -378,6 +378,27 @@ export class InstanceManager {
     else await this.refresh();
   }
 
+  /**
+   * Removes an instance of this account with the OXY SESSION alone — no
+   * `signer`, so no device key is needed.
+   *
+   * The signed `revoke` above is the everyday one. This is for the account
+   * whose last ACTIVE instance is gone: a browser whose site data was
+   * cleared, a lost phone, a key that did not survive. Nothing on this device
+   * can sign for that instance any more, so nothing can approve the device
+   * standing in front of the person now — and the account would be finished.
+   * `client.reclaimAccount()` is the whole move; this is its one request.
+   */
+  async revokeWithSession(instanceId: string): Promise<void> {
+    await this.deps.http.request({ method: "DELETE", path: `/v1/instances/${instanceId}`, schema: instanceResponseSchema });
+  }
+
+  /** Every instance the account has, read with the Oxy session rather than a device key. */
+  async listWithSession(): Promise<ClientInstance[]> {
+    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+    return res.instances;
+  }
+
   // ---- push ----------------------------------------------------------------
 
   async setPushToken(provider: "fcm" | "apns", token: string): Promise<void> {

@@ -10,6 +10,17 @@
  * between `start()` beginning and the instance existing, and renders the app
  * so the shell is on screen while the SDK opens its store.
  *
+ * The pending screen carries a SECOND way out, and it is not decoration.
+ * "Waiting to be approved" assumes there is a device left that can approve,
+ * and there need not be: a browser whose site data was cleared, a phone that
+ * was lost, a device whose key did not survive — each leaves an instance the
+ * account still calls active that nothing can sign for. Without a way past
+ * it the account is finished, so "Use this device instead"
+ * (`client.reclaimAccount()`) revokes those devices with the Oxy session and
+ * registers this one into the empty account. It is destructive, it is behind
+ * a confirmation that says what is lost, and it is the honest end of the
+ * screen rather than a spinner that never stops.
+ *
  * It is mounted at boot, so nothing here may suspend: `useTranslation` is
  * called with suspense off, and every string has an inline default.
  */
@@ -24,6 +35,7 @@ import { RiShieldLine, RiSmartphoneLine } from '@oxy.so/bloom/icons';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
 
+import { confirmDialog } from '@/utils/alerts';
 import { logger } from '@/utils/logger';
 
 export interface EnrollmentGateProps {
@@ -42,6 +54,7 @@ export function EnrollmentGate({ children, onSignOut }: EnrollmentGateProps) {
         deviceName={instance?.displayName}
         fingerprint={instance?.enrollment?.fingerprint}
         errorMessage={error?.message}
+        onReclaim={() => client.reclaimAccount()}
         onSignOut={onSignOut}
       />
     );
@@ -64,12 +77,42 @@ interface PendingApprovalScreenProps {
   deviceName?: string;
   fingerprint?: string;
   errorMessage?: string;
+  /** Takes the account over from devices that can no longer approve. Omitted, the action is not offered. */
+  onReclaim?: () => Promise<void>;
   onSignOut?: () => void;
 }
 
-export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, onSignOut }: PendingApprovalScreenProps) {
+export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, onReclaim, onSignOut }: PendingApprovalScreenProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const theme = useTheme();
+  const [reclaiming, setReclaiming] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const reclaim = useCallback(async () => {
+    if (!onReclaim) return;
+    const confirmed = await confirmDialog({
+      title: t('enrollment.reclaim.title', 'Use this device instead?'),
+      message: t(
+        'enrollment.reclaim.body',
+        'Your other devices will be signed out, and messages kept only on them will be lost — this device cannot read what they hold. Do this only when you cannot reach a device that is already signed in.',
+      ),
+      okText: t('enrollment.reclaim.confirm', 'Use this device'),
+      cancelText: t('common.cancel', 'Cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setReclaiming(true);
+    setFailure(null);
+    try {
+      await onReclaim();
+    } catch (error) {
+      logger.error('[allo] reclaiming the account failed', error);
+      setFailure(error instanceof Error ? error.message : String(error));
+    } finally {
+      setReclaiming(false);
+    }
+  }, [onReclaim, t]);
+
   return (
     <GateFrame
       icon={<IconCircle icon={RiSmartphoneLine} />}
@@ -100,8 +143,20 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
       ) : null}
       <ActivityIndicator color={theme.colors.primary} />
       {errorMessage ? <ErrorLine message={errorMessage} /> : null}
+      {failure ? <ErrorLine message={failure} /> : null}
+      {onReclaim ? (
+        <Button
+          variant="secondary"
+          loading={reclaiming}
+          onPress={() => {
+            void reclaim();
+          }}
+        >
+          {t('enrollment.reclaim.action', 'Use this device instead')}
+        </Button>
+      ) : null}
       {onSignOut ? (
-        <Button variant="secondary" onPress={onSignOut}>
+        <Button variant="text" onPress={onSignOut}>
           {t('settings.signOut', 'Sign out')}
         </Button>
       ) : null}
