@@ -15,11 +15,25 @@ export class GroupRegistry {
     private readonly store: InstanceStore,
   ) {}
 
-  async load(): Promise<void> {
+  /**
+   * Loads every persisted state. Bytes that do not decode are skipped and their
+   * conversation ids returned: the conversation then has a record and no state,
+   * which is exactly what `ConversationsService.reconcile` repairs by resync
+   * when the server still lists this instance's leaf as active. Throwing here
+   * would keep the whole client from starting over one damaged row.
+   */
+  async load(): Promise<string[]> {
+    const undecodable: string[] = [];
     for (const id of await this.store.listIds("groupState")) {
       const bytes = await this.store.getBytes("groupState", id);
-      if (bytes) this.states.set(id, this.engine.deserializeGroup(bytes));
+      if (!bytes) continue;
+      try {
+        this.states.set(id, this.engine.deserializeGroup(bytes));
+      } catch {
+        undecodable.push(id);
+      }
     }
+    return undecodable;
   }
 
   get(conversationId: string): GroupState | undefined {

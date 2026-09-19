@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, type TextInput } from 'react-native';
+import { ActivityIndicator, Platform, type TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
   AttachmentMenu,
@@ -8,6 +8,7 @@ import {
   ComposerIconButton,
   VoiceRecorder,
   type AttachmentMenuItem,
+  type ChatComposerIcon,
   type ChatComposerSuggestion,
 } from '@oxy.so/bloom/chat-composer';
 import {
@@ -15,10 +16,12 @@ import {
   RiBarChartHorizontalLine,
   RiCameraLine,
   RiContactsBookLine,
+  RiErrorWarningLine,
   RiFileTextLine,
   RiGalleryLine,
   RiMapPinLine,
 } from '@oxy.so/bloom/icons';
+import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import type { ContactDraft, PlaceDraft, PollDraft } from '@allo/core';
 
@@ -56,6 +59,10 @@ interface ComposerProps {
   onClearTarget: () => void;
   /** Read-only, with this line in place of the input. */
   notice?: string;
+  /** The notice is about something under way: a spinner takes the icon's place. */
+  noticeBusy?: boolean;
+  /** The notice is a failure, not a wait: the icon is drawn in the error colour. */
+  noticeError?: boolean;
   /** A line above the input that informs without blocking it. */
   note?: string | null;
   /** Who `@` offers. Empty (the default) turns mention suggestions off entirely. */
@@ -90,6 +97,17 @@ const NOBODY: readonly Mentionable[] = [];
 // MediaRecorder on the web).
 const IS_NATIVE = Platform.OS !== 'web';
 
+/** Bloom draws the notice icon at 16px in the secondary icon colour; a spinner in the same slot and colour. */
+const BusyNoticeIcon: ChatComposerIcon = ({ fill }) => (
+  <ActivityIndicator size="small" color={typeof fill === 'string' ? fill : undefined} testID="composer-notice-busy" />
+);
+
+/** The failure glyph in the theme's error colour, whatever secondary tint Bloom passes. */
+const ErrorNoticeIcon: ChatComposerIcon = ({ width, height }) => {
+  const theme = useTheme();
+  return <RiErrorWarningLine width={width} height={height} fill={theme.colors.error} />;
+};
+
 /**
  * Where the insertion point is.
  *
@@ -109,6 +127,8 @@ export function Composer({
   target,
   onClearTarget,
   notice,
+  noticeBusy,
+  noticeError,
   note,
   mentionables = NOBODY,
   onSendText,
@@ -414,6 +434,7 @@ export function Composer({
       inputRef={field}
       placeholder={t('composer.placeholder')}
       notice={notice}
+      noticeIcon={noticeBusy ? BusyNoticeIcon : noticeError ? ErrorNoticeIcon : undefined}
       banner={banner}
       recorder={recorder}
       attachments={tiles}

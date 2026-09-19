@@ -49,7 +49,7 @@ async function withSecondDevice() {
     epoch: 1,
     payload: base64("add-a2"),
     commit: {
-      newEpoch: 2,
+      newEpoch: 2, groupInfo: base64("gi-2"),
       addedLeaves: [{ instanceId: a2.id, accountId: dm.a.accountId }],
       removedLeaves: [],
       welcome: { payload: base64("welcome-a2"), recipients: [a2.id] },
@@ -105,7 +105,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 2,
       payload: base64("c"),
-      commit: { newEpoch: 3, addedLeaves: [], removedLeaves: [] },
+      commit: { newEpoch: 3, groupInfo: base64("gi-3"), addedLeaves: [], removedLeaves: [] },
     });
     expect(ahead.status).toBe(409);
   });
@@ -181,7 +181,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 2,
       payload: base64("remove-a2"),
-      commit: { newEpoch: 3, addedLeaves: [], removedLeaves: [a2.id] },
+      commit: { newEpoch: 3, groupInfo: base64("gi-3"), addedLeaves: [], removedLeaves: [a2.id] },
     });
     expect(remove.status).toBe(200);
     expect(await recipientsOf(remove.body.event.id)).toEqual([a2.id, b.id].sort());
@@ -216,7 +216,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("bye"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [b.id] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [b.id] },
     });
     expect(self.status).toBe(200);
     let view = await a.signed("get", `/v1/conversations/${conversationId}`);
@@ -229,7 +229,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("kick"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [dm2.b.id] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [dm2.b.id] },
     });
     expect(byOwner.status).toBe(200);
     view = await dm2.a.signed("get", `/v1/conversations/${dm2.conversationId}`);
@@ -265,7 +265,7 @@ describe("POST /v1/conversations/:id/events", () => {
       epoch: 0,
       payload: base64("add-b"),
       commit: {
-        newEpoch: 1,
+        newEpoch: 1, groupInfo: base64("gi-1"),
         addedLeaves: [{ instanceId: b.id, accountId: b.accountId }],
         removedLeaves: [],
         welcome: { payload: base64("welcome-b"), recipients: [b.id] },
@@ -280,7 +280,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("remove-b"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [b.id] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [b.id] },
     });
     expect(remove.status).toBe(200);
     expect(await memberStates()).toEqual({ [a.accountId]: "joined", [b.accountId]: "removed", [carol]: "joined" });
@@ -295,7 +295,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("kick-owner"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [a.id] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [a.id] },
     });
     expect(notAllowed.status).toBe(403);
     expect(notAllowed.body.error.code).toBe("forbidden");
@@ -306,7 +306,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("third"),
-      commit: { newEpoch: 2, addedLeaves: [{ instanceId: c.id, accountId: c.accountId }], removedLeaves: [] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [{ instanceId: c.id, accountId: c.accountId }], removedLeaves: [] },
     });
     expect(third.status).toBe(403);
 
@@ -315,7 +315,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("lie"),
-      commit: { newEpoch: 2, addedLeaves: [{ instanceId: c.id, accountId: b.accountId }], removedLeaves: [] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [{ instanceId: c.id, accountId: b.accountId }], removedLeaves: [] },
     });
     expect(wrongAccount.status).toBe(400);
 
@@ -324,7 +324,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "mls_commit",
       epoch: 1,
       payload: base64("w"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [], welcome: { payload: base64("w"), recipients: [b.id] } },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [], welcome: { payload: base64("w"), recipients: [b.id] } },
     });
     expect(badWelcome.status).toBe(400);
 
@@ -360,7 +360,7 @@ describe("POST /v1/conversations/:id/events", () => {
       kind: "app_message",
       epoch: 1,
       payload: base64("x"),
-      commit: { newEpoch: 2, addedLeaves: [], removedLeaves: [] },
+      commit: { newEpoch: 2, groupInfo: base64("gi-2"), addedLeaves: [], removedLeaves: [] },
     });
     expect(malformed.status).toBe(400);
     expect(malformed.body.error.code).toBe("validation_failed");

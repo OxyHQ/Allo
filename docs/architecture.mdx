@@ -140,8 +140,18 @@ uniqueness on `mls_group_id`, the initial commit appended in the create
 transaction; `appendClientEvent` runs under `SELECT ... FOR UPDATE` on the
 conversation row and is where the epoch compare-and-set, the dense `seq`, the
 add and remove authorization, the welcome's separate event, the membership
-updates and the delivery rows are one write or none. Server-side leave writes
-a `member_left` control event.
+updates, the stored GroupInfo and the delivery rows are one write or none.
+Every `mls_commit` carries the new epoch's GroupInfo, upserted into
+`conversation_group_info` in the same transaction; a commit of `kind:
+external` needs a `joined` member row rather than a leaf, must add exactly its
+sender, and activates that leaf at once; `kind: resync` must add and remove
+exactly its sender and replaces the leaf row. `GET /v1/conversations/:id/group-info`
+returns the stored GroupInfo, or `null` when it is not the current epoch's, to
+an instance whose account is a joined member; `PUT` lets an active leaf
+re-publish one for the current epoch only (`409 epoch_conflict` otherwise),
+which is how conversations older than the field become joinable. The server
+never parses the bytes. Server-side leave writes a `member_left` control
+event.
 
 **Deliveries and sync** (`db/platform/deliveryRepository.ts`): one
 `instance_deliveries` row per event and recipient, written in the event's
@@ -205,6 +215,7 @@ Oxy ids). Column-level detail is in the schema files' comments.
 | `conversations` | kind `dm`/`group`, app, the unique `dm_key` for a DM, the unique MLS group id, `current_epoch` and `last_seq` advanced under the row lock |
 | `conversation_members` | one row per (conversation, account): role `owner`/`admin`/`member`, state `joined`/`left`/`removed`; rows are kept as membership history |
 | `conversation_leaves` | which instances hold a leaf: state `pending_welcome`/`active`/`removed`, the epoch added and the epoch removed |
+| `conversation_group_info` | one row per conversation: the latest epoch's serialized MLS GroupInfo (`external_pub` plus ratchet tree, a protected column, at most 256 KiB), the epoch and the signing instance; written in the commit's transaction, read by a joined member's device to join by external commit |
 | `conversation_events` | the append-only log: dense `seq` per conversation, kind, epoch, sender, idempotency key (unique per sender instance), `payload` as ciphertext bytes or server-authored control JSON, declared `blob_ids` |
 | `instance_deliveries` | the outbox and the per-instance sync stream: a `bigserial` id (the one integer key, because it is the cursor), status, lease, attempts, expiry at 30 days |
 | `blobs` / `blob_bytes` | uploaded ciphertext: size, digest, uploader, `expires_at` cleared when an event, a pending history offer or the account backup references it; the bytes in their own table behind `BlobStore` |
@@ -213,14 +224,15 @@ Oxy ids). Column-level detail is in the schema files' comments.
 | `user_settings`, `blocks`, `restricts`, `user_behavior` | per-account settings and social lists, kept from before |
 | `abuse_reports`, `moderation_events`, `moderation_outbox`, `moderation_enforcements` | the CrowdSource pipeline, kept from before |
 
-Six messaging columns are registered in `protectedColumns.ts` (beside the
+Seven messaging columns are registered in `protectedColumns.ts` (beside the
 two moderation payload columns) so a listing cannot serialise them by
 accident: `client_instances.push_token`, `key_packages.data`,
-`conversation_events.payload`, `blob_bytes.data`, `history_offers.sealed_key`
-and `account_backups.key_check`. The push token never leaves the process; the
-readers that legitimately return the other five (the claim, the event and
-sync reads, the blob download, the recipient's offer read and the owner's
-backup read) name them explicitly.
+`conversation_events.payload`, `conversation_group_info.data`,
+`blob_bytes.data`, `history_offers.sealed_key` and
+`account_backups.key_check`. The push token never leaves the process; the
+readers that legitimately return the other six (the claim, the event and
+sync reads, the group-info read for a joined member, the blob download, the
+recipient's offer read and the owner's backup read) name them explicitly.
 
 ### Realtime
 

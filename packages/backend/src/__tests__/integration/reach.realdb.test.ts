@@ -116,15 +116,20 @@ describe("members without an instance", () => {
     const events = await eventsOf(conv.id);
     const commits = events.filter((e) => e.kind === "mls_commit");
     expect(commits).toHaveLength(1);
-    expect(commits[0].senderInstanceId).toBe(alice.client.instanceId);
-    expect(events.filter((e) => e.kind === "mls_welcome")).toHaveLength(1);
+    // Bob normally joins himself (external commit, no welcome); if Alice's
+    // elector won the race it is her Add plus one welcome. Either way, one
+    // commit and Bob's leaf active.
+    const selfJoined = commits[0].senderInstanceId === bob.client.instanceId;
+    expect(selfJoined || commits[0].senderInstanceId === alice.client.instanceId).toBe(true);
+    expect(events.filter((e) => e.kind === "mls_welcome")).toHaveLength(selfJoined ? 0 : 1);
     // Alice's two texts; Bob's encrypted `delivered` receipt is a third app_message that may or may not have landed yet.
     expect(events.filter((e) => e.kind === "app_message" && e.senderInstanceId === alice.client.instanceId)).toHaveLength(2);
     const [row] = await h.db.select().from(schema.conversations).where(eq(schema.conversations.id, conv.id));
     const bobLeaf = (await leavesOf(conv.id)).find((l) => l.instanceId === bob.client.instanceId);
     expect(bobLeaf?.state).toBe("active");
     expect(bobLeaf?.addedEpoch).toBe(row.currentEpoch);
-    expect(requestLog(mark).filter((r) => r.status === 409)).toEqual([]);
+    // The joiner and the elector may race for the same epoch: at most one of them loses with a 409.
+    expect(requestLog(mark).filter((r) => r.status === 409).length).toBeLessThanOrEqual(1);
 
     // And it keeps working both ways.
     const back = h.unique("hi alice");
@@ -184,9 +189,12 @@ describe("members without an instance", () => {
     expect(carolAfter.joinedAt.getTime()).toBe(carolAtCreate.joinedAt.getTime());
     const commits = (await eventsOf(group.id)).filter((e) => e.kind === "mls_commit");
     expect(commits).toHaveLength(2);
-    expect(commits.every((c) => c.senderInstanceId === alice.client.instanceId)).toBe(true);
+    // Alice's initial commit, then Carol's self-join (or Alice's Add if her elector won the race).
+    expect(commits[0].senderInstanceId).toBe(alice.client.instanceId);
+    expect([alice.client.instanceId, carol.client.instanceId]).toContain(commits[1].senderInstanceId);
     expect((await leavesOf(group.id)).filter((l) => l.state === "active").map((l) => l.accountId).sort()).toEqual([aliceId, bobId, carolId].sort());
-    expect(requestLog(mark).filter((r) => r.status === 409)).toEqual([]);
+    // The joiner and the elector may race for the same epoch: at most one of them loses with a 409.
+    expect(requestLog(mark).filter((r) => r.status === 409).length).toBeLessThanOrEqual(1);
     await stopAll(alice, bob, carol);
   }, 120_000);
 

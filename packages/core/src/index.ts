@@ -11,6 +11,7 @@ export {
   FutureEpochError,
   InstanceNotActiveError,
   InvalidStateError,
+  JoinRefusedError,
   NotFoundError,
   NotImplementedError,
   RecoveryPhraseError,
@@ -19,7 +20,21 @@ export {
   UntrustedInstanceError,
   type AlloErrorCodeName,
 } from "./errors";
-export { CryptoEngine, CIPHERSUITE_ID, keyPackageRefFromWire, identityString, parseIdentity, type GroupState, type Identity, type KeyPackageBundle, type LeafInfo } from "./crypto/engine";
+export {
+  CryptoEngine,
+  CIPHERSUITE_ID,
+  keyPackageRefFromWire,
+  identityString,
+  parseIdentity,
+  type GroupState,
+  type Identity,
+  type KeyPackageBundle,
+  type LeafInfo,
+  type CommitResult,
+  type ExternalJoinResult,
+  type ExternalJoiner,
+  type JoinerAdmission,
+} from "./crypto/engine";
 export { nobleCryptoProvider } from "./crypto/nobleCryptoProvider";
 export { generateSigningKey, signRequest, signEnrollmentApproval, verifyInstanceChain, verifyEd25519, type SigningKeyPair, type ChainVerdict } from "./crypto/signing";
 export { AtRestCipher, storageKeyName } from "./crypto/atRest";

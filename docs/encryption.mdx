@@ -40,6 +40,19 @@ and body hash, so a stolen Oxy token alone cannot act inside one. Revoking an
 instance refuses its signature, cuts its sockets, and has a remaining leaf
 commit its removal. Sections 6 and 7 of the crypto page.
 
+**Joining by yourself.** Every commit's author also uploads, in the same
+request, the MLS GroupInfo of the new epoch (`external_pub` plus the ratchet
+tree; nothing secret, and nothing the server did not already hold). A device
+that is a member with no leaf — a new account's first device, a new device of
+a member — fetches it and joins by an external commit of its own, so nobody
+else has to be online; a device that lost its group state but kept its key
+replaces its own leaf the same way. Who gets in is decided by the members,
+not by the server: each one verifies the joiner's credential against the
+account's approval chain before the library sees the commit, and a forged
+joiner is dropped with the state untouched. A conversation from before stored
+GroupInfos still waits for another device to add it, and the app says which
+is happening. Section 5 of the crypto page.
+
 **Media.** A file is encrypted on the device with a fresh random key under
 AES-256-GCM, uploaded as an opaque blob under an unguessable id, and the key,
 nonce and digest travel only inside the encrypted `media` message; a

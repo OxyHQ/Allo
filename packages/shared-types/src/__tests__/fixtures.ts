@@ -17,6 +17,8 @@ export const SIGNATURE = Buffer.alloc(64, 2).toString("base64");
 /** base64url of 32 bytes: 43 chars, unpadded. */
 export const CHALLENGE = Buffer.alloc(32, 3).toString("base64url");
 export const B64 = Buffer.from("hello world").toString("base64");
+/** base64 of a stand-in serialized GroupInfo (the server never reads it). */
+export const GROUP_INFO = Buffer.from("mls_group_info").toString("base64");
 
 /** A valid `transfer` manifest of two chunks. Spread `{ ...MANIFEST, kind: "backup" }` for the other kind. */
 export const MANIFEST: ArchiveManifest = {

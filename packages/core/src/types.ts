@@ -232,9 +232,14 @@ export interface TimelineItemView {
    * Only on a `pending` own echo: why the outbox is not sending it yet.
    * `no_reachable_member`: no other member of the conversation has a device
    * that could read it (see `ConversationView.unreachableMemberAccountIds`);
-   * the item is released on its own once one appears. Derived, never stored.
+   * the item is released on its own once one appears. `epoch_stalled`: the
+   * server keeps answering `epoch_conflict` and syncing does not move this
+   * device's epoch, because a commit the server accepted was refused here
+   * (see `ConversationView.integrity`); the outbox stops sending it, backs
+   * off, and releases it on its own if the local epoch ever advances.
+   * Derived, never stored.
    */
-  holdReason?: "no_reachable_member";
+  holdReason?: "no_reachable_member" | "epoch_stalled";
 }
 
 export interface ConversationView {
@@ -248,6 +253,30 @@ export interface ConversationView {
   epoch: number;
   /** Whether this instance holds an active MLS leaf: it can read and send. */
   joined: boolean;
+  /**
+   * How this instance stands towards the group. `joined` is `joined === true`.
+   * `joining`: it holds no leaf yet but a stored GroupInfo exists (or has not
+   * been asked for yet), so it is joining by itself, with nobody else needed;
+   * also a device whose group state is lost while the server still lists its
+   * leaf, which resyncs the same way. `waiting_for_member`: the server holds no
+   * GroupInfo for the current epoch (a conversation whose last commit predates
+   * the field), so a member's device has to add this one — "This device is
+   * being added…" — and that is also what a removed or left member reads.
+   */
+  joinState: "joined" | "joining" | "waiting_for_member";
+  /**
+   * `refused_commit`: this device refused a commit the server had already
+   * accepted, because its joiner could not be verified (a device outside the
+   * account's approval chain, or a leaf already in the tree). The group on the
+   * server moved on without this device; nothing sent from here reaches the
+   * others any more and the outbox stalls (`holdReason: 'epoch_stalled'`).
+   * The UI says the conversation cannot continue securely and offers nothing
+   * else: fail closed. `refusedEpoch` is the epoch the refused commit left,
+   * `refusalReason` the engine's reason. Persisted; never cleared by the SDK.
+   */
+  integrity: "ok" | "refused_commit";
+  refusedEpoch?: number;
+  refusalReason?: string;
   /**
    * Joined members other than me with NO active leaf in the group: accounts
    * that have not installed Allo (or whose devices are all gone). Nothing

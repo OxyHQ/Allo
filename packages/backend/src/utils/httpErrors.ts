@@ -21,6 +21,7 @@ export const STATUS_BY_CODE: Readonly<Record<AlloErrorCode, number>> = {
   not_found: 404,
   validation_failed: 400,
   epoch_conflict: 409,
+  group_info_missing: 409,
   instance_not_active: 403,
   instance_revoked: 403,
   key_packages_exhausted: 409,

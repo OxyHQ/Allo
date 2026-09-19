@@ -332,9 +332,14 @@ describe("end to end over the fake server", () => {
     expect(bob2.client.instance.state()).toBe("active");
     expect(server.requestLog.some((r) => r.method === "POST" && r.path === "/v1/instances" && r.status === 409)).toBe(true);
     expect(server.instancesOf("acc-bob-0001")).toHaveLength(1);
-    // the wiped store lost the group state; the leaf exists server-side, so the conversation is listed but not readable
-    await waitFor(() => bob2.client.conversations.get(conv.id) !== undefined);
-    expect(bob2.client.conversations.get(conv.id)?.joined).toBe(false);
+    // the wiped store lost the group state; the leaf exists server-side, so the adopted instance RESYNCS: one external
+    // commit that replaces its own leaf, nobody else needed, and the conversation is readable again
+    await waitJoined(bob2, conv.id, 10_000);
+    const resync = server.eventsOf(conv.id).filter((e) => e.kind === "mls_commit" && e.senderInstanceId === id);
+    expect(resync).toHaveLength(1);
+    expect([...server.conversations.get(conv.id)!.leaves.values()].filter((l) => l.accountId === "acc-bob-0001")).toHaveLength(1);
+    await alice.client.messages.send(conv.id, "after the wipe");
+    await waitForText(bob2, conv.id, "after the wipe");
     // a key that matches no live instance is refused rather than silently re-registered
     server.instances.get(id)!.status = "revoked";
     const bob3 = await makeClient(server, "acc-bob-0001", "Bob", "ios", { storage: new MemoryStorage(), secrets }, false);

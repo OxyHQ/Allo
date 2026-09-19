@@ -91,12 +91,26 @@ delivery receipts as encrypted `delivered` messages that set `sendState` to
 `@allo/react`; and the app's backup screen, restore screen and transfer
 banner, specified with this change and built alongside it.
 
+Delivered by the external-join change (branch `feat/external-join`): a device
+that is a member with no active leaf joins a conversation by itself, with no
+other device online, by an MLS external commit built from the GroupInfo the
+server stores with every commit (`conversation_group_info`, migration 0007,
+`GET`/`PUT /v1/conversations/:id/group-info`, `CommitInfo.groupInfo` required,
+`kind: external`); recovery of a device that lost its group state but kept
+its signing key, by the same commit replacing its own leaf (`kind: resync`);
+joiner admission on every member against the account's verified chain before
+the library sees the commit; `ConversationView.joinState` and the app's
+"Joining the conversation…" notice; the elector rules kept as the fallback for
+conversations without a stored GroupInfo, which a member re-publishes once per
+session (`crypto.md` section 5).
+
 Remains: a self-custodied recovery mechanism able to approve an instance (the
 phrase unlocks history only, so trust on first use still bootstraps an
 account with no active instance); restore from an instance awaiting approval
 (restore needs an active instance); a second automatic offer after one
 expires or is refused (`offerTo` by hand); resumable uploads and quotas;
-client-generated push previews; an S3 blob store.
+client-generated push previews; an S3 blob store. A device that lost its
+group state AND its signing key is a new instance, not a recovery.
 
 ### Phase 4: Mention
 
@@ -150,6 +164,9 @@ issue #139 (the named tests are the evidence).
 | Revoking an installation cuts future access | met, test exists: core e2e (d) and the integration suite (no delivery row, sockets cut, cannot decrypt) |
 | A new installation recovers only the permitted history | met, test exists: core `phase3.test.ts` (t1) has a newly approved device receive the whole timeline from the elector and open a media file and its thumbnail while the server saw ciphertext only, (t2) refuses a forged manifest signature and a donor that is not a verified same-account instance before any download, and (b1) has a fresh install with wiped storage and new keys restore from the phrase while a wrong phrase is refused before any download; the backend suites `platform/history.realdb.test.ts` and `platform/backups.realdb.test.ts` cover the server rules and chunk retention, and the integration suite `phase3.realdb.test.ts` (in this change) runs the SDK against Postgres. A pending-approval instance recovers nothing until approved; losing every device and the phrase loses history |
 | Desktop is first class without a primary phone | met by design and by test: any active instance approves, adds and revokes; the integration suite has Bob desktop approve-free after enrollment and revoke Bob iOS |
+| A new device joins a conversation with no other device online | met, test exists: core `join.test.ts` (j1) has a not-yet-installed Bob join Alice's DM with Alice off and Alice process the commit on restart, (j2) has Bob's second device join with Bob's first and Alice both off, (j4) refuses a forged joiner on every member with the state untouched, (j5) races two joiners at one epoch; backend `platform/groupInfo.realdb.test.ts` covers the server rules and `reach.realdb.test.ts` accepts a self-join; the app's `__tests__/allo/joinNotice.test.tsx` draws "Joining the conversation…" then the messages over a real client |
+| A device that lost its group state recovers without another device | met, test exists: core `join.test.ts` (j3, j3b): the state wiped or undecodable, one resync commit by the same instance, members unchanged, traffic resumes; the old copy of a resynced state can neither send nor read (gap 7.1) |
+| A conversation from before stored GroupInfos still gets a device added | met, test exists: core `join.test.ts` (j6) the elector adds it and the next commit leaves a GroupInfo behind, (j7) a member re-publishes once per session and a later device joins by itself |
 
 ### Apps
 
@@ -168,7 +185,7 @@ issue #139 (the named tests are the evidence).
 | A crash between the DB write and the notification loses no delivery | met by design, test exists for the mechanism: deliveries are rows written in the event's transaction and claimed with leases; the socket nudge is only the fast path |
 | Redis down loses no messages | met by design: Redis only fans out Socket.IO nudges; the delivery stream is Postgres. `socketRedisAdapter` degrades to single-instance mode without throwing (tested) |
 | A large backfill keeps memory bounded | partly: sync pages (`MAX_SYNC_PAGE`) and pipelines per delivery; no load test was run (Phase 6 hardening) |
-| Concurrent commits and revocations leave no inconsistent crypto state | met, test exists: epoch CAS with 409 and re-sync (core e2e (e), integration suite concurrent add of Carol); revocation Remove commit by the elector (core e2e (d)) |
+| Concurrent commits and revocations leave no inconsistent crypto state | met, test exists: epoch CAS with 409 and re-sync (core e2e (e), integration suite concurrent add of Carol); revocation Remove commit by the elector (core e2e (d)); two self-joiners at one epoch, one 409, every tree agreeing (core `join.test.ts` j5) |
 
 ### Clean break
 

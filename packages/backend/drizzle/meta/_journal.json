@@ -71,6 +71,13 @@
       "when": 1789788602786,
       "tag": "0009_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789803852528,
+      "tag": "0010_group_info",
+      "breakpoints": true
     }
   ]
 }

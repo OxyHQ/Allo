@@ -1,6 +1,6 @@
 /**
- * Conversations, their members (accounts) and their leaves (instances in the
- * MLS group).
+ * Conversations, their members (accounts), their leaves (instances in the
+ * MLS group) and the stored GroupInfo a leafless member joins from.
  *
  * The server knows WHO is in a conversation and WHICH installations hold a
  * leaf; it never knows the conversation's name or any message — those are
@@ -9,7 +9,7 @@
 
 import { sql } from "drizzle-orm";
 import { bigint, check, index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
+import { bytea, createdAt, timestamptz, updatedAt } from "@oxy.so/db";
 import { CONVERSATION_KINDS, LEAF_STATES, MEMBER_ROLES, MEMBER_STATES } from "@allo/shared-types";
 import { checkOneOf } from "./columns";
 import { clientInstances } from "./instances";
@@ -130,4 +130,42 @@ export const conversationLeaves = pgTable(
     checkOneOf("conversation_leaves_state_check", t.state, LEAF_STATES),
     check("conversation_leaves_added_epoch_check", sql`${t.addedEpoch} >= 0`),
   ],
+);
+
+/**
+ * The stored `GroupInfo` of a conversation: what a device that is a member
+ * with no active leaf joins from, by MLS external commit, with nobody else
+ * online (`docs/platform/crypto.md`, external join).
+ *
+ * One row per conversation, for the CURRENT epoch only. Every accepted
+ * `mls_commit` replaces it in the same transaction (`CommitInfo.groupInfo`,
+ * `eventRepository.ts`), and a member holding an active leaf may re-publish it
+ * for the current epoch (`PUT …/group-info`) so a conversation whose last
+ * commit predates the field becomes joinable. `epoch` is therefore expected
+ * to equal `conversations.current_epoch`; a reader that finds otherwise
+ * serves `null`, never a stale one.
+ *
+ * `data` is opaque public MLS material (`external_pub` plus the ratchet tree,
+ * ≤ 256 KiB) that the server never parses. It is registered in
+ * `protectedColumns.ts`: whoever holds it can attempt an external join, so it
+ * reaches exactly the readers that gate on membership and nothing else.
+ *
+ * `signer_instance_id` is the instance whose commit or re-publish produced it,
+ * kept for the joiner's benefit and for forensics; it is NOT a foreign key,
+ * because deleting that instance must not delete the only thing a later device
+ * can join from.
+ */
+export const conversationGroupInfo = pgTable(
+  "conversation_group_info",
+  {
+    conversationId: text()
+      .primaryKey()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    epoch: bigint({ mode: "number" }).notNull(),
+    signerInstanceId: text().notNull(),
+    data: bytea().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check("conversation_group_info_epoch_check", sql`${t.epoch} >= 0`)],
 );

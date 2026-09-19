@@ -8,7 +8,7 @@ import {
   MAX_GROUP_MEMBERS,
   type ConversationSummary,
 } from "../conversations";
-import { B64, ISO, OBJECT_ID, OBJECT_ID_2, UUID_V7 } from "./fixtures";
+import { B64, GROUP_INFO, ISO, OBJECT_ID, OBJECT_ID_2, UUID_V7 } from "./fixtures";
 
 const summary: ConversationSummary = {
   id: UUID_V7,
@@ -53,7 +53,7 @@ describe("createConversationRequestSchema", () => {
     kind: "mls_commit",
     epoch: 0,
     payload: B64,
-    commit: { newEpoch: 1, addedLeaves: [{ instanceId: UUID_V7, accountId: OBJECT_ID_2 }], removedLeaves: [] },
+    commit: { newEpoch: 1, addedLeaves: [{ instanceId: UUID_V7, accountId: OBJECT_ID_2 }], removedLeaves: [], groupInfo: GROUP_INFO },
   };
   it("a dm names exactly one other account; a group 0..255", () => {
     expect(createConversationRequestSchema.safeParse({ ...base, kind: "dm", memberAccountIds: [OBJECT_ID_2] }).success).toBe(true);
@@ -78,6 +78,21 @@ describe("createConversationRequestSchema", () => {
     expect(
       createConversationRequestSchema.safeParse({ ...dm, initialCommit: { idempotencyKey: "c1", kind: "app_message", epoch: 0, payload: B64 } })
         .success,
+    ).toBe(false);
+  });
+  it("the initial commit carries groupInfo, like every commit, and defaults to kind member", () => {
+    const dm = { ...base, kind: "dm", memberAccountIds: [OBJECT_ID_2] };
+    const { groupInfo: _omit, ...withoutGroupInfo } = commit.commit;
+    const result = createConversationRequestSchema.safeParse({ ...dm, initialCommit: { ...commit, commit: withoutGroupInfo } });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map((i) => i.path.join("."))).toContain("initialCommit.commit.groupInfo");
+    const parsed = createConversationRequestSchema.parse({ ...dm, initialCommit: commit });
+    expect(parsed.initialCommit?.commit?.kind).toBe("member");
+    expect(
+      createConversationRequestSchema.safeParse({
+        ...dm,
+        initialCommit: { ...commit, commit: { ...commit.commit, kind: "external", addedLeaves: [commit.commit.addedLeaves[0], commit.commit.addedLeaves[0]] } },
+      }).success,
     ).toBe(false);
   });
   it("rejects a missing idempotency key", () => {

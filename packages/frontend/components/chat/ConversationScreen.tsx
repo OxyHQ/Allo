@@ -34,6 +34,7 @@ import type { PickedAttachments } from '@/lib/chat/attachments';
 import {
   conversationAvatar,
   conversationFaces,
+  composerNotice,
   conversationTitle,
   firstUnreadId,
   pinnedMessages,
@@ -120,8 +121,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         firstUnreadId: unreadAnchor ?? undefined,
         holdLabel: unreachable?.hold,
         bubbleMaxWidth: split ? WIDE_BUBBLE_MAX_WIDTH : undefined,
+        stalledLabel: t('chat.hold.stalled'),
       }),
-    [items, ctx, isGroup, unreadAnchor, unreachable, split],
+    [items, ctx, isGroup, unreadAnchor, unreachable, split, t],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   // A DM's other account is the one presence this screen draws. A group's
@@ -390,6 +392,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const otherPerson = other ? ctx.person(other) : undefined;
   const handle = otherPerson?.handle;
   const faces = conversationFaces(view, ctx);
+  const notice = composerNotice(view, t);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -493,7 +496,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           <Composer
             target={target}
             onClearTarget={() => setTarget(null)}
-            notice={view.joined ? undefined : t('chat.notJoined')}
+            notice={notice?.text}
+            noticeBusy={notice?.busy}
+            noticeError={notice?.error}
             note={unreachable?.banner}
             mentionables={mentionables}
             onSendText={sendText}

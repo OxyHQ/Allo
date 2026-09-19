@@ -161,7 +161,7 @@ describe("POST /v1/conversations", () => {
         kind: "mls_commit",
         epoch: 0,
         payload: base64("c"),
-        commit: { newEpoch: 1, addedLeaves: [{ instanceId: "does-not-exist-1", accountId: accountId("x") }], removedLeaves: [] },
+        commit: { newEpoch: 1, groupInfo: base64("gi-1"), addedLeaves: [{ instanceId: "does-not-exist-1", accountId: accountId("x") }], removedLeaves: [] },
       },
     });
     expect(response.status).toBe(400);

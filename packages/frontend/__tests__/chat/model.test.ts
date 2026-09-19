@@ -3,10 +3,12 @@ import type { ConversationView, TimelineItemView } from '@allo/core';
 import type { Person } from '@/lib/allo/people';
 import {
   chatSummary,
+  composerNotice,
   pinnedMessages,
   conversationTitle,
   deliveryStatus,
   firstUnreadId,
+  joinNotice,
   previewText,
   transcriptItems,
   unreachableCopy,
@@ -62,6 +64,8 @@ function view(overrides: Partial<ConversationView> = {}): ConversationView {
     myRole: 'member',
     epoch: 1,
     joined: true,
+    joinState: 'joined',
+    integrity: 'ok',
     unreachableMemberAccountIds: [],
     unreadCount: 0,
     lastActivityAt: '2026-09-17T10:00:00',
@@ -169,6 +173,33 @@ describe('unreachableCopy', () => {
   });
 });
 
+describe('joinNotice', () => {
+  it('says nothing once this device holds a leaf', () => {
+    expect(joinNotice(view(), t)).toBeNull();
+  });
+  it('spins while the device joins by itself', () => {
+    expect(joinNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({ text: 'chat.joining', busy: true });
+  });
+  it('explains the wait when only another device can add this one', () => {
+    expect(joinNotice(view({ joined: false, joinState: 'waiting_for_member' }), t)).toEqual({
+      text: 'chat.notJoined chat.notJoinedHint',
+      busy: false,
+    });
+  });
+});
+
+describe('composerNotice', () => {
+  it('is the join notice while the conversation is sound', () => {
+    expect(composerNotice(view(), t)).toBeNull();
+    expect(composerNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({ text: 'chat.joining', busy: true, error: false });
+  });
+  it('is the integrity failure, and only that, once a commit was refused — even while joined', () => {
+    const refused = view({ integrity: 'refused_commit', refusedEpoch: 3, refusalReason: 'not in the verified chain' });
+    expect(composerNotice(refused, t)).toEqual({ text: 'chat.integrity.refused', busy: false, error: true });
+    expect(composerNotice({ ...refused, joined: false, joinState: 'joining' }, t)).toEqual({ text: 'chat.integrity.refused', busy: false, error: true });
+  });
+});
+
 describe('transcriptItems', () => {
   it('maps a text message with its time, day and direction', () => {
     const [row] = transcriptItems([item()], ctx, { isGroup: false });
@@ -249,6 +280,16 @@ describe('transcriptItems', () => {
   it('puts the unread separator before the first unread message', () => {
     const rows = transcriptItems([item({ id: 'a' }), item({ id: 'b' })], ctx, { isGroup: false, firstUnreadId: 'b' });
     expect(rows.map((row) => row.unreadBefore)).toEqual([false, true]);
+  });
+});
+
+describe('transcriptItems hold labels', () => {
+  it('names the stalled echo differently from the unreachable one, and labels neither on a message that is not held', () => {
+    const held = item({ isOwn: true, sendState: 'pending', holdReason: 'no_reachable_member' });
+    const stalled = item({ id: 'evt-2', isOwn: true, sendState: 'pending', holdReason: 'epoch_stalled' });
+    const plain = item({ id: 'evt-3', isOwn: true, sendState: 'pending' });
+    const rows = transcriptItems([held, stalled, plain], ctx, { isGroup: false, holdLabel: 'Waiting for Alice to join', stalledLabel: 'Waiting to catch up' });
+    expect(rows.map((r) => r.labels?.pending)).toEqual(['Waiting for Alice to join', 'Waiting to catch up', undefined]);
   });
 });
 

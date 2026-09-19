@@ -37,6 +37,13 @@ export const PROTECTED_COLUMNS = {
   blob_bytes: ["data"],
   client_instances: ["pushToken"],
   /**
+   * The conversation's GroupInfo: public MLS material, but whoever holds it can
+   * attempt an external join, so it is served by `GET …/group-info` to a
+   * joined member (`groupInfoRepository.ts` names the opt-in) and by no
+   * listing.
+   */
+  conversation_group_info: ["data"],
+  /**
    * Archive key material. `sealed_key` is the archive key sealed to ONE
    * recipient's transfer key and is for that recipient alone; `key_check` is
    * an HMAC under the backup key, which a wrong-phrase guesser could grind

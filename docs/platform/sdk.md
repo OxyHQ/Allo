@@ -99,9 +99,18 @@ instance of every member and post the group's first commit with the create;
 `addMember`, `removeMember`, `leave`, `rename` (an encrypted `conversation`
 message), `refresh()`. Neither create rejects a member who has no instance:
 somebody who has not installed Allo is a joined member with no leaf, listed in
-the view's `unreachableMemberAccountIds`, and the SDK adds their first device
-on its own when it appears (`crypto.md` section 5). `createDirect` throws only
-for a DM with oneself (`InvalidStateError`) or a real failure.
+the view's `unreachableMemberAccountIds`, and their first device joins on its
+own when it appears (`crypto.md` section 5). A device of a member account
+that holds no leaf joins by itself from the GroupInfo the server stores with
+every commit (an MLS external commit, `kind: 'external'`), and one that lost
+its group state while the server still lists its leaf replaces that leaf the
+same way (`kind: 'resync'`); neither needs another device online. Only a
+conversation whose last commit predates the stored GroupInfo still waits for
+an elector to add the device, and `ConversationView.joinState` says which is
+happening. Every commit the client creates attaches the new epoch's
+GroupInfo, and a member re-publishes one for such an old conversation once
+per session. `createDirect` throws only for a DM with oneself
+(`InvalidStateError`) or a real failure.
 
 `client.messages` (`messages/service.ts`): `timeline(id)`; `send(id, text,
 { replyTo })`, `edit`, `remove`, `react` (a toggle), `markRead` (local at
@@ -177,15 +186,26 @@ replaced only on change, so React sees stable references between emissions.
 status, `isThis`, approver, timestamps), `PendingEnrollmentView` (the
 instance, the challenge, and its `fingerprint`), `ConversationView` (kind,
 app, `title` from the encrypted name or `null`, member account ids, own
-role, epoch, `joined`, `unreachableMemberAccountIds` — joined members other
+role, epoch, `joined`, `joinState` — `joined`, or `joining` while this
+device joins by itself from the stored GroupInfo with nobody else needed, or
+`waiting_for_member` when the server holds no GroupInfo for the current epoch
+and a member's device has to add this one, which is also what a removed or
+left member reads — `integrity` (`ok`, or `refused_commit` once this device
+refused a commit the server accepted because its joiner could not be
+verified, with `refusedEpoch` and `refusalReason`; persisted and never cleared
+by the SDK, and the app fails closed on it, `crypto.md` section 5) —
+`unreachableMemberAccountIds` — joined members other
 than me with no active leaf, which is who has not set up Allo yet; empty while
 this instance has no group state — `lastMessage`, `unreadCount`, activity
 time), `TimelineItemView` (server id or local key, seq or `null`, sender
 account and instance, `isOwn`, `sendState`, `content`, `reactions`,
 `replyTo`, and on a `pending` own echo an optional `holdReason`:
 `no_reachable_member` when the outbox is deliberately not sending it because
-nobody else in the conversation could read it; released on its own, never
-stored, never set on a failed send),
+nobody else in the conversation could read it, or `epoch_stalled` when the
+server keeps answering `epoch_conflict` and syncing does not move this
+device's epoch (a refused commit, above), so the outbox has stopped and backed
+off; either is released on its own, never stored, never set on a failed
+send),
 `TimelineContent` (`text`, `media`, `deleted`, `undecryptable` with a reason,
 `system`), `MediaView` (with an optional `thumbnail: { ref, width, height }`)
 and `MediaRef`, `UploadMediaMeta` (with an optional `thumbnail`),
@@ -218,6 +238,7 @@ branches on it rather than on a message, and none carries plaintext.
 | `InstanceNotActiveError` | `instance_not_active` | a call that needs an active instance while this one is pending, revoked or unregistered |
 | `NotImplementedError` | `not_implemented` | a documented later-phase API |
 | `DecryptError` | `decrypt_failed` | the library or a digest refused the bytes |
+| `JoinRefusedError` | `decrypt_failed` | a `DecryptError`: an external commit whose joiner is not an instance in its account's verified chain with that signing key, or whose key or instance id is already active in the tree; the commit is dropped and the state untouched (`crypto.md` section 5) |
 | `FutureEpochError` | `future_epoch` | internal to sync: the message is ahead of the state and was queued |
 | `TransportError` | `transport` | a non-2xx or a network failure; `status`, `serverCode`, `isNetwork`, `isRetryable` |
 | `StorageError` | `storage` | the adapter failed, or a stored value did not authenticate or parse |
@@ -225,6 +246,13 @@ branches on it rather than on a message, and none carries plaintext.
 | `NotFoundError` | `not_found` | no such conversation, message, media key, history offer, backup, or account with an instance |
 | `UntrustedInstanceError` | `untrusted_instance` | a history donor or backup writer that is not an active, chain-verified instance of this account, or whose manifest signature does not verify; nothing from it is opened, downloaded or imported. Carries `instanceId` |
 | `RecoveryPhraseError` | `invalid_recovery_phrase` | not a valid 12-word BIP39 phrase, or one whose derived key fails the backup's `keyCheck`; raised before any download and never carrying the phrase |
+
+The engine's surface is exported for tests and tools that build on it:
+`CryptoEngine` with `publishGroupInfo`, `joinExternal` and `admitJoiner`, and
+the types `CommitResult`, `ExternalJoinResult`, `ExternalJoiner` (the leaf an
+incoming external commit declares) and `JoinerAdmission` (the chain check the
+engine asks the client for). Apps never call these; `client.conversations`
+does.
 
 ### The fake server, for tests
 

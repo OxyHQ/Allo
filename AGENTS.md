@@ -266,10 +266,47 @@ them), the held message's clock, whose accessible name `transcriptItems` sets to
 "Waiting for <Name> to join" (only on a held own message), and the list row,
 whose preview `chatSummary` replaces with "Waiting for <Name>". The composer is never disabled for this, the name comes through the
 people layer and an id never reaches the screen ("this person" while the
-lookup is out), and nothing here polls: the server nudges the conversation
-when the person's first device activates and the SDK's elector adds it.
+lookup is out), and nothing here polls: the person's first device joins by
+itself the moment it is active (next paragraph), and the server's nudge wakes
+the elector only for a conversation it cannot join by itself.
 `__tests__/allo/unreachableBanner.test.tsx` runs that data path over a real
 `@allo/core` client and the fake server, both ends, with the real English copy.
+
+**A device joins a conversation by itself; nobody has to be online.** Every
+commit's author uploads the new epoch's MLS GroupInfo with it, and a device
+that is a member with no leaf (a new account's first device, a newly approved
+second device, a device whose group state was lost) joins by an external
+commit built from it, admitted by every member against the account's approval
+chain and never on the server's word (`docs/platform/crypto.md` section 5).
+The elector that used to add it is now the fallback for a conversation whose
+last commit predates the stored GroupInfo. The screen reads it off
+`ConversationView.joinState`, through one pure function, `joinNotice` in
+`lib/chat/model.ts`, drawn as the composer's notice in `ConversationScreen`:
+`joining` is "Joining the conversation…" with a spinner in the notice icon's
+slot (`Composer`'s `noticeBusy`), `waiting_for_member` is "This device is still
+being added to the conversation." plus "Another device in the conversation has
+to be online." and no spinner, `joined` is nothing. Never key that notice on
+`joined` alone again: the two `false` states mean opposite things to the
+person reading them. `__tests__/allo/joinNotice.test.tsx` runs both over a
+real client and the fake server — a second device joining with the first and
+the other member switched off, the GET on `group-info` held behind a gate so
+"joining" is on screen for certain before the join lands; and
+`server.keepGroupInfo = false` for the waiting text and the elector clearing it.
+
+**A conversation this device refused a commit in is closed, and stays closed.**
+When the server lets in a joiner this device cannot verify (an instance outside
+the account's approval chain), the SDK refuses the commit, the group moves on
+without this device, and `ConversationView.integrity` becomes
+`'refused_commit'` for good. `composerNotice` in `lib/chat/model.ts` puts that
+ahead of the join state: the composer is replaced by "This conversation cannot
+continue securely: a device that could not be verified was added." with the
+error icon (`Composer`'s `noticeError`), and there is deliberately no retry,
+dismiss or "trust anyway" — every way out is accepting the device it could not
+verify. An echo the outbox has given up on (`holdReason: 'epoch_stalled'`) gets
+the clock label "Waiting for the conversation to catch up" through
+`transcriptItems`' `stalledLabel`. The third case of `joinNotice.test.tsx`
+drives it with a real forged joiner: a second client for Bob whose pending
+instance the fake server is made to list as an unapproved active root.
 
 ## Key features
 

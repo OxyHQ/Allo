@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  COMMIT_KINDS,
   commitInfoSchema,
+  commitKindSchema,
   controlEventSchema,
   conversationEventSchema,
+  GROUP_INFO_MAX_BASE64,
+  GROUP_INFO_MAX_BYTES,
   listEventsQuerySchema,
   listEventsResponseSchema,
   MAX_EVENT_PAYLOAD_BASE64_LENGTH,
@@ -11,8 +15,9 @@ import {
   submitEventResponseSchema,
   type ConversationEvent,
   type SubmitEventRequest,
+  type SubmitEventRequestInput,
 } from "../events";
-import { B64, ISO, OBJECT_ID, OBJECT_ID_2, UUID_V7 } from "./fixtures";
+import { B64, GROUP_INFO, ISO, OBJECT_ID, OBJECT_ID_2, UUID_V7 } from "./fixtures";
 
 const event: ConversationEvent = {
   id: UUID_V7,
@@ -57,7 +62,7 @@ describe("controlEventSchema", () => {
 
 describe("submitEventRequestSchema", () => {
   const message: SubmitEventRequest = { idempotencyKey: "m1", kind: "app_message", epoch: 4, payload: B64 };
-  const commit: SubmitEventRequest = {
+  const commit: SubmitEventRequestInput = {
     idempotencyKey: "c1",
     kind: "mls_commit",
     epoch: 4,
@@ -67,6 +72,7 @@ describe("submitEventRequestSchema", () => {
       addedLeaves: [{ instanceId: UUID_V7, accountId: OBJECT_ID_2 }],
       removedLeaves: [],
       welcome: { payload: B64, recipients: [UUID_V7] },
+      groupInfo: GROUP_INFO,
     },
   };
   it("accepts an app_message, a proposal and a commit with info", () => {
@@ -97,6 +103,91 @@ describe("submitEventRequestSchema", () => {
   });
   it("a welcome needs at least one recipient", () => {
     expect(commitInfoSchema.safeParse({ ...commit.commit, welcome: { payload: B64, recipients: [] } }).success).toBe(false);
+  });
+  it("rejects a commit without groupInfo, or with one that is not base64 or over the bound", () => {
+    const { groupInfo: _omit, ...withoutGroupInfo } = commit.commit!;
+    const result = submitEventRequestSchema.safeParse({ ...commit, commit: withoutGroupInfo });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map((i) => i.path.join("."))).toContain("commit.groupInfo");
+    expect(commitInfoSchema.safeParse(withoutGroupInfo).success).toBe(false);
+    expect(commitInfoSchema.safeParse({ ...commit.commit, groupInfo: "" }).success).toBe(false);
+    expect(commitInfoSchema.safeParse({ ...commit.commit, groupInfo: "not base64!" }).success).toBe(false);
+    expect(commitInfoSchema.safeParse({ ...commit.commit, groupInfo: "A".repeat(GROUP_INFO_MAX_BASE64) }).success).toBe(true);
+    expect(commitInfoSchema.safeParse({ ...commit.commit, groupInfo: "A".repeat(GROUP_INFO_MAX_BASE64 + 4) }).success).toBe(false);
+  });
+  it("the group info bound is 256 KiB of bytes, expressed in encoded characters", () => {
+    expect(GROUP_INFO_MAX_BYTES).toBe(256 * 1024);
+    expect(GROUP_INFO_MAX_BASE64).toBe(Math.ceil(GROUP_INFO_MAX_BYTES / 3) * 4);
+    expect(Buffer.alloc(GROUP_INFO_MAX_BYTES).toString("base64")).toHaveLength(GROUP_INFO_MAX_BASE64);
+  });
+});
+
+describe("commit kinds", () => {
+  const self = { instanceId: UUID_V7, accountId: OBJECT_ID };
+  const base = { idempotencyKey: "c1", kind: "mls_commit", epoch: 4, payload: B64 } as const;
+  const external = {
+    ...base,
+    commit: { newEpoch: 5, kind: "external", addedLeaves: [self], removedLeaves: [], groupInfo: GROUP_INFO },
+  } as const;
+  const resync = {
+    ...base,
+    commit: { newEpoch: 5, kind: "resync", addedLeaves: [self], removedLeaves: [UUID_V7], groupInfo: GROUP_INFO },
+  } as const;
+  const paths = (input: unknown) => {
+    const r = submitEventRequestSchema.safeParse(input);
+    return r.success ? [] : r.error.issues.map((i) => i.path.join("."));
+  };
+
+  it("the closed set is member, external, resync; an unknown kind is refused", () => {
+    expect(COMMIT_KINDS).toEqual(["member", "external", "resync"]);
+    expect(commitKindSchema.safeParse("welcome").success).toBe(false);
+    expect(paths({ ...external, commit: { ...external.commit, kind: "rejoin" } })).toContain("commit.kind");
+  });
+  it("kind defaults to member, and a member commit keeps today's freedom of shape", () => {
+    const parsed = commitInfoSchema.parse({ newEpoch: 5, addedLeaves: [], removedLeaves: [], groupInfo: GROUP_INFO });
+    expect(parsed.kind).toBe("member");
+    const viaRequest = submitEventRequestSchema.parse({
+      ...base,
+      commit: { newEpoch: 5, addedLeaves: [self, { instanceId: OBJECT_ID_2, accountId: OBJECT_ID_2 }], removedLeaves: [OBJECT_ID_2], groupInfo: GROUP_INFO },
+    });
+    expect(viaRequest.commit?.kind).toBe("member");
+    expect(
+      submitEventRequestSchema.safeParse({
+        ...base,
+        commit: { newEpoch: 5, kind: "member", addedLeaves: [], removedLeaves: [], welcome: { payload: B64, recipients: [UUID_V7] }, groupInfo: GROUP_INFO },
+      }).success,
+    ).toBe(true);
+  });
+  it("accepts an external commit: exactly one added leaf, no removed leaf, no welcome", () => {
+    expect(submitEventRequestSchema.safeParse(external).success).toBe(true);
+    expect(submitEventRequestSchema.parse(external).commit?.kind).toBe("external");
+  });
+  it("refuses an external commit with two added leaves, or none", () => {
+    expect(paths({ ...external, commit: { ...external.commit, addedLeaves: [self, { instanceId: OBJECT_ID_2, accountId: OBJECT_ID }] } })).toContain(
+      "commit.addedLeaves",
+    );
+    expect(paths({ ...external, commit: { ...external.commit, addedLeaves: [] } })).toContain("commit.addedLeaves");
+  });
+  it("refuses an external commit with a welcome", () => {
+    expect(paths({ ...external, commit: { ...external.commit, welcome: { payload: B64, recipients: [UUID_V7] } } })).toContain("commit.welcome");
+  });
+  it("refuses an external commit that removes a leaf", () => {
+    expect(paths({ ...external, commit: { ...external.commit, removedLeaves: [UUID_V7] } })).toContain("commit.removedLeaves");
+  });
+  it("accepts a resync commit: exactly one added and exactly one removed leaf, no welcome", () => {
+    expect(submitEventRequestSchema.safeParse(resync).success).toBe(true);
+    expect(submitEventRequestSchema.parse(resync).commit?.kind).toBe("resync");
+  });
+  it("refuses a resync commit without a removed leaf, with two, with two added leaves, or with a welcome", () => {
+    expect(paths({ ...resync, commit: { ...resync.commit, removedLeaves: [] } })).toContain("commit.removedLeaves");
+    expect(paths({ ...resync, commit: { ...resync.commit, removedLeaves: [UUID_V7, OBJECT_ID_2] } })).toContain("commit.removedLeaves");
+    expect(paths({ ...resync, commit: { ...resync.commit, addedLeaves: [self, self] } })).toContain("commit.addedLeaves");
+    expect(paths({ ...resync, commit: { ...resync.commit, welcome: { payload: B64, recipients: [UUID_V7] } } })).toContain("commit.welcome");
+  });
+  it("an external or resync commit still needs groupInfo and the epoch step", () => {
+    const { groupInfo: _omit, ...bare } = external.commit;
+    expect(paths({ ...external, commit: bare })).toContain("commit.groupInfo");
+    expect(paths({ ...external, commit: { ...external.commit, newEpoch: 6 } })).toContain("commit.newEpoch");
   });
 });
 

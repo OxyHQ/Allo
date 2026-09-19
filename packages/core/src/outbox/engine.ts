@@ -16,24 +16,52 @@
  * has a device (`ConversationsService.hasNoReachableMember`) is skipped —
  * not encrypted, not sent, no attempt counted — and picked up by the next
  * pass once a leaf for another account exists. Encrypting it earlier would
- * bind it to an epoch that account can never read. Commits are never held.
+ * bind it to an epoch that account can never read. Commits are never held
+ * for that reason.
+ *
+ * Stall: `epoch_conflict` is answered by a sync and a retry, because normally
+ * the sync brings the winning commit and the local epoch moves. When it does
+ * NOT move — this device refused a commit the server accepted (a joiner it
+ * could not verify, `ConversationView.integrity`) — retrying is a loop of
+ * refused POSTs. So per item, consecutive conflicts whose sync did not advance
+ * the local epoch are counted; from {@link EPOCH_STALL_LIMIT} on the item is
+ * held (`holdReason: 'epoch_stalled'`) and tried again only after an
+ * exponential backoff (1 s doubling to 60 s), and it is released the moment
+ * the local epoch advances. The count is in memory: a restart starts over,
+ * which costs at most {@link EPOCH_STALL_LIMIT} more POSTs.
  */
 import { encodeAppMessage, submitEventResponseSchema, type AppMessage, type EventRef, type SubmitEventRequest } from "@allo/shared-types";
 import type { Context } from "../context";
 import { EpochConflictError, InstanceNotActiveError, InvalidStateError, TransportError } from "../errors";
 import { Model } from "../storage/model";
-import { pendingCommitRecordSchema, type EventRecord, type OutboxCommitIntent, type OutboxItemRecord } from "../storage/records";
+import { pendingCommitRecordSchema, type EventRecord, type OutboxCommitIntent, type OutboxItemRecord, type PendingCommitRecord } from "../storage/records";
 import { base64Decode, base64Encode } from "../util/bytes";
 import { uuidV7 } from "../util/ids";
 import { backoffMs, sleep } from "../util/async";
 import { describeError } from "../util/logger";
 
 const MAX_ATTEMPTS = 50;
+/** Consecutive `epoch_conflict`s without local progress before an item is held. */
+export const EPOCH_STALL_LIMIT = 3;
+export const EPOCH_STALL_BACKOFF_BASE_MS = 1_000;
+export const EPOCH_STALL_BACKOFF_CAP_MS = 60_000;
+
+interface EpochStall {
+  conversationId: string;
+  /** The local epoch the conflicts were counted at; a different live epoch releases the stall. */
+  epoch: number;
+  count: number;
+  /** When the next attempt may be made once held. */
+  nextAt: number;
+}
 
 export class OutboxEngine {
   private running: Promise<void> | null = null;
   private stopped = false;
   private wake: (() => void) | null = null;
+  /** Outbox item id → its epoch-conflict stall. */
+  private readonly stalls = new Map<string, EpochStall>();
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly ctx: Context) {}
 
@@ -107,7 +135,57 @@ export class OutboxEngine {
 
   stop(): void {
     this.stopped = true;
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = null;
     this.wake?.();
+  }
+
+  /** Pending items of a conversation held as `epoch_stalled` right now (for the timeline). */
+  stalledItemIds(conversationId: string): Set<string> {
+    const out = new Set<string>();
+    for (const [itemId, stall] of this.stalls) {
+      if (stall.conversationId !== conversationId) continue;
+      if (this.liveStall(itemId) && stall.count >= EPOCH_STALL_LIMIT) out.add(itemId);
+    }
+    return out;
+  }
+
+  /** The item's stall, unless the local epoch moved past it, in which case it is released here. */
+  private liveStall(itemId: string): EpochStall | undefined {
+    const stall = this.stalls.get(itemId);
+    if (!stall) return undefined;
+    const live = this.ctx.groups.get(stall.conversationId);
+    if (live && this.ctx.engine.epochOf(live) !== stall.epoch) {
+      this.stalls.delete(itemId);
+      return undefined;
+    }
+    return stall;
+  }
+
+  private isStalled(item: OutboxItemRecord): boolean {
+    const stall = this.liveStall(item.id);
+    return stall !== undefined && stall.count >= EPOCH_STALL_LIMIT && this.ctx.now() < stall.nextAt;
+  }
+
+  /** Wakes the loop once the earliest held item's backoff has expired. */
+  private scheduleStallWake(): void {
+    if (this.stopped) return;
+    let earliest = Infinity;
+    for (const s of this.stalls.values()) if (s.count >= EPOCH_STALL_LIMIT) earliest = Math.min(earliest, s.nextAt);
+    if (earliest === Infinity) return;
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = setTimeout(
+      () => {
+        this.stallTimer = null;
+        this.kick();
+      },
+      Math.max(0, earliest - this.ctx.now()),
+    );
+  }
+
+  private localEpoch(conversationId: string): number | undefined {
+    const live = this.ctx.groups.get(conversationId);
+    return live ? this.ctx.engine.epochOf(live) : undefined;
   }
 
   start(): void {
@@ -133,6 +211,7 @@ export class OutboxEngine {
 
   /** Held items stay `pending` untouched; `TimelineItemView.holdReason` tells the UI why. */
   private isHeld(item: OutboxItemRecord): boolean {
+    if (this.isStalled(item)) return true;
     return item.kind === "app_message" && this.ctx.conversations.hasNoReachableMember(item.conversationId);
   }
 
@@ -166,11 +245,29 @@ export class OutboxEngine {
   private async handleTransportError(item: OutboxItemRecord, error: unknown): Promise<"retry" | "stop" | "failed"> {
     const { ctx } = this;
     if (error instanceof EpochConflictError) {
+      const before = this.localEpoch(item.conversationId);
       try {
         await ctx.sync.now();
       } catch (e) {
         ctx.log.debug?.("sync after epoch conflict failed", { error: describeError(e) });
         await this.delay(item);
+        return "retry";
+      }
+      const after = this.localEpoch(item.conversationId);
+      if (after !== before) {
+        this.stalls.delete(item.id); // the sync brought the winning commit: an ordinary race
+        return "retry";
+      }
+      // No progress: the server is ahead of a state this device will not move. Count, then hold.
+      const stall = this.stalls.get(item.id) ?? { conversationId: item.conversationId, epoch: after ?? -1, count: 0, nextAt: 0 };
+      stall.count++;
+      this.stalls.set(item.id, stall);
+      if (stall.count >= EPOCH_STALL_LIMIT) {
+        const backoff = Math.min(EPOCH_STALL_BACKOFF_CAP_MS, EPOCH_STALL_BACKOFF_BASE_MS * 2 ** (stall.count - EPOCH_STALL_LIMIT));
+        stall.nextAt = ctx.now() + backoff;
+        ctx.log.warn?.("epoch conflict without local progress; item held", { itemId: item.id, conversationId: item.conversationId, conflicts: stall.count, backoffMs: backoff });
+        ctx.messages.invalidate(item.conversationId); // `holdReason: 'epoch_stalled'` appears
+        this.scheduleStallWake();
       }
       return "retry";
     }
@@ -318,8 +415,14 @@ export class OutboxEngine {
       await this.markFailed(item, "empty commit");
       return true;
     }
-    // A pending state from an earlier attempt (crash or lost answer): resend the identical request.
-    const pending = await ctx.store.getJson("pendingCommit", item.conversationId, pendingCommitRecordSchema);
+    // A pending state from an earlier attempt (crash or lost answer): resend the identical request. One whose
+    // stored request no longer parses (written before `commit.groupInfo` was required) is rebuilt instead.
+    let pending: PendingCommitRecord | undefined;
+    try {
+      pending = await ctx.store.getJson("pendingCommit", item.conversationId, pendingCommitRecordSchema);
+    } catch (error) {
+      ctx.log.warn?.("pending commit record unreadable; rebuilding the commit", { conversationId: item.conversationId, error: describeError(error) });
+    }
     let request: SubmitEventRequest;
     let nextBytes: Uint8Array;
     let added: Array<{ instanceId: string; accountId: string }> = [];
@@ -378,9 +481,12 @@ export class OutboxEngine {
       payload: base64Encode(result.commit),
       commit: {
         newEpoch: epoch + 1,
+        kind: "member",
         addedLeaves: result.added,
         removedLeaves: removes,
         ...(result.welcome && adds.length ? { welcome: { payload: base64Encode(result.welcome), recipients: adds.map((a) => a.instanceId) } } : {}),
+        // The GroupInfo of the new epoch travels with the commit, so a member's device with no leaf can join by itself.
+        groupInfo: base64Encode(result.groupInfo),
       },
     };
     const nextBytes = ctx.engine.serializeGroup(result.next);
