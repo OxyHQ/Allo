@@ -630,7 +630,16 @@ export class FakeAlloServer implements SocketHost {
       const mine = conv.leaves.get(me.id);
       // The caller's own replay: already installed, and this device is the live leaf.
       if (!(conv.mlsGroupId === req.mlsGroupId && mine?.state === "active")) {
-        if ([...conv.leaves.values()].some((leaf) => leaf.state === "active")) {
+        // A DM with no GroupInfo has no other way in for a device with no
+        // leaf, so it may be re-keyed; see `mayRekeyDirect` on the server.
+        const alive = [...conv.leaves.values()].filter((leaf) => leaf.state === "active");
+        const ours = [...conv.leaves.values()].filter((leaf) => leaf.accountId === me.accountId);
+        const mayRekey =
+          conv.kind === "dm" &&
+          !ours.some((leaf) => leaf.state === "active") &&
+          ours.some((leaf) => leaf.state === "removed") &&
+          !this.groupInfos.has(conv.id);
+        if (alive.length > 0 && !mayRekey) {
           throw new HttpError(409, "idempotency_conflict", "the conversation still has an active device");
         }
         if ([...this.conversations.values()].some((c) => c.id !== conv.id && c.mlsGroupId === req.mlsGroupId)) {
