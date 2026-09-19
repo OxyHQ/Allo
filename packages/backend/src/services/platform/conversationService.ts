@@ -4,7 +4,7 @@
 
 import { isUniqueViolation } from "@oxy.so/db";
 import { dmKeyFor, type ConversationSummary, type CreateConversationRequest, type ResetConversationRequest } from "@allo/shared-types";
-import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction } from "../../db";
+import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction, type AlloTransaction } from "../../db";
 import {
   findConversationByDmKey,
   findConversationById,
@@ -24,6 +24,7 @@ import {
   upsertLeaf,
 } from "../../db/platform/conversationRepository";
 import { appendClientEvent, appendControlEvent } from "../../db/platform/eventRepository";
+import { findGroupInfo } from "../../db/platform/groupInfoRepository";
 import { getRealtime } from "../../runtime/realtime";
 import { AlloHttpError, notFound, validationFailed } from "../../utils/httpErrors";
 import { toConversationSummary } from "./wire";
@@ -211,7 +212,7 @@ export async function resetConversation(
     if (conversation.mlsGroupId === request.mlsGroupId && mine?.state === "active") return;
 
     const alive = leaves.filter((leaf) => leaf.state === "active");
-    if (alive.length > 0) {
+    if (alive.length > 0 && !(await mayRekeyDirect(conversation, caller, leaves, tx))) {
       throw new AlloHttpError("idempotency_conflict", "The conversation still has an active device and cannot be reset", {
         activeLeaves: alive.length,
       });
@@ -238,6 +239,55 @@ export async function resetConversation(
 
   const [conversation] = await summariesFor([conversationId], caller.instanceId, db);
   return { conversation, nudges };
+}
+
+/**
+ * May this caller re-key a DM it cannot otherwise get into?
+ *
+ * The plain rule is that a group with a live device is never reset, because a
+ * reset would let one member rebuild the membership without the others. That
+ * rule leaves one person stuck for ever, and it is the case people actually
+ * hit: a DM made before GroupInfos existed, whose other device has not been
+ * opened since. Nothing can add this device — only a member inside a group may
+ * commit an Add — and nothing can let it in by itself, because there is no
+ * GroupInfo to join from. "Wait for the other person to open their app" is not
+ * an answer a messenger may give.
+ *
+ * So a DM, and only a DM, may be re-keyed by an account that was IN the group
+ * and FELL OUT of it, and only while no GroupInfo exists to join from. Five
+ * conditions, and each is doing work:
+ *
+ * - **A DM has exactly one other member**, so there is no membership to
+ *   manipulate: dropping the only other person leaves the caller alone in a
+ *   conversation with nobody, which is not an attack, it is pointlessness.
+ * - **The caller is already a joined member**, so it is not a stranger.
+ * - **No leaf of the caller's ACCOUNT is active**, so the account can read
+ *   NOTHING of this conversation today: the re-key hands it no access it did
+ *   not have, and the history stays exactly as unreadable to it as it was.
+ * - **Some leaf of the caller's account is `removed`** — it HAD a seat and
+ *   lost it, to a revoked device or wiped site data. This is the condition
+ *   that separates the two cases that otherwise look identical: an account
+ *   that has NEVER held a leaf is a newcomer, and a newcomer is what the
+ *   elector rule is for. Without it, the first device of somebody who had not
+ *   installed Allo yet would re-key the conversation out from under the person
+ *   who started it, discarding the messages held for them.
+ * - **No GroupInfo exists**, so the honest way in — RFC 9420's external commit
+ *   — is genuinely unavailable rather than merely inconvenient.
+ *
+ * A GROUP is never re-keyed this way, and does not need to be: every commit
+ * made since GroupInfos existed publishes one, so the gap closes itself.
+ */
+async function mayRekeyDirect(
+  conversation: { id: string; kind: string },
+  caller: Caller,
+  leaves: readonly { instanceId: string; accountId: string; state: string }[],
+  tx: AlloTransaction,
+): Promise<boolean> {
+  if (conversation.kind !== "dm") return false;
+  const ours = leaves.filter((leaf) => leaf.accountId === caller.accountId);
+  if (ours.some((leaf) => leaf.state === "active")) return false;
+  if (!ours.some((leaf) => leaf.state === "removed")) return false;
+  return (await findGroupInfo(conversation.id, tx)) === null;
 }
 
 /**

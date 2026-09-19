@@ -18,7 +18,7 @@
  *                     exists for.
  */
 import { describe, expect, it } from "vitest";
-import { fakeServer, makeClient, stopAll, texts } from "./e2eHelpers";
+import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from "./e2eHelpers";
 import { storageKeyName } from "../crypto/atRest";
 import { instanceKeyName } from "../instance/manager";
 
@@ -180,5 +180,83 @@ describe("a conversation with no live device", () => {
     // Alice is still in it, so nothing is revived out from under her.
     expect(server.conversations.get(conversation.id)!.mlsGroupId).toBe(groupBefore);
     await stopAll(alice, bob);
+  }, 30_000);
+});
+
+/**
+ * THE CASE PEOPLE ACTUALLY HIT: a DM made before GroupInfos existed, whose
+ * other device has not been opened since.
+ *
+ * Nothing can add this device — only a member inside a group may commit an
+ * Add — and nothing can let it in by itself, because there is no GroupInfo to
+ * join from. Reported twice from the app, the second time as "This device is
+ * still being added to the conversation. Another device in the conversation
+ * has to be online."
+ *
+ * "Wait for the other person to open their app" is not an answer a messenger
+ * may give, so the DM is re-keyed instead. It costs nothing that was not
+ * already gone: a device with no leaf could read none of it anyway.
+ */
+describe("a direct conversation with nobody able to let this device in", () => {
+  it("re-keys itself and lets the person write, with the other side offline", async () => {
+    const server = fakeServer();
+    // Conversations made before GroupInfos existed publish none.
+    server.keepGroupInfo = false;
+
+    const alice = await makeClient(server, "acc-rekey-a", "Alice phone");
+    const bob = await makeClient(server, "acc-rekey-b", "Bob");
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.messages.send(conversation.id, "from before");
+    await alice.client.sync.flush();
+    await waitForText(bob, conversation.id, "from before");
+    await bob.client.stop();
+
+    // Alice re-enrols: her old device is revoked, the new one has no leaf, and
+    // Bob — the only device that could add her — is not running.
+    await alice.client.stop();
+    server.instancesOf("acc-rekey-a").forEach((i) => (i.status = "revoked"));
+    const group = server.conversations.get(conversation.id)!;
+    for (const [id, leaf] of group.leaves) {
+      if (leaf.accountId === "acc-rekey-a") group.leaves.set(id, { ...leaf, state: "removed" });
+    }
+    expect([...group.leaves.values()].some((leaf) => leaf.state === "active")).toBe(true); // Bob's is still live
+
+    const fresh = await makeClient(server, "acc-rekey-a", "Alice laptop");
+    await waitFor(() => fresh.client.conversations.get(conversation.id)?.joined === true, 10_000);
+
+    const view = fresh.client.conversations.get(conversation.id)!;
+    expect(view.joined).toBe(true);
+    expect(view.joinState).toBe("joined");
+
+    // And she can actually speak in it.
+    await fresh.client.messages.send(conversation.id, "I can write again");
+    await fresh.client.sync.flush();
+    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain("I can write again");
+    await stopAll(fresh);
+  }, 30_000);
+
+  it("never re-keys a GROUP out from under the people in it", async () => {
+    const server = fakeServer();
+    server.keepGroupInfo = false;
+    const alice = await makeClient(server, "acc-rekey-c", "Alice");
+    const bob = await makeClient(server, "acc-rekey-d", "Bob");
+    const carol = await makeClient(server, "acc-rekey-e", "Carol");
+    const conversation = await alice.client.conversations.createGroup([bob.accountId, carol.accountId]);
+    await alice.client.sync.flush();
+
+    const groupIdBefore = server.conversations.get(conversation.id)!.mlsGroupId;
+    await alice.client.stop();
+    server.instancesOf("acc-rekey-c").forEach((i) => (i.status = "revoked"));
+    const g = server.conversations.get(conversation.id)!;
+    for (const [id, leaf] of g.leaves) {
+      if (leaf.accountId === "acc-rekey-c") g.leaves.set(id, { ...leaf, state: "removed" });
+    }
+
+    const fresh = await makeClient(server, "acc-rekey-c", "Alice laptop");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    // The group is untouched, and this device waits for a member, as it must.
+    expect(server.conversations.get(conversation.id)!.mlsGroupId).toBe(groupIdBefore);
+    expect(fresh.client.conversations.get(conversation.id)?.joined).toBe(false);
+    await stopAll(fresh, bob, carol);
   }, 30_000);
 });

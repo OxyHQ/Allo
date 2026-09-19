@@ -88,6 +88,8 @@ export class ConversationsService {
   private reconciling = false;
   /** Conversations a revive has been attempted for, so a permanent failure is not retried every refresh. */
   private readonly reviving = new Set<string>();
+  /** DMs a re-key has been attempted for, so a refusal is asked once rather than every sync. */
+  private readonly rekeyTried = new Set<string>();
   /** `${conversationId}/${accountId}` → when the elector may look that account up again. */
   private readonly reachNextAt = new Map<string, number>();
   /** Keys whose last attempt was the quick retry: a second miss waits the full throttle, so a device that never uploads key packages is not polled every few seconds. */
@@ -662,6 +664,43 @@ export class ConversationsService {
     for (let attempt = 0; attempt < MAX_JOIN_ATTEMPTS; attempt++) {
       const stored = await this.fetchGroupInfo(conversationId);
       if (!stored) {
+        /**
+         * No GroupInfo, so there is no honest way in — and for a DM, waiting
+         * is not an answer: the only other device may never be opened again.
+         * A DM with nobody able to admit this device is re-keyed instead, a
+         * move the server allows only under exactly these conditions (see
+         * `mayRekeyDirect`). Nothing is lost that was not already lost: a
+         * device with no leaf could read none of it anyway.
+         */
+        const record = ctx.model.conversations.get(conversationId);
+        /**
+         * A DM this ACCOUNT was once in and fell out of, with no GroupInfo to
+         * join from, is re-keyed rather than waited on — the server's
+         * `mayRekeyDirect` enforces the same rule and is the authority.
+         *
+         * The condition is checked BEFORE trying, not by trying: building the
+         * new group claims the other side's key packages, and a claim spent on
+         * a re-key the server then refuses is one the elector no longer has to
+         * add this device with. An account that has never held a leaf here is
+         * a newcomer, and a newcomer waits for the elector.
+         */
+        if (record?.kind === "dm" && !this.rekeyTried.has(conversationId)) {
+          const summary = await this.fetchSummary(conversationId);
+          const ours = summary.leaves.filter((leaf) => leaf.accountId === ctx.accountId);
+          const fellOut = !ours.some((leaf) => leaf.state === "active") && ours.some((leaf) => leaf.state === "removed");
+          if (fellOut) {
+            this.rekeyTried.add(conversationId);
+            try {
+              await this.revive(conversationId);
+              return;
+            } catch (error) {
+              ctx.log.info?.("this direct conversation could not be re-keyed; waiting for a member", {
+                conversationId,
+                reason: describeError(error),
+              });
+            }
+          }
+        }
         this.setJoinStatus(conversationId, "waiting_for_member");
         return;
       }
