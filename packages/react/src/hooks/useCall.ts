@@ -1,4 +1,4 @@
-import type { CallView } from "@allo/core";
+import type { CallHistoryEntry, CallView } from "@allo/core";
 import { useCallback, useMemo } from "react";
 import { useAlloContext } from "../AlloProvider";
 import { useClientSnapshot } from "../internal/useClientSnapshot";
@@ -42,4 +42,18 @@ export function useCallActions(): CallActions {
     () => ({ start, answer, decline, end, setMuted, setCameraEnabled }),
     [start, answer, decline, end, setMuted, setCameraEnabled],
   );
+}
+
+
+/**
+ * Every call this device knows about, newest first.
+ *
+ * Read out of the conversations, because that is where the log lives: a
+ * `call_log` message syncs, backs up and reaches both accounts' devices the
+ * way any message does. Subscribes to `conversations`, so a call that has just
+ * ended appears without a refresh.
+ */
+export function useCallHistory(): CallHistoryEntry[] {
+  const { client } = useAlloContext();
+  return useClientSnapshot(client, "conversations", () => client.calls.history());
 }
