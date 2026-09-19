@@ -32,11 +32,11 @@ function fakeMedia(): CallMediaAdapter & { calls: string[]; plan: unknown } {
     },
     async createOffer(): Promise<SessionDescription> {
       recorded.push("createOffer");
-      return { sdp: sdpWith(FINGERPRINT), fingerprint: FINGERPRINT };
+      return { sdp: sdpWith(FINGERPRINT) };
     },
     async acceptOffer(): Promise<SessionDescription> {
       recorded.push("acceptOffer");
-      return { sdp: sdpWith(FINGERPRINT), fingerprint: FINGERPRINT };
+      return { sdp: sdpWith(FINGERPRINT) };
     },
     async acceptAnswer() {
       recorded.push("acceptAnswer");
