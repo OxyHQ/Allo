@@ -330,16 +330,49 @@ when the person's first device activates and the SDK's elector adds it.
   with a deadline; the client keeps the deadline it verified in the signature
   rather than a later claim; and a status already decrypted on a device is that
   device's, which the screens say rather than implying a remote delete.
-- **Calls are the frontend only, and say so.**
-  There is no signalling and no media in the platform, so
-  `packages/frontend/lib/phase2/calls.ts` holds that state in
-  memory for the life of the tab, the screens (`/calls`, `/c/:id/call`)
-  are built on Bloom's `call-ui` and carry
-  a notice that nothing is connected. Every one of those files documents what a
-  transport must supply to replace it and marks its sample data `DEMO_*`. The
-  status route is `/updates` because Metro's dev server answers `/status`
-  itself, and a screen that cannot be opened while developing is a screen
-  nobody checks.
+- **Calls: the server half is built, the client half is not, and the screens
+  still say so.** The backend runs the part a client cannot — who may ring
+  (a joined member, never across a block), the fork across a callee's devices,
+  first-to-answer-wins as an UPDATE guarded on the state, the ring nobody
+  answered, and whether the media is relayed (`relayed = group || either side
+  hides its address`, told to everybody and attributed to nobody). Routes are
+  `POST /v1/calls` plus `/ice`, `/token`, `/answer`, `/decline`, `/end`.
+  **Nothing about the media passes through it**: the offer, the candidates and
+  the per-sender frame keys are encrypted `call` messages in the conversation.
+  `GET /v1/calls/:id/token` is the SFU ticket and applies three rules — a 1:1
+  call has none (its media is peer to peer or through TURN), an ended call has
+  none, and only a device that has ANSWERED gets one; `identity` is the
+  instance, because a per-sender key is per device, and the grant opens no data
+  channel because nothing rides LiveKit's.
+  What is still missing is `@allo/core`'s call service (encrypted signalling,
+  the client state machine, the injected media seam — WebRTC cannot live in
+  core, which runs in Node under test) and the native ring (CallKit, Telecom,
+  a `phoneCall` foreground service). Until then
+  `packages/frontend/lib/phase2/calls.ts` holds that state in memory for the
+  life of the tab, the screens (`/calls`, `/c/:id/call`) are built on Bloom's
+  `call-ui` and carry a notice that nothing is connected, and their sample data
+  is marked `DEMO_*`. The status route is `/updates` because Metro's dev server
+  answers `/status` itself, and a screen that cannot be opened while developing
+  is a screen nobody checks.
+- **The relay and the SFU are read at BOOT, in `runtimeApp.ts`, or they are not
+  read at all.** `getIceConfig()`'s lazy fallback parses an EMPTY environment,
+  so for as long as nothing called `setIceConfig` every deployment served STUN
+  alone, `TURN_URLS` was dead, and a relayed call — anybody hiding their
+  address, or any group call — was told `relayOnly: true` with no relay in the
+  list, which is an impossible call rather than a degraded one.
+  `mediaConfigWiring.test.ts` boots the app and holds that line, including
+  that a HALF-configured relay or SFU fails the boot. `LIVEKIT_API_KEY` and
+  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, written by
+  OxyHQServices, bound per service by terraform): never `sync_secret` them from
+  Allo's workflow, which would overwrite the value every other app uses.
+  Production still needs both halves wired in `oxy-infra` by hand —
+  `app-allo.tf` gains `{ name = "LIVEKIT_URL", value = "wss://livekit.oxy.so" }`
+  in `environment` and the two `valueFrom = "${local.ssm}/oxy/_shared/LIVEKIT_*"`
+  entries in `secrets`, exactly as `app-services-realtime.tf:29,68-69` does for
+  another app — and coturn does not exist yet, so until it does a deployment
+  serves STUN alone and a relayed call cannot connect. That is now an absence
+  of infrastructure rather than a bug, and the group-call ticket answers
+  `unavailable` instead of inventing a room.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.

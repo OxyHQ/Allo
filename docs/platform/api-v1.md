@@ -449,6 +449,7 @@ envelope in `api.ts`). It is Oxy-authenticated and not part of `/v1`.
 | `POST /v1/calls` | instance | `CreateCallRequest` | 201 `{ call }` — rings every active device of every other member |
 | `GET /v1/calls/:id` | instance | — | `{ call }`; the caller and the rung devices only |
 | `GET /v1/calls/:id/ice` | instance | — | `IceServersResponse` `{ iceServers, expiresAt, relayOnly }` |
+| `GET /v1/calls/:id/token` | instance | — | `CallTokenResponse` `{ url, token, room, expiresAt }` — the SFU ticket, group calls only |
 | `POST /v1/calls/:id/answer` | instance | — | `{ call }`; 403 when another device won the race |
 | `POST /v1/calls/:id/decline` | instance | — | `{ call }` |
 | `POST /v1/calls/:id/end` | instance | `EndCallRequest` | `{ call }` |
@@ -471,6 +472,18 @@ The rules:
 - **`relayed` is a property of the CALL.** True for a group, and for a 1:1
   where either side has `privacy_relay_calls` on — a connection cannot be half
   relayed. Everybody is told the call is relayed; nobody is told who asked.
+- **The SFU ticket refuses three things, and each is a rule.** A 1:1 call has
+  no ticket — its media is peer to peer, or through the TURN relay `/ice` hands
+  out, and the SFU is not in that path at all. An ended call has none, so a
+  token cannot outlive the call it was minted for. And only a device that has
+  ANSWERED gets one: a rung device has not agreed to be in the room, and the
+  ticket is how you get in. `identity` is the INSTANCE rather than the account,
+  because two of somebody's devices in one call are two participants and the
+  per-sender frame key of ADR 0002 is per device; the grant sets
+  `canPublishData: false`, because signalling and the frame keys travel as
+  encrypted messages in the conversation and nothing rides LiveKit's data
+  channel. With no SFU configured the route answers `unavailable` rather than
+  inventing a room.
 - **`relayOnly` in the ICE answer is what a client sets `iceTransportPolicy`
   from.** The credential is the 2013 REST scheme every TURN server implements
   (`username = "<expiry>:<account>"`, `credential = base64(HMAC-SHA1(secret,

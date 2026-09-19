@@ -11,7 +11,7 @@
 
 import { Router, type RequestHandler } from "express";
 import { createCallRequestSchema, endCallRequestSchema, idSchema } from "@allo/shared-types";
-import { answerCall, callIceServers, createCall, declineCall, endCall, readCall } from "../../services/platform/callService";
+import { answerCall, callIceServers, callSfuToken, createCall, declineCall, endCall, readCall } from "../../services/platform/callService";
 import { asyncRoute } from "./asyncRoute";
 import { callerOf } from "./conversations";
 import { parseBody, parseParam } from "./validate";
@@ -58,6 +58,22 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
           { instanceId: me.instanceId, accountId: me.accountId },
           parseParam(idSchema, req.params.id, "id"),
         ),
+      );
+    }),
+  );
+
+  /**
+   * The SFU ticket, for a GROUP call and only once this device has answered.
+   * A 1:1 call never comes here: its media is peer to peer, or through the
+   * TURN relay that `/ice` hands out.
+   */
+  router.get(
+    "/calls/:id/token",
+    deps.instanceAuth,
+    asyncRoute(async (req, res) => {
+      const me = callerOf(req);
+      res.json(
+        await callSfuToken({ instanceId: me.instanceId, accountId: me.accountId }, parseParam(idSchema, req.params.id, "id")),
       );
     }),
   );
