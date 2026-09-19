@@ -15,6 +15,7 @@ import {
   BLOB_SHA256_HEADER,
   CLIENT_TO_SERVER_EVENTS,
   PRESENCE_TTL_MS,
+  createStatusRequestSchema,
   presenceQuerySchema,
   DEFAULT_MAX_BLOB_BYTES,
   EMPTY_BODY_SHA256_HEX,
@@ -231,6 +232,35 @@ export class FakeAlloServer implements SocketHost {
   private readonly beats = new Map<string, Map<string, number>>();
   private readonly lastSeen = new Map<string, number>();
   private readonly watching = new Map<FakeSocket, string[]>();
+  /**
+   * Status updates: the ciphertext, the per-device sealed keys, and who has
+   * viewed. The same three refusals the backend makes — not there, no shared
+   * conversation, blocked — so a client that skipped one fails a test here.
+   */
+  readonly statuses = new Map<string, {
+    id: string;
+    authorAccountId: string;
+    authorInstanceId: string;
+    payload: string;
+    nonce: string;
+    sha256: string;
+    blobIds: string[];
+    signature: string;
+    idempotencyKey: string;
+    createdAt: string;
+    expiresAt: string;
+    state: "live" | "deleted";
+    keys: Map<string, string>;
+    views: Map<string, boolean>;
+  }>();
+  /** Accounts that publish no status view receipt. */
+  readonly statusReceiptsOff = new Set<string>();
+  /**
+   * A server that keeps serving a status past its deadline — which is exactly
+   * what a dishonest one would do, and what the client's own clock is for.
+   */
+  keepExpiredStatuses = false;
+
   /** Accounts that have turned their own presence off, keyed by account id. */
   readonly presenceHidden = new Set<string>();
   /** `blocker -> blocked`, either direction cutting presence. */
@@ -278,6 +308,22 @@ export class FakeAlloServer implements SocketHost {
       };
     });
     return { presence, publishing };
+  }
+
+  private statusFor(row: { id: string; authorAccountId: string; authorInstanceId: string; payload: string; nonce: string; sha256: string; blobIds: string[]; signature: string; createdAt: string; expiresAt: string }, sealedKey: string | null) {
+    return {
+      id: row.id,
+      authorAccountId: row.authorAccountId,
+      authorInstanceId: row.authorInstanceId,
+      payload: row.payload,
+      nonce: row.nonce,
+      sha256: row.sha256,
+      blobIds: row.blobIds,
+      sealedKey,
+      signature: row.signature,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+    };
   }
 
   /** Tell every socket watching `accountId` what it looks like to that socket now. */
@@ -575,6 +621,99 @@ export class FakeAlloServer implements SocketHost {
       const events = conv.events.filter((e) => e.seq > q.data.after);
       return json(200, { events: events.slice(0, q.data.limit), hasMore: events.length > q.data.limit });
     }
+    if (method === "POST" && path === "/v1/statuses") {
+      const me = signed();
+      const req = this.parse(createStatusRequestSchema, body);
+      const existing = [...this.statuses.values()].find(
+        (s) => s.authorInstanceId === me.id && s.idempotencyKey === req.idempotencyKey,
+      );
+      if (existing) return json(201, { status: this.statusFor(existing, null), refused: [] });
+
+      const refused: string[] = [];
+      const keys = new Map<string, string>();
+      for (const recipient of req.recipients) {
+        const instance = this.instances.get(recipient.instanceId);
+        const reachable =
+          instance?.status === "active" &&
+          (instance.accountId === me.accountId ||
+            (this.sharesConversation(me.accountId, instance.accountId) &&
+              !this.blocks.has(`${me.accountId}:${instance.accountId}`) &&
+              !this.blocks.has(`${instance.accountId}:${me.accountId}`)));
+        if (!reachable) {
+          refused.push(recipient.instanceId);
+          continue;
+        }
+        keys.set(recipient.instanceId, recipient.sealedKey);
+      }
+
+      const row = {
+        id: req.id,
+        authorAccountId: me.accountId,
+        authorInstanceId: me.id,
+        payload: req.payload,
+        nonce: req.nonce,
+        sha256: req.sha256,
+        blobIds: req.blobIds,
+        signature: req.signature,
+        idempotencyKey: req.idempotencyKey,
+        createdAt: new Date(this.now()).toISOString(),
+        expiresAt: req.expiresAt,
+        state: "live" as const,
+        keys,
+        views: new Map<string, boolean>(),
+      };
+      this.statuses.set(row.id, row);
+      for (const blobId of req.blobIds) {
+        const blob = this.blobs.get(blobId);
+        if (blob) blob.expiresAt = null;
+      }
+      for (const instanceId of keys.keys()) {
+        this.emitTo(instanceId, "status.posted", { statusId: row.id, authorAccountId: me.accountId });
+      }
+      return json(201, { status: this.statusFor(row, null), refused });
+    }
+
+    if (method === "GET" && path === "/v1/statuses") {
+      const me = signed();
+      const live = [...this.statuses.values()].filter(
+        (s) => s.state === "live" && (this.keepExpiredStatuses || new Date(s.expiresAt).getTime() > this.now()),
+      );
+      const statuses = live
+        .filter((s) => s.keys.has(me.id) || s.authorAccountId === me.accountId)
+        .map((s) => this.statusFor(s, s.keys.get(me.id) ?? null))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return json(200, { statuses });
+    }
+
+    const viewMatch = /^\/v1\/statuses\/([^/]+)\/views$/.exec(path);
+    if (viewMatch) {
+      const me = signed();
+      const row = this.statuses.get(viewMatch[1]);
+      if (!row || row.state !== "live") throw new HttpError(404, "not_found", "no such status");
+      if (method === "POST") {
+        if (row.authorAccountId === me.accountId) return new Response(null, { status: 204 });
+        if (!row.keys.has(me.id)) throw new HttpError(404, "not_found", "no such status");
+        if (!row.views.has(me.accountId)) row.views.set(me.accountId, !this.statusReceiptsOff.has(me.accountId));
+        return new Response(null, { status: 204 });
+      }
+      if (method === "GET") {
+        if (row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+        const views = [...row.views.entries()]
+          .filter(([, published]) => published)
+          .map(([accountId]) => ({ accountId, viewedAt: new Date(this.now()).toISOString() }));
+        return json(200, { views, total: row.views.size });
+      }
+    }
+
+    const statusMatch = /^\/v1\/statuses\/([^/]+)$/.exec(path);
+    if (statusMatch && method === "DELETE") {
+      const me = signed();
+      const row = this.statuses.get(statusMatch[1]);
+      if (!row || row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+      row.state = "deleted";
+      return new Response(null, { status: 204 });
+    }
+
     if (method === "GET" && path === "/v1/presence") {
       const me = signed();
       const q = presenceQuerySchema.safeParse(Object.fromEntries(url.searchParams));

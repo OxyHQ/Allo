@@ -85,6 +85,9 @@ export class Realtime {
     socket.on("presence", (payload) => {
       ctx.presence.onPresence(payload);
     });
+    socket.on("status.posted", (payload) => {
+      if (SERVER_TO_CLIENT_EVENTS["status.posted"].safeParse(payload).success) ctx.statuses.onPosted();
+    });
     socket.connect();
   }
 

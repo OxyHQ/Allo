@@ -25,6 +25,9 @@ export * from "./conversations";
 export * from "./events";
 
 // The delivery stream, cursors and socket events
+// Status updates: one ciphertext, a key sealed per device, 24 hours.
+export * from "./statuses";
+
 // Presence: who has a device connected, and the rules about who may ask.
 export * from "./presence";
 export * from "./sync";

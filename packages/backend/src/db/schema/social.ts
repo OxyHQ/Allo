@@ -97,6 +97,12 @@ export const userSettings = pgTable(
     privacyAllowTags: boolean().notNull().default(true),
     privacyAllowAllos: boolean().notNull().default(true),
     privacyShowOnlineStatus: boolean().notNull().default(true),
+    /**
+     * Whether a status view carries this account's NAME to the poster. Its own
+     * switch rather than a rider on read receipts: Signal keeps the two apart
+     * and WhatsApp's coupling of them is the thing people are surprised by.
+     */
+    privacyStatusViewReceipts: boolean().notNull().default(true),
     privacyHideLikeCounts: boolean().notNull().default(false),
     privacyHideShareCounts: boolean().notNull().default(false),
     privacyHideReplyCounts: boolean().notNull().default(false),

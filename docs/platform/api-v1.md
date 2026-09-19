@@ -420,6 +420,47 @@ returns `keyCheck` and learns nothing from it.
 `DirectoryAssetUrlResponse`, and the `ApiErrorResponse` / `ApiSuccessResponse`
 envelope in `api.ts`). It is Oxy-authenticated and not part of `/v1`.
 
+## Status updates (`statuses.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `POST /v1/statuses` | instance | `CreateStatusRequest` | 201 `CreateStatusResponse` `{ status, refused }` |
+| `GET /v1/statuses` | instance | — | `ListStatusesResponse` — everything sealed to THIS instance, plus what its own account posted |
+| `DELETE /v1/statuses/:id` | instance | — | 204; author only, and a status that is not yours answers `not_found` |
+| `POST /v1/statuses/:id/views` | instance | — | 204; only from a device the status was sealed to |
+| `GET /v1/statuses/:id/views` | instance | — | `ListStatusViewsResponse` `{ views, total }`; author only |
+
+One ciphertext, a key sealed per recipient DEVICE. The poster encrypts the
+whole update (its kind, its words, and the key and digest of any media blob)
+under a random per-status key, and HPKE-seals that key to each recipient
+instance's `transferPublicKey` with `info = STATUS_KEY_SEAL_INFO` — the same
+primitive a history offer uses, with its own domain separator. The server
+stores a body it cannot open and `N` sealed keys it cannot use.
+
+The audience is resolved on the DEVICE; the server is never asked who your
+contacts are. What it decides is delivery, and it refuses three kinds of
+recipient, naming each in `refused` so the app can be honest about who did not
+get it:
+
+1. a device that is not there (unknown, pending or revoked),
+2. an account that shares no conversation with the author,
+3. either direction of a block.
+
+The author's own other devices are always allowed, which is how a status shows
+on the phone that did not post it.
+
+`id` and `expiresAt` are the client's and are covered by `signature`
+(`statusSignatureMessage`) — a server-assigned id could not be signed, and an
+unsigned deadline could be moved. The server refuses a deadline beyond
+`STATUS_LIFETIME_MS` (24 hours) or already past. A recipient verifies that
+signature against the author instance's published key, and the digest of the
+ciphertext, BEFORE decrypting; it also keeps the deadline it verified rather
+than a later claim.
+
+Expiry is the ordinary sweep: `statuses`, `status_keys` and `status_views` all
+carry the deadline, and the blobs the envelope named are dated a day out ahead
+of the delete, exactly as a history offer's chunks are.
+
 ## Presence (`presence.ts`)
 
 | route | auth | body | answer |
@@ -459,6 +500,7 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 | `presence` | server → client | `PresenceState` `{ accountId, online, lastSeenAt }` | one account of THIS socket's watch set changed. Never a broadcast: a socket hears only about what it asked for |
 | `presence.watch` | client → server | `PresenceWatchEvent` `{ accountIds }` | the accounts this client is SHOWING, at most 200. Replaces the previous set; an empty list stops the updates |
 | `presence.heartbeat` | client → server | `{}` | this instance is still here. Presence is a heartbeat with a 75 s deadline, not an open socket — a socket survives a sleeping phone |
+| `status.posted` | server → client (`instance:<recipient>`) | `StatusPostedEvent` `{ statusId, authorAccountId }` | somebody this device holds a key for posted a status; re-read `GET /v1/statuses` |
 | `history.offer` | server → client (`instance:<recipient>`) | `HistoryOfferEvent` `{ offerId }` | another instance of the account offered this one its history; pull `GET /v1/instances/me/history-offers` and verify the donor before accepting |
 
 ## The application message (`appMessage.ts`)

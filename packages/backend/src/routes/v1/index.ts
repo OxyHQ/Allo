@@ -21,6 +21,7 @@ import { createBlobReadRoutes } from "./blobs";
 import { createHistoryRoutes } from "./history";
 import { createBackupRoutes } from "./backups";
 import { createPresenceRoutes } from "./presence";
+import { createStatusRoutes } from "./statuses";
 
 export interface V1RouterDeps {
   /** `requireInstance()` from `middleware/instanceAuth.ts`, or a test double. */
@@ -38,5 +39,6 @@ export function createV1Router(deps: V1RouterDeps): Router {
   router.use(createHistoryRoutes(deps));
   router.use(createBackupRoutes(deps));
   router.use(createPresenceRoutes(deps));
+  router.use(createStatusRoutes(deps));
   return router;
 }

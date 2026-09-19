@@ -53,6 +53,7 @@ export interface RecordedRealtime extends Realtime {
   revoked: { accountId: string; instanceId: string }[];
   low: { instanceId: string; available: number }[];
   historyOffers: { instanceId: string; offerId: string }[];
+  statusPosts: { instanceId: string; statusId: string }[];
   typings: { instanceIds: string[]; conversationId: string }[];
   disconnected: string[];
   /** Instances `isInstanceConnected` answers true for. */
@@ -67,6 +68,7 @@ export function recordedRealtime(): RecordedRealtime {
     revoked: [],
     low: [],
     historyOffers: [],
+    statusPosts: [],
     typings: [],
     disconnected: [],
     connected: new Set(),
@@ -81,6 +83,9 @@ export function recordedRealtime(): RecordedRealtime {
     },
     keyPackagesLow(instanceId, event) {
       r.low.push({ instanceId, available: event.available });
+    },
+    statusPosted(instanceId, event) {
+      r.statusPosts.push({ instanceId, statusId: event.statusId });
     },
     historyOffer(instanceId, event) {
       r.historyOffers.push({ instanceId, offerId: event.offerId });
@@ -100,6 +105,7 @@ export function recordedRealtime(): RecordedRealtime {
       r.revoked = [];
       r.low = [];
       r.historyOffers = [];
+      r.statusPosts = [];
       r.typings = [];
       r.disconnected = [];
       r.connected.clear();

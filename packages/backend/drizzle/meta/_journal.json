@@ -57,6 +57,13 @@
       "when": 1789783046895,
       "tag": "0007_account_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789784807196,
+      "tag": "0008_statuses",
+      "breakpoints": true
     }
   ]
 }

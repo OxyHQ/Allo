@@ -15,6 +15,7 @@ import type {
   InstanceApprovedEvent,
   InstanceRevokedEvent,
   KeyPackagesLowEvent,
+  StatusPostedEvent,
   SyncNudgeEvent,
   TypingEvent,
 } from "@allo/shared-types";
@@ -27,6 +28,8 @@ export interface Realtime {
   keyPackagesLow(instanceId: string, event: KeyPackagesLowEvent): void;
   /** `history.offer` to the recipient instance's room: another instance of its account offered it history. */
   historyOffer(instanceId: string, event: HistoryOfferEvent): void;
+  /** `status.posted` to a recipient instance's room: something it holds a key for was posted. */
+  statusPosted(instanceId: string, event: StatusPostedEvent): void;
   typing(instanceIds: readonly string[], event: TypingEvent): void;
   /** Whether at least one socket of the instance is connected — across every task when the Redis adapter is attached. */
   isInstanceConnected(instanceId: string): Promise<boolean>;
@@ -41,6 +44,7 @@ export const NOOP_REALTIME: Realtime = {
   instanceRevoked: () => undefined,
   keyPackagesLow: () => undefined,
   historyOffer: () => undefined,
+  statusPosted: () => undefined,
   typing: () => undefined,
   isInstanceConnected: async () => false,
   disconnectInstance: async () => undefined,

@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { presenceHeartbeatEventSchema, presenceStateSchema, presenceWatchEventSchema } from "./presence";
+import { statusPostedEventSchema } from "./statuses";
 import {
   accountIdSchema,
   base64Schema,
@@ -153,6 +154,7 @@ export const SERVER_TO_CLIENT_EVENTS = {
   typing: typingEventSchema,
   presence: presenceEventSchema,
   "history.offer": historyOfferEventSchema,
+  "status.posted": statusPostedEventSchema,
 } as const;
 
 export const CLIENT_TO_SERVER_EVENTS = {

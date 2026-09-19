@@ -5,7 +5,7 @@
  *
  * One file per domain. The messaging platform (`docs/platform/`) is seven of
  * them: instances, conversations, events, deliveries, blobs, history (the
- * E2EE archive offers and backups) and presence (last seen).
+ * E2EE archive offers and backups), presence (last seen) and statuses.
  */
 
 export * from "./blobs";
@@ -17,3 +17,4 @@ export * from "./instances";
 export * from "./moderation";
 export * from "./presence";
 export * from "./social";
+export * from "./statuses";

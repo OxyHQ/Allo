@@ -26,6 +26,8 @@ import { blobs } from "./schema/blobs";
 import { instanceDeliveries } from "./schema/deliveries";
 import { historyOffers } from "./schema/history";
 import { moderationEvents, moderationOutbox } from "./schema/moderation";
+import { statuses, statusKeys, statusViews } from "./schema/statuses";
+import { releaseDueStatusBlobs } from "./platform/statusRepository";
 
 export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
   {
@@ -87,6 +89,42 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
       "ahead of this sweep in `runExpirySweep` and dates them a day out, so " +
       "the blob sweep above reaps them on its own schedule.",
   },
+  {
+    table: statuses,
+    column: statuses.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Status updates, dated 24 hours out at insert (`STATUS_LIFETIME_MS`) or " +
+      "at the moment the author took one down. Deleting the row cascades to " +
+      "`status_keys` and `status_views`, so the sealed keys go with the body " +
+      "they open and nobody is left holding a key to nothing. The media blobs " +
+      "are NOT deleted here: `releaseDueStatusBlobs` runs ahead of this sweep " +
+      "and dates them, so the blob sweep above reaps them on its own schedule. " +
+      "A device that already decrypted a status keeps what it has — the server " +
+      "cannot reach into a phone, and the screens say so rather than implying " +
+      "it can.",
+  },
+  {
+    table: statusKeys,
+    column: statusKeys.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "The per-status key sealed to one device, carrying its status's own " +
+      "deadline so a key can be reaped without a join. The cascade from " +
+      "`statuses` normally gets there first; this target is what covers a key " +
+      "whose status was deleted early and re-dated, and what makes the sweep " +
+      "independent of the cascade's ordering.",
+  },
+  {
+    table: statusViews,
+    column: statusViews.expiresAt,
+    retentionSeconds: 0,
+    reason:
+      "Who saw a status, carrying that status's deadline. The record of a view " +
+      "must not outlive the thing viewed: an expired status leaving its " +
+      "viewers behind would be a durable record of who looked at what, which " +
+      "is precisely what a 24-hour feature is not.",
+  },
 ];
 
 /**
@@ -116,6 +154,10 @@ export async function runExpirySweep(
 ): Promise<readonly ExpirySweepResult[]> {
   const released = await releaseDueHistoryOffers(db);
   if (released > 0) log.info(`history offers expired ahead of the sweep: count=${released}`);
+  // Same shape, same reason: a status row must not be deleted while the blobs
+  // its envelope named still carry `expires_at = null` and no other referent.
+  const statusBlobs = await releaseDueStatusBlobs(db);
+  if (statusBlobs > 0) log.info(`status blobs dated ahead of the sweep: count=${statusBlobs}`);
   const results = await sweepAllExpiredRows(db, EXPIRY_SWEEP_TARGETS);
   const deleted = results.reduce((total, result) => total + result.deleted, 0);
   const summary = `expiry sweep: tablesSwept=${results.length} deleted=${deleted}`;

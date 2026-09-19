@@ -30,6 +30,7 @@ import { Namespace } from "./storage/namespace";
 import { storageKeyName } from "./crypto/atRest";
 import { SyncEngine } from "./sync/engine";
 import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
+import { StatusService } from "./statuses/service";
 import { Realtime } from "./sync/realtime";
 import { HttpClient } from "./transport/http";
 import { PRESENCE_HEARTBEAT_MS } from "@allo/shared-types";
@@ -40,6 +41,9 @@ import type {
   HistoryOfferView,
   HistoryProgress,
   PresenceView,
+  StatusDraft,
+  StatusView,
+  StatusViewerView,
   InstanceState,
   InstanceView,
   LoadOlderResult,
@@ -130,6 +134,26 @@ export interface AlloClient {
    * `presence`. Nothing is persisted and nothing is remembered across a
    * restart: a dot restored from disk is a claim the device cannot make.
    */
+  /**
+   * Status updates: one ciphertext, a key sealed per device, 24 hours. Topic
+   * `statuses`. Nothing is persisted — the deadline is the promise, and a
+   * status restored from disk would outlive it.
+   */
+  statuses: {
+    /** Everything this device can read, newest first. Referentially stable between emissions. */
+    list(): readonly StatusView[];
+    /** Post one. The audience is resolved on this device; the server never sees a contact list. */
+    post(draft: StatusDraft): Promise<string>;
+    /** Tell the author it was seen. Whether your name travels is your own setting. */
+    view(statusId: string): Promise<void>;
+    /** Who saw one of YOURS. The server refuses this from anybody else. */
+    viewers(statusId: string): Promise<StatusViewerView>;
+    /** Take one of yours down before its deadline. */
+    remove(statusId: string): Promise<void>;
+    /** The picture or video, decrypted. Nothing is fetched until this is called. */
+    media(statusId: string, options?: { signal?: AbortSignal }): Promise<Uint8Array>;
+    refresh(): Promise<void>;
+  };
   presence: {
     /** The accounts being drawn. Replaces the previous set; an empty one stops the updates. */
     watch(accountIds: readonly string[]): Promise<void>;
@@ -224,6 +248,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.outbox.start();
     c.backup.start();
     c.presence.start(PRESENCE_HEARTBEAT_MS);
+    c.statuses.start();
     await c.instance.ensureTransferKey();
     c.history.offersStale = true;
     await c.sync.now().catch(() => undefined);
@@ -282,6 +307,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.outbox = new OutboxEngine(c);
     c.sync = new SyncEngine(c);
     c.presence = new PresenceService(c);
+    c.statuses = new StatusService(c);
     c.realtime = new Realtime(c);
     c.history = new HistoryService(c);
     await c.history.load();
@@ -315,6 +341,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     ctx.history.stop();
     ctx.backup.stop();
     ctx.presence.stop();
+    ctx.statuses.stop();
     await ctx.outbox.idle().catch(() => undefined);
     started = false;
     activated = false;
@@ -405,6 +432,15 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     media: {
       upload: (id, bytes, meta) => new MediaService(requireCtx()).upload(id, bytes, meta),
       download: (ref, options) => new MediaService(requireCtx()).download(ref, options),
+    },
+    statuses: {
+      list: () => ctx?.statuses.list() ?? EMPTY_LIST,
+      post: (draft) => requireCtx().statuses.post(draft),
+      view: (statusId) => requireCtx().statuses.view(statusId),
+      viewers: (statusId) => requireCtx().statuses.viewers(statusId),
+      remove: (statusId) => requireCtx().statuses.remove(statusId),
+      media: (statusId, options) => requireCtx().statuses.media(statusId, options),
+      refresh: () => requireCtx().statuses.refresh(),
     },
     presence: {
       watch: (accountIds) => (ctx ? ctx.presence.watch(accountIds) : Promise.resolve()),

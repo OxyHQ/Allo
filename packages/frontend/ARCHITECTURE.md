@@ -79,11 +79,20 @@ projection: a dot only for somebody who is there, and a line that says nothing
 at all when the server declined to answer, because hidden, blocked, unknown and
 offline are deliberately one answer.
 
-Calls and status updates are NOT. There is no signalling and no media
-anywhere in the platform, so `lib/phase2/{calls,stories}.ts`
-hold that state in memory for the life of the tab and the screens say so in
-their own words (`components/phase2/NotConnectedNotice.tsx`). Each file's header
-states exactly what a transport must supply to replace it, and each exports a
+Status updates are real as well, and are NOT a group: one ciphertext, a key
+sealed to each recipient device, twenty-four hours. `useStatuses` is the whole
+surface; `lib/statuses.ts` groups a flat list by author and decides the ring
+and the words, `lib/allo/useStatusMedia.ts` fetches and decrypts a picture only
+when one is actually opened, and `/updates` posts through the SDK with the
+audience resolved on the device. Nothing about a status is persisted locally —
+its key lives in memory with its decrypted envelope, so it is gone when the
+status is.
+
+Calls are NOT. There is no signalling and no media anywhere in the platform,
+so `lib/phase2/calls.ts`
+holds that state in memory for the life of the tab and the screens say so in
+their own words (`components/phase2/NotConnectedNotice.tsx`). Its header
+states exactly what a transport must supply to replace it, and it exports a
 `DEMO_*` constant that is the only sample data to delete. Nothing there opens a
 socket, touches a microphone or persists anything.
 

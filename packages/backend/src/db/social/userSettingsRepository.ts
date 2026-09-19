@@ -59,6 +59,7 @@ export const UPDATABLE_USER_SETTINGS_COLUMNS = [
   "privacyAllowTags",
   "privacyAllowAllos",
   "privacyShowOnlineStatus",
+  "privacyStatusViewReceipts",
   "privacyHideLikeCounts",
   "privacyHideShareCounts",
   "privacyHideReplyCounts",
@@ -160,6 +161,23 @@ export async function showOnlineStatusOf(db: AlloDatabase, accountIds: readonly 
   if (accountIds.length === 0) return new Set();
   const rows = await db
     .select({ oxyUserId: userSettings.oxyUserId, show: userSettings.privacyShowOnlineStatus })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));
+  return new Set(accountIds.filter((accountId) => !hidden.has(accountId)));
+}
+
+/**
+ * Which of these accounts let a status view carry their name.
+ *
+ * Absence means the default, which is true — the same reading as
+ * {@link showOnlineStatusOf}, and for the same reason: presence and receipts
+ * must not depend on whether somebody has ever opened a settings screen.
+ */
+export async function statusViewReceiptsOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, show: userSettings.privacyStatusViewReceipts })
     .from(userSettings)
     .where(inArray(userSettings.oxyUserId, [...accountIds]));
   const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));

@@ -31,6 +31,7 @@ import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction } from "../ind
 import { requireTransaction } from "../moderation/transactionGuard";
 import { PROTECTED_COLUMNS } from "../protectedColumns";
 import { blobs } from "../schema/blobs";
+import { namedByLiveStatus } from "./statusRepository";
 import { conversationEvents } from "../schema/events";
 import { accountBackups, historyOffers } from "../schema/history";
 
@@ -296,7 +297,7 @@ export async function retainChunkBlobs(ids: readonly string[], db: AlloDatabaseO
 }
 
 /** `NOT EXISTS (pending offer naming the blob)`, correlated on the outer `blobs` row. */
-const namedByPendingOffer = (db: AlloDatabaseOrTransaction) =>
+export const namedByPendingOffer = (db: AlloDatabaseOrTransaction) =>
   notExists(
     db
       .select({ one: sql`1` })
@@ -305,7 +306,7 @@ const namedByPendingOffer = (db: AlloDatabaseOrTransaction) =>
   );
 
 /** `NOT EXISTS (backup naming the blob)`. */
-const namedByBackup = (db: AlloDatabaseOrTransaction) =>
+export const namedByBackup = (db: AlloDatabaseOrTransaction) =>
   notExists(
     db
       .select({ one: sql`1` })
@@ -314,7 +315,7 @@ const namedByBackup = (db: AlloDatabaseOrTransaction) =>
   );
 
 /** `NOT EXISTS (event naming the blob)` — the GIN index on `blob_ids` answers it. */
-const namedByEvent = (db: AlloDatabaseOrTransaction) =>
+export const namedByEvent = (db: AlloDatabaseOrTransaction) =>
   notExists(
     db
       .select({ one: sql`1` })
@@ -338,7 +339,7 @@ export async function releaseChunkBlobs(ids: readonly string[], db: AlloDatabase
   await tx
     .update(blobs)
     .set({ expiresAt: sql`now() + make_interval(secs => ${CHUNK_RELEASE_TTL_MS / 1_000})` })
-    .where(and(inArray(blobs.id, unique), namedByPendingOffer(tx), namedByBackup(tx), namedByEvent(tx)));
+    .where(and(inArray(blobs.id, unique), namedByPendingOffer(tx), namedByBackup(tx), namedByEvent(tx), namedByLiveStatus(tx)));
 }
 
 /**
@@ -366,6 +367,7 @@ export async function dateOrphanedChunkBlobs(now: Date, db: AlloDatabase = getDb
         lt(blobs.createdAt, threshold),
         namedByPendingOffer(db),
         namedByBackup(db),
+        namedByLiveStatus(db),
         namedByEvent(db),
       ),
     )

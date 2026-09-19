@@ -128,6 +128,13 @@ content, identity binding to Oxy accounts, sync, or media.
   socket asked to WATCH — that last one is a screen's contents, and is new with
   ADR 0002. The rules in `presence.ts` bound what other USERS see; they bound
   nothing about the operator, who computes all of it.
+- Status updates: that one exists, who wrote it, WHICH DEVICES it was sealed
+  to — the audience, which the server necessarily learns in order to deliver,
+  as WhatsApp's and Signal's do — its size, its deadline, which blobs it names,
+  and who viewed it. Not the words, the picture, or the key: the body is
+  AES-256-GCM under a key that reaches each device HPKE-sealed to its transfer
+  key. A viewer whose receipts are off is counted and not named, and the author
+  cannot tell a missing name from somebody who did not look.
 - The existence and timing of typing traffic; typing payloads themselves are
   MLS application messages the server cannot read and does not store.
 - Push tokens and which instance is on which platform and app.

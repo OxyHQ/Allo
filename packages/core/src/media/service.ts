@@ -13,6 +13,34 @@ import { DecryptError, NotFoundError } from "../errors";
 import type { MediaRef, UploadMediaMeta } from "../types";
 import { base64Decode, base64Encode, randomBytes, sha256Hex } from "../util/bytes";
 
+/**
+ * AES-256-GCM with a fresh nonce. The one encryption every attachment in this
+ * SDK uses, factored out so a status update encrypts its picture exactly the
+ * way a message encrypts one rather than nearly.
+ */
+export function encryptBytes(key: Uint8Array, bytes: Uint8Array): { ciphertext: Uint8Array; nonce: Uint8Array } {
+  const nonce = randomBytes(12);
+  return { ciphertext: gcm(key, nonce).encrypt(bytes), nonce };
+}
+
+/** The inverse. The caller verifies the digest BEFORE calling this. */
+export function decryptBytes(key: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array): Uint8Array {
+  return gcm(key, nonce).decrypt(ciphertext);
+}
+
+/** Uploads ciphertext as a blob and answers its id. The server sees bytes and a digest. */
+export async function uploadEncryptedBlob(ctx: Context, ciphertext: Uint8Array): Promise<string> {
+  const res = await ctx.http.request({
+    method: "POST",
+    path: "/v1/blobs",
+    rawBody: ciphertext,
+    headers: { [BLOB_SHA256_HEADER]: sha256Hex(ciphertext) },
+    schema: uploadBlobResponseSchema,
+    signer: ctx.signer,
+  });
+  return res.blobId;
+}
+
 export class MediaService {
   constructor(private readonly ctx: Context) {}
 

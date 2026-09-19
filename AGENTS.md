@@ -283,11 +283,23 @@ when the person's first device activates and the SDK's elector adds it.
   and hidden, blocked, unknown and offline are all the same answer — a client
   that could tell them apart could tell it had been blocked. The old shape
   (announce to every co-member on connect) is gone.
-- **Calls and status updates are the frontend only, and say so.**
+- **A status update is one ciphertext and a key sealed per device.** The
+  poster encrypts it under a random per-status key and HPKE-seals that key to
+  each recipient INSTANCE's transfer key (`STATUS_KEY_SEAL_INFO`); the audience
+  is resolved on the device, so the server is never asked for a contact list.
+  It is NOT an MLS group: RFC 9420 gives every member the ratchet tree, so
+  "everybody except Ana" as a group would publish the audience to the audience.
+  The server refuses three kinds of recipient (not there, no shared
+  conversation, blocked either way) and NAMES them back, so the app never says
+  "posted" to somebody who did not get it. 24 hours, swept like everything else
+  with a deadline; the client keeps the deadline it verified in the signature
+  rather than a later claim; and a status already decrypted on a device is that
+  device's, which the screens say rather than implying a remote delete.
+- **Calls are the frontend only, and say so.**
   There is no signalling and no media in the platform, so
-  `packages/frontend/lib/phase2/{calls,stories}.ts` hold that state in
-  memory for the life of the tab, the screens (`/calls`, `/c/:id/call`,
-  `/updates`) are built on Bloom's `call-ui` and `chat-people` and each carries
+  `packages/frontend/lib/phase2/calls.ts` holds that state in
+  memory for the life of the tab, the screens (`/calls`, `/c/:id/call`)
+  are built on Bloom's `call-ui` and carry
   a notice that nothing is connected. Every one of those files documents what a
   transport must supply to replace it and marks its sample data `DEMO_*`. The
   status route is `/updates` because Metro's dev server answers `/status`

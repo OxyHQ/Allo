@@ -11,8 +11,9 @@
  * 1. Every `src/routes/**` and `src/services/platform/**` file: no property
  *    access chain rooted at `req.body` (or `request.body`) ends in a
  *    plaintext-shaped name, and no destructuring of `req.body` binds one.
- * 2. The contract: `submitEventRequestSchema`, `createConversationRequestSchema`
- *    and `typingEventSchema` accept NO plaintext-shaped key, proven by parsing
+ * 2. The contract: `submitEventRequestSchema`, `createConversationRequestSchema`,
+ *    `typingEventSchema` and `createStatusRequestSchema` accept NO
+ *    plaintext-shaped key, proven by parsing
  *    (a `z.object` strips unknown keys; a key that survives is declared).
  *
  * Anti-vacuity: the file census has a floor, the AST walker is pinned against a
@@ -24,7 +25,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { createConversationRequestSchema, submitEventRequestSchema, typingEventSchema } from "@allo/shared-types";
+import {
+  createConversationRequestSchema,
+  createStatusRequestSchema,
+  submitEventRequestSchema,
+  typingEventSchema,
+} from "@allo/shared-types";
 
 const SRC = join(__dirname, "..", "..");
 const SCANNED_DIRS = [join(SRC, "routes"), join(SRC, "services", "platform"), join(SRC, "app.ts")];
@@ -112,5 +118,25 @@ describe("the contract", () => {
     expect(Object.keys(create).sort()).toEqual(["idempotencyKey", "kind", "memberAccountIds", "mlsGroupId"]);
     const typing = typingEventSchema.parse({ conversationId: "conv-00000001", ciphertext: payload, ...extra });
     expect(Object.keys(typing).sort()).toEqual(["ciphertext", "conversationId"]);
+    // A status update is the one place a caption legitimately exists — inside
+    // the ciphertext, never as a field. The request must drop one offered to it.
+    const status = createStatusRequestSchema.parse({
+      idempotencyKey: "k",
+      payload,
+      nonce: payload,
+      sha256: "a".repeat(64),
+      recipients: [{ instanceId: "inst-0000001", sealedKey: payload }],
+      signature: Buffer.alloc(64, 1).toString("base64"),
+      ...extra,
+    });
+    expect(Object.keys(status).sort()).toEqual([
+      "blobIds",
+      "idempotencyKey",
+      "nonce",
+      "payload",
+      "recipients",
+      "sha256",
+      "signature",
+    ]);
   });
 });

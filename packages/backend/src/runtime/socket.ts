@@ -144,6 +144,9 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     historyOffer(instanceId, event) {
       namespace.to(instanceRoom(instanceId)).emit("history.offer", event);
     },
+    statusPosted(instanceId, event) {
+      namespace.to(instanceRoom(instanceId)).emit("status.posted", event);
+    },
     typing(instanceIds, event) {
       for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("typing", event);
     },

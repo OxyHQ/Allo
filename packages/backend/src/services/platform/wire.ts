@@ -13,11 +13,13 @@ import type {
   ConversationSummary,
   HistoryOffer,
   PublicInstance,
+  Status,
 } from "@allo/shared-types";
 import type { ConversationRow, LeafRow, MemberRow } from "../../db/platform/conversationRepository";
 import type { EventReadRow } from "../../db/platform/eventRepository";
 import type { AccountBackupRow, HistoryOfferRow } from "../../db/platform/historyRepository";
 import type { InstanceRow } from "../../db/platform/instanceRepository";
+import type { StatusRow } from "../../db/platform/statusRepository";
 
 const iso = (date: Date): string => date.toISOString();
 const isoOrNull = (date: Date | null): string | null => (date ? date.toISOString() : null);
@@ -97,6 +99,28 @@ export function toAccountBackup(row: AccountBackupRow): AccountBackup {
     keyCheck: row.keyCheck,
     manifestSignature: row.manifestSignature,
     updatedAt: iso(row.updatedAt),
+  };
+}
+
+/**
+ * A status as ONE device receives it: the ciphertext, and the key sealed to
+ * that device. `sealedKey` is `null` for the author's own listing, which is
+ * the one case where the reader already holds the key — and `null` rather than
+ * omitted, as everywhere else here.
+ */
+export function toStatus(row: StatusRow, sealedKey: string | null): Status {
+  return {
+    id: row.id,
+    authorAccountId: row.authorAccountId,
+    authorInstanceId: row.authorInstanceId,
+    payload: row.payload.toString("base64"),
+    nonce: row.nonce.toString("base64"),
+    sha256: row.sha256,
+    blobIds: row.blobIds,
+    sealedKey,
+    signature: row.signature,
+    createdAt: iso(row.createdAt),
+    expiresAt: iso(row.expiresAt),
   };
 }
 
