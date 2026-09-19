@@ -1,19 +1,19 @@
 import React, { useCallback, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { usePresence } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
+import { useCallActions, usePresence } from '@allo/react';
 import { CallHistoryList, IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
-import { RiPhoneLine } from '@oxy.so/bloom/icons';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
 
 import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { Page } from '@/components/shell/Page';
 import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
-import { callHistorySections, useCallLog, useCallSession, useCallsStore } from '@/lib/phase2/calls';
+import { callHistorySections } from '@/lib/phase2/calls';
+import { useCallLog, useCallSession } from '@/lib/calls/session';
+import { toast } from '@oxy.so/bloom/toast';
+import { logger } from '@/utils/logger';
 
 /**
  * `/calls` — THE CALL LOG.
@@ -31,13 +31,9 @@ import { callHistorySections, useCallLog, useCallSession, useCallsStore } from '
 export default function CallsScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const theme = useTheme();
   const log = useCallLog();
   const session = useCallSession();
-  const place = useCallsStore((state) => state.place);
-  const receive = useCallsStore((state) => state.receive);
-  const decline = useCallsStore((state) => state.decline);
-  const answer = useCallsStore((state) => state.answer);
+  const calls = useCallActions();
 
   const accountIds = useMemo(() => {
     const ids = new Set<string>();
@@ -83,14 +79,13 @@ export default function CallsScreen() {
     (id: string) => {
       const entry = entryById.get(id);
       if (!entry) return;
-      place({
-        conversationId: entry.conversationId,
-        peerAccountIds: entry.peerAccountIds,
-        mode: entry.mode,
-      });
       router.push(`/c/${entry.conversationId}/call`);
+      void calls.start(entry.conversationId, entry.mode).catch((error: unknown) => {
+        logger.error('[calls] calling back failed', error);
+        toast.error(t('calls.failed'));
+      });
     },
-    [entryById, place, router],
+    [calls, entryById, router, t],
   );
 
   const openConversation = useCallback(
@@ -100,17 +95,6 @@ export default function CallsScreen() {
     },
     [entryById, router],
   );
-
-  /**
-   * The only way to see the incoming screens without a server that rings.
-   * Named for what it is: it puts THIS device into the "somebody is calling"
-   * state, and nobody is called.
-   */
-  const previewIncoming = useCallback(() => {
-    const caller = log[0]?.peerAccountIds[0];
-    if (!caller) return;
-    receive({ conversationId: caller, peerAccountIds: [caller], mode: 'voice' });
-  }, [log, receive]);
 
   const arriving = session !== null && session.incoming && session.status === 'ringing';
   const callerId = session?.peers[0]?.accountId;
@@ -128,10 +112,10 @@ export default function CallsScreen() {
           mode={session.mode}
           status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
           onAccept={() => {
-            answer();
+            void calls.answer().catch((error: unknown) => logger.error('[calls] answering failed', error));
             router.push(`/c/${session.conversationId}/call`);
           }}
-          onDecline={decline}
+          onDecline={() => void calls.decline().catch((error: unknown) => logger.error('[calls] declining failed', error))}
           onPress={() => router.push(`/c/${session.conversationId}/call`)}
           labels={{
             accept: t('calls.control.accept'),
@@ -153,17 +137,10 @@ export default function CallsScreen() {
         emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
       />
 
-      <View style={[styles.preview, { borderTopColor: theme.colors.border }]}>
-        <Muted>{t('calls.preview.help')}</Muted>
-        <Button variant="secondary" icon={RiPhoneLine} onPress={previewIncoming} disabled={session !== null}>
-          {t('calls.preview.incoming')}
-        </Button>
-      </View>
     </Page>
   );
 }
 
 const styles = StyleSheet.create({
   empty: { paddingVertical: 24, textAlign: 'center' },
-  preview: { gap: 12, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
 });

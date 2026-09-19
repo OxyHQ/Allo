@@ -79,6 +79,7 @@ const LAST_MESSAGE_KINDS = new Set<TimelineContent["kind"]>([
   "poll",
   "location",
   "contact",
+  "call",
   "deleted",
 ]);
 

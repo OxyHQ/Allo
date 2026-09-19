@@ -208,12 +208,31 @@ export interface ContactCardView {
   phone?: string;
 }
 
+/**
+ * A call that happened, as the conversation shows it.
+ *
+ * "Missed" is not a field: it is the RECEIVER's reading of `not_answered` on
+ * an incoming call, and the sender asserting it would be asserting something
+ * about somebody else's attention. `incoming` plus `outcome` is what a screen
+ * needs to say either sentence.
+ */
+export interface CallLogView {
+  callId: string;
+  mode: "voice" | "video";
+  outcome: "answered" | "not_answered" | "declined" | "cancelled" | "failed";
+  /** Whether it came to this account. The same event reads differently at each end. */
+  incoming: boolean;
+  /** How long it lasted, for an answered one. */
+  durationMs?: number;
+}
+
 export type TimelineContent =
   | { kind: "text"; body: string; isEdited: boolean }
   | { kind: "media"; media: MediaView }
   | { kind: "poll"; poll: PollView }
   | { kind: "location"; place: PlaceView }
   | { kind: "contact"; contact: ContactCardView }
+  | { kind: "call"; call: CallLogView }
   | { kind: "deleted" }
   | { kind: "undecryptable"; reason: string }
   | { kind: "system"; text: string };

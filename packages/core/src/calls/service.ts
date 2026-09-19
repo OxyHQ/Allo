@@ -37,6 +37,22 @@ import { uuidV7 } from "../util/ids";
 import { describeError } from "../util/logger";
 import type { CallMediaAdapter, SessionDescription } from "./media";
 
+/** One finished call, as the history list shows it. */
+export interface CallHistoryEntry {
+  /** The timeline item's id, which is what a list keys on. */
+  id: string;
+  callId: string;
+  conversationId: string;
+  withAccountIds: string[];
+  mode: CallMode;
+  outcome: "answered" | "not_answered" | "declined" | "cancelled" | "failed";
+  incoming: boolean;
+  /** ISO, when it happened. */
+  at: string;
+  /** Zero for a call that never connected. */
+  durationMs: number;
+}
+
 /** Where a call is, as a screen sees it. */
 export type CallPhase = "ringing" | "connecting" | "active" | "ended";
 
@@ -100,6 +116,36 @@ export class CallsService {
   /** Bumped on every change, so a hook has something to compare. */
   version(): number {
     return this.changes;
+  }
+
+  /**
+   * Every call this device knows about, newest first.
+   *
+   * Read out of the conversations rather than kept as a list of its own: the
+   * log IS the `call_log` messages, which sync, back up and reach every device
+   * of both accounts the way any message does. A second store would be a
+   * second truth to keep in step.
+   */
+  history(): CallHistoryEntry[] {
+    const out: CallHistoryEntry[] = [];
+    for (const conversation of this.ctx.conversations.list()) {
+      for (const item of this.ctx.messages.timeline(conversation.id)) {
+        if (item.content.kind !== "call") continue;
+        const call = item.content.call;
+        out.push({
+          id: item.id,
+          callId: call.callId,
+          conversationId: conversation.id,
+          withAccountIds: conversation.memberAccountIds.filter((id) => id !== this.ctx.accountId),
+          mode: call.mode,
+          outcome: call.outcome,
+          incoming: call.incoming,
+          at: item.sentAt,
+          durationMs: call.durationMs ?? 0,
+        });
+      }
+    }
+    return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   }
 
   // ---- starting, answering, ending -----------------------------------------
@@ -257,7 +303,10 @@ export class CallsService {
     const live = this.live;
     if (!live || live.view.id !== event.callId) return;
     if (event.state === "ended") {
-      void this.finish(event.endReason ?? "hangup");
+      // A ring nobody answered was ended by the SERVER, so the caller writes
+      // it; anything else was ended by a device, and that device writes it.
+      const expired = event.endReason === "missed";
+      void this.finish(event.endReason ?? "hangup", expired && live.view.outgoing);
       return;
     }
     if (event.state === "active" && live.view.phase === "ringing") {
@@ -322,7 +371,8 @@ export class CallsService {
         });
         break;
       case "end":
-        await this.finish((message.reason as CallEndReason) ?? "hangup");
+        // They ended it, so the record is theirs to write.
+        await this.finish((message.reason as CallEndReason) ?? "hangup", false);
         break;
     }
   }
@@ -406,8 +456,17 @@ export class CallsService {
     await fn(this.media);
   }
 
-  /** Ends the call locally, writes the log, and tears the media down exactly once. */
-  private async finish(reason: CallEndReason): Promise<void> {
+  /**
+   * Ends the call locally and tears the media down exactly once.
+   *
+   * `writeLog` is what keeps the conversation from getting TWO records of one
+   * call. The log is a message, so whoever writes it writes it for both
+   * accounts; the device that ended the call is the one that does. A ring the
+   * SERVER gave up on was ended by nobody, so the caller writes that one —
+   * they are the one who placed it, and the receiver calling it "missed" is a
+   * reading of the same record, not a second record.
+   */
+  private async finish(reason: CallEndReason, writeLog = true): Promise<void> {
     const live = this.live;
     if (!live || live.view.phase === "ended") return;
     live.stopCandidates?.();
@@ -426,6 +485,7 @@ export class CallsService {
           : reason === "failed"
             ? "failed"
             : "not_answered";
+    if (!writeLog) return;
     try {
       await this.ctx.outbox.enqueueMessage(live.view.conversationId, {
         v: 1,

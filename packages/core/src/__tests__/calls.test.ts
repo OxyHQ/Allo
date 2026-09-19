@@ -138,3 +138,41 @@ describe("a 1:1 call", () => {
     await stopAll(alice, bob);
   }, 30_000);
 });
+
+describe("what a call leaves behind", () => {
+  it("writes a log both ends can read, and each reads its own direction out of it", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-log-a", "Alice");
+    const bob = await makeClient(server, "acc-log-b", "Bob");
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.sync.flush();
+    await waitFor(() => bob.client.conversations.get(conversation.id)?.joined === true);
+
+    await alice.client.calls.start(conversation.id, "voice");
+    await waitFor(() => bob.client.calls.current() !== null);
+    await bob.client.calls.answer();
+    await bob.client.calls.end();
+    await bob.client.sync.flush();
+    await waitFor(() => alice.client.messages.timeline(conversation.id).some((i) => i.content.kind === "call"), 10_000);
+
+    const atAlice = alice.client.messages.timeline(conversation.id).find((i) => i.content.kind === "call");
+    const atBob = bob.client.messages.timeline(conversation.id).find((i) => i.content.kind === "call");
+    expect(atAlice?.content).toMatchObject({ kind: "call", call: { mode: "voice", outcome: "answered" } });
+    expect(atBob?.content).toMatchObject({ kind: "call", call: { mode: "voice", outcome: "answered" } });
+
+    // Bob ended it, so it is HIS message: incoming for Alice, outgoing for Bob.
+    expect((atAlice?.content as { call: { incoming: boolean } }).call.incoming).toBe(true);
+    expect((atBob?.content as { call: { incoming: boolean } }).call.incoming).toBe(false);
+
+    // And the conversation row speaks for it rather than showing the message before.
+    expect(alice.client.conversations.get(conversation.id)?.lastMessage?.content.kind).toBe("call");
+
+    // The history is READ out of the conversations, so both ends have it and
+    // neither keeps a second list to fall out of step with.
+    const history = alice.client.calls.history();
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ conversationId: conversation.id, mode: "voice", outcome: "answered", incoming: true });
+    expect(bob.client.calls.history()[0]).toMatchObject({ incoming: false });
+    await stopAll(alice, bob);
+  }, 40_000);
+});

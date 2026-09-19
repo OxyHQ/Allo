@@ -8,7 +8,7 @@
  * network, a store or React. People arrive through `ChatContext.person`, which
  * the screens back with the people layer (`lib/allo/people.ts`).
  */
-import type { ConversationView, MediaView, SendState, TimelineContent, TimelineItemView } from '@allo/core';
+import type { CallLogView, ConversationView, MediaView, SendState, TimelineContent, TimelineItemView } from '@allo/core';
 import type { MessageDeliveryStatus } from '@oxy.so/bloom/chat-indicators';
 import type { ChatPinnedMessage } from '@oxy.so/bloom/chat-screen';
 import type { ChatAttachmentKind, ChatFace, ChatPreview, ChatSummary } from '@oxy.so/bloom/chat-list';
@@ -82,6 +82,8 @@ export function previewText(item: TimelineItemView, t: Translate): string {
       return content.place.label ?? t('chat.attachment.location');
     case 'contact':
       return content.contact.name;
+    case 'call':
+      return callSummary(content.call, t);
     case 'deleted':
       return t('message.deleted');
     case 'undecryptable':
@@ -385,6 +387,10 @@ export function transcriptItems(
       case 'location':
       case 'contact':
         return base;
+      case 'call':
+        // A call is a thing that happened, not something somebody said: Bloom's
+        // system row is the shape for that, and a reaction on it is meaningless.
+        return { ...base, system: callSummary(content.call, ctx.t), reactions: undefined };
       case 'deleted':
         return { ...base, deleted: true, reactions: undefined };
       case 'undecryptable':
@@ -410,4 +416,30 @@ export function firstUnreadId(items: readonly TimelineItemView[], unreadCount: n
     if (seen === unreadCount) return items[index].id;
   }
   return undefined;
+}
+
+
+/**
+ * A finished call, in one line.
+ *
+ * "Missed" is the RECEIVER's reading of a call nobody answered, which is why
+ * it is derived here from `incoming` rather than carried in the message: the
+ * caller saying "you missed my call" would be asserting something about
+ * somebody else's attention, and the same event has to read correctly at both
+ * ends.
+ */
+export function callSummary(call: CallLogView, t: Translate): string {
+  const kind = call.mode === 'video' ? t('calls.log.video') : t('calls.log.voice');
+  switch (call.outcome) {
+    case 'answered':
+      return t('calls.log.answered', { kind });
+    case 'not_answered':
+      return call.incoming ? t('calls.log.missed', { kind }) : t('calls.log.noAnswer', { kind });
+    case 'declined':
+      return call.incoming ? t('calls.log.declined', { kind }) : t('calls.log.declinedByThem', { kind });
+    case 'cancelled':
+      return call.incoming ? t('calls.log.missed', { kind }) : t('calls.log.cancelled', { kind });
+    case 'failed':
+      return t('calls.log.failed', { kind });
+  }
 }

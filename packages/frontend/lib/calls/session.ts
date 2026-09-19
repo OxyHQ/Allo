@@ -21,8 +21,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import type { CallPipCorner, CallStatus } from '@oxy.so/bloom/call-ui';
-import { useCall } from '@allo/react';
+import { useCall, useCallHistory } from '@allo/react';
 import type { CallView } from '@allo/core';
+import type { CallDirection } from '@oxy.so/bloom/call-ui';
 
 export type { CallPipCorner, CallStatus };
 
@@ -141,4 +142,48 @@ export function useCallDuration(session: CallSession | null): string {
   const minutes = Math.floor(total / 60);
   if (minutes < 60) return `${minutes}:${seconds}`;
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${seconds}`;
+}
+
+/** A finished call, as the history screen lists it. */
+export interface CallLogEntry {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly peerAccountIds: readonly string[];
+  readonly mode: 'voice' | 'video';
+  readonly direction: CallDirection;
+  readonly at: number;
+  readonly durationMs: number;
+}
+
+/**
+ * Which of Bloom's four arrows a finished call wears.
+ *
+ * `missed` and `declined` are READINGS of an incoming call, not facts the
+ * caller asserted: the same record is an unanswered outgoing call at the other
+ * end, and drawing it as "missed" there would be telling somebody they ignored
+ * their own call.
+ */
+function directionOf(entry: { incoming: boolean; outcome: string }): CallDirection {
+  if (!entry.incoming) return 'outgoing';
+  if (entry.outcome === 'declined') return 'declined';
+  if (entry.outcome === 'not_answered' || entry.outcome === 'cancelled') return 'missed';
+  return 'incoming';
+}
+
+/** The call log, read out of the conversations where it lives. */
+export function useCallLog(): readonly CallLogEntry[] {
+  const history = useCallHistory();
+  return useMemo(
+    () =>
+      history.map((entry) => ({
+        id: entry.id,
+        conversationId: entry.conversationId,
+        peerAccountIds: entry.withAccountIds,
+        mode: entry.mode,
+        direction: directionOf(entry),
+        at: Date.parse(entry.at),
+        durationMs: entry.durationMs,
+      })),
+    [history],
+  );
 }

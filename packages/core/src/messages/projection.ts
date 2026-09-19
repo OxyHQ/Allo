@@ -8,7 +8,7 @@
  */
 import type { AppMessage, EventRef } from "@allo/shared-types";
 import type { EventRecord, OutboxItemRecord } from "../storage/records";
-import type { MediaView, PollView, TimelineItemView } from "../types";
+import type { CallLogView, MediaView, PollView, TimelineItemView } from "../types";
 
 export interface ProjectionInput {
   conversationId: string;
@@ -143,6 +143,8 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
     } else if (m.t === "contact") {
       add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
+    } else if (m.t === "call_log") {
+      add({ item: { ...base, content: { kind: "call", call: callLogView(m, base.isOwn) } }, reactions: new Map() });
     } else {
       apply(m, e.senderAccountId, isOwn, e.seq);
     }
@@ -174,6 +176,8 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
     } else if (m.t === "contact") {
       add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
+    } else if (m.t === "call_log") {
+      add({ item: { ...base, content: { kind: "call", call: callLogView(m, base.isOwn) } }, reactions: new Map() });
     } else if (o.state !== "failed") {
       apply(m, accountId, true, null);
     }
@@ -240,5 +244,24 @@ function mediaView(conversationId: string, m: Extract<AppMessage, { t: "media" }
     caption: m.caption,
     ref: { conversationId, blobId: m.blobId },
     thumbnail: m.thumbnail ? { ref: { conversationId, blobId: m.thumbnail.blobId }, width: m.thumbnail.width, height: m.thumbnail.height } : undefined,
+  };
+}
+
+
+/**
+ * A finished call, for the conversation.
+ *
+ * `incoming` is derived from who wrote the log, not carried in it: the device
+ * that ended the call writes one message, both accounts read it, and each
+ * reads its own direction out of the sender. That is why "missed" can be a
+ * receiver's word without the sender ever claiming it.
+ */
+function callLogView(m: Extract<AppMessage, { t: "call_log" }>, isOwn: boolean): CallLogView {
+  return {
+    callId: m.callId,
+    mode: m.mode,
+    outcome: m.outcome,
+    incoming: !isOwn,
+    ...(m.durationMs === undefined ? {} : { durationMs: m.durationMs }),
   };
 }

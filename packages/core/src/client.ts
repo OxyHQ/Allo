@@ -35,7 +35,7 @@ import { Model } from "./storage/model";
 import { Namespace } from "./storage/namespace";
 import { storageKeyName } from "./crypto/atRest";
 import { SyncEngine } from "./sync/engine";
-import { CallsService, type CallView } from "./calls/service";
+import { CallsService, type CallHistoryEntry, type CallView } from "./calls/service";
 import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
 import { StatusService } from "./statuses/service";
 import { Realtime } from "./sync/realtime";
@@ -123,6 +123,8 @@ export interface AlloClient {
   calls: {
     /** The call this device is in, or `null`. One at a time, as a phone does. */
     current(): CallView | null;
+    /** Every call this device knows about, newest first. Read out of the conversations, which is where the log lives. */
+    history(): CallHistoryEntry[];
     /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
     start(conversationId: string, mode?: "voice" | "video"): Promise<CallView>;
     answer(): Promise<void>;
@@ -279,6 +281,7 @@ const EMPTY_LIST: never[] = Object.freeze([]) as never[];
 const NO_INSTANCES: InstanceView[] = EMPTY_LIST;
 const NO_PENDING: PendingEnrollmentView[] = EMPTY_LIST;
 const NO_CONVERSATIONS: ConversationView[] = EMPTY_LIST;
+const NO_CALLS: CallHistoryEntry[] = EMPTY_LIST;
 const NO_TIMELINE: TimelineItemView[] = EMPTY_LIST;
 const IDLE_PROGRESS: HistoryProgress = { phase: "idle", done: 0, total: 0 };
 const NO_OFFERS: HistoryOfferView[] = EMPTY_LIST;
@@ -507,6 +510,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     reclaimAccount,
     calls: {
       current: () => ctx?.calls.current() ?? null,
+      history: () => ctx?.calls.history() ?? NO_CALLS,
       start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? "voice"),
       answer: () => requireCtx().calls.answer(),
       decline: () => requireCtx().calls.decline(),
