@@ -135,7 +135,10 @@ describe("socket events", () => {
       typing: (p) => void p.ciphertext,
       presence: (p) => void p.online,
       "history.offer": (p) => void p.offerId,
+      "status.posted": (p) => void p.statusId,
     };
-    expect(Object.keys(handlers)).toHaveLength(7);
+    // The map is EXHAUSTIVE by type: leaving one out is a tsc failure, which
+    // is the point of the assertion rather than the count beside it.
+    expect(Object.keys(handlers)).toHaveLength(Object.keys(SERVER_TO_CLIENT_EVENTS).length);
   });
 });

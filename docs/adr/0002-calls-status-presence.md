@@ -72,14 +72,33 @@ the background.
 blocked account. A ring is the loudest thing this system can do to a device
 and it is the one primitive worth rate-limiting hard.
 
-**Group calls are staged.** 1:1 first, over ICE with DTLS-SRTP and a TURN
-relay for the quarter or so of calls that cannot go direct. A mesh up to four
-participants reuses that path with no new infrastructure. Beyond four an SFU is
-required, and the SFU decision is deferred to its own ADR: Oxy already runs
-LiveKit, but RFC 9605's warning is that a shared frame key gives no per-sender
-authentication — any participant can produce media attributed to any other —
-so the group design has to be per-sender keys, and that is not a detail to
-retrofit later.
+**Two media paths, and the person chooses between them.**
+
+A 1:1 call goes peer to peer over ICE with DTLS-SRTP, which is the best
+latency and costs the server nothing, and falls back to a relay for the
+fifteen per cent or so of calls a NAT will not let through. Peer to peer means
+each side learns the other's IP address — true of every calling app, and the
+thing WhatsApp eventually shipped a switch for.
+
+So Allo ships the switch: **"Hide my IP address in calls"**. With it on, the
+client offers no host and no server-reflexive candidate, so every packet goes
+through the relay and the other side sees only the relay's address. Two rules
+follow, and both are the server's to enforce because a client cannot:
+
+- **Either side asking is enough.** A connection cannot be half relayed, so if
+  one participant hides, the call is relayed for both — and the other side is
+  told the call is relayed, not who asked for it.
+- **A group call is always relayed**, because it goes through the SFU. The
+  question does not arise there, and the setting says so rather than implying
+  it is doing something in a group.
+
+**Group calls go through the SFU now.** Oxy already runs LiveKit; a mesh would
+have been less to build and would have capped the feature at four people.
+RFC 9605's warning stands and shapes the design rather than deferring it: a
+single shared frame key gives NO per-sender authentication — any participant
+can emit media attributed to any other — so the group key is derived per
+sender, rotated when the membership changes, and the rotation is what a joiner
+and a leaver both trigger.
 
 ## Decision 2: a status update is sealed per device, not posted to a group
 
@@ -174,11 +193,15 @@ to ignore.
   header is deleted with the store it describes.
 - TURN and the native call UI are the two places this design needs something
   the repository cannot provide: a relay with a bill attached, and a dev build
-  carrying CallKit and Telecom. Both are decided with the owner before the
-  calls change starts, not during it.
+  carrying CallKit and Telecom. Both were decided with the owner before the
+  calls change started: the relay rides on the LiveKit box Oxy already
+  operates, and the ring is CallKit and Android Telecom in a development
+  build, with the Play Console declaration that implies.
+- `privacy_relay_calls` joins `privacy_show_online_status` and
+  `privacy_status_view_receipts` as a setting the platform actually acts on.
 
 ## What this ADR does not decide
 
-The SFU for calls above four participants, and the per-sender key design that
-goes with it. Federation of any of the three. Status replies. Call recording,
-which is deliberately not a feature.
+Federation of any of the three. Status replies. Call recording, which is
+deliberately not a feature. Calls between an Allo account and a phone number,
+which is not a thing this platform has.

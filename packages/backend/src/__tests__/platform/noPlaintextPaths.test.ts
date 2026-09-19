@@ -121,6 +121,8 @@ describe("the contract", () => {
     // A status update is the one place a caption legitimately exists — inside
     // the ciphertext, never as a field. The request must drop one offered to it.
     const status = createStatusRequestSchema.parse({
+      id: "status-00000001",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
       idempotencyKey: "k",
       payload,
       nonce: payload,
@@ -131,6 +133,8 @@ describe("the contract", () => {
     });
     expect(Object.keys(status).sort()).toEqual([
       "blobIds",
+      "expiresAt",
+      "id",
       "idempotencyKey",
       "nonce",
       "payload",
