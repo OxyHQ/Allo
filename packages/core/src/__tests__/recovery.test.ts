@@ -93,3 +93,34 @@ describe("a device that lost a secret", () => {
     await stopAll(next);
   }, 30_000);
 });
+
+/**
+ * A key package is never expired and no sweep collects one, so whatever a
+ * client uploads it keeps for ever — on the server and, with its private half,
+ * on the device. A client that cannot ask how many the server holds has to
+ * assume zero, and a fresh client assumes it on every start.
+ *
+ * Measured in a browser before `GET /v1/key-packages` existed: five reloads
+ * turned 21 local rows into 125.
+ */
+describe("the key package stock", () => {
+  it("is topped up to the target rather than added to on every start", async () => {
+    const server = fakeServer();
+    const first = await makeClient(server, "acc-stock-0001", "Chrome");
+    const afterFirst = server.keyPackages.get(first.client.instanceId!)?.length ?? 0;
+    expect(afterFirst).toBeGreaterThan(0);
+    await first.client.stop();
+
+    // Three more starts on the same device: nothing was consumed, so nothing
+    // needs uploading.
+    for (let i = 0; i < 3; i += 1) {
+      const again = await makeClient(server, "acc-stock-0001", "Chrome", "web", { storage: first.storage, secrets: first.secrets });
+      expect(server.keyPackages.get(again.client.instanceId!)?.length ?? 0).toBe(afterFirst);
+      await again.client.stop();
+    }
+
+    // And the private halves on disk did not multiply either.
+    const rows = (await first.storage.list(`allo/allo/acc-stock-0001/`)).filter((key) => key.includes("keyPackage"));
+    expect(rows).toHaveLength(afterFirst);
+  }, 30_000);
+});

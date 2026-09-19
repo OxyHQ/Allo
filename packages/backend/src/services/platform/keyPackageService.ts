@@ -11,6 +11,21 @@ import { AlloHttpError } from "../../utils/httpErrors";
 /** Below this many unconsumed packages an instance is told to upload more. */
 export const KEY_PACKAGE_LOW_WATER_MARK = 5;
 
+/**
+ * `GET /v1/key-packages`: the unconsumed stock, readable without uploading.
+ *
+ * `uploadKeyPackages` answers the same number, which used to be the only way
+ * to learn it — so a client starting up had to assume zero and upload a full
+ * target's worth every time. Nothing expires a key package and no sweep
+ * collects one, so that assumption grew both stores without bound.
+ */
+export async function countKeyPackageStock(
+  instanceId: string,
+  deps: { db?: AlloDatabase } = {},
+): Promise<UploadKeyPackagesResponse> {
+  return { available: await countAvailableKeyPackages(instanceId, deps.db ?? getDb()) };
+}
+
 export async function uploadKeyPackages(
   instanceId: string,
   request: UploadKeyPackagesRequest,

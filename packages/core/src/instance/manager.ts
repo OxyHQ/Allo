@@ -7,6 +7,7 @@
  */
 import {
   claimKeyPackagesResponseSchema,
+  keyPackageStockResponseSchema,
   instanceResponseSchema,
   listAccountInstancesResponseSchema,
   listInstancesResponseSchema,
@@ -459,11 +460,26 @@ export class InstanceManager {
     for (const { value } of await this.instanceStore.listJson("keyPackage", keyPackageRecordSchema)) this.stock.set(value.ref, value);
   }
 
-  /** Uploads until the server holds `keyPackageTarget` unconsumed packages of ours. */
+  /**
+   * Uploads until the server holds `keyPackageTarget` unconsumed packages of
+   * ours.
+   *
+   * `available` comes from the server when it has just counted — the low-stock
+   * nudge, or the answer to the last upload. When it is not known, it is READ
+   * (`GET /v1/key-packages`) rather than assumed. Assuming zero is what a
+   * fresh client used to do on every start, and since nothing expires a key
+   * package and no sweep collects one, each start added a full target's worth
+   * to both stores for ever. Measured in a browser: five reloads turned 21
+   * local rows into 125.
+   */
   async topUpKeyPackages(available?: number): Promise<void> {
     if (!this.isActive) return;
     if (available !== undefined) this.serverAvailable = available;
-    const have = this.serverAvailable ?? 0;
+    if (this.serverAvailable === null) {
+      const stock = await this.deps.http.request({ method: "GET", path: "/v1/key-packages", schema: keyPackageStockResponseSchema, signer: this.signer });
+      this.serverAvailable = stock.available;
+    }
+    const have = this.serverAvailable;
     const need = this.deps.keyPackageTarget - have;
     if (need <= 0) return;
     const bundles = await this.deps.engine.generateKeyPackages(this.identity, Math.min(need, 50));
