@@ -152,7 +152,26 @@ export class InstanceManager {
         this.emitInstance();
         return existing;
       }
-      this.deps.log.warn?.("instance record does not match the stored key; re-registering");
+    }
+    /**
+     * Everything below enrols a NEW instance, which on an account that already
+     * has an active one means the "approve this device" screen. That is the
+     * right answer when this device genuinely cannot prove which instance it
+     * is — but it is indistinguishable, from the outside, from a device that
+     * simply lost one of its two halves. So say which half, once, loudly
+     * enough to find in a support log:
+     *
+     *   no-record   the encrypted store has no `self` (cleared site data, a
+     *               new profile, a first run)
+     *   no-key      the record is there and the SIGNING KEY is gone — the
+     *               shape a non-durable secret store produces, and the one
+     *               worth investigating rather than explaining away
+     *   mismatch    both are there and disagree, which means two clients
+     *               raced to enrol on this device
+     */
+    if (existing || secret) {
+      const reason = !existing ? "no-record" : !secret || secret.length !== 32 ? "no-key" : "mismatch";
+      this.deps.log.warn?.("enrolling a new instance rather than resuming", { reason });
     }
     if (!secret || secret.length !== 32) {
       const fresh = generateSigningKey();
