@@ -204,6 +204,67 @@ export const pinMessageSchema = z.object({
   op: z.enum(["pin", "unpin"]),
 });
 
+/**
+ * CALL SIGNALLING — an offer, an answer, a batch of ICE candidates, a frame
+ * key, or the end of one.
+ *
+ * A CONTROL kind (`ctl: true`), so a client that does not know it drops it in
+ * silence rather than drawing a broken bubble for every candidate. The server
+ * relays it as ciphertext like everything else: it knows a call is being set
+ * up — it has to, it is ringing the other side — and knows nothing about the
+ * addresses, the codecs or the keys.
+ *
+ * `ice` carries a BATCH. One message per candidate would mean one MLS ratchet
+ * advance and one disk write per candidate; the gathering is batched into a
+ * couple of frames instead, which is what Matrix's MSC2746 settled on for the
+ * same reason.
+ *
+ * `key` is a group call's per-sender frame key, distributed by its owner. It
+ * is random and nobody else can derive it, which is the only thing that stops
+ * one participant producing media attributed to another (RFC 9605 gives no
+ * per-sender authentication of its own). `generation` counts up on every
+ * rotation, and a rotation is what a participant joining or leaving triggers.
+ */
+export const callMessageSchema = z.object({
+  v,
+  t: z.literal("call"),
+  ctl: z.literal(true),
+  callId: idempotencyKeySchema,
+  kind: z.enum(["offer", "answer", "ice", "key", "end"]),
+  /** The SDP, for `offer` and `answer`. Its DTLS fingerprint is what makes the media end to end. */
+  sdp: z.string().min(1).max(MAX_TEXT_BODY_LENGTH).optional(),
+  /** A batch of ICE candidates, for `ice`. An empty array is the end-of-candidates marker. */
+  candidates: z.array(z.string().min(1).max(1024)).max(64).optional(),
+  /** The 32-byte frame key, base64, for `key`. */
+  key: z.string().max(64).optional(),
+  generation: nonNegativeIntSchema.optional(),
+  /** Why, for `end`. */
+  reason: z.string().min(1).max(32).optional(),
+});
+
+/**
+ * WHAT A CALL LEAVES BEHIND, and the only part of one a person sees.
+ *
+ * A CONTENT kind, deliberately: it is a thing that happened, it belongs in the
+ * conversation, and a client too old to draw it is right to say so rather than
+ * silently dropping a record of a call. Written once, by the device that ended
+ * the call, so the log reaches every device of both accounts the way every
+ * other message does — no separate sync, and nothing for the server to hold.
+ *
+ * `outcome` is what to show. "Missed" is a receiver's reading of
+ * `not_answered` on an incoming call, not a fact the sender asserts about
+ * somebody else's attention.
+ */
+export const callLogMessageSchema = z.object({
+  v,
+  t: z.literal("call_log"),
+  callId: idempotencyKeySchema,
+  mode: z.enum(["voice", "video"]),
+  outcome: z.enum(["answered", "not_answered", "declined", "cancelled", "failed"]),
+  /** How long it lasted, for an answered one. */
+  durationMs: nonNegativeIntSchema.optional(),
+});
+
 /** Only ever sent over the socket `typing` channel; never stored as an event. */
 export const typingMessageSchema = z.object({
   v,
@@ -225,10 +286,44 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   locationMessageSchema,
   contactMessageSchema,
   pinMessageSchema,
+  callMessageSchema,
+  callLogMessageSchema,
   typingMessageSchema,
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;
 export type AppMessageKind = AppMessage["t"];
+
+/**
+ * A CONTROL message this client does not know, which says so itself.
+ *
+ * `ctl: true` is the sender's promise that a receiver which ignores this
+ * message entirely loses nothing a person would see — it drives something
+ * (a call, a receipt, a device's own housekeeping) rather than being
+ * something somebody wrote.
+ *
+ * Without it, an unknown `t` is a decode failure, and a decode failure is
+ * drawn in the conversation as "this message could not be decrypted". Every
+ * control kind added after a release would therefore litter the timeline of
+ * every device still on the release before it. That is why this lands BEFORE
+ * the first kind that needs it: the clients in the field have to learn to
+ * ignore before there is anything to ignore.
+ *
+ * This schema is only ever used to DECODE. A build that knows the kind parses
+ * it as itself, and every control kind declares `ctl: z.literal(true)` in its
+ * own schema so the marker survives `encodeAppMessage`, which strips what the
+ * matching schema does not name.
+ *
+ * A CONTENT kind — something a person sent and would expect to see — must NOT
+ * carry the marker. An old client saying "this message could not be
+ * displayed" is right about a message it cannot draw, and wrong only about
+ * machinery.
+ */
+export const unknownControlMessageSchema = z.object({
+  v,
+  t: z.string().min(1).max(64),
+  ctl: z.literal(true),
+});
+export type UnknownControlMessage = z.infer<typeof unknownControlMessageSchema>;
 
 export class AppMessageDecodeError extends Error {
   override readonly name = "AppMessageDecodeError";
@@ -250,13 +345,32 @@ export function encodeAppMessage(message: AppMessage): Uint8Array {
 
 /** The inverse of {@link encodeAppMessage}. Throws {@link AppMessageDecodeError} on anything else. */
 export function decodeAppMessage(bytes: Uint8Array): AppMessage {
-  let json: unknown;
+  const parsed = appMessageSchema.safeParse(parseJson(bytes));
+  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+  return parsed.data;
+}
+
+/**
+ * {@link decodeAppMessage}, but `null` for a message this build should ignore
+ * rather than report: a control kind from a newer client, marked `ctl: true`
+ * (see {@link unknownControlMessageSchema}).
+ *
+ * This is the function a RECEIVER uses. `null` means "nothing to do and
+ * nothing to show"; a throw still means a message this build cannot read and
+ * should say so about.
+ */
+export function decodeAppMessageOrIgnore(bytes: Uint8Array): AppMessage | null {
+  const json = parseJson(bytes);
+  const parsed = appMessageSchema.safeParse(json);
+  if (parsed.success) return parsed.data;
+  if (unknownControlMessageSchema.safeParse(json).success) return null;
+  throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+}
+
+function parseJson(bytes: Uint8Array): unknown {
   try {
-    json = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch (cause) {
     throw new AppMessageDecodeError("AppMessage is not UTF-8 JSON", { cause });
   }
-  const parsed = appMessageSchema.safeParse(json);
-  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
-  return parsed.data;
 }

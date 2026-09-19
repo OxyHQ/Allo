@@ -87,12 +87,25 @@ describe("sync response / query / ack", () => {
 });
 
 describe("socket events", () => {
-  it("names the namespace and the seven server events, one client event", () => {
+  it("names the namespace and every event in both directions", () => {
     expect(SOCKET_NAMESPACE).toBe("/v1");
     expect(Object.keys(SERVER_TO_CLIENT_EVENTS).sort()).toEqual(
-      ["history.offer", "instance.approved", "instance.revoked", "keypackages.low", "presence", "sync.nudge", "typing"].sort(),
+      [
+        "call.incoming",
+        "call.updated",
+        "history.offer",
+        "instance.approved",
+        "instance.revoked",
+        "keypackages.low",
+        "presence",
+        "status.posted",
+        "sync.nudge",
+        "typing",
+      ].sort(),
     );
-    expect(Object.keys(CLIENT_TO_SERVER_EVENTS)).toEqual(["typing"]);
+    // Named, not counted: the client→server side is the one an app can point
+    // at the server, and each addition is a decision worth seeing in a diff.
+    expect(Object.keys(CLIENT_TO_SERVER_EVENTS)).toEqual(["typing", "presence.watch", "presence.heartbeat"]);
   });
   it("each payload schema accepts its shape and rejects a wrong one", () => {
     expect(syncNudgeEventSchema.safeParse({}).success).toBe(true);
@@ -106,8 +119,11 @@ describe("socket events", () => {
     expect(keyPackagesLowEventSchema.safeParse({ available: "2" }).success).toBe(false);
     expect(typingEventSchema.safeParse({ conversationId: UUID_V7, ciphertext: B64 }).success).toBe(true);
     expect(typingEventSchema.safeParse({ conversationId: UUID_V7, on: true }).success).toBe(false);
-    expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: true }).success).toBe(true);
-    expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: "yes" }).success).toBe(false);
+    expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: true, lastSeenAt: null }).success).toBe(true);
+    expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: "yes", lastSeenAt: null }).success).toBe(false);
+    // The last seen is required, because absent and "not telling you" must not
+    // be the same value on the wire.
+    expect(presenceEventSchema.safeParse({ accountId: OBJECT_ID, online: false }).success).toBe(false);
     expect(historyOfferEventSchema.safeParse({ offerId: UUID_V7 }).success).toBe(true);
     expect(historyOfferEventSchema.safeParse({ offerId: 7 }).success).toBe(false);
     expect(historyOfferEventSchema.safeParse({}).success).toBe(false);
@@ -121,7 +137,12 @@ describe("socket events", () => {
       typing: (p) => void p.ciphertext,
       presence: (p) => void p.online,
       "history.offer": (p) => void p.offerId,
+      "status.posted": (p) => void p.statusId,
+      "call.incoming": (p) => void p.callId,
+      "call.updated": (p) => void p.state,
     };
-    expect(Object.keys(handlers)).toHaveLength(7);
+    // The map is EXHAUSTIVE by type: leaving one out is a tsc failure, which
+    // is the point of the assertion rather than the count beside it.
+    expect(Object.keys(handlers)).toHaveLength(Object.keys(SERVER_TO_CLIENT_EVENTS).length);
   });
 });

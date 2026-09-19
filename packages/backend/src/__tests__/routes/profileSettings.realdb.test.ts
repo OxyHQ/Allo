@@ -84,6 +84,8 @@ describe("GET /api/profile/settings/me", () => {
       allowTags: true,
       allowallos: true,
       showOnlineStatus: true,
+      statusViewReceipts: true,
+      relayCalls: false,
       hideLikeCounts: false,
       hideShareCounts: false,
       hideReplyCounts: false,

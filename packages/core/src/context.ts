@@ -17,6 +17,8 @@ import type { OutboxEngine } from "./outbox/engine";
 import type { SyncEngine } from "./sync/engine";
 import type { ConversationsService } from "./conversations/service";
 import type { MessagesService } from "./messages/service";
+import type { PresenceService } from "./presence/service";
+import type { StatusService } from "./statuses/service";
 import type { Realtime } from "./sync/realtime";
 import type { HistoryService } from "./history/service";
 import type { BackupService } from "./backup/service";
@@ -49,6 +51,8 @@ export class Context {
   conversations!: ConversationsService;
   messages!: MessagesService;
   realtime!: Realtime;
+  presence!: PresenceService;
+  statuses!: StatusService;
   history!: HistoryService;
   backup!: BackupService;
   /** Set by the client: runs the post-activation steps when a pending instance is approved. */

@@ -206,6 +206,38 @@ export async function listAccountsSharingConversations(
   return rows.map((row) => row.accountId);
 }
 
+/**
+ * Which of `candidates` share at least one conversation with `accountId`.
+ *
+ * The same rule as {@link listAccountsSharingConversations}, asked the other
+ * way round: a presence watch set names the accounts a screen is showing, and
+ * what matters is which of THOSE may be answered for — not the whole
+ * co-membership graph, which for a busy account is most of the address book.
+ */
+export async function listSharedAccountsAmong(
+  accountId: string,
+  candidates: readonly string[],
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<Set<string>> {
+  if (candidates.length === 0) return new Set();
+  const mine = db
+    .select({ conversationId: conversationMembers.conversationId })
+    .from(conversationMembers)
+    .where(and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, "joined")));
+  const rows = await db
+    .selectDistinct({ accountId: conversationMembers.accountId })
+    .from(conversationMembers)
+    .where(
+      and(
+        inArray(conversationMembers.conversationId, mine),
+        eq(conversationMembers.state, "joined"),
+        inArray(conversationMembers.accountId, [...candidates]),
+        sql`${conversationMembers.accountId} <> ${accountId}`,
+      ),
+    );
+  return new Set(rows.map((row) => row.accountId));
+}
+
 // --- leaves ------------------------------------------------------------------
 
 export interface UpsertLeafInput {

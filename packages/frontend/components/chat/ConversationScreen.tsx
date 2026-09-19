@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
-import { useConversation, useConversationActions, useSyncState, useTimeline } from '@allo/react';
+import { useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
 import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
 import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
@@ -42,6 +42,7 @@ import {
   unreachableCopy,
 } from '@/lib/chat/model';
 import { toUpload } from '@/lib/chat/upload';
+import { presenceDot, presenceLine } from '@/lib/presence';
 import { useCallsStore } from '@/lib/phase2/calls';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { confirmDialog } from '@/utils/alerts';
@@ -123,6 +124,13 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     [items, ctx, isGroup, unreadAnchor, unreachable, split],
   );
   const sources = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  // A DM's other account is the one presence this screen draws. A group's
+  // members are not watched: a header cannot say anything useful about eight
+  // dots, and watching them would tell the server about a screen that shows
+  // nothing of the sort.
+  const other = view?.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
+  const watched = useMemo(() => (other ? [other] : []), [other]);
+  const presence = usePresence(watched);
   const pins = useMemo(() => pinnedMessages(items, ctx), [items, ctx]);
 
   const matches = useMemo(() => {
@@ -379,7 +387,6 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   };
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;
-  const other = view.kind === 'dm' ? view.memberAccountIds.find((id) => id !== ctx.me) : undefined;
   const otherPerson = other ? ctx.person(other) : undefined;
   const handle = otherPerson?.handle;
   const faces = conversationFaces(view, ctx);
@@ -394,7 +401,15 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           avatar={faces ? <GroupAvatar faces={faces} size={40} /> : undefined}
           avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
           avatarName={title}
-          status={isGroup ? t('chat.members', { count: members }) : handle ? `@${handle}` : undefined}
+          status={
+            isGroup
+              ? t('chat.members', { count: members })
+              : // Presence when there is any, the handle when there is not: a
+                // header that says nothing is worse than one that says who.
+                (other ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now }) : undefined) ??
+                (handle ? `@${handle}` : undefined)
+          }
+          presence={other ? presenceDot(presence.of(other)) : undefined}
           typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
           connecting={sync === 'offline'}
           connectingLabel={t('chat.connecting')}

@@ -32,6 +32,10 @@ export class Realtime {
     socket.on("connect", () => {
       ctx.sync.setState("live");
       ctx.sync.request();
+      // The watch set and the heartbeat belong to the SOCKET, so a reconnect
+      // starts both again. Without this a client that dropped for a second
+      // stops hearing about the accounts it is drawing.
+      void ctx.presence.resume();
     });
     socket.on("disconnect", () => {
       if (ctx.sync.state === "live") ctx.sync.setState("idle");
@@ -78,6 +82,12 @@ export class Realtime {
       const parsed = SERVER_TO_CLIENT_EVENTS.typing.safeParse(payload);
       if (parsed.success) void ctx.messages.onTyping(parsed.data.conversationId, parsed.data.ciphertext);
     });
+    socket.on("presence", (payload) => {
+      ctx.presence.onPresence(payload);
+    });
+    socket.on("status.posted", (payload) => {
+      if (SERVER_TO_CLIENT_EVENTS["status.posted"].safeParse(payload).success) ctx.statuses.onPosted();
+    });
     socket.connect();
   }
 
@@ -88,5 +98,15 @@ export class Realtime {
 
   emitTyping(conversationId: string, ciphertext: string): void {
     this.socket?.emit("typing", { conversationId, ciphertext });
+  }
+
+  /** The accounts this client is showing. The server answers for these and no others. */
+  emitPresenceWatch(accountIds: readonly string[]): void {
+    this.socket?.emit("presence.watch", { accountIds: [...accountIds] });
+  }
+
+  /** Still here. A socket that stays open through a sleeping phone is not presence. */
+  emitPresenceHeartbeat(): void {
+    this.socket?.emit("presence.heartbeat", {});
   }
 }

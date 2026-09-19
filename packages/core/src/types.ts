@@ -355,6 +355,8 @@ export interface LoadOlderResult {
 
 export type SubscriptionTopic =
   | "conversations"
+  | "presence"
+  | "statuses"
   | `timeline:${string}`
   | "instance"
   | "instances"
@@ -363,5 +365,66 @@ export type SubscriptionTopic =
   | "history"
   | "backup"
   | "error";
+
+/**
+ * One account's presence, as this device knows it.
+ *
+ * `known` is false until the server has answered for this account at all —
+ * which is different from "offline", and is what stops a list drawing every
+ * row as away while the first read is in flight. It is NOT the difference
+ * between offline and hidden: those two are the same answer on purpose.
+ */
+export interface PresenceView {
+  readonly online: boolean;
+  /** Truncated to the minute by the server, and null while the account is online. */
+  readonly lastSeenAt: string | null;
+  readonly known: boolean;
+}
+
+/** What a status update looks like on a screen. The media is fetched on demand. */
+export interface StatusView {
+  readonly id: string;
+  readonly authorAccountId: string;
+  readonly kind: "text" | "image" | "video";
+  readonly caption?: string;
+  readonly hasMedia: boolean;
+  readonly createdAt: string;
+  /** 24 hours after it was posted. The client drops it then, whatever the server still holds. */
+  readonly expiresAt: string;
+  readonly mine: boolean;
+  /** Whether this device has told the author it was seen. Always true for your own. */
+  readonly seen: boolean;
+}
+
+/**
+ * Who a status goes to, decided on the device.
+ *
+ * `all` is every account this device shares a conversation with — the server
+ * is never asked for a contact list. `only` and `except` narrow that, and an
+ * account outside it cannot be reached by naming it.
+ */
+export interface StatusAudience {
+  readonly mode: "all" | "only" | "except";
+  readonly accountIds: readonly string[];
+}
+
+export interface StatusDraft {
+  readonly kind: "text" | "image" | "video";
+  readonly caption?: string;
+  readonly media?: {
+    readonly bytes: Uint8Array;
+    readonly mime: string;
+    readonly width?: number;
+    readonly height?: number;
+    readonly durationMs?: number;
+  };
+  readonly audience: StatusAudience;
+}
+
+/** Who saw one of yours: the names that publish a receipt, and the count of everybody. */
+export interface StatusViewerView {
+  readonly accounts: readonly string[];
+  readonly total: number;
+}
 
 export type { AppMessage };

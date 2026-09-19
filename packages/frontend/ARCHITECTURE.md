@@ -70,11 +70,29 @@ Polls, votes, places, cards and pins are REAL: new E2EE message kinds in
 like anything else. The server carries ciphertext, so none of them needed a
 backend change.
 
-Calls, status updates and presence are NOT. There is no signalling, no media
-and no presence anywhere in the platform, so `lib/phase2/{calls,stories,presence}.ts`
-hold that state in memory for the life of the tab and the screens say so in
-their own words (`components/phase2/NotConnectedNotice.tsx`). Each file's header
-states exactly what a transport must supply to replace it, and each exports a
+Presence is real too, and is a WATCH SET: `usePresence(accountIds)` tells the
+server which accounts a screen is drawing and hears about those. The
+conversation list watches its DM counterparties (capped), the conversation
+header watches the one person it is showing, and nothing watches a group's
+members — one dot cannot speak for eight people. `lib/presence.ts` is the
+projection: a dot only for somebody who is there, and a line that says nothing
+at all when the server declined to answer, because hidden, blocked, unknown and
+offline are deliberately one answer.
+
+Status updates are real as well, and are NOT a group: one ciphertext, a key
+sealed to each recipient device, twenty-four hours. `useStatuses` is the whole
+surface; `lib/statuses.ts` groups a flat list by author and decides the ring
+and the words, `lib/allo/useStatusMedia.ts` fetches and decrypts a picture only
+when one is actually opened, and `/updates` posts through the SDK with the
+audience resolved on the device. Nothing about a status is persisted locally —
+its key lives in memory with its decrypted envelope, so it is gone when the
+status is.
+
+Calls are NOT. There is no signalling and no media anywhere in the platform,
+so `lib/phase2/calls.ts`
+holds that state in memory for the life of the tab and the screens say so in
+their own words (`components/phase2/NotConnectedNotice.tsx`). Its header
+states exactly what a transport must supply to replace it, and it exports a
 `DEMO_*` constant that is the only sample data to delete. Nothing there opens a
 socket, touches a microphone or persists anything.
 

@@ -53,6 +53,9 @@ export interface RecordedRealtime extends Realtime {
   revoked: { accountId: string; instanceId: string }[];
   low: { instanceId: string; available: number }[];
   historyOffers: { instanceId: string; offerId: string }[];
+  statusPosts: { instanceId: string; statusId: string }[];
+  callRings: { instanceId: string; callId: string }[];
+  callUpdates: { instanceId: string; callId: string; state: string; endReason: string | null }[];
   typings: { instanceIds: string[]; conversationId: string }[];
   disconnected: string[];
   /** Instances `isInstanceConnected` answers true for. */
@@ -67,6 +70,9 @@ export function recordedRealtime(): RecordedRealtime {
     revoked: [],
     low: [],
     historyOffers: [],
+    statusPosts: [],
+    callRings: [],
+    callUpdates: [],
     typings: [],
     disconnected: [],
     connected: new Set(),
@@ -82,13 +88,21 @@ export function recordedRealtime(): RecordedRealtime {
     keyPackagesLow(instanceId, event) {
       r.low.push({ instanceId, available: event.available });
     },
+    statusPosted(instanceId, event) {
+      r.statusPosts.push({ instanceId, statusId: event.statusId });
+    },
+    callIncoming(instanceId, event) {
+      r.callRings.push({ instanceId, callId: event.callId });
+    },
+    callUpdated(instanceId, event) {
+      r.callUpdates.push({ instanceId, callId: event.callId, state: event.state, endReason: event.endReason });
+    },
     historyOffer(instanceId, event) {
       r.historyOffers.push({ instanceId, offerId: event.offerId });
     },
     typing(instanceIds, event) {
       r.typings.push({ instanceIds: [...instanceIds], conversationId: event.conversationId });
     },
-    presence() {},
     async isInstanceConnected(instanceId) {
       return r.connected.has(instanceId);
     },
@@ -101,6 +115,9 @@ export function recordedRealtime(): RecordedRealtime {
       r.revoked = [];
       r.low = [];
       r.historyOffers = [];
+      r.statusPosts = [];
+      r.callRings = [];
+      r.callUpdates = [];
       r.typings = [];
       r.disconnected = [];
       r.connected.clear();

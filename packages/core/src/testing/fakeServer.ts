@@ -13,6 +13,10 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import {
   BLOB_SHA256_HEADER,
+  CLIENT_TO_SERVER_EVENTS,
+  PRESENCE_TTL_MS,
+  createStatusRequestSchema,
+  presenceQuerySchema,
   DEFAULT_MAX_BLOB_BYTES,
   EMPTY_BODY_SHA256_HEX,
   INITIAL_CURSOR,
@@ -49,7 +53,10 @@ import {
   type HistoryOffer,
   type ConversationEvent,
   type ConversationSummary,
+  type PresenceState,
+  type PresenceWatchEvent,
   type PublicInstance,
+  type TypingEvent,
   type SubmitEventRequest,
 } from "@allo/shared-types";
 import type { z } from "zod";
@@ -216,6 +223,120 @@ export class FakeAlloServer implements SocketHost {
     return { instanceId: inst.id, accountId };
   }
 
+  /**
+   * Presence, modelled the way the backend models it: a heartbeat with a
+   * deadline, a watch set per socket, and the four visibility rules. A test
+   * that watches an account it shares nothing with must see nothing, or the
+   * rule is only in the backend's suite.
+   */
+  private readonly beats = new Map<string, Map<string, number>>();
+  private readonly lastSeen = new Map<string, number>();
+  private readonly watching = new Map<FakeSocket, string[]>();
+  /**
+   * Status updates: the ciphertext, the per-device sealed keys, and who has
+   * viewed. The same three refusals the backend makes — not there, no shared
+   * conversation, blocked — so a client that skipped one fails a test here.
+   */
+  readonly statuses = new Map<string, {
+    id: string;
+    authorAccountId: string;
+    authorInstanceId: string;
+    payload: string;
+    nonce: string;
+    sha256: string;
+    blobIds: string[];
+    signature: string;
+    idempotencyKey: string;
+    createdAt: string;
+    expiresAt: string;
+    state: "live" | "deleted";
+    keys: Map<string, string>;
+    views: Map<string, boolean>;
+  }>();
+  /** Accounts that publish no status view receipt. */
+  readonly statusReceiptsOff = new Set<string>();
+  /**
+   * A server that keeps serving a status past its deadline — which is exactly
+   * what a dishonest one would do, and what the client's own clock is for.
+   */
+  keepExpiredStatuses = false;
+
+  /** Accounts that have turned their own presence off, keyed by account id. */
+  readonly presenceHidden = new Set<string>();
+  /** `blocker -> blocked`, either direction cutting presence. */
+  readonly blocks = new Set<string>();
+
+  private beat(accountId: string, instanceId: string): void {
+    const forAccount = this.beats.get(accountId) ?? new Map<string, number>();
+    forAccount.set(instanceId, this.now() + PRESENCE_TTL_MS);
+    this.beats.set(accountId, forAccount);
+    this.lastSeen.set(accountId, this.now());
+  }
+
+  private isOnline(accountId: string): boolean {
+    const forAccount = this.beats.get(accountId);
+    if (!forAccount) return false;
+    for (const [instanceId, deadline] of forAccount) if (deadline <= this.now()) forAccount.delete(instanceId);
+    return forAccount.size > 0;
+  }
+
+  private sharesConversation(a: string, b: string): boolean {
+    for (const conv of this.conversations.values()) {
+      const members = [...conv.members.entries()].filter(([, m]) => m.state === "joined").map(([accountId]) => accountId);
+      if (members.includes(a) && members.includes(b)) return true;
+    }
+    return false;
+  }
+
+  private presenceVisible(viewer: string, subject: string): boolean {
+    if (viewer === subject) return false;
+    if (this.presenceHidden.has(viewer) || this.presenceHidden.has(subject)) return false;
+    if (this.blocks.has(`${viewer}:${subject}`) || this.blocks.has(`${subject}:${viewer}`)) return false;
+    return this.sharesConversation(viewer, subject);
+  }
+
+  presenceFor(viewer: string, accountIds: readonly string[]): { presence: PresenceState[]; publishing: boolean } {
+    const publishing = !this.presenceHidden.has(viewer);
+    const presence = accountIds.map((accountId) => {
+      if (!publishing || !this.presenceVisible(viewer, accountId)) return { accountId, online: false, lastSeenAt: null };
+      const online = this.isOnline(accountId);
+      const seen = this.lastSeen.get(accountId);
+      return {
+        accountId,
+        online,
+        lastSeenAt: online || !seen ? null : new Date(Math.floor(seen / 60_000) * 60_000).toISOString(),
+      };
+    });
+    return { presence, publishing };
+  }
+
+  private statusFor(row: { id: string; authorAccountId: string; authorInstanceId: string; payload: string; nonce: string; sha256: string; blobIds: string[]; signature: string; createdAt: string; expiresAt: string }, sealedKey: string | null) {
+    return {
+      id: row.id,
+      authorAccountId: row.authorAccountId,
+      authorInstanceId: row.authorInstanceId,
+      payload: row.payload,
+      nonce: row.nonce,
+      sha256: row.sha256,
+      blobIds: row.blobIds,
+      sealedKey,
+      signature: row.signature,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+    };
+  }
+
+  /** Tell every socket watching `accountId` what it looks like to that socket now. */
+  private pushPresence(accountId: string): void {
+    for (const [socket, watched] of this.watching) {
+      if (!watched.includes(accountId) || !socket.instanceId) continue;
+      const viewer = this.instances.get(socket.instanceId)?.accountId;
+      if (!viewer) continue;
+      const [state] = this.presenceFor(viewer, [accountId]).presence;
+      socket.receive("presence", state);
+    }
+  }
+
   attach(socket: FakeSocket, instanceId: string): void {
     let set = this.sockets.get(instanceId);
     if (!set) {
@@ -223,20 +344,57 @@ export class FakeAlloServer implements SocketHost {
       this.sockets.set(instanceId, set);
     }
     set.add(socket);
+    const inst = this.instances.get(instanceId);
+    if (inst?.status === "active") {
+      this.beat(inst.accountId, instanceId);
+      this.pushPresence(inst.accountId);
+    }
   }
 
   detach(socket: FakeSocket): void {
-    if (socket.instanceId) this.sockets.get(socket.instanceId)?.delete(socket);
+    this.watching.delete(socket);
+    if (!socket.instanceId) return;
+    this.sockets.get(socket.instanceId)?.delete(socket);
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst || (this.sockets.get(socket.instanceId)?.size ?? 0) > 0) return;
+    this.beats.get(inst.accountId)?.delete(socket.instanceId);
+    this.lastSeen.set(inst.accountId, this.now());
+    this.pushPresence(inst.accountId);
   }
 
+  /**
+   * Client → server. Every frame is parsed with the SAME schema the backend
+   * parses it with (`CLIENT_TO_SERVER_EVENTS`), so a drift between the SDK
+   * and the contract fails a test here rather than in production.
+   */
   onClientEvent(socket: FakeSocket, event: string, payload: unknown): void {
-    if (event !== "typing" || !socket.instanceId) return;
-    const p = payload as { conversationId?: string; ciphertext?: string };
-    const conv = p.conversationId ? this.conversations.get(p.conversationId) : undefined;
-    if (!conv || typeof p.ciphertext !== "string") return;
-    if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
-    for (const [instanceId, leaf] of conv.leaves) {
-      if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+    if (!socket.instanceId) return;
+    const schema = CLIENT_TO_SERVER_EVENTS[event as keyof typeof CLIENT_TO_SERVER_EVENTS];
+    if (!schema) return;
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) return;
+    const inst = this.instances.get(socket.instanceId);
+    if (!inst) return;
+
+    if (event === "typing") {
+      const p = parsed.data as TypingEvent;
+      const conv = this.conversations.get(p.conversationId);
+      if (!conv) return;
+      if (conv.leaves.get(socket.instanceId)?.state !== "active") return;
+      for (const [instanceId, leaf] of conv.leaves) {
+        if (leaf.state === "active" && instanceId !== socket.instanceId) this.emitTo(instanceId, "typing", { conversationId: conv.id, ciphertext: p.ciphertext });
+      }
+      return;
+    }
+
+    if (event === "presence.watch") {
+      const accountIds = (parsed.data as PresenceWatchEvent).accountIds;
+      this.watching.set(socket, [...accountIds]);
+      return;
+    }
+
+    if (event === "presence.heartbeat" && inst.status === "active") {
+      this.beat(inst.accountId, inst.id);
     }
   }
 
@@ -462,6 +620,105 @@ export class FakeAlloServer implements SocketHost {
       if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
       const events = conv.events.filter((e) => e.seq > q.data.after);
       return json(200, { events: events.slice(0, q.data.limit), hasMore: events.length > q.data.limit });
+    }
+    if (method === "POST" && path === "/v1/statuses") {
+      const me = signed();
+      const req = this.parse(createStatusRequestSchema, body);
+      const existing = [...this.statuses.values()].find(
+        (s) => s.authorInstanceId === me.id && s.idempotencyKey === req.idempotencyKey,
+      );
+      if (existing) return json(201, { status: this.statusFor(existing, null), refused: [] });
+
+      const refused: string[] = [];
+      const keys = new Map<string, string>();
+      for (const recipient of req.recipients) {
+        const instance = this.instances.get(recipient.instanceId);
+        const reachable =
+          instance?.status === "active" &&
+          (instance.accountId === me.accountId ||
+            (this.sharesConversation(me.accountId, instance.accountId) &&
+              !this.blocks.has(`${me.accountId}:${instance.accountId}`) &&
+              !this.blocks.has(`${instance.accountId}:${me.accountId}`)));
+        if (!reachable) {
+          refused.push(recipient.instanceId);
+          continue;
+        }
+        keys.set(recipient.instanceId, recipient.sealedKey);
+      }
+
+      const row = {
+        id: req.id,
+        authorAccountId: me.accountId,
+        authorInstanceId: me.id,
+        payload: req.payload,
+        nonce: req.nonce,
+        sha256: req.sha256,
+        blobIds: req.blobIds,
+        signature: req.signature,
+        idempotencyKey: req.idempotencyKey,
+        createdAt: new Date(this.now()).toISOString(),
+        expiresAt: req.expiresAt,
+        state: "live" as const,
+        keys,
+        views: new Map<string, boolean>(),
+      };
+      this.statuses.set(row.id, row);
+      for (const blobId of req.blobIds) {
+        const blob = this.blobs.get(blobId);
+        if (blob) blob.expiresAt = null;
+      }
+      for (const instanceId of keys.keys()) {
+        this.emitTo(instanceId, "status.posted", { statusId: row.id, authorAccountId: me.accountId });
+      }
+      return json(201, { status: this.statusFor(row, null), refused });
+    }
+
+    if (method === "GET" && path === "/v1/statuses") {
+      const me = signed();
+      const live = [...this.statuses.values()].filter(
+        (s) => s.state === "live" && (this.keepExpiredStatuses || new Date(s.expiresAt).getTime() > this.now()),
+      );
+      const statuses = live
+        .filter((s) => s.keys.has(me.id) || s.authorAccountId === me.accountId)
+        .map((s) => this.statusFor(s, s.keys.get(me.id) ?? null))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      return json(200, { statuses });
+    }
+
+    const viewMatch = /^\/v1\/statuses\/([^/]+)\/views$/.exec(path);
+    if (viewMatch) {
+      const me = signed();
+      const row = this.statuses.get(viewMatch[1]);
+      if (!row || row.state !== "live") throw new HttpError(404, "not_found", "no such status");
+      if (method === "POST") {
+        if (row.authorAccountId === me.accountId) return new Response(null, { status: 204 });
+        if (!row.keys.has(me.id)) throw new HttpError(404, "not_found", "no such status");
+        if (!row.views.has(me.accountId)) row.views.set(me.accountId, !this.statusReceiptsOff.has(me.accountId));
+        return new Response(null, { status: 204 });
+      }
+      if (method === "GET") {
+        if (row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+        const views = [...row.views.entries()]
+          .filter(([, published]) => published)
+          .map(([accountId]) => ({ accountId, viewedAt: new Date(this.now()).toISOString() }));
+        return json(200, { views, total: row.views.size });
+      }
+    }
+
+    const statusMatch = /^\/v1\/statuses\/([^/]+)$/.exec(path);
+    if (statusMatch && method === "DELETE") {
+      const me = signed();
+      const row = this.statuses.get(statusMatch[1]);
+      if (!row || row.authorAccountId !== me.accountId) throw new HttpError(404, "not_found", "no such status");
+      row.state = "deleted";
+      return new Response(null, { status: 204 });
+    }
+
+    if (method === "GET" && path === "/v1/presence") {
+      const me = signed();
+      const q = presenceQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+      if (!q.success) throw new HttpError(400, "validation_failed", "query", q.error.issues);
+      return json(200, this.presenceFor(me.accountId, q.data.accountIds));
     }
     if (method === "GET" && path === "/v1/sync") {
       const me = signed();
