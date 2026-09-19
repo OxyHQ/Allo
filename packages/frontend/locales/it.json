@@ -38,6 +38,7 @@
   "backup.turnOffConfirmTitle": "Disattivare il backup?",
   "backup.turnOn": "Attiva",
   "calls.callBack": "Richiama {{name}}",
+  "calls.failed": "Impossibile avviare la chiamata.",
   "calls.control.accept": "Rispondi",
   "calls.control.add": "Aggiungi qualcuno",
   "calls.control.decline": "Rifiuta",

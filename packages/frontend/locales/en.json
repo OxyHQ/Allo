@@ -38,6 +38,7 @@
   "backup.turnOffConfirmTitle": "Turn off backup?",
   "backup.turnOn": "Turn on",
   "calls.callBack": "Call {{name}} back",
+  "calls.failed": "The call could not be placed.",
   "calls.control.accept": "Accept",
   "calls.control.add": "Add someone",
   "calls.control.decline": "Decline",

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services';
-import { useConversation } from '@allo/react';
+import { useCallActions, useConversation } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import {
   CallControlButton,
@@ -20,7 +20,8 @@ import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { StagePlaceholder } from '@/components/phase2/StagePlaceholder';
 import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
-import { useCallDuration, useCallsStore, useCallSession } from '@/lib/phase2/calls';
+import { logger } from '@/utils/logger';
+import { useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
 
 /**
  * `/c/:id/call` — THE CALL ITSELF.
@@ -38,6 +39,11 @@ import { useCallDuration, useCallsStore, useCallSession } from '@/lib/phase2/cal
  * `lib/phase2/calls.ts` and stops there. The screen says so in its own subtitle
  * rather than in a banner that would cover the stage.
  */
+/** A call action that failed. Logged, never swallowed, and never a crash on a screen somebody is on. */
+function reportCallError(error: unknown): void {
+  logger.error('[call] action failed', error);
+}
+
 export default function CallRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
@@ -47,20 +53,25 @@ export default function CallRoute() {
   const conversation = useConversation(id ?? '');
   const session = useCallSession();
 
-  const place = useCallsStore((state) => state.place);
-  const markRinging = useCallsStore((state) => state.markRinging);
-  const connect = useCallsStore((state) => state.connect);
-  const answer = useCallsStore((state) => state.answer);
-  const decline = useCallsStore((state) => state.decline);
-  const end = useCallsStore((state) => state.end);
-  const setMuted = useCallsStore((state) => state.setMuted);
-  const setSpeaker = useCallsStore((state) => state.setSpeaker);
-  const setVideo = useCallsStore((state) => state.setVideo);
-  const setScreenSharing = useCallsStore((state) => state.setScreenSharing);
-  const flipCamera = useCallsStore((state) => state.flipCamera);
-  const setHold = useCallsStore((state) => state.setHold);
-  const setMinimised = useCallsStore((state) => state.setMinimised);
-  const movePip = useCallsStore((state) => state.movePip);
+  /**
+   * The call itself is the SDK's; this screen only asks. What is NOT here is
+   * as deliberate as what is: the speaker, screen sharing, the camera's facing
+   * and hold are not things the platform can do yet, so their buttons do
+   * nothing rather than pretending — see the notice the screen draws.
+   */
+  const calls = useCallActions();
+  const answer = useCallback(() => void calls.answer().catch(reportCallError), [calls]);
+  const decline = useCallback(() => void calls.decline().catch(reportCallError), [calls]);
+  const end = useCallback(() => void calls.end().catch(reportCallError), [calls]);
+  const setMuted = useCallback((muted: boolean) => void calls.setMuted(muted).catch(reportCallError), [calls]);
+  const setVideo = useCallback((on: boolean) => void calls.setCameraEnabled(on).catch(reportCallError), [calls]);
+  const setMinimised = useCallUi((state) => state.setMinimised);
+  const movePip = useCallUi((state) => state.setPipCorner);
+  const noop = useCallback((..._ignored: unknown[]) => undefined, []);
+  const setSpeaker = noop;
+  const setScreenSharing = noop;
+  const flipCamera = noop;
+  const setHold = noop;
 
   /**
    * Who is on the call. The live call knows; before one exists the members of
@@ -83,37 +94,21 @@ export default function CallRoute() {
    * call clears the session, and without the guard this effect would read that
    * as "no call yet" and dial again.
    */
+  /**
+   * Opening `/c/:id/call` with no call in progress PLACES one — the screen is
+   * reached by pressing call, and a screen that showed nothing would be a
+   * button that did nothing.
+   *
+   * The ref is what stops it dialling again the moment it is hung up: ending a
+   * call clears the session, and without the guard this would read that as "no
+   * call yet".
+   */
   const placed = useRef(false);
   useEffect(() => {
     if (session !== null || peerAccountIds.length === 0 || !id || placed.current) return;
     placed.current = true;
-    place({ conversationId: id, peerAccountIds, mode: 'voice' });
-  }, [id, peerAccountIds, place, session]);
-
-  /**
-   * A signalling server, as two timers.
-   *
-   * This is the most obviously temporary thing in the change: a real transport
-   * reports these transitions, and when it does this effect is deleted whole
-   * rather than edited.
-   */
-  const status = session?.status;
-  const incoming = session?.incoming ?? false;
-  useEffect(() => {
-    if (status === 'calling') {
-      const timer = setTimeout(markRinging, 900);
-      return () => clearTimeout(timer);
-    }
-    if (status === 'ringing' && !incoming) {
-      const timer = setTimeout(connect, 2400);
-      return () => clearTimeout(timer);
-    }
-    if (status === 'connecting') {
-      const timer = setTimeout(connect, 900);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [connect, incoming, markRinging, status]);
+    void calls.start(id, 'voice').catch(reportCallError);
+  }, [calls, id, peerAccountIds, session]);
 
   const duration = useCallDuration(session);
   const someone = t('calls.someone');
