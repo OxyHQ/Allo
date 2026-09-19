@@ -152,7 +152,26 @@ export class InstanceManager {
         this.emitInstance();
         return existing;
       }
-      this.deps.log.warn?.("instance record does not match the stored key; re-registering");
+    }
+    /**
+     * Everything below enrols a NEW instance, which on an account that already
+     * has an active one means the "approve this device" screen. That is the
+     * right answer when this device genuinely cannot prove which instance it
+     * is — but it is indistinguishable, from the outside, from a device that
+     * simply lost one of its two halves. So say which half, once, loudly
+     * enough to find in a support log:
+     *
+     *   no-record   the encrypted store has no `self` (cleared site data, a
+     *               new profile, a first run)
+     *   no-key      the record is there and the SIGNING KEY is gone — the
+     *               shape a non-durable secret store produces, and the one
+     *               worth investigating rather than explaining away
+     *   mismatch    both are there and disagree, which means two clients
+     *               raced to enrol on this device
+     */
+    if (existing || secret) {
+      const reason = !existing ? "no-record" : !secret || secret.length !== 32 ? "no-key" : "mismatch";
+      this.deps.log.warn?.("enrolling a new instance rather than resuming", { reason });
     }
     if (!secret || secret.length !== 32) {
       const fresh = generateSigningKey();
@@ -357,6 +376,27 @@ export class InstanceManager {
     await this.deps.http.request({ method: "POST", path: `/v1/instances/${instanceId}/revoke`, schema: instanceResponseSchema, signer: this.signer });
     if (instanceId === this.record?.id) this.markRevoked();
     else await this.refresh();
+  }
+
+  /**
+   * Removes an instance of this account with the OXY SESSION alone — no
+   * `signer`, so no device key is needed.
+   *
+   * The signed `revoke` above is the everyday one. This is for the account
+   * whose last ACTIVE instance is gone: a browser whose site data was
+   * cleared, a lost phone, a key that did not survive. Nothing on this device
+   * can sign for that instance any more, so nothing can approve the device
+   * standing in front of the person now — and the account would be finished.
+   * `client.reclaimAccount()` is the whole move; this is its one request.
+   */
+  async revokeWithSession(instanceId: string): Promise<void> {
+    await this.deps.http.request({ method: "DELETE", path: `/v1/instances/${instanceId}`, schema: instanceResponseSchema });
+  }
+
+  /** Every instance the account has, read with the Oxy session rather than a device key. */
+  async listWithSession(): Promise<ClientInstance[]> {
+    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+    return res.instances;
   }
 
   // ---- push ----------------------------------------------------------------

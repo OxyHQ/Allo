@@ -94,14 +94,38 @@ content, identity binding to Oxy accounts, sync, or media.
   the account owner sees it in the devices screen); a self-custodied recovery
   mechanism that can approve instead is designed and not built. The Phase 3
   recovery phrase unlocks the backup and approves nothing.
-- **Revocation.** Any active instance of the account, or the instance itself,
-  can revoke an instance. The server marks it revoked, refuses its signature
-  from then on, disconnects its sockets, marks its leaves removed pending, and
-  appends an `instance_revoked` control event. An active leaf commits a
+- **Revocation, and the Oxy session's door into it.** Any active instance of
+  the account, or the instance itself, can revoke an instance. The server
+  marks it revoked, refuses its signature from then on, disconnects its
+  sockets, marks its leaves removed pending, and appends an
+  `instance_revoked` control event. An active leaf commits a
   Remove, after which the revoked instance holds no secret for the next epoch.
   Between revocation and that commit the revoked instance can still decrypt
   events of the current epoch it receives by other means; it no longer
   receives them from the server.
+
+  `DELETE /v1/instances/:id` adds ONE more caller: the account's Oxy session,
+  with no instance signature. This is a deliberate widening, taken because the
+  alternative is worse. An account whose last ACTIVE instance is gone — a
+  browser whose site data was cleared, a phone that was lost, a key that did
+  not survive — has no signing key left to authorise anything with, so a newly
+  enrolled device waits on an approval that can never come and the ACCOUNT is
+  finished. No messenger may do that to somebody, and none does: WhatsApp and
+  Signal both let the account's own credential re-register a device and sign
+  the others out.
+
+  What it costs, stated plainly: **a stolen Oxy token can take the account
+  over going forward.** It can revoke every device and enrol itself into the
+  empty account, which the TOFU bootstrap above then makes active. What it
+  CANNOT do is read what came before — history is end-to-end encrypted and
+  reaches a new device only by an approved transfer or the recovery phrase,
+  neither of which a token grants — and it cannot do it quietly: every device
+  it removes hears `instance.revoked`, lands on "this device was removed", and
+  every other member of every conversation sees the account's instance list
+  change. It is the same shape as a SIM swap against WhatsApp, with the same
+  answer: the account is recoverable, the past is not readable, and the theft
+  is loud. `client.reclaimAccount()` is the legitimate use, offered on the
+  pending-approval screen behind a confirmation that says what is lost.
 - **History only from a verified instance of the same account.** A new
   instance receives an offer's archive key sealed to its own transfer key,
   and its SDK accepts an offer only after it has verified, from the listing

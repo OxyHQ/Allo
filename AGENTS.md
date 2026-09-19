@@ -175,6 +175,21 @@ to AsyncStorage**; `__tests__/allo/noLegacyChatPath.test.ts` is a TypeScript-AST
 census that enforces it, plus no `socket.io-client`, no legacy endpoint, and
 `@allo/core` value imports only inside `lib/allo/`.
 
+**A session that is not there is not a sign-out.** Oxy clears the bearer on an
+unrecoverable 401 and reports a locally signed-out session while KEEPING the
+stored one, because it expects to restore it. `AlloRoot` therefore only ever
+`stop()`s a client when the account goes away; it never resets one. Leaving
+this device is a deliberate act and goes through `lib/allo/signOut.ts`, which
+runs `reset()` while the token is still alive — the only moment the revoke can
+be authenticated — and reports whether it landed. Getting this backwards is
+what turned a page reload into a permanent "approve this device": the revoke
+could not land (its credential was the bearer that had just gone), so the
+server kept an ACTIVE instance whose signing key had just been deleted, and
+the next start enrolled a stranger that the ghost alone could have approved.
+`__tests__/allo/sessionGap.test.tsx` holds that line, and
+`__tests__/allo/reload.test.ts` runs the whole journey over the real web
+adapters.
+
 **Enrollment is a gate, not a setting.** `EnrollmentGate` renders the app only
 for an `active` instance. A second device sits on a "approve this device" screen
 until an active device approves it from Settings → Devices
@@ -184,6 +199,26 @@ revoked device gets "start over" (`reset()` then `start()`). Both sides show the
 same challenge fingerprint for an out-of-band comparison: the pending device
 reads its own from `instance.enrollment?.fingerprint` (present only while it is
 pending), the approver from `usePendingEnrollments()`.
+
+**And the pending screen has a second way out, because there need not be
+anybody to approve.** A device whose signing key is gone leaves an instance the
+account still calls active that nothing can sign for; when it is the last one,
+waiting is forever. "Use this device instead" is `client.reclaimAccount()`:
+revoke every active instance with the Oxy session (`DELETE /v1/instances/:id`,
+the one instance route a session alone may call), wipe, and register into the
+now-empty account, which the bootstrap rule makes active. It is destructive,
+it sits behind a confirmation that says the other devices are signed out and
+their messages are gone, and the trade it makes — a stolen Oxy token can take
+the account over going forward, though it can read nothing from before and
+cannot do it quietly — is written down in `docs/platform/threat-model.md` §4.
+
+**A lost STORAGE key is survivable and a lost SIGNING key is not.** They are
+separate secrets. Without the storage key every row of the namespace is
+ciphertext nobody will ever read again, so `start()` drops them and carries on;
+the signing key survives, the registration meets `idempotency_conflict`, and
+the device ADOPTS the instance it already has — still active, nobody asked to
+approve anything. Without the signing key there is nothing to adopt.
+`src/__tests__/recovery.test.ts` in `@allo/core` runs both.
 
 **The web secret store is the platform's documented weak point.** A browser has
 no Keychain; the storage key, the signing key, the transfer key and, once
