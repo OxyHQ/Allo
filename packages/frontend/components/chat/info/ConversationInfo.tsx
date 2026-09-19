@@ -46,7 +46,7 @@ import { conversationAvatar, conversationFaces, conversationTitle } from '@/lib/
 import { report } from '@/lib/moderation/report';
 import { addModeratedUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 interface ConversationInfoProps {
@@ -131,11 +131,11 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
 
   const confirmLeave = useCallback(async () => {
     if (!view) return;
-    const ok = await confirmDialog({
+    const ok = await confirm({
       title: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-      message: t('chat.leave.confirm'),
-      okText: t('chat.leave.action'),
-      cancelText: t('common.cancel'),
+      description: t('chat.leave.confirm'),
+      confirmLabel: t('chat.leave.action'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!ok) return;
@@ -151,11 +151,11 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
 
   const confirmBlock = useCallback(async () => {
     if (!other) return;
-    const ok = await confirmDialog({
+    const ok = await confirm({
       title: t('chat.block.title'),
-      message: t('chat.block.confirm'),
-      okText: t('chat.block.title'),
-      cancelText: t('common.cancel'),
+      description: t('chat.block.confirm'),
+      confirmLabel: t('chat.block.title'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!ok) return;
@@ -170,11 +170,11 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
 
   const confirmReport = useCallback(async () => {
     if (!other) return;
-    const ok = await confirmDialog({
+    const ok = await confirm({
       title: t('chat.report.title'),
-      message: t('chat.report.confirm'),
-      okText: t('chat.report.title'),
-      cancelText: t('common.cancel'),
+      description: t('chat.report.confirm'),
+      confirmLabel: t('chat.report.title'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!ok) return;

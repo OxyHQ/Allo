@@ -17,7 +17,7 @@ import { toast } from '@oxy.so/bloom/toast';
 import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { Page } from '@/components/shell/Page';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
@@ -90,11 +90,11 @@ export default function DevicesScreen() {
 
   const reject = useCallback(
     async (enrollment: PendingEnrollmentView) => {
-      const confirmed = await confirmDialog({
+      const confirmed = await confirm({
         title: t('devices.reject'),
-        message: t('devices.rejectConfirm'),
-        okText: t('devices.reject'),
-        cancelText: t('common.cancel'),
+        description: t('devices.rejectConfirm'),
+        confirmLabel: t('devices.reject'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!confirmed) return;
@@ -112,11 +112,11 @@ export default function DevicesScreen() {
 
   const revoke = useCallback(
     async (instance: InstanceView) => {
-      const confirmed = await confirmDialog({
+      const confirmed = await confirm({
         title: t('devices.remove'),
-        message: t('devices.removeConfirm', { name: instance.displayName }),
-        okText: t('devices.remove'),
-        cancelText: t('common.cancel'),
+        description: t('devices.removeConfirm', { name: instance.displayName }),
+        confirmLabel: t('devices.remove'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!confirmed) return;

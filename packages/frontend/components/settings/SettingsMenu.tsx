@@ -30,7 +30,7 @@ import { useSplitLayout } from '@/hooks/useSplitLayout';
 import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { signOutOfAllo } from '@/lib/allo/signOut';
 import { profileHref } from '@/lib/profile/handle';
-import { alertDialog, confirmDialog } from '@/utils/alerts';
+import { alert, confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 import { hasNotificationPermission, requestNotificationPermissions } from '@/utils/notifications';
 
@@ -63,11 +63,11 @@ export function SettingsMenu() {
   const isActive = (target: string) => split && (path === target || path.startsWith(`${target}/`));
 
   const signOut = useCallback(async () => {
-    const confirmed = await confirmDialog({
+    const confirmed = await confirm({
       title: t('settings.signOut'),
-      message: t('settings.signOutMessage'),
-      okText: t('settings.signOut'),
-      cancelText: t('common.cancel'),
+      description: t('settings.signOutMessage'),
+      confirmLabel: t('settings.signOut'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!confirmed) return;
@@ -237,7 +237,7 @@ function useNotificationPermission() {
       // The messaging client registers the push token on this signal.
       announcePushPermissionGranted();
     } else {
-      await alertDialog({ title: t('settings.preferences.notifications'), message: t('notification.permission.denied') });
+      alert(t('settings.preferences.notifications'), t('notification.permission.denied'));
     }
   }, [t]);
 

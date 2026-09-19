@@ -18,7 +18,7 @@ import { useChatContext } from '@/hooks/useChatContext';
 import { readAttachmentBytes } from '@/lib/allo/attachmentBytes';
 import { pickMediaAttachments } from '@/lib/chat/attachments';
 import { ringState, statusAgeLabel, statusAuthors, statusRemainingLabel } from '@/lib/statuses';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 /**
@@ -97,11 +97,11 @@ export default function UpdatesScreen() {
   /** Taking one of yours down early. A long press, and a confirmation. */
   const remove = useCallback(
     async (statusId: string) => {
-      const ok = await confirmDialog({
+      const ok = await confirm({
         title: t('stories.remove.title'),
-        message: t('stories.remove.confirm'),
-        okText: t('stories.remove.action'),
-        cancelText: t('common.cancel'),
+        description: t('stories.remove.confirm'),
+        confirmLabel: t('stories.remove.action'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!ok) return;
