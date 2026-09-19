@@ -17,7 +17,7 @@ import { toast } from '@oxy.so/bloom/toast';
 import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { normalizeRecoveryPhrase, RECOVERY_PHRASE_WORDS, recoveryPhraseWordCount } from '@/lib/allo/recoveryPhrase';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
@@ -100,11 +100,11 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
 
   const turnOff = useCallback(async () => {
     if (busy) return;
-    const confirmed = await confirmDialog({
+    const confirmed = await confirm({
       title: t('backup.turnOffConfirmTitle'),
-      message: t('backup.turnOffConfirm'),
-      okText: t('backup.turnOff'),
-      cancelText: t('common.cancel'),
+      description: t('backup.turnOffConfirm'),
+      confirmLabel: t('backup.turnOff'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!confirmed) return;

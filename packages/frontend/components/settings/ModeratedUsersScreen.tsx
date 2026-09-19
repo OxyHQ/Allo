@@ -20,7 +20,7 @@ import {
 } from '@/hooks/usePrivacySettings';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import type { ModerationList } from '@/lib/privacy/api';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
@@ -96,11 +96,11 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
 
   const remove = useCallback(
     async (user: ModeratedUser) => {
-      const confirmed = await confirmDialog({
+      const confirmed = await confirm({
         title: t(props.removeActionKey),
-        message: t(props.removeConfirmKey),
-        okText: t(props.removeActionKey),
-        cancelText: t('common.cancel'),
+        description: t(props.removeConfirmKey),
+        confirmLabel: t(props.removeActionKey),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!confirmed) return;

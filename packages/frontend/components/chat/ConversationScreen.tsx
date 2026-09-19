@@ -45,7 +45,7 @@ import { toUpload } from '@/lib/chat/upload';
 import { presenceDot, presenceLine } from '@/lib/presence';
 import { useCallsStore } from '@/lib/phase2/calls';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 /** What this screen does to a message it is pointed at. */
@@ -186,11 +186,11 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         setTarget({ kind: 'edit', id, body: source.content.body, preview: source.content.body });
       },
       remove: (id) => {
-        void confirmDialog({
+        void confirm({
           title: t('message.delete'),
-          message: t('message.deleteConfirm'),
-          okText: t('message.delete'),
-          cancelText: t('common.cancel'),
+          description: t('message.deleteConfirm'),
+          confirmLabel: t('message.delete'),
+          cancelLabel: t('common.cancel'),
           destructive: true,
         }).then((ok) => {
           if (!ok) return;
@@ -354,11 +354,11 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const onLoadOlder = useCallback(() => void loadOlder(), [loadOlder]);
 
   const confirmLeave = useCallback(async () => {
-    const ok = await confirmDialog({
+    const ok = await confirm({
       title: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-      message: t('chat.leave.confirm'),
-      okText: t('chat.leave.action'),
-      cancelText: t('common.cancel'),
+      description: t('chat.leave.confirm'),
+      confirmLabel: t('chat.leave.action'),
+      cancelLabel: t('common.cancel'),
       destructive: true,
     });
     if (!ok) return;

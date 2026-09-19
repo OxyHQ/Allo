@@ -8,7 +8,7 @@ import { toast } from '@oxy.so/bloom/toast';
 import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
 import { profileHref } from '@/lib/profile/handle';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 /**
@@ -47,11 +47,11 @@ export default function MembersRoute() {
 
   const remove = useCallback(
     async (accountId: string) => {
-      const ok = await confirmDialog({
+      const ok = await confirm({
         title: t('chat.group.removeMember'),
-        message: t('chat.group.removeMemberConfirm'),
-        okText: t('chat.group.removeMember'),
-        cancelText: t('common.cancel'),
+        description: t('chat.group.removeMemberConfirm'),
+        confirmLabel: t('chat.group.removeMember'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!ok) return;

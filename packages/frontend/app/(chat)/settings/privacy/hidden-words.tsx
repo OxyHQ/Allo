@@ -17,7 +17,7 @@ import {
   removeHiddenWord,
   type HiddenWordRejection,
 } from '@/lib/privacy/hiddenWords';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 /**
  * THE WORDS THIS READER DOES NOT WANT TO SEE: add one, take one away.
@@ -62,11 +62,11 @@ export default function HiddenWordsScreen() {
 
   const remove = useCallback(
     async (word: string) => {
-      const confirmed = await confirmDialog({
+      const confirmed = await confirm({
         title: t('settings.privacy.hiddenWordRemove'),
-        message: t('settings.privacy.hiddenWordRemoveConfirm', { word }),
-        okText: t('settings.privacy.hiddenWordRemove'),
-        cancelText: t('common.cancel'),
+        description: t('settings.privacy.hiddenWordRemoveConfirm', { word }),
+        confirmLabel: t('settings.privacy.hiddenWordRemove'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!confirmed) return;

@@ -23,7 +23,7 @@ import { HistoryTransferBanner } from '@/components/conversation/HistoryTransfer
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useSplitLayout } from '@/hooks/useSplitLayout';
-import { confirmDialog } from '@/utils/alerts';
+import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 import { conversationIdFromPath } from '@/utils/routeUtils';
 
@@ -96,11 +96,11 @@ export function ConversationList() {
 
   const confirmLeave = useCallback(
     async (id: string) => {
-      const ok = await confirmDialog({
+      const ok = await confirm({
         title: t('chat.leave.conversation'),
-        message: t('chat.leave.confirm'),
-        okText: t('chat.leave.action'),
-        cancelText: t('common.cancel'),
+        description: t('chat.leave.confirm'),
+        confirmLabel: t('chat.leave.action'),
+        cancelLabel: t('common.cancel'),
         destructive: true,
       });
       if (!ok) return;
