@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { CallMinimisedPill } from '@oxy.so/bloom/call-ui';
 
 import { usePerson } from '@/hooks/usePerson';
-import { useCallDuration, useCallsStore, useCallSession } from '@/lib/phase2/calls';
+import { useCallActions } from '@allo/react';
+import { useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
 
 /**
  * THE MINIMISED CALL, FLOATING OVER WHATEVER SCREEN YOU WENT TO.
@@ -22,9 +23,8 @@ export function CallPill() {
   const router = useRouter();
   const { t } = useTranslation();
   const session = useCallSession();
-  const setMinimised = useCallsStore((state) => state.setMinimised);
-  const end = useCallsStore((state) => state.end);
-  const setMuted = useCallsStore((state) => state.setMuted);
+  const setMinimised = useCallUi((state) => state.setMinimised);
+  const calls = useCallActions();
   const duration = useCallDuration(session);
   const peer = usePerson(session?.peers[0]?.accountId);
 
@@ -41,12 +41,12 @@ export function CallPill() {
       duration={duration === '' ? undefined : duration}
       statusText={duration === '' ? t('calls.status.connecting') : undefined}
       muted={session.muted}
-      onMutedChange={setMuted}
+      onMutedChange={(muted) => void calls.setMuted(muted).catch(() => undefined)}
       onExpand={() => {
         setMinimised(false);
         router.push(`/c/${session.conversationId}/call`);
       }}
-      onEndCall={end}
+      onEndCall={() => void calls.end().catch(() => undefined)}
       labels={{
         mute: t('calls.control.mute'),
         unmute: t('calls.control.unmute'),

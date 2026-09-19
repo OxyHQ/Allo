@@ -38,6 +38,7 @@
   "backup.turnOffConfirmTitle": "¿Desactivar la copia de seguridad?",
   "backup.turnOn": "Activar",
   "calls.callBack": "Devolver la llamada a {{name}}",
+  "calls.failed": "No se pudo iniciar la llamada.",
   "calls.control.accept": "Responder",
   "calls.control.add": "Añadir a alguien",
   "calls.control.decline": "Rechazar",

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
-import { useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
+import { useCallActions, useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
 import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
 import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
@@ -44,7 +44,7 @@ import {
 } from '@/lib/chat/model';
 import { toUpload } from '@/lib/chat/upload';
 import { presenceDot, presenceLine } from '@/lib/presence';
-import { useCallsStore } from '@/lib/phase2/calls';
+
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
@@ -84,7 +84,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const toggleInfo = useChatPaneStore((state) => state.toggleInfo);
   const sync = useSyncState();
   const { leave } = useConversationActions();
-  const placeCall = useCallsStore((state) => state.place);
+  const { start: startRinging } = useCallActions();
   const view = useConversation(conversationId);
   const timeline = useTimeline(conversationId);
   const ctx = useChatContext(view?.memberAccountIds ?? []);
@@ -377,15 +377,18 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
   const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
   /**
-   * Calls are not connected to anything yet: this opens the call screen, which
-   * says so itself. The mode is decided here so the screen does not have to
-   * guess which button was pressed.
+   * Rings every other member's devices. The screen opens first: the SDK
+   * resolves once the SERVER has the call, which is not the same moment, and
+   * a button that does nothing for a round trip reads as broken.
    */
   const startCall = (mode: 'voice' | 'video') => {
     const peers = view.memberAccountIds.filter((id) => id !== ctx.me);
     if (peers.length === 0) return;
-    placeCall({ conversationId, peerAccountIds: peers, mode });
     router.push(`/c/${conversationId}/call`);
+    void startRinging(conversationId, mode).catch((error: unknown) => {
+      logger.error('[ConversationScreen] the call could not be placed', error);
+      toast.error(t('calls.failed'));
+    });
   };
   const title = conversationTitle(view, ctx);
   const members = view.memberAccountIds.length;
