@@ -121,6 +121,30 @@ describe("a 1:1 call", () => {
     expect(fingerprintOf("v=0\r\na=setup:active\r\n")).toBe("");
   });
 
+  it("places ONE call when two things dial at once", async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, "acc-race-a", "Alice");
+    const bob = await makeClient(server, "acc-race-b", "Bob");
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.sync.flush();
+    await waitFor(() => bob.client.conversations.get(conversation.id)?.joined === true);
+
+    // A button and a screen both dialling, which is what shipped: `start()` is
+    // asynchronous, so both passed the "already in a call" check before either
+    // had set anything, and the server got two calls. One rang out while the
+    // other was answered.
+    const results = await Promise.allSettled([
+      alice.client.calls.start(conversation.id, "voice"),
+      alice.client.calls.start(conversation.id, "voice"),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(server.requestLog.filter((e) => e.method === "POST" && e.path === "/v1/calls")).toHaveLength(1);
+    expect([...server.calls.values()]).toHaveLength(1);
+
+    await alice.client.calls.end();
+    await stopAll(alice, bob);
+  }, 30_000);
+
   it("still rings, answers and ends with NO media adapter at all", async () => {
     const server = fakeServer();
     const alice = await makeClient(server, "acc-call-e", "Alice");

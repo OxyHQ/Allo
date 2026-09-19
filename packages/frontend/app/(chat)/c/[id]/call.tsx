@@ -45,7 +45,7 @@ function reportCallError(error: unknown): void {
 }
 
 export default function CallRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, mode } = useLocalSearchParams<{ id: string; mode?: 'voice' | 'video' }>();
   const { t } = useTranslation();
   const router = useRouter();
   const theme = useTheme();
@@ -107,8 +107,8 @@ export default function CallRoute() {
   useEffect(() => {
     if (session !== null || peerAccountIds.length === 0 || !id || placed.current) return;
     placed.current = true;
-    void calls.start(id, 'voice').catch(reportCallError);
-  }, [calls, id, peerAccountIds, session]);
+    void calls.start(id, mode === 'video' ? 'video' : 'voice').catch(reportCallError);
+  }, [calls, id, mode, peerAccountIds, session]);
 
   const duration = useCallDuration(session);
   const someone = t('calls.someone');
