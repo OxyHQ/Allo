@@ -84,9 +84,25 @@ packages/
 
 The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
 chat-screen, message-bubble, message-media, chat-composer, chat-people) in
-Bloom's split `AppShell`; `packages/frontend/ARCHITECTURE.md` maps every screen.
-Nothing is hand-built that Bloom has, and a missing piece is added to Bloom and
-released, never patched in the app. Import Bloom by subpath only.
+Bloom's `ChatSplitLayout` with a `Sidebar` rail beside it;
+`packages/frontend/ARCHITECTURE.md` maps every screen.
+
+**Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),
+not the conversation list (`ChatList`), not the picker (`ContactList`), not one
+icon — every glyph comes from `@oxy.so/bloom/icons`, and the app's only drawing
+of its own is Allo's logotype, which is what `Sidebar.logo` is for. When Bloom
+is missing a piece or gets one wrong, it is fixed IN BLOOM, released, and
+consumed: 2.12.1 (a bubble holding controls is not a `<button>`) and 2.12.2
+(`RiChatNewLine`, so the new-chat action stops wearing the compose-a-document
+mark) both came out of building these screens. Import Bloom by subpath only.
+
+**The chat screens can be opened without an account.** `ALLO_HARNESS=1 expo
+start --web` swaps the Oxy session and the Allo client for in-memory stand-ins
+(`packages/frontend/harness/`, resolved only under that flag) seeded with a DM,
+a group, a picture, a document, a voice note and a link, so the UI is looked at
+in a browser and compared with Bloom's own stories rather than assumed. Jest
+cannot do this job: rendering a Bloom chat screen there dies in reanimated 4's
+native worklets, so component coverage stays at the data-path level.
 
 NativeWind is on a **prerelease** (a `5.0.0-preview` tag), paired with Tailwind
 v4 and `react-native-css` v3, and is there only for Bloom's design tokens: the
@@ -159,6 +175,21 @@ to AsyncStorage**; `__tests__/allo/noLegacyChatPath.test.ts` is a TypeScript-AST
 census that enforces it, plus no `socket.io-client`, no legacy endpoint, and
 `@allo/core` value imports only inside `lib/allo/`.
 
+**A session that is not there is not a sign-out.** Oxy clears the bearer on an
+unrecoverable 401 and reports a locally signed-out session while KEEPING the
+stored one, because it expects to restore it. `AlloRoot` therefore only ever
+`stop()`s a client when the account goes away; it never resets one. Leaving
+this device is a deliberate act and goes through `lib/allo/signOut.ts`, which
+runs `reset()` while the token is still alive — the only moment the revoke can
+be authenticated — and reports whether it landed. Getting this backwards is
+what turned a page reload into a permanent "approve this device": the revoke
+could not land (its credential was the bearer that had just gone), so the
+server kept an ACTIVE instance whose signing key had just been deleted, and
+the next start enrolled a stranger that the ghost alone could have approved.
+`__tests__/allo/sessionGap.test.tsx` holds that line, and
+`__tests__/allo/reload.test.ts` runs the whole journey over the real web
+adapters.
+
 **Enrollment is a gate, not a setting.** `EnrollmentGate` renders the app only
 for an `active` instance. A second device sits on a "approve this device" screen
 until an active device approves it from Settings → Devices
@@ -168,6 +199,26 @@ revoked device gets "start over" (`reset()` then `start()`). Both sides show the
 same challenge fingerprint for an out-of-band comparison: the pending device
 reads its own from `instance.enrollment?.fingerprint` (present only while it is
 pending), the approver from `usePendingEnrollments()`.
+
+**And the pending screen has a second way out, because there need not be
+anybody to approve.** A device whose signing key is gone leaves an instance the
+account still calls active that nothing can sign for; when it is the last one,
+waiting is forever. "Use this device instead" is `client.reclaimAccount()`:
+revoke every active instance with the Oxy session (`DELETE /v1/instances/:id`,
+the one instance route a session alone may call), wipe, and register into the
+now-empty account, which the bootstrap rule makes active. It is destructive,
+it sits behind a confirmation that says the other devices are signed out and
+their messages are gone, and the trade it makes — a stolen Oxy token can take
+the account over going forward, though it can read nothing from before and
+cannot do it quietly — is written down in `docs/platform/threat-model.md` §4.
+
+**A lost STORAGE key is survivable and a lost SIGNING key is not.** They are
+separate secrets. Without the storage key every row of the namespace is
+ciphertext nobody will ever read again, so `start()` drops them and carries on;
+the signing key survives, the registration meets `idempotency_conflict`, and
+the device ADOPTS the instance it already has — still active, nobody asked to
+approve anything. Without the signing key there is nothing to adopt.
+`src/__tests__/recovery.test.ts` in `@allo/core` runs both.
 
 **The web secret store is the platform's documented weak point.** A browser has
 no Keychain; the storage key, the signing key, the transfer key and, once
@@ -282,10 +333,83 @@ instance the fake server is made to list as an unapproved active root.
   are encrypted `delivered` messages: an own bubble shows `delivered` once
   another account's device has it and `read` once a read receipt covers it.
 - **There is no archive;** the list's swipe action LEAVES the conversation.
-- **Real time:** the SDK's socket. There are no calls, stories, polls or
-  locations yet: the SDK has nothing behind them, so the app draws none of them
-  (Bloom has the UI — `call-ui`, `chat-people`'s stories, `message-media`'s
-  polls and locations — for when it does).
+- **Real time:** the SDK's socket.
+- **Polls, places, cards and pins are message kinds, not features bolted on.**
+  Each is an E2EE `AppMessage` (`poll`, `poll_vote`, `location`, `contact`,
+  `pin`) that the server carries as ciphertext like any other, so none of them
+  needed a backend change. A vote is a statement of the voter's CURRENT answer,
+  not an increment: the last one wins and an empty list retracts, so a client
+  that missed one still totals correctly, and `anonymous` is a request the UI
+  honours rather than a guarantee — every client in the group can still see who
+  voted. `pin` folds the last op per target, so two devices that pin and unpin
+  in either order agree. `ConversationView.lastMessage` must list every kind a
+  row can speak for (`LAST_MESSAGE_KINDS` in `conversations/service.ts`) or the
+  list keeps showing the message before it.
+- **Presence is a watch set, and it is reciprocal.** A client says which
+  accounts it is SHOWING (`presence.watch`), beats every 30 s, and hears about
+  those accounts and no others; online is that heartbeat still being inside its
+  75 s deadline, held in Redis, and last seen is one coarse row per account in
+  `account_presence`. Four rules are enforced in `presenceService.ts`: an
+  account that hides its own presence receives nobody else's, you may only ask
+  about accounts you share a conversation with, a block cuts both directions,
+  and hidden, blocked, unknown and offline are all the same answer — a client
+  that could tell them apart could tell it had been blocked. The old shape
+  (announce to every co-member on connect) is gone.
+- **A status update is one ciphertext and a key sealed per device.** The
+  poster encrypts it under a random per-status key and HPKE-seals that key to
+  each recipient INSTANCE's transfer key (`STATUS_KEY_SEAL_INFO`); the audience
+  is resolved on the device, so the server is never asked for a contact list.
+  It is NOT an MLS group: RFC 9420 gives every member the ratchet tree, so
+  "everybody except Ana" as a group would publish the audience to the audience.
+  The server refuses three kinds of recipient (not there, no shared
+  conversation, blocked either way) and NAMES them back, so the app never says
+  "posted" to somebody who did not get it. 24 hours, swept like everything else
+  with a deadline; the client keeps the deadline it verified in the signature
+  rather than a later claim; and a status already decrypted on a device is that
+  device's, which the screens say rather than implying a remote delete.
+- **Calls: the server half is built, the client half is not, and the screens
+  still say so.** The backend runs the part a client cannot — who may ring
+  (a joined member, never across a block), the fork across a callee's devices,
+  first-to-answer-wins as an UPDATE guarded on the state, the ring nobody
+  answered, and whether the media is relayed (`relayed = group || either side
+  hides its address`, told to everybody and attributed to nobody). Routes are
+  `POST /v1/calls` plus `/ice`, `/token`, `/answer`, `/decline`, `/end`.
+  **Nothing about the media passes through it**: the offer, the candidates and
+  the per-sender frame keys are encrypted `call` messages in the conversation.
+  `GET /v1/calls/:id/token` is the SFU ticket and applies three rules — a 1:1
+  call has none (its media is peer to peer or through TURN), an ended call has
+  none, and only a device that has ANSWERED gets one; `identity` is the
+  instance, because a per-sender key is per device, and the grant opens no data
+  channel because nothing rides LiveKit's.
+  What is still missing is `@allo/core`'s call service (encrypted signalling,
+  the client state machine, the injected media seam — WebRTC cannot live in
+  core, which runs in Node under test) and the native ring (CallKit, Telecom,
+  a `phoneCall` foreground service). Until then
+  `packages/frontend/lib/phase2/calls.ts` holds that state in memory for the
+  life of the tab, the screens (`/calls`, `/c/:id/call`) are built on Bloom's
+  `call-ui` and carry a notice that nothing is connected, and their sample data
+  is marked `DEMO_*`. The status route is `/updates` because Metro's dev server
+  answers `/status` itself, and a screen that cannot be opened while developing
+  is a screen nobody checks.
+- **The relay and the SFU are read at BOOT, in `runtimeApp.ts`, or they are not
+  read at all.** `getIceConfig()`'s lazy fallback parses an EMPTY environment,
+  so for as long as nothing called `setIceConfig` every deployment served STUN
+  alone, `TURN_URLS` was dead, and a relayed call — anybody hiding their
+  address, or any group call — was told `relayOnly: true` with no relay in the
+  list, which is an impossible call rather than a degraded one.
+  `mediaConfigWiring.test.ts` boots the app and holds that line, including
+  that a HALF-configured relay or SFU fails the boot. `LIVEKIT_API_KEY` and
+  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, written by
+  OxyHQServices, bound per service by terraform): never `sync_secret` them from
+  Allo's workflow, which would overwrite the value every other app uses.
+  Production still needs both halves wired in `oxy-infra` by hand —
+  `app-allo.tf` gains `{ name = "LIVEKIT_URL", value = "wss://livekit.oxy.so" }`
+  in `environment` and the two `valueFrom = "${local.ssm}/oxy/_shared/LIVEKIT_*"`
+  entries in `secrets`, exactly as `app-services-realtime.tf:29,68-69` does for
+  another app — and coturn does not exist yet, so until it does a deployment
+  serves STUN alone and a relayed call cannot connect. That is now an absence
+  of infrastructure rather than a bug, and the group-call ticket answers
+  `unavailable` instead of inventing a room.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.
@@ -303,9 +427,10 @@ instance the fake server is made to list as an unapproved active root.
   screens (blocked, restricted, hidden words, the first two sharing
   `components/settings/ModeratedUsersScreen.tsx`). The stored document
   (`backend/src/models/UserSettings.ts`) still carries Mention's feed fields
-  (`allowTags`, `hide*Counts`); Allo names none of them. **Nothing acts on any of
-  these settings yet** — `Block` and `Restrict` are written and never read, and
-  no route consults `hiddenWords` or `showOnlineStatus` — which is why the
+  (`allowTags`, `hide*Counts`); Allo names none of them. **`showOnlineStatus`
+  is the one setting the platform acts on**, and a block now cuts presence in
+  both directions (ADR 0002); `hiddenWords` and `Restrict` are still written
+  and never read, and a block still stops no message, which is why those
   screens say so rather than implying protection.
 - **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
   dotted key per entry at the top level, not nested objects.

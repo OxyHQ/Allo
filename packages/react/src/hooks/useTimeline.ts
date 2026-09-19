@@ -1,4 +1,12 @@
-import type { LoadOlderResult, SendOptions, TimelineItemView, UploadMediaMeta } from "@allo/core";
+import type {
+  ContactDraft,
+  LoadOlderResult,
+  PlaceDraft,
+  PollDraft,
+  SendOptions,
+  TimelineItemView,
+  UploadMediaMeta,
+} from "@allo/core";
 import { useCallback, useMemo, useState } from "react";
 import { useAlloContext } from "../AlloProvider";
 import { useClientSnapshot } from "../internal/useClientSnapshot";
@@ -20,6 +28,16 @@ export interface Timeline {
   send(text: string, options?: SendOptions): Promise<string>;
   /** Encrypts and uploads, then sends the `media` message. Resolves to the local key. */
   sendMedia(bytes: Uint8Array, meta: UploadMediaMeta): Promise<string>;
+  /** A poll. Resolves to the local key of the echo. */
+  sendPoll(poll: PollDraft): Promise<string>;
+  /** This account's answer, which replaces the one before it; an empty list retracts. */
+  vote(targetId: string, optionIds: readonly string[]): Promise<void>;
+  /** A place. Nothing is resolved or fetched: the coordinates are the sender's. */
+  sendLocation(place: PlaceDraft): Promise<string>;
+  /** Somebody's card. */
+  sendContact(contact: ContactDraft): Promise<string>;
+  /** Pins a message for everybody in the conversation, or takes the pin off. */
+  setPinned(targetId: string, pinned: boolean): Promise<void>;
   edit(targetId: string, body: string): Promise<void>;
   remove(targetId: string): Promise<void>;
   /** Toggles: reacting with a key this account already set removes it. */
@@ -71,11 +89,56 @@ export function useTimeline(conversationId: string, options?: TimelineOptions): 
   const edit = useCallback((targetId: string, body: string) => client.messages.edit(conversationId, targetId, body), [client, conversationId]);
   const remove = useCallback((targetId: string) => client.messages.remove(conversationId, targetId), [client, conversationId]);
   const react = useCallback((targetId: string, key: string) => client.messages.react(conversationId, targetId, key), [client, conversationId]);
+  const sendPoll = useCallback((poll: PollDraft) => client.messages.sendPoll(conversationId, poll), [client, conversationId]);
+  const vote = useCallback(
+    (targetId: string, optionIds: readonly string[]) => client.messages.vote(conversationId, targetId, optionIds),
+    [client, conversationId],
+  );
+  const sendLocation = useCallback((place: PlaceDraft) => client.messages.sendLocation(conversationId, place), [client, conversationId]);
+  const sendContact = useCallback((contact: ContactDraft) => client.messages.sendContact(conversationId, contact), [client, conversationId]);
+  const setPinned = useCallback(
+    (targetId: string, pinned: boolean) => client.messages.setPinned(conversationId, targetId, pinned),
+    [client, conversationId],
+  );
   const markRead = useCallback(() => client.messages.markRead(conversationId), [client, conversationId]);
   const setTyping = useCallback((on: boolean) => client.messages.setTyping(conversationId, on), [client, conversationId]);
 
   return useMemo(
-    () => ({ items, reachedStart, loadOlder, send, sendMedia, edit, remove, react, markRead, setTyping, typing }),
-    [items, reachedStart, loadOlder, send, sendMedia, edit, remove, react, markRead, setTyping, typing],
+    () => ({
+      items,
+      reachedStart,
+      loadOlder,
+      send,
+      sendMedia,
+      sendPoll,
+      vote,
+      sendLocation,
+      sendContact,
+      setPinned,
+      edit,
+      remove,
+      react,
+      markRead,
+      setTyping,
+      typing,
+    }),
+    [
+      items,
+      reachedStart,
+      loadOlder,
+      send,
+      sendMedia,
+      sendPoll,
+      vote,
+      sendLocation,
+      sendContact,
+      setPinned,
+      edit,
+      remove,
+      react,
+      markRead,
+      setTyping,
+      typing,
+    ],
   );
 }

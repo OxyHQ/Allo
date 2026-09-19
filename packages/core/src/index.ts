@@ -2,7 +2,7 @@
  * `@allo/core`: the headless Allo messaging SDK. No React, no Expo, no
  * Node-only API; one code path for Node, browsers and Hermes.
  */
-export { createAlloClient, type AlloClient } from "./client";
+export { createAlloClient, type AlloClient, type ResetOutcome } from "./client";
 export * from "./types";
 export {
   AlloError,
@@ -52,6 +52,7 @@ export {
   RECOVERY_PHRASE_WORDS,
 } from "./crypto/backupKey";
 export { backupDue, BACKUP_AUTO_REFRESH_EVENTS, BACKUP_AUTO_REFRESH_AGE_MS } from "./backup/service";
+export { PRESENCE_UNKNOWN } from "./presence/service";
 export { challengeFingerprint, instanceKeyName } from "./instance/manager";
 export { project as projectTimeline } from "./messages/projection";
 export type { Logger } from "./util/logger";
@@ -59,7 +60,9 @@ export { base64Encode, base64Decode } from "./util/bytes";
 export {
   encodeAppMessage,
   decodeAppMessage,
+  decodeAppMessageOrIgnore,
   appMessageSchema,
+  PRESENCE_HEARTBEAT_MS,
   AppMessageDecodeError,
   type AppMessage,
   type AppMessageKind,

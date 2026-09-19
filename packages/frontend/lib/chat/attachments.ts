@@ -1,6 +1,10 @@
+import { Platform } from 'react-native';
+import type { ContactDraft, PlaceDraft } from '@allo/core';
+import * as Contacts from 'expo-contacts';
 import * as DocumentPicker from 'expo-document-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { createVideoPlayer } from 'expo-video';
 
 import { logger } from '@/utils/logger';
@@ -278,6 +282,120 @@ async function saveThumbnail(
       `[chat] a thumbnail could not be rendered from ${description}; sending without one`,
       error,
     );
+    return undefined;
+  }
+}
+
+/**
+ * WHERE THIS DEVICE IS, or `undefined`.
+ *
+ * `undefined` covers every way this ends without a place: the permission was
+ * refused, the dialog was dismissed, the fix timed out, location services are
+ * off. **There is no fallback coordinate.** A refused permission answered with
+ * an approximate or a last-known position would send somebody's location after
+ * they said no, which is the one failure mode a share-my-location feature must
+ * not have.
+ *
+ * `Balanced` accuracy is a city block or so and arrives in a second or two;
+ * `Highest` runs the GPS radio until it has metres and can take half a minute
+ * standing still indoors. What is being shared is "the café on this corner",
+ * not a survey marker.
+ *
+ * The street address is a BEST EFFORT on top. `reverseGeocodeAsync` needs a
+ * platform geocoder — the browser has none and throws — so a failure here drops
+ * the line and keeps the place: the coordinates are the message, the address is
+ * the courtesy. `PlaceView` falls back to the formatted coordinates when it is
+ * missing (`lib/chat/place.ts`).
+ *
+ * The two ways this comes back empty are told APART on purpose: somebody who
+ * denied the permission made a choice and gets no error, while a position that
+ * could not be read is a failure the app owes them a word about.
+ */
+export async function pickPlace(): Promise<PickedPlace> {
+  const permission = await Location.requestForegroundPermissionsAsync();
+  if (!permission.granted) {
+    return { ok: false, reason: 'denied' };
+  }
+  try {
+    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const { latitude, longitude } = position.coords;
+    return { ok: true, place: { latitude, longitude, ...(await describePosition(latitude, longitude)) } };
+  } catch (error) {
+    logger.warn('[chat] the current position could not be read', error);
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** Why {@link pickPlace} came back with nothing, when it did. */
+export type PickedPlace = { ok: true; place: PlaceDraft } | { ok: false; reason: 'denied' | 'unavailable' };
+
+/** A name and a street for a coordinate, and `{}` wherever that cannot be had. */
+async function describePosition(
+  latitude: number,
+  longitude: number,
+): Promise<Pick<PlaceDraft, 'label' | 'address'>> {
+  try {
+    const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+    if (!place) {
+      return {};
+    }
+    const street = [place.street, place.streetNumber].filter(Boolean).join(' ');
+    const address = [street, place.postalCode, place.city, place.country].filter(Boolean).join(', ');
+    return {
+      label: place.name ?? undefined,
+      address: address.length > 0 ? address : undefined,
+    };
+  } catch (error) {
+    logger.warn('[chat] a position could not be named; sending the coordinates alone', error);
+    return {};
+  }
+}
+
+/**
+ * SOMEBODY FROM THE ADDRESS BOOK, or `undefined`.
+ *
+ * The system picker is the whole permission story: it is the OS's own list, the
+ * person chooses one row, and Allo is handed that row and nothing else. A
+ * refusal, a dismissal or a contact with no name all answer `undefined`.
+ *
+ * **Native only.** A browser has no address book and no picker to open, so the
+ * web answers `undefined` and the composer does not offer the entry there at
+ * all — an entry that opens nothing is worse than a missing one.
+ *
+ * The card carries a name and a phone number. It carries NO `accountId`:
+ * nothing in a phone's address book says which Oxy account a number belongs to,
+ * and guessing would be a claim this app cannot make. A card that names an
+ * account is one built from an Allo profile, not from here — which is why the
+ * receiving end shows "Message" only when the field is set.
+ */
+export async function pickContact(): Promise<ContactDraft | undefined> {
+  if (Platform.OS === 'web') {
+    return undefined;
+  }
+  const permission = await Contacts.requestPermissionsAsync();
+  if (!permission.granted) {
+    return undefined;
+  }
+  try {
+    const picked = await Contacts.Contact.presentPicker();
+    if (!picked) {
+      return undefined;
+    }
+    const details = await picked.getDetails([
+      Contacts.ContactField.FULL_NAME,
+      Contacts.ContactField.GIVEN_NAME,
+      Contacts.ContactField.FAMILY_NAME,
+      Contacts.ContactField.PHONES,
+    ]);
+    const name =
+      details.fullName ?? [details.givenName, details.familyName].filter(Boolean).join(' ').trim();
+    if (!name) {
+      return undefined;
+    }
+    const phone = details.phones?.find((entry) => Boolean(entry.number))?.number;
+    return { name, ...(phone ? { phone } : {}) };
+  } catch (error) {
+    logger.warn('[chat] a contact could not be read', error);
     return undefined;
   }
 }

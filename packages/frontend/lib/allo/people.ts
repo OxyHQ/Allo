@@ -32,6 +32,10 @@ export interface Person {
   handle?: string;
   /** An Oxy file id or an absolute URL. Resolve with `oxyServices.getFileDownloadUrl` when it is an id. */
   avatar?: string;
+  /** What the person says about themselves on Oxy, when they have said anything. */
+  bio?: string;
+  /** Oxy says this account is verified. */
+  verified?: boolean;
 }
 
 /** How long "Oxy said nobody" is believed before being asked again. */
@@ -116,7 +120,14 @@ export function personFromEntity(entity: UserEntity | undefined): Person | undef
   const handle = entity.username ?? entity.handle;
   const displayName = name || handle;
   if (!displayName) return undefined;
-  return { id: entity.id, displayName, handle, avatar: entity.avatar ?? undefined };
+  return {
+    id: entity.id,
+    displayName,
+    handle,
+    avatar: entity.avatar ?? undefined,
+    bio: entity.bio ?? entity.description,
+    verified: entity.verified === true,
+  };
 }
 
 /**

@@ -1,17 +1,23 @@
 /**
  * The seam between domain code and Socket.IO.
  *
+ * Presence is deliberately NOT here. Everything below is a room emit a route
+ * or a worker asks for; presence is per SOCKET, decided by what that socket
+ * said it was showing, and it belongs to `presenceHub.ts`.
+ *
  * Routes and workers emit through {@link getRealtime}; without a server set
  * (tests, one-shot scripts) every call is a no-op. Importing this module never
  * creates a server. `src/runtime/socket.ts` builds the real implementation.
  */
 
 import type {
+  CallIncomingEvent,
+  CallUpdatedEvent,
   HistoryOfferEvent,
   InstanceApprovedEvent,
   InstanceRevokedEvent,
   KeyPackagesLowEvent,
-  PresenceEvent,
+  StatusPostedEvent,
   SyncNudgeEvent,
   TypingEvent,
 } from "@allo/shared-types";
@@ -24,8 +30,13 @@ export interface Realtime {
   keyPackagesLow(instanceId: string, event: KeyPackagesLowEvent): void;
   /** `history.offer` to the recipient instance's room: another instance of its account offered it history. */
   historyOffer(instanceId: string, event: HistoryOfferEvent): void;
+  /** `status.posted` to a recipient instance's room: something it holds a key for was posted. */
+  statusPosted(instanceId: string, event: StatusPostedEvent): void;
+  /** `call.incoming` to a rung device's room: somebody is calling. */
+  callIncoming(instanceId: string, event: CallIncomingEvent): void;
+  /** `call.updated` to a device that was rung or did the ringing: the call moved. */
+  callUpdated(instanceId: string, event: CallUpdatedEvent): void;
   typing(instanceIds: readonly string[], event: TypingEvent): void;
-  presence(accountIds: readonly string[], event: PresenceEvent): void;
   /** Whether at least one socket of the instance is connected — across every task when the Redis adapter is attached. */
   isInstanceConnected(instanceId: string): Promise<boolean>;
   /** Disconnect every socket of the instance; the next handshake is refused by the signature check. */
@@ -39,8 +50,10 @@ export const NOOP_REALTIME: Realtime = {
   instanceRevoked: () => undefined,
   keyPackagesLow: () => undefined,
   historyOffer: () => undefined,
+  statusPosted: () => undefined,
+  callIncoming: () => undefined,
+  callUpdated: () => undefined,
   typing: () => undefined,
-  presence: () => undefined,
   isInstanceConnected: async () => false,
   disconnectInstance: async () => undefined,
 };

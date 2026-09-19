@@ -3,6 +3,7 @@ import {
   APP_MESSAGE_VERSION,
   AppMessageDecodeError,
   appMessageSchema,
+  decodeAppMessageOrIgnore,
   decodeAppMessage,
   encodeAppMessage,
   eventRefSchema,
@@ -123,5 +124,42 @@ describe("encode / decode", () => {
       expect((e as Error).name).toBe("AppMessageDecodeError");
       expect((e as { cause?: unknown }).cause).toBeDefined();
     }
+  });
+});
+
+describe("an unknown control message", () => {
+  const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+
+  it("is ignored by a receiver rather than reported, so a newer client's machinery draws nothing", () => {
+    expect(decodeAppMessageOrIgnore(enc({ v: 1, t: "call", ctl: true, callId: UUID_V7 }))).toBeNull();
+  });
+
+  it("still throws from the strict decoder, which is what a sender validates with", () => {
+    expect(() => decodeAppMessage(enc({ v: 1, t: "call", ctl: true }))).toThrow(AppMessageDecodeError);
+  });
+
+  it("without the marker a receiver reports it, because a CONTENT kind must read as undecryptable", () => {
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "sticker", id: "x" }))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "sticker", ctl: false }))).toThrow(AppMessageDecodeError);
+  });
+
+  it("is refused at the wrong version, an empty kind and an over-long one", () => {
+    const bad = (o: unknown) => expect(() => decodeAppMessageOrIgnore(enc(o))).toThrow(AppMessageDecodeError);
+    bad({ v: 2, t: "call", ctl: true });
+    bad({ v: 1, t: "", ctl: true });
+    bad({ v: 1, t: "x".repeat(65), ctl: true });
+  });
+
+  it("never shadows a known kind: a marker on a kind this build knows parses as that kind", () => {
+    expect(decodeAppMessageOrIgnore(enc({ v: 1, t: "text", body: "hola", ctl: true }))).toEqual({ v: 1, t: "text", body: "hola" });
+  });
+
+  it("leaves every message this build does know exactly as the strict decoder does", () => {
+    for (const m of valid) expect(decodeAppMessageOrIgnore(encodeAppMessage(m))).toEqual(m);
+  });
+
+  it("reports a broken envelope the same way through both doors", () => {
+    expect(() => decodeAppMessageOrIgnore(new TextEncoder().encode("{not json"))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessageOrIgnore(enc("a string"))).toThrow(AppMessageDecodeError);
   });
 });

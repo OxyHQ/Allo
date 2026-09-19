@@ -8,8 +8,9 @@
  * network, a store or React. People arrive through `ChatContext.person`, which
  * the screens back with the people layer (`lib/allo/people.ts`).
  */
-import type { ConversationView, MediaView, SendState, TimelineItemView } from '@allo/core';
+import type { ConversationView, MediaView, SendState, TimelineContent, TimelineItemView } from '@allo/core';
 import type { MessageDeliveryStatus } from '@oxy.so/bloom/chat-indicators';
+import type { ChatPinnedMessage } from '@oxy.so/bloom/chat-screen';
 import type { ChatAttachmentKind, ChatFace, ChatPreview, ChatSummary } from '@oxy.so/bloom/chat-list';
 import type { MessageListItem, MessageReaction, MessageReplyPreview } from '@oxy.so/bloom/message-bubble';
 
@@ -57,6 +58,16 @@ function attachmentKind(media: MediaView): ChatAttachmentKind {
   return media.kind === 'image' && media.mime === 'image/gif' ? 'gif' : ATTACHMENT_KIND[media.kind];
 }
 
+/**
+ * The content kinds that are an attachment in a list row without being a file.
+ * Bloom draws a glyph for each; a kind that is not here draws plain text.
+ */
+const ATTACHMENT_CONTENT: Partial<Record<TimelineContent['kind'], ChatAttachmentKind>> = {
+  poll: 'poll',
+  location: 'location',
+  contact: 'contact',
+};
+
 /** One line of text for a message: a row's preview, a reply quote, a composer banner. */
 export function previewText(item: TimelineItemView, t: Translate): string {
   const content = item.content;
@@ -65,6 +76,12 @@ export function previewText(item: TimelineItemView, t: Translate): string {
       return content.body;
     case 'media':
       return content.media.caption || t(`chat.attachment.${attachmentKind(content.media)}`);
+    case 'poll':
+      return content.poll.question;
+    case 'location':
+      return content.place.label ?? t('chat.attachment.location');
+    case 'contact':
+      return content.contact.name;
     case 'deleted':
       return t('message.deleted');
     case 'undecryptable':
@@ -235,15 +252,25 @@ function chatPreview(view: ConversationView, ctx: ChatContext): ChatPreview | un
     const kind = attachmentKind(last.content.media);
     return { sender, attachment: { kind, label: ctx.t(`chat.attachment.${kind}`) } };
   }
+  // A poll, a place and a card get the glyph AND their own words: the row has
+  // room for one line, and "Poll" says less than the question does. An
+  // attachment with no words of its own falls back to the generic name, which
+  // is what `previewText` already answers.
+  const attachment = ATTACHMENT_CONTENT[last.content.kind];
+  if (attachment) {
+    return { sender, attachment: { kind: attachment, label: previewText(last, ctx.t) } };
+  }
   return { sender, text: previewText(last, ctx.t) };
 }
 
 /** `ConversationView` → one row of the conversation list. */
 export function chatSummary(view: ConversationView, ctx: ChatContext): ChatSummary {
   const last = view.lastMessage;
+  const other = view.kind === 'dm' ? others(view, ctx.me)[0] : undefined;
   return {
     id: view.id,
     kind: view.kind === 'group' ? 'group' : 'direct',
+    verified: other ? ctx.person(other)?.verified : undefined,
     name: conversationTitle(view, ctx),
     avatar: conversationAvatar(view, ctx),
     faces: conversationFaces(view, ctx),
@@ -252,6 +279,21 @@ export function chatSummary(view: ConversationView, ctx: ChatContext): ChatSumma
     unreadCount: view.unreadCount,
     outgoingStatus: last?.isOwn ? deliveryStatus(last.sendState) : undefined,
   };
+}
+
+/**
+ * The messages somebody pinned for the whole conversation, oldest first — what
+ * Bloom's `PinnedMessageBar` draws. A pin is an encrypted control message the
+ * SDK folds onto its target, so this is only a reading of the timeline.
+ */
+export function pinnedMessages(items: readonly TimelineItemView[], ctx: ChatContext): ChatPinnedMessage[] {
+  return items
+    .filter((item) => item.pinned)
+    .map((item) => ({
+      id: item.id,
+      preview: previewText(item, ctx.t),
+      author: item.isOwn ? ctx.t('chat.you') : ctx.person(item.senderAccountId)?.displayName,
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +379,12 @@ export function transcriptItems(
         return { ...base, text: content.body, editedLabel: content.isEdited ? ctx.t('message.edited') : undefined };
       case 'media':
         return { ...base, text: content.media.caption || undefined };
+      // A poll, a place and a card are drawn by the media slot the screen
+      // fills, so the bubble itself carries no text of its own.
+      case 'poll':
+      case 'location':
+      case 'contact':
+        return base;
       case 'deleted':
         return { ...base, deleted: true, reactions: undefined };
       case 'undecryptable':

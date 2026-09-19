@@ -1,5 +1,4 @@
 import { oxyClient } from '@oxy.so/core';
-import { Platform } from 'react-native';
 import { API_URL } from '@/config';
 import { CircuitBreaker } from '@/lib/api/retryLogic';
 
@@ -146,31 +145,6 @@ export class ApiError extends Error {
   constructor(message: string, public status?: number, public response?: unknown) {
     super(message);
     this.name = 'ApiError';
-  }
-}
-
-export function webAlert(
-  title: string,
-  message: string,
-  buttons?: Array<{ text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void }>
-) {
-  if (Platform.OS === 'web') {
-    if (buttons && buttons.length > 1) {
-      const result = window.confirm(`${title}\n\n${message}`);
-      if (result) {
-        const confirmButton = buttons.find(btn => btn.style !== 'cancel');
-        confirmButton?.onPress?.();
-      } else {
-        const cancelButton = buttons.find(btn => btn.style === 'cancel');
-        cancelButton?.onPress?.();
-      }
-    } else {
-      window.alert(`${title}\n\n${message}`);
-      buttons?.[0]?.onPress?.();
-    }
-  } else {
-    const { Alert } = require('react-native');
-    Alert.alert(title, message, buttons);
   }
 }
 

@@ -53,6 +53,35 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     }),
   );
 
+  /**
+   * `DELETE /v1/instances/:id` — remove one of YOUR OWN devices with the Oxy
+   * session instead of that device's signing key.
+   *
+   * The signed route below is the everyday one: a device you still hold takes
+   * another off the account. This one exists for the case that route cannot
+   * reach — the last active device is gone (site data cleared, phone lost,
+   * a key that did not survive), so there is no signing key left to authorise
+   * anything with, and a newly enrolled device waits for an approval that can
+   * never come. Without a session-authenticated way out, the ACCOUNT is
+   * finished, which is not a thing a messenger may do to somebody.
+   *
+   * It is the same trade every major makes — WhatsApp and Signal both let the
+   * account's own credential re-register a device and sign the others out —
+   * and it is written down in `docs/platform/threat-model.md`: an Oxy session
+   * can remove this account's devices, so a stolen Oxy token can take the
+   * account over going forward. It cannot read a word of what came before:
+   * history is end-to-end encrypted and reaches a new device only by an
+   * approved transfer or the recovery phrase. And it is loud — every device it
+   * removes learns it was revoked.
+   */
+  router.delete(
+    "/instances/:id",
+    asyncRoute(async (req, res) => {
+      const id = parseParam(instanceIdSchema, req.params.id, "id");
+      res.json({ instance: await revokeInstance(getRequiredOxyUserId(req), id) });
+    }),
+  );
+
   // --- Instance-signed. `pending` is declared before `:id` so it is not an id. --
 
   router.get(
@@ -122,7 +151,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
       const id = parseParam(instanceIdSchema, req.params.id, "id");
-      res.json({ instance: await revokeInstance({ id: me.id, accountId: me.accountId }, id) });
+      res.json({ instance: await revokeInstance(me.accountId, id) });
     }),
   );
 

@@ -118,6 +118,7 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | POST | `/v1/instances` | oxy | `RegisterInstanceRequest` | `RegisterInstanceResponse` | `validation_failed` |
 | GET | `/v1/instances` | oxy | — | `ListInstancesResponse` | — |
 | GET | `/v1/accounts/:accountId/instances` | oxy | — | `ListAccountInstancesResponse` (`PublicInstance[]`, active and revoked, never pending: a chain whose approver was revoked later must still verify; an account with no instance answers `[]`, never 404) | — |
+| DELETE | `/v1/instances/:id` | oxy | — | `InstanceResponse` | `not_found` |
 | GET | `/v1/instances/pending` | instance-signed | — | `ListPendingEnrollmentsResponse` | — |
 | POST | `/v1/instances/:id/approve` | instance-signed | `ApproveInstanceRequest` | `InstanceResponse` | `not_found`, `forbidden`, `unauthorized` (bad approval signature), `validation_failed` |
 | POST | `/v1/instances/:id/reject` | instance-signed | — | `InstanceResponse` | `not_found`, `forbidden` |
@@ -125,6 +126,17 @@ A connected socket joins the rooms `instance:<id>` and `account:<accountId>`.
 | PUT | `/v1/instances/me/push` | instance-signed | `SetPushTokenRequest` | `204` | `validation_failed` |
 | DELETE | `/v1/instances/me/push` | instance-signed | — | `204` | — |
 | PUT | `/v1/instances/me/transfer-key` | instance-signed | `SetTransferKeyRequest` `{ transferPublicKey }` | `InstanceResponse` | `validation_failed` |
+
+`DELETE /v1/instances/:id` is the ONE instance route the Oxy session alone can
+call, and it is there for the state the signed one cannot reach: an account
+whose last active instance is gone — cleared site data, a lost phone, a key
+that did not survive — has no signing key left, so a newly enrolled device
+waits on an approval nothing can give. Every major messenger has the same door
+(an account credential re-registers a device and signs the others out); the
+trade is written down in `threat-model.md`. Another account's instance answers
+`not_found`, the same as one that does not exist. `client.reclaimAccount()` is
+the SDK's whole move: revoke each active instance, wipe, register again — into
+an account with no active instance, so the bootstrap rule makes it active.
 
 Registration is the bootstrap rule: an account with zero active instances
 gets `enrollment: "active"` at once; otherwise the answer is `"pending"` with
@@ -183,6 +195,7 @@ it `active`, clears the challenge, and emits `instance.approved` to
 
 | method | path | auth | request | response | errors |
 | --- | --- | --- | --- | --- | --- |
+| GET | `/v1/key-packages` | instance-signed | — | `KeyPackageStockResponse` `{ available }` | — |
 | PUT | `/v1/key-packages` | instance-signed | `UploadKeyPackagesRequest` (1..50 `KeyPackageUpload`) | `UploadKeyPackagesResponse` `{ available }` | `validation_failed`, `idempotency_conflict` (duplicate `ref`) |
 | POST | `/v1/key-packages/claim` | instance-signed | `ClaimKeyPackagesRequest` (1..100 instance ids) | `ClaimKeyPackagesResponse` `{ keyPackages, missing }` | `validation_failed` |
 
@@ -190,6 +203,15 @@ it `active`, clears the challenge, and emits `instance.approved` to
 A claim consumes at most one package per instance, atomically; an instance
 with none left appears in `missing` rather than failing the call. An instance
 whose stock drops below the low-water mark is sent `keypackages.low`.
+
+**Read the stock before topping it up.** Nothing expires a key package and no
+sweep collects one, so whatever is uploaded stays — on the server, and with its
+private half on the device. `GET /v1/key-packages` exists so a client starting
+up can learn the count instead of assuming zero and uploading a full target's
+worth every time; `topUpKeyPackages()` reads it whenever the server has not
+just volunteered the number (the upload's answer, or the `keypackages.low`
+nudge). Measured in a browser before the route existed: five reloads turned 21
+local rows into 125, and the server's stock grew by the target on each one.
 
 ### Conversations (`conversations.ts`)
 
@@ -499,6 +521,128 @@ returns `keyCheck` and learns nothing from it.
 `DirectoryAssetUrlResponse`, and the `ApiErrorResponse` / `ApiSuccessResponse`
 envelope in `api.ts`). It is Oxy-authenticated and not part of `/v1`.
 
+## Calls (`calls.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `POST /v1/calls` | instance | `CreateCallRequest` | 201 `{ call }` — rings every active device of every other member |
+| `GET /v1/calls/:id` | instance | — | `{ call }`; the caller and the rung devices only |
+| `GET /v1/calls/:id/ice` | instance | — | `IceServersResponse` `{ iceServers, expiresAt, relayOnly }` |
+| `GET /v1/calls/:id/token` | instance | — | `CallTokenResponse` `{ url, token, room, expiresAt }` — the SFU ticket, group calls only |
+| `POST /v1/calls/:id/answer` | instance | — | `{ call }`; 403 when another device won the race |
+| `POST /v1/calls/:id/decline` | instance | — | `{ call }` |
+| `POST /v1/calls/:id/end` | instance | `EndCallRequest` | `{ call }` |
+
+**Nothing about the media is here.** The offer, the answer, the ICE candidates
+and the frame keys are encrypted `call` application messages in the
+conversation — a control kind, so a client that does not know them ignores
+them. The server relays that ciphertext and holds only the state machine it
+cannot do without: a `calls` row, and a `call_participants` row per RUNG
+DEVICE.
+
+The rules:
+
+- **A ring is forked to every active device** of every other joined member,
+  and never across a block in either direction.
+- **Exactly one device wins.** `answer` is an UPDATE guarded on the state, so a
+  second device answering a moment later is told who won instead of joining a
+  call nobody else is on. Its own account's other phones stop ringing; in a
+  group everybody else's keep going.
+- **`relayed` is a property of the CALL.** True for a group, and for a 1:1
+  where either side has `privacy_relay_calls` on — a connection cannot be half
+  relayed. Everybody is told the call is relayed; nobody is told who asked.
+- **The SFU ticket refuses three things, and each is a rule.** A 1:1 call has
+  no ticket — its media is peer to peer, or through the TURN relay `/ice` hands
+  out, and the SFU is not in that path at all. An ended call has none, so a
+  token cannot outlive the call it was minted for. And only a device that has
+  ANSWERED gets one: a rung device has not agreed to be in the room, and the
+  ticket is how you get in. `identity` is the INSTANCE rather than the account,
+  because two of somebody's devices in one call are two participants and the
+  per-sender frame key of ADR 0002 is per device; the grant sets
+  `canPublishData: false`, because signalling and the frame keys travel as
+  encrypted messages in the conversation and nothing rides LiveKit's data
+  channel. With no SFU configured the route answers `unavailable` rather than
+  inventing a room.
+- **`relayOnly` in the ICE answer is what a client sets `iceTransportPolicy`
+  from.** The credential is the 2013 REST scheme every TURN server implements
+  (`username = "<expiry>:<account>"`, `credential = base64(HMAC-SHA1(secret,
+  username))`), valid for an hour, with the account in the username so the
+  relay's own quotas and logs are per account. With no relay configured the
+  answer is STUN alone.
+- **The ring gives up after `CALL_RING_TIMEOUT_MS`** (45 s), which only the
+  server can notice; `workers/callRingWorker.ts` claims and settles each
+  expired ring in one statement, so two tasks sweeping at the same second ring
+  off each call exactly once.
+
+**The call LOG is not these rows.** What a person sees is an encrypted
+`call_log` message written into the conversation when the call ends, so it
+reaches every device of both accounts the way any other message does. These
+rows are operational and the sweep takes them a day later.
+
+## Status updates (`statuses.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `POST /v1/statuses` | instance | `CreateStatusRequest` | 201 `CreateStatusResponse` `{ status, refused }` |
+| `GET /v1/statuses` | instance | — | `ListStatusesResponse` — everything sealed to THIS instance, plus what its own account posted |
+| `DELETE /v1/statuses/:id` | instance | — | 204; author only, and a status that is not yours answers `not_found` |
+| `POST /v1/statuses/:id/views` | instance | — | 204; only from a device the status was sealed to |
+| `GET /v1/statuses/:id/views` | instance | — | `ListStatusViewsResponse` `{ views, total }`; author only |
+
+One ciphertext, a key sealed per recipient DEVICE. The poster encrypts the
+whole update (its kind, its words, and the key and digest of any media blob)
+under a random per-status key, and HPKE-seals that key to each recipient
+instance's `transferPublicKey` with `info = STATUS_KEY_SEAL_INFO` — the same
+primitive a history offer uses, with its own domain separator. The server
+stores a body it cannot open and `N` sealed keys it cannot use.
+
+The audience is resolved on the DEVICE; the server is never asked who your
+contacts are. What it decides is delivery, and it refuses three kinds of
+recipient, naming each in `refused` so the app can be honest about who did not
+get it:
+
+1. a device that is not there (unknown, pending or revoked),
+2. an account that shares no conversation with the author,
+3. either direction of a block.
+
+The author's own other devices are always allowed, which is how a status shows
+on the phone that did not post it.
+
+`id` and `expiresAt` are the client's and are covered by `signature`
+(`statusSignatureMessage`) — a server-assigned id could not be signed, and an
+unsigned deadline could be moved. The server refuses a deadline beyond
+`STATUS_LIFETIME_MS` (24 hours) or already past. A recipient verifies that
+signature against the author instance's published key, and the digest of the
+ciphertext, BEFORE decrypting; it also keeps the deadline it verified rather
+than a later claim.
+
+Expiry is the ordinary sweep: `statuses`, `status_keys` and `status_views` all
+carry the deadline, and the blobs the envelope named are dated a day out ahead
+of the delete, exactly as a history offer's chunks are.
+
+## Presence (`presence.ts`)
+
+| route | auth | body | answer |
+| --- | --- | --- | --- |
+| `GET /v1/presence?accountIds=a,b,c` | instance | — | `PresenceResponse` `{ presence: PresenceState[], publishing }` |
+
+The socket carries the changes; this is how a screen starts, before anything
+has changed. Four rules decide what comes back, and they are enforced here
+rather than asked of the client:
+
+1. **Reciprocity.** An account whose `privacy_show_online_status` is off
+   publishes nothing and receives nothing — `publishing: false`, and every
+   state hidden.
+2. **A shared conversation.** Only accounts the asker shares one with are
+   answered honestly. Presence is not a directory lookup.
+3. **Blocks, both directions.** Either side of a block hides both.
+4. **One answer for all of it.** Hidden, blocked, unknown and plainly offline
+   are all `{ online: false, lastSeenAt: null }`. A client that could tell
+   them apart could tell it had been blocked.
+
+`lastSeenAt` is truncated to the minute and is `null` while the account is
+online, so the two facts are never read as one.
+
 ## Socket events (`sync.ts`)
 
 Namespace `/v1`, authenticated as above. Payload schemas are the values of
@@ -512,7 +656,12 @@ and `ClientToServerEvents` are the handler maps for Socket.IO's generics.
 | `instance.revoked` | server → client (`account:<id>`) | `InstanceRevokedEvent` `{ instanceId }` | an instance of the account was revoked |
 | `keypackages.low` | server → client | `KeyPackagesLowEvent` `{ available }` | upload more key packages |
 | `typing` | client → server, server → client | `TypingEvent` `{ conversationId, ciphertext }` | an MLS application message carrying a `typing` app message; relayed to the conversation's other leaves, never stored |
-| `presence` | server → client | `PresenceEvent` `{ accountId, online }` | best effort, for accounts sharing a conversation |
+| `presence` | server → client | `PresenceState` `{ accountId, online, lastSeenAt }` | one account of THIS socket's watch set changed. Never a broadcast: a socket hears only about what it asked for |
+| `presence.watch` | client → server | `PresenceWatchEvent` `{ accountIds }` | the accounts this client is SHOWING, at most 200. Replaces the previous set; an empty list stops the updates |
+| `presence.heartbeat` | client → server | `{}` | this instance is still here. Presence is a heartbeat with a 75 s deadline, not an open socket — a socket survives a sleeping phone |
+| `call.incoming` | server → client (`instance:<rung device>`) | `CallIncomingEvent` `{ callId, conversationId, initiatorAccountId, mode, group }` | somebody is calling this device; the offer itself arrives encrypted, in the conversation |
+| `call.updated` | server → client | `CallUpdatedEvent` `{ callId, state, answeredByInstanceId, endReason }` | the call moved: answered elsewhere, declined, ended, or the ring gave up |
+| `status.posted` | server → client (`instance:<recipient>`) | `StatusPostedEvent` `{ statusId, authorAccountId }` | somebody this device holds a key for posted a status; re-read `GET /v1/statuses` |
 | `history.offer` | server → client (`instance:<recipient>`) | `HistoryOfferEvent` `{ offerId }` | another instance of the account offered this one its history; pull `GET /v1/instances/me/history-offers` and verify the donor before accepting |
 
 ## The application message (`appMessage.ts`)
@@ -522,7 +671,11 @@ never sees it. `encodeAppMessage` produces UTF-8 JSON (validating first, so a
 malformed envelope is never encrypted) and `decodeAppMessage` parses and
 validates, throwing `AppMessageDecodeError` on anything else. `v` is `1`;
 `t` is one of `text`, `edit`, `delete`, `reaction`, `read`, `delivered`,
-`media`, `conversation`, `typing`. `EventRef` names another message as
+`media`, `conversation`, `poll`, `poll_vote`, `location`, `contact`, `pin`,
+`typing`. A control kind carries `ctl: true`, and a receiver decodes with
+`decodeAppMessageOrIgnore`, which answers `null` for a marked kind it does not
+know rather than reporting a message it cannot read — so a kind added in a
+later release is ignored in silence by the releases before it. `EventRef` names another message as
 `{ kind: "event", conversationId, eventId }` once the server has assigned an
 id, or `{ kind: "local", conversationId, idempotencyKey }` while it is still
 the sender's local echo. A `media` message carries the blob id, the 32-byte

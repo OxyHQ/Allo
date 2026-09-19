@@ -53,6 +53,8 @@ export interface UserSettingsDto {
     allowTags: boolean;
     allowallos: boolean;
     showOnlineStatus: boolean;
+    statusViewReceipts: boolean;
+    relayCalls: boolean;
     hideLikeCounts: boolean;
     hideShareCounts: boolean;
     hideReplyCounts: boolean;
@@ -95,6 +97,8 @@ export function toUserSettingsDto(row: UserSettingsRow): UserSettingsDto {
       allowTags: row.privacyAllowTags,
       allowallos: row.privacyAllowAllos,
       showOnlineStatus: row.privacyShowOnlineStatus,
+      statusViewReceipts: row.privacyStatusViewReceipts,
+      relayCalls: row.privacyRelayCalls,
       hideLikeCounts: row.privacyHideLikeCounts,
       hideShareCounts: row.privacyHideShareCounts,
       hideReplyCounts: row.privacyHideReplyCounts,
@@ -218,6 +222,10 @@ export function readUserSettingsPatch(body: unknown): UserSettingsPatch {
     if (allowallos !== undefined) patch.privacyAllowAllos = allowallos;
     const showOnlineStatus = bool(privacy, "showOnlineStatus");
     if (showOnlineStatus !== undefined) patch.privacyShowOnlineStatus = showOnlineStatus;
+    const statusViewReceipts = bool(privacy, "statusViewReceipts");
+    if (statusViewReceipts !== undefined) patch.privacyStatusViewReceipts = statusViewReceipts;
+    const relayCalls = bool(privacy, "relayCalls");
+    if (relayCalls !== undefined) patch.privacyRelayCalls = relayCalls;
     const hideLikeCounts = bool(privacy, "hideLikeCounts");
     if (hideLikeCounts !== undefined) patch.privacyHideLikeCounts = hideLikeCounts;
     const hideShareCounts = bool(privacy, "hideShareCounts");

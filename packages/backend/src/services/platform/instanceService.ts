@@ -202,14 +202,16 @@ export async function rejectInstance(
  * from the MLS group yet) and a `control` event to every other active leaf;
  * then the instance's sockets are cut. The revoked instance hears
  * `instance.revoked` on the account room before the disconnect.
+ *
+ * The caller is an ACCOUNT, not an instance: both doors into this lead here —
+ * another device of the account signing the request with its own key, and the
+ * account's Oxy session (`DELETE /v1/instances/:id`, the only way back for
+ * somebody whose last active device is gone). Either way the target must
+ * belong to the account, which `requireOwnInstance` is what enforces.
  */
-export async function revokeInstance(
-  caller: { id: string; accountId: string },
-  targetId: string,
-  deps: InstanceServiceDeps = {},
-): Promise<ClientInstance> {
+export async function revokeInstance(accountId: string, targetId: string, deps: InstanceServiceDeps = {}): Promise<ClientInstance> {
   const db = deps.db ?? getDb();
-  const target = await requireOwnInstance(caller.accountId, targetId, db);
+  const target = await requireOwnInstance(accountId, targetId, db);
   if (target.status === "revoked") return toClientInstance(target);
 
   const conversationIds = await listConversationIdsWithLiveLeaf(target.id, db);

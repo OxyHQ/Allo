@@ -186,7 +186,21 @@ decryption. The server is not a party to its versioning. The kinds:
 | `delivered` | `upTo` | a delivery receipt from a receiving instance: own messages at or below that seq show `delivered` unless already `read` (section 16) |
 | `media` | blob id, content key, nonce, ciphertext digest, mime, filename, plaintext size, kind, optional dimensions, duration, caption, thumbnail | a media message (section 4) |
 | `conversation` | optional `name` | the group's name, stored locally; the server never learns it |
+| `poll` | `question`, two to twelve `options`, `multiple`, `anonymous` | a poll |
+| `poll_vote` | `target`, `optionIds` | one account's CURRENT answer: the last vote wins, an empty list retracts |
+| `location` | `latitude`, `longitude`, optional `label` and `address` | a place |
+| `contact` | `name`, optional `accountId`, `handle`, `phone` | somebody's card |
+| `pin` | `target`, `op: pin or unpin` | folds onto the target; the last op per target wins |
 | `typing` | `on` | never stored; only ever travels over the socket |
+
+A kind this build does not know is a decode failure, and a decode failure is
+drawn in the conversation as "this message could not be decrypted" — which is
+right for something a person sent and wrong for machinery. So a CONTROL kind
+carries `ctl: true` in its own schema, and a receiver decodes with
+`decodeAppMessageOrIgnore`, which answers `null` for a marked kind it does not
+know and throws for everything else. The marker is a promise: a receiver that
+drops this message loses nothing a person would see. It exists so that the
+kinds a later release adds are ignored, in silence, by the releases before it.
 
 `EventRef` names another message by the server's event id once it has one, or
 by the sender's idempotency key while the message is still a local echo. The

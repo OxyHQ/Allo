@@ -21,7 +21,10 @@
       "/node_modules/(?!(.pnpm|@noble|ts-mls|@hpke|@oxy\\.so|@scure|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation))",
       "/node_modules/react-native-reanimated/plugin/",
       "/node_modules/@react-native/babel-preset/"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^@oxy\\.so/bloom/surfaces$": "<rootDir>/__mocks__/bloom-surfaces.js"
+    }
   },
   "expo": {
     "install": {
@@ -40,8 +43,7 @@
     "@babel/plugin-transform-dynamic-import": "^7.27.1",
     "@babel/plugin-transform-export-namespace-from": "^7.27.1",
     "@bitdrift/react-native": "^0.12.12",
-    "@expo/vector-icons": "^15.1.1",
-    "@oxy.so/bloom": "^2.11.0",
+    "@oxy.so/bloom": "^2.12.4",
     "@oxy.so/core": "^1.3.1",
     "@oxy.so/expo-splash": "^1.0.0",
     "@oxy.so/services": "^2.0.0",
@@ -66,6 +68,7 @@
     "expo-image": "~57.0.1",
     "expo-image-manipulator": "~57.0.4",
     "expo-image-picker": "~57.0.4",
+    "expo-location": "~57.0.4",
     "expo-notifications": "~57.0.5",
     "expo-router": "~57.0.6",
     "expo-secure-store": "~57.0.1",

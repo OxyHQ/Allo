@@ -8,7 +8,7 @@
  */
 import type { AppMessage, EventRef } from "@allo/shared-types";
 import type { EventRecord, OutboxItemRecord } from "../storage/records";
-import type { MediaView, TimelineItemView } from "../types";
+import type { MediaView, PollView, TimelineItemView } from "../types";
 
 export interface ProjectionInput {
   conversationId: string;
@@ -25,6 +25,8 @@ export interface ProjectionInput {
 interface Working {
   item: TimelineItemView;
   reactions: Map<string, Set<string>>;
+  /** For a poll: the last answer each account gave. The last one wins. */
+  votes?: Map<string, string[]>;
 }
 
 export function project(input: ProjectionInput): TimelineItemView[] {
@@ -69,6 +71,21 @@ export function project(input: ProjectionInput): TimelineItemView[] {
         }
         if (message.op === "add") set.add(sender);
         else set.delete(sender);
+        break;
+      }
+      case "poll_vote": {
+        const t = resolve(message.target);
+        if (!t || t.item.content.kind !== "poll" || !t.votes) break;
+        // A vote is the voter's CURRENT answer, not an increment: the last one
+        // replaces the one before it, and an empty list retracts.
+        if (message.optionIds.length === 0) t.votes.delete(sender);
+        else t.votes.set(sender, [...new Set(message.optionIds)]);
+        break;
+      }
+      case "pin": {
+        const t = resolve(message.target);
+        if (!t) break;
+        t.item.pinned = message.op === "pin" ? true : undefined;
         break;
       }
       case "read": {
@@ -120,6 +137,12 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });
     } else if (m.t === "media") {
       add({ item: { ...base, content: { kind: "media", media: mediaView(conversationId, m) } }, reactions: new Map() });
+    } else if (m.t === "poll") {
+      add({ item: { ...base, content: { kind: "poll", poll: pollView(m) } }, reactions: new Map(), votes: new Map() });
+    } else if (m.t === "location") {
+      add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
+    } else if (m.t === "contact") {
+      add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
     } else {
       apply(m, e.senderAccountId, isOwn, e.seq);
     }
@@ -145,6 +168,12 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       add({ item: { ...base, content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined }, reactions: new Map() });
     } else if (m.t === "media") {
       add({ item: { ...base, content: { kind: "media", media: mediaView(conversationId, m) } }, reactions: new Map() });
+    } else if (m.t === "poll") {
+      add({ item: { ...base, content: { kind: "poll", poll: pollView(m) } }, reactions: new Map(), votes: new Map() });
+    } else if (m.t === "location") {
+      add({ item: { ...base, content: { kind: "location", place: placeView(m) } }, reactions: new Map() });
+    } else if (m.t === "contact") {
+      add({ item: { ...base, content: { kind: "contact", contact: contactView(m) } }, reactions: new Map() });
     } else if (o.state !== "failed") {
       apply(m, accountId, true, null);
     }
@@ -159,8 +188,44 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       else if (item.seq <= maxDelivered) item.sendState = "delivered";
     }
     item.reactions = [...w.reactions.entries()].filter(([, set]) => set.size > 0).map(([key, set]) => ({ key, accountIds: [...set] }));
+    if (item.content.kind === "poll" && w.votes) foldVotes(item.content.poll, w.votes, accountId);
     return item;
   });
+}
+
+function pollView(m: Extract<AppMessage, { t: "poll" }>): PollView {
+  return {
+    question: m.question,
+    options: m.options.map((o) => ({ id: o.id, label: o.label, votes: 0, mine: false, accountIds: [] })),
+    totalVotes: 0,
+    multiple: m.multiple,
+    anonymous: m.anonymous,
+    voted: false,
+  };
+}
+
+/** The answers as counts, each account counted once however many options it chose. */
+function foldVotes(poll: PollView, votes: Map<string, string[]>, viewer: string): void {
+  const byOption = new Map(poll.options.map((o) => [o.id, o]));
+  for (const [voter, optionIds] of votes) {
+    for (const id of optionIds) {
+      const option = byOption.get(id);
+      if (!option) continue; // an option this client does not know: a newer poll shape
+      option.votes += 1;
+      if (voter === viewer) option.mine = true;
+      if (!poll.anonymous) option.accountIds.push(voter);
+    }
+  }
+  poll.totalVotes = votes.size;
+  poll.voted = votes.has(viewer);
+}
+
+function placeView(m: Extract<AppMessage, { t: "location" }>) {
+  return { latitude: m.latitude, longitude: m.longitude, label: m.label, address: m.address };
+}
+
+function contactView(m: Extract<AppMessage, { t: "contact" }>) {
+  return { name: m.name, accountId: m.accountId, handle: m.handle, phone: m.phone };
 }
 
 function mediaView(conversationId: string, m: Extract<AppMessage, { t: "media" }>): MediaView {

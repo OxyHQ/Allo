@@ -12,12 +12,16 @@ import type {
   ConversationEvent,
   ConversationSummary,
   HistoryOffer,
+  Call,
   PublicInstance,
+  Status,
 } from "@allo/shared-types";
 import type { ConversationRow, LeafRow, MemberRow } from "../../db/platform/conversationRepository";
 import type { EventReadRow } from "../../db/platform/eventRepository";
 import type { AccountBackupRow, HistoryOfferRow } from "../../db/platform/historyRepository";
 import type { InstanceRow } from "../../db/platform/instanceRepository";
+import type { CallParticipantRow, CallRow } from "../../db/platform/callRepository";
+import type { StatusRow } from "../../db/platform/statusRepository";
 
 const iso = (date: Date): string => date.toISOString();
 const isoOrNull = (date: Date | null): string | null => (date ? date.toISOString() : null);
@@ -97,6 +101,54 @@ export function toAccountBackup(row: AccountBackupRow): AccountBackup {
     keyCheck: row.keyCheck,
     manifestSignature: row.manifestSignature,
     updatedAt: iso(row.updatedAt),
+  };
+}
+
+/**
+ * A status as ONE device receives it: the ciphertext, and the key sealed to
+ * that device. `sealedKey` is `null` for the author's own listing, which is
+ * the one case where the reader already holds the key — and `null` rather than
+ * omitted, as everywhere else here.
+ */
+/** A call and its rung devices, as any participant may see it. */
+export function toCall(row: CallRow, participants: readonly CallParticipantRow[]): Call {
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    initiatorAccountId: row.initiatorAccountId,
+    initiatorInstanceId: row.initiatorInstanceId,
+    mode: row.mode,
+    state: row.state,
+    relayed: row.relayed,
+    group: row.group,
+    participants: participants.map((one) => ({
+      accountId: one.accountId,
+      instanceId: one.instanceId,
+      state: one.state,
+      joinedAt: isoOrNull(one.joinedAt),
+      leftAt: isoOrNull(one.leftAt),
+    })),
+    startedAt: iso(row.startedAt),
+    answeredAt: isoOrNull(row.answeredAt),
+    endedAt: isoOrNull(row.endedAt),
+    endReason: row.endReason ?? null,
+    ringExpiresAt: isoOrNull(row.ringExpiresAt),
+  };
+}
+
+export function toStatus(row: StatusRow, sealedKey: string | null): Status {
+  return {
+    id: row.id,
+    authorAccountId: row.authorAccountId,
+    authorInstanceId: row.authorInstanceId,
+    payload: row.payload.toString("base64"),
+    nonce: row.nonce.toString("base64"),
+    sha256: row.sha256,
+    blobIds: row.blobIds,
+    sealedKey,
+    signature: row.signature,
+    createdAt: iso(row.createdAt),
+    expiresAt: iso(row.expiresAt),
   };
 }
 

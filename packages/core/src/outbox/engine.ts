@@ -345,6 +345,8 @@ export class OutboxEngine {
       case "edit":
       case "delete":
       case "reaction":
+      case "poll_vote":
+      case "pin":
         return { ...message, target: fix(message.target) };
       case "read":
       case "delivered":

@@ -28,7 +28,7 @@
  * "normalising" a new row with a literal it could get wrong.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { uuidv7 } from "@oxy.so/db";
 import type { AlloDatabase } from "../index";
 import { userSettings } from "../schema/social";
@@ -59,6 +59,8 @@ export const UPDATABLE_USER_SETTINGS_COLUMNS = [
   "privacyAllowTags",
   "privacyAllowAllos",
   "privacyShowOnlineStatus",
+  "privacyStatusViewReceipts",
+  "privacyRelayCalls",
   "privacyHideLikeCounts",
   "privacyHideShareCounts",
   "privacyHideReplyCounts",
@@ -147,6 +149,57 @@ async function readUserSettings(
  * every read of an existing row — moving `updated_at` and `xmin` for a call
  * that changed nothing.
  */
+/**
+ * Which of these accounts publish their online status.
+ *
+ * An account with no settings row publishes: `privacy_show_online_status`
+ * defaults to true in the schema, and a row is only written the first time
+ * somebody opens the settings screen. So absence means the default, never
+ * "unknown" — and reading it any other way would make presence depend on
+ * whether a person had ever visited a screen.
+ */
+export async function showOnlineStatusOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, show: userSettings.privacyShowOnlineStatus })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));
+  return new Set(accountIds.filter((accountId) => !hidden.has(accountId)));
+}
+
+/**
+ * Which of these accounts let a status view carry their name.
+ *
+ * Absence means the default, which is true — the same reading as
+ * {@link showOnlineStatusOf}, and for the same reason: presence and receipts
+ * must not depend on whether somebody has ever opened a settings screen.
+ */
+export async function statusViewReceiptsOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, show: userSettings.privacyStatusViewReceipts })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  const hidden = new Set(rows.filter((row) => !row.show).map((row) => row.oxyUserId));
+  return new Set(accountIds.filter((accountId) => !hidden.has(accountId)));
+}
+
+/**
+ * Which of these accounts ask for their calls to be relayed.
+ *
+ * Absent means the default, which is OFF — a direct call is better, and a
+ * setting nobody has opened should not quietly degrade their calls.
+ */
+export async function relayCallsOf(db: AlloDatabase, accountIds: readonly string[]): Promise<Set<string>> {
+  if (accountIds.length === 0) return new Set();
+  const rows = await db
+    .select({ oxyUserId: userSettings.oxyUserId, relay: userSettings.privacyRelayCalls })
+    .from(userSettings)
+    .where(inArray(userSettings.oxyUserId, [...accountIds]));
+  return new Set(rows.filter((row) => row.relay).map((row) => row.oxyUserId));
+}
+
 export async function ensureUserSettings(
   db: AlloDatabase,
   oxyUserId: string,

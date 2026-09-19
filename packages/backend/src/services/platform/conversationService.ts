@@ -3,7 +3,7 @@
  */
 
 import { isUniqueViolation } from "@oxy.so/db";
-import { dmKeyFor, type ConversationSummary, type CreateConversationRequest } from "@allo/shared-types";
+import { dmKeyFor, type ConversationSummary, type CreateConversationRequest, type ResetConversationRequest } from "@allo/shared-types";
 import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction } from "../../db";
 import {
   findConversationByDmKey,
@@ -18,6 +18,7 @@ import {
   listMembersForConversations,
   lockConversation,
   markLeafRemoved,
+  replaceConversationGroup,
   setMemberState,
   upsertJoinedMember,
   upsertLeaf,
@@ -156,6 +157,87 @@ export async function createConversation(
 
   const [conversation] = await summariesFor([createdId], caller.instanceId, db);
   return { conversation, created: true, nudges };
+}
+
+/**
+ * REVIVE a conversation whose MLS group has lost every active leaf.
+ *
+ * A group can end up with none: the only device in it was revoked, or the last
+ * member signed out. Nothing can ever be committed to such a group again, so
+ * nobody can be added back to it — and a DM is unique on its `dm_key`, so
+ * "just start a new conversation" converges on the same dead row. Two people
+ * would never be able to speak again.
+ *
+ * **The rule, and it is the whole security of this route: the group must be
+ * provably dead.** Zero leaves in state `active`. While one is alive the reset
+ * is refused, so this can never eject a participant or take over a live
+ * conversation — the surviving device would have to be revoked first, and only
+ * its own account can do that. The caller must also be a joined member, and a
+ * stranger gets `not_found` like everywhere else.
+ *
+ * What survives: the conversation id, its members, its `dm_key`, and its event
+ * log. What does not: every message sent before the reset stays unreadable —
+ * which it already was, because nobody holds the keys and neither a history
+ * transfer nor a backup carries MLS state.
+ */
+export async function resetConversation(
+  caller: Caller,
+  conversationId: string,
+  request: ResetConversationRequest,
+  deps: { db?: AlloDatabase } = {},
+): Promise<{ conversation: ConversationSummary; nudges: string[] }> {
+  const db = deps.db ?? getDb();
+  const member = await findMember(conversationId, caller.accountId, db);
+  if (!member || member.state !== "joined") throw notFound("Conversation not found");
+
+  const claimed = await findConversationByMlsGroupId(request.mlsGroupId, db);
+  if (claimed && claimed.id !== conversationId) {
+    throw new AlloHttpError("idempotency_conflict", "This mlsGroupId belongs to another conversation");
+  }
+
+  let nudges: string[] = [];
+  await db.transaction(async (tx) => {
+    const conversation = await lockConversation(conversationId, tx);
+    if (!conversation) throw notFound("Conversation not found");
+    const leaves = await listLeaves(conversationId, tx);
+    /**
+     * A replay of the caller's own reset. Once it lands the group is ALIVE —
+     * this device's leaf is the live one — so the rule below would refuse the
+     * retry that a dropped response makes normal. Matching on the exact group
+     * the caller installed gives nothing away: anybody it would let through is
+     * already in the conversation.
+     */
+    const mine = leaves.find((leaf) => leaf.instanceId === caller.instanceId);
+    if (conversation.mlsGroupId === request.mlsGroupId && mine?.state === "active") return;
+
+    const alive = leaves.filter((leaf) => leaf.state === "active");
+    if (alive.length > 0) {
+      throw new AlloHttpError("idempotency_conflict", "The conversation still has an active device and cannot be reset", {
+        activeLeaves: alive.length,
+      });
+    }
+    // Idempotent: the same group posted twice resets once.
+    if (conversation.mlsGroupId !== request.mlsGroupId) {
+      await replaceConversationGroup(conversationId, request.mlsGroupId, tx);
+    }
+    for (const leaf of leaves) {
+      if (leaf.state !== "removed") await markLeafRemoved(conversationId, leaf.instanceId, null, tx);
+    }
+    await upsertLeaf(
+      { conversationId, instanceId: caller.instanceId, accountId: caller.accountId, state: "active", addedEpoch: 0 },
+      tx,
+    );
+    if (request.initialCommit) {
+      const appended = await appendClientEvent(
+        { conversationId, sender: { instanceId: caller.instanceId, accountId: caller.accountId }, request: request.initialCommit },
+        tx,
+      );
+      nudges = appended.recipients;
+    }
+  });
+
+  const [conversation] = await summariesFor([conversationId], caller.instanceId, db);
+  return { conversation, nudges };
 }
 
 /**

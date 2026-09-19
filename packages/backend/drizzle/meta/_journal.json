@@ -54,8 +54,29 @@
     {
       "idx": 7,
       "version": "7",
-      "when": 1789703939324,
-      "tag": "0007_group_info",
+      "when": 1789783046895,
+      "tag": "0007_account_presence",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789784807196,
+      "tag": "0008_statuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789788602786,
+      "tag": "0009_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789803852528,
+      "tag": "0010_group_info",
       "breakpoints": true
     }
   ]

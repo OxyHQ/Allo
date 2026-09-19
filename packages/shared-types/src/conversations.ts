@@ -107,6 +107,43 @@ export const createConversationResponseSchema = z.object({
 });
 export type CreateConversationResponse = z.infer<typeof createConversationResponseSchema>;
 
+/**
+ * `POST /v1/conversations/:id/reset` — REVIVE a conversation whose MLS group
+ * has no active leaf left.
+ *
+ * A group can lose every one of them: the only device in it was revoked, or
+ * the last member signed out. Nothing can be committed to such a group ever
+ * again, so nobody can be added back to it — and because a DM is unique on its
+ * `dm_key`, "start a new conversation with that person" returns the same dead
+ * row. Without this the two of you can never speak again, which is not a thing
+ * a messenger may do.
+ *
+ * The conversation keeps its id, its members and its `dm_key`; only the MLS
+ * group underneath is replaced, by the same initial commit a creation uses.
+ *
+ * **The rule the server enforces is that the group is provably dead**: zero
+ * leaves in state `active`. While even one is alive the reset is refused, so
+ * this can never eject anybody or take over a live conversation — the one
+ * device still in it would have to be revoked first, which is a thing only
+ * that account can do.
+ *
+ * What it costs is stated rather than hidden: everything sent before the reset
+ * stays unreadable. It already was. No one holds the keys, and neither a
+ * history transfer nor a backup carries MLS state, so a group with no live
+ * leaf was unreadable for ever before this route existed.
+ */
+export const resetConversationRequestSchema = z.object({
+  /** The new group, which must not be any other conversation's. */
+  mlsGroupId: mlsGroupIdSchema,
+  idempotencyKey: idempotencyKeySchema,
+  /** Epoch 0, adding every other member's devices, exactly as a creation does. */
+  initialCommit: submitEventRequestSchema.optional(),
+});
+export type ResetConversationRequest = z.infer<typeof resetConversationRequestSchema>;
+
+export const resetConversationResponseSchema = z.object({ conversation: conversationSummarySchema });
+export type ResetConversationResponse = z.infer<typeof resetConversationResponseSchema>;
+
 /** `GET /v1/conversations` */
 export const listConversationsResponseSchema = z.object({
   conversations: z.array(conversationSummarySchema),

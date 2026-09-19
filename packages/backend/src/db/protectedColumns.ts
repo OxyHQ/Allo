@@ -52,4 +52,14 @@ export const PROTECTED_COLUMNS = {
    */
   history_offers: ["sealedKey"],
   account_backups: ["keyCheck"],
+  /**
+   * A status update's body, and the per-status key sealed to ONE recipient
+   * device. The body is AES-256-GCM under a key the server never holds; the
+   * sealed key opens only with that device's transfer private key. Both are
+   * returned by the two routes that hand them to the device they belong to
+   * (`statusRepository.ts` names the opt-in) and by no listing of anybody
+   * else's.
+   */
+  statuses: ["payload", "nonce"],
+  status_keys: ["sealedKey"],
 } as const;

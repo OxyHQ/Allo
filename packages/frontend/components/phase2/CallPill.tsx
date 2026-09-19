@@ -1,0 +1,63 @@
+import React from 'react';
+import { StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { CallMinimisedPill } from '@oxy.so/bloom/call-ui';
+
+import { usePerson } from '@/hooks/usePerson';
+import { useCallDuration, useCallsStore, useCallSession } from '@/lib/phase2/calls';
+
+/**
+ * THE MINIMISED CALL, FLOATING OVER WHATEVER SCREEN YOU WENT TO.
+ *
+ * Bloom's `CallMinimisedPill` deliberately does not place itself: it knows
+ * nothing about the safe areas, the keyboard or the tab bar, so the offsets are
+ * this app's to decide and arrive through `style`.
+ *
+ * It renders nothing unless there is a live call that has been minimised, which
+ * is what makes it safe to mount once in `app/(chat)/_layout.tsx` — a minimised
+ * call then survives walking around the app.
+ */
+export function CallPill() {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const session = useCallSession();
+  const setMinimised = useCallsStore((state) => state.setMinimised);
+  const end = useCallsStore((state) => state.end);
+  const setMuted = useCallsStore((state) => state.setMuted);
+  const duration = useCallDuration(session);
+  const peer = usePerson(session?.peers[0]?.accountId);
+
+  if (!session || !session.minimised) return null;
+
+  const others = session.peers.length - 1;
+  const who = peer?.displayName ?? t('calls.someone');
+  const name = others > 0 ? t('calls.withOthers', { name: who, count: others }) : who;
+
+  return (
+    <CallMinimisedPill
+      name={name}
+      mode={session.mode}
+      duration={duration === '' ? undefined : duration}
+      statusText={duration === '' ? t('calls.status.connecting') : undefined}
+      muted={session.muted}
+      onMutedChange={setMuted}
+      onExpand={() => {
+        setMinimised(false);
+        router.push(`/c/${session.conversationId}/call`);
+      }}
+      onEndCall={end}
+      labels={{
+        mute: t('calls.control.mute'),
+        unmute: t('calls.control.unmute'),
+        endCall: t('calls.control.end'),
+        expand: t('calls.expand'),
+      }}
+      style={styles.floating}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  floating: { position: 'absolute', left: 16, right: 16, bottom: 24 },
+});
