@@ -27,6 +27,7 @@ import {
   type Call,
   type CallEndReason,
   type CallResponse,
+  type CallTokenResponse,
   type CreateCallRequest,
   type IceServersResponse,
 } from "@allo/shared-types";
@@ -49,9 +50,11 @@ import { listActiveInstancesForAccounts } from "../../db/platform/instanceReposi
 import { blockedEitherWay } from "../../db/social/blockRepository";
 import { relayCallsOf } from "../../db/social/userSettingsRepository";
 import { getRealtime } from "../../runtime/realtime";
-import { forbidden, notFound, validationFailed } from "../../utils/httpErrors";
+import { AlloHttpError, forbidden, notFound, validationFailed } from "../../utils/httpErrors";
 import { uuidv7 } from "@oxy.so/db";
 import { getIceConfig } from "../../config/iceRuntime";
+import { callRoomName, type LiveKitConfig } from "../../config/livekit";
+import { getLiveKitConfig } from "../../config/sfuRuntime";
 import { mintTurnCredential, type IceConfig } from "../../config/turn";
 import { toCall } from "./wire";
 
@@ -259,6 +262,69 @@ export async function callIceServers(
     expiresAt = credential.expiresAt;
   }
   return { iceServers, expiresAt: expiresAt.toISOString(), relayOnly: call.relayed };
+}
+
+/**
+ * The SFU ticket for a GROUP call.
+ *
+ * Three refusals, and each is a rule rather than a guard:
+ *
+ * - **A 1:1 call has no ticket.** Its media is peer to peer, or through the
+ *   TURN relay when somebody hides their address; the SFU is not in that path
+ *   at all, and issuing a room for it would invent a third party the ADR
+ *   deliberately kept out.
+ * - **A call that is over has no ticket**, so a token cannot outlive the call
+ *   it was minted for.
+ * - **Only a device that has JOINED gets one.** A rung device that has not
+ *   answered has not agreed to be in the room, and a ticket is how you get in.
+ *   Answering first is the point of the state machine.
+ *
+ * `identity` is the INSTANCE, not the account: two of somebody's devices in
+ * one call are two participants, and the per-sender frame key of Decision 1 is
+ * per device. Data is not published — signalling and the frame keys travel as
+ * encrypted messages in the conversation, never over LiveKit — so the grant
+ * says so rather than leaving a channel open that nothing uses.
+ */
+export async function callSfuToken(
+  caller: CallCaller,
+  callId: string,
+  deps: CallServiceDeps & { livekit?: LiveKitConfig | null; now?: () => Date } = {},
+): Promise<CallTokenResponse> {
+  const db = deps.db ?? getDb();
+  const { call } = await readCall(caller, callId, deps);
+  if (!call.group) throw validationFailed("a 1:1 call does not use the SFU", { callId });
+  if (call.state === "ended") throw validationFailed("the call has ended", { callId });
+
+  const participant = await findParticipant(callId, caller.instanceId, db);
+  if (!participant || participant.state !== "joined") {
+    throw forbidden("answer the call before asking for a place in the room");
+  }
+
+  const config = deps.livekit !== undefined ? deps.livekit : getLiveKitConfig();
+  if (!config) throw new AlloHttpError("unavailable", "Group calling is not configured on this deployment");
+
+  const now = deps.now?.() ?? new Date();
+  const room = callRoomName(callId);
+  const { AccessToken } = await import("livekit-server-sdk");
+  const grant = new AccessToken(config.apiKey, config.apiSecret, {
+    identity: caller.instanceId,
+    ttl: config.ttlSeconds,
+  });
+  grant.addGrant({
+    roomJoin: true,
+    room,
+    canPublish: true,
+    canSubscribe: true,
+    // Nothing rides LiveKit's data channel: the offer, the candidates and the
+    // per-sender frame keys are encrypted messages in the conversation.
+    canPublishData: false,
+  });
+  return {
+    url: config.url,
+    token: await grant.toJwt(),
+    room,
+    expiresAt: new Date(now.getTime() + config.ttlSeconds * 1000).toISOString(),
+  };
 }
 
 // ---- the parts --------------------------------------------------------------

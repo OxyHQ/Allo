@@ -8,7 +8,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { callResponseSchema, iceServersResponseSchema, CALL_RING_TIMEOUT_MS } from "@allo/shared-types";
+import { callResponseSchema, callTokenResponseSchema, iceServersResponseSchema, CALL_RING_TIMEOUT_MS } from "@allo/shared-types";
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { calls } from "../../db/schema/calls";
@@ -16,11 +16,14 @@ import { blockUser } from "../../db/social/blockRepository";
 import { ensureUserSettings, updateUserSettings } from "../../db/social/userSettingsRepository";
 import { runCallRingTick } from "../../workers/callRingWorker";
 import { clearIceConfig, setIceConfig } from "../../config/iceRuntime";
+import { callRoomName, readLiveKitConfig } from "../../config/livekit";
+import { clearLiveKitConfig, setLiveKitConfig } from "../../config/sfuRuntime";
 import {
   accountId,
   createPlatformHarness,
   dmBetween,
   expectParses,
+  groupOfThree,
   TestInstance,
   USER_HEADER,
   type PlatformHarness,
@@ -40,6 +43,7 @@ afterAll(async () => {
 beforeEach(() => {
   h.realtime.reset();
   clearIceConfig();
+  clearLiveKitConfig();
 });
 
 let keys = 0;
@@ -245,5 +249,83 @@ describe("GET /v1/calls/:id/ice", () => {
     const stranger = await TestInstance.register(h.app, accountId("nosy"));
     const id = (await ring(a, conversationId)).body.call.id as string;
     expect((await stranger.signed("get", `/v1/calls/${id}/ice`)).status).toBe(404);
+  });
+});
+
+/**
+ * The SFU ticket. A group call's media goes through LiveKit; a 1:1's does not,
+ * and the refusals say which rule they are.
+ */
+describe("GET /v1/calls/:id/token", () => {
+  const LIVEKIT = { url: "wss://livekit.test", apiKey: "APIkeytest", apiSecret: "secret-that-is-long-enough-for-hs256", ttlSeconds: 3600 };
+
+  beforeEach(() => setLiveKitConfig(LIVEKIT));
+  afterAll(() => clearLiveKitConfig());
+
+  it("is refused for a 1:1 call, which never touches the SFU", async () => {
+    const { a, b, conversationId } = await dmBetween(h.app);
+    const { call } = expectParses(callResponseSchema, (await ring(a, conversationId)).body);
+    await b.signed("post", `/v1/calls/${call.id}/answer`).expect(200);
+
+    const response = await a.signed("get", `/v1/calls/${call.id}/token`);
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("validation_failed");
+  });
+
+  it("is refused until this device has answered, and then issued", async () => {
+    const { a, b, conversationId } = await groupOfThree(h.app);
+    const { call } = expectParses(callResponseSchema, (await ring(a, conversationId)).body);
+    expect(call.group).toBe(true);
+    expect(call.relayed).toBe(true);
+
+    // `b` was rung and has not answered: no place in the room yet.
+    const tooEarly = await b.signed("get", `/v1/calls/${call.id}/token`);
+    expect(tooEarly.status).toBe(403);
+
+    await b.signed("post", `/v1/calls/${call.id}/answer`).expect(200);
+    const issued = await b.signed("get", `/v1/calls/${call.id}/token`);
+    expect(issued.status).toBe(200);
+    const ticket = expectParses(callTokenResponseSchema, issued.body);
+    expect(ticket.url).toBe(LIVEKIT.url);
+    expect(ticket.room).toBe(callRoomName(call.id));
+
+    // The identity in the token is this DEVICE, because a per-sender key is
+    // per device, and the grant opens no data channel.
+    const claims = JSON.parse(Buffer.from(ticket.token.split(".")[1], "base64url").toString());
+    expect(claims.sub).toBe(b.id);
+    expect(claims.video).toMatchObject({ roomJoin: true, room: callRoomName(call.id), canPublish: true, canSubscribe: true });
+    expect(claims.video.canPublishData).toBe(false);
+  });
+
+  it("is refused once the call is over, so a ticket cannot outlive it", async () => {
+    const { a, b, conversationId } = await groupOfThree(h.app);
+    const { call } = expectParses(callResponseSchema, (await ring(a, conversationId)).body);
+    await b.signed("post", `/v1/calls/${call.id}/answer`).expect(200);
+    await b.signed("post", `/v1/calls/${call.id}/end`, { reason: "hangup" }).expect(200);
+
+    const response = await b.signed("get", `/v1/calls/${call.id}/token`);
+    expect(response.status).toBe(400);
+  });
+
+  it("says so plainly when no SFU is configured, rather than pretending", async () => {
+    clearLiveKitConfig();
+    const { a, b, conversationId } = await groupOfThree(h.app);
+    const { call } = expectParses(callResponseSchema, (await ring(a, conversationId)).body);
+    await b.signed("post", `/v1/calls/${call.id}/answer`).expect(200);
+
+    const response = await b.signed("get", `/v1/calls/${call.id}/token`);
+    expect(response.status).toBe(503);
+    expect(response.body.error.code).toBe("unavailable");
+  });
+
+  it("reads the three variables together or not at all", () => {
+    expect(readLiveKitConfig({} as NodeJS.ProcessEnv)).toBeNull();
+    expect(() => readLiveKitConfig({ LIVEKIT_URL: "wss://x" } as NodeJS.ProcessEnv)).toThrow(/together or not at all/);
+    expect(readLiveKitConfig({ LIVEKIT_URL: "wss://x", LIVEKIT_API_KEY: "k", LIVEKIT_API_SECRET: "s" } as NodeJS.ProcessEnv)).toEqual({
+      url: "wss://x",
+      apiKey: "k",
+      apiSecret: "s",
+      ttlSeconds: 3600,
+    });
   });
 });
