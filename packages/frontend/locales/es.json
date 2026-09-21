@@ -1,4 +1,8 @@
 {
+  "settings.appearance.mode.system": "Sistema",
+  "settings.appearance.mode.light": "Claro",
+  "settings.appearance.mode.dark": "Oscuro",
+  "navigation.open": "Abrir navegación",
   "auth.welcome.subtitle": "Mensajería privada con cifrado de extremo a extremo. Inicia sesión con tu cuenta de Oxy para empezar.",
   "auth.welcome.title": "Te damos la bienvenida a Allo",
   "backup.backUpNow": "Hacer copia ahora",
@@ -206,6 +210,7 @@
   "chat.you": "Tú",
   "common.back": "Atrás",
   "common.cancel": "Cancelar",
+  "common.open": "Abrir",
   "common.close": "Cerrar",
   "common.done": "Listo",
   "composer.attach.camera": "Cámara",

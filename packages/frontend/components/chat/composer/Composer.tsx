@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, type TextInput } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import type { ContactDraft, PlaceDraft, PollDraft } from '@allo/core';
 import {
   AttachmentMenu,
   ChatComposer,
@@ -11,19 +9,19 @@ import {
   type ChatComposerIcon,
   type ChatComposerSuggestion,
 } from '@oxy.so/bloom/chat-composer';
-import {
-  RiAttachment2,
-  RiBarChartHorizontalLine,
-  RiCameraLine,
-  RiContactsBookLine,
-  RiErrorWarningLine,
-  RiFileTextLine,
-  RiGalleryLine,
-  RiMapPinLine,
-} from '@oxy.so/bloom/icons';
+import { RiAttachment2 } from '@oxy.so/bloom/icons/RiAttachment2';
+import { RiBarChartHorizontalLine } from '@oxy.so/bloom/icons/RiBarChartHorizontalLine';
+import { RiCameraLine } from '@oxy.so/bloom/icons/RiCameraLine';
+import { RiContactsBookLine } from '@oxy.so/bloom/icons/RiContactsBookLine';
+import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
+import { RiFileTextLine } from '@oxy.so/bloom/icons/RiFileTextLine';
+import { RiGalleryLine } from '@oxy.so/bloom/icons/RiGalleryLine';
+import { RiMapPinLine } from '@oxy.so/bloom/icons/RiMapPinLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
-import type { ContactDraft, PlaceDraft, PollDraft } from '@allo/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ActivityIndicator, Platform, type TextInput } from 'react-native';
 
 import {
   captureMediaAttachment,

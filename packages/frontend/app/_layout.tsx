@@ -20,6 +20,7 @@ import { AppState, Platform, type AppStateStatus } from 'react-native';
 
 import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
+import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { AlloRoot } from '@/lib/allo/AlloRoot';
@@ -111,7 +112,7 @@ export default function RootLayout() {
               gates the app on this device's enrollment. */}
           <AlloRoot>
             {!IS_WEB && <NotificationPermissionGate />}
-            <RootStack />
+            <NavigationTheme><RootStack /></NavigationTheme>
           </AlloRoot>
         </AppProviders>
       ) : IS_WEB ? (

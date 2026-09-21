@@ -1,28 +1,22 @@
-import React, { useCallback, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
 import { GlyphButton } from '@oxy.so/bloom/button';
 import { ContactRow } from '@oxy.so/bloom/chat-people';
-import { RiCloseCircleLine } from '@oxy.so/bloom/icons';
+import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
 import { Search } from '@oxy.so/bloom/search';
-import { SettingsListGroup } from '@oxy.so/bloom/settings-list';
+import { SettingsCard, SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Muted } from '@oxy.so/bloom/typography';
+import { useOxy } from '@oxy.so/services';
+import { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { Page } from '@/components/shell/Page';
-import {
-  useAddModeratedUser,
-  useModeratedUsers,
-  useRemoveModeratedUser,
-  type ModeratedUser,
-} from '@/hooks/usePrivacySettings';
+import { useAddModeratedUser, useModeratedUsers, useRemoveModeratedUser, type ModeratedUser } from '@/hooks/usePrivacySettings';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import type { ModerationList } from '@/lib/privacy/api';
-import { confirm } from '@oxy.so/bloom/surfaces';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 /**
  * THE BLOCKED LIST AND THE RESTRICTED LIST, which are one screen.
@@ -121,7 +115,7 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
   const note = (key: string) => <Muted style={styles.note}>{t(key)}</Muted>;
 
   return (
-    <Page title={t(props.titleKey)}>
+    <>
       <Search
         label={t(props.searchPlaceholderKey)}
         value={search.term}
@@ -141,19 +135,21 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
         ) : searchResults.length === 0 ? (
           note('settings.privacy.noUsersFound')
         ) : (
-          <SettingsListGroup>
-            {searchResults.map((candidate) => (
-              <ContactRow
-                key={candidate.id}
-                id={candidate.id}
-                name={candidate.displayName}
-                avatar={candidate.avatar}
-                subtitle={`@${candidate.handle}`}
-                actionLabel={t('settings.privacy.add')}
-                onAction={() => add(candidate)}
-              />
-            ))}
-          </SettingsListGroup>
+          <SettingsSection>
+            <SettingsCard>
+              {searchResults.map((candidate) => (
+                <ContactRow
+                  key={candidate.id}
+                  id={candidate.id}
+                  name={candidate.displayName}
+                  avatar={candidate.avatar}
+                  subtitle={`@${candidate.handle}`}
+                  actionLabel={t('settings.privacy.add')}
+                  onAction={() => add(candidate)}
+                />
+              ))}
+            </SettingsCard>
+          </SettingsSection>
         )
       ) : loading ? (
         <View style={styles.centred}>
@@ -167,28 +163,30 @@ export function ModeratedUsersScreen(props: ModeratedUsersScreenProps) {
           {note(props.descriptionKey)}
         </View>
       ) : (
-        <SettingsListGroup title={t(props.titleKey)} footer={t(props.descriptionKey)}>
-          {users.map((user) => (
-            <ContactRow
-              key={user.id}
-              id={user.id}
-              name={user.displayName ?? t('settings.privacy.unknownAccount')}
-              avatar={user.avatar}
-              subtitle={user.handle ? `@${user.handle}` : user.id}
-              trailingSlot={
-                <GlyphButton
-                  icon={RiCloseCircleLine}
-                  color={theme.colors.error}
-                  accessibilityLabel={t(props.removeActionKey)}
-                  disabled={removeUser.isPending}
-                  onPress={() => void remove(user)}
-                />
-              }
-            />
-          ))}
-        </SettingsListGroup>
+        <SettingsSection label={t(props.titleKey)} description={t(props.descriptionKey)}>
+          <SettingsCard>
+            {users.map((user) => (
+              <ContactRow
+                key={user.id}
+                id={user.id}
+                name={user.displayName ?? t('settings.privacy.unknownAccount')}
+                avatar={user.avatar}
+                subtitle={user.handle ? `@${user.handle}` : user.id}
+                trailingSlot={
+                  <GlyphButton
+                    icon={RiCloseCircleLine}
+                    color={theme.colors.error}
+                    accessibilityLabel={t(props.removeActionKey)}
+                    disabled={removeUser.isPending}
+                    onPress={() => void remove(user)}
+                  />
+                }
+              />
+            ))}
+          </SettingsCard>
+        </SettingsSection>
       )}
-    </Page>
+    </>
   );
 }
 

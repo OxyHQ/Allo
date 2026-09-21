@@ -28,7 +28,7 @@ never patched here.
 
 | Route | Screen |
 |---|---|
-| `(chat)/_layout.tsx` | Phone: a stack. From 768px: Bloom `ChatSplitLayout` behind a `Sidebar` rail (Chats, Calls, Status) — list pane (`ConversationList`, or `SettingsMenu` under `/settings`), the route as the detail pane, `ConversationInfo` as the info pane when opened from the header. `CallPill` is mounted here, so a minimised call survives walking around |
+| `(chat)/_layout.tsx` | Bloom `AppShell variant="split"` owns the viewport, rail/drawer, pane surfaces and resizing. From 768px, `ConversationList` sits beside the routed detail; below it, the detail slot holds the phone stack and the home route supplies the list. Existing lists own scrolling (`paneScroll={false}`). `ConversationInfo` is the optional third pane from 1100px. Settings routes bridge to `AlloSettingsProvider`/Bloom `SettingsModal` and never replace the conversation list. `CallPill` is mounted here, so a minimised call survives walking around |
 | `(chat)/index.tsx` | Phone: `ConversationList`. Wide: the empty detail pane |
 | `(chat)/c/[id]/index.tsx` | `ConversationScreen`; an account id opens (creates) the DM |
 | `(chat)/c/[id]/info.tsx` | `ConversationInfo` as a screen (phone) |
@@ -113,3 +113,11 @@ preset. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
 - No colour literals; `StyleSheet` with theme colours.
 - Every string through `t()`; bundles are flat dotted keys.
 - Navigate with literal paths so `__tests__/routes/navigationTargets.test.ts` can see them.
+
+### Bloom navigation and settings
+
+`NavigationTheme` uses Expo Router’s public theme provider to map Bloom tokens. Its transparent variant is scoped to AppShell’s detail navigator: the base owns that surface on web and native, including the navigator’s otherwise-grey Background wrapper. Individual routes do not paint another full-pane background.
+
+Settings pages compose Bloom `SettingsGeneralPage`, `SettingsSection`, `SettingsCard` and `SettingsRow`; they own neither a header nor a ScrollView. The modal owns responsive navigation, PageHeader and its viewport. Account/language operations close the modal before opening Services’ shared account flow. Backup keeps its existing route-removal guard and publishes only a pending boolean to the modal departure guard; the recovery phrase stays solely in BackupPanel memory.
+
+Native calling registers `@livekit/react-native` globals in `lib/calls/globals.native.ts`. Its required LiveKit client/WebRTC peers and both Expo config plugins are installed explicitly (https://docs.livekit.io/transport/sdk-platforms/expo/); do not install the second `react-native-webrtc` implementation alongside LiveKit’s fork. This corrects the previously undeclared native import without changing call signalling/media logic. Android export verifies bundling, not device permissions or an actual call.

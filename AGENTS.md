@@ -84,7 +84,7 @@ packages/
 
 The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
 chat-screen, message-bubble, message-media, chat-composer, chat-people) in
-Bloom's `ChatSplitLayout` with a `Sidebar` rail beside it;
+Bloom's `AppShell variant="split"`, which owns the Sidebar rail/drawer and pane surfaces; settings use Bloom's `SettingsModal`;
 `packages/frontend/ARCHITECTURE.md` maps every screen.
 
 **Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),

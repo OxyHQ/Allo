@@ -11,11 +11,11 @@
  * reaches for two, and the popover still dismisses on Escape and an outside
  * press.
  */
-import React, { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { ComposerIconButton, EmojiPicker } from '@oxy.so/bloom/chat-composer';
-import { RiEmotionLine } from '@oxy.so/bloom/icons';
+import { RiEmotionLine } from '@oxy.so/bloom/icons/RiEmotionLine';
 import { Popover, PopoverContent, PopoverTrigger } from '@oxy.so/bloom/popover';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { EMOJI_GROUPS } from '@/lib/chat/emoji';
 

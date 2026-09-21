@@ -1,16 +1,16 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiMessage2Line, RiUserSearchLine } from '@oxy.so/bloom/icons';
+import { RiMessage2Line } from '@oxy.so/bloom/icons/RiMessage2Line';
+import { RiUserSearchLine } from '@oxy.so/bloom/icons/RiUserSearchLine';
 import * as Skeleton from '@oxy.so/bloom/skeleton';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import { useOxy } from '@oxy.so/services';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 import { ProfileIdentity } from '@/components/profile/ProfileIdentity';
 import { Page } from '@/components/shell/Page';
