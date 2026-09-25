@@ -15,6 +15,25 @@ compatibility_date = "2026-09-09"
 
 workers_dev = false
 
+# App Links / Universal Links configuration, read by `worker/appAssociation.js`
+# (`/.well-known/assetlinks.json` and `/.well-known/apple-app-site-association`).
+# Declared here so a deploy carries it; a value set only in the dashboard is
+# replaced by these on the next `wrangler deploy`.
+#
+#   APPLE_TEAM_ID  The Apple Developer Team ID (10 characters, Membership
+#                  details) that signs `com.allo.ios`. Empty: the AASA answers a
+#                  JSON 404, because a guessed value publishes a wrong
+#                  association.
+#   ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS
+#                  Comma-separated signing-certificate SHA-256 fingerprints
+#                  trusted besides the Oxy release key — the Google Play
+#                  app-signing key once Play App Signing is on (Play Console ->
+#                  Test and release -> App integrity). The public debug key is
+#                  refused even if listed.
+[vars]
+APPLE_TEAM_ID = ""
+ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS = ""
+
 # Every request is observed; ASSETS retains routing and public/_headers.
 [assets]
 binding = "ASSETS"

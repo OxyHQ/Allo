@@ -24,6 +24,7 @@ import { AppProviders } from '@/components/providers/AppProviders';
 import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { AlloRoot } from '@/lib/allo/AlloRoot';
 import { AppInitializer } from '@/lib/appInitializer';
+import { usePendingHref } from '@/lib/navigation/usePendingHref';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
 import { colorPresetFromSetting, themeModeFromSetting } from '@/lib/theme';
 import { useAppearanceStore } from '@/stores/appearanceStore';
@@ -52,10 +53,15 @@ function ThemeRoot({ children }: { children: ReactNode }) {
   );
 }
 
-/** Signed out, the chat group redirects to sign-in, and the other way round. */
+/**
+ * Signed out, the chat group redirects to sign-in, and the other way round. A
+ * link opened while signed out is kept and followed once signed in, rather than
+ * lost to the redirect (`usePendingHref`).
+ */
 function RootStack() {
   const { user } = useOxy();
   const signedIn = Boolean(user);
+  usePendingHref(signedIn);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(chat)" redirect={!signedIn} />

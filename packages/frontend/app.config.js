@@ -17,19 +17,26 @@ module.exports = function(_config) {
    */
   const PLATFORM = process.env.EAS_BUILD_PLATFORM
 
-  const IS_TESTFLIGHT = process.env.EXPO_PUBLIC_ENV === 'testflight'
-  const IS_PRODUCTION = process.env.EXPO_PUBLIC_ENV === 'production'
-  const IS_DEV = !IS_TESTFLIGHT || !IS_PRODUCTION
-
-  // App variant — lets a development build sit next to the production app on the
-  // SAME device by giving it a distinct applicationId/bundleId + name. Build the
-  // dev variant with `APP_VARIANT=development`; production is the default. The URL
-  // scheme is intentionally shared so deep-link plumbing keeps working — Android
-  // just shows an app chooser when both are installed.
+  // ONE build variant, chosen explicitly: `APP_VARIANT=development` builds the
+  // development app, anything else (unset included) is the production app.
+  //
+  // It lets a development build sit next to the production app on the SAME
+  // device by giving it a distinct applicationId/bundleId + name, and it is the
+  // only thing that decides whether dev-only entries (the `localhost` link host)
+  // ship. That used to be `IS_DEV = !IS_TESTFLIGHT || !IS_PRODUCTION`, read off
+  // `EXPO_PUBLIC_ENV`: true for every build that was not BOTH TestFlight and
+  // production at once, which is every build, so production store builds claimed
+  // `http://localhost:4140` (OxyHQ/Allo#176). `__tests__/appConfig.test.ts`
+  // asserts a production config names no local host. The URL scheme is
+  // intentionally shared so deep-link plumbing keeps working — Android just shows
+  // an app chooser when both are installed.
   const IS_DEV_VARIANT = process.env.APP_VARIANT === 'development'
   const ANDROID_ID = IS_DEV_VARIANT ? 'com.allo.app.dev' : 'com.allo.app'
   const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios'
   const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo'
+
+  // The host whose https links open the app: the web app's own origin.
+  const APP_LINK_HOST = 'allo.you'
 
   // Check if google-services.json exists
   const googleServicesPath = path.resolve(__dirname, '../../google-services.json')
@@ -53,6 +60,10 @@ return {
       ios: {
         supportsTablet: true,
         bundleIdentifier: IOS_ID,
+        // Universal Links. iOS reads `https://allo.you/.well-known/apple-app-site-association`
+        // (served by `worker/appAssociation.js`), which answers 404 until the
+        // Apple Team ID is configured there.
+        associatedDomains: [`applinks:${APP_LINK_HOST}`],
       },
         android: {
             adaptiveIcon: {
@@ -70,11 +81,15 @@ return {
             ...(hasGoogleServices && { googleServicesFile: "../../google-services.json" }),
             // App Links. Every https host in an autoVerify filter is VERIFIED,
             // so each must serve an assetlinks.json naming this package and its
-            // signing key. `oxy.so` was listed and removed: Allo opens no oxy.so
-            // URL, oxy.so publishes no assetlinks for Allo, and on Android 11 and
-            // below one unverifiable host fails verification for the WHOLE
-            // filter. Mention removed the same entry (OxyHQ/Mention#1128).
-            // `__tests__/appConfig.test.ts` keeps it out.
+            // signing key. `allo.you` is the web app (the `allo-frontend`
+            // Worker, `wrangler.toml`), and `worker/appAssociation.js` serves
+            // that file. `allo.chat` was listed here and does not resolve in
+            // DNS, so no https link ever opened the app (OxyHQ/Allo#176).
+            // `oxy.so` was listed and removed: Allo opens no oxy.so URL, oxy.so
+            // publishes no assetlinks for Allo, and on Android 11 and below one
+            // unverifiable host fails verification for the WHOLE filter.
+            // Mention removed the same entry (OxyHQ/Mention#1128).
+            // `__tests__/appConfig.test.ts` keeps both out.
             intentFilters: [
                     {
                         action: 'VIEW',
@@ -82,15 +97,23 @@ return {
                         data: [
                             {
                                 scheme: 'https',
-                                host: 'allo.chat',
-                            },
-                            IS_DEV && {
-                                scheme: 'http',
-                                host: 'localhost:4140',
+                                host: APP_LINK_HOST,
                             },
                         ],
                         category: ['BROWSABLE', 'DEFAULT'],
                     },
+                    // The development variant also opens links to a local web
+                    // server. Its own filter, without autoVerify: an http host can
+                    // never verify, and in a verified filter it would only fail it.
+                    ...(IS_DEV_VARIANT
+                        ? [
+                            {
+                                action: 'VIEW',
+                                data: [{ scheme: 'http', host: 'localhost', port: '4140' }],
+                                category: ['BROWSABLE', 'DEFAULT'],
+                            },
+                        ]
+                        : []),
             ],
             softwareKeyboardLayoutMode: "pan",
             edgeToEdgeEnabled: true,
