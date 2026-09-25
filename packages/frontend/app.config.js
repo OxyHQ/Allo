@@ -68,6 +68,13 @@ return {
             package: ANDROID_ID,
             // Point to your google-services.json for FCM (only if file exists)
             ...(hasGoogleServices && { googleServicesFile: "../../google-services.json" }),
+            // App Links. Every https host in an autoVerify filter is VERIFIED,
+            // so each must serve an assetlinks.json naming this package and its
+            // signing key. `oxy.so` was listed and removed: Allo opens no oxy.so
+            // URL, oxy.so publishes no assetlinks for Allo, and on Android 11 and
+            // below one unverifiable host fails verification for the WHOLE
+            // filter. Mention removed the same entry (OxyHQ/Mention#1128).
+            // `__tests__/appConfig.test.ts` keeps it out.
             intentFilters: [
                     {
                         action: 'VIEW',
@@ -76,10 +83,6 @@ return {
                             {
                                 scheme: 'https',
                                 host: 'allo.chat',
-                            },
-                            {
-                                scheme: 'https',
-                                host: 'oxy.so',
                             },
                             IS_DEV && {
                                 scheme: 'http',
