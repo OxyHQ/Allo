@@ -1,4 +1,5 @@
 import {
+  handleFromDirectMessageSegment,
   handleFromProfileSegment,
   profileHandleFromPathname,
   profileHref,
@@ -121,5 +122,21 @@ describe('profileHandleFromPathname', () => {
     // pane picker must be told about it rather than silently drawing the profile
     // over it.
     expect(profileHandleFromPathname('/@alice/media')).toBeNull();
+  });
+});
+
+describe('handleFromDirectMessageSegment', () => {
+  it('reads a handle with or without the @, since the dm/ prefix already names a person', () => {
+    expect(handleFromDirectMessageSegment('alice')).toBe('alice');
+    expect(handleFromDirectMessageSegment('@alice')).toBe('alice');
+    expect(handleFromDirectMessageSegment('alice@example.org')).toBe('alice@example.org');
+  });
+
+  it('names nobody for an empty, hostile or missing segment', () => {
+    expect(handleFromDirectMessageSegment('')).toBeNull();
+    expect(handleFromDirectMessageSegment('@')).toBeNull();
+    expect(handleFromDirectMessageSegment('a b')).toBeNull();
+    expect(handleFromDirectMessageSegment(['alice'])).toBeNull();
+    expect(handleFromDirectMessageSegment(undefined)).toBeNull();
   });
 });

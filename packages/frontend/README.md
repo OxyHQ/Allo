@@ -196,8 +196,9 @@ API_URL_SOCKET=ws://localhost:4140
 EXPO_PUBLIC_OXY_BASE_URL=https://api.oxy.so
 EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
 
-# Selects the build variant in app.config.js ('testflight' | 'production')
-EXPO_PUBLIC_ENV=
+# The ONE build variant app.config.js reads: 'development' builds the dev app
+# (its own app id, plus the localhost link host); unset is the production app.
+APP_VARIANT=
 
 # Optional third-party keys; empty string when unset
 EXPO_PUBLIC_KLIPY_APP_KEY=

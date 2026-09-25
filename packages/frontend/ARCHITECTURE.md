@@ -34,11 +34,12 @@ never patched here.
 | `(chat)/c/[id]/info.tsx` | `ConversationInfo` as a screen (phone) |
 | `(chat)/new.tsx` | People picker: DM, group, or `?addTo=<id>` to add members |
 | `(chat)/[username].tsx` | `/@handle` profile; otherwise 404 |
+| `(chat)/dm/[username].tsx` | `/dm/handle`: resolves the handle and replaces with `/c/<account id>` (the DM) |
 | `(chat)/calls.tsx` | Call history, and the banner an arriving call would use |
 | `(chat)/c/[id]/call.tsx` | The call itself: `IncomingCallScreen` while ringing, else `CallScreen` |
 | `(chat)/updates.tsx` | Status updates. `/updates`, not `/status`: Metro's dev server answers `/status` itself, so that route can never be opened while developing |
 | `(chat)/settings/*` | Appearance, language, privacy, devices, backup |
-| `(auth)/index.tsx` | Sign in with Oxy |
+| `(auth)/index.tsx` | Sign in with Oxy. A link opened while signed out is kept and followed after sign-in (`lib/navigation/usePendingHref.ts`) |
 
 ## The conversation
 

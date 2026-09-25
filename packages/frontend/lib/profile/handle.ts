@@ -118,3 +118,19 @@ export function profileHandleFromPathname(
   if (match === null) return null;
   return normalizeHandle(match[1]);
 }
+
+/**
+ * The handle the `dm/[username]` segment names, or `null` when it names nobody.
+ *
+ * Unlike the profile catch-all, the `@` is optional here: the static `dm/`
+ * prefix already says the segment is a person, so `/dm/alice` and `/dm/@alice`
+ * are the same link. `/dm/alice` opens the conversation with alice, created if
+ * there is none yet — the route for an app that holds only a handle, as `/c/<id>`
+ * is for one that holds an Oxy account id (OxyHQ/Allo#176).
+ */
+export function handleFromDirectMessageSegment(
+  segment: string | string[] | null | undefined,
+): string | null {
+  if (typeof segment !== 'string') return null;
+  return normalizeHandle(segment);
+}
