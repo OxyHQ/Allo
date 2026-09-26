@@ -554,7 +554,7 @@ against the stored raw public key (wrapped in the SPKI prefix for
 the three Oxy-only routes.
 
 The Socket.IO handshake on namespace `/v1` runs the same function with the
-path fixed to `/socket` and the empty-body digest, after `oxy.authSocket()`.
+path fixed to `/socket` and the empty-body digest, after `oxy.middleware.socket()`.
 The SDK recomputes the handshake on every reconnect because the signature
 carries a timestamp. A connected socket joins `instance:<id>` and
 `account:<accountId>`, rooms derived from the verified instance and never from

@@ -65,28 +65,32 @@ function fakeClient(): FakeClient {
 
   return {
     calls,
-    getProfileByUsername: vi.fn(async (username: string) => {
-      calls.push(`getProfileByUsername:${username}`);
-      refuseIfAsked();
-      return oxyUser({ username });
-    }),
-    getUserById: vi.fn(async (userId: string) => {
-      calls.push(`getUserById:${userId}`);
-      refuseIfAsked();
-      return oxyUser({ id: userId });
-    }),
-    getUsersByIds: vi.fn(async (ids: string[]) => {
-      calls.push(`getUsersByIds:${ids.join(",")}`);
-      refuseIfAsked();
-      return byIdsResult;
-    }),
-    searchProfiles: vi.fn(async (query: string, pagination?: { limit?: number; offset?: number }) => {
-      calls.push(`searchProfiles:${query}:${pagination?.limit}:${pagination?.offset}`);
-      refuseIfAsked();
-      return searchResult;
-    }),
-    getFileDownloadUrl: (fileId: string, variant?: string) =>
-      `${CLOUD_ORIGIN}/${fileId}${variant === undefined ? "" : `?variant=${variant}`}`,
+    users: {
+      byUsername: vi.fn(async (username: string) => {
+        calls.push(`users.byUsername:${username}`);
+        refuseIfAsked();
+        return oxyUser({ username });
+      }),
+      get: vi.fn(async (userId: string) => {
+        calls.push(`users.get:${userId}`);
+        refuseIfAsked();
+        return oxyUser({ id: userId });
+      }),
+      getMany: vi.fn(async (ids: string[]) => {
+        calls.push(`users.getMany:${ids.join(",")}`);
+        refuseIfAsked();
+        return byIdsResult;
+      }),
+      search: vi.fn(async (query: string, pagination?: { limit?: number; offset?: number }) => {
+        calls.push(`users.search:${query}:${pagination?.limit}:${pagination?.offset}`);
+        refuseIfAsked();
+        return searchResult;
+      }),
+    },
+    assets: {
+      publicUrl: (fileId: string, variant?: string) =>
+        `${CLOUD_ORIGIN}/${fileId}${variant === undefined ? "" : `?variant=${variant}`}`,
+    },
   };
 }
 
@@ -347,7 +351,7 @@ describe("searching for people", () => {
   it("defaults the page size rather than letting the caller omit it upstream", async () => {
     await request(directoryApp()).get("/api/directory/profiles/search?query=nate");
 
-    expect(client.calls).toEqual(["searchProfiles:nate:20:0"]);
+    expect(client.calls).toEqual(["users.search:nate:20:0"]);
   });
 
   it("refuses an empty query", async () => {

@@ -6,7 +6,7 @@
  * GONE and a person who has LEFT.
  *
  * Oxy's `HttpService` clears the bearer on an unrecoverable 401 and emits
- * `onTokensChanged(null)`; `OxyContext` turns that into a locally signed-out
+ * `session.onChange(null)`; `OxyContext` turns that into a locally signed-out
  * state while deliberately keeping the persisted session, because it treats
  * the null as transient — a cold-boot race, a refresh landing late, one 5xx on
  * a private endpoint — and expects a later reload to restore it. `AlloRoot`

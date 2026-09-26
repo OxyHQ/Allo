@@ -19,16 +19,18 @@ const DIRECTORY = [
 ];
 
 const services = {
-  getFileDownloadUrl: (id: string, variant?: string) => `https://i.pravatar.cc/200?u=${id}${variant ?? ''}`,
-  getProfileByUsername: async (handle: string) => ({ id: handle, username: handle, name: { displayName: handle } }),
-  getUsersByIds: async (ids: string[]) => ids.map((id) => ({ id, username: id, name: { displayName: id } })),
-  searchProfiles: async (term: string) => ({
-    data: DIRECTORY.filter((person) =>
-      `${person.name.displayName} ${person.username}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()),
-    ),
-  }),
-  getAccessToken: () => 'harness',
-  getCurrentUser: async () => HARNESS_ME,
+  assets: { publicUrl: (id: string, variant?: string) => `https://i.pravatar.cc/200?u=${id}${variant ?? ''}` },
+  users: {
+    byUsername: async (handle: string) => ({ id: handle, username: handle, name: { displayName: handle } }),
+    getMany: async (ids: string[]) => ids.map((id) => ({ id, username: id, name: { displayName: id } })),
+    search: async (term: string) => ({
+      data: DIRECTORY.filter((person) =>
+        `${person.name.displayName} ${person.username}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()),
+      ),
+    }),
+    me: async () => HARNESS_ME,
+  },
+  session: { accessToken: 'harness', userId: HARNESS_ME.id, onChange: () => () => undefined },
 };
 
 export function useOxy() {

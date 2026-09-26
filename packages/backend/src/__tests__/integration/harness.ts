@@ -45,12 +45,14 @@ export const bearerAuth: RequestHandler = (req, _res, next) => {
 
 /** Oxy's socket half: the same bearer in `handshake.auth.token`. */
 export const socketOxy = {
-  authSocket: () => async (socket: unknown, next: (err?: Error) => void) => {
-    const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
-    const token = s.handshake.auth.token;
-    if (typeof token !== "string" || !token.startsWith(TOKEN_PREFIX)) return next(new Error("Authentication required"));
-    s.data.userId = token.slice(TOKEN_PREFIX.length);
-    next();
+  middleware: {
+    socket: () => async (socket: unknown, next: (err?: Error) => void) => {
+      const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
+      const token = s.handshake.auth.token;
+      if (typeof token !== "string" || !token.startsWith(TOKEN_PREFIX)) return next(new Error("Authentication required"));
+      s.data.userId = token.slice(TOKEN_PREFIX.length);
+      next();
+    },
   },
 };
 

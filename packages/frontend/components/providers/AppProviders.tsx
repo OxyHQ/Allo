@@ -18,7 +18,8 @@ import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import i18n, { setLanguage } from '@/lib/i18n';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/constants';
-import { OXY_BASE_URL, OXY_CLIENT_ID } from '@/config';
+import { OXY_CLIENT_ID } from '@/config';
+import { oxyServices } from '@/lib/oxy';
 import { logger } from '@/utils/logger';
 
 interface AppProvidersProps {
@@ -31,7 +32,7 @@ interface AppProvidersProps {
  *
  * Registers a single `ImageResolverProvider` whose resolver turns an Oxy file
  * id (plus optional rendition variant) into the canonical Oxy media URL via
- * `oxyServices.getFileDownloadUrl` — the ONE place a media URL is built. Any
+ * `oxyServices.assets.publicUrl` — the ONE place a media URL is built. Any
  * Bloom surface that renders `Avatar source={<fileId>} variant="thumb"` (e.g.
  * the sidebar `ProfileButton`) gets correctly-resolved media for free.
  */
@@ -40,7 +41,7 @@ function MediaResolverProvider({ children }: { children: React.ReactNode }) {
   const resolver = useMemo<ImageResolver>(
     () => (id: string, variant?: string) => {
       if (!id) return undefined;
-      return oxyServices.getFileDownloadUrl(id, variant ?? 'thumb');
+      return oxyServices.assets.publicUrl(id, variant ?? 'thumb');
     },
     [oxyServices],
   );
@@ -64,7 +65,7 @@ export const AppProviders = memo(function AppProviders({
         <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <OxyProvider
-            baseURL={OXY_BASE_URL}
+            oxyServices={oxyServices}
             clientId={OXY_CLIENT_ID}
             language={{
               supportedLocales: SUPPORTED_LANGUAGES,

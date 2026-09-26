@@ -18,7 +18,7 @@
  * Blocks and restricts are NOT in that document. They are their own collections
  * with their own endpoints (`/profile/blocks`, `/profile/restricts`), and each
  * answers with a list of Oxy ACCOUNT IDS — not handles. Turning those into people
- * is `oxyServices.getUsersByIds`, one request rather than one per row.
+ * is `oxyServices.users.getMany`, one request rather than one per row.
  *
  * ## Which client
  *

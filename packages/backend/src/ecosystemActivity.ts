@@ -1,8 +1,8 @@
 import { createEcosystemTraffic } from '@oxy.so/core/server';
 import type { RequestHandler } from 'express';
-import { oxyClient } from '@oxy.so/core';
 
 import { canAuthenticateAsOxyService } from './config/oxyService';
+import { oxy } from './oxy';
 
 let activity: ReturnType<typeof createEcosystemTraffic> | undefined;
 
@@ -19,7 +19,7 @@ export function startEcosystemActivity(ready: () => boolean): void {
   /**
    * An identity, not a key pair.
    *
-   * `credential` below is `getServiceToken()`, and since oxy ADR 0026 the SDK
+   * `credential` below is `serviceToken()`, and since oxy ADR 0026 the SDK
    * mints that from EITHER an `ALLO_OXY_SERVICE_API_KEY`/`_SECRET` pair or an
    * attested ECS task role. Demanding the pair therefore refused to boot exactly
    * the deployment that works — the one whose identity is its task role and which
@@ -35,7 +35,7 @@ export function startEcosystemActivity(ready: () => boolean): void {
   if (activity) return;
   activity = createEcosystemTraffic({
     service: 'allo',
-    credential: () => oxyClient.getServiceToken(),
+    credential: () => oxy.serviceToken(),
     ready,
   });
   activity.installFetch();

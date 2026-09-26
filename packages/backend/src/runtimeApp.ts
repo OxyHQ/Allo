@@ -5,7 +5,6 @@
  * result; `server.ts` listens.
  */
 
-import { oxyClient } from "@oxy.so/core";
 import { createOptionalOxyAuth, createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { APP_ORIGINS, createApp } from "./app";
 import { setIceConfig } from "./config/iceRuntime";
@@ -17,6 +16,7 @@ import { checkPostgresHealth } from "./db";
 import { ecosystemActivityMiddleware } from "./ecosystemActivity";
 import { requireInstance } from "./middleware/instanceAuth";
 import { requireOxySession } from "./middleware/oxySession";
+import { oxy } from "./oxy";
 import { createCrowdSourceWebhookRoutes } from "./routes/crowdSourceWebhook";
 import { createDirectoryRoutes } from "./routes/directory";
 import profileSettingsRoutes from "./routes/profileSettings";
@@ -25,7 +25,6 @@ import { createOxyDirectoryService } from "./services/oxy/OxyDirectoryService";
 import { blobMaxBytes } from "./services/platform/blobService";
 
 export function createRuntimeApp() {
-  const oxy = oxyClient;
   configureOxyServiceAuth(oxy);
   /**
    * The media configuration is read HERE, once, so a half-configured relay or

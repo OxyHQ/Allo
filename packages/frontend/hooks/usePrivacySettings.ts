@@ -129,7 +129,7 @@ function toModeratedUser(user: User): ModeratedUser {
  * renames themselves, and folding them together would refetch every profile on
  * every unblock.
  *
- * `getUsersByIds` and not `getUserById` in a loop — one request per chunk rather
+ * `users.getMany` and not `users.get` in a loop — one request per chunk rather
  * than one per row. Ids that resolve to nothing are kept as bare rows rather than
  * dropped: silently shortening the list would tell the reader they had unblocked
  * somebody they had not.
@@ -150,7 +150,7 @@ export function useModeratedUsers(list: ModerationList): {
 
   const profiles = useQuery({
     queryKey: ['privacy', 'moderated', list, 'profiles', idList ?? []] as const,
-    queryFn: () => oxyServices.getUsersByIds([...(idList ?? [])]),
+    queryFn: () => oxyServices.users.getMany([...(idList ?? [])]),
     enabled: idList !== undefined && idList.length > 0,
   });
 

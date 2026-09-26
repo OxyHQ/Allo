@@ -100,6 +100,8 @@ describe("what the subject providers are allowed to reach", () => {
      */
     "db/schema/columns.ts",
     "db/schema/moderation.ts",
+    /** The one Oxy client (`OxyServer`), which the user subject reads accounts through. */
+    "oxy.ts",
     "services/moderation/subjects/registry.ts",
     "services/moderation/subjects/types.ts",
     "services/moderation/subjects/userSubject.ts",
@@ -110,6 +112,7 @@ describe("what the subject providers are allowed to reach", () => {
   const ALLOWED_PACKAGES = [
     "@crowdsource.you/core",
     "@oxy.so/core",
+    "@oxy.so/core/server",
     "@oxy.so/db",
     "drizzle-orm",
     "drizzle-orm/pg-core",

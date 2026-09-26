@@ -1,6 +1,6 @@
-import { oxyClient } from '@oxy.so/core';
 import { API_URL } from '@/config';
 import { CircuitBreaker } from '@/lib/api/retryLogic';
+import { oxyServices } from '@/lib/oxy';
 
 // API Configuration
 const API_CONFIG = {
@@ -13,13 +13,11 @@ const API_CONFIG = {
 // lockstep with the canonical OxyServices session and delegates 401 refresh back
 // to that session. No manual Authorization plumbing, no app-local token provider.
 // Bearer-authenticated writes do not fetch an app-local CSRF token.
-const linkedBackend = oxyClient.createLinkedClient({ baseURL: API_CONFIG.baseURL });
+const linkedBackend = oxyServices.createLinkedClient({ baseURL: API_CONFIG.baseURL });
 const backendClient = linkedBackend.client;
 
-// Keep oxyClient reference for Oxy-specific API calls (if needed).
-// Annotate with the client's own return type: `HttpService` is not re-exported
-// from the package root, so an inferred type would reference an internal path.
-const authenticatedClient: ReturnType<typeof oxyClient.getClient> = oxyClient.getClient();
+// The Oxy API transport itself, for the Oxy calls the app makes directly.
+const authenticatedClient: typeof oxyServices.http = oxyServices.http;
 
 // Circuit breakers prevent cascading failures: 5 consecutive failures open the
 // circuit for 30 seconds.

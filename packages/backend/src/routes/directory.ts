@@ -209,7 +209,7 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
   /**
    * `GET /api/directory/assets/:fileId/url?variant=` — an avatar's address.
    *
-   * The only one of the five that reaches nothing: `getFileDownloadUrl` is a
+   * The only one of the five that reaches nothing: `assets.publicUrl` is a
    * pure string builder over the Oxy CDN origin. It exists as an endpoint
    * anyway because an app with no Oxy SDK does not know that origin. Most
    * avatars should never need it — every {@link DirectoryUser} this router

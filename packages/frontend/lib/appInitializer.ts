@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
-import { oxyClient } from '@oxy.so/core';
 
+import { oxyServices } from '@/lib/oxy';
 import { useAppearanceStore } from '@/stores/appearanceStore';
 import { hasNotificationPermission, setupNotifications } from '@/utils/notifications';
 import { logger } from '@/utils/logger';
@@ -20,10 +20,10 @@ export const AppInitializer = {
 
   /** The session and the appearance settings, raced against a hard timeout. */
   async initializeApp(): Promise<void> {
-    const session = oxyClient.getCurrentUser().catch(() => {
+    const session = oxyServices.users.me().catch(() => {
       // Not signed in yet: the auth screen handles it.
     });
-    const appearance = oxyClient.getAccessToken()
+    const appearance = oxyServices.session.accessToken
       ? useAppearanceStore.getState().loadMySettings()
       : Promise.resolve();
     await Promise.race([

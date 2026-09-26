@@ -15,7 +15,7 @@
  * holds" apart from "not a profile URL at all" without asking the network.
  *
  * Every function is syntactic. Nothing here fetches anything, and nothing here
- * decides whether an account exists — that is `oxyServices.getProfileByUsername`,
+ * decides whether an account exists — that is `oxyServices.users.byUsername`,
  * which takes a HANDLE and not an id. Handing it an id 404s, quietly, once per
  * render; see git history of `hooks/useSenderInfo.ts` for the production
  * incident that rule is written from.
