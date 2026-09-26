@@ -1,13 +1,13 @@
-import React, { useCallback, type ErrorInfo, type ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
 import { ErrorBoundary as BloomErrorBoundary, type ErrorBoundaryFallbackContext } from '@oxy.so/bloom/error-boundary';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiErrorWarningLine } from '@oxy.so/bloom/icons';
+import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import { useCallback, type ErrorInfo, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { logger } from '@/utils/logger';
 

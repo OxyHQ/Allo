@@ -1,32 +1,26 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { usePathname, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
 import { useConversationActions, useSyncState } from '@allo/react';
-import {
-  ChatFolderTabs,
-  ChatList,
-  ChatSearchField,
-  ChatSearchResults,
-  NewChatButton,
-  type ChatSummary,
-} from '@oxy.so/bloom/chat-list';
-import { ComposerIconButton } from '@oxy.so/bloom/chat-composer';
-import { RiDeleteBinLine, RiLogoutBoxRLine, RiPhoneLine, RiSettings3Line, RiSlideshow3Line } from '@oxy.so/bloom/icons';
+import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
+import { ChatFolderTabs, ChatList, ChatSearchField, ChatSearchResults, NewChatButton, type ChatSummary } from '@oxy.so/bloom/chat-list';
+import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
+import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
+import { useOxy } from '@oxy.so/services';
+import { usePathname, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useSplitLayout } from '@/hooks/useSplitLayout';
-import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 import { conversationIdFromPath } from '@/utils/routeUtils';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 /**
  * What the swipe offers, and it is not the same thing in both cases.
@@ -64,9 +58,7 @@ export function ConversationList() {
   const chats = useMemo<ChatSummary[]>(
     () =>
       summaries
-        .filter((chat) =>
-          folder === 'unread' ? (chat.unreadCount ?? 0) > 0 : folder === 'groups' ? chat.kind === 'group' : true,
-        )
+        .filter((chat) => (folder === 'unread' ? (chat.unreadCount ?? 0) > 0 : folder === 'groups' ? chat.kind === 'group' : true))
         .map((chat) => ({
           ...chat,
           swipeActions: {
@@ -161,56 +153,16 @@ export function ConversationList() {
   const openUpdates = useCallback(() => router.push('/updates'), [router]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <PageHeader
-        title={t('chat.title')}
-        safeArea={!split}
-        actions={
-          // The rail carries these on a wide window; a phone has no rail, so the
-          // header does. Starting a conversation is the FAB below, which is where
-          // Bloom's own conversations screen puts it.
-          split ? undefined : (
-            <View style={styles.actions}>
-              <ComposerIconButton
-                icon={RiPhoneLine}
-                accessibilityLabel={t('calls.title')}
-                onPress={() => router.push('/calls')}
-              />
-              <ComposerIconButton
-                icon={RiSlideshow3Line}
-                accessibilityLabel={t('stories.title')}
-                onPress={openUpdates}
-              />
-              <ComposerIconButton
-                icon={RiSettings3Line}
-                accessibilityLabel={t('settings.title')}
-                onPress={() => router.push('/settings')}
-              />
-            </View>
-          )
-        }
-      />
+    <View style={styles.root}>
+      <PageHeader title={t('chat.title')} safeArea={!split} leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />} />
       <View style={styles.search}>
-        <ChatSearchField
-          value={query}
-          onChangeText={setQuery}
-          onClear={() => setQuery('')}
-          placeholder={t('chat.search.placeholder')}
-        />
+        <ChatSearchField value={query} onChangeText={setQuery} onClear={() => setQuery('')} placeholder={t('chat.search.placeholder')} />
       </View>
       {folders.length > 0 && (
-        <ChatFolderTabs
-          folders={folders}
-          value={folder}
-          onValueChange={setFolder}
-          accessibilityLabel={t('chat.folder.label')}
-          divider
-        />
+        <ChatFolderTabs folders={folders} value={folder} onValueChange={setFolder} accessibilityLabel={t('chat.folder.label')} divider />
       )}
       <HistoryTransferBanner />
-      {sync === 'offline' && (
-        <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>{t('chat.sync.offline')}</Text>
-      )}
+      {sync === 'offline' && <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>{t('chat.sync.offline')}</Text>}
       <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {searching ? (
           <ChatSearchResults
@@ -235,14 +187,7 @@ export function ConversationList() {
           />
         )}
       </ScrollView>
-      <NewChatButton
-        accessibilityLabel={t('chat.new.title')}
-        onPress={() => router.push('/new')}
-        placement="bottom-right"
-        // The brand's own accent: Bloom's Fab defaults to the tertiary one,
-        // which under a green preset is a magenta nobody asked for.
-        variant="primary"
-      />
+      <NewChatButton accessibilityLabel={t('chat.new.title')} onPress={() => router.push('/new')} placement="bottom-right" />
     </View>
   );
 }
@@ -250,7 +195,6 @@ export function ConversationList() {
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   search: { paddingHorizontal: 12, paddingBottom: 8 },
-  actions: { flexDirection: 'row', alignItems: 'center' },
   notice: { paddingHorizontal: 16, paddingBottom: 8 },
   content: { paddingBottom: 24 },
 });

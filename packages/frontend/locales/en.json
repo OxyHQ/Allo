@@ -1,4 +1,8 @@
 {
+  "settings.appearance.mode.system": "System",
+  "settings.appearance.mode.light": "Light",
+  "settings.appearance.mode.dark": "Dark",
+  "navigation.open": "Open navigation",
   "auth.welcome.subtitle": "Private, end-to-end encrypted messaging. Sign in with your Oxy account to start.",
   "auth.welcome.title": "Welcome to Allo",
   "backup.backUpNow": "Back up now",
@@ -206,6 +210,7 @@
   "chat.you": "You",
   "common.back": "Back",
   "common.cancel": "Cancel",
+  "common.open": "Open",
   "common.close": "Close",
   "common.done": "Done",
   "composer.attach.camera": "Camera",

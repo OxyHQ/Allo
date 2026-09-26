@@ -219,6 +219,10 @@ return {
             // "@oxy.so/expo-splash" branding string) so the splash tuple and its
             // branding string stay contiguous at indices 1 and 2.
             if (PLATFORM !== 'web') {
+                // Native call adapter registers LiveKit's WebRTC globals. Both
+                // plugins are required by the official Expo integration.
+                base.push('@livekit/react-native-expo-plugin');
+                base.push('@config-plugins/react-native-webrtc');
                 base.splice(3, 0, [
                     "expo-notifications",
                     {

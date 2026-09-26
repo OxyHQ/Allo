@@ -1,7 +1,3 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { useConversation, useConversationActions, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import {
@@ -11,29 +7,32 @@ import {
   type ChatInfoTab,
   type ChatMember,
 } from '@oxy.so/bloom/chat-screen';
-import {
-  RiDeleteBinLine,
-  RiDoorOpenLine,
-  RiFileTextLine,
-  RiForbidLine,
-  RiGroupLine,
-  RiImageLine,
-  RiLink,
-  RiLock2Line,
-  RiMicLine,
-  RiSearchLine,
-  RiSpamLine,
-  RiUserAddLine,
-  RiUserLine,
-} from '@oxy.so/bloom/icons';
+import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
+import { RiDoorOpenLine } from '@oxy.so/bloom/icons/RiDoorOpenLine';
+import { RiFileTextLine } from '@oxy.so/bloom/icons/RiFileTextLine';
+import { RiForbidLine } from '@oxy.so/bloom/icons/RiForbidLine';
+import { RiGroupLine } from '@oxy.so/bloom/icons/RiGroupLine';
+import { RiImageLine } from '@oxy.so/bloom/icons/RiImageLine';
+import { RiLink } from '@oxy.so/bloom/icons/RiLink';
+import { RiLock2Line } from '@oxy.so/bloom/icons/RiLock2Line';
+import { RiMicLine } from '@oxy.so/bloom/icons/RiMicLine';
+import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
+import { RiSpamLine } from '@oxy.so/bloom/icons/RiSpamLine';
+import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
+import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
+import { useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
+import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import {
-  countOf,
   countLinks,
+  countOf,
   SharedFiles,
   SharedLinks,
   SharedMedia,
@@ -46,9 +45,8 @@ import { conversationAvatar, conversationFaces, conversationTitle } from '@/lib/
 import { report } from '@/lib/moderation/report';
 import { addModeratedUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
-import { confirm } from '@oxy.so/bloom/surfaces';
-import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { logger } from '@/utils/logger';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 interface ConversationInfoProps {
   conversationId: string;

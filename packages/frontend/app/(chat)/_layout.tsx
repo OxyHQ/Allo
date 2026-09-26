@@ -1,38 +1,37 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Slot, Stack, usePathname, useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
 import { useTotalUnread } from '@allo/react';
-import { ChatSplitLayout } from '@oxy.so/bloom/chat-screen';
-import {
-  RiChat3Fill,
-  RiChat3Line,
-  RiPhoneFill,
-  RiPhoneLine,
-  RiSettings3Fill,
-  RiSettings3Line,
-  RiSlideshow3Line,
-  RiUser3Fill,
-  RiUserLine,
-} from '@oxy.so/bloom/icons';
-import { Sidebar } from '@oxy.so/bloom/sidebar';
+import { AppShell } from '@oxy.so/bloom/app-shell';
+import { RiChat3Fill } from '@oxy.so/bloom/icons/RiChat3Fill';
+import { RiChat3Line } from '@oxy.so/bloom/icons/RiChat3Line';
+import { RiPhoneFill } from '@oxy.so/bloom/icons/RiPhoneFill';
+import { RiPhoneLine } from '@oxy.so/bloom/icons/RiPhoneLine';
+import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
+import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
+import { RiSlideshow3Line } from '@oxy.so/bloom/icons/RiSlideshow3Line';
+import { RiUser3Fill } from '@oxy.so/bloom/icons/RiUser3Fill';
+import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { useTheme } from '@oxy.so/bloom/theme';
+import { useOxy } from '@oxy.so/services';
+import { Slot, Stack, usePathname, useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
+import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { LogoIcon } from '@/assets/logo';
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
 import { ConversationList } from '@/components/chat/list/ConversationList';
 import { CallPill } from '@/components/phase2/CallPill';
-import { SettingsMenu } from '@/components/settings/SettingsMenu';
+import { AlloSettingsProvider } from '@/components/settings/AlloSettingsProvider';
+import { useAlloSettings } from '@/components/settings/context';
 import { SPLIT_FROM, useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { profileHref } from '@/lib/profile/handle';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
-import { conversationIdFromPath, isSettingsPath } from '@/utils/routeUtils';
+import { conversationIdFromPath } from '@/utils/routeUtils';
 
 /**
  * The signed-in app. On a phone, a stack: the list, and each screen pushed over
  * it. From `SPLIT_FROM` up, the navigation rail flush against Bloom's
- * `ChatSplitLayout` — list pane, the route as the conversation pane, and a
+ * `AppShell` split layout — list pane, the route as the conversation pane, and a
  * conversation's info beside it once a third column fits.
  */
 export default function ChatLayout() {
@@ -40,14 +39,17 @@ export default function ChatLayout() {
   return (
     // The pill draws nothing unless a call is minimised, and it lives here so a
     // minimised call survives walking around the app.
-    <View style={styles.app}>
-      {split ? <SplitShell /> : <Stack screenOptions={{ headerShown: false }} />}
-      <CallPill />
-    </View>
+    <AlloSettingsProvider>
+      <View style={styles.app}>
+        <SplitShell split={split} />
+        <CallPill />
+      </View>
+    </AlloSettingsProvider>
   );
 }
 
-function SplitShell() {
+function SplitShell({ split }: { split: boolean }) {
+  const settings = useAlloSettings();
   const router = useRouter();
   const pathname = usePathname();
   const theme = useTheme();
@@ -58,20 +60,11 @@ function SplitShell() {
   const infoOpen = useChatPaneStore((state) => state.infoOpen);
   const closeInfo = useChatPaneStore((state) => state.closeInfo);
 
-  const inSettings = isSettingsPath(pathname);
   const conversationId = conversationIdFromPath(pathname);
 
   const ownProfile = profileHref(user?.username);
   const onProfile = Boolean(ownProfile) && pathname === ownProfile;
-  const selected = inSettings
-    ? 'settings'
-    : onProfile
-      ? 'profile'
-      : pathname.startsWith('/calls')
-        ? 'calls'
-        : pathname.startsWith('/updates')
-          ? 'updates'
-          : 'chats';
+  const selected = onProfile ? 'profile' : pathname.startsWith('/calls') ? 'calls' : pathname.startsWith('/updates') ? 'updates' : 'chats';
 
   // The rail carries navigation only (an account block belongs to the panel
   // variant), so the person's own profile is a foot item rather than a card.
@@ -105,47 +98,72 @@ function SplitShell() {
   const secondaryItems = useMemo(
     () => [
       ...(ownProfile
-        ? [{ key: 'profile', label: t('profile.view'), icon: RiUserLine, activeIcon: RiUser3Fill, onPress: () => router.push(ownProfile) }]
+        ? [
+            {
+              key: 'profile',
+              label: t('profile.view'),
+              icon: RiUserLine,
+              activeIcon: RiUser3Fill,
+              onPress: () => router.push(ownProfile),
+            },
+          ]
         : []),
       {
         key: 'settings',
         label: t('settings.title'),
         icon: RiSettings3Line,
         activeIcon: RiSettings3Fill,
-        onPress: () => router.push('/settings'),
+        onPress: () => settings.open(),
       },
     ],
-    [ownProfile, router, t],
+    [ownProfile, router, settings, t],
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <Sidebar
-        variant="rail"
-        logo={{ icon: <LogoIcon size={28} color={theme.colors.primary} />, accessibilityLabel: 'Allo' }}
-        items={items}
-        secondaryItems={secondaryItems}
-        selected={selected}
-        style={{ borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.colors.border }}
-      />
-      <ChatSplitLayout
-        style={styles.root}
-        breakpoint={SPLIT_FROM}
-        list={inSettings ? <SettingsMenu /> : <ConversationList />}
-        info={
-          conversationId && infoOpen && infoBeside ? (
-            <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
-          ) : undefined
-        }
-        resizeLabel={t('chat.resize')}
-      >
-        <Slot />
-      </ChatSplitLayout>
-    </View>
+    <AppShell
+      variant="split"
+      scroll="fixed"
+      header={null}
+      navFrom={SPLIT_FROM}
+      splitFrom={SPLIT_FROM}
+      infoFrom={1100}
+      paneScroll={false}
+      sidebar={{
+        variant: 'rail',
+        showSearch: false,
+        logo: {
+          icon: <LogoIcon size={28} color={theme.colors.primary} />,
+          accessibilityLabel: 'Allo',
+        },
+        items,
+        secondaryItems,
+        selected,
+      }}
+      pane="detail"
+      list={split ? <ConversationList /> : undefined}
+      info={
+        conversationId && infoOpen && infoBeside ? (
+          <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
+        ) : undefined
+      }
+      resizeLabel={t('chat.resize')}
+    >
+      <NavigationTheme transparent>
+        {split ? (
+          <Slot />
+        ) : (
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: 'transparent' },
+            }}
+          />
+        )}
+      </NavigationTheme>
+    </AppShell>
   );
 }
 
 const styles = StyleSheet.create({
   app: { flex: 1, minHeight: 0 },
-  root: { flex: 1, minHeight: 0, flexDirection: 'row' },
 });

@@ -24,19 +24,20 @@
  * It is mounted at boot, so nothing here may suspend: `useTranslation` is
  * called with suspense off, and every string has an inline default.
  */
-import React, { useCallback, useState, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { useAlloClient, useInstanceState } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiShieldLine, RiSmartphoneLine } from '@oxy.so/bloom/icons';
+import { RiShieldLine } from '@oxy.so/bloom/icons/RiShieldLine';
+import { RiSmartphoneLine } from '@oxy.so/bloom/icons/RiSmartphoneLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import React, { useCallback, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 export interface EnrollmentGateProps {
   children: React.ReactNode;
