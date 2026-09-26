@@ -197,7 +197,15 @@ return {
                         buildToolsVersion: '36.0.0',
                         enableProguardInReleaseBuilds: true,
                         enableShrinkResourcesInReleaseBuilds: true,
-                        useLegacyPackaging: false
+                        useLegacyPackaging: false,
+                        extraProguardRules: [
+                          '# @livekit/react-native-webrtc 144.2.0 moved to the PREFIXED WebRTC build',
+                          '# (livekit.org.*) but its consumer rules still keep org.jni_zero.**. R8',
+                          '# then strips livekit.org.jni_zero.JniInit, and libjingle_peerconnection',
+                          '# aborts in JNI_OnLoad at startup. Fixed upstream in',
+                          '# livekit/react-native-webrtc#107; drop once a release keeps it.',
+                          '-keep class livekit.org.jni_zero.** { *; }',
+                        ].join('\n'),
                       },
                     },
                 ],
