@@ -1,23 +1,24 @@
-import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import type { PollDraft } from '@allo/core';
 import { Button, GlyphButton } from '@oxy.so/bloom/button';
-import { RiAddLine, RiCloseCircleLine } from '@oxy.so/bloom/icons';
 import { Dialog } from '@oxy.so/bloom/dialog';
+import { RiAddLine } from '@oxy.so/bloom/icons/RiAddLine';
+import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
 import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
 import { Switch } from '@oxy.so/bloom/switch';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTheme } from '@oxy.so/bloom/theme';
+import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   canSendPoll,
-  pollDraft,
   POLL_INITIAL_OPTIONS,
   POLL_MAX_OPTIONS,
   POLL_MIN_OPTIONS,
   POLL_OPTION_MAX_LENGTH,
   POLL_QUESTION_MAX_LENGTH,
+  pollDraft,
 } from '@/lib/chat/poll';
 
 /**

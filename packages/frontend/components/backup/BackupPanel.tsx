@@ -1,25 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import { Checkbox } from '@oxy.so/bloom/checkbox';
 import { RecoveryPhraseError, useBackup } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
-import {
-  RiCheckboxBlankCircleLine,
-  RiCheckboxCircleFill,
-  RiFileCopyLine,
-  RiShieldCheckLine,
-  RiShieldLine,
-} from '@oxy.so/bloom/icons';
-import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
+import { SettingsCard, SettingsRow, SettingsSection, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { Textarea } from '@oxy.so/bloom/textarea';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Muted, Text } from '@oxy.so/bloom/typography';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 import { normalizeRecoveryPhrase, RECOVERY_PHRASE_WORDS, recoveryPhraseWordCount } from '@/lib/allo/recoveryPhrase';
-import { confirm } from '@oxy.so/bloom/surfaces';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 /**
  * ENCRYPTED BACKUP AND RECOVERY, as one panel over the SDK's `backup` topic.
@@ -162,31 +157,34 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
   const words = useMemo(() => (phrase === null ? [] : phrase.split(' ')), [phrase]);
   const typedWords = recoveryPhraseWordCount(restoreInput);
   const showRestore = status.remote?.exists === true && !status.enabled;
-  const StatusIcon = status.enabled ? RiShieldCheckLine : RiShieldLine;
 
   return (
     <View style={styles.root}>
-      <SettingsListGroup title={t('backup.section.status')} footer={t('backup.explain')}>
-        <SettingsListItem
-          icon={<StatusIcon width={20} height={20} fill={status.enabled ? theme.colors.success : theme.colors.textSecondary} />}
-          title={status.enabled ? t('backup.status.on') : t('backup.status.off')}
-          description={
-            status.lastBackupAt
-              ? t('backup.status.lastBackup', { when: formatWhen(status.lastBackupAt) })
-              : t('backup.status.never')
-          }
-          value={status.enabled ? t('backup.status.events', { count: status.eventCount }) : undefined}
-        />
-        <SettingsListItem
-          title={
-            status.remote === null
-              ? t('backup.status.remoteUnknown')
-              : status.remote.exists
-                ? t('backup.status.remoteExists')
-                : t('backup.status.remoteMissing')
-          }
-        />
-      </SettingsListGroup>
+      <SettingsSection label={t('backup.section.status')} description={t('backup.explain')}>
+        <SettingsCard>
+          <SettingsRow
+            label={status.enabled ? t('backup.status.on') : t('backup.status.off')}
+            description={
+              status.lastBackupAt
+                ? t('backup.status.lastBackup', {
+                    when: formatWhen(status.lastBackupAt),
+                  })
+                : t('backup.status.never')
+            }
+          >
+            <SettingsValueField>{status.enabled ? t('backup.status.events', { count: status.eventCount }) : undefined}</SettingsValueField>
+          </SettingsRow>
+          <SettingsRow
+            label={
+              status.remote === null
+                ? t('backup.status.remoteUnknown')
+                : status.remote.exists
+                  ? t('backup.status.remoteExists')
+                  : t('backup.status.remoteMissing')
+            }
+          ></SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
 
       <View style={styles.actions}>
         {status.enabled ? (
@@ -227,87 +225,79 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
       </View>
 
       {phrase !== null ? (
-        <SettingsListGroup title={t('backup.phrase.title')}>
-          <View style={styles.card} testID="backup-phrase">
-            <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.phrase.body')}</Text>
-            <View style={styles.grid} accessibilityLabel={t('backup.phrase.title')}>
-              {words.map((word, index) => (
-                <View key={`${index}-${word}`} style={styles.cell}>
-                  <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>{index + 1}</Text>
-                  <Text style={[styles.cellWord, { color: theme.colors.text }]} testID={`backup-word-${index + 1}`} selectable>
-                    {word}
-                  </Text>
-                </View>
-              ))}
+        <SettingsSection label={t('backup.phrase.title')}>
+          <SettingsCard>
+            <View style={styles.card} testID="backup-phrase">
+              <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.phrase.body')}</Text>
+              <View style={styles.grid} accessibilityLabel={t('backup.phrase.title')}>
+                {words.map((word, index) => (
+                  <View key={`${index}-${word}`} style={styles.cell}>
+                    <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>{index + 1}</Text>
+                    <Text style={[styles.cellWord, { color: theme.colors.text }]} testID={`backup-word-${index + 1}`} selectable>
+                      {word}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Button testID="backup-copy" variant="secondary" leadingIcon={RiFileCopyLine} onPress={() => void copyPhrase()}>
+                {t('backup.phrase.copy')}
+              </Button>
+              <Checkbox testID="backup-confirm" checked={wroteDown} onCheckedChange={setWroteDown} label={t('backup.phrase.confirm')} />
+              {!wroteDown ? <Muted>{t('backup.phrase.mustConfirm')}</Muted> : null}
+              <Button testID="backup-done" variant="primary" disabled={!wroteDown} onPress={dismissPhrase}>
+                {t('common.done')}
+              </Button>
             </View>
-            <Button testID="backup-copy" variant="secondary" leadingIcon={RiFileCopyLine} onPress={() => void copyPhrase()}>
-              {t('backup.phrase.copy')}
-            </Button>
-            <Pressable
-              testID="backup-confirm"
-              style={styles.check}
-              onPress={() => setWroteDown((value) => !value)}
-              accessibilityRole="checkbox"
-              aria-checked={wroteDown}
-            >
-              {wroteDown ? (
-                <RiCheckboxCircleFill width={22} height={22} fill={theme.colors.primary} />
-              ) : (
-                <RiCheckboxBlankCircleLine width={22} height={22} fill={theme.colors.textSecondary} />
-              )}
-              <Text style={[styles.checkLabel, { color: theme.colors.text }]}>{t('backup.phrase.confirm')}</Text>
-            </Pressable>
-            {!wroteDown ? <Muted>{t('backup.phrase.mustConfirm')}</Muted> : null}
-            <Button testID="backup-done" variant="primary" disabled={!wroteDown} onPress={dismissPhrase}>
-              {t('common.done')}
-            </Button>
-          </View>
-        </SettingsListGroup>
+          </SettingsCard>
+        </SettingsSection>
       ) : null}
 
       {showRestore ? (
-        <SettingsListGroup title={t('backup.restore.title')}>
-          <View style={styles.card} testID="backup-restore-section">
-            <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.restore.body')}</Text>
-            <Textarea
-              testID="backup-restore-input"
-              accessibilityLabel={t('backup.restore.title')}
-              placeholder={t('backup.restore.placeholder')}
-              value={restoreInput}
-              onChangeText={(value) => {
-                setRestoreInput(value.toLowerCase());
-                if (restoreError !== null) setRestoreError(null);
-              }}
-              isInvalid={restoreError !== null}
-              rows={3}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="off"
-              spellCheck={false}
-              textContentType="none"
-              disabled={action === 'restore'}
-            />
-            <Muted>{t('backup.restore.count', { count: typedWords, total: RECOVERY_PHRASE_WORDS })}</Muted>
-            {restoreError !== null ? (
-              <Text
-                style={[styles.error, { color: theme.colors.error }]}
-                testID="backup-restore-error"
-                accessibilityLiveRegion="polite"
+        <SettingsSection label={t('backup.restore.title')}>
+          <SettingsCard>
+            <View style={styles.card} testID="backup-restore-section">
+              <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.restore.body')}</Text>
+              <Textarea
+                testID="backup-restore-input"
+                accessibilityLabel={t('backup.restore.title')}
+                placeholder={t('backup.restore.placeholder')}
+                value={restoreInput}
+                onChangeText={(value) => {
+                  setRestoreInput(value.toLowerCase());
+                  if (restoreError !== null) setRestoreError(null);
+                }}
+                isInvalid={restoreError !== null}
+                rows={3}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                spellCheck={false}
+                textContentType="none"
+                disabled={action === 'restore'}
+              />
+              <Muted>
+                {t('backup.restore.count', {
+                  count: typedWords,
+                  total: RECOVERY_PHRASE_WORDS,
+                })}
+              </Muted>
+              {restoreError !== null ? (
+                <Text style={[styles.error, { color: theme.colors.error }]} testID="backup-restore-error" accessibilityLiveRegion="polite">
+                  {restoreError}
+                </Text>
+              ) : null}
+              <Button
+                testID="backup-restore"
+                variant="primary"
+                loading={action === 'restore'}
+                disabled={busy || typedWords !== RECOVERY_PHRASE_WORDS}
+                onPress={() => void runRestore()}
               >
-                {restoreError}
-              </Text>
-            ) : null}
-            <Button
-              testID="backup-restore"
-              variant="primary"
-              loading={action === 'restore'}
-              disabled={busy || typedWords !== RECOVERY_PHRASE_WORDS}
-              onPress={() => void runRestore()}
-            >
-              {t('backup.restore.button')}
-            </Button>
-          </View>
-        </SettingsListGroup>
+                {t('backup.restore.button')}
+              </Button>
+            </View>
+          </SettingsCard>
+        </SettingsSection>
       ) : null}
     </View>
   );
@@ -316,7 +306,10 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
 function formatWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 }
 
 const styles = StyleSheet.create({
@@ -334,9 +327,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
-  cellIndex: { fontSize: 12, fontVariant: ['tabular-nums'], minWidth: 16, textAlign: 'right' },
+  cellIndex: {
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+    minWidth: 16,
+    textAlign: 'right',
+  },
   cellWord: { fontSize: 16, fontWeight: '600' },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  checkLabel: { fontSize: 15 },
   error: { fontSize: 13 },
 });

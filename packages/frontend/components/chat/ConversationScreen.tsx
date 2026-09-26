@@ -1,27 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
 import { useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
-import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
-import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import {
-  RiArrowGoBackLine,
-  RiDeleteBinLine,
-  RiFileCopyLine,
-  RiInformationLine,
-  RiMore2Line,
-  RiPencilLine,
-  RiPushpinLine,
-} from '@oxy.so/bloom/icons';
+import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
+import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
+import { RiArrowGoBackLine } from '@oxy.so/bloom/icons/RiArrowGoBackLine';
+import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
+import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
+import { RiInformationLine } from '@oxy.so/bloom/icons/RiInformationLine';
+import { RiMore2Line } from '@oxy.so/bloom/icons/RiMore2Line';
+import { RiPencilLine } from '@oxy.so/bloom/icons/RiPencilLine';
+import { RiPushpinLine } from '@oxy.so/bloom/icons/RiPushpinLine';
 import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import * as Clipboard from 'expo-clipboard';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Composer, type ComposerTarget, type Mentionable } from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
@@ -32,9 +29,9 @@ import { useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { collectViewerItems } from '@/lib/chat/attachmentViewer';
 import type { PickedAttachments } from '@/lib/chat/attachments';
 import {
+  composerNotice,
   conversationAvatar,
   conversationFaces,
-  composerNotice,
   conversationTitle,
   firstUnreadId,
   pinnedMessages,
@@ -46,8 +43,8 @@ import { toUpload } from '@/lib/chat/upload';
 import { presenceDot, presenceLine } from '@/lib/presence';
 
 import { useChatPaneStore } from '@/stores/chatPaneStore';
-import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
+import { confirm } from '@oxy.so/bloom/surfaces';
 
 /** What this screen does to a message it is pointed at. */
 interface MessageActions {
@@ -78,7 +75,6 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const split = useSplitLayout();
   // Below the third column the info is a route of its own, so the press always lands somewhere.
   const infoBeside = useInfoPane();
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toggleInfo = useChatPaneStore((state) => state.toggleInfo);
@@ -397,7 +393,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const notice = composerNotice(view, t);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.root}>
       <View style={{ paddingTop: split ? 0 : insets.top }}>
         <ChatHeader
           title={title}

@@ -58,15 +58,17 @@ jest.mock('@oxy.so/bloom/typography', () => {
   return { Text: ReactNative.Text, Muted: ReactNative.Text };
 });
 
-jest.mock('@oxy.so/bloom/settings-list', () => {
+jest.mock('@oxy.so/bloom/settings-modal', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
-  const text = (value?: string) => (value ? ReactModule.createElement(ReactNative.Text, null, value) : null);
+  const text = (value?: string) => value ? ReactModule.createElement(ReactNative.Text, null, value) : null;
   return {
-    SettingsListGroup: ({ title, children }: { title?: string; children: React.ReactNode }) =>
-      ReactModule.createElement(ReactNative.View, null, text(title), children),
-    SettingsListItem: ({ title, description, value }: { title: string; description?: string; value?: string }) =>
-      ReactModule.createElement(ReactNative.View, null, text(title), text(description), text(value)),
+    SettingsSection: ({ label, children }: { label?: string; children: React.ReactNode }) =>
+      ReactModule.createElement(ReactNative.View, null, text(label), children),
+    SettingsCard: ReactNative.View,
+    SettingsValueField: ReactNative.Text,
+    SettingsRow: ({ label, description, children }: { label: string; description?: string; children?: React.ReactNode }) =>
+      ReactModule.createElement(ReactNative.View, null, text(label), text(description), children),
   };
 });
 
@@ -79,6 +81,13 @@ jest.mock('@oxy.so/bloom/button', () => {
   };
 });
 
+jest.mock('@oxy.so/bloom/checkbox', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  const ReactModule = jest.requireActual<typeof import('react')>('react');
+  return { Checkbox: ({ checked, onCheckedChange, label, testID }: { checked: boolean; onCheckedChange: (checked: boolean) => void; label: string; testID: string }) =>
+    ReactModule.createElement(ReactNative.Pressable, { testID, onPress: () => onCheckedChange(!checked) }, ReactModule.createElement(ReactNative.Text, null, label)) };
+});
+
 jest.mock('@oxy.so/bloom/textarea', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
@@ -87,16 +96,7 @@ jest.mock('@oxy.so/bloom/textarea', () => {
   };
 });
 
-jest.mock('@oxy.so/bloom/icons', () => {
-  const none = () => null;
-  return {
-    RiCheckboxBlankCircleLine: none,
-    RiCheckboxCircleFill: none,
-    RiFileCopyLine: none,
-    RiShieldCheckLine: none,
-    RiShieldLine: none,
-  };
-});
+jest.mock('@oxy.so/bloom/icons/RiFileCopyLine', () => ({ RiFileCopyLine: () => null }));
 
 const mockToasts: string[] = [];
 jest.mock('@oxy.so/bloom/toast', () => ({
@@ -166,7 +166,8 @@ async function press(renderer: TestRenderer.ReactTestRenderer, testID: string): 
   if (!node) throw new Error(`no node with testID ${testID}`);
   if (node.props.disabled) throw new Error(`${testID} is disabled`);
   await act(async () => {
-    node.props.onPress();
+    if (node.props.onCheckedChange) node.props.onCheckedChange(!node.props.checked);
+    else node.props.onPress();
   });
 }
 

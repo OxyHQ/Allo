@@ -1,7 +1,5 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { useTheme } from '@oxy.so/bloom/theme';
+import { StyleSheet, View } from 'react-native';
 
 interface EmptyDetailProps {
   title: string;
@@ -10,9 +8,8 @@ interface EmptyDetailProps {
 
 /** The detail pane before anything is chosen in the list beside it. */
 export function EmptyDetail({ title, description }: EmptyDetailProps) {
-  const theme = useTheme();
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.root}>
       <ChatEmptyState title={title} description={description} />
     </View>
   );

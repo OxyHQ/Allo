@@ -24,17 +24,17 @@
  * Boot-mounted, so nothing here may suspend: `useTranslation` runs with
  * suspense off and every string has an inline default.
  */
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { useAlloClient, useBackup, useConversations, useInstanceState } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiHistoryLine } from '@oxy.so/bloom/icons';
+import { RiHistoryLine } from '@oxy.so/bloom/icons/RiHistoryLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 import { useRestorePromptStore } from '@/stores/restorePromptStore';
 import { logger } from '@/utils/logger';

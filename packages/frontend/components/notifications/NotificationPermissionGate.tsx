@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { BottomSheet, type BottomSheetRef } from '@oxy.so/bloom/bottom-sheet';
 import { Button } from '@oxy.so/bloom/button';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiNotification3Line } from '@oxy.so/bloom/icons';
+import { RiNotification3Line } from '@oxy.so/bloom/icons/RiNotification3Line';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { INITIALIZATION_TIMEOUT } from '@/lib/constants';

@@ -1,12 +1,11 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { Button } from '@oxy.so/bloom/button';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
-import { RiCompass3Line } from '@oxy.so/bloom/icons';
+import { RiCompass3Line } from '@oxy.so/bloom/icons/RiCompass3Line';
 import { useTheme } from '@oxy.so/bloom/theme';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 /** A path that names nothing: say so, and offer the way back and the way home. */
 export default function NotFoundScreen() {

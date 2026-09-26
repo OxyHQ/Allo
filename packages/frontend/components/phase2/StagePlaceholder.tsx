@@ -1,8 +1,7 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { RiVideoOffLine } from '@oxy.so/bloom/icons';
+import { RiVideoOffLine } from '@oxy.so/bloom/icons/RiVideoOffLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
+import { StyleSheet, View } from 'react-native';
 
 /**
  * WHAT GOES IN `remoteVideo` AND `localVideo` WHILE THERE IS NO VIDEO.

@@ -64,7 +64,7 @@ export default function ConversationRoute() {
   if (isSelf) return <EmptyDetail title={t('chat.open.self')} />;
   if (failed) return <EmptyDetail title={failed} />;
   return (
-    <View style={[styles.pending, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.pending}>
       <ActivityIndicator color={theme.colors.primary} />
     </View>
   );

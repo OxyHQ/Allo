@@ -1,9 +1,8 @@
-import React, { type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@oxy.so/bloom/page-header';
-import { useTheme } from '@oxy.so/bloom/theme';
+import { useRouter } from 'expo-router';
+import { type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { useSplitLayout } from '@/hooks/useSplitLayout';
 
@@ -27,11 +26,10 @@ export function Page({ title, subtitle, actions, back = 'narrow', scroll = true,
   const router = useRouter();
   const split = useSplitLayout();
   const { t } = useTranslation();
-  const theme = useTheme();
   const showBack = back === 'always' || (back === 'narrow' && !split);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.root}>
       <PageHeader
         title={title}
         subtitle={subtitle}
