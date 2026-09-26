@@ -167,7 +167,7 @@ use `@allo/react` hooks and the pure projections in `lib/chat/model.ts`
 `storage.web.ts` (IndexedDB), `secrets.native.ts` (expo-secure-store,
 `WHEN_UNLOCKED_THIS_DEVICE_ONLY`) and `secrets.web.ts`, `session.ts` (the
 `OxyServices` instance from `useOxy()`), `people.ts` (the ONE place the chat path
-asks Oxy about a person; coalesced `getUsersByIds`, filling `usersStore`),
+asks Oxy about a person; coalesced `users.getMany`, filling `usersStore`),
 `push.ts`, `useMediaUri.ts`, and `AlloRoot.tsx`, which owns the lifecycle: one
 client per signed-in account, `stop()` on an account switch, `reset()` (wipe and
 best-effort self-revoke) on sign-out. **Nothing on the chat path may fall back
@@ -311,11 +311,11 @@ instance the fake server is made to list as an unapproved active root.
 ## Key features
 
 - **Authentication:** `Authorization: Bearer` carries an Oxy token, read by
-  `oxy.auth()` only from a header beginning with the exact string `"Bearer "`.
+  `oxy.middleware.auth()` only from a header beginning with the exact string `"Bearer "`.
   The Socket.IO handshake requires the same Oxy token.
 - **People directory:** `/api/directory/*` (`packages/backend/src/routes/directory.ts`)
-  answers the five Oxy lookups the app makes — `getProfileByUsername`,
-  `getUserById`, `getUsersByIds`, `searchProfiles`, `getFileDownloadUrl` — so an
+  answers the five Oxy lookups the app makes — `users.byUsername`,
+  `users.get`, `users.getMany`, `users.search`, `assets.publicUrl` — so an
   app with no Oxy session can still draw a person. **The frontend still calls Oxy
   directly**; this is the surface it moves to. Every underlying Oxy route is
   public, so no service credential is needed, and the responses are a PROJECTION

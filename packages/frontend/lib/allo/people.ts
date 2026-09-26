@@ -15,14 +15,15 @@
  *   `usersStore`, which is what `resolve` fills.
  *
  * Lookups COALESCE: every id asked for in one tick goes out as one
- * `getUsersByIds`, so a group of thirty is one request, a list of two hundred
+ * `users.getMany`, so a group of thirty is one request, a list of two hundred
  * rows is one request, and a row asking twice is one entry. An id already in
  * the cache is not asked for again until its TTL passes, and an id that Oxy
  * does not answer (deleted, hidden) is remembered as unresolved for the same
  * TTL so the list does not ask for it on every render.
  */
-import { oxyClient, type User } from '@oxy.so/core';
+import type { User } from '@oxy.so/core';
 import type { PeopleDirectory, PersonInfo } from '@allo/core';
+import { oxyServices } from '@/lib/oxy';
 import { useUsersStore, type UserEntity } from '@/stores/usersStore';
 
 /** What a screen draws for a person. `undefined` for anyone still being looked up. */
@@ -30,7 +31,7 @@ export interface Person {
   id: string;
   displayName: string;
   handle?: string;
-  /** An Oxy file id or an absolute URL. Resolve with `oxyServices.getFileDownloadUrl` when it is an id. */
+  /** An Oxy file id or an absolute URL. Resolve with `oxyServices.assets.publicUrl` when it is an id. */
   avatar?: string;
   /** What the person says about themselves on Oxy, when they have said anything. */
   bio?: string;
@@ -131,8 +132,8 @@ export function personFromEntity(entity: UserEntity | undefined): Person | undef
 }
 
 /**
- * The app's resolver, over the Oxy client singleton that `OxyProvider` keeps in
- * lockstep with the session. Every underlying route is public, so no session
+ * The app's resolver, over the Oxy client `OxyProvider` signs in with
+ * (`@/lib/oxy`). Every underlying route is public, so no session
  * is needed to draw a person; the bearer only widens what is visible.
  */
-export const people = new PeopleResolver((ids) => oxyClient.getUsersByIds(ids));
+export const people = new PeopleResolver((ids) => oxyServices.users.getMany(ids));

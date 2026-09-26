@@ -205,11 +205,11 @@ a person through this backend rather than by calling Oxy itself.
 
 | Route | Replaces |
 | --- | --- |
-| `GET /api/directory/profiles/username/:username` | `oxyServices.getProfileByUsername` |
-| `GET /api/directory/users/:userId` | `oxyServices.getUserById` |
-| `POST /api/directory/users/by-ids` (`{ ids }`, max 100) | `oxyServices.getUsersByIds` |
-| `GET /api/directory/profiles/search?query=&limit=&offset=` | `oxyServices.searchProfiles` |
-| `GET /api/directory/assets/:fileId/url?variant=` | `oxyServices.getFileDownloadUrl` |
+| `GET /api/directory/profiles/username/:username` | `oxy.users.byUsername` |
+| `GET /api/directory/users/:userId` | `oxy.users.get` |
+| `POST /api/directory/users/by-ids` (`{ ids }`, max 100) | `oxy.users.getMany` |
+| `GET /api/directory/profiles/search?query=&limit=&offset=` | `oxy.users.search` |
+| `GET /api/directory/assets/:fileId/url?variant=` | `oxy.assets.publicUrl` |
 
 Every one answers a `DirectoryUser` (or a list of them) from
 `@allo/shared-types`, which is a **projection**: id, handle, display name,
@@ -281,7 +281,7 @@ bytes, size-capped by `ALLO_BLOB_MAX_BYTES` — is mounted ahead of the JSON
 parser in `src/app.ts` with its own chain.
 
 Socket.IO namespace `/v1` takes the same three fields in `handshake.auth`
-(path `/socket`, empty body) after `oxy.authSocket()`. A socket joins
+(path `/socket`, empty body) after `oxy.middleware.socket()`. A socket joins
 `instance:<id>` and `account:<accountId>`; the server emits `sync.nudge`,
 `instance.approved`, `instance.revoked`, `keypackages.low`, `history.offer` and
 `presence`, and relays `typing` ciphertext to a conversation's other active

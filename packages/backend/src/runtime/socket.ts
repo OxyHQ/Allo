@@ -1,7 +1,7 @@
 /**
  * The Socket.IO server on namespace `/v1` (`SOCKET_NAMESPACE`).
  *
- * Auth is two middlewares in order: `oxy.authSocket()` (the Oxy bearer, sets
+ * Auth is two middlewares in order: `oxy.middleware.socket()` (the Oxy bearer, sets
  * `socket.data.userId`), then the instance signature over `handshake.auth`
  * (`socketAuthSchema`) with the path fixed to `SOCKET_SIGNING_PATH` and an
  * empty body — the same check `requireInstance` makes, through the same
@@ -41,7 +41,9 @@ import { PresenceHub } from "./presenceHub";
 import type { Realtime } from "./realtime";
 
 export interface SocketAuthProvider {
-  authSocket(): (socket: unknown, next: (err?: Error) => void) => Promise<void>;
+  readonly middleware: {
+    socket(): (socket: unknown, next: (err?: Error) => void) => Promise<void>;
+  };
 }
 
 interface SocketData {
@@ -55,7 +57,7 @@ type V1Namespace = Namespace<ClientToServerEvents, ServerToClientEvents, Record<
 export const instanceRoom = (instanceId: string) => `instance:${instanceId}`;
 export const accountRoom = (accountId: string) => `account:${accountId}`;
 
-/** Where `oxy.authSocket()` leaves the account id. */
+/** Where `oxy.middleware.socket()` leaves the account id. */
 function oxyUserIdOf(socket: V1Socket): string | null {
   const fromData = socket.data.userId;
   if (typeof fromData === "string" && fromData) return fromData;
@@ -92,7 +94,7 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
   });
 
   const namespace: V1Namespace = io.of(SOCKET_NAMESPACE);
-  const oxyAuth = deps.oxy.authSocket();
+  const oxyAuth = deps.oxy.middleware.socket();
   namespace.use((socket, next) => {
     void oxyAuth(socket, next);
   });

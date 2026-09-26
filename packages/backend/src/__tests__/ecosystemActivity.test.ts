@@ -74,7 +74,7 @@ describe('ecosystem activity lifecycle', () => {
 
   it('publishes from a task that attests, carrying no credential at all', () => {
     /**
-     * The deployment this change is for. `getServiceToken()` mints from the task
+     * The deployment this change is for. `serviceToken()` mints from the task
      * role (oxy ADR 0026), so demanding the key pair here would have refused to
      * boot the one deployment whose identity is the strongest — and the failure
      * would have read as a missing secret rather than as a check asking the wrong

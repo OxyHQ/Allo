@@ -7,22 +7,37 @@ const PEOPLE: Record<string, { id: string; username: string; name: { displayName
   '6700000000000000000000a5': { id: '6700000000000000000000a5', username: 'kwabena', name: { displayName: 'Kwabena Osei' } },
 };
 
-const known: Record<string, unknown> = {
-  getAccessToken: () => 'harness',
-  getCurrentUser: async () => PEOPLE['6700000000000000000000a1'],
-  getUsersByIds: async (ids: string[]) => ids.map((id) => PEOPLE[id]).filter(Boolean),
-  getProfileByUsername: async (handle: string) => PEOPLE[`acc-${handle}`] ?? PEOPLE['6700000000000000000000a2'],
-  getFileDownloadUrl: (id: string) => `https://i.pravatar.cc/200?u=${id}`,
-  searchProfiles: async () => ({ data: Object.values(PEOPLE) }),
+const users = {
+  me: async () => PEOPLE['6700000000000000000000a1'],
+  getMany: async (ids: string[]) => ids.map((id) => PEOPLE[id]).filter(Boolean),
+  byUsername: async (handle: string) => PEOPLE[`acc-${handle}`] ?? PEOPLE['6700000000000000000000a2'],
+  search: async () => ({ data: Object.values(PEOPLE) }),
 };
 
 /** Anything else the app or Bloom reaches for answers with a no-op rather than crashing the harness. */
-export const oxyClient: Record<string, any> = new Proxy(known, {
-  get(target, key: string) {
-    if (key in target) return target[key];
-    return (...args: unknown[]) => (key === 'createLinkedClient' ? oxyClient : undefined);
-  },
+function noop(known: Record<string, unknown>): Record<string, any> {
+  return new Proxy(known, {
+    get(target, key: string) {
+      if (key in target) return target[key];
+      return () => undefined;
+    },
+  });
+}
+
+const client: Record<string, any> = noop({
+  users: noop(users),
+  assets: noop({ publicUrl: (id: string) => `https://i.pravatar.cc/200?u=${id}` }),
+  session: noop({ accessToken: 'harness', userId: '6700000000000000000000a1', onChange: () => () => undefined }),
+  http: noop({}),
+  createLinkedClient: () => ({ client: noop({}), dispose: () => undefined }),
 });
+
+/** `new OxyServices(…)` in `@/lib/oxy` gets the harness client. */
+export class OxyServices {
+  constructor() {
+    return client;
+  }
+}
 
 export function getNativeLanguageName(code: string): string {
   return code;

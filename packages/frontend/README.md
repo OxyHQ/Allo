@@ -109,7 +109,7 @@ the SDK is *constructed*, and every platform adapter it needs lives there:
 | `storage.native.ts` / `storage.web.ts` | `StorageAdapter` over `expo-sqlite` (`allo.db`, table `kv`) / IndexedDB (`allo`, store `kv`); `batch` is one transaction |
 | `secrets.native.ts` / `secrets.web.ts` | `SecretStore` over `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`) / IndexedDB (`allo-secrets`); the web file documents the limitation |
 | `session.ts` | `OxySessionAdapter` over the `OxyServices` instance `useOxy()` provides — the session authority |
-| `people.ts` | `PeopleDirectory` and the coalesced `getUsersByIds` lookup that fills `usersStore`; the only place the chat path asks Oxy about a person |
+| `people.ts` | `PeopleDirectory` and the coalesced `users.getMany` lookup that fills `usersStore`; the only place the chat path asks Oxy about a person |
 | `push.ts` | The device push token → `client.instance.setPushToken`, once permission is granted; cleared on sign-out |
 | `useMediaUri.ts` + `mediaSink.*.ts` | A `MediaRef` → a URI a player can open: a cache file on native, an object URL on web, released on unmount |
 | `AlloRoot.tsx` + `EnrollmentGate.tsx` | Client lifecycle (one per signed-in account; stop on switch, `reset()` on sign-out) and the approval / revoked screens |

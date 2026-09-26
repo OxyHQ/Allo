@@ -44,16 +44,16 @@ const mockDirectory: Record<string, { id: string; username: string; name: { disp
   [ALICE]: { id: ALICE, username: 'alice', name: { displayName: 'Alice' } },
   [BOB]: { id: BOB, username: 'bob', name: { displayName: 'Bob Example' } },
 };
-jest.mock('@oxy.so/core', () => ({
-  oxyClient: {
-    getUsersByIds: async (ids: string[]) => ids.map((id) => mockDirectory[id]).filter(Boolean),
+jest.mock('@/lib/oxy', () => ({
+  oxyServices: {
+    users: { getMany: async (ids: string[]) => ids.map((id) => mockDirectory[id]).filter(Boolean) },
   },
 }));
 
 jest.mock('@oxy.so/services', () => ({
   useOxy: () => ({
     user: { id: 'acc-reach-alice', username: 'alice', name: { displayName: 'Alice' } },
-    oxyServices: { getFileDownloadUrl: (fileId: string, variant?: string) => `https://files.test/${fileId}/${variant ?? 'full'}` },
+    oxyServices: { assets: { publicUrl: (fileId: string, variant?: string) => `https://files.test/${fileId}/${variant ?? 'full'}` } },
     isLoading: false,
     logout: jest.fn(),
   }),

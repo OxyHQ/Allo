@@ -24,12 +24,14 @@ let url: string;
 
 /** Oxy's socket auth stand-in: `auth.oxyUser` names the account. */
 const fakeOxy = {
-  authSocket: () => async (socket: unknown, next: (err?: Error) => void) => {
-    const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
-    const userId = s.handshake.auth.oxyUser;
-    if (typeof userId !== "string") return next(new Error("no session"));
-    s.data.userId = userId;
-    next();
+  middleware: {
+    socket: () => async (socket: unknown, next: (err?: Error) => void) => {
+      const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
+      const userId = s.handshake.auth.oxyUser;
+      if (typeof userId !== "string") return next(new Error("no session"));
+      s.data.userId = userId;
+      next();
+    },
   },
 };
 

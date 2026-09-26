@@ -8,7 +8,7 @@
  *
  * ## Silence is the failure being removed
  *
- * Handing an identifier that names no account to `oxyClient.getUserById`
+ * Handing an identifier that names no account to `oxy.users.get`
  * produces a 404, which `userSubject` correctly turns into `null`, which
  * `ModerationDeliveryWorker` correctly reads as "the account no longer exists" —
  * and the report closes with a sentence that was never true of a subject that
@@ -38,7 +38,7 @@
  * many. What an unbounded one costs is not a rejected insert:
  *
  * 1. **A stuck outbox slot, permanently.** A `user` report with a megabyte
- *    identifier still gets a delivery event, and `oxyClient.getUserById` puts that
+ *    identifier still gets a delivery event, and `oxy.users.get` puts that
  *    identifier in a URL path. What comes back is not a 404 — it is a request-line
  *    or header-size failure, or a transport error, and `isOxyUserNotFound` does not
  *    recognise it. The provider rethrows, the outbox reads that as an OUTAGE, and

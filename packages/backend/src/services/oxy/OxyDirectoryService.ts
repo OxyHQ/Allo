@@ -9,8 +9,8 @@ import type { SearchProfilesResponse, User } from "@oxy.so/core";
  * The app draws a person through this backend rather than by calling Oxy from
  * a screen, so a client that holds an Allo session and nothing else — an SDK
  * consumer that is not the Allo app — can still resolve who somebody is. These
- * five are the whole of what the app asks Oxy for: `getProfileByUsername`,
- * `getUserById`, `getUsersByIds`, `searchProfiles` and `getFileDownloadUrl`
+ * five are the whole of what the app asks Oxy for: `users.byUsername`,
+ * `users.get`, `users.getMany`, `users.search` and `assets.publicUrl`
  * (avatars).
  *
  * ## Why no service credential is required
@@ -40,14 +40,18 @@ import type { SearchProfilesResponse, User } from "@oxy.so/core";
  * test can satisfy it in ten lines, and the compiler still checks every call.
  */
 export interface OxyDirectoryClient {
-  getProfileByUsername(username: string, options?: { cache?: boolean }): Promise<User>;
-  getUserById(userId: string, options?: { cache?: boolean }): Promise<User>;
-  getUsersByIds(ids: string[]): Promise<User[]>;
-  searchProfiles(
-    query: string,
-    pagination?: { limit?: number; offset?: number },
-  ): Promise<SearchProfilesResponse>;
-  getFileDownloadUrl(fileId: string, variant?: string, expiresIn?: number): string;
+  readonly users: {
+    byUsername(username: string, options?: { cache?: boolean }): Promise<User>;
+    get(userId: string, options?: { cache?: boolean }): Promise<User>;
+    getMany(ids: string[]): Promise<User[]>;
+    search(
+      query: string,
+      pagination?: { limit?: number; offset?: number },
+    ): Promise<SearchProfilesResponse>;
+  };
+  readonly assets: {
+    publicUrl(fileId: string, variant?: string, expiresIn?: number): string;
+  };
 }
 
 /**
@@ -98,7 +102,7 @@ export function toDirectoryUser(user: User, client: OxyDirectoryClient): Directo
     lastName: trimToUndefined(user.name?.last) ?? "",
     ...(avatar === undefined
       ? {}
-      : { avatar, avatarUrl: client.getFileDownloadUrl(avatar, AVATAR_VARIANT) }),
+      : { avatar, avatarUrl: client.assets.publicUrl(avatar, AVATAR_VARIANT) }),
     ...(trimToUndefined(user.bio) === undefined ? {} : { bio: user.bio }),
   };
 }
@@ -106,22 +110,22 @@ export function toDirectoryUser(user: User, client: OxyDirectoryClient): Directo
 export function createOxyDirectoryService(client: OxyDirectoryClient): OxyDirectoryService {
   return {
     async profileByUsername(username: string): Promise<DirectoryUser> {
-      return toDirectoryUser(await client.getProfileByUsername(username), client);
+      return toDirectoryUser(await client.users.byUsername(username), client);
     },
 
     async userById(userId: string): Promise<DirectoryUser> {
-      return toDirectoryUser(await client.getUserById(userId), client);
+      return toDirectoryUser(await client.users.get(userId), client);
     },
 
     async usersByIds(ids: readonly string[]): Promise<DirectoryUser[]> {
       /**
-       * `getUsersByIds` deduplicates, chunks at 100 and drops a chunk that
+       * `users.getMany` deduplicates, chunks at 100 and drops a chunk that
        * fails rather than the whole call, so the answer can legitimately be
        * shorter than the request. The route says so; nothing here pads it back
        * out with placeholders, because a placeholder is indistinguishable from
        * a real answer at the point it is drawn.
        */
-      const users = await client.getUsersByIds([...ids]);
+      const users = await client.users.getMany([...ids]);
       return users.map((user) => toDirectoryUser(user, client));
     },
 
@@ -129,7 +133,7 @@ export function createOxyDirectoryService(client: OxyDirectoryClient): OxyDirect
       query: string,
       pagination: { limit: number; offset: number },
     ): Promise<{ users: DirectoryUser[]; total: number; hasMore: boolean }> {
-      const response = await client.searchProfiles(query, pagination);
+      const response = await client.users.search(query, pagination);
       return {
         users: response.data.map((user) => toDirectoryUser(user, client)),
         total: response.pagination.total,
@@ -138,7 +142,7 @@ export function createOxyDirectoryService(client: OxyDirectoryClient): OxyDirect
     },
 
     assetUrl(fileId: string, variant: string | undefined): string {
-      return client.getFileDownloadUrl(fileId, variant ?? AVATAR_VARIANT);
+      return client.assets.publicUrl(fileId, variant ?? AVATAR_VARIANT);
     },
   };
 }

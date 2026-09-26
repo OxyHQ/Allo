@@ -237,7 +237,7 @@ recipient's offer read and the owner's backup read) name them explicitly.
 ### Realtime
 
 Socket.IO namespace `/v1` on the same HTTP server (`runtime/socket.ts`). Two
-handshake middlewares in order: `oxy.authSocket()`, then the instance
+handshake middlewares in order: `oxy.middleware.socket()`, then the instance
 signature over `handshake.auth` with the path fixed to `/socket` and an empty
 body, through the same function the HTTP middleware uses. A connected socket
 joins `instance:<id>` and `account:<accountId>`; the rooms are derived from

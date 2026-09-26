@@ -35,7 +35,7 @@ describe("the Oxy service credential", () => {
     /**
      * Half a credential is a service token that can never be minted, and the
      * way that shows up in production is every bulk profile lookup quietly
-     * returning nothing — `getUsersByIds` logs a failed chunk and carries on.
+     * returning nothing — `users.getMany` logs a failed chunk and carries on.
      */
     expect(() => loadOxyServiceCredential({ ALLO_OXY_SERVICE_API_KEY: API_KEY })).toThrow(
       /ALLO_OXY_SERVICE_API_SECRET/,

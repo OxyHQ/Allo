@@ -10,7 +10,7 @@ import { getHttpStatus } from '@/utils/errors';
 /**
  * WHO A PROFILE URL NAMES.
  *
- * One lookup, by HANDLE. `oxyServices.getProfileByUsername` takes a username;
+ * One lookup, by HANDLE. `oxyServices.users.byUsername` takes a username;
  * `getUserById` takes an account id. Passing an id to the by-username endpoint
  * 404s — quietly, once per render — and that exact confusion shipped once
  * already; `hooks/useSenderInfo.ts` carries the note. Everything that arrives at
@@ -78,7 +78,7 @@ export function useProfileData(username?: string): {
 
   const query = useQuery({
     queryKey: profileQueryKeys.byUsername(username ?? ''),
-    queryFn: () => oxyServices.getProfileByUsername(username ?? ''),
+    queryFn: () => oxyServices.users.byUsername(username ?? ''),
     enabled: Boolean(username),
     staleTime: PROFILE_STALE_TIME_MS,
     // A handle nobody holds is an answer, not an outage. Retrying it four times

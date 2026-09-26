@@ -30,7 +30,7 @@ import { logger } from "../utils/logger";
  * here, and this file exists for what a credential changes rather than for what
  * it enables:
  *
- * - `getUsersByIds` takes the server-to-server path (`Authorization: Bearer
+ * - `users.getMany` takes the server-to-server path (`Authorization: Bearer
  *   <service token>`) instead of the anonymous one, which saves the
  *   `GET /csrf-token` round trip the SDK otherwise makes before every
  *   state-changing request without a bearer.

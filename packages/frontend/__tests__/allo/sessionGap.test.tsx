@@ -3,7 +3,7 @@
  * its keys.
  *
  * Oxy's `HttpService` clears the bearer on an unrecoverable 401 and emits
- * `onTokensChanged(null)`; `OxyContext` turns that into a LOCAL signed-out
+ * `session.onChange(null)`; `OxyContext` turns that into a LOCAL signed-out
  * state while deliberately keeping the persisted session, because it treats
  * the null as transient — "a later reload can still restore". So `useOxy()`
  * can report `user: null` with `isLoading: false` for a moment in the life of
