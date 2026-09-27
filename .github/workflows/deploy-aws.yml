@@ -67,7 +67,6 @@ jobs:
       - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
         env:
           APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SHARED_REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
           sync_secret() {
             name="$1"; value="$2"; path="$3"
@@ -93,15 +92,12 @@ jobs:
           # oxy-infra #44; this is the other half.
           sync_secret DATABASE_URL "$APP_DATABASE_URL" "/oxy/$APP/DATABASE_URL"
 
-          # Valkey vive en la región del clúster; una URL de otra región deja al
-          # servicio sin caché de forma silenciosa, así que se rechaza.
-          if [ -n "$SHARED_REDIS_URL" ] && [ "$SHARED_REDIS_URL" != "-" ] &&
-             [ "$AWS_REGION" = "us-west-2" ] &&
-             ! printf '%s' "$SHARED_REDIS_URL" | grep -q '\.usw2\.cache\.amazonaws\.com'; then
-            echo "::warning::skip REDIS_URL because it does not point at the us-west-2 Valkey endpoint; SSM unchanged"
-          else
-            sync_secret REDIS_URL "$SHARED_REDIS_URL" "/oxy/_shared/REDIS_URL"
-          fi
+          # Sin REDIS_URL. `/oxy/_shared/REDIS_URL` es de la Terraform de
+          # oxy-infra (terraform-uswest2/redis.tf), y el despliegue de una app
+          # nunca debe escribir un parámetro compartido: seis repos copiaban cada
+          # uno su propio secrets.REDIS_URL, dos tenían valores distintos y cada
+          # despliegue lo cambiaba de clúster (incidente 2026-09-27). La task
+          # definition de allo lo sigue LEYENDO; solo se quita la escritura.
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
