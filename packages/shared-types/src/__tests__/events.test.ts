@@ -40,7 +40,7 @@ describe("conversationEventSchema", () => {
     ).toBe(true);
   });
   it("rejects an unknown kind, a colon-bearing account id that is not the server, and 17 blob ids", () => {
-    expect(conversationEventSchema.safeParse({ ...event, kind: "sticker" }).success).toBe(false);
+    expect(conversationEventSchema.safeParse({ ...event, kind: "hologram" }).success).toBe(false);
     expect(conversationEventSchema.safeParse({ ...event, senderAccountId: "allo:other" }).success).toBe(false);
     expect(conversationEventSchema.safeParse({ ...event, blobIds: Array(17).fill(UUID_V7) }).success).toBe(false);
     const { blobIds: _omit, ...missing } = event;

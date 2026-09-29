@@ -36,6 +36,8 @@ export const MAX_POLL_OPTIONS = 12;
 export const MAX_PLACE_LABEL_LENGTH = 256;
 export const MAX_CONTACT_NAME_LENGTH = 128;
 export const MAX_CONTACT_DETAIL_LENGTH = 128;
+export const MAX_STICKER_ID_LENGTH = 64;
+export const MAX_STICKER_EMOJI_LENGTH = 32;
 
 export const eventRefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("event"), conversationId: conversationIdSchema, eventId: eventIdSchema }),
@@ -193,6 +195,28 @@ export const contactMessageSchema = z.object({
 });
 
 /**
+ * A sticker from Oxy's shared catalogue (`@oxy.so/stickers`), by reference.
+ *
+ * The animation itself is public — the same bytes for every conversation that
+ * sends it — so it is not re-uploaded as an encrypted blob: the receiver
+ * resolves `stickerId` through Oxy and fetches the files from Oxy's CDN.
+ * `sha256` is the animation's hash as the SENDER saw it, and the receiver
+ * checks the bytes it fetched against it before drawing them, so the CDN
+ * cannot substitute one sticker for another in a conversation it cannot read.
+ *
+ * `emoji` is what the sticker stands for, carried so a conversation list, a
+ * notification or a screen reader can say "😢 Sticker" without resolving it.
+ */
+export const stickerMessageSchema = z.object({
+  v,
+  t: z.literal("sticker"),
+  stickerId: z.string().min(1).max(MAX_STICKER_ID_LENGTH),
+  packId: z.string().min(1).max(MAX_STICKER_ID_LENGTH),
+  sha256: sha256HexSchema,
+  emoji: z.string().min(1).max(MAX_STICKER_EMOJI_LENGTH).optional(),
+});
+
+/**
  * Pinning a message for everybody in the conversation. A control message, not
  * a timeline entry: clients fold the last op per target, so two devices that
  * pin and unpin in either order agree on the result.
@@ -310,6 +334,7 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   pollVoteMessageSchema,
   locationMessageSchema,
   contactMessageSchema,
+  stickerMessageSchema,
   pinMessageSchema,
   callMessageSchema,
   callLogMessageSchema,

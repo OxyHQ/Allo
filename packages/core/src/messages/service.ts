@@ -8,7 +8,7 @@ import { decodeAppMessage, encodeAppMessage, type AppMessage, type EventRef } fr
 import { Model } from "../storage/model";
 import type { Context } from "../context";
 import { InvalidStateError, NotFoundError } from "../errors";
-import type { ContactDraft, LoadOlderResult, PlaceDraft, PollDraft, SendOptions, TimelineItemView } from "../types";
+import type { ContactDraft, LoadOlderResult, PlaceDraft, PollDraft, SendOptions, StickerDraft, TimelineContent, TimelineItemView } from "../types";
 import { base64Decode, base64Encode } from "../util/bytes";
 import { describeError } from "../util/logger";
 import { project } from "./projection";
@@ -16,6 +16,12 @@ import { project } from "./projection";
 const READ_THROTTLE_MS = 5000;
 const DELIVERED_THROTTLE_MS = 5000;
 const TYPING_TTL_MS = 6000;
+
+/**
+ * What counts toward unread and moves the read receipt: what somebody wrote or
+ * sent to be looked at. A sticker is a message on its own, like a photo.
+ */
+const COUNTED_KINDS = new Set<TimelineContent["kind"]>(["text", "media", "sticker"]);
 
 export class MessagesService {
   private timelines = new Map<string, TimelineItemView[]>();
@@ -62,7 +68,7 @@ export class MessagesService {
     const record = this.ctx.model.conversations.get(conversationId);
     if (!record) return 0;
     return this.timeline(conversationId).filter(
-      (i) => !i.isOwn && i.seq !== null && i.seq > record.lastReadSeq && (i.content.kind === "text" || i.content.kind === "media"),
+      (i) => !i.isOwn && i.seq !== null && i.seq > record.lastReadSeq && COUNTED_KINDS.has(i.content.kind),
     ).length;
   }
 
@@ -132,6 +138,23 @@ export class MessagesService {
       longitude: place.longitude,
       ...(place.label ? { label: place.label } : {}),
       ...(place.address ? { address: place.address } : {}),
+    });
+    return item.id;
+  }
+
+  /**
+   * A sticker from Oxy's catalogue. Only the reference travels — the animation
+   * is public and fetched from Oxy's CDN by every receiver, which checks it
+   * against `sha256`.
+   */
+  async sendSticker(conversationId: string, sticker: StickerDraft): Promise<string> {
+    const item = await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: "sticker",
+      stickerId: sticker.stickerId,
+      packId: sticker.packId,
+      sha256: sticker.sha256,
+      ...(sticker.emoji ? { emoji: sticker.emoji } : {}),
     });
     return item.id;
   }
@@ -223,7 +246,7 @@ export class MessagesService {
     const { ctx } = this;
     const record = ctx.model.conversations.get(conversationId);
     if (!record) throw new NotFoundError(`conversation ${conversationId}`);
-    const last = [...this.timeline(conversationId)].reverse().find((i) => !i.isOwn && i.seq !== null && (i.content.kind === "text" || i.content.kind === "media"));
+    const last = [...this.timeline(conversationId)].reverse().find((i) => !i.isOwn && i.seq !== null && COUNTED_KINDS.has(i.content.kind));
     if (!last || last.seq === null || last.seq <= record.lastReadSeq) return;
     const next = { ...record, lastReadSeq: last.seq };
     await ctx.store.putJson("conversation", next.id, next);

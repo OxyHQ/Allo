@@ -66,6 +66,7 @@ const ATTACHMENT_CONTENT: Partial<Record<TimelineContent['kind'], ChatAttachment
   poll: 'poll',
   location: 'location',
   contact: 'contact',
+  sticker: 'sticker',
 };
 
 /** One line of text for a message: a row's preview, a reply quote, a composer banner. */
@@ -82,6 +83,8 @@ export function previewText(item: TimelineItemView, t: Translate): string {
       return content.place.label ?? t('chat.attachment.location');
     case 'contact':
       return content.contact.name;
+    case 'sticker':
+      return content.sticker.emoji ? `${content.sticker.emoji} ${t('chat.attachment.sticker')}` : t('chat.attachment.sticker');
     case 'call':
       return callSummary(content.call, t);
     case 'deleted':
@@ -381,11 +384,12 @@ export function transcriptItems(
         return { ...base, text: content.body, editedLabel: content.isEdited ? ctx.t('message.edited') : undefined };
       case 'media':
         return { ...base, text: content.media.caption || undefined };
-      // A poll, a place and a card are drawn by the media slot the screen
-      // fills, so the bubble itself carries no text of its own.
+      // A poll, a place, a card and a sticker are drawn by the media slot the
+      // screen fills, so the bubble itself carries no text of its own.
       case 'poll':
       case 'location':
       case 'contact':
+      case 'sticker':
         return base;
       case 'call':
         // A call is a thing that happened, not something somebody said: Bloom's

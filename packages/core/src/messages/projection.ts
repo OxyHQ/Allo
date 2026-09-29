@@ -67,6 +67,13 @@ export function project(input: ProjectionInput): TimelineItemView[] {
         return { content: { kind: "location", place: placeView(m) } };
       case "contact":
         return { content: { kind: "contact", contact: contactView(m) } };
+      case "sticker":
+        return {
+          content: {
+            kind: "sticker",
+            sticker: { stickerId: m.stickerId, packId: m.packId, sha256: m.sha256, ...(m.emoji ? { emoji: m.emoji } : {}) },
+          },
+        };
       case "call_log":
         return { content: { kind: "call", call: callLogView(m, isOwn) } };
       default:

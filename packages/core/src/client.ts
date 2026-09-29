@@ -59,6 +59,7 @@ import type {
   PollDraft,
   PlaceDraft,
   ContactDraft,
+  StickerDraft,
   SendOptions,
   SubscriptionTopic,
   SyncState,
@@ -171,6 +172,8 @@ export interface AlloClient {
     sendLocation(conversationId: string, place: PlaceDraft): Promise<string>;
     /** Somebody's card. */
     sendContact(conversationId: string, contact: ContactDraft): Promise<string>;
+    /** A sticker from Oxy's catalogue, sent by reference; receivers check its hash. */
+    sendSticker(conversationId: string, sticker: StickerDraft): Promise<string>;
     /** Pins a message for everybody in the conversation, or takes the pin off. */
     setPinned(conversationId: string, targetId: string, pinned: boolean): Promise<void>;
     edit(conversationId: string, targetId: string, body: string): Promise<void>;
@@ -560,6 +563,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       vote: (id, t, optionIds) => requireCtx().messages.vote(id, t, optionIds),
       sendLocation: (id, place) => requireCtx().messages.sendLocation(id, place),
       sendContact: (id, contact) => requireCtx().messages.sendContact(id, contact),
+      sendSticker: (id, sticker) => requireCtx().messages.sendSticker(id, sticker),
       setPinned: (id, t, pinned) => requireCtx().messages.setPinned(id, t, pinned),
       edit: (id, t, body) => requireCtx().messages.edit(id, t, body),
       remove: (id, t) => requireCtx().messages.remove(id, t),

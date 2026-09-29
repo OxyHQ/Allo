@@ -8,6 +8,7 @@ import {
   encodeAppMessage,
   eventRefSchema,
   MAX_TEXT_BODY_LENGTH,
+  stickerMessageSchema,
   type AppMessage,
   type EventRef,
 } from "../appMessage";
@@ -45,6 +46,8 @@ const valid: AppMessage[] = [
   { v: 1, t: "conversation", name: "Familia" },
   { v: 1, t: "conversation" },
   { v: 1, t: "typing", on: true },
+  { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256, emoji: "😢" },
+  { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 },
 ];
 
 describe("eventRefSchema", () => {
@@ -58,6 +61,25 @@ describe("eventRefSchema", () => {
   });
 });
 
+describe("sticker messages", () => {
+  const sticker = { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 };
+  it("needs the id, the pack and the animation's hash", () => {
+    expect(appMessageSchema.safeParse(sticker).success).toBe(true);
+    for (const missing of ["stickerId", "packId", "sha256"] as const) {
+      const { [missing]: _drop, ...rest } = sticker;
+      expect(appMessageSchema.safeParse(rest).success, missing).toBe(false);
+    }
+  });
+  it("refuses a hash that is not sha256 hex, and an overlong emoji", () => {
+    expect(appMessageSchema.safeParse({ ...sticker, sha256: "not-a-hash" }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ ...sticker, emoji: "x".repeat(33) }).success).toBe(false);
+  });
+  it("is content, not control: it carries no ctl marker", () => {
+    expect(appMessageSchema.safeParse({ ...sticker, ctl: true }).success).toBe(true);
+    expect(stickerMessageSchema.parse({ ...sticker, ctl: true })).not.toHaveProperty("ctl");
+  });
+});
+
 describe("appMessageSchema", () => {
   it("accepts every kind", () => {
     for (const m of valid) expect(appMessageSchema.safeParse(m).success, m.t).toBe(true);
@@ -66,7 +88,7 @@ describe("appMessageSchema", () => {
     expect(APP_MESSAGE_VERSION).toBe(1);
     expect(appMessageSchema.safeParse({ v: 2, t: "text", body: "x" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: "1", t: "text", body: "x" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "sticker", id: "x" }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: "hologram", id: "x" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: 1, t: "text" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: 1, t: "text", body: "" }).success).toBe(false);
     expect(appMessageSchema.safeParse({ v: 1, t: "text", body: "x".repeat(MAX_TEXT_BODY_LENGTH + 1) }).success).toBe(false);
@@ -105,7 +127,7 @@ describe("encode / decode", () => {
   });
   it("decode rejects unknown t, wrong v, non-JSON and non-UTF-8", () => {
     const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
-    expect(() => decodeAppMessage(enc({ v: 1, t: "sticker" }))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessage(enc({ v: 1, t: "hologram" }))).toThrow(AppMessageDecodeError);
     expect(() => decodeAppMessage(enc({ v: 2, t: "text", body: "x" }))).toThrow(AppMessageDecodeError);
     expect(() => decodeAppMessage(new TextEncoder().encode("{not json"))).toThrow(AppMessageDecodeError);
     expect(() => decodeAppMessage(new Uint8Array([0xff, 0xfe, 0x7b]))).toThrow(AppMessageDecodeError);
@@ -139,8 +161,8 @@ describe("an unknown control message", () => {
   });
 
   it("without the marker a receiver reports it, because a CONTENT kind must read as undecryptable", () => {
-    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "sticker", id: "x" }))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "sticker", ctl: false }))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "hologram", id: "x" }))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "hologram", ctl: false }))).toThrow(AppMessageDecodeError);
   });
 
   it("is refused at the wrong version, an empty kind and an over-long one", () => {

@@ -494,6 +494,17 @@ describe("polls, places and cards over the wire", () => {
     await flush(alice, bob);
     await waitFor(() => bob.client.conversations.get(conv.id)?.lastMessage?.content.kind === "contact");
 
+    // A sticker travels as a reference, arrives with the sender's hash, is the
+    // row's preview, and counts toward unread like a photo would.
+    const unreadBefore = bob.client.messages.unreadCount(conv.id);
+    const sticker = { stickerId: "stk-sad-bear", packId: "pack-bff", sha256: "a".repeat(64), emoji: "😢" };
+    await alice.client.messages.sendSticker(conv.id, sticker);
+    await flush(alice, bob);
+    await waitFor(() => bob.client.conversations.get(conv.id)?.lastMessage?.content.kind === "sticker");
+    const received = bob.client.messages.timeline(conv.id).find((i) => i.content.kind === "sticker")!;
+    expect(received.content.kind === "sticker" && received.content.sticker).toEqual(sticker);
+    expect(bob.client.messages.unreadCount(conv.id)).toBe(unreadBefore + 1);
+
     await stopAll(alice, bob);
   });
 });

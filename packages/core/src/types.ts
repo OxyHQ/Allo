@@ -209,6 +209,19 @@ export interface ContactCardView {
 }
 
 /**
+ * A sticker from Oxy's catalogue, by reference. The screen resolves
+ * `stickerId` through `@oxy.so/stickers` and must check the animation it
+ * fetched against `sha256` — the hash the sender saw — before drawing it.
+ */
+export interface StickerView {
+  stickerId: string;
+  packId: string;
+  sha256: string;
+  /** What it stands for, for a list row, a notification or a screen reader. */
+  emoji?: string;
+}
+
+/**
  * A call that happened, as the conversation shows it.
  *
  * "Missed" is not a field: it is the RECEIVER's reading of `not_answered` on
@@ -232,6 +245,7 @@ export type TimelineContent =
   | { kind: "poll"; poll: PollView }
   | { kind: "location"; place: PlaceView }
   | { kind: "contact"; contact: ContactCardView }
+  | { kind: "sticker"; sticker: StickerView }
   | { kind: "call"; call: CallLogView }
   | { kind: "deleted" }
   | { kind: "undecryptable"; reason: string }
@@ -388,6 +402,9 @@ export interface PlaceDraft {
 }
 
 /** What `messages.sendContact` takes. */
+/** A sticker to send: the `StickerRef` `@oxy.so/stickers` builds, plus its emoji. */
+export type StickerDraft = StickerView;
+
 export interface ContactDraft {
   name: string;
   /** Set it when the card names an Oxy account. */

@@ -348,6 +348,17 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
     expect(previewText(card, t)).toBe('Marta Ferreira');
   });
 
+  it('previews a sticker as its emoji and the word, with the sticker glyph', () => {
+    const sad = item({ content: { kind: 'sticker', sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64), emoji: '😢' } } });
+    const bare = item({ content: { kind: 'sticker', sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64) } } });
+    expect(previewText(sad, t)).toBe('😢 chat.attachment.sticker');
+    expect(previewText(bare, t)).toBe('chat.attachment.sticker');
+    expect(chatSummary(view({ lastMessage: sad }), ctx).preview).toEqual({
+      sender: undefined,
+      attachment: { kind: 'sticker', label: '😢 chat.attachment.sticker' },
+    });
+  });
+
   it('names an unnamed place rather than showing an empty line', () => {
     expect(previewText(nowhere, t)).toBe('chat.attachment.location');
   });

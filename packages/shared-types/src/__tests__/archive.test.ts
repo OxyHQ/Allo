@@ -113,7 +113,7 @@ describe("archiveV1Schema", () => {
   it("an event's message must be an AppMessage: not ciphertext, not an unknown t", () => {
     const ev = archive.events[0];
     expect(archiveV1Schema.safeParse({ ...archive, events: [{ ...ev, message: "AAAA" }] }).success).toBe(false);
-    expect(archiveV1Schema.safeParse({ ...archive, events: [{ ...ev, message: { v: 1, t: "sticker" } }] }).success).toBe(false);
+    expect(archiveV1Schema.safeParse({ ...archive, events: [{ ...ev, message: { v: 1, t: "hologram" } }] }).success).toBe(false);
     expect(archiveV1Schema.safeParse({ ...archive, events: [{ ...ev, message: { v: 2, t: "text", body: "x" } }] }).success).toBe(false);
     expect(archiveV1Schema.safeParse({ ...archive, events: [{ ...ev, senderInstanceId: undefined }] }).success).toBe(false);
   });
@@ -135,7 +135,7 @@ describe("encodeArchive / decodeArchive", () => {
     expect(decodeArchive(bytes)).toEqual(archive);
   });
   it("decode rejects an event whose message is not an AppMessage", () => {
-    const bad = { ...archive, events: [{ ...archive.events[0], message: { v: 1, t: "sticker", id: "x" } }] };
+    const bad = { ...archive, events: [{ ...archive.events[0], message: { v: 1, t: "hologram", id: "x" } }] };
     const bytes = new TextEncoder().encode(JSON.stringify(bad));
     expect(() => decodeArchive(bytes)).toThrow(ArchiveDecodeError);
   });
