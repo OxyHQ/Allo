@@ -95,6 +95,7 @@
   "chat.attachment.gif": "GIF",
   "chat.attachment.location": "Posizione",
   "chat.attachment.photo": "Foto",
+  "chat.attachment.sticker": "Sticker",
   "chat.attachment.video": "Video",
   "chat.attachment.voice": "Messaggio vocale",
   "chat.block.confirm": "Non potranno iniziare nuove conversazioni con te. Nulla viene eliminato.",
