@@ -23,6 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Composer, type ComposerTarget, type Mentionable } from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
 import { hasMessageMedia, MessageMedia } from '@/components/chat/media/MessageMedia';
+import { stickerDraftOf } from '@/lib/chat/stickerRef';
+import type { Sticker } from '@oxy.so/stickers';
 import { Transcript } from '@/components/chat/transcript/Transcript';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
@@ -247,7 +249,14 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             ) : undefined,
           // A photo bleeds to the bubble's radius; a poll, a place and a card
           // are typography and keep its padding (Bloom 2.12.4).
-          mediaFit: content && INSET_MEDIA.has(content.kind) ? ('inset' as const) : undefined,
+          // A sticker is its own shape and gets no bubble at all (Bloom 6.3's
+          // `bare`).
+          mediaFit:
+            content?.kind === 'sticker'
+              ? ('bare' as const)
+              : content && INSET_MEDIA.has(content.kind)
+                ? ('inset' as const)
+                : undefined,
           onLongPress: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
           onContextMenu: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
           onToggleReaction: settled ? (emoji: string) => actions.react(row.id, emoji) : undefined,
@@ -320,7 +329,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
    * A poll, a place and a card each go as their own message, so all three are
    * the same shape: send it, and say so when it does not go out.
    */
-  const { sendPoll, sendLocation, sendContact } = timeline;
+  const { sendPoll, sendLocation, sendContact, sendSticker } = timeline;
   const sendOne = useCallback(
     async (send: () => Promise<string>) => {
       try {
@@ -338,6 +347,10 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   const onSendContact = useCallback(
     (contact: ContactDraft) => sendOne(() => sendContact(contact)),
     [sendContact, sendOne],
+  );
+  const onSendSticker = useCallback(
+    (sticker: Sticker) => sendOne(() => sendSticker(stickerDraftOf(sticker))),
+    [sendSticker, sendOne],
   );
 
   const onTyping = useCallback(
@@ -504,6 +517,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             onSendPoll={onSendPoll}
             onSendPlace={onSendPlace}
             onSendContact={onSendContact}
+          onSendSticker={onSendSticker}
             onTyping={onTyping}
           />
         </View>

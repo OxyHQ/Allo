@@ -4,6 +4,7 @@ import type {
   PlaceDraft,
   PollDraft,
   SendOptions,
+  StickerDraft,
   TimelineItemView,
   UploadMediaMeta,
 } from "@allo/core";
@@ -36,6 +37,8 @@ export interface Timeline {
   sendLocation(place: PlaceDraft): Promise<string>;
   /** Somebody's card. */
   sendContact(contact: ContactDraft): Promise<string>;
+  /** A sticker from Oxy's catalogue, by reference. Resolves to the local key of the echo. */
+  sendSticker(sticker: StickerDraft): Promise<string>;
   /** Pins a message for everybody in the conversation, or takes the pin off. */
   setPinned(targetId: string, pinned: boolean): Promise<void>;
   edit(targetId: string, body: string): Promise<void>;
@@ -96,6 +99,7 @@ export function useTimeline(conversationId: string, options?: TimelineOptions): 
   );
   const sendLocation = useCallback((place: PlaceDraft) => client.messages.sendLocation(conversationId, place), [client, conversationId]);
   const sendContact = useCallback((contact: ContactDraft) => client.messages.sendContact(conversationId, contact), [client, conversationId]);
+  const sendSticker = useCallback((sticker: StickerDraft) => client.messages.sendSticker(conversationId, sticker), [client, conversationId]);
   const setPinned = useCallback(
     (targetId: string, pinned: boolean) => client.messages.setPinned(conversationId, targetId, pinned),
     [client, conversationId],
@@ -114,6 +118,7 @@ export function useTimeline(conversationId: string, options?: TimelineOptions): 
       vote,
       sendLocation,
       sendContact,
+      sendSticker,
       setPinned,
       edit,
       remove,
@@ -132,6 +137,7 @@ export function useTimeline(conversationId: string, options?: TimelineOptions): 
       vote,
       sendLocation,
       sendContact,
+      sendSticker,
       setPinned,
       edit,
       remove,

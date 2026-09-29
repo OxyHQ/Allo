@@ -1,4 +1,8 @@
 {
+  "chat.sticker.unavailable": "{{label}} is not available",
+  "composer.stickers.add": "Add",
+  "composer.stickers.empty": "Add a pack to start sending stickers. Packs you add show up in every Oxy app.",
+  "composer.stickers.label": "Stickers",
   "settings.appearance.mode.system": "System",
   "settings.appearance.mode.light": "Light",
   "settings.appearance.mode.dark": "Dark",

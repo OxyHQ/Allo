@@ -33,6 +33,7 @@ import {
   type PickedAttachments,
 } from '@/lib/chat/attachments';
 import { logger } from '@/utils/logger';
+import type { Sticker } from '@oxy.so/stickers';
 import { EmojiButton } from './EmojiButton';
 import { PollComposer } from './PollComposer';
 import { applyMention, mentionFragment, type MentionFragment } from './mentions';
@@ -77,6 +78,8 @@ interface ComposerProps {
   onSendPoll: (poll: PollDraft) => Promise<void>;
   onSendPlace: (place: PlaceDraft) => Promise<void>;
   onSendContact: (contact: ContactDraft) => Promise<void>;
+  /** A sticker picked from the Stickers tab, sent as its own message. */
+  onSendSticker: (sticker: Sticker) => Promise<void>;
   onTyping: (on: boolean) => void;
 }
 
@@ -134,6 +137,7 @@ export function Composer({
   onSendPoll,
   onSendPlace,
   onSendContact,
+  onSendSticker,
   onTyping,
 }: ComposerProps) {
   const { t } = useTranslation();
@@ -455,7 +459,16 @@ export function Composer({
           </AttachmentMenu>
         ) : undefined
       }
-      emojiSlot={notice === undefined ? <EmojiButton onSelect={insertAtCaret} /> : undefined}
+      emojiSlot={
+        notice === undefined ? (
+          <EmojiButton
+            onSelect={insertAtCaret}
+            // Not while editing: an edit changes a text message, and a sticker
+            // is a new one.
+            onSelectSticker={target?.kind === 'edit' ? undefined : (sticker) => void onSendSticker(sticker).catch(() => undefined)}
+          />
+        ) : undefined
+      }
       onMicPress={target?.kind === 'edit' || staged.length > 0 ? undefined : () => void startVoice()}
       onEscape={mention || target ? onEscape : undefined}
       labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
