@@ -141,7 +141,7 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
         ))}
 
         {options.length < POLL_MAX_OPTIONS ? (
-          <Button variant="text" icon={RiAddLine} onPress={addOption}>
+          <Button  icon={RiAddLine} onPress={addOption} tone="accent" appearance="plain">
             {t('poll.compose.addOption')}
           </Button>
         ) : null}
@@ -153,8 +153,8 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
             showChevron={false}
             rightElement={
               <Switch
-                value={multiple}
-                onValueChange={setMultiple}
+                checked={multiple}
+                onCheckedChange={setMultiple}
                 accessibilityLabel={t('poll.compose.multiple')}
               />
             }
@@ -165,8 +165,8 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
             showChevron={false}
             rightElement={
               <Switch
-                value={anonymous}
-                onValueChange={setAnonymous}
+                checked={anonymous}
+                onCheckedChange={setAnonymous}
                 accessibilityLabel={t('poll.compose.anonymous')}
               />
             }

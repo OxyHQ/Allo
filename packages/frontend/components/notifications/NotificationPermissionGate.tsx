@@ -59,10 +59,10 @@ export function NotificationPermissionGate() {
           </Text>
         </View>
         <View style={styles.actions}>
-          <Button size="large" loading={requesting} onPress={() => void enable()}>
+          <Button size="lg" loading={requesting} onPress={() => void enable()}>
             {t('permission.notifications.enable')}
           </Button>
-          <Button size="large" variant="secondary" onPress={() => sheet.current?.dismiss()}>
+          <Button size="lg"  onPress={() => sheet.current?.dismiss()} tone="neutral" appearance="outline">
             {t('permission.notifications.later')}
           </Button>
         </View>

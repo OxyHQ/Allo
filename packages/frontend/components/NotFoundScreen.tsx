@@ -22,7 +22,7 @@ export default function NotFoundScreen() {
         action={
           <View style={styles.actions}>
             {router.canGoBack() ? (
-              <Button variant="secondary" onPress={() => router.back()}>
+              <Button  onPress={() => router.back()} tone="neutral" appearance="outline">
                 {t('notFound.goBack')}
               </Button>
             ) : null}

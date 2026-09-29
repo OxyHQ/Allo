@@ -89,7 +89,7 @@ export default function HiddenWordsScreen() {
           returnKeyType="done"
           onSubmitEditing={add}
         />
-        <Button variant="primary" disabled={!saved || draft.trim().length === 0} loading={updateSettings.isPending} onPress={add}>
+        <Button  disabled={!saved || draft.trim().length === 0} loading={updateSettings.isPending} onPress={add} tone="accent" appearance="solid">
           {t('settings.privacy.add')}
         </Button>
       </View>

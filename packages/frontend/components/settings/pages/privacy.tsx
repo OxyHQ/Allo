@@ -41,9 +41,8 @@ export default function PrivacySettingsScreen() {
         <SettingsCard>
           <SettingsRow label={t('settings.privacy.privateProfile')}>
             <Button
-              variant="secondary"
               onPress={() => settingsModal.open('privacy-profile-visibility')}
-              accessibilityLabel={t('settings.privacy.privateProfile')}
+              accessibilityLabel={t('settings.privacy.privateProfile')} tone="neutral" appearance="outline"
             >
               {t(profileVisibilityLabelKey(settings.profileVisibility))}
             </Button>
@@ -51,8 +50,8 @@ export default function PrivacySettingsScreen() {
           <SettingsRow label={t('settings.privacy.showOnlineStatus')} description={t('settings.privacy.showOnlineStatusDesc')}>
             {
               <Switch
-                value={settings.showOnlineStatus}
-                onValueChange={onToggleOnlineStatus}
+                checked={settings.showOnlineStatus}
+                onCheckedChange={onToggleOnlineStatus}
                 // Until the stored value arrives the switch shows the schema
                 // default; writing from there would save a choice never made.
                 disabled={!saved}
@@ -63,27 +62,24 @@ export default function PrivacySettingsScreen() {
           </SettingsRow>
           <SettingsRow label={t('settings.privacy.restrictedProfiles')}>
             <Button
-              variant="secondary"
               onPress={() => settingsModal.open('privacy-restricted')}
-              accessibilityLabel={t('settings.privacy.restrictedProfiles')}
+              accessibilityLabel={t('settings.privacy.restrictedProfiles')} tone="neutral" appearance="outline"
             >
               {t('common.open')}
             </Button>
           </SettingsRow>
           <SettingsRow label={t('settings.privacy.blockedProfiles')}>
             <Button
-              variant="secondary"
               onPress={() => settingsModal.open('privacy-blocked')}
-              accessibilityLabel={t('settings.privacy.blockedProfiles')}
+              accessibilityLabel={t('settings.privacy.blockedProfiles')} tone="neutral" appearance="outline"
             >
               {t('common.open')}
             </Button>
           </SettingsRow>
           <SettingsRow label={t('settings.privacy.hiddenWords')}>
             <Button
-              variant="secondary"
               onPress={() => settingsModal.open('privacy-hidden-words')}
-              accessibilityLabel={t('settings.privacy.hiddenWords')}
+              accessibilityLabel={t('settings.privacy.hiddenWords')} tone="neutral" appearance="outline"
             >
               {t('common.open')}
             </Button>
