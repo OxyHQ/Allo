@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import type { ContactCardView, MediaView, PlaceView, PollView, TimelineContent } from '@allo/core';
+import type { ContactCardView, MediaView, PlaceView, PollView, StickerView, TimelineContent } from '@allo/core';
 import {
   ContactMessage,
   FileMessage,
@@ -9,15 +9,20 @@ import {
   ImageMessage,
   LocationMessage,
   PollMessage,
+  StickerMessage,
   VideoMessage,
   VoiceMessage,
   type MessageTone,
 } from '@oxy.so/bloom/message-media';
 import { toast } from '@oxy.so/bloom/toast';
+import { Text } from '@oxy.so/bloom/typography';
+import { useSticker } from '@oxy.so/stickers/react';
+import { View } from 'react-native';
 
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 import { openPlace, placeLabel } from '@/lib/chat/place';
 import { shareAttachment } from '@/lib/chat/shareAttachment';
+import { isSentSticker } from '@/lib/chat/stickerRef';
 import { logger } from '@/utils/logger';
 
 /**
@@ -30,6 +35,7 @@ const MEDIA_KINDS: ReadonlySet<TimelineContent['kind']> = new Set<TimelineConten
   'poll',
   'location',
   'contact',
+  'sticker',
 ]);
 
 /** Whether {@link MessageMedia} would draw anything for this message. */
@@ -76,10 +82,45 @@ export const MessageMedia = memo(function MessageMedia({
       return <Place place={content.place} tone={tone} />;
     case 'contact':
       return <Card contact={content.contact} tone={tone} onMessageAccount={onMessageAccount} />;
+    case 'sticker':
+      return <StickerBubble sticker={content.sticker} tone={tone} />;
     default:
       return null;
   }
 });
+
+/** A sticker's edge in a conversation. */
+const STICKER_SIZE = 144;
+
+/**
+ * A sticker from Oxy's catalogue, drawn by Bloom's `StickerMessage` in a bubble
+ * the screen renders bare. It is resolved by id and drawn only when it is the
+ * one the sender saw (`isSentSticker`): anything else says the sticker is not
+ * available rather than showing a different one.
+ */
+function StickerBubble({ sticker: ref, tone }: { sticker: StickerView; tone: MessageTone }) {
+  const { t } = useTranslation();
+  const { data: sticker, isLoading } = useSticker(ref.stickerId);
+  const label = ref.emoji ? `${ref.emoji} ${t('chat.attachment.sticker')}` : t('chat.attachment.sticker');
+
+  if (isLoading) return <View style={{ width: STICKER_SIZE, height: STICKER_SIZE }} />;
+  if (!isSentSticker(sticker, ref)) {
+    return (
+      <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+        <Text variant="body-regular">{t('chat.sticker.unavailable', { label })}</Text>
+      </View>
+    );
+  }
+  return (
+    <StickerMessage
+      tone={tone}
+      source={sticker.fallback.url}
+      animation={sticker.animation.url}
+      size={STICKER_SIZE}
+      accessibilityLabel={label}
+    />
+  );
+}
 
 function Attachment({ media, tone, onOpen }: MediaProps) {
   switch (media.kind) {

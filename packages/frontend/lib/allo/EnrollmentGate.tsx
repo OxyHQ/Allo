@@ -124,7 +124,7 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
       )}
     >
       {deviceName || fingerprint ? (
-        <Card variant="filled" radius="radius-16" style={styles.codeCard}>
+        <Card  radius="radius-16" style={styles.codeCard} appearance="subtle">
           {deviceName ? (
             <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
               {deviceName}
@@ -147,17 +147,16 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
       {failure ? <ErrorLine message={failure} /> : null}
       {onReclaim ? (
         <Button
-          variant="secondary"
           loading={reclaiming}
           onPress={() => {
             void reclaim();
-          }}
+          }} tone="neutral" appearance="outline"
         >
           {t('enrollment.reclaim.action', 'Use this device instead')}
         </Button>
       ) : null}
       {onSignOut ? (
-        <Button variant="text" onPress={onSignOut}>
+        <Button  onPress={onSignOut} tone="accent" appearance="plain">
           {t('settings.signOut', 'Sign out')}
         </Button>
       ) : null}
@@ -199,7 +198,7 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
     >
       {failure ? <ErrorLine message={failure} /> : null}
       <Button
-        size="large"
+        size="lg"
         loading={busy}
         onPress={() => {
           void startOver();
@@ -208,7 +207,7 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
         {t('enrollment.revoked.startOver', 'Start over')}
       </Button>
       {onSignOut ? (
-        <Button variant="text" onPress={onSignOut}>
+        <Button  onPress={onSignOut} tone="accent" appearance="plain">
           {t('settings.signOut', 'Sign out')}
         </Button>
       ) : null}

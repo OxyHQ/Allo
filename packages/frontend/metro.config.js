@@ -13,7 +13,9 @@ const config = getDefaultConfig(__dirname);
 // `.woff2` or `.woff`) fails to load Bloom's font assets during the web bundle
 // pass. Native bundling is unaffected — Bloom's native code path is a no-op
 // stub that never imports `.woff2`/`.woff`.
-for (const ext of ['woff2', 'woff']) {
+// `.wasm` too: dotLottie's renderer, which draws stickers on the web, is bundled
+// as an asset and served from this origin (`lib/chat/lottieWeb.web.ts`).
+for (const ext of ['woff2', 'woff', 'wasm']) {
   if (!config.resolver.assetExts.includes(ext)) {
     config.resolver.assetExts.push(ext);
   }

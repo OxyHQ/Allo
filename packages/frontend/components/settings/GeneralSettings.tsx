@@ -75,7 +75,7 @@ export function GeneralSettings() {
                     key: 'manage',
                     label: t('settings.account.manage'),
                     control: (
-                      <Button variant="secondary" onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))}>
+                      <Button  onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))} tone="neutral" appearance="outline">
                         {t('settings.account.manage')}
                       </Button>
                     ),
@@ -96,7 +96,7 @@ export function GeneralSettings() {
                     description: notifications.granted === false ? t('settings.notifications.allow') : undefined,
                     control:
                       notifications.granted === false ? (
-                        <Button variant="secondary" onPress={notifications.request}>
+                        <Button  onPress={notifications.request} tone="neutral" appearance="outline">
                           {t('settings.notifications.allow')}
                         </Button>
                       ) : (
@@ -140,7 +140,7 @@ export function GeneralSettings() {
                     key: 'signout',
                     label: t('settings.signOut'),
                     control: (
-                      <Button variant="secondary" tone="danger" onPress={() => void signOut()}>
+                      <Button  tone="danger" onPress={() => void signOut()} appearance="outline">
                         {t('settings.signOut')}
                       </Button>
                     ),

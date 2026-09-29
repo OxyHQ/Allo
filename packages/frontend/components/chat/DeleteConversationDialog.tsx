@@ -55,10 +55,10 @@ function DeleteConversationBody({ title, description, alsoForThemLabel, confirmL
         <Checkbox checked={forEveryone} onCheckedChange={setForEveryone} label={alsoForThemLabel} />
       ) : null}
       <View style={styles.actions}>
-        <Button variant="secondary" onPress={() => onAnswer({ confirmed: false, forEveryone: false })}>
+        <Button  onPress={() => onAnswer({ confirmed: false, forEveryone: false })} tone="neutral" appearance="outline">
           {cancelLabel}
         </Button>
-        <Button variant="destructive" onPress={() => onAnswer({ confirmed: true, forEveryone })}>
+        <Button  onPress={() => onAnswer({ confirmed: true, forEveryone })} tone="danger" appearance="solid">
           {confirmLabel}
         </Button>
       </View>

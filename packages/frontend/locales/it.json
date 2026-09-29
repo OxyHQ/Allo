@@ -1,4 +1,8 @@
 {
+  "chat.sticker.unavailable": "{{label}} non è disponibile",
+  "composer.stickers.add": "Aggiungi",
+  "composer.stickers.empty": "Aggiungi un pacchetto per iniziare a inviare sticker. I pacchetti che aggiungi compaiono in tutte le app di Oxy.",
+  "composer.stickers.label": "Sticker",
   "settings.appearance.mode.system": "Sistema",
   "settings.appearance.mode.light": "Chiaro",
   "settings.appearance.mode.dark": "Scuro",

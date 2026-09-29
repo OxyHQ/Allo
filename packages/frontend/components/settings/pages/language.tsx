@@ -28,9 +28,8 @@ export default function LanguageSettingsScreen() {
             description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
           >
             <Button
-              variant="secondary"
               onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
-              accessibilityLabel={t('settings.preferences.language')}
+              accessibilityLabel={t('settings.preferences.language')} tone="neutral" appearance="outline"
             >
               {t('common.open')}
             </Button>

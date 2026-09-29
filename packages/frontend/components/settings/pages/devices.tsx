@@ -132,7 +132,7 @@ export default function DevicesScreen() {
 
   return (
     <>
-      <Button variant="secondary" leadingIcon={RiRefreshLine} onPress={() => void refreshAll()}>
+      <Button  leadingIcon={RiRefreshLine} onPress={() => void refreshAll()} tone="neutral" appearance="outline">
         {t('devices.refresh')}
       </Button>
       {pending.pending.length > 0 ? (
@@ -161,15 +161,14 @@ export default function DevicesScreen() {
                     {enrollment.fingerprint}
                   </Text>
                   <View style={styles.actions}>
-                    <Button variant="secondary" style={styles.action} disabled={busyId !== null} onPress={() => void reject(enrollment)}>
+                    <Button  style={styles.action} disabled={busyId !== null} onPress={() => void reject(enrollment)} tone="neutral" appearance="outline">
                       {t('devices.reject')}
                     </Button>
                     <Button
-                      variant="primary"
                       style={styles.action}
                       loading={busy}
                       disabled={busyId !== null && !busy}
-                      onPress={() => void approve(enrollment)}
+                      onPress={() => void approve(enrollment)} tone="accent" appearance="solid"
                     >
                       {t('devices.approve')}
                     </Button>

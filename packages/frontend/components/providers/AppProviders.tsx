@@ -20,7 +20,19 @@ import i18n, { setLanguage } from '@/lib/i18n';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/constants';
 import { OXY_CLIENT_ID } from '@/config';
 import { oxyServices } from '@/lib/oxy';
+import { createStickersClient } from '@oxy.so/stickers';
+import { StickersProvider } from '@oxy.so/stickers/react';
+import { configureLottieWeb } from '@/lib/chat/lottieWeb';
 import { logger } from '@/utils/logger';
+
+/**
+ * Oxy's shared sticker catalogue, read through this app's OxyServices. One client
+ * for the app: it memoizes resolved stickers, which never change once published.
+ */
+const stickersClient = createStickersClient(oxyServices);
+
+// Before any sticker renders: the web Lottie renderer loads from this origin.
+configureLottieWeb();
 
 interface AppProvidersProps {
   children: React.ReactNode;
@@ -75,6 +87,7 @@ export const AppProviders = memo(function AppProviders({
                 logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
             }}
           >
+            <StickersProvider client={stickersClient}>
             <MediaResolverProvider>
               <I18nextProvider i18n={i18n}>
                 <ErrorBoundary>
@@ -84,6 +97,7 @@ export const AppProviders = memo(function AppProviders({
                 </ErrorBoundary>
               </I18nextProvider>
             </MediaResolverProvider>
+            </StickersProvider>
           </OxyProvider>
         </QueryClientProvider>
         </KeyboardProvider>

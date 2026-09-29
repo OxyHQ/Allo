@@ -1,6 +1,7 @@
 import { useConversationActions, useSyncState } from '@allo/react';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { ChatFolderTabs, ChatList, ChatSearchField, ChatSearchResults, NewChatButton, type ChatSummary } from '@oxy.so/bloom/chat-list';
+import { PageAction } from '@/components/shell/PageAction';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
@@ -187,7 +188,9 @@ export function ConversationList() {
           />
         )}
       </ScrollView>
-      <NewChatButton accessibilityLabel={t('chat.new.title')} onPress={() => router.push('/new')} placement="bottom-right" />
+      <PageAction>
+        <NewChatButton accessibilityLabel={t('chat.new.title')} onPress={() => router.push('/new')} />
+      </PageAction>
     </View>
   );
 }
