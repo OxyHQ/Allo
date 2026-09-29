@@ -1,7 +1,8 @@
 {
+  "$comment": "maxJavaScriptGzipBytes counts EVERY .js file in the web export, on-demand chunks included. Raised 2410000 -> 2710000 with Bloom 6 (Allo#185): measured 2161297 on main and 2607534 after, of which 402 KB gzip is Bloom's per-language message catalogues, each its own chunk loaded only for a person using that language; the rest is Bloom 6 (+~12 KB) and dotLottie, the web sticker renderer (+~33 KB).",
   "frontendWeb": {
     "maxTotalBytes": 23470000,
-    "maxJavaScriptGzipBytes": 2410000,
+    "maxJavaScriptGzipBytes": 2710000,
     "maxFontBytes": 2765000
   }
 }
