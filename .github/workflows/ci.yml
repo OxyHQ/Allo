@@ -22,11 +22,63 @@ on:
 permissions:
   contents: read
 
+# A push to a pull request supersedes its previous run; a push to main never
+# cancels, so every merged commit keeps its own post-merge evidence.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Affected-only jobs on pull requests. The org shares 20 concurrent jobs across
+  # every repository, so a PR that touches only the frontend should not hold a
+  # Postgres-backed backend job. Pushes to main (and any other event) run every
+  # job regardless: each job's `if` treats a non-PR event as "everything
+  # changed", and this job does not run at all there.
+  #
+  # Shared inputs mark everything: the lockfile, root manifests and config,
+  # patches, and .github/** (this workflow and the scripts it runs). The SDK
+  # packages are consumed by both apps, so changing them runs the apps too.
+  changes:
+    name: Detect affected packages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      deploy: ${{ steps.filter.outputs.deploy }}
+      backend: ${{ steps.filter.outputs.backend }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - 'bun.lock'
+              - 'package.json'
+              - 'bunfig.toml'
+              - 'tsconfig.json'
+              - 'patches/**'
+              - '.github/**'
+            deploy:
+              - *shared
+            sdk: &sdk
+              - *shared
+              - 'packages/shared-types/**'
+              - 'packages/core/**'
+              - 'packages/react/**'
+            backend:
+              - *sdk
+              - 'packages/backend/**'
+            frontend:
+              - *sdk
+              - 'packages/frontend/**'
+              - 'scripts/**'
+              - 'performance-budgets.json'
+
   # Gates the rollout logic deploy-aws.yml runs against production.
   #
   # The script and this harness STARTED as copies of Mention's. They are no
@@ -38,6 +90,8 @@ jobs:
   # one to be assumed present in the other.
   deploy-script-test:
     name: Deploy Script Tests
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.deploy == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -50,6 +104,8 @@ jobs:
 
   backend:
     name: Backend typecheck + tests
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
     env:
       # The server the realdb suites create their throwaway databases ON. Plain
@@ -90,6 +146,13 @@ jobs:
           bun-version: 1.3.14
 
       # postinstall builds @allo/shared-types, which the backend compiles against.
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Install
         run: bun install
 
@@ -105,6 +168,8 @@ jobs:
   # backend validates with, so contract drift fails here before it fails there.
   sdk:
     name: SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react)
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.sdk == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -113,6 +178,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install
         run: bun install
@@ -125,6 +197,8 @@ jobs:
 
   frontend:
     name: Frontend typecheck
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -132,6 +206,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
+
+      - name: Cache Bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install
         run: bun install
@@ -182,3 +263,24 @@ jobs:
 
       - name: Mutation-test performance gates
         run: bun run test:performance-gates
+
+  # The one check branch protection should require. A job skipped because the
+  # PR does not touch its paths reports `skipped`; one that failed or was
+  # cancelled (including a timeout, which GitHub reports as cancelled) fails
+  # this gate. `changes` is in `needs` so a broken filter fails it too.
+  ci-complete:
+    name: CI complete
+    if: always()
+    needs: [changes, deploy-script-test, backend, sdk, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then
+            echo "::error::a CI job failed or was cancelled"
+            exit 1
+          fi
