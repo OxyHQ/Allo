@@ -24,8 +24,15 @@ permissions:
 
 # A push to a pull request supersedes its previous run; a push to main never
 # cancels, so every merged commit keeps its own post-merge evidence.
+#
+# The flag alone is not enough: GitHub cancels a PENDING run whenever a newer
+# one joins the same group, whatever `cancel-in-progress` says. With one group
+# for all of main, and runs queueing behind the org's shared 20-job cap, a
+# merge whose run was still pending was cancelled by the next merge (measured:
+# run 36717068654 for 1a5f89a, cancelled with no jobs by the push of 68fea5f).
+# So a non-PR run gets its own group per commit and nothing can supersede it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -146,13 +153,6 @@ jobs:
           bun-version: 1.3.14
 
       # postinstall builds @allo/shared-types, which the backend compiles against.
-      - name: Cache Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
-
       - name: Install
         run: bun install
 
@@ -179,13 +179,6 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Cache Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
-
       - name: Install
         run: bun install
 
@@ -206,13 +199,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-
-      - name: Cache Bun install cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install
         run: bun install
