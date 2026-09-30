@@ -210,16 +210,12 @@ return {
                     },
                 ],
                 "expo-web-browser",
-                // Android sharedUserId for cross-app authentication — lets the
-                // Oxy apps signed with the SAME release key share a signing-scoped
-                // UID ("so.oxy.shared") so "Sign in with Oxy" reuses the device
-                // session across installed Oxy apps.
-                './plugins/withSharedUserId',
-                // Reader side of the shared-identity native module (ships in
-                // @oxy.so/services): request the signature permission + <queries>
-                // so cold boot can silently read the Commons-hosted shared
-                // identity (silent "Sign in with Oxy").
-                '@oxy.so/services/plugins/withSharedIdentityReader',
+                // Allo runs under its own Android UID. This declares and requests
+                // the signature permissions so.oxy.permission.IDENTITY and
+                // DEVICE_SESSION, plus <queries> for the Commons/Accounts
+                // providers, so cold boot can ask Commons for a signed identity
+                // proof and share the device session (silent "Sign in with Oxy").
+                '@oxy.so/services/plugins/withOxySharedPermissions',
             ];
 
             // Only include expo-notifications for native builds (android/ios).

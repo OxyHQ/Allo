@@ -38,8 +38,9 @@ export const IOS_BUNDLE_ID = 'com.allo.ios';
 
 /**
  * The Oxy ecosystem release key (`CN=Oxy, OU=Oxy Ecosystem`, alias `oxy`). Every
- * app sharing `android:sharedUserId="so.oxy.shared"` (`plugins/withSharedUserId.js`)
- * MUST be signed with it, so it is the key a release build of Allo carries.
+ * Oxy app MUST be signed with it: the signature-level so.oxy.permission.* that
+ * reach Commons are granted only to the same certificate, so it is the key a
+ * release build of Allo carries.
  * Read from the keystore itself, and the same value Mention publishes.
  */
 export const OXY_RELEASE_CERT_SHA256 =
