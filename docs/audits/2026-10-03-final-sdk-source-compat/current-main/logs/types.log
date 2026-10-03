@@ -1,0 +1,7 @@
+$ bun run typecheck:backend && bun run typecheck:core && bun run typecheck:react && bun run typecheck:frontend
+$ tsc --noEmit -p packages/backend/tsconfig.json
+$ bun run --filter @allo/core typecheck
+@allo/core typecheck: Exited with code 0
+$ bun run --filter @allo/react typecheck
+@allo/react typecheck: Exited with code 0
+$ tsc --noEmit -p packages/frontend/tsconfig.json

@@ -1,0 +1,9 @@
+{
+  "databasesAfterSuites": [
+    "postgres"
+  ],
+  "remainingFixtureDatabases": [],
+  "ownedPid": 4175376,
+  "absent": true,
+  "dataRetainedForEvidence": true
+}

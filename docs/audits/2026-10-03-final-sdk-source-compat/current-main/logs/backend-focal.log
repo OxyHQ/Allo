@@ -1,0 +1,10 @@
+$ vitest run src/__tests__/ecosystemActivity.test.ts src/__tests__/services/moderation/subjectProviders.test.ts
+
+ RUN  v4.1.10 /home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/packages/backend
+
+
+ Test Files  2 passed (2)
+      Tests  23 passed (23)
+   Start at  21:58:17
+   Duration  544ms (transform 127ms, setup 38ms, import 636ms, tests 16ms, environment 0ms)
+

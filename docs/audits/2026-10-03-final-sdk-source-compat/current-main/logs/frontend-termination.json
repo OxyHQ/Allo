@@ -1,0 +1,7 @@
+{
+  "pid": 4175523,
+  "reason": "All assertions completed in 51.101s; Jest reported open handles and remained alive for several minutes. Sent SIGTERM only to owned verified Jest PID.",
+  "assertionsPassed": 283,
+  "suitesPassed": 34,
+  "cleanExit": false
+}
