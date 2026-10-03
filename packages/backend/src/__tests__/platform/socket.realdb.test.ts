@@ -29,7 +29,8 @@ const fakeOxy = {
       const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
       const userId = s.handshake.auth.oxyUser;
       if (typeof userId !== "string") return next(new Error("no session"));
-      s.data.userId = userId;
+      Reflect.set(s, "user", { id: userId });
+      s.data.userId = s.handshake.auth.fixtureDataUser ?? userId;
       next();
     },
   },
@@ -67,6 +68,14 @@ function open(auth: Record<string, unknown>): Promise<{ socket: Socket; error?: 
 }
 
 describe("the handshake", () => {
+  it("uses the verified socket user when legacy data disagrees", async () => {
+    const me = await TestInstance.register(h.app, accountId());
+    // The authority double emits SDK-shaped user/data; only this fixture varies data.
+    const result = await open(socketAuthFor(me, { fixtureDataUser: accountId("legacy") }));
+    expect(result.error).toBeUndefined();
+    result.socket.close();
+  });
+
   it("admits a correctly signed instance and refuses a bad signature, a foreign account and a stale timestamp", async () => {
     const me = await TestInstance.register(h.app, accountId());
     const ok = await open(socketAuthFor(me));
