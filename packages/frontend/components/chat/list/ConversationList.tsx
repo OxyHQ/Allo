@@ -198,10 +198,9 @@ export function ConversationList() {
       <NewChatButton
         accessibilityLabel={t('chat.new.title')}
         onPress={() => router.push('/new')}
-        placement="bottom-right"
-        // The brand's own accent: Bloom's Fab defaults to the tertiary one,
-        // which under a green preset is a magenta nobody asked for.
-        variant="primary"
+        style={styles.newChat}
+        appearance="solid"
+        tone="accent"
       />
     </View>
   );
@@ -209,6 +208,7 @@ export function ConversationList() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
+  newChat: { position: 'absolute', bottom: 16, right: 16 },
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   actions: { flexDirection: 'row', alignItems: 'center' },
   notice: { paddingHorizontal: 16, paddingBottom: 8 },

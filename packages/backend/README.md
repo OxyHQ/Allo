@@ -271,7 +271,7 @@ bytes, size-capped by `ALLO_BLOB_MAX_BYTES` — is mounted ahead of the JSON
 parser in `src/app.ts` with its own chain.
 
 Socket.IO namespace `/v1` takes the same three fields in `handshake.auth`
-(path `/socket`, empty body) after `oxy.authSocket()`. A socket joins
+(path `/socket`, empty body) after `oxy.middleware.socket()`. A socket joins
 `instance:<id>` and `account:<accountId>`; the server emits `sync.nudge`,
 `instance.approved`, `instance.revoked`, `keypackages.low`, `history.offer` and
 `presence`, and relays `typing` ciphertext to a conversation's other active

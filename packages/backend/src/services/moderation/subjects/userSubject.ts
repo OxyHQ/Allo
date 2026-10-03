@@ -1,4 +1,4 @@
-import { oxyClient } from "@oxy.so/core";
+import { oxyClient } from "../../oxy/client";
 import type { User } from "@oxy.so/core";
 import { isOxyUserNotFound } from "../../../utils/oxyUserDisplay";
 import type { ModerationSubjectProvider, ModerationSubjectSnapshot } from "./types";
@@ -38,7 +38,7 @@ export interface UserSubjectDependencies {
 
 export function createUserSubjectProvider(
   dependencies: UserSubjectDependencies = {
-    getUserById: (userId, options) => oxyClient.getUserById(userId, options),
+    getUserById: (userId, options) => oxyClient.users.get(userId, options),
   },
 ): ModerationSubjectProvider {
   return {

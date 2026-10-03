@@ -4,7 +4,7 @@
  * Memoized to prevent unnecessary re-renders
  */
 
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -15,10 +15,13 @@ import { OxyProvider, useOxy } from '@oxy.so/services';
 import { ImageResolverProvider, type ImageResolver } from '@oxy.so/bloom/image-resolver';
 import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 
+import { oxyClient } from '@/lib/oxy';
+import { useAppearanceStore } from '@/stores/appearanceStore';
+
 import ErrorBoundary from '@/components/ErrorBoundary';
 import i18n, { setLanguage } from '@/lib/i18n';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/constants';
-import { OXY_BASE_URL, OXY_CLIENT_ID } from '@/config';
+import { OXY_CLIENT_ID } from '@/config';
 import { logger } from '@/utils/logger';
 
 interface AppProvidersProps {
@@ -36,11 +39,14 @@ interface AppProvidersProps {
  * the sidebar `ProfileButton`) gets correctly-resolved media for free.
  */
 function MediaResolverProvider({ children }: { children: React.ReactNode }) {
-  const { oxyServices } = useOxy();
+  const { oxyServices, user, isLoading } = useOxy();
+  useEffect(() => {
+    if (!isLoading && user?.id) void useAppearanceStore.getState().loadMySettings();
+  }, [isLoading, user?.id]);
   const resolver = useMemo<ImageResolver>(
     () => (id: string, variant?: string) => {
       if (!id) return undefined;
-      return oxyServices.getFileDownloadUrl(id, variant ?? 'thumb');
+      return oxyServices.assets.publicUrl(id, variant ?? 'thumb');
     },
     [oxyServices],
   );
@@ -64,7 +70,7 @@ export const AppProviders = memo(function AppProviders({
         <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <OxyProvider
-            baseURL={OXY_BASE_URL}
+            oxyServices={oxyClient}
             clientId={OXY_CLIENT_ID}
             language={{
               supportedLocales: SUPPORTED_LANGUAGES,

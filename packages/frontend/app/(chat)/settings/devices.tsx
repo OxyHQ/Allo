@@ -142,11 +142,10 @@ export default function DevicesScreen() {
       title={t('devices.title')}
       actions={
         <Button
-          variant="secondary"
           iconOnly
           leadingIcon={RiRefreshLine}
           accessibilityLabel={t('devices.refresh')}
-          onPress={() => void refreshAll()}
+          onPress={() => void refreshAll()} tone="neutral" appearance="outline"
         />
       }
     >
@@ -169,15 +168,14 @@ export default function DevicesScreen() {
                   {enrollment.fingerprint}
                 </Text>
                 <View style={styles.actions}>
-                  <Button variant="secondary" style={styles.action} disabled={busyId !== null} onPress={() => void reject(enrollment)}>
+                  <Button  style={styles.action} disabled={busyId !== null} onPress={() => void reject(enrollment)} tone="neutral" appearance="outline">
                     {t('devices.reject')}
                   </Button>
                   <Button
-                    variant="primary"
                     style={styles.action}
                     loading={busy}
                     disabled={busyId !== null && !busy}
-                    onPress={() => void approve(enrollment)}
+                    onPress={() => void approve(enrollment)} tone="accent" appearance="solid"
                   >
                     {t('devices.approve')}
                   </Button>

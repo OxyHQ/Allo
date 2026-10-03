@@ -154,7 +154,7 @@ export default function CallRoute() {
       <Page title={t('calls.title')}>
         <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
         <Muted>{t('calls.noParticipants')}</Muted>
-        <Button variant="secondary" onPress={() => router.push('/calls')}>
+        <Button  onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
           {t('calls.title')}
         </Button>
       </Page>
@@ -280,7 +280,7 @@ export default function CallRoute() {
             icon={RiPauseLine}
             label={session.status === 'onHold' ? t('calls.control.resume') : t('calls.control.hold')}
             active={session.status === 'onHold'}
-            size="large"
+            size="lg"
             showLabel
             onPress={() => setHold(session.status !== 'onHold')}
           />

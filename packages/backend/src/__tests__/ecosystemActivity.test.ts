@@ -5,7 +5,10 @@ const publisher = vi.hoisted(() => ({
   installFetch: vi.fn(), observeSocket: vi.fn(), stop: vi.fn(async () => {}),
 }));
 const create = vi.hoisted(() => vi.fn((_options: unknown) => publisher));
-vi.mock('@oxy.so/core/server', () => ({ createEcosystemTraffic: create }));
+vi.mock('@oxy.so/core/server', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@oxy.so/core/server')>(),
+  createEcosystemTraffic: create,
+}));
 import { ecosystemActivityMiddleware, observeEcosystemSocket, startEcosystemActivity, stopEcosystemActivity } from '../ecosystemActivity';
 
 describe('ecosystem activity lifecycle', () => {

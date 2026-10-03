@@ -55,8 +55,8 @@ export default function PrivacySettingsScreen() {
           showChevron={false}
           rightElement={
             <Switch
-              value={settings.showOnlineStatus}
-              onValueChange={onToggleOnlineStatus}
+              checked={settings.showOnlineStatus}
+              onCheckedChange={onToggleOnlineStatus}
               // Until the stored value arrives the switch shows the schema
               // default; writing from there would save a choice never made.
               disabled={!saved}

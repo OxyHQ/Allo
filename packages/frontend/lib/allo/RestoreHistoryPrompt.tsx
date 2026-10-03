@@ -88,7 +88,7 @@ export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardPr
   return (
     <View style={styles.host} pointerEvents="box-none">
       <View style={styles.frame} accessibilityRole="alert" testID="restore-prompt">
-        <Card variant="elevated" elevation="m" radius="radius-20" style={styles.card}>
+        <Card  elevation="m" radius="radius-20" style={styles.card} appearance="solid">
           <View style={styles.heading}>
             <IconCircle icon={RiHistoryLine} size="lg" />
             <View style={styles.copy}>
@@ -99,7 +99,7 @@ export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardPr
             </View>
           </View>
           <View style={styles.actions}>
-            <Button variant="secondary" onPress={onNotNow} testID="restore-prompt-not-now">
+            <Button  onPress={onNotNow} testID="restore-prompt-not-now" tone="neutral" appearance="outline">
               {t('restorePrompt.notNow', 'Not now')}
             </Button>
             <Button onPress={onRestore} testID="restore-prompt-restore">

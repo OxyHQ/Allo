@@ -66,13 +66,13 @@ function AppCrashFallback({ error, errorInfo, retry, retryCount, showDetails }: 
         <View style={styles.actions}>
           <Button onPress={retry}>{t('error.boundary.retry')}</Button>
           {canReload ? (
-            <Button variant="secondary" onPress={() => window.location.reload()}>
+            <Button  onPress={() => window.location.reload()} tone="neutral" appearance="outline">
               {t('error.boundary.reload')}
             </Button>
           ) : null}
         </View>
         {__DEV__ || showDetails ? (
-          <Card variant="filled" style={styles.details}>
+          <Card  style={styles.details} appearance="subtle">
             <ScrollView>
               <Text variant="caption-1-regular" selectable style={{ color: theme.colors.textSecondary }}>
                 {error.toString()}

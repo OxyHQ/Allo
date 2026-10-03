@@ -103,12 +103,14 @@ describe("what the subject providers are allowed to reach", () => {
     "services/moderation/subjects/registry.ts",
     "services/moderation/subjects/types.ts",
     "services/moderation/subjects/userSubject.ts",
+    "services/oxy/client.ts",
     "utils/oxyUserDisplay.ts",
   ];
 
   /** The packages that closure imports. Also pinned: a new one is a new capability. */
   const ALLOWED_PACKAGES = [
     "@oxy.so/core",
+    "@oxy.so/core/server",
     "@oxy.so/crowdsource",
     "@oxy.so/db",
     "drizzle-orm",

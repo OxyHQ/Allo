@@ -78,7 +78,7 @@ export function useProfileData(username?: string): {
 
   const query = useQuery({
     queryKey: profileQueryKeys.byUsername(username ?? ''),
-    queryFn: () => oxyServices.getProfileByUsername(username ?? ''),
+    queryFn: () => oxyServices.users.byUsername(username ?? ''),
     enabled: Boolean(username),
     staleTime: PROFILE_STALE_TIME_MS,
     // A handle nobody holds is an answer, not an outage. Retrying it four times

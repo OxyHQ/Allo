@@ -193,21 +193,19 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
           <>
             <Button
               testID="backup-refresh"
-              variant="primary"
               style={styles.action}
               loading={action === 'refresh' || (action === null && status.busy)}
               disabled={busy}
-              onPress={() => void backUpNow()}
+              onPress={() => void backUpNow()} tone="accent" appearance="solid"
             >
               {t('backup.backUpNow')}
             </Button>
             <Button
               testID="backup-disable"
-              variant="secondary"
               style={styles.action}
               loading={action === 'disable'}
               disabled={busy}
-              onPress={() => void turnOff()}
+              onPress={() => void turnOff()} tone="neutral" appearance="outline"
             >
               {t('backup.turnOff')}
             </Button>
@@ -215,11 +213,10 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
         ) : (
           <Button
             testID="backup-enable"
-            variant="primary"
             style={styles.action}
             loading={action === 'enable'}
             disabled={busy || phrasePending}
-            onPress={() => void turnOn()}
+            onPress={() => void turnOn()} tone="accent" appearance="solid"
           >
             {t('backup.turnOn')}
           </Button>
@@ -240,7 +237,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 </View>
               ))}
             </View>
-            <Button testID="backup-copy" variant="secondary" leadingIcon={RiFileCopyLine} onPress={() => void copyPhrase()}>
+            <Button testID="backup-copy"  leadingIcon={RiFileCopyLine} onPress={() => void copyPhrase()} tone="neutral" appearance="outline">
               {t('backup.phrase.copy')}
             </Button>
             <Pressable
@@ -258,7 +255,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
               <Text style={[styles.checkLabel, { color: theme.colors.text }]}>{t('backup.phrase.confirm')}</Text>
             </Pressable>
             {!wroteDown ? <Muted>{t('backup.phrase.mustConfirm')}</Muted> : null}
-            <Button testID="backup-done" variant="primary" disabled={!wroteDown} onPress={dismissPhrase}>
+            <Button testID="backup-done"  disabled={!wroteDown} onPress={dismissPhrase} tone="accent" appearance="solid">
               {t('common.done')}
             </Button>
           </View>
@@ -299,10 +296,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
             ) : null}
             <Button
               testID="backup-restore"
-              variant="primary"
               loading={action === 'restore'}
               disabled={busy || typedWords !== RECOVERY_PHRASE_WORDS}
-              onPress={() => void runRestore()}
+              onPress={() => void runRestore()} tone="accent" appearance="solid"
             >
               {t('backup.restore.button')}
             </Button>

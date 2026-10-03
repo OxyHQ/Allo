@@ -21,7 +21,8 @@
  * does not answer (deleted, hidden) is remembered as unresolved for the same
  * TTL so the list does not ask for it on every render.
  */
-import { oxyClient, type User } from '@oxy.so/core';
+import type { User } from '@oxy.so/core';
+import { oxyClient } from '@/lib/oxy';
 import type { PeopleDirectory, PersonInfo } from '@allo/core';
 import { useUsersStore, type UserEntity } from '@/stores/usersStore';
 
@@ -135,4 +136,4 @@ export function personFromEntity(entity: UserEntity | undefined): Person | undef
  * lockstep with the session. Every underlying route is public, so no session
  * is needed to draw a person; the bearer only widens what is visible.
  */
-export const people = new PeopleResolver((ids) => oxyClient.getUsersByIds(ids));
+export const people = new PeopleResolver((ids) => oxyClient.users.getMany(ids));

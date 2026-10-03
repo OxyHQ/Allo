@@ -5,7 +5,7 @@
  * result; `server.ts` listens.
  */
 
-import { oxyClient } from "@oxy.so/core";
+import { oxyClient } from "./services/oxy/client";
 import { createOptionalOxyAuth, createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { APP_ORIGINS, createApp } from "./app";
 import { configureOxyServiceAuth } from "./config/oxyService";
@@ -34,7 +34,14 @@ export function createRuntimeApp() {
     api: {
       profile: profileSettingsRoutes,
       reports: reportsRoutes,
-      directory: createDirectoryRoutes({ service: createOxyDirectoryService(oxy) }),
+      directory: createDirectoryRoutes({ service: createOxyDirectoryService({
+        getProfileByUsername: (username, options) => oxy.users.byUsername(username, options),
+        getUserById: (userId, options) => oxy.users.get(userId, options),
+        getUsersByIds: (ids) => oxy.users.getMany(ids),
+        searchProfiles: (query, pagination) => oxy.users.search(query, pagination),
+        // Directory avatars are public; preserve the synchronous credential-free URL.
+        getFileDownloadUrl: (fileId, variant, expiresIn) => oxy.assets.publicUrl(fileId, variant, expiresIn),
+      }) }),
     },
     checkPostgres: checkPostgresHealth,
     blobMaxBytes: blobMaxBytes(),

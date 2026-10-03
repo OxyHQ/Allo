@@ -156,7 +156,7 @@ export default function NewConversationRoute() {
       back="always"
       scroll={false}
       actions={
-        <Button variant="primary" size="small" disabled={count === 0} loading={busy} onPress={() => void submit()}>
+        <Button  size="sm" disabled={count === 0} loading={busy} onPress={() => void submit()} tone="accent" appearance="solid">
           {submitLabel}
         </Button>
       }

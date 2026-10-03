@@ -1,4 +1,4 @@
-import { oxyClient } from '@oxy.so/core';
+import { oxyClient } from '@/lib/oxy';
 import { Platform } from 'react-native';
 import { API_URL } from '@/config';
 import { CircuitBreaker } from '@/lib/api/retryLogic';
@@ -20,7 +20,7 @@ const backendClient = linkedBackend.client;
 // Keep oxyClient reference for Oxy-specific API calls (if needed).
 // Annotate with the client's own return type: `HttpService` is not re-exported
 // from the package root, so an inferred type would reference an internal path.
-const authenticatedClient: ReturnType<typeof oxyClient.getClient> = oxyClient.getClient();
+const authenticatedClient: typeof oxyClient.http = oxyClient.http;
 
 // Circuit breakers prevent cascading failures: 5 consecutive failures open the
 // circuit for 30 seconds.

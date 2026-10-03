@@ -312,7 +312,7 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
                     onSubmitEditing={() => void saveName()}
                     returnKeyType="done"
                     maxLength={128}
-                    size="small"
+                    size="sm"
                   />
                 </View>
               }

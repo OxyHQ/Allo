@@ -154,7 +154,7 @@ export default function CallsScreen() {
 
       <View style={[styles.preview, { borderTopColor: theme.colors.border }]}>
         <Muted>{t('calls.preview.help')}</Muted>
-        <Button variant="secondary" icon={RiPhoneLine} onPress={previewIncoming} disabled={session !== null}>
+        <Button  icon={RiPhoneLine} onPress={previewIncoming} disabled={session !== null} tone="neutral" appearance="outline">
           {t('calls.preview.incoming')}
         </Button>
       </View>

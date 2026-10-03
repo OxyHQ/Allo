@@ -1,6 +1,6 @@
 import { createEcosystemTraffic } from '@oxy.so/core/server';
 import type { RequestHandler } from 'express';
-import { oxyClient } from '@oxy.so/core';
+import { oxyClient } from './services/oxy/client';
 
 let activity: ReturnType<typeof createEcosystemTraffic> | undefined;
 
@@ -20,7 +20,7 @@ export function startEcosystemActivity(ready: () => boolean): void {
   if (activity) return;
   activity = createEcosystemTraffic({
     service: 'allo',
-    credential: () => oxyClient.getServiceToken(),
+    credential: () => oxyClient.serviceToken(),
     ready,
   });
   activity.installFetch();

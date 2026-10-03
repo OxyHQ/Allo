@@ -150,7 +150,7 @@ export function useModeratedUsers(list: ModerationList): {
 
   const profiles = useQuery({
     queryKey: ['privacy', 'moderated', list, 'profiles', idList ?? []] as const,
-    queryFn: () => oxyServices.getUsersByIds([...(idList ?? [])]),
+    queryFn: () => oxyServices.users.getMany([...(idList ?? [])]),
     enabled: idList !== undefined && idList.length > 0,
   });
 
