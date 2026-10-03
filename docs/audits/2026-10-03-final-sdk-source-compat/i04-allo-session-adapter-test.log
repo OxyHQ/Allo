@@ -1,0 +1,10 @@
+$ jest --watchAll=false --runInBand __tests__/allo/sessionAdapter.test.ts
+PASS __tests__/allo/sessionAdapter.test.ts
+  Allo session adapter with the canonical Oxy session namespace
+    ✓ observes the current effective account during refresh, switch, and sign-out (3 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       1 passed, 1 total
+Snapshots:   0 total
+Time:        1.401 s
+Ran all test suites matching /__tests__\/allo\/sessionAdapter.test.ts/i.

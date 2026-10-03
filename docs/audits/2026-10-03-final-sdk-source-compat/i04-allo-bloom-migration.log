@@ -1,0 +1,17 @@
+update packages/frontend/app/(chat)/c/[id]/call.tsx
+update packages/frontend/app/(chat)/calls.tsx
+update packages/frontend/app/(chat)/new.tsx
+update packages/frontend/app/(chat)/settings/devices.tsx
+update packages/frontend/app/(chat)/settings/privacy/hidden-words.tsx
+update packages/frontend/app/(chat)/settings/privacy.tsx
+update packages/frontend/components/ErrorBoundary.tsx
+update packages/frontend/components/NotFoundScreen.tsx
+update packages/frontend/components/backup/BackupPanel.tsx
+update packages/frontend/components/chat/composer/PollComposer.tsx
+update packages/frontend/components/chat/info/ConversationInfo.tsx
+update packages/frontend/components/notifications/NotificationPermissionGate.tsx
+update packages/frontend/components/profile/ProfileScreen.tsx
+packages/frontend/components/profile/ProfileScreen.tsx:11: Namespace import: review component props manually
+update packages/frontend/lib/allo/EnrollmentGate.tsx
+update packages/frontend/lib/allo/RestoreHistoryPrompt.tsx
+Updated 15 files; 1 expressions need review.

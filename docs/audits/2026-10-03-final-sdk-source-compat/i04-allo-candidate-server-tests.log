@@ -1,0 +1,39 @@
+$ vitest run src/__tests__/ecosystemActivity.test.ts src/__tests__/services/moderation/subjectProviders.test.ts src/__tests__/routes/directory.test.ts
+
+ RUN  v4.1.10 /home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/packages/backend
+
+ ❯ src/__tests__/ecosystemActivity.test.ts (0 test)
+ ❯ src/__tests__/services/moderation/subjectProviders.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/ecosystemActivity.test.ts [ src/__tests__/ecosystemActivity.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ecosystemActivity.ts:1:1
+      1| import { createEcosystemTraffic } from '@oxy.so/core/server';
+       | ^
+      2| import type { RequestHandler } from 'express';
+      3| import { oxyClient } from './services/oxy/client';
+
+Caused by: SyntaxError: The requested module '@oxy.so/telemetry/browser' does not provide an export named 'peekBrowserEdgeRegionHeader'
+ ❯ src/__tests__/ecosystemActivity.test.ts:9:6
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/__tests__/services/moderation/subjectProviders.test.ts [ src/__tests__/services/moderation/subjectProviders.test.ts ]
+SyntaxError: The requested module '@oxy.so/telemetry/browser' does not provide an export named 'peekBrowserEdgeRegionHeader'
+ ❯ src/services/oxy/client.ts:1:1
+      1| import { OxyServer } from "@oxy.so/core/server";
+       | ^
+      2|
+      3| /** One server client; bootstrap supplies the existing Allo service cr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  31 passed (31)
+   Start at  17:16:58
+   Duration  982ms (transform 184ms, setup 62ms, import 189ms, tests 688ms, environment 0ms)
+
+error: script "test" exited with code 1

@@ -1,0 +1,19 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [123]
+Saved lockfile
+
++ @types/node@24.13.3 (v26.6.4 available)
++ react-native-worklets@0.10.0
++ typescript@5.9.3 (v7.0.2 available)
++ @oxy.so/bloom@6.2.1
++ @oxy.so/contracts@/home/nate/Oxy/.agent-evidence/i04-consumer-final-candidate-packs/oxy.so-contracts-4.9.0.tgz
++ @oxy.so/core@/home/nate/Oxy/.agent-evidence/i04-consumer-final-candidate-packs/oxy.so-core-4.2.0.tgz
++ @oxy.so/services@/home/nate/Oxy/.agent-evidence/i04-consumer-final-candidate-packs/oxy.so-services-11.1.0.tgz
++ @react-native/js-polyfills@0.86.0
++ @tanstack/query-async-storage-persister@5.101.2
++ @tanstack/react-query@5.101.2 (v5.104.1 available)
++ @tanstack/react-query-persist-client@5.101.2
++ react-native-css@3.0.7
+
+1481 packages installed [6.51s]

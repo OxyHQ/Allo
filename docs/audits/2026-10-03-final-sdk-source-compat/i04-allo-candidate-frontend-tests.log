@@ -1,0 +1,1428 @@
+$ jest --watchAll=false --runInBand
+PASS __tests__/allo/backupScreen.test.tsx (5.546 s)
+  ● Console
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      142 |   let renderer: TestRenderer.ReactTestRenderer | undefined;
+      143 |   act(() => {
+    > 144 |     renderer = TestRenderer.create(
+          |                             ^
+      145 |       <AlloProvider client={client}>
+      146 |         <BackupPanel onPhrasePending={onPhrasePending} />
+      147 |       </AlloProvider>,
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at updateContainerImpl (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14984:9)
+      at updateContainer (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14927:7)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.create (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:17369:7)
+      at create (__tests__/allo/backupScreen.test.tsx:144:29)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at mount (__tests__/allo/backupScreen.test.tsx:143:6)
+      at Object.mount (__tests__/allo/backupScreen.test.tsx:218:19)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      72 |   const turnOn = useCallback(async () => {
+      73 |     if (busy) return;
+    > 74 |     setAction('enable');
+         |     ^
+      75 |     try {
+      76 |       const words = await enable();
+      77 |       setWroteDown(false);
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:74:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.turnOn [as onPress] (components/backup/BackupPanel.tsx:219:33)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:169:2)
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:225:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:80:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:133:18)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:80:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:171:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      75 |     try {
+      76 |       const words = await enable();
+    > 77 |       setWroteDown(false);
+         |       ^
+      78 |       setPhrase(words);
+      79 |     } catch (error: unknown) {
+      80 |       logger.error('[Backup] enable failed', error);
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setWroteDown (components/backup/BackupPanel.tsx:77:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      76 |       const words = await enable();
+      77 |       setWroteDown(false);
+    > 78 |       setPhrase(words);
+         |       ^
+      79 |     } catch (error: unknown) {
+      80 |       logger.error('[Backup] enable failed', error);
+      81 |       toast.error(getErrorMessage(error) || t('backup.enableFailed'));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setPhrase (components/backup/BackupPanel.tsx:78:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      81 |       toast.error(getErrorMessage(error) || t('backup.enableFailed'));
+      82 |     } finally {
+    > 83 |       setAction(null);
+         |       ^
+      84 |     }
+      85 |   }, [busy, enable, t]);
+      86 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:83:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      244 |               testID="backup-confirm"
+      245 |               style={styles.check}
+    > 246 |               onPress={() => setWroteDown((value) => !value)}
+          |                              ^
+      247 |               accessibilityRole="checkbox"
+      248 |               aria-checked={wroteDown}
+      249 |             >
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setWroteDown [as onPress] (components/backup/BackupPanel.tsx:246:30)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:247:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      136 |   const dismissPhrase = useCallback(() => {
+      137 |     if (!wroteDown) return;
+    > 138 |     setPhrase(null);
+          |     ^
+      139 |     setWroteDown(false);
+      140 |   }, [wroteDown]);
+      141 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setPhrase [as onPress] (components/backup/BackupPanel.tsx:138:5)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:249:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      137 |     if (!wroteDown) return;
+      138 |     setPhrase(null);
+    > 139 |     setWroteDown(false);
+          |     ^
+      140 |   }, [wroteDown]);
+      141 |
+      142 |   const runRestore = useCallback(async () => {
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setWroteDown [as onPress] (components/backup/BackupPanel.tsx:139:5)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:249:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      87 |   const backUpNow = useCallback(async () => {
+      88 |     if (busy) return;
+    > 89 |     setAction('refresh');
+         |     ^
+      90 |     try {
+      91 |       await refresh();
+      92 |       toast.success(t('backup.refreshed'));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:89:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.backUpNow [as onPress] (components/backup/BackupPanel.tsx:199:35)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:255:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:133:18)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:80:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:171:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       95 |       toast.error(getErrorMessage(error) || t('backup.refreshFailed'));
+       96 |     } finally {
+    >  97 |       setAction(null);
+          |       ^
+       98 |     }
+       99 |   }, [busy, refresh, t]);
+      100 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:97:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      142 |   let renderer: TestRenderer.ReactTestRenderer | undefined;
+      143 |   act(() => {
+    > 144 |     renderer = TestRenderer.create(
+          |                             ^
+      145 |       <AlloProvider client={client}>
+      146 |         <BackupPanel onPhrasePending={onPhrasePending} />
+      147 |       </AlloProvider>,
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at updateContainerImpl (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14984:9)
+      at updateContainer (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14927:7)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.create (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:17369:7)
+      at create (__tests__/allo/backupScreen.test.tsx:144:29)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at mount (__tests__/allo/backupScreen.test.tsx:143:6)
+      at Object.mount (__tests__/allo/backupScreen.test.tsx:270:20)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      273 |               value={restoreInput}
+      274 |               onChangeText={(value) => {
+    > 275 |                 setRestoreInput(value.toLowerCase());
+          |                 ^
+      276 |                 if (restoreError !== null) setRestoreError(null);
+      277 |               }}
+      278 |               isInvalid={restoreError !== null}
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setRestoreInput [as onChangeText] (components/backup/BackupPanel.tsx:275:17)
+      at onChangeText (__tests__/allo/backupScreen.test.tsx:175:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:174:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:177:2)
+      at apply (__tests__/allo/backupScreen.test.tsx:171:20)
+      at Object.type (__tests__/allo/backupScreen.test.tsx:281:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      142 |   const runRestore = useCallback(async () => {
+      143 |     if (busy) return;
+    > 144 |     setRestoreError(null);
+          |     ^
+      145 |     setAction('restore');
+      146 |     try {
+      147 |       await restore(normalizeRecoveryPhrase(restoreInput));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setRestoreError (components/backup/BackupPanel.tsx:144:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.runRestore [as onPress] (components/backup/BackupPanel.tsx:301:35)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:283:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      143 |     if (busy) return;
+      144 |     setRestoreError(null);
+    > 145 |     setAction('restore');
+          |     ^
+      146 |     try {
+      147 |       await restore(normalizeRecoveryPhrase(restoreInput));
+      148 |       setRestoreInput('');
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:145:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.runRestore [as onPress] (components/backup/BackupPanel.tsx:301:35)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:283:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:199:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      150 |     } catch (error: unknown) {
+      151 |       if (error instanceof RecoveryPhraseError) {
+    > 152 |         setRestoreError(t('backup.restore.wrongPhrase'));
+          |         ^
+      153 |       } else {
+      154 |         logger.error('[Backup] restore failed', error);
+      155 |         setRestoreError(t('backup.restore.failed'));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setRestoreError (components/backup/BackupPanel.tsx:152:9)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      156 |       }
+      157 |     } finally {
+    > 158 |       setAction(null);
+          |       ^
+      159 |     }
+      160 |   }, [busy, restore, restoreInput, t]);
+      161 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:158:7)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      273 |               value={restoreInput}
+      274 |               onChangeText={(value) => {
+    > 275 |                 setRestoreInput(value.toLowerCase());
+          |                 ^
+      276 |                 if (restoreError !== null) setRestoreError(null);
+      277 |               }}
+      278 |               isInvalid={restoreError !== null}
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setRestoreInput [as onChangeText] (components/backup/BackupPanel.tsx:275:17)
+      at onChangeText (__tests__/allo/backupScreen.test.tsx:175:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:174:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:171:20)
+      at Object.type (__tests__/allo/backupScreen.test.tsx:290:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      274 |               onChangeText={(value) => {
+      275 |                 setRestoreInput(value.toLowerCase());
+    > 276 |                 if (restoreError !== null) setRestoreError(null);
+          |                                            ^
+      277 |               }}
+      278 |               isInvalid={restoreError !== null}
+      279 |               rows={3}
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at Object.setRestoreError [as onChangeText] (components/backup/BackupPanel.tsx:276:44)
+      at onChangeText (__tests__/allo/backupScreen.test.tsx:175:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:174:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:171:20)
+      at Object.type (__tests__/allo/backupScreen.test.tsx:290:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      142 |   const runRestore = useCallback(async () => {
+      143 |     if (busy) return;
+    > 144 |     setRestoreError(null);
+          |     ^
+      145 |     setAction('restore');
+      146 |     try {
+      147 |       await restore(normalizeRecoveryPhrase(restoreInput));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setRestoreError (components/backup/BackupPanel.tsx:144:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.runRestore [as onPress] (components/backup/BackupPanel.tsx:301:35)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:292:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      143 |     if (busy) return;
+      144 |     setRestoreError(null);
+    > 145 |     setAction('restore');
+          |     ^
+      146 |     try {
+      147 |       await restore(normalizeRecoveryPhrase(restoreInput));
+      148 |       setRestoreInput('');
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:145:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.runRestore [as onPress] (components/backup/BackupPanel.tsx:301:35)
+      at onPress (__tests__/allo/backupScreen.test.tsx:167:16)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at __tests__/allo/backupScreen.test.tsx:166:12
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+      at apply (__tests__/allo/backupScreen.test.tsx:162:21)
+      at Object.press (__tests__/allo/backupScreen.test.tsx:292:11)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:199:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:217:18)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:22:7
+      at ../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:14:12
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:80:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:75:14)
+      at setBusy (../core/dist/backup/service.js:230:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      146 |     try {
+      147 |       await restore(normalizeRecoveryPhrase(restoreInput));
+    > 148 |       setRestoreInput('');
+          |       ^
+      149 |       toast.success(t('backup.restore.done'));
+      150 |     } catch (error: unknown) {
+      151 |       if (error instanceof RecoveryPhraseError) {
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setRestoreInput (components/backup/BackupPanel.tsx:148:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      156 |       }
+      157 |     } finally {
+    > 158 |       setAction(null);
+          |       ^
+      159 |     }
+      160 |   }, [busy, restore, restoreInput, t]);
+      161 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:158:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      109 |     });
+      110 |     if (!confirmed) return;
+    > 111 |     setAction('disable');
+          |     ^
+      112 |     try {
+      113 |       await disable();
+      114 |       toast.success(t('backup.disabled'));
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:111:5)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at BackupService.emit [as changed] (../core/dist/backup/service.js:69:26)
+      at BackupService.changed (../core/dist/backup/service.js:80:14)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      117 |       toast.error(getErrorMessage(error) || t('backup.disableFailed'));
+      118 |     } finally {
+    > 119 |       setAction(null);
+          |       ^
+      120 |     }
+      121 |   }, [busy, disable, t]);
+      122 |
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setAction (components/backup/BackupPanel.tsx:119:7)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+PASS __tests__/chat/model.test.ts
+PASS __tests__/allo/postLoginTree.test.tsx
+PASS __tests__/allo/noLegacyChatPath.test.ts
+PASS __tests__/phase2/calls.test.ts
+PASS __tests__/allo/unreachableBanner.test.tsx
+PASS __tests__/routes/navigationTargets.test.ts
+PASS __tests__/allo/storage.web.test.ts
+PASS __tests__/phase2/stories.test.ts
+PASS __tests__/privacy/translations.test.ts
+PASS __tests__/circuitBreaker.test.ts
+  ● Console
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 503
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 429
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 408
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: Network request failed
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 6 failures. Last error: HTTP 500
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+    console.error
+      [Circuit Breaker] Opened for test after 5 failures. Last error: HTTP 503:
+
+      248 |       if (this.failures >= this.threshold) {
+      249 |         this.state = 'open';
+    > 250 |         console.error(
+          |                 ^
+      251 |           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
+      252 |             `Last error: ${getErrorMessage(error)}`
+      253 |         );
+
+      at CircuitBreaker.error (lib/api/retryLogic.ts:250:17)
+          at Generator.throw (<anonymous>)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _throw (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:20:9)
+
+PASS __tests__/allo/enrollmentGate.test.tsx (11.027 s)
+  ● Console
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      46 |   let renderer: TestRenderer.ReactTestRenderer | undefined;
+      47 |   act(() => {
+    > 48 |     renderer = TestRenderer.create(
+         |                             ^
+      49 |       <BloomThemeProvider mode="light" fonts={false}>
+      50 |         <AlloProvider client={client}>
+      51 |           <EnrollmentGate>
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at updateContainerImpl (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14984:9)
+      at updateContainer (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14927:7)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.create (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:17369:7)
+      at create (__tests__/allo/enrollmentGate.test.tsx:48:29)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at mount (__tests__/allo/enrollmentGate.test.tsx:47:6)
+      at Object.mount (__tests__/allo/enrollmentGate.test.tsx:96:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      46 |   let renderer: TestRenderer.ReactTestRenderer | undefined;
+      47 |   act(() => {
+    > 48 |     renderer = TestRenderer.create(
+         |                             ^
+      49 |       <BloomThemeProvider mode="light" fonts={false}>
+      50 |         <AlloProvider client={client}>
+      51 |           <EnrollmentGate>
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at updateContainerImpl (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14984:9)
+      at updateContainer (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14927:7)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.create (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:17369:7)
+      at create (__tests__/allo/enrollmentGate.test.tsx:48:29)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at mount (__tests__/allo/enrollmentGate.test.tsx:47:6)
+      at Object.mount (__tests__/allo/enrollmentGate.test.tsx:109:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at Object.emit (../core/dist/client.js:173:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      22 |         if (cache.current)
+      23 |             cache.current.version++;
+    > 24 |         onChange();
+         |         ^
+      25 |     }), [client, topic]);
+      26 |     const read = (0, react_1.useCallback)(() => {
+      27 |         const c = cache.current;
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at onChange (../react/dist/internal/useClientSnapshot.js:24:9)
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at Object.emit (../core/dist/client.js:173:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      22 |         if (cache.current)
+      23 |             cache.current.version++;
+    > 24 |         onChange();
+         |         ^
+      25 |     }), [client, topic]);
+      26 |     const read = (0, react_1.useCallback)(() => {
+      27 |         const c = cache.current;
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at onChange (../react/dist/internal/useClientSnapshot.js:24:9)
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at InstanceManager.emit (../core/dist/instance/manager.js:205:35)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      46 |   let renderer: TestRenderer.ReactTestRenderer | undefined;
+      47 |   act(() => {
+    > 48 |     renderer = TestRenderer.create(
+         |                             ^
+      49 |       <BloomThemeProvider mode="light" fonts={false}>
+      50 |         <AlloProvider client={client}>
+      51 |           <EnrollmentGate>
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at updateContainerImpl (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14984:9)
+      at updateContainer (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14927:7)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.create (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:17369:7)
+      at create (__tests__/allo/enrollmentGate.test.tsx:48:29)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../node_modules/react/cjs/react.development.js:814:22)
+      at mount (__tests__/allo/enrollmentGate.test.tsx:47:6)
+      at Object.mount (__tests__/allo/enrollmentGate.test.tsx:139:22)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      30 |         for (const l of [...set]) {
+      31 |             try {
+    > 32 |                 l();
+         |                 ^
+      33 |             }
+      34 |             catch {
+      35 |                 /* a listener's failure is not the SDK's */
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at Object.emit (../core/dist/client.js:173:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      22 |         if (cache.current)
+      23 |             cache.current.version++;
+    > 24 |         onChange();
+         |         ^
+      25 |     }), [client, topic]);
+      26 |     const read = (0, react_1.useCallback)(() => {
+      27 |         const c = cache.current;
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at onChange (../react/dist/internal/useClientSnapshot.js:24:9)
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at Object.emit (../core/dist/client.js:173:17)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      22 |         if (cache.current)
+      23 |             cache.current.version++;
+    > 24 |         onChange();
+         |         ^
+      25 |     }), [client, topic]);
+      26 |     const read = (0, react_1.useCallback)(() => {
+      27 |         const c = cache.current;
+
+      at isConcurrentActEnvironment (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:11999:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14399:7)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at forceStoreRerender (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5432:24)
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:5417:11
+      at onChange (../react/dist/internal/useClientSnapshot.js:24:9)
+      at Emitter.l [as emit] (../core/dist/events/emitter.js:32:17)
+      at InstanceManager.emit (../core/dist/instance/manager.js:205:35)
+      at asyncGeneratorStep (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (../../node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+PASS __tests__/allo/storage.native.test.ts
+PASS __tests__/profile/handle.test.ts
+PASS __tests__/allo/transferBanner.test.tsx
+  ● Console
+
+    console.error
+      An update to FontLoader inside a test was not wrapped in act(...).
+      
+      When testing, code that causes React state updates should be wrapped into act(...):
+      
+      act(() => {
+        /* fire events that update state */
+      });
+      /* assert on the output */
+      
+      This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+      at ../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14402:19
+      at runWithFiberInDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:2315:13)
+      at warnIfUpdatesNotWrappedWithActDEV (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:14401:9)
+      at scheduleUpdateOnFiber (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:12086:9)
+      at dispatchSetStateInternal (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6208:13)
+      at dispatchSetState (../../node_modules/react-test-renderer/cjs/react-test-renderer.development.js:6165:7)
+      at setLoaded (../../node_modules/expo-font/src/FontHooks.ts:28:11)
+
+PASS __tests__/phase2/presence.test.ts
+PASS __tests__/privacy/hiddenWords.test.ts
+PASS __tests__/allo/secrets.test.ts
+PASS __tests__/chat/place.test.ts
+PASS __tests__/appearanceEndpoint.test.ts
+PASS __tests__/chat/newConversation.test.ts
+PASS __tests__/chat/poll.test.ts
+PASS __tests__/chat/attachmentViewer.test.ts
+
+Test Suites: 23 passed, 23 total
+Tests:       214 passed, 214 total
+Snapshots:   0 total
+Time:        27.925 s
+Ran all test suites.

@@ -1,0 +1,10 @@
+$ bun run typecheck:backend && bun run typecheck:core && bun run typecheck:react && bun run typecheck:frontend
+$ tsc --noEmit -p packages/backend/tsconfig.json
+$ bun run --filter @allo/core typecheck
+@allo/core typecheck: Exited with code 0
+$ bun run --filter @allo/react typecheck
+@allo/react typecheck: Exited with code 0
+$ tsc --noEmit -p packages/frontend/tsconfig.json
+packages/frontend/app/(chat)/c/[id]/call.tsx(283,13): error TS2322: Type '"large"' is not assignable to type 'CallControlSize | undefined'.
+packages/frontend/components/chat/list/ConversationList.tsx(201,9): error TS2322: Type '{ accessibilityLabel: string; onPress: () => void; placement: string; variant: string; }' is not assignable to type 'IntrinsicAttributes & NewChatButtonProps'.
+  Property 'placement' does not exist on type 'IntrinsicAttributes & NewChatButtonProps'.

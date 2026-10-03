@@ -1,0 +1,10 @@
+$ jest --watchAll=false --runInBand __tests__/allo/sessionAdapter.test.ts __tests__/allo/postLoginTree.test.tsx __tests__/allo/noLegacyChatPath.test.ts
+PASS __tests__/allo/postLoginTree.test.tsx
+PASS __tests__/allo/sessionAdapter.test.ts
+PASS __tests__/allo/noLegacyChatPath.test.ts
+
+Test Suites: 3 passed, 3 total
+Tests:       9 passed, 9 total
+Snapshots:   0 total
+Time:        3.166 s, estimated 7 s
+Ran all test suites matching /__tests__\/allo\/sessionAdapter.test.ts|__tests__\/allo\/postLoginTree.test.tsx|__tests__\/allo\/noLegacyChatPath.test.ts/i.
