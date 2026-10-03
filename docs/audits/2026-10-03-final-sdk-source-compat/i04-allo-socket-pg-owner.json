@@ -1,0 +1,9 @@
+{
+  "directory": "/home/nate/Oxy/.agent-evidence/i04-allo-socket-pg-r52icsq9",
+  "pid": 3950345,
+  "uid": 1000,
+  "port": 5594,
+  "url": "postgresql://allo_fixture@127.0.0.1:5594/postgres",
+  "purpose": "owned Allo socket regression only",
+  "status": "running"
+}
