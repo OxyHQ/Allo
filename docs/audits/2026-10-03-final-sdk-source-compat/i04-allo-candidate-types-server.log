@@ -1,0 +1,9 @@
+$ bun run typecheck:backend && bun run typecheck:core && bun run typecheck:react && bun run typecheck:frontend
+$ tsc --noEmit -p packages/backend/tsconfig.json
+packages/backend/server.ts(75,50): error TS2741: Property 'authSocket' is missing in type 'OxyServer' but required in type 'SocketAuthProvider'.
+packages/backend/src/ecosystemActivity.ts(23,33): error TS2551: Property 'getServiceToken' does not exist on type 'OxyServer'. Did you mean 'serviceToken'?
+packages/backend/src/runtimeApp.ts(37,77): error TS2345: Argument of type 'OxyServer' is not assignable to parameter of type 'OxyDirectoryClient'.
+  Type 'OxyServer' is missing the following properties from type 'OxyDirectoryClient': getProfileByUsername, getUserById, getUsersByIds, searchProfiles, getFileDownloadUrl
+packages/backend/src/services/moderation/subjects/userSubject.ts(41,49): error TS2339: Property 'getUserById' does not exist on type 'OxyServer'.
+packages/backend/src/services/oxy/client.ts(4,40): error TS2345: Argument of type '{}' is not assignable to parameter of type 'OxyServerConfig'.
+  Property 'baseURL' is missing in type '{}' but required in type 'OxyServerConfig'.

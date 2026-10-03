@@ -1,0 +1,49 @@
+{
+  "name": "@allo/backend",
+  "version": "1.0.0",
+  "private": true,
+  "author": "",
+  "type": "commonjs",
+  "main": "server.ts",
+  "scripts": {
+    "start": "ts-node --transpile-only server.ts",
+    "dev": "nodemon --watch \"**/*.ts\" --exec ts-node --transpile-only server.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "ts-node --transpile-only src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@allo/shared-types": "workspace:*",
+    "@oxy.so/contracts": "file:/home/nate/Oxy/.agent-evidence/i04-consumer-final-candidate-packs/oxy.so-contracts-4.9.0.tgz",
+    "@oxy.so/core": "file:/home/nate/Oxy/.agent-evidence/i04-consumer-final-candidate-packs/oxy.so-core-4.2.0.tgz",
+    "@oxy.so/crowdsource": "^1.0.0",
+    "@oxy.so/crowdsource-contracts": "^1.0.0",
+    "@oxy.so/crowdsource-express": "^1.0.0",
+    "@oxy.so/db": "^1.0.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "0.45.2",
+    "express": "^4.22.2",
+    "express-rate-limit": "^8.0.0",
+    "firebase-admin": "^14.1.0",
+    "helmet": "^8.0.0",
+    "postgres": "3.4.9",
+    "redis": "^5.12.1",
+    "socket.io": "^4.8.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@allo/core": "workspace:*",
+    "@types/express": "^4.17.21",
+    "@types/supertest": "^6.0.3",
+    "drizzle-kit": "0.31.10",
+    "node-fetch": "^2.7.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
