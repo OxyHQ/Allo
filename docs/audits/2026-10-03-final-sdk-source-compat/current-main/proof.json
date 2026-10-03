@@ -1,0 +1,191 @@
+{
+  "source": "ce5fe3afbd8f679562263e5a7c27a4e7f3795ff9",
+  "mainBase": "b75a4b2c7fd050892731f0fcaf9bfcc864abc263",
+  "sources": [
+    {
+      "path": "packages/backend/src/runtime/socket.ts",
+      "sha256": "dc0e76aeed44c5276669a87a7c82113616c029ae77283aa2c31166e7c0c73712"
+    },
+    {
+      "path": "packages/backend/src/__tests__/integration/harness.ts",
+      "sha256": "441b1d77dfe20df129da4c8f9d9e95fcdfb63c94e0436a12563b9ce0e8fdea73"
+    },
+    {
+      "path": "packages/backend/src/__tests__/platform/socket.realdb.test.ts",
+      "sha256": "57131ad9893ada780ba407cb547a6d91942e21e8ea189cf0ebdbd82a417d2a93"
+    },
+    {
+      "path": "packages/frontend/__tests__/allo/sessionAdapter.test.ts",
+      "sha256": "57b126618dbc4ddc8d755056e68c8a7710e68b4e08a981793c7629a7719b8a83"
+    },
+    {
+      "path": "packages/backend/src/ecosystemActivity.ts",
+      "sha256": "4d224fe91b93473c7931cf1570760bc4ea831933d3b4e109989ca88ff2d2a0c0"
+    },
+    {
+      "path": "packages/backend/src/config/oxyService.ts",
+      "sha256": "2f7011c708c4ea3f4906ede96695bcc0ef1806887e31ab264751743fa12f8bfb"
+    },
+    {
+      "path": "packages/backend/src/oxy.ts",
+      "sha256": "3fd9bf1a9392deb0f675097a40f2d6c0e699576059f479637825c8ca6f0c4e05"
+    },
+    {
+      "path": "packages/frontend/lib/oxy.ts",
+      "sha256": "55dd77aee34c4819636d3d125dc169910b7318e151a18ebf1a7a34fddff8e273"
+    },
+    {
+      "path": "packages/frontend/components/providers/AppProviders.tsx",
+      "sha256": "c5ccf6017daa02fef048e9a4324efd30e46682f0681c8939ab4d2ff0bdcfa12a"
+    },
+    {
+      "path": "packages/frontend/app/_layout.tsx",
+      "sha256": "26eb796b72939ac2a78485e8dfeb9f2557c1e046d36136c2e9ab0fae6cb57815"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/backend-build.log",
+      "sha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/backend-focal.log",
+      "sha256": "0250bf38bb0a31871a79c9aab2115509e5dc267d33065cf6c6304481ce2a2fd0"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/backend-full.log",
+      "sha256": "833c5b7ce9d02e76ebd014e89d0f643075ac0b556c85e9cd6a4edf79319aa07c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/frontend-build.log",
+      "sha256": "a7513c05e87ca67f0e9f0f469ba55f22bf46a81c784ac46215fb8d8afb364234"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/frontend-full.log",
+      "sha256": "653dd624e3af1b070cff83d12cee7cb1620f46e6b62b6503367f83e5780552e7"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/frontend-termination.json",
+      "sha256": "20d43d7bffad51f13ce8e8a0e143804057179fe0435cf8f8d5c2a169718a5775"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/install.log",
+      "sha256": "255a1b9a3ee2b2012e95b9104af07cefd31e916573e533bf718c52263605217f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/pg-init.log",
+      "sha256": "f4d33ea5de5cb815a11065e20cc0861116129932947e8eb1de7c1a934806482f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/pg-owner.json",
+      "sha256": "194eb43620fdd6c9bf79a9dd1758e56b463231ec0a2419ec1a7e6cdafb83e1e7"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/pg-start.log",
+      "sha256": "66afd0411ccc09366e99fdd99b85f21899c8d2d064f5835126859618802153ad"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/pg-stop.log",
+      "sha256": "ca19178a35ab4153b75b494963b66ce8243e1b94c173107c87b44d09db23652d"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/pg-teardown.json",
+      "sha256": "19da14889efaa098cce3771d2aa974c31ed691e7ee8e4edff7aac104c0cd0c52"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/session-test.log",
+      "sha256": "3a8a148d3299042960a4d4daf0fad2dc3a1d5eb1ab24c1b2d2d8062c067984b3"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/logs/types.log",
+      "sha256": "8b8374c49f6e701ade918c59ac75c0d344728d34357e8ba00e0fea61978b953c"
+    }
+  ],
+  "candidateInputs": [
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/package.json",
+      "sha256": "45218a5abd5bb7c1edafe64ad01d30bcb7c0f484c60cc3bab4bad87fbe12db9a"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/bun.lock",
+      "sha256": "1b7f6f59a031eb5831b438f4c057f03e75b9a458a3862dd0212964da0ada28ba"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/packages/backend/package.json",
+      "sha256": "5e49fab17eb01fc0dcfbc5b80f1cf05e2657bc102c1e02f681ab5e6e6aa34c69"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/packages/frontend/package.json",
+      "sha256": "747bbd8b14b2da2f9bd00ba1d1a3ac0bf0c672625e4113368ffdee03dde1ab81"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/packages/react/package.json",
+      "sha256": "d7949bcc2ed0babca8c9355f64289f5cb0829a373b17247f02d5955d3350feaa"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/packages/shared-types/package.json",
+      "sha256": "26d05fab1e3711ade44fd4e9fc0fced72c1da11529a2ee99c62b4718ad5d8cd7"
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/current-main/candidate-install/packages/core/package.json",
+      "sha256": "8a32b59e20902e73dcddce6713f1ffe283d3a3610ca3291c50bbeb0e5155cc4b"
+    }
+  ],
+  "installed": [
+    {
+      "name": "@oxy.so/contracts",
+      "path": "/home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/node_modules/@oxy.so/contracts",
+      "filesByteIdentical": 198,
+      "archive": "/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-contracts-4.9.0.tgz",
+      "archiveSha256": "6b1e6a8da92341871d2832834ad063df1a1e84a46dc367786599fdd26be6e635"
+    },
+    {
+      "name": "@oxy.so/protocol",
+      "path": "/home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/node_modules/@oxy.so/protocol",
+      "filesByteIdentical": 145,
+      "archive": "/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-protocol-1.2.2.tgz",
+      "archiveSha256": "325b20125f1cf5159c36ca7a75f32c83a4560cf41c55526828b1718595acc843"
+    },
+    {
+      "name": "@oxy.so/core",
+      "path": "/home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/node_modules/@oxy.so/core",
+      "filesByteIdentical": 581,
+      "archive": "/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-core-4.2.0.tgz",
+      "archiveSha256": "83059583068cf96d8dc7e4335fe226126cb795f7c6cfba469f8cec4ef9c6a385"
+    },
+    {
+      "name": "@oxy.so/services",
+      "path": "/home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/node_modules/@oxy.so/services",
+      "filesByteIdentical": 2418,
+      "archive": "/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-services-11.1.0.tgz",
+      "archiveSha256": "b8d232cb04d934ac38c8be303dbbcf9819d444bec8458628c8478cbbf2155c9c"
+    }
+  ],
+  "results": {
+    "backend": {
+      "files": 44,
+      "passed": 553,
+      "exit": 0,
+      "database": "owned loopback PostgreSQL; only postgres remains after suite teardown; server PID absent"
+    },
+    "frontend": {
+      "suites": 34,
+      "passed": 283,
+      "assertionRunSeconds": 51.101,
+      "cleanExit": false,
+      "termination": "Owned Jest SIGTERM after open-handles warning; no full clean-exit claim"
+    },
+    "sessionAdapter": {
+      "tests": 1,
+      "exit": 0
+    },
+    "types": "backend/core/react/frontend PASS",
+    "webExport": "PASS",
+    "backendBuild": "PASS"
+  },
+  "limits": [
+    "Historical Oxy 1b candidate, not final registry or deployment",
+    "Bloom 7.1.2 published dependency; no native product runtime exercised",
+    "Original historical proof unchanged; source rebase preserves newer main product changes"
+  ]
+}
