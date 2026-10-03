@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "7115bbed417f6d1d6ef3941d2e2d3739b8d47d4d",
+  "sourceCommit": "72b51b593a3396ea8188a7d508044e66cdc8b16f",
   "base": "795ba4e0c612d41d69f46ed7b332423be5b9d16c",
   "sdkCandidate": "dca175d22497b0c51e124f4a517b1b7f055f7908",
   "sources": [
@@ -15,13 +15,13 @@
     },
     {
       "path": "packages/backend/src/__tests__/integration/harness.ts",
-      "sha256": "af5f608425281285e4cbe32546a0aa856cc8c25c75ccfff0c218d4db79fd1039",
-      "bytes": 8617
+      "sha256": "5acf3b1bfe8d81bef2474c394d99af96e69fc1f89e873db4ad458dbe106e616b",
+      "bytes": 8668
     },
     {
       "path": "packages/backend/src/__tests__/platform/socket.realdb.test.ts",
-      "sha256": "714a3b0342afac9748be7052d139eaf2731d88bdd2b35a79b83c6af579007eaa",
-      "bytes": 7263
+      "sha256": "8691039e36270f8c8002a427abfc0f8fee0266a83f7c8c65c18eca88a1e107e0",
+      "bytes": 7741
     },
     {
       "path": "packages/backend/src/__tests__/services/moderation/subjectProviders.test.ts",
@@ -35,7 +35,7 @@
     },
     {
       "path": "packages/backend/src/runtime/socket.ts",
-      "sha256": "cfd8d17ba16dbf8007e2f48ce0763a5e94dd9cd605bc2128a246a4344e090468",
+      "sha256": "e0d8b70fdebe0bb94c5c9491789f813d2806107fffc79ebfbac116aeb809e654",
       "bytes": 7898
     },
     {
@@ -356,6 +356,31 @@
       "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-packs.json",
       "sha256": "967393536b6e4e526e0dce6d313531881552e977f60dd0dc4ef82a6efb54e171",
       "bytes": 1664
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-red.log",
+      "sha256": "9eca25b258319a3a2d53d153beef3567d70529c3c22aa88ea7dcd725f3ff1b29",
+      "bytes": 2316
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-green.log",
+      "sha256": "acd0bc44147f77312528ff39139506fd8379b977bbb7092c9bd13fbc4f0a4e7a",
+      "bytes": 1597
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-build.log",
+      "sha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+      "bytes": 6
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-pg-owner.json",
+      "sha256": "9597efc2fca2877dca9963bf338183c8d39d09ff46f96531257e55c5c900910b",
+      "bytes": 264
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-pg-teardown.json",
+      "sha256": "c3d3928469106fe5cbfb2a0e5f02bcbd4297054c49606cc3d51f4f2756be74aa",
+      "bytes": 484
     }
   ],
   "results": {
@@ -384,14 +409,29 @@
       "maxWarningsZeroExit": 1,
       "baselineSameFileWarnings": 2,
       "newWarnings": 0
+    },
+    "socketSql": {
+      "red": {
+        "pass": 3,
+        "fail": 1
+      },
+      "green": {
+        "suites": 2,
+        "pass": 10,
+        "fail": 0
+      },
+      "backendBuildExit": 0,
+      "databasesRemaining": 0,
+      "ownedPostgresStopped": true
     }
   },
   "limits": [
     "Oxy packages are local candidate packs, not final registry versions.",
     "Bloom 6.2.1 and telemetry 1.2.0 are registry dependencies.",
     "Unsigned local transport claims in adapter test do not establish server authorization.",
-    "Backend focal suites mock external boundaries; socket real-PG suites not run in this checkpoint.",
+    "Backend focal suites mock external boundaries. Socket integration uses real HTTP/Socket.IO, Allo SDK and SQL, with Oxy authority represented by an explicit SDK-shaped double.",
     "Existing frontend suites render components but do not replace browser/device/provider acceptance.",
     "No native device, live identity, DB migration, publication or deployment."
-  ]
+  ],
+  "initialSourceCommit": "7115bbed417f6d1d6ef3941d2e2d3739b8d47d4d"
 }
