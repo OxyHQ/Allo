@@ -92,15 +92,17 @@ function useDeviceSignals() {
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient(QUERY_CLIENT_CONFIG));
+  const [initialized, setInitialized] = useState(false);
   // Web fades its splash out before the app appears; native has no such splash.
   const [splashFaded, setSplashFaded] = useState(!IS_WEB);
-  const ready = splashFaded;
+  const ready = initialized && splashFaded;
 
   useDeviceSignals();
   useHideNativeSplashWhenReady(ready);
 
   useEffect(() => {
     AppInitializer.initializeI18n().catch((error) => console.error('Failed to initialize i18n:', error));
+    AppInitializer.initializeApp().finally(() => setInitialized(true));
   }, []);
 
   useEffect(() => {
@@ -120,7 +122,7 @@ export default function RootLayout() {
           </AlloRoot>
         </AppProviders>
       ) : IS_WEB ? (
-        <AppSplashScreen startFade onFadeComplete={() => setSplashFaded(true)} />
+        <AppSplashScreen startFade={initialized} onFadeComplete={() => setSplashFaded(true)} />
       ) : null}
     </ThemeRoot>
   );
