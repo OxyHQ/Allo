@@ -1,0 +1,2 @@
+$ bun run --filter @allo/backend build
+@allo/backend build: Exited with code 0

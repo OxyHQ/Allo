@@ -1,0 +1,57 @@
+[
+  {
+    "name": "shared-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "run",
+      "build:shared-types"
+    ],
+    "exitCode": 0,
+    "seconds": 0.766
+  },
+  {
+    "name": "core-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "run",
+      "build:core"
+    ],
+    "exitCode": 0,
+    "seconds": 0.866
+  },
+  {
+    "name": "react-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "run",
+      "build:react"
+    ],
+    "exitCode": 0,
+    "seconds": 0.766
+  },
+  {
+    "name": "types",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "run",
+      "typecheck"
+    ],
+    "exitCode": 0,
+    "seconds": 10.839
+  },
+  {
+    "name": "backend-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "run",
+      "build:backend"
+    ],
+    "exitCode": 0,
+    "seconds": 1.617
+  }
+]

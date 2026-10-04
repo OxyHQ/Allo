@@ -1,0 +1,14 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [99]
+Saved lockfile
+
+$ bun run build:shared-types && bun run build:core && bun run build:react
+$ bun run --filter @allo/shared-types build
+@allo/shared-types build: Exited with code 0
+$ bun run --filter @allo/core build
+@allo/core build: Exited with code 0
+$ bun run --filter @allo/react build
+@allo/react build: Exited with code 0
+
+Checked 2250 installs across 1641 packages (no changes) [3.03s]

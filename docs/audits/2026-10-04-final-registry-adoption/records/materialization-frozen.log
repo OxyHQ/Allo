@@ -1,0 +1,15 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [1]
+
+$ bun run build:shared-types && bun run build:core && bun run build:react
+$ bun run --filter @allo/shared-types build
+@allo/shared-types build: Exited with code 0
+$ bun run --filter @allo/core build
+@allo/core build: Exited with code 0
+$ bun run --filter @allo/react build
+@allo/react build: Exited with code 0
+
++ @oxy.so/core@4.2.0
+
+4 packages installed [3.88s]

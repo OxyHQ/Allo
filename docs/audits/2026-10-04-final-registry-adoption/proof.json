@@ -1,0 +1,181 @@
+{
+  "source": "56d3e81ee38efb348e7a1136d45ed03fc8738c6b",
+  "sources": [
+    {
+      "path": "package.json",
+      "sha256": "e87be1546922e96df67c6bc1691ed963b7a044ff4e1c0948fa7b39d034eecbe0"
+    },
+    {
+      "path": "packages/backend/package.json",
+      "sha256": "6710abb77ae199637d5fe12368d9511021d4a098eee7f46b8a07d5c51baccdfd"
+    },
+    {
+      "path": "packages/frontend/package.json",
+      "sha256": "980f07936de6ecd259fffc4bf096487823fbc4eace66bf8d4ada1a471267505a"
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "5a6e0749d8a39c6fac94ad8102a1c1c7ca18619fdc134dc21776e2737f8e1be7"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Allo-frozen.log",
+      "sha256": "2418256c3945f62b1809e442378861cd32949a8f12eb631c366d07286f855b80",
+      "bytes": 470
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Allo-installed.json",
+      "sha256": "9cf2c8eb6ccf99f200bb3b32cc1e895dc8ea372268f7b66669ddf94b15e50321",
+      "bytes": 2163
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Allo-resolve.log",
+      "sha256": "244bfdb1430df8da068a580c1716add0e924128a760f33200743b8914acc5bb0",
+      "bytes": 486
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-build.log",
+      "sha256": "672d2cd05d91cbea176feeb26a764cea703478defa328ad6bb21c494360c4d24",
+      "bytes": 79
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-socket-realdb.log",
+      "sha256": "e84e0891c099804fe5bb771a6b74fe16ce08c2d5c6041dc08ff96d4547168dd8",
+      "bytes": 1295
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/bloom-final-importers.json",
+      "sha256": "a26618444784a38794f671d671d65b3a393a2d72971fbdae7309231989358a21",
+      "bytes": 591
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/checks-export.json",
+      "sha256": "d7b80717bfe9d27162715bbb5039b8b743197c24732d9d5203b665e66069a388",
+      "bytes": 360
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/checks-initial.json",
+      "sha256": "aa795a66deccefc888d11b53703f3215f42516f16b10f9fd85bfa5ed9bb1ea97",
+      "bytes": 916
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/contracts-registry.json",
+      "sha256": "fb1ded2797bdbd0ca31460f3cba087f078a86dc201365c923da9fcc23b07ed7b",
+      "bytes": 380
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/core-build.log",
+      "sha256": "69a61ac0a3d290ed4bc2f8dd2804de9a4517bab6bbd61517700ad86714896ccd",
+      "bytes": 73
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/core-registry.json",
+      "sha256": "99b7f8a1cc87cf46ff54b3113a1911a938f39b4f086537e0a4138ee38dd035b7",
+      "bytes": 375
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/failed.json",
+      "sha256": "e45a08861b705a4bd04a1ac5bec7dfdc902621991070d99debf9062f9e6cfe3d",
+      "bytes": 89
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/frontend-export-check.json",
+      "sha256": "f159f617a5b3fcb9158d7be55bd01d22c4c59d73b83ac98df4f9aed3a4fafc77",
+      "bytes": 170
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/frontend-export.log",
+      "sha256": "1628d0edf80ff3b1b816e84a2167e114b4128ef341137f8d8cf2257e95155703",
+      "bytes": 12638
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/intent.json",
+      "sha256": "b797e41f2a55530336a918f024134b3ef29b3d3a570567e6a4582362e335a223",
+      "bytes": 148
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/local-initial-checks.json",
+      "sha256": "3701af038f6a358dce1ab4d8a7d63386c26a08c00bd9e25a4be3da0abdfa99aa",
+      "bytes": 801
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/materialization-frozen.log",
+      "sha256": "12efbbdace85779e482146ea6a15a7adcbabe9cf48517b12a51de0e6ec18abe3",
+      "bytes": 457
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/materialization-repair-intent.json",
+      "sha256": "1a97d5abea44a633e71a6a664921ede4c2dda7dfd0040a6b704ad4798dc20146",
+      "bytes": 528
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/mcp-registry.json",
+      "sha256": "cc279f4f5b1ca68041f6f0d3583e4d9dc218bd7c0b77846207aa3b981086d7ac",
+      "bytes": 373
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/owned-pg.py",
+      "sha256": "898379b539c457cdf9ed69476083cb143491c8efb2cff9e38816e24fb92d3841",
+      "bytes": 3182
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/pinned-frozen.log",
+      "sha256": "d0984d5cdde0e9a79bee263532b38def1c615cdf944459535f5535ebcadd7ce0",
+      "bytes": 434
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/pinned-installed.json",
+      "sha256": "ff494ab8e7e7c20c5d356b1d2484a7277d6f2d79b0d67d3f8c768452e038134b",
+      "bytes": 2031
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/preflight.json",
+      "sha256": "a504b55c83242d0adf99ceb1d0230cf7499d77af6e197d1dca40400cfc4c24df",
+      "bytes": 249
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/protocol-registry.json",
+      "sha256": "cc0b427dca92d55ea5e1debe7e76580618a26f997b2c888b8484537b64b70bbd",
+      "bytes": 379
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/react-build.log",
+      "sha256": "49b03cefa03345cf69637a6b9509903140cee5c177fb4b985e7fe347259cdf93",
+      "bytes": 75
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/registry.json",
+      "sha256": "a39da224fafeec388f0ac27e08ea13cf666427a0177b67f7b077c65cadb59df0",
+      "bytes": 415373
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/services-registry.json",
+      "sha256": "444599f0eb56d104d64c288ed3a6544163e54430c0f275c2feec219d5f624611",
+      "bytes": 381
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/shared-build.log",
+      "sha256": "abb72a8b05ff05bbd1b972671961e3171c3f149026483797edb697378e56b5b6",
+      "bytes": 89
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/types.log",
+      "sha256": "8b8374c49f6e701ade918c59ac75c0d344728d34357e8ba00e0fea61978b953c",
+      "bytes": 374
+    }
+  ],
+  "validation": {
+    "backendFiles": 2,
+    "backendPassed": 16,
+    "sdkImporterMembers": 6975,
+    "bloomImporterMembers": 43882,
+    "typesBuildExport": "passed"
+  },
+  "limits": [
+    "Published registry archives and all installed SDK importer members were compared byte for byte. Stale same-version candidate materializations were retained and repaired with a frozen install; their setup failures remain in the records.",
+    "Local web export proves compilation, not browser/native acceptance or deployed public-client configuration. Required PR/main CI and root image/promotion remain separate.",
+    "No production database, provider writes, grants, credentials or auth fixtures were changed. Owned PostgreSQL was stopped and its PID absence verified.",
+    "The earlier candidate frontend full suite reached 283 assertions without a clean exit. This proof does not convert it into a full-suite pass or repeat it without cause."
+  ]
+}
