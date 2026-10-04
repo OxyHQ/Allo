@@ -1,0 +1,10 @@
+$ vitest run
+
+ RUN  v4.1.10 /home/nate/Oxy/Allo/.worktrees/1519-final-sdk-adoption-20261003/packages/backend
+
+
+ Test Files  44 passed (44)
+      Tests  553 passed (553)
+   Start at  21:59:35
+   Duration  34.33s (transform 21.23s, setup 1.51s, import 75.94s, tests 537.18s, environment 4ms)
+

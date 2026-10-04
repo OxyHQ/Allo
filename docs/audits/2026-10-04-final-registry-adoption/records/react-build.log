@@ -1,0 +1,2 @@
+$ bun run --filter @allo/react build
+@allo/react build: Exited with code 0

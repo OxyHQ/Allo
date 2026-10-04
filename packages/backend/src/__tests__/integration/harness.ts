@@ -51,6 +51,7 @@ export const socketOxy = {
       const token = s.handshake.auth.token;
       if (typeof token !== "string" || !token.startsWith(TOKEN_PREFIX)) return next(new Error("Authentication required"));
       s.data.userId = token.slice(TOKEN_PREFIX.length);
+      Reflect.set(s, "user", { id: s.data.userId });
       next();
     },
   },

@@ -1,0 +1,2 @@
+$ bun run --filter @allo/core build
+@allo/core build: Exited with code 0

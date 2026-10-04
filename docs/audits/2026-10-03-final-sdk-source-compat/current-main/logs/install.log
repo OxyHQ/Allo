@@ -1,0 +1,19 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [104]
+Saved lockfile
+
+$ bun run build:shared-types && bun run build:core && bun run build:react
+$ bun run --filter @allo/shared-types build
+@allo/shared-types build: Exited with code 0
+$ bun run --filter @allo/core build
+@allo/core build: Exited with code 0
+$ bun run --filter @allo/react build
+@allo/react build: Exited with code 0
+
++ @oxy.so/bloom@7.1.2
++ @oxy.so/contracts@/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-contracts-4.9.0.tgz
++ @oxy.so/core@/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-core-4.2.0.tgz
++ @oxy.so/services@/home/nate/Oxy/.agent-evidence/i04-consumer-frozen-1b-packs/oxy.so-services-11.1.0.tgz
+
+74 packages installed [6.26s]

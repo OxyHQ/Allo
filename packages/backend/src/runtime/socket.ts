@@ -59,10 +59,10 @@ export const accountRoom = (accountId: string) => `account:${accountId}`;
 
 /** Where `oxy.middleware.socket()` leaves the account id. */
 function oxyUserIdOf(socket: V1Socket): string | null {
-  const fromData = socket.data.userId;
-  if (typeof fromData === "string" && fromData) return fromData;
   const user = Reflect.get(socket, "user") as { id?: unknown } | undefined;
-  return typeof user?.id === "string" && user.id ? user.id : null;
+  if (typeof user?.id === "string" && user.id) return user.id;
+  const fromData = socket.data.userId;
+  return typeof fromData === "string" && fromData ? fromData : null;
 }
 
 export interface SocketServerDeps {

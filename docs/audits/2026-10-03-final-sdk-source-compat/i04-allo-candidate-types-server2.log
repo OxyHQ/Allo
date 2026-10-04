@@ -1,0 +1,6 @@
+$ bun run typecheck:backend && bun run typecheck:core && bun run typecheck:react && bun run typecheck:frontend
+$ tsc --noEmit -p packages/backend/tsconfig.json
+packages/backend/src/runtime/socket.ts(89,18): error TS2345: Argument of type 'Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>' is not assignable to parameter of type 'SocketLike'.
+  Types of property 'data' are incompatible.
+    Type 'SocketData' is not assignable to type 'Record<string, unknown>'.
+      Index signature for type 'string' is missing in type 'SocketData'.

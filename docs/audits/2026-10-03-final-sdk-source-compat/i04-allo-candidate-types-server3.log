@@ -1,0 +1,90 @@
+$ bun run typecheck:backend && bun run typecheck:core && bun run typecheck:react && bun run typecheck:frontend
+$ tsc --noEmit -p packages/backend/tsconfig.json
+$ bun run --filter @allo/core typecheck
+@allo/core typecheck: Exited with code 0
+$ bun run --filter @allo/react typecheck
+@allo/react typecheck: Exited with code 0
+$ tsc --noEmit -p packages/frontend/tsconfig.json
+packages/frontend/app/(chat)/c/[id]/call.tsx(157,17): error TS2322: Type '{ children: string; variant: string; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/c/[id]/call.tsx(283,13): error TS2322: Type '"large"' is not assignable to type 'CallControlSize | undefined'.
+packages/frontend/app/(chat)/calls.tsx(157,17): error TS2322: Type '{ children: string; variant: string; icon: ForwardRefExoticComponent<{ fill?: ColorValue | undefined; style?: StyleProp<IconStyle>; size?: "xs" | "sm" | "md" | "lg" | "2xs" | "xl" | "2xl" | "3xl" | undefined; gradient?: "primary" | ... 1 more ... | undefined; } & Omit<...> & RefAttributes<...>>; onPress: () => void;...' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/new.tsx(159,35): error TS2322: Type '"small"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/app/(chat)/settings/devices.tsx(145,11): error TS2322: Type '{ variant: string; iconOnly: true; leadingIcon: ForwardRefExoticComponent<{ fill?: ColorValue | undefined; style?: StyleProp<IconStyle>; size?: "xs" | "sm" | "md" | "lg" | "2xs" | "xl" | "2xl" | "3xl" | undefined; gradient?: "primary" | ... 1 more ... | undefined; } & Omit<...> & RefAttributes<...>>; accessibilityLa...' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/settings/devices.tsx(172,27): error TS2322: Type '{ children: string; variant: string; style: { flex: number; }; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/settings/devices.tsx(176,21): error TS2322: Type '{ children: string; variant: string; style: { flex: number; }; loading: boolean; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/settings/privacy.tsx(58,15): error TS2322: Type '{ value: boolean; onValueChange: (showOnlineStatus: boolean) => void; disabled: boolean; accessibilityLabel: string; testID: string; }' is not assignable to type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+packages/frontend/app/(chat)/settings/privacy/hidden-words.tsx(99,11): error TS2322: Type '{ children: string; variant: string; disabled: boolean; loading: boolean; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/ErrorBoundary.tsx(69,21): error TS2322: Type '{ children: string; variant: string; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/ErrorBoundary.tsx(75,17): error TS2322: Type '{ children: Element; variant: string; style: { alignSelf: "stretch"; maxHeight: number; padding: number; }; }' is not assignable to type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+packages/frontend/components/NotFoundScreen.tsx(26,23): error TS2322: Type '{ children: string; variant: string; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(196,15): error TS2322: Type '{ children: string; testID: string; variant: string; style: { flex: number; }; loading: boolean; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(206,15): error TS2322: Type '{ children: string; testID: string; variant: string; style: { flex: number; }; loading: boolean; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(218,13): error TS2322: Type '{ children: string; testID: string; variant: string; style: { flex: number; }; loading: boolean; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(243,42): error TS2322: Type '{ children: string; testID: string; variant: string; leadingIcon: ForwardRefExoticComponent<{ fill?: ColorValue | undefined; style?: StyleProp<IconStyle>; size?: "xs" | "sm" | ... 6 more ... | undefined; gradient?: "primary" | ... 1 more ... | undefined; } & Omit<...> & RefAttributes<...>>; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(261,42): error TS2322: Type '{ children: string; testID: string; variant: string; disabled: boolean; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/backup/BackupPanel.tsx(302,15): error TS2322: Type '{ children: string; testID: string; variant: string; loading: boolean; disabled: boolean; onPress: () => undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/chat/composer/PollComposer.tsx(143,19): error TS2322: Type '{ children: string; variant: string; icon: ForwardRefExoticComponent<{ fill?: ColorValue | undefined; style?: StyleProp<IconStyle>; size?: "xs" | "sm" | "md" | "lg" | "2xs" | "xl" | "2xl" | "3xl" | undefined; gradient?: "primary" | ... 1 more ... | undefined; } & Omit<...> & RefAttributes<...>>; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/components/chat/composer/PollComposer.tsx(155,17): error TS2322: Type '{ value: boolean; onValueChange: Dispatch<SetStateAction<boolean>>; accessibilityLabel: string; }' is not assignable to type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+packages/frontend/components/chat/composer/PollComposer.tsx(167,17): error TS2322: Type '{ value: boolean; onValueChange: Dispatch<SetStateAction<boolean>>; accessibilityLabel: string; }' is not assignable to type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & SwitchProps & RefAttributes<View>'.
+packages/frontend/components/chat/info/ConversationInfo.tsx(315,21): error TS2322: Type '"small"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/components/chat/list/ConversationList.tsx(201,9): error TS2322: Type '{ accessibilityLabel: string; onPress: () => void; placement: string; variant: string; }' is not assignable to type 'IntrinsicAttributes & NewChatButtonProps'.
+  Property 'placement' does not exist on type 'IntrinsicAttributes & NewChatButtonProps'.
+packages/frontend/components/notifications/NotificationPermissionGate.tsx(62,19): error TS2322: Type '"large"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/components/notifications/NotificationPermissionGate.tsx(65,19): error TS2322: Type '"large"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/components/profile/ProfileScreen.tsx(60,21): error TS2322: Type '"large"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/components/profile/ProfileScreen.tsx(65,19): error TS2322: Type '{ children: Element[]; variant: string; radius: "radius-16"; style: { padding: number; gap: number; }; }' is not assignable to type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+packages/frontend/components/providers/AppProviders.tsx(43,26): error TS2339: Property 'getFileDownloadUrl' does not exist on type 'OxyServices'.
+packages/frontend/hooks/usePerson.ts(42,26): error TS2339: Property 'getFileDownloadUrl' does not exist on type 'OxyServices'.
+packages/frontend/hooks/usePrivacySettings.ts(153,32): error TS2339: Property 'getUsersByIds' does not exist on type 'OxyServices'.
+packages/frontend/hooks/usePrivacySettings.ts(157,51): error TS2345: Argument of type '() => {}[]' is not assignable to parameter of type '() => readonly ModeratedUser[]'.
+  Type '{}[]' is not assignable to type 'readonly ModeratedUser[]'.
+    Property 'id' is missing in type '{}' but required in type 'ModeratedUser'.
+packages/frontend/hooks/usePrivacySettings.ts(159,53): error TS7006: Parameter 'user' implicitly has an 'any' type.
+packages/frontend/hooks/useProfileData.ts(81,32): error TS2339: Property 'getProfileByUsername' does not exist on type 'OxyServices'.
+packages/frontend/hooks/useUserSearch.ts(93,42): error TS2339: Property 'searchProfiles' does not exist on type 'OxyServices'.
+packages/frontend/hooks/useUserSearch.ts(94,33): error TS7006: Parameter 'profile' implicitly has an 'any' type.
+packages/frontend/lib/allo/AlloRoot.tsx(64,27): error TS2739: Type 'OxyServices' is missing the following properties from type 'OxySessionSource': getAccessToken, getCurrentUserId, onTokensChanged
+packages/frontend/lib/allo/EnrollmentGate.tsx(83,15): error TS2322: Type '{ children: (Element | null)[]; variant: string; radius: "radius-16"; style: { alignSelf: "stretch"; alignItems: "center"; gap: number; paddingVertical: number; paddingHorizontal: number; }; }' is not assignable to type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+packages/frontend/lib/allo/EnrollmentGate.tsx(104,17): error TS2322: Type '{ children: string; variant: string; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/lib/allo/EnrollmentGate.tsx(146,9): error TS2322: Type '"large"' is not assignable to type 'BloomSize | undefined'.
+packages/frontend/lib/allo/EnrollmentGate.tsx(155,17): error TS2322: Type '{ children: string; variant: string; onPress: () => void; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/lib/allo/RestoreHistoryPrompt.tsx(91,15): error TS2322: Type '{ children: Element[]; variant: string; elevation: "m"; radius: "radius-20"; style: { padding: number; gap: number; }; }' is not assignable to type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & CardProps & RefAttributes<View>'.
+packages/frontend/lib/allo/RestoreHistoryPrompt.tsx(102,21): error TS2322: Type '{ children: string; variant: string; onPress: () => void; testID: string; }' is not assignable to type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+  Property 'variant' does not exist on type 'IntrinsicAttributes & ButtonProps & RefAttributes<View>'.
+packages/frontend/lib/allo/people.ts(24,10): error TS2305: Module '"@oxy.so/core"' has no exported member 'oxyClient'.
+packages/frontend/lib/appInitializer.ts(2,10): error TS2305: Module '"@oxy.so/core"' has no exported member 'oxyClient'.
+packages/frontend/utils/api.ts(1,10): error TS2305: Module '"@oxy.so/core"' has no exported member 'oxyClient'.
+packages/frontend/utils/api.ts(109,14): error TS2322: Type 'unknown' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'unknown'.
+packages/frontend/utils/api.ts(117,14): error TS2322: Type 'unknown' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'unknown'.
+packages/frontend/utils/api.ts(125,14): error TS2322: Type 'unknown' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'unknown'.
+packages/frontend/utils/api.ts(133,14): error TS2322: Type 'unknown' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'unknown'.
+packages/frontend/utils/api.ts(141,14): error TS2322: Type 'unknown' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'unknown'.

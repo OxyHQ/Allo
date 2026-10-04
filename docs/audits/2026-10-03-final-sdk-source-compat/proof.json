@@ -1,0 +1,437 @@
+{
+  "sourceCommit": "72b51b593a3396ea8188a7d508044e66cdc8b16f",
+  "base": "795ba4e0c612d41d69f46ed7b332423be5b9d16c",
+  "sdkCandidate": "dca175d22497b0c51e124f4a517b1b7f055f7908",
+  "sources": [
+    {
+      "path": "packages/backend/README.md",
+      "sha256": "80ca0c2fc89f1e84aef7ab8aa44d2ed64d07775b568f5c70f4f363c5a015786d",
+      "bytes": 22795
+    },
+    {
+      "path": "packages/backend/src/__tests__/ecosystemActivity.test.ts",
+      "sha256": "80edc679928c3296e3267520b34ebc7b93336ba896fd0f59cda8d44f37521e7b",
+      "bytes": 3706
+    },
+    {
+      "path": "packages/backend/src/__tests__/integration/harness.ts",
+      "sha256": "5acf3b1bfe8d81bef2474c394d99af96e69fc1f89e873db4ad458dbe106e616b",
+      "bytes": 8668
+    },
+    {
+      "path": "packages/backend/src/__tests__/platform/socket.realdb.test.ts",
+      "sha256": "8691039e36270f8c8002a427abfc0f8fee0266a83f7c8c65c18eca88a1e107e0",
+      "bytes": 7741
+    },
+    {
+      "path": "packages/backend/src/__tests__/services/moderation/subjectProviders.test.ts",
+      "sha256": "34fc2f5d5b6c40acac80e5adeb96edc1eb8a7ea7431bf5b24a20d2e5456c4c22",
+      "bytes": 14780
+    },
+    {
+      "path": "packages/backend/src/ecosystemActivity.ts",
+      "sha256": "3e5fdb346150dae2fd97e72fb996d706196beae4ae44dec8fb117e6d1c0c5611",
+      "bytes": 1589
+    },
+    {
+      "path": "packages/backend/src/runtime/socket.ts",
+      "sha256": "e0d8b70fdebe0bb94c5c9491789f813d2806107fffc79ebfbac116aeb809e654",
+      "bytes": 7898
+    },
+    {
+      "path": "packages/backend/src/runtimeApp.ts",
+      "sha256": "68f7d902e8407de8714d4430f02de92d418d6f267766b704b7c993b2c330ff41",
+      "bytes": 2418
+    },
+    {
+      "path": "packages/backend/src/services/moderation/subjects/userSubject.ts",
+      "sha256": "694acf92a7a88b4f7bb90b7686768f32998b977a4f4f143cff6b1ff0f8a04471",
+      "bytes": 4393
+    },
+    {
+      "path": "packages/frontend/__tests__/allo/postLoginTree.test.tsx",
+      "sha256": "501ce0143002ffbb43619b5aa9519f5b8005b8bc31b2e3ee607eb6a101378ef6",
+      "bytes": 11677
+    },
+    {
+      "path": "packages/frontend/__tests__/allo/unreachableBanner.test.tsx",
+      "sha256": "4557271c8c6f035b211731b2e4735369775769a672385108700f07a7b2222893",
+      "bytes": 9411
+    },
+    {
+      "path": "packages/frontend/app/(chat)/c/[id]/call.tsx",
+      "sha256": "b23a6bd970630c43f9ec0e0af59d81c0d18fec400301ee2af831088d59f1a64b",
+      "bytes": 11834
+    },
+    {
+      "path": "packages/frontend/app/(chat)/calls.tsx",
+      "sha256": "6b462a2d2046b1b6802bcc73e5708836ba06942dba0785d1d90c9b0bacefa39b",
+      "bytes": 6215
+    },
+    {
+      "path": "packages/frontend/app/(chat)/new.tsx",
+      "sha256": "bf619a3521804bed8a492dcee7d9fbff2b8de6ce7d7e931db4a6d64776fa0b62",
+      "bytes": 8169
+    },
+    {
+      "path": "packages/frontend/app/(chat)/settings/devices.tsx",
+      "sha256": "72d712276e717fede26ec8d0199754e8dfd971a0e29d60023a713ac4a30d59e3",
+      "bytes": 10049
+    },
+    {
+      "path": "packages/frontend/app/(chat)/settings/privacy.tsx",
+      "sha256": "59ebf2cd8aac916116ae043fa4a7da20e2ba528fb6ee49176f9a6c95f0c8e3f0",
+      "bytes": 3702
+    },
+    {
+      "path": "packages/frontend/app/(chat)/settings/privacy/hidden-words.tsx",
+      "sha256": "27b11ccd259a0c93f1baae1ccc808ee70d1593d85d68670a5fb2f55fa65a037a",
+      "bytes": 5133
+    },
+    {
+      "path": "packages/frontend/app/_layout.tsx",
+      "sha256": "0250615b2090f137cc2f88fda2f0b653e9566841806396586ce5ad33e21b050f",
+      "bytes": 4717
+    },
+    {
+      "path": "packages/frontend/components/ErrorBoundary.tsx",
+      "sha256": "bb4d1b63e703a95fa361cb60db52f98426620b5c233f3a16e8d11549da5b6f4b",
+      "bytes": 4760
+    },
+    {
+      "path": "packages/frontend/components/NotFoundScreen.tsx",
+      "sha256": "25bda1874e81f83178a76414ad6171ca8ee6d59e933fbd505e57eb6389b15c28",
+      "bytes": 1494
+    },
+    {
+      "path": "packages/frontend/components/backup/BackupPanel.tsx",
+      "sha256": "c86b8756cf9782347d928db62f07c31c6c48853acb97c22fac9fb26e1dce19d4",
+      "bytes": 13082
+    },
+    {
+      "path": "packages/frontend/components/chat/composer/PollComposer.tsx",
+      "sha256": "8ac12de2249d859d3c062cb29f43acd5479a1903e27a312600dccb2b1b83f178",
+      "bytes": 6834
+    },
+    {
+      "path": "packages/frontend/components/chat/info/ConversationInfo.tsx",
+      "sha256": "67d2767eb4d1e9d7129aff74ecfbe38379a0a46861397f480f8e220c836c3cba",
+      "bytes": 11509
+    },
+    {
+      "path": "packages/frontend/components/chat/list/ConversationList.tsx",
+      "sha256": "436e062cba248a3a7c557138791f23731fa704f6dbeec80f2368c90f5fa3e512",
+      "bytes": 7978
+    },
+    {
+      "path": "packages/frontend/components/notifications/NotificationPermissionGate.tsx",
+      "sha256": "71f0de2c440acbf3bcc81ba6ca9c48359448e1051666205335170a8210456910",
+      "bytes": 3043
+    },
+    {
+      "path": "packages/frontend/components/profile/ProfileScreen.tsx",
+      "sha256": "47699c51673deaae98da91e5a4fc7e590ab92c6b8a65dd35160e6878f97bf16f",
+      "bytes": 3438
+    },
+    {
+      "path": "packages/frontend/components/providers/AppProviders.tsx",
+      "sha256": "b41fdf4f83dfdbca5003041ae4157c4d72a631ef9d43f2e2b485ba6f3e78400b",
+      "bytes": 3700
+    },
+    {
+      "path": "packages/frontend/hooks/usePerson.ts",
+      "sha256": "b57f6744fd15202f6761803b5b7bce2d59e8f1b13e81a3b08469305e43dc6ae9",
+      "bytes": 1866
+    },
+    {
+      "path": "packages/frontend/hooks/usePrivacySettings.ts",
+      "sha256": "74415340f81ae0b977583555ad76b32768889e7bd9f213ac26fcb0aeca3781e0",
+      "bytes": 6480
+    },
+    {
+      "path": "packages/frontend/hooks/useProfileData.ts",
+      "sha256": "cde42de938da2f4998be9280e3f7930fa5cb966a151744cf583cd61383e6cf5e",
+      "bytes": 4661
+    },
+    {
+      "path": "packages/frontend/hooks/useUserSearch.ts",
+      "sha256": "253c401886387dcd27ca607737c29359cad62a80d19e2971f0caf29535874e95",
+      "bytes": 3737
+    },
+    {
+      "path": "packages/frontend/lib/allo/EnrollmentGate.tsx",
+      "sha256": "2caf48fda2f958480b8109cc04f245d5f2d00aa9fc42e57254bc28bd42471836",
+      "bytes": 7123
+    },
+    {
+      "path": "packages/frontend/lib/allo/RestoreHistoryPrompt.tsx",
+      "sha256": "c548cd114170488019cb18b27f3aedfc8073adb908c143149fb6d6fe43978ce2",
+      "bytes": 5542
+    },
+    {
+      "path": "packages/frontend/lib/allo/people.ts",
+      "sha256": "6a2231c712a3a97dd9919c7638af58de85ba6e3a5dff0c05da9da8df12ed8fb0",
+      "bytes": 5500
+    },
+    {
+      "path": "packages/frontend/lib/allo/session.ts",
+      "sha256": "5ac0a0b7d6e52ee6b3d4425923903176cd7b20801e200866da10b58bd28caea1",
+      "bytes": 1160
+    },
+    {
+      "path": "packages/frontend/lib/appInitializer.ts",
+      "sha256": "454797195a8fcbaa262de3e6471ecc96093403891f7fcc89e29dceb1086f7d76",
+      "bytes": 817
+    },
+    {
+      "path": "packages/frontend/utils/api.ts",
+      "sha256": "3e9f7f50036d79f1cc9d0809f291831c1700a1497c937b78e73d21e1409789d4",
+      "bytes": 6299
+    },
+    {
+      "path": "packages/backend/src/services/oxy/client.ts",
+      "sha256": "4948639eaf12d79a5cc8648393e5e5c0a011f97a4c670fa527b474697be897a8",
+      "bytes": 208
+    },
+    {
+      "path": "packages/frontend/__tests__/allo/sessionAdapter.test.ts",
+      "sha256": "57b126618dbc4ddc8d755056e68c8a7710e68b4e08a981793c7629a7719b8a83",
+      "bytes": 1713
+    },
+    {
+      "path": "packages/frontend/lib/oxy.ts",
+      "sha256": "1d83a6017ee545b6176252dce74ca1192869323d4808eaeece0ef747414b3022",
+      "bytes": 241
+    }
+  ],
+  "candidateInstall": [
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/bun.lock",
+      "sha256": "7581e0dbe7ba93be90ae34c71338ed6f7b80e360ab38c00483adffd64496aa41",
+      "bytes": 595979
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/package.json",
+      "sha256": "23cdbe6ee912286659dce35a69bb4763a86a83004bddaaf17586f157d0b369c3",
+      "bytes": 4418
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/packages/backend/package.json",
+      "sha256": "7fecb46cc68013371a515b34b96bcf22416d2094556d77f6a357968d879c84e6",
+      "bytes": 1561
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/packages/core/package.json",
+      "sha256": "8a32b59e20902e73dcddce6713f1ffe283d3a3610ca3291c50bbeb0e5155cc4b",
+      "bytes": 1041
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/packages/frontend/package.json",
+      "sha256": "95bd51cfde46ebb01b38713aa059d6d98f153c38bfa1518f7a238df6fd85efe6",
+      "bytes": 4193
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/packages/react/package.json",
+      "sha256": "d7949bcc2ed0babca8c9355f64289f5cb0829a373b17247f02d5955d3350feaa",
+      "bytes": 863
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-install/packages/shared-types/package.json",
+      "sha256": "26d05fab1e3711ade44fd4e9fc0fced72c1da11529a2ee99c62b4718ad5d8cd7",
+      "bytes": 812
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-install.log",
+      "sha256": "30c127096f35ca1c36de335690b27c2c91fbaf2da045626543e1188d159c2291",
+      "bytes": 816
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-after-deps.log",
+      "sha256": "efbeff1bdcd30b5f764f3434d35d9978c323bf98ae3d11718301d96584ea0c0d",
+      "bytes": 545
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-server.log",
+      "sha256": "94a670e83daf45fb8c1b8e0b5e1aa4074309f6a79db7dd0e318ca7680252290e",
+      "bytes": 1156
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-server2.log",
+      "sha256": "9b7326ec81489fbd2ad1c03f476732b3ceaf76fe8f3441dcaa46d1471e11a713",
+      "bytes": 572
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-server3.log",
+      "sha256": "f6e260f4719521e4b03475d1a4d7378ff4722e0a79f955cd88d83aec2554de33",
+      "bytes": 14638
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-bloom-migration.log",
+      "sha256": "0d2154408cebcdd4d97cc4aba7f9ae08d394901e0042cdf7e0af7dfde9e0732e",
+      "bytes": 1037
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-frontend.log",
+      "sha256": "222403e271fc8b517825f37b9c6d4077ae8dcceefbff5fe0125535638c5aed8b",
+      "bytes": 852
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-green.log",
+      "sha256": "8b8374c49f6e701ade918c59ac75c0d344728d34357e8ba00e0fea61978b953c",
+      "bytes": 374
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-final.log",
+      "sha256": "8b8374c49f6e701ade918c59ac75c0d344728d34357e8ba00e0fea61978b953c",
+      "bytes": 374
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-types-final-frontend.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-server-tests.log",
+      "sha256": "7e5b5384e1c2ab12f0481b1e717dd5046aa891e96bc7b23dc03e365a82c6f592",
+      "bytes": 2024
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-telemetry-install.log",
+      "sha256": "2c2e8852383207ba14e69a425b3643170f36748fac858202c41bc08ccb086800",
+      "bytes": 472
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-server-tests2.log",
+      "sha256": "cb8214ff17082fa81ccf206d3088510b625f395da4f949f6fac56034314d1054",
+      "bytes": 419
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-frontend-tests.log",
+      "sha256": "05450e9e6910711d22c061bc125954f28ee736b46a5f3930bb1cc56b95090e99",
+      "bytes": 88118
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-session-adapter-test.log",
+      "sha256": "a106274d20eaabaa6f241d3da4b1b6c51861c06450eaa9598e4879a12d92d463",
+      "bytes": 450
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-final-focal.log",
+      "sha256": "632fe99667b569e9ce40fdd5f075d324ecfae6f5cb4a1fb201dbe903e5021865",
+      "bytes": 558
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-backend-build.log",
+      "sha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+      "bytes": 6
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-candidate-web-build-final2.log",
+      "sha256": "09fd06d0deb7bf7023256664f6f216bb760c0025daae38a3300f0856e29653e3",
+      "bytes": 9665
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-scoped-lint-baseline.json",
+      "sha256": "afc9d6719be6f527c17d2d41e37e6198d854e65934f7eaa11dc06821ce471560",
+      "bytes": 7388
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-scoped-lint-corrected.json",
+      "sha256": "61a392ce4df3e7dd2b03c73111f405aef5bff5084596f28f8d1cc8e29e38589e",
+      "bytes": 16168
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-scoped-lint-corrected.stderr",
+      "sha256": "99a3dfa8107e1f53d2ffb780a3dfb2d79c4ec1f2ba90a4173dc91308d07b536b",
+      "bytes": 45
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-layout-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/candidate-packs.json",
+      "sha256": "967393536b6e4e526e0dce6d313531881552e977f60dd0dc4ef82a6efb54e171",
+      "bytes": 1664
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-red.log",
+      "sha256": "9eca25b258319a3a2d53d153beef3567d70529c3c22aa88ea7dcd725f3ff1b29",
+      "bytes": 2316
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-green.log",
+      "sha256": "acd0bc44147f77312528ff39139506fd8379b977bbb7092c9bd13fbc4f0a4e7a",
+      "bytes": 1597
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-build.log",
+      "sha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+      "bytes": 6
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-pg-owner.json",
+      "sha256": "9597efc2fca2877dca9963bf338183c8d39d09ff46f96531257e55c5c900910b",
+      "bytes": 264
+    },
+    {
+      "path": "docs/audits/2026-10-03-final-sdk-source-compat/i04-allo-socket-pg-teardown.json",
+      "sha256": "c3d3928469106fe5cbfb2a0e5f02bcbd4297054c49606cc3d51f4f2756be74aa",
+      "bytes": 484
+    }
+  ],
+  "results": {
+    "backendFocused": {
+      "suites": 3,
+      "pass": 52
+    },
+    "frontendExisting": {
+      "suites": 23,
+      "pass": 214
+    },
+    "canonicalSessionAdapter": {
+      "suites": 1,
+      "pass": 1
+    },
+    "finalFocused": {
+      "suites": 3,
+      "pass": 9
+    },
+    "typechecksExit": 0,
+    "backendBuildExit": 0,
+    "webBuildExit": 0,
+    "scopedLint": {
+      "errors": 0,
+      "warnings": 2,
+      "maxWarningsZeroExit": 1,
+      "baselineSameFileWarnings": 2,
+      "newWarnings": 0
+    },
+    "socketSql": {
+      "red": {
+        "pass": 3,
+        "fail": 1
+      },
+      "green": {
+        "suites": 2,
+        "pass": 10,
+        "fail": 0
+      },
+      "backendBuildExit": 0,
+      "databasesRemaining": 0,
+      "ownedPostgresStopped": true
+    }
+  },
+  "limits": [
+    "Oxy packages are local candidate packs, not final registry versions.",
+    "Bloom 6.2.1 and telemetry 1.2.0 are registry dependencies.",
+    "Unsigned local transport claims in adapter test do not establish server authorization.",
+    "Backend focal suites mock external boundaries. Socket integration uses real HTTP/Socket.IO, Allo SDK and SQL, with Oxy authority represented by an explicit SDK-shaped double.",
+    "Existing frontend suites render components but do not replace browser/device/provider acceptance.",
+    "No native device, live identity, DB migration, publication or deployment."
+  ],
+  "initialSourceCommit": "7115bbed417f6d1d6ef3941d2e2d3739b8d47d4d"
+}

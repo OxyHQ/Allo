@@ -1,0 +1,34 @@
+{
+  "name": "@allo/shared-types",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Allo platform API v1 wire contracts: zod schemas and their types, shared by the backend and the SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "typescript",
+    "types",
+    "shared",
+    "allo"
+  ],
+  "author": "allo Team",
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}

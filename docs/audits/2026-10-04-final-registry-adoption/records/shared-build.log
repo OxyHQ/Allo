@@ -1,0 +1,2 @@
+$ bun run --filter @allo/shared-types build
+@allo/shared-types build: Exited with code 0
