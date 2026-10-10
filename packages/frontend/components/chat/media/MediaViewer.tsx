@@ -1,11 +1,4 @@
-import React, {
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-  type Ref,
-  type RefObject,
-} from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref, type RefObject } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useVideoPlayer } from 'expo-video';

@@ -14,7 +14,6 @@ import {
 import { callIncomingEventSchema, callUpdatedEventSchema } from './calls';
 import { statusPostedEventSchema } from './statuses';
 import {
-  accountIdSchema,
   base64Schema,
   base64UrlDecode,
   base64UrlEncode,

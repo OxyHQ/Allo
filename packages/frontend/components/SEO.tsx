@@ -1,4 +1,3 @@
-import React from 'react';
 import { Platform } from 'react-native';
 import { usePathname } from 'expo-router';
 import Head from 'expo-router/head';

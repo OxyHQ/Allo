@@ -37,9 +37,5 @@ export default function BackupScreen() {
     });
   }, [navigation, t]);
 
-  return (
-    <>
-      <BackupPanel onPhrasePending={onPhrasePending} />
-    </>
-  );
+  return <BackupPanel onPhrasePending={onPhrasePending} />;
 }

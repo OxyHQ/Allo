@@ -21,8 +21,6 @@ import {
  * shorter prefix.
  */
 
-type Row = { key: string; value: Uint8Array };
-
 class FakeRequest<T> implements KvIdbRequest<T> {
   result!: T;
   error?: unknown;

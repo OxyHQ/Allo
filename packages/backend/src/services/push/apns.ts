@@ -1,4 +1,4 @@
-import { connect, constants, type ClientHttp2Session } from 'http2';
+import { connect, constants, type ClientHttp2Session } from 'node:http2';
 
 import type { ApnsCredentials } from '../../config/push';
 import { logger } from '../../utils/logger';

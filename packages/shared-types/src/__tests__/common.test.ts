@@ -106,7 +106,7 @@ describe('key and digest shapes', () => {
     expect(x25519PublicKeySchema.safeParse(PUBKEY).success).toBe(true);
     expect(x25519PublicKeySchema.safeParse(SIGNATURE).success).toBe(false);
     expect(x25519PublicKeySchema.safeParse(PUBKEY.slice(0, 43)).success).toBe(false);
-    expect(x25519PublicKeySchema.safeParse('not base64!' + PUBKEY.slice(11)).success).toBe(false);
+    expect(x25519PublicKeySchema.safeParse(`not base64!${PUBKEY.slice(11)}`).success).toBe(false);
   });
   it('sha256 hex is lowercase and 64 long', () => {
     expect(sha256HexSchema.safeParse(EMPTY_BODY_SHA256_HEX).success).toBe(true);

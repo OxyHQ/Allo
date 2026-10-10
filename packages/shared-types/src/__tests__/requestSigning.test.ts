@@ -32,7 +32,7 @@ describe('signedRequestMessage', () => {
       bodySha256Hex: EMPTY_BODY_SHA256_HEX,
     });
     expect(message).toBe(
-      'allo-v1\nPOST\n/v1/sync?cursor=MA&limit=50\n1758104430123\n' + EMPTY_BODY_SHA256_HEX,
+      `allo-v1\nPOST\n/v1/sync?cursor=MA&limit=50\n1758104430123\n${EMPTY_BODY_SHA256_HEX}`,
     );
   });
   it('signs the socket handshake over GET /socket with the empty-body digest', () => {
@@ -43,7 +43,7 @@ describe('signedRequestMessage', () => {
         timestampMs: 0,
         bodySha256Hex: EMPTY_BODY_SHA256_HEX,
       }),
-    ).toBe('allo-v1\nGET\n/socket\n0\n' + EMPTY_BODY_SHA256_HEX);
+    ).toBe(`allo-v1\nGET\n/socket\n0\n${EMPTY_BODY_SHA256_HEX}`);
   });
   it('refuses inputs no well-formed request produces', () => {
     const ok = {

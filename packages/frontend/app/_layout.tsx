@@ -15,7 +15,7 @@ import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.
 import { useOxy } from '@oxy.so/services';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import React, { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 
 import AppSplashScreen from '@/components/AppSplashScreen';

@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import type { ReportInput } from '@crowdsource.you/core';
 import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from './reportTaxonomy';
 import { resolveModerationSubject } from './subjectIdentity';

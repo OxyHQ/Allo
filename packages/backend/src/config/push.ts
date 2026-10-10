@@ -1,4 +1,4 @@
-import { createPrivateKey } from 'crypto';
+import { createPrivateKey } from 'node:crypto';
 import * as z from 'zod';
 
 /**

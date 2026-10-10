@@ -1,5 +1,5 @@
-import { createServer, type Http2Server } from 'http2';
-import type { AddressInfo } from 'net';
+import { createServer, type Http2Server } from 'node:http2';
+import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { ApnsCredentials } from '../../../config/push';

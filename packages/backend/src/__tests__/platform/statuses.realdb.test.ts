@@ -14,7 +14,6 @@ import {
   createStatusResponseSchema,
   listStatusViewsResponseSchema,
   listStatusesResponseSchema,
-  statusSignatureMessage,
   STATUS_LIFETIME_MS,
 } from '@allo/shared-types';
 import { getDb } from '../../db';

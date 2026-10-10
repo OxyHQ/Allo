@@ -26,8 +26,7 @@ describe('request signing', () => {
       bodySha256Hex: sha256Hex(body),
     };
     const sig = signRequest(key, input);
-    const expectedMessage =
-      'allo-v1\nPOST\n/v1/sync?cursor=MA&limit=50\n1700000000000\n' + sha256Hex(body);
+    const expectedMessage = `allo-v1\nPOST\n/v1/sync?cursor=MA&limit=50\n1700000000000\n${sha256Hex(body)}`;
     expect(signedRequestMessage(input)).toBe(expectedMessage);
     expect(ed25519.verify(base64Decode(sig), utf8Encode(expectedMessage), key.publicKey)).toBe(
       true,

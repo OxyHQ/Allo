@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 
 /**
  * WHICH LINKS THE BUILT APP CLAIMS.

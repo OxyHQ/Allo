@@ -15,7 +15,6 @@
 import {
   conversationResponseSchema,
   type Archive,
-  type ArchiveEvent,
   type ArchiveMediaKey,
   type ConversationSummary,
 } from '@allo/shared-types';

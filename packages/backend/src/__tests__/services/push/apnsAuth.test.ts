@@ -1,4 +1,4 @@
-import { createPublicKey, generateKeyPairSync, verify } from 'crypto';
+import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import type { ApnsCredentials } from '../../../config/push';

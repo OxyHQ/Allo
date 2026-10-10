@@ -211,7 +211,7 @@ export function canonicalJson(value: unknown): string {
       const keys = Object.keys(obj)
         .filter((k) => obj[k] !== undefined)
         .sort();
-      return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalJson(obj[k])).join(',') + '}';
+      return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`;
     }
     default:
       throw new TypeError(`canonical JSON cannot carry a ${typeof value}`);
@@ -225,5 +225,5 @@ export function canonicalJson(value: unknown): string {
  *     "allo-archive-manifest-v1\n" + canonicalJson(manifest)
  */
 export function archiveManifestMessage(manifest: ArchiveManifest): string {
-  return ARCHIVE_MANIFEST_SIGNING_CONTEXT + '\n' + canonicalJson(manifest);
+  return `${ARCHIVE_MANIFEST_SIGNING_CONTEXT}\n${canonicalJson(manifest)}`;
 }

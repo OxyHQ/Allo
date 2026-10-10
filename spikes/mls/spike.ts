@@ -875,6 +875,6 @@ async function main() {
 const out = await main();
 await Bun.write(
   new URL('./spike-output.txt', import.meta.url),
-  out.results.join('\n') + `\n\n${out.passed} passed, ${out.failed} failed\n`,
+  `${out.results.join('\n')}\n\n${out.passed} passed, ${out.failed} failed\n`,
 );
 if (out.failed > 0) process.exitCode = 1;

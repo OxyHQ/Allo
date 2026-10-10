@@ -17,7 +17,7 @@
  * stack through `present()` — stacked and dismissed like every other surface,
  * rather than a modal of its own invention.
  */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button } from '@oxy.so/bloom/button';
 import { Checkbox } from '@oxy.so/bloom/checkbox';

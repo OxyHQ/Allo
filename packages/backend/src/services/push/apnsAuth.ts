@@ -1,4 +1,4 @@
-import { createPrivateKey, sign, type KeyObject } from 'crypto';
+import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
 import type { ApnsCredentials } from '../../config/push';
 

@@ -1,32 +1,3 @@
-/**
- * A SESSION THAT GOES AWAY IS NOT A SIGN-OUT, and must never cost this device
- * its keys.
- *
- * Oxy's `HttpService` clears the bearer on an unrecoverable 401 and emits
- * `session.onChange(null)`; `OxyContext` turns that into a LOCAL signed-out
- * state while deliberately keeping the persisted session, because it treats
- * the null as transient — "a later reload can still restore". So `useOxy()`
- * can report `user: null` with `isLoading: false` for a moment in the life of
- * a perfectly good session: a cold-boot race, a refresh landing late, one 5xx
- * on a private endpoint.
- *
- * `AlloRoot` used to read that as "the account went away" and call
- * `client.reset()`, which revokes this instance and deletes its signing key,
- * storage key, transfer key and backup key. Two things then happen, and the
- * second is the one people report:
- *
- *   - the revoke CANNOT land, because the credential it needs is the bearer
- *     that just went away, so the instance stays ACTIVE on the server;
- *   - the session comes back, the client enrols afresh, and the server —
- *     seeing an account that already has an active instance — returns
- *     `pending`. The device that was working a second ago is now asking to be
- *     approved by a ghost whose key it has just deleted, which nothing can do.
- *
- * So: a vanished session stops the client and keeps every key. Only a
- * deliberate sign-out resets, and it does that while the token is still alive
- * (`lib/allo/signOut.ts`).
- */
-import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import { createAlloClient, testing, type AlloClient } from '@allo/core';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { Admonition } from '@oxy.so/bloom/admonition';
 
 /**

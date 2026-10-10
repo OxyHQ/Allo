@@ -54,7 +54,7 @@ import {
 } from '../storage/records';
 import { base64Decode, base64Encode } from '../util/bytes';
 import { uuidV7 } from '../util/ids';
-import { backoffMs, sleep } from '../util/async';
+import { backoffMs } from '../util/async';
 import { describeError } from '../util/logger';
 
 const MAX_ATTEMPTS = 50;

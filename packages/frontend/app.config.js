@@ -1,6 +1,6 @@
 const pkg = require('./package.json');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config');
 
 module.exports = (_config) => {

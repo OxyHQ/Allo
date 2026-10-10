@@ -38,35 +38,32 @@ export default function ProfileVisibilityScreen() {
   );
 
   return (
-    <>
-      <SettingsSection description={t('settings.privacy.description')}>
-        <SettingsCard>
-          {PROFILE_VISIBILITIES.map((visibility) => {
-            const saving =
-              updateSettings.isPending &&
-              updateSettings.variables?.profileVisibility === visibility;
-            return (
-              <SettingsRow
-                key={visibility}
-                label={t(profileVisibilityLabelKey(visibility))}
-                description={t(profileVisibilityDescriptionKey(visibility))}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color={theme.colors.primary} />
-                ) : (
-                  <Radio
-                    value={visibility}
-                    checked={settings.profileVisibility === visibility}
-                    onValueChange={choose}
-                    disabled={!saved || updateSettings.isPending}
-                    accessibilityLabel={t(profileVisibilityLabelKey(visibility))}
-                  />
-                )}
-              </SettingsRow>
-            );
-          })}
-        </SettingsCard>
-      </SettingsSection>
-    </>
+    <SettingsSection description={t('settings.privacy.description')}>
+      <SettingsCard>
+        {PROFILE_VISIBILITIES.map((visibility) => {
+          const saving =
+            updateSettings.isPending && updateSettings.variables?.profileVisibility === visibility;
+          return (
+            <SettingsRow
+              key={visibility}
+              label={t(profileVisibilityLabelKey(visibility))}
+              description={t(profileVisibilityDescriptionKey(visibility))}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <Radio
+                  value={visibility}
+                  checked={settings.profileVisibility === visibility}
+                  onValueChange={choose}
+                  disabled={!saved || updateSettings.isPending}
+                  accessibilityLabel={t(profileVisibilityLabelKey(visibility))}
+                />
+              )}
+            </SettingsRow>
+          );
+        })}
+      </SettingsCard>
+    </SettingsSection>
   );
 }

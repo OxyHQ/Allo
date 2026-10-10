@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import type { SettingsModalProps } from '@oxy.so/bloom/settings-modal';
 import TestRenderer, { act } from 'react-test-renderer';
 import { AlloSettingsProvider } from '@/components/settings/AlloSettingsProvider';

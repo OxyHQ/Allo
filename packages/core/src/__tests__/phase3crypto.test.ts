@@ -91,9 +91,7 @@ describe('recovery phrase and backup key', () => {
     const phrase = generateRecoveryPhrase();
     expect(phrase.split(' ')).toHaveLength(12);
     expect(validateRecoveryPhrase(phrase)).toBe(true);
-    expect(validateRecoveryPhrase('  ' + phrase.toUpperCase().replace(/ /g, '   ') + '\n')).toBe(
-      true,
-    );
+    expect(validateRecoveryPhrase(`  ${phrase.toUpperCase().replace(/ /g, '   ')}\n`)).toBe(true);
     expect(canonicalRecoveryPhrase(phrase.toUpperCase())).toBe(phrase);
     expect(normalizeRecoveryPhrase(' A  b\tc ')).toBe('a b c');
     const key = deriveBackupKey(phrase, 'acc-1');
@@ -139,7 +137,7 @@ describe('recovery phrase and backup key', () => {
     ).toBe(true);
     expect(() => deriveBackupKey('abandon abandon abandon', 'acc')).toThrow(RecoveryPhraseError);
     // a 24-word phrase is valid BIP39 but not an Allo recovery phrase
-    const twentyFour = Array(23).fill('abandon').join(' ') + ' art';
+    const twentyFour = `${Array(23).fill('abandon').join(' ')} art`;
     expect(validateRecoveryPhrase(twentyFour)).toBe(false);
   });
 });

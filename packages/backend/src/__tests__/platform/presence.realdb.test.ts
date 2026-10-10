@@ -250,7 +250,7 @@ describe('the watch set', () => {
   });
 
   it('a connecting instance is present, and its last socket leaving makes it absent', async () => {
-    const { a, b } = await dmBetween(h.app);
+    const { b } = await dmBetween(h.app);
     const hub = new PresenceHub();
     const instanceB = {
       id: b.id,

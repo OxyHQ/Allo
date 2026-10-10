@@ -1,5 +1,5 @@
 import { WebhookEventEnvelopeSchema } from '@crowdsource.you/contracts';
-import { createHmac } from 'crypto';
+import { createHmac } from 'node:crypto';
 import express from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

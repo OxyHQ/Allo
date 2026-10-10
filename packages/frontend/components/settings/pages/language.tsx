@@ -20,24 +20,22 @@ export default function LanguageSettingsScreen() {
   const selected = currentLanguages.length > 0 ? currentLanguages : [currentLanguage];
 
   return (
-    <>
-      <SettingsSection label={t('settings.language.selectLanguage')}>
-        <SettingsCard>
-          <SettingsRow
-            label={t('settings.preferences.language')}
-            description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
+    <SettingsSection label={t('settings.language.selectLanguage')}>
+      <SettingsCard>
+        <SettingsRow
+          label={t('settings.preferences.language')}
+          description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
+        >
+          <Button
+            onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
+            accessibilityLabel={t('settings.preferences.language')}
+            tone="neutral"
+            appearance="outline"
           >
-            <Button
-              onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
-              accessibilityLabel={t('settings.preferences.language')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('common.open')}
-            </Button>
-          </SettingsRow>
-        </SettingsCard>
-      </SettingsSection>
-    </>
+            {t('common.open')}
+          </Button>
+        </SettingsRow>
+      </SettingsCard>
+    </SettingsSection>
   );
 }

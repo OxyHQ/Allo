@@ -1,4 +1,3 @@
-import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Avatar } from '@oxy.so/bloom/avatar';
 import { useTheme } from '@oxy.so/bloom/theme';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';

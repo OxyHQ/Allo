@@ -279,7 +279,7 @@ describe('POST /v1/conversations/:id/leave', () => {
  */
 describe('POST /v1/conversations/:id/reset', () => {
   it('is refused while ANY device is still in the group, which is what stops it being a takeover', async () => {
-    const { a, b, conversationId } = await dmBetween(h.app);
+    const { b, conversationId } = await dmBetween(h.app);
     const response = await b.signed('post', `/v1/conversations/${conversationId}/reset`, {
       mlsGroupId: mlsGroupId(),
       idempotencyKey: `reset-${Date.now()}-${Math.random()}`,

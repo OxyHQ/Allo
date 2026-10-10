@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { crowdSourceConfig } from '../../config/crowdsource';
 import { logger } from '../../utils/logger';
 import { applyDecisionOutboxEvent } from './ModerationDecisionWorker';

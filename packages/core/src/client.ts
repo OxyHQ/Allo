@@ -414,7 +414,6 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.identity = c.instance.identity;
     c.model = new Model();
     await c.model.load(c.store);
-    c.instance.bindModel(c.model);
     c.groups = new GroupRegistry(engine, c.store);
     const undecodable = await c.groups.load();
     if (undecodable.length)

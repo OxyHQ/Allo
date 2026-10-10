@@ -1,5 +1,5 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
-const path = require('path');
+const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
 
@@ -59,7 +59,7 @@ function hpkeEsmEntry(packageName) {
   try {
     const packageJson = require.resolve(`${packageName}/package.json`, { paths: [__dirname] });
     const entry = path.join(path.dirname(packageJson), 'esm', 'mod.js');
-    return require('fs').existsSync(entry) ? entry : null;
+    return require('node:fs').existsSync(entry) ? entry : null;
   } catch {
     return null;
   }

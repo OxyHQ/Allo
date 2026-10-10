@@ -66,7 +66,6 @@ import {
 import { base64UrlEncode } from '@allo/shared-types';
 import type { Logger } from '../util/logger';
 import { describeError } from '../util/logger';
-import type { Model } from '../storage/model';
 
 export function instanceKeyName(accountId: string, appId: string): string {
   return `allo.instance-key.${accountId}.${appId}`;
@@ -101,7 +100,6 @@ export class InstanceManager {
   private transferKey: TransferKeyPair | undefined;
   private transferKeyUpload: Promise<void> | null = null;
   private store: InstanceStore | undefined;
-  private model: Model | undefined;
   private own: ClientInstance[] = [];
   private pendingList: PendingEnrollment[] = [];
   private serverAvailable: number | null = null;
@@ -162,10 +160,6 @@ export class InstanceManager {
   get transferPublicKeyBase64(): string {
     if (!this.transferKey) throw new InvalidStateError('instance is not registered');
     return base64Encode(this.transferKey.publicKey);
-  }
-
-  bindModel(model: Model): void {
-    this.model = model;
   }
 
   assertActive(): void {

@@ -22,10 +22,10 @@ export function base64Encode(bytes: Uint8Array): string {
   const rest = bytes.length - i;
   if (rest === 1) {
     const n = bytes[i] << 16;
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + '==';
+    out += `${B64[(n >> 18) & 63] + B64[(n >> 12) & 63]}==`;
   } else if (rest === 2) {
     const n = (bytes[i] << 16) | (bytes[i + 1] << 8);
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + '=';
+    out += `${B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63]}=`;
   }
   return out;
 }

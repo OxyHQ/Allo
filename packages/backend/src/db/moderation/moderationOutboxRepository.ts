@@ -41,11 +41,7 @@
 
 import { and, asc, eq, gt, lte, or, sql } from 'drizzle-orm';
 import { getDb, type AlloDatabaseOrTransaction } from '../index';
-import {
-  moderationOutbox,
-  type ModerationOutboxKind,
-  type ModerationOutboxStatus,
-} from '../schema/moderation';
+import { moderationOutbox, type ModerationOutboxKind } from '../schema/moderation';
 import { requireTransaction } from './transactionGuard';
 
 /**
