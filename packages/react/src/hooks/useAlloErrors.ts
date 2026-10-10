@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useAlloContext } from "../AlloProvider";
+import { useEffect, useRef } from 'react';
+import { useAlloContext } from '../AlloProvider';
 
 /**
  * Calls `onError` for every error the client reports (sync, outbox, decrypt,

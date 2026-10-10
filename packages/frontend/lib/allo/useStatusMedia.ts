@@ -25,7 +25,12 @@ export interface StatusMediaState {
 
 export function useStatusMedia(statusId: string | undefined, enabled = true): StatusMediaState {
   const client = useAlloClient();
-  const [state, setState] = useState<{ key: string; uri: string; loading: boolean; error?: unknown }>({
+  const [state, setState] = useState<{
+    key: string;
+    uri: string;
+    loading: boolean;
+    error?: unknown;
+  }>({
     key: '',
     uri: '',
     loading: false,
@@ -33,7 +38,9 @@ export function useStatusMedia(statusId: string | undefined, enabled = true): St
 
   useEffect(() => {
     if (!statusId || !enabled) {
-      setState((prev) => (prev.uri === '' && !prev.loading ? prev : { key: '', uri: '', loading: false }));
+      setState((prev) =>
+        prev.uri === '' && !prev.loading ? prev : { key: '', uri: '', loading: false },
+      );
       return;
     }
     const abort = new AbortController();

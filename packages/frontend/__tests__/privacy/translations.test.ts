@@ -5,10 +5,7 @@ import es from '@/locales/es.json';
 import itIT from '@/locales/it.json';
 
 import { PROFILE_VISIBILITIES } from '@/lib/privacy/api';
-import {
-  profileVisibilityDescriptionKey,
-  profileVisibilityLabelKey,
-} from '@/lib/privacy/labels';
+import { profileVisibilityDescriptionKey, profileVisibilityLabelKey } from '@/lib/privacy/labels';
 
 /**
  * That every string the privacy screens and the profile screen put on screen

@@ -6,10 +6,10 @@
  * inside that lock and take the transaction handle explicitly.
  */
 
-import { and, asc, eq, inArray, isNull, notExists, or, sql } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
+import { and, asc, eq, inArray, isNull, notExists, or, sql } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
 import {
   conversationLeaves,
   conversationMembers,
@@ -18,8 +18,8 @@ import {
   type LeafState,
   type MemberRole,
   type MemberState,
-} from "../schema/conversations";
-import { clientInstances } from "../schema/instances";
+} from '../schema/conversations';
+import { clientInstances } from '../schema/instances';
 
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MemberRow = typeof conversationMembers.$inferSelect;
@@ -38,7 +38,7 @@ export async function insertConversation(
   input: InsertConversationInput,
   db: AlloDatabaseOrTransaction,
 ): Promise<ConversationRow> {
-  const tx = requireTransaction(db, "insertConversation");
+  const tx = requireTransaction(db, 'insertConversation');
   const [row] = await tx
     .insert(conversations)
     .values({ id: uuidv7(), ...input })
@@ -58,7 +58,11 @@ export async function findConversationByDmKey(
   dmKey: string,
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<ConversationRow | null> {
-  const [row] = await db.select().from(conversations).where(eq(conversations.dmKey, dmKey)).limit(1);
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.dmKey, dmKey))
+    .limit(1);
   return row ?? null;
 }
 
@@ -78,8 +82,16 @@ export async function findConversationByMlsGroupId(
  * `SELECT … FOR UPDATE` on the conversation: the serialisation point for its
  * event log. Everything that assigns a `seq` or moves the epoch holds this.
  */
-export async function lockConversation(id: string, tx: AlloTransaction): Promise<ConversationRow | null> {
-  const [row] = await tx.select().from(conversations).where(eq(conversations.id, id)).limit(1).for("update");
+export async function lockConversation(
+  id: string,
+  tx: AlloTransaction,
+): Promise<ConversationRow | null> {
+  const [row] = await tx
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .limit(1)
+    .for('update');
   return row ?? null;
 }
 
@@ -124,8 +136,11 @@ export interface UpsertMemberInput {
 }
 
 /** Insert as `joined`, or re-join an account whose row exists in any state. */
-export async function upsertJoinedMember(input: UpsertMemberInput, db: AlloDatabaseOrTransaction): Promise<void> {
-  const tx = requireTransaction(db, "upsertJoinedMember");
+export async function upsertJoinedMember(
+  input: UpsertMemberInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  const tx = requireTransaction(db, 'upsertJoinedMember');
   const now = new Date();
   await tx
     .insert(conversationMembers)
@@ -134,13 +149,19 @@ export async function upsertJoinedMember(input: UpsertMemberInput, db: AlloDatab
       conversationId: input.conversationId,
       accountId: input.accountId,
       role: input.role,
-      state: "joined",
+      state: 'joined',
       joinedAt: now,
       addedByAccountId: input.addedByAccountId,
     })
     .onConflictDoUpdate({
       target: [conversationMembers.conversationId, conversationMembers.accountId],
-      set: { state: "joined", joinedAt: now, leftAt: null, addedByAccountId: input.addedByAccountId, updatedAt: now },
+      set: {
+        state: 'joined',
+        joinedAt: now,
+        leftAt: null,
+        addedByAccountId: input.addedByAccountId,
+        updatedAt: now,
+      },
       /** A `joined` row is left alone: its `joined_at` is history. */
       setWhere: sql`${conversationMembers.state} <> 'joined'`,
     });
@@ -149,10 +170,10 @@ export async function upsertJoinedMember(input: UpsertMemberInput, db: AlloDatab
 export async function setMemberState(
   conversationId: string,
   accountId: string,
-  state: Exclude<MemberState, "joined">,
+  state: Exclude<MemberState, 'joined'>,
   db: AlloDatabaseOrTransaction,
 ): Promise<void> {
-  const tx = requireTransaction(db, "setMemberState");
+  const tx = requireTransaction(db, 'setMemberState');
   const now = new Date();
   await tx
     .update(conversationMembers)
@@ -161,7 +182,7 @@ export async function setMemberState(
       and(
         eq(conversationMembers.conversationId, conversationId),
         eq(conversationMembers.accountId, accountId),
-        eq(conversationMembers.state, "joined"),
+        eq(conversationMembers.state, 'joined'),
       ),
     );
 }
@@ -185,7 +206,12 @@ export async function findMember(
   const [row] = await db
     .select()
     .from(conversationMembers)
-    .where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.accountId, accountId)))
+    .where(
+      and(
+        eq(conversationMembers.conversationId, conversationId),
+        eq(conversationMembers.accountId, accountId),
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
@@ -199,7 +225,9 @@ export async function listConversationIdsForAccount(
     .select({ id: conversations.id })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
-    .where(and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, "joined")))
+    .where(
+      and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, 'joined')),
+    )
     .orderBy(sql`${conversations.updatedAt} desc`, asc(conversations.id));
   return rows.map((row) => row.id);
 }
@@ -212,14 +240,16 @@ export async function listAccountsSharingConversations(
   const mine = db
     .select({ conversationId: conversationMembers.conversationId })
     .from(conversationMembers)
-    .where(and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, "joined")));
+    .where(
+      and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, 'joined')),
+    );
   const rows = await db
     .selectDistinct({ accountId: conversationMembers.accountId })
     .from(conversationMembers)
     .where(
       and(
         inArray(conversationMembers.conversationId, mine),
-        eq(conversationMembers.state, "joined"),
+        eq(conversationMembers.state, 'joined'),
         sql`${conversationMembers.accountId} <> ${accountId}`,
       ),
     );
@@ -243,14 +273,16 @@ export async function listSharedAccountsAmong(
   const mine = db
     .select({ conversationId: conversationMembers.conversationId })
     .from(conversationMembers)
-    .where(and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, "joined")));
+    .where(
+      and(eq(conversationMembers.accountId, accountId), eq(conversationMembers.state, 'joined')),
+    );
   const rows = await db
     .selectDistinct({ accountId: conversationMembers.accountId })
     .from(conversationMembers)
     .where(
       and(
         inArray(conversationMembers.conversationId, mine),
-        eq(conversationMembers.state, "joined"),
+        eq(conversationMembers.state, 'joined'),
         inArray(conversationMembers.accountId, [...candidates]),
         sql`${conversationMembers.accountId} <> ${accountId}`,
       ),
@@ -269,15 +301,24 @@ export interface UpsertLeafInput {
 }
 
 /** Insert, or re-add a leaf whose row exists (a removed instance added back). */
-export async function upsertLeaf(input: UpsertLeafInput, db: AlloDatabaseOrTransaction): Promise<void> {
-  const tx = requireTransaction(db, "upsertLeaf");
+export async function upsertLeaf(
+  input: UpsertLeafInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  const tx = requireTransaction(db, 'upsertLeaf');
   const now = new Date();
   await tx
     .insert(conversationLeaves)
     .values({ id: uuidv7(), ...input, removedEpoch: null })
     .onConflictDoUpdate({
       target: [conversationLeaves.conversationId, conversationLeaves.instanceId],
-      set: { state: input.state, accountId: input.accountId, addedEpoch: input.addedEpoch, removedEpoch: null, updatedAt: now },
+      set: {
+        state: input.state,
+        accountId: input.accountId,
+        addedEpoch: input.addedEpoch,
+        removedEpoch: null,
+        updatedAt: now,
+      },
     });
 }
 
@@ -287,11 +328,16 @@ export async function markLeafRemoved(
   removedEpoch: number | null,
   db: AlloDatabaseOrTransaction,
 ): Promise<void> {
-  const tx = requireTransaction(db, "markLeafRemoved");
+  const tx = requireTransaction(db, 'markLeafRemoved');
   await tx
     .update(conversationLeaves)
-    .set({ state: "removed", removedEpoch, updatedAt: new Date() })
-    .where(and(eq(conversationLeaves.conversationId, conversationId), eq(conversationLeaves.instanceId, instanceId)));
+    .set({ state: 'removed', removedEpoch, updatedAt: new Date() })
+    .where(
+      and(
+        eq(conversationLeaves.conversationId, conversationId),
+        eq(conversationLeaves.instanceId, instanceId),
+      ),
+    );
 }
 
 export async function listLeaves(
@@ -334,7 +380,10 @@ export async function listConversationsByIds(
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<ConversationRow[]> {
   if (ids.length === 0) return [];
-  return db.select().from(conversations).where(inArray(conversations.id, [...ids]));
+  return db
+    .select()
+    .from(conversations)
+    .where(inArray(conversations.id, [...ids]));
 }
 
 /** Conversations in which the instance holds an ACTIVE leaf, or a server-side removed one no commit has confirmed. */
@@ -349,8 +398,8 @@ export async function listConversationIdsWithLiveLeaf(
       and(
         eq(conversationLeaves.instanceId, instanceId),
         or(
-          eq(conversationLeaves.state, "active"),
-          and(eq(conversationLeaves.state, "removed"), isNull(conversationLeaves.removedEpoch)),
+          eq(conversationLeaves.state, 'active'),
+          and(eq(conversationLeaves.state, 'removed'), isNull(conversationLeaves.removedEpoch)),
         ),
       ),
     );
@@ -375,7 +424,7 @@ export async function listConversationsAwaitingAccountLeaf(
     .where(
       and(
         eq(conversationMembers.accountId, accountId),
-        eq(conversationMembers.state, "joined"),
+        eq(conversationMembers.state, 'joined'),
         notExists(
           db
             .select({ one: sql`1` })
@@ -384,7 +433,7 @@ export async function listConversationsAwaitingAccountLeaf(
               and(
                 eq(conversationLeaves.conversationId, conversationMembers.conversationId),
                 eq(conversationLeaves.accountId, accountId),
-                eq(conversationLeaves.state, "active"),
+                eq(conversationLeaves.state, 'active'),
               ),
             ),
         ),
@@ -392,7 +441,10 @@ export async function listConversationsAwaitingAccountLeaf(
     );
   if (awaiting.length === 0) return [];
   const leaves = await db
-    .select({ conversationId: conversationLeaves.conversationId, instanceId: conversationLeaves.instanceId })
+    .select({
+      conversationId: conversationLeaves.conversationId,
+      instanceId: conversationLeaves.instanceId,
+    })
     .from(conversationLeaves)
     .where(
       and(
@@ -400,7 +452,7 @@ export async function listConversationsAwaitingAccountLeaf(
           conversationLeaves.conversationId,
           awaiting.map((row) => row.conversationId),
         ),
-        eq(conversationLeaves.state, "active"),
+        eq(conversationLeaves.state, 'active'),
       ),
     )
     .orderBy(asc(conversationLeaves.createdAt), asc(conversationLeaves.id));
@@ -410,7 +462,10 @@ export async function listConversationsAwaitingAccountLeaf(
     ids.push(leaf.instanceId);
     byConversation.set(leaf.conversationId, ids);
   }
-  return [...byConversation].map(([conversationId, activeLeafInstanceIds]) => ({ conversationId, activeLeafInstanceIds }));
+  return [...byConversation].map(([conversationId, activeLeafInstanceIds]) => ({
+    conversationId,
+    activeLeafInstanceIds,
+  }));
 }
 
 export async function findActiveLeaf(
@@ -425,7 +480,7 @@ export async function findActiveLeaf(
       and(
         eq(conversationLeaves.conversationId, conversationId),
         eq(conversationLeaves.instanceId, instanceId),
-        eq(conversationLeaves.state, "active"),
+        eq(conversationLeaves.state, 'active'),
       ),
     )
     .limit(1);
@@ -441,5 +496,5 @@ export async function findAddableInstances(
   return db
     .select({ id: clientInstances.id, accountId: clientInstances.accountId })
     .from(clientInstances)
-    .where(and(inArray(clientInstances.id, [...ids]), eq(clientInstances.status, "active")));
+    .where(and(inArray(clientInstances.id, [...ids]), eq(clientInstances.status, 'active')));
 }

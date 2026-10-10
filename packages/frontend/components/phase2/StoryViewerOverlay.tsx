@@ -67,7 +67,9 @@ export function StoryViewerOverlay({ authors, startAccountId, onClose }: StoryVi
         id: one.id,
         // Only the one on screen is fetched; a person with six updates
         // downloads one picture, not six.
-        media: <SlideMedia status={one} active={index === slideIndex} label={t('stories.noPicture')} />,
+        media: (
+          <SlideMedia status={one} active={index === slideIndex} label={t('stories.noPicture')} />
+        ),
       })),
     [slideIndex, slides, t],
   );
@@ -153,7 +155,15 @@ export function StoryViewerOverlay({ authors, startAccountId, onClose }: StoryVi
  * One update: its picture once it has been fetched and decrypted, or its words
  * when that is all it is.
  */
-function SlideMedia({ status, active, label }: { status: StatusView; active: boolean; label: string }) {
+function SlideMedia({
+  status,
+  active,
+  label,
+}: {
+  status: StatusView;
+  active: boolean;
+  label: string;
+}) {
   const theme = useTheme();
   const { uri } = useStatusMedia(status.hasMedia ? status.id : undefined, active);
 
@@ -177,7 +187,9 @@ function SlideMedia({ status, active, label }: { status: StatusView; active: boo
     <View style={styles.media}>
       <Image source={{ uri }} style={styles.media} resizeMode="contain" accessible={false} />
       {status.caption ? (
-        <View style={[styles.caption, { backgroundColor: theme.colors.overlay ?? 'rgba(0,0,0,0.45)' }]}>
+        <View
+          style={[styles.caption, { backgroundColor: theme.colors.overlay ?? 'rgba(0,0,0,0.45)' }]}
+        >
           <Text variant="body-regular" style={styles.captionText}>
             {status.caption}
           </Text>

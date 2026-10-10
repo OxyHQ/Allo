@@ -7,10 +7,10 @@
  * tests are the `*.realdb.test.ts` suites, each on its own throwaway database
  * (`src/db/testDatabase.ts`); nothing opens a connection merely by importing.
  */
-import { vi } from "vitest";
+import { vi } from 'vitest';
 
 // Suppress log output; assertions that care about logging spy on it explicitly.
-vi.mock("../utils/logger", () => ({
+vi.mock('../utils/logger', () => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),

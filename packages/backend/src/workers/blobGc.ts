@@ -14,14 +14,16 @@
  *   day's grace and not the bytes.
  */
 
-import { getDb, type AlloDatabase } from "../db";
-import { deleteCollectableBlobs } from "../db/platform/blobRepository";
-import { dateOrphanedChunkBlobs } from "../db/platform/historyRepository";
-import { logger } from "../utils/logger";
+import { getDb, type AlloDatabase } from '../db';
+import { deleteCollectableBlobs } from '../db/platform/blobRepository';
+import { dateOrphanedChunkBlobs } from '../db/platform/historyRepository';
+import { logger } from '../utils/logger';
 
 export const BLOB_GC_INTERVAL_MS = 60 * 60 * 1_000;
 
-export async function runBlobGc(deps: { db?: AlloDatabase; now?: () => Date } = {}): Promise<number> {
+export async function runBlobGc(
+  deps: { db?: AlloDatabase; now?: () => Date } = {},
+): Promise<number> {
   const db = deps.db ?? getDb();
   const now = (deps.now ?? (() => new Date()))();
   const orphaned = await dateOrphanedChunkBlobs(now, db);
@@ -40,7 +42,7 @@ export function startBlobGc(deps: { db?: AlloDatabase } = {}): void {
   const tick = () => {
     if (inFlight) return;
     inFlight = runBlobGc(deps)
-      .catch((error: unknown) => logger.error("blob gc failed", error))
+      .catch((error: unknown) => logger.error('blob gc failed', error))
       .finally(() => {
         inFlight = undefined;
       });

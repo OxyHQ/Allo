@@ -19,7 +19,10 @@ const WATCH_LIMIT = 40;
 /** Every conversation as a list row, most recent first, with a dot on the DMs that are online. */
 export function useChatSummaries(): ChatSummary[] {
   const views = useConversations();
-  const memberIds = useMemo(() => [...new Set(views.flatMap((view) => view.memberAccountIds))], [views]);
+  const memberIds = useMemo(
+    () => [...new Set(views.flatMap((view) => view.memberAccountIds))],
+    [views],
+  );
   const ctx = useChatContext(memberIds);
 
   // Only DMs: a group row has several people behind it and one dot cannot

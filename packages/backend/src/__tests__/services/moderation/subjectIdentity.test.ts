@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 
-import { MAX_REPORT_LOCAL_STATUS_REASON_LENGTH } from "../../../db/schema/moderation";
+import { MAX_REPORT_LOCAL_STATUS_REASON_LENGTH } from '../../../db/schema/moderation';
 import {
   moderationSubjectReasons,
   resolveModerationSubject,
-} from "../../../services/moderation/subjectIdentity";
+} from '../../../services/moderation/subjectIdentity';
 
 /**
  * Which reported identifiers name an Oxy account, and which only look like one.
@@ -22,58 +22,58 @@ import {
  * better-typed hole in the middle.
  */
 
-const OXY_ID = "507f1f77bcf86cd799439011";
+const OXY_ID = '507f1f77bcf86cd799439011';
 
-describe("resolving a reported identifier", () => {
-  it("passes an Oxy account id through untouched", () => {
+describe('resolving a reported identifier', () => {
+  it('passes an Oxy account id through untouched', () => {
     /**
      * Every report the app files. `Report.reportedId` is an Oxy id, so the id
      * has to come out of this function exactly as it went in — if it did not,
      * the dedup key `{reporter, reportedId, reportedType}` would have moved.
      */
     expect(resolveModerationSubject(OXY_ID)).toEqual({
-      kind: "oxy-account",
+      kind: 'oxy-account',
       reportedId: OXY_ID,
     });
   });
 
-  it("trims, so the same account spelled with whitespace is one subject", () => {
+  it('trims, so the same account spelled with whitespace is one subject', () => {
     expect(resolveModerationSubject(`  ${OXY_ID}  `).reportedId).toBe(OXY_ID);
   });
 
-  it("records a handle as not reviewable rather than guessing who holds it", () => {
+  it('records a handle as not reviewable rather than guessing who holds it', () => {
     /**
      * A handle names whoever displays it today. Resolving it at intake would file
      * the report against the holder at that instant, and delivering it later
      * would describe whoever holds it then — two people, one row. The row says
      * so, so an operator reading it knows the client sent a name and not an id.
      */
-    const resolved = resolveModerationSubject("@someone");
+    const resolved = resolveModerationSubject('@someone');
 
-    expect(resolved.kind).toBe("not-an-oxy-account");
-    expect(resolved).toHaveProperty("reason", expect.stringContaining("handle"));
+    expect(resolved.kind).toBe('not-an-oxy-account');
+    expect(resolved).toHaveProperty('reason', expect.stringContaining('handle'));
   });
 
-  it("keeps a handle as given, because there is no id to canonicalise it to", () => {
-    expect(resolveModerationSubject("@someone").reportedId).toBe("@someone");
+  it('keeps a handle as given, because there is no id to canonicalise it to', () => {
+    expect(resolveModerationSubject('@someone').reportedId).toBe('@someone');
   });
 
-  it("never echoes the identifier back into the reason", () => {
+  it('never echoes the identifier back into the reason', () => {
     /**
      * `localStatus` reasons are the field an operator reads in bulk. A reason
      * that interpolated the identifier would copy a name into a second column,
      * and the reasons are meant to be a closed set of sentences.
      */
-    const resolved = resolveModerationSubject("@aVeryDistinctiveHandle");
+    const resolved = resolveModerationSubject('@aVeryDistinctiveHandle');
 
-    expect(resolved).toHaveProperty("reason");
-    if (resolved.kind === "not-an-oxy-account") {
-      expect(resolved.reason).not.toContain("aVeryDistinctiveHandle");
+    expect(resolved).toHaveProperty('reason');
+    if (resolved.kind === 'not-an-oxy-account') {
+      expect(resolved.reason).not.toContain('aVeryDistinctiveHandle');
     }
   });
 });
 
-describe("the reasons written onto a report", () => {
+describe('the reasons written onto a report', () => {
   /**
    * `reports.local_status_reason` is bounded by a CHECK, and intake writes the
    * reason INSIDE the transaction that stores the report. `reportRepository`
@@ -85,7 +85,7 @@ describe("the reasons written onto a report", () => {
    * The bound is read from the constant the CHECK and the truncation are both
    * rendered from, so there is one number here, not a third copy of it.
    */
-  it("every reason fits the field it is stored in", () => {
+  it('every reason fits the field it is stored in', () => {
     const limit = MAX_REPORT_LOCAL_STATUS_REASON_LENGTH;
     expect(moderationSubjectReasons().length).toBeGreaterThan(0);
     for (const reason of moderationSubjectReasons()) {
@@ -93,10 +93,10 @@ describe("the reasons written onto a report", () => {
     }
   });
 
-  it("says what CrowdSource does, in every reason", () => {
+  it('says what CrowdSource does, in every reason', () => {
     for (const reason of moderationSubjectReasons()) {
-      expect(reason).toContain("CrowdSource reviews Oxy accounts only");
-      expect(reason).toContain("not sent for community review");
+      expect(reason).toContain('CrowdSource reviews Oxy accounts only');
+      expect(reason).toContain('not sent for community review');
     }
   });
 });

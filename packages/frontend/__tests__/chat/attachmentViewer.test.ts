@@ -34,7 +34,11 @@ const text: TimelineItemView = {
 
 describe('the gallery a viewer opens on', () => {
   it('collects every picture and video in timeline order, one page per message', () => {
-    const items = collectViewerItems([media('a'), text, media('b', { kind: 'video', mime: 'video/mp4' })]);
+    const items = collectViewerItems([
+      media('a'),
+      text,
+      media('b', { kind: 'video', mime: 'video/mp4' }),
+    ]);
     expect(items.map((item) => [item.key, item.kind])).toEqual([
       ['a', 'image'],
       ['b', 'video'],
@@ -48,6 +52,11 @@ describe('the gallery a viewer opens on', () => {
   });
 
   it('leaves out what a viewer cannot show', () => {
-    expect(collectViewerItems([media('v', { kind: 'voice', mime: 'audio/m4a' }), media('f', { kind: 'file' })])).toEqual([]);
+    expect(
+      collectViewerItems([
+        media('v', { kind: 'voice', mime: 'audio/m4a' }),
+        media('f', { kind: 'file' }),
+      ]),
+    ).toEqual([]);
   });
 });

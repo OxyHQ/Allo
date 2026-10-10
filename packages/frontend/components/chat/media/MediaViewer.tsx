@@ -1,4 +1,11 @@
-import React, { useEffect, useImperativeHandle, useRef, useState, type Ref, type RefObject } from 'react';
+import React, {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+  type RefObject,
+} from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useVideoPlayer } from 'expo-video';
@@ -32,19 +39,34 @@ export function MediaViewer({ ref }: { ref: Ref<MediaViewerHandle> }) {
   const [request, setRequest] = useState<{ item: ViewerItem; nonce: number } | null>(null);
   useImperativeHandle(
     ref,
-    () => ({ open: (item: ViewerItem) => setRequest((current) => ({ item, nonce: (current?.nonce ?? 0) + 1 })) }),
+    () => ({
+      open: (item: ViewerItem) =>
+        setRequest((current) => ({ item, nonce: (current?.nonce ?? 0) + 1 })),
+    }),
     [],
   );
 
   return (
     <>
       <ZoomableMediaGallery ref={gallery} videoControls />
-      {request && <OpenItem key={`${request.item.key}:${request.nonce}`} item={request.item} gallery={gallery} />}
+      {request && (
+        <OpenItem
+          key={`${request.item.key}:${request.nonce}`}
+          item={request.item}
+          gallery={gallery}
+        />
+      )}
     </>
   );
 }
 
-function OpenItem({ item, gallery }: { item: ViewerItem; gallery: RefObject<ZoomableMediaGalleryHandle | null> }) {
+function OpenItem({
+  item,
+  gallery,
+}: {
+  item: ViewerItem;
+  gallery: RefObject<ZoomableMediaGalleryHandle | null>;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { uri, error } = useMediaUri(item.ref, item.mime);
@@ -54,7 +76,10 @@ function OpenItem({ item, gallery }: { item: ViewerItem; gallery: RefObject<Zoom
   useEffect(() => {
     if (!uri || opened.current) return;
     opened.current = true;
-    gallery.current?.open(item.kind === 'video' ? [{ kind: 'video', id: item.key, player }] : [{ uri }], 0);
+    gallery.current?.open(
+      item.kind === 'video' ? [{ kind: 'video', id: item.key, player }] : [{ uri }],
+      0,
+    );
   }, [uri, item, player, gallery]);
 
   useEffect(() => {
@@ -63,7 +88,9 @@ function OpenItem({ item, gallery }: { item: ViewerItem; gallery: RefObject<Zoom
 
   if (uri || error) return null;
   return (
-    <View style={[StyleSheet.absoluteFill, styles.loading, { backgroundColor: theme.colors.overlay }]}>
+    <View
+      style={[StyleSheet.absoluteFill, styles.loading, { backgroundColor: theme.colors.overlay }]}
+    >
       <ActivityIndicator color={theme.colors.primary} />
     </View>
   );

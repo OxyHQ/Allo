@@ -35,7 +35,7 @@
  * restriction the port invented rather than one it preserved.
  */
 
-import type { AlloDatabaseOrTransaction, AlloTransaction } from "../index";
+import type { AlloDatabaseOrTransaction, AlloTransaction } from '../index';
 
 /**
  * Raised when a write that must commit with its domain row is handed the root
@@ -48,10 +48,10 @@ export class MissingTransactionError extends Error {
   constructor(operation: string) {
     super(
       `Refusing to run '${operation}' outside a transaction: it must commit together ` +
-        "with the write it belongs to, or a report is answered 201 and never delivered. " +
-        "Pass the handle from `db.transaction(...)`, not `getDb()`.",
+        'with the write it belongs to, or a report is answered 201 and never delivered. ' +
+        'Pass the handle from `db.transaction(...)`, not `getDb()`.',
     );
-    this.name = "MissingTransactionError";
+    this.name = 'MissingTransactionError';
   }
 }
 
@@ -67,7 +67,7 @@ export function requireTransaction(
   db: AlloDatabaseOrTransaction,
   operation: string,
 ): AlloTransaction {
-  if (!("rollback" in db) || typeof db.rollback !== "function") {
+  if (!('rollback' in db) || typeof db.rollback !== 'function') {
     throw new MissingTransactionError(operation);
   }
   return db;

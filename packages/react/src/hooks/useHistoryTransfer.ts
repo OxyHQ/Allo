@@ -1,7 +1,7 @@
-import type { HistoryOfferView, HistoryProgress } from "@allo/core";
-import { useCallback, useMemo } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot } from "../internal/useClientSnapshot";
+import type { HistoryOfferView, HistoryProgress } from '@allo/core';
+import { useCallback, useMemo } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { useClientSnapshot } from '../internal/useClientSnapshot';
 
 export interface HistoryTransfer {
   /**
@@ -27,9 +27,12 @@ export interface HistoryTransfer {
  */
 export function useHistoryTransfer(): HistoryTransfer {
   const { client } = useAlloContext();
-  const progress = useClientSnapshot(client, "history", () => client.history.progress());
-  const pendingOffers = useClientSnapshot(client, "history", () => client.history.pendingOffers());
+  const progress = useClientSnapshot(client, 'history', () => client.history.progress());
+  const pendingOffers = useClientSnapshot(client, 'history', () => client.history.pendingOffers());
   const accept = useCallback((offerId: string) => client.history.accept(offerId), [client]);
   const refresh = useCallback(() => client.history.refreshOffers(), [client]);
-  return useMemo(() => ({ progress, pendingOffers, accept, refresh }), [progress, pendingOffers, accept, refresh]);
+  return useMemo(
+    () => ({ progress, pendingOffers, accept, refresh }),
+    [progress, pendingOffers, accept, refresh],
+  );
 }

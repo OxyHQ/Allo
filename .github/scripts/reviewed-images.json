@@ -3,9 +3,7 @@
   "recipes": [
     {
       "name": "allo",
-      "services": [
-        "allo"
-      ],
+      "services": ["allo"],
       "ecrRepository": "oxy/allo",
       "dockerfile": "packages/backend/Dockerfile",
       "dockerfileSha256": "35c7d56ec0f98a71f051230348c2145f0a2cc1c2101ebab46e29d7f8d9eb03b6",

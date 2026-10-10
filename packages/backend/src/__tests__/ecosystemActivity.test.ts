@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const publisher = vi.hoisted(() => ({
   observeHttp: vi.fn((_req: unknown, _res: unknown, next: () => void) => next()),
-  installFetch: vi.fn(), observeSocket: vi.fn(), stop: vi.fn(async () => {}),
+  installFetch: vi.fn(),
+  observeSocket: vi.fn(),
+  stop: vi.fn(async () => {}),
 }));
 const create = vi.hoisted(() => vi.fn((_options: unknown) => publisher));
 /**
@@ -18,7 +20,12 @@ vi.mock('@oxy.so/core/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@oxy.so/core/server')>()),
   createEcosystemTraffic: create,
 }));
-import { ecosystemActivityMiddleware, observeEcosystemSocket, startEcosystemActivity, stopEcosystemActivity } from '../ecosystemActivity';
+import {
+  ecosystemActivityMiddleware,
+  observeEcosystemSocket,
+  startEcosystemActivity,
+  stopEcosystemActivity,
+} from '../ecosystemActivity';
 
 /** Shaped the way `config/oxyService.ts` insists on: `oxy_dk_<hex>` and 32+ bytes. */
 const API_KEY = 'oxy_dk_0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -34,7 +41,11 @@ describe('ecosystem activity lifecycle', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.clearAllMocks();
   });
-  afterEach(async () => { await stopEcosystemActivity(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+  afterEach(async () => {
+    await stopEcosystemActivity();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
 
   it('does not start or publish when explicitly disabled', () => {
     vi.stubEnv('OXY_ECOSYSTEM_ACTIVITY_ENABLED', 'false');
@@ -61,7 +72,9 @@ describe('ecosystem activity lifecycle', () => {
   });
 
   it('fails boot when the shared collector rejects its configuration', () => {
-    create.mockImplementationOnce(() => { throw new Error('Invalid infrastructure region'); });
+    create.mockImplementationOnce(() => {
+      throw new Error('Invalid infrastructure region');
+    });
     expect(() => startEcosystemActivity(() => true)).toThrow('Invalid infrastructure region');
     expect(publisher.installFetch).not.toHaveBeenCalled();
   });

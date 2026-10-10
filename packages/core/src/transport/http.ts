@@ -12,12 +12,12 @@ import {
   TIMESTAMP_HEADER,
   epochConflictDetailsSchema,
   errorResponseSchema,
-} from "@allo/shared-types";
-import type { z } from "zod";
-import { EpochConflictError, InstanceNotActiveError, TransportError } from "../errors";
-import { sha256Hex, utf8Encode } from "../util/bytes";
-import type { SigningKeyPair } from "../crypto/signing";
-import { signRequest } from "../crypto/signing";
+} from '@allo/shared-types';
+import type { z } from 'zod';
+import { EpochConflictError, InstanceNotActiveError, TransportError } from '../errors';
+import { sha256Hex, utf8Encode } from '../util/bytes';
+import type { SigningKeyPair } from '../crypto/signing';
+import { signRequest } from '../crypto/signing';
 
 export interface Signer {
   instanceId: string;
@@ -34,7 +34,7 @@ export interface HttpClientOptions {
 }
 
 export interface RequestOptions<T> {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string;
   /** JSON body, or raw bytes with `rawContentType`. */
   body?: unknown;
@@ -54,33 +54,50 @@ export class HttpClient {
 
   async request<T = void>(req: RequestOptions<T>): Promise<T> {
     const token = await this.options.getAccessToken();
-    if (!token) throw new TransportError(401, "unauthorized", "no Oxy session");
-    const headers: Record<string, string> = { authorization: `Bearer ${token}`, accept: "application/json", ...(req.headers ?? {}) };
+    if (!token) throw new TransportError(401, 'unauthorized', 'no Oxy session');
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      ...(req.headers ?? {}),
+    };
     let body: Uint8Array | string | undefined;
     let bodySha = EMPTY_BODY_SHA256_HEX;
     if (req.rawBody !== undefined) {
       body = req.rawBody;
-      headers["content-type"] = headers["content-type"] ?? "application/octet-stream";
-      headers["content-length"] = String(req.rawBody.byteLength);
+      headers['content-type'] = headers['content-type'] ?? 'application/octet-stream';
+      headers['content-length'] = String(req.rawBody.byteLength);
       bodySha = sha256Hex(req.rawBody);
     } else if (req.body !== undefined) {
       const text = JSON.stringify(req.body);
       body = text;
-      headers["content-type"] = "application/json";
+      headers['content-type'] = 'application/json';
       bodySha = sha256Hex(utf8Encode(text));
     }
     if (req.signer) {
       const timestampMs = Math.floor(this.options.now());
       headers[INSTANCE_HEADER] = req.signer.instanceId;
       headers[TIMESTAMP_HEADER] = String(timestampMs);
-      headers[SIGNATURE_HEADER] = signRequest(req.signer.key, { method: req.method, pathWithQuery: req.path, timestampMs, bodySha256Hex: bodySha });
+      headers[SIGNATURE_HEADER] = signRequest(req.signer.key, {
+        method: req.method,
+        pathWithQuery: req.path,
+        timestampMs,
+        bodySha256Hex: bodySha,
+      });
     }
     let response: Response;
     try {
-      response = await this.options.fetch(this.options.baseUrl + req.path, { method: req.method, headers, body: body as BodyInit | undefined, signal: req.signal });
+      response = await this.options.fetch(this.options.baseUrl + req.path, {
+        method: req.method,
+        headers,
+        body: body as BodyInit | undefined,
+        signal: req.signal,
+      });
     } catch (cause) {
-      if (req.signal?.aborted || (cause instanceof Error && cause.name === "AbortError")) throw cause;
-      throw new TransportError(0, "network", "request failed to reach the server", undefined, { cause });
+      if (req.signal?.aborted || (cause instanceof Error && cause.name === 'AbortError'))
+        throw cause;
+      throw new TransportError(0, 'network', 'request failed to reach the server', undefined, {
+        cause,
+      });
     }
     if (!response.ok) throw await this.toError(response);
     if (response.status === 204 || req.schema === undefined) {
@@ -91,18 +108,28 @@ export class HttpClient {
     try {
       json = await response.json();
     } catch (cause) {
-      throw new TransportError(response.status, "internal", "answer was not JSON", undefined, { cause });
+      throw new TransportError(response.status, 'internal', 'answer was not JSON', undefined, {
+        cause,
+      });
     }
     const parsed = req.schema.safeParse(json);
     if (!parsed.success) {
-      const where = parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-      throw new TransportError(response.status, "internal", `answer did not match its schema (${where})`, parsed.error.issues);
+      const where = parsed.error.issues
+        .slice(0, 3)
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ');
+      throw new TransportError(
+        response.status,
+        'internal',
+        `answer did not match its schema (${where})`,
+        parsed.error.issues,
+      );
     }
     return parsed.data;
   }
 
   private async toError(response: Response): Promise<Error> {
-    let code = "internal";
+    let code = 'internal';
     let message = `http ${response.status}`;
     let details: unknown;
     try {
@@ -115,15 +142,16 @@ export class HttpClient {
     } catch {
       /* body was not JSON */
     }
-    if (response.status === 409 && code === "epoch_conflict") {
+    if (response.status === 409 && code === 'epoch_conflict') {
       const d = epochConflictDetailsSchema.safeParse(details);
       return new EpochConflictError(d.success ? d.data.currentEpoch : undefined);
     }
-    if (response.status === 403 && code === "instance_revoked") {
+    if (response.status === 403 && code === 'instance_revoked') {
       this.options.onInstanceRevoked?.();
-      return new InstanceNotActiveError("revoked");
+      return new InstanceNotActiveError('revoked');
     }
-    if (response.status === 403 && code === "instance_not_active") return new InstanceNotActiveError("pending");
+    if (response.status === 403 && code === 'instance_not_active')
+      return new InstanceNotActiveError('pending');
     return new TransportError(response.status, code, message, details);
   }
 }

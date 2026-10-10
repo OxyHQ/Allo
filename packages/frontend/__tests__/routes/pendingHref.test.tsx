@@ -89,9 +89,16 @@ describe('usePendingHref', () => {
     launchUrl = null;
     urlListener = null;
     jest.spyOn(Linking, 'getInitialURL').mockImplementation(() => Promise.resolve(launchUrl));
-    jest.spyOn(Linking, 'addEventListener').mockImplementation(((_type: string, listener: (event: { url: string }) => void) => {
+    jest.spyOn(Linking, 'addEventListener').mockImplementation(((
+      _type: string,
+      listener: (event: { url: string }) => void,
+    ) => {
       urlListener = listener;
-      return { remove: () => { urlListener = null; } };
+      return {
+        remove: () => {
+          urlListener = null;
+        },
+      };
     }) as never);
   });
 

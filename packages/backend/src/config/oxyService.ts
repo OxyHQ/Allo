@@ -1,7 +1,7 @@
-import { canAttestWorkloadIdentity } from "@oxy.so/core/server";
-import * as z from "zod";
+import { canAttestWorkloadIdentity } from '@oxy.so/core/server';
+import * as z from 'zod';
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
 /**
  * Allo's own credential for calling the Oxy API as itself.
@@ -57,13 +57,13 @@ import { logger } from "../utils/logger";
  */
 
 const emptyAsUndefined = (value: unknown): unknown =>
-  typeof value === "string" && value.trim().length === 0 ? undefined : value;
+  typeof value === 'string' && value.trim().length === 0 ? undefined : value;
 
 /** Oxy application credential public keys are minted as `oxy_dk_<48 hex>`. */
 const apiKey = z
   .string()
   .trim()
-  .regex(/^oxy_dk_[0-9a-f]{8,}$/, "must be an Oxy application credential public key (oxy_dk_…)");
+  .regex(/^oxy_dk_[0-9a-f]{8,}$/, 'must be an Oxy application credential public key (oxy_dk_…)');
 
 /** The secret is 32 random bytes as hex. A credential: never logged. */
 const apiSecret = z.string().trim().min(32);
@@ -80,12 +80,12 @@ function buildOxyServiceEnvSchema() {
       if (hasKey === hasSecret) return;
 
       context.addIssue({
-        code: "custom",
-        path: [hasKey ? "ALLO_OXY_SERVICE_API_SECRET" : "ALLO_OXY_SERVICE_API_KEY"],
+        code: 'custom',
+        path: [hasKey ? 'ALLO_OXY_SERVICE_API_SECRET' : 'ALLO_OXY_SERVICE_API_KEY'],
         message:
-          "ALLO_OXY_SERVICE_API_KEY and ALLO_OXY_SERVICE_API_SECRET must be set together — a key " +
-          "without its secret is a service token that can never be minted, which shows up as every " +
-          "bulk profile lookup returning nothing",
+          'ALLO_OXY_SERVICE_API_KEY and ALLO_OXY_SERVICE_API_SECRET must be set together — a key ' +
+          'without its secret is a service token that can never be minted, which shows up as every ' +
+          'bulk profile lookup returning nothing',
       });
     });
 }
@@ -129,9 +129,7 @@ export interface ServiceAuthConfigurable {
  * there was; asked this way, removing the pair from the task definition changes
  * nothing.
  */
-export function canAuthenticateAsOxyService(
-  environment: NodeJS.ProcessEnv = process.env,
-): boolean {
+export function canAuthenticateAsOxyService(environment: NodeJS.ProcessEnv = process.env): boolean {
   return (
     canAttestWorkloadIdentity(environment) || loadOxyServiceCredential(environment) !== undefined
   );
@@ -156,17 +154,17 @@ export function configureOxyServiceAuth(
      * describes a process that will genuinely call Oxy anonymously.
      */
     if (canAttestWorkloadIdentity(environment)) {
-      logger.info("[Oxy] no service key pair; the SDK attests this task role instead");
+      logger.info('[Oxy] no service key pair; the SDK attests this task role instead');
     } else {
       logger.info(
-        "[Oxy] no Oxy service identity: neither a key pair nor an attestable task role. " +
-          "Directory lookups will call Oxy anonymously, which every one of those routes allows",
+        '[Oxy] no Oxy service identity: neither a key pair nor an attestable task role. ' +
+          'Directory lookups will call Oxy anonymously, which every one of those routes allows',
       );
     }
     return false;
   }
 
   client.configureServiceAuth(credential.apiKey, credential.apiSecret);
-  logger.info("[Oxy] service credential configured");
+  logger.info('[Oxy] service credential configured');
   return true;
 }

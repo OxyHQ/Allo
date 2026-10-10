@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import {
   APP_MESSAGE_VERSION,
   AppMessageDecodeError,
@@ -11,177 +11,220 @@ import {
   stickerMessageSchema,
   type AppMessage,
   type EventRef,
-} from "../appMessage";
-import { PUBKEY, SHA256, UUID_V7 } from "./fixtures";
+} from '../appMessage';
+import { PUBKEY, SHA256, UUID_V7 } from './fixtures';
 
-const ref: EventRef = { kind: "event", conversationId: UUID_V7, eventId: UUID_V7 };
-const local: EventRef = { kind: "local", conversationId: UUID_V7, idempotencyKey: "m-1" };
+const ref: EventRef = { kind: 'event', conversationId: UUID_V7, eventId: UUID_V7 };
+const local: EventRef = { kind: 'local', conversationId: UUID_V7, idempotencyKey: 'm-1' };
 
 const media: AppMessage = {
   v: 1,
-  t: "media",
+  t: 'media',
   blobId: UUID_V7,
   key: PUBKEY,
-  nonce: Buffer.alloc(12, 9).toString("base64"),
+  nonce: Buffer.alloc(12, 9).toString('base64'),
   sha256: SHA256,
-  mime: "image/jpeg",
-  filename: "cat.jpg",
+  mime: 'image/jpeg',
+  filename: 'cat.jpg',
   size: 12345,
-  kind: "image",
+  kind: 'image',
   width: 640,
   height: 480,
-  thumbnail: { blobId: UUID_V7, key: PUBKEY, nonce: Buffer.alloc(12, 8).toString("base64"), sha256: SHA256, width: 64, height: 48 },
+  thumbnail: {
+    blobId: UUID_V7,
+    key: PUBKEY,
+    nonce: Buffer.alloc(12, 8).toString('base64'),
+    sha256: SHA256,
+    width: 64,
+    height: 48,
+  },
 };
 
 const valid: AppMessage[] = [
-  { v: 1, t: "text", body: "hola" },
-  { v: 1, t: "text", body: "hola", replyTo: local },
-  { v: 1, t: "edit", target: ref, body: "hola!" },
-  { v: 1, t: "delete", target: ref },
-  { v: 1, t: "reaction", target: ref, key: "👍", op: "add" },
-  { v: 1, t: "read", upTo: ref },
-  { v: 1, t: "delivered", upTo: ref },
-  { v: 1, t: "delivered", upTo: local },
+  { v: 1, t: 'text', body: 'hola' },
+  { v: 1, t: 'text', body: 'hola', replyTo: local },
+  { v: 1, t: 'edit', target: ref, body: 'hola!' },
+  { v: 1, t: 'delete', target: ref },
+  { v: 1, t: 'reaction', target: ref, key: '👍', op: 'add' },
+  { v: 1, t: 'read', upTo: ref },
+  { v: 1, t: 'delivered', upTo: ref },
+  { v: 1, t: 'delivered', upTo: local },
   media,
-  { v: 1, t: "conversation", name: "Familia" },
-  { v: 1, t: "conversation" },
-  { v: 1, t: "typing", on: true },
-  { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256, emoji: "😢" },
-  { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 },
+  { v: 1, t: 'conversation', name: 'Familia' },
+  { v: 1, t: 'conversation' },
+  { v: 1, t: 'typing', on: true },
+  { v: 1, t: 'sticker', stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256, emoji: '😢' },
+  { v: 1, t: 'sticker', stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 },
 ];
 
-describe("eventRefSchema", () => {
-  it("takes an event ref or a local ref", () => {
+describe('eventRefSchema', () => {
+  it('takes an event ref or a local ref', () => {
     expect(eventRefSchema.safeParse(ref).success).toBe(true);
     expect(eventRefSchema.safeParse(local).success).toBe(true);
   });
-  it("rejects a ref with both keys under the wrong kind, and one with neither", () => {
-    expect(eventRefSchema.safeParse({ kind: "event", conversationId: UUID_V7, idempotencyKey: "m-1" }).success).toBe(false);
-    expect(eventRefSchema.safeParse({ conversationId: UUID_V7, eventId: UUID_V7 }).success).toBe(false);
+  it('rejects a ref with both keys under the wrong kind, and one with neither', () => {
+    expect(
+      eventRefSchema.safeParse({ kind: 'event', conversationId: UUID_V7, idempotencyKey: 'm-1' })
+        .success,
+    ).toBe(false);
+    expect(eventRefSchema.safeParse({ conversationId: UUID_V7, eventId: UUID_V7 }).success).toBe(
+      false,
+    );
   });
 });
 
-describe("sticker messages", () => {
-  const sticker = { v: 1, t: "sticker", stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 };
+describe('sticker messages', () => {
+  const sticker = { v: 1, t: 'sticker', stickerId: UUID_V7, packId: UUID_V7, sha256: SHA256 };
   it("needs the id, the pack and the animation's hash", () => {
     expect(appMessageSchema.safeParse(sticker).success).toBe(true);
-    for (const missing of ["stickerId", "packId", "sha256"] as const) {
+    for (const missing of ['stickerId', 'packId', 'sha256'] as const) {
       const { [missing]: _drop, ...rest } = sticker;
       expect(appMessageSchema.safeParse(rest).success, missing).toBe(false);
     }
   });
-  it("refuses a hash that is not sha256 hex, and an overlong emoji", () => {
-    expect(appMessageSchema.safeParse({ ...sticker, sha256: "not-a-hash" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ ...sticker, emoji: "x".repeat(33) }).success).toBe(false);
+  it('refuses a hash that is not sha256 hex, and an overlong emoji', () => {
+    expect(appMessageSchema.safeParse({ ...sticker, sha256: 'not-a-hash' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ ...sticker, emoji: 'x'.repeat(33) }).success).toBe(false);
   });
-  it("is content, not control: it carries no ctl marker", () => {
+  it('is content, not control: it carries no ctl marker', () => {
     expect(appMessageSchema.safeParse({ ...sticker, ctl: true }).success).toBe(true);
-    expect(stickerMessageSchema.parse({ ...sticker, ctl: true })).not.toHaveProperty("ctl");
+    expect(stickerMessageSchema.parse({ ...sticker, ctl: true })).not.toHaveProperty('ctl');
   });
 });
 
-describe("appMessageSchema", () => {
-  it("accepts every kind", () => {
+describe('appMessageSchema', () => {
+  it('accepts every kind', () => {
     for (const m of valid) expect(appMessageSchema.safeParse(m).success, m.t).toBe(true);
   });
-  it("rejects wrong v, unknown t, and a field of the wrong kind", () => {
+  it('rejects wrong v, unknown t, and a field of the wrong kind', () => {
     expect(APP_MESSAGE_VERSION).toBe(1);
-    expect(appMessageSchema.safeParse({ v: 2, t: "text", body: "x" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: "1", t: "text", body: "x" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "hologram", id: "x" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "text" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "text", body: "" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "text", body: "x".repeat(MAX_TEXT_BODY_LENGTH + 1) }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "reaction", target: ref, key: "👍", op: "toggle" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "typing", on: "yes" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "delivered" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 1, t: "delivered", upTo: UUID_V7 }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ v: 2, t: "delivered", upTo: ref }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ ...media, kind: "gif" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ ...media, key: "short" }).success).toBe(false);
-    expect(appMessageSchema.safeParse({ ...media, sha256: SHA256.toUpperCase() }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 2, t: 'text', body: 'x' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: '1', t: 'text', body: 'x' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'hologram', id: 'x' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'text' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'text', body: '' }).success).toBe(false);
+    expect(
+      appMessageSchema.safeParse({ v: 1, t: 'text', body: 'x'.repeat(MAX_TEXT_BODY_LENGTH + 1) })
+        .success,
+    ).toBe(false);
+    expect(
+      appMessageSchema.safeParse({ v: 1, t: 'reaction', target: ref, key: '👍', op: 'toggle' })
+        .success,
+    ).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'typing', on: 'yes' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'delivered' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 1, t: 'delivered', upTo: UUID_V7 }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ v: 2, t: 'delivered', upTo: ref }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ ...media, kind: 'gif' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ ...media, key: 'short' }).success).toBe(false);
+    expect(appMessageSchema.safeParse({ ...media, sha256: SHA256.toUpperCase() }).success).toBe(
+      false,
+    );
   });
 });
 
-describe("encode / decode", () => {
-  it("round-trips every kind as UTF-8 JSON", () => {
+describe('encode / decode', () => {
+  it('round-trips every kind as UTF-8 JSON', () => {
     for (const m of valid) {
       const bytes = encodeAppMessage(m);
       expect(bytes).toBeInstanceOf(Uint8Array);
-      expect(JSON.parse(Buffer.from(bytes).toString("utf8"))).toEqual(m);
+      expect(JSON.parse(Buffer.from(bytes).toString('utf8'))).toEqual(m);
       expect(decodeAppMessage(bytes)).toEqual(m);
     }
   });
-  it("a delivered receipt round-trips, and an unknown t still fails", () => {
-    const m: AppMessage = { v: 1, t: "delivered", upTo: ref };
+  it('a delivered receipt round-trips, and an unknown t still fails', () => {
+    const m: AppMessage = { v: 1, t: 'delivered', upTo: ref };
     const decoded = decodeAppMessage(encodeAppMessage(m));
     expect(decoded).toEqual(m);
-    expect(decoded.t).toBe("delivered");
-    expect(() => decodeAppMessage(new TextEncoder().encode(JSON.stringify({ v: 1, t: "acked", upTo: ref })))).toThrow(
+    expect(decoded.t).toBe('delivered');
+    expect(() =>
+      decodeAppMessage(new TextEncoder().encode(JSON.stringify({ v: 1, t: 'acked', upTo: ref }))),
+    ).toThrow(AppMessageDecodeError);
+  });
+  it('keeps non-ASCII text intact', () => {
+    const m: AppMessage = { v: 1, t: 'text', body: 'ñandú 🦤 日本' };
+    expect(decodeAppMessage(encodeAppMessage(m))).toEqual(m);
+  });
+  it('decode rejects unknown t, wrong v, non-JSON and non-UTF-8', () => {
+    const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+    expect(() => decodeAppMessage(enc({ v: 1, t: 'hologram' }))).toThrow(AppMessageDecodeError);
+    expect(() => decodeAppMessage(enc({ v: 2, t: 'text', body: 'x' }))).toThrow(
+      AppMessageDecodeError,
+    );
+    expect(() => decodeAppMessage(new TextEncoder().encode('{not json'))).toThrow(
+      AppMessageDecodeError,
+    );
+    expect(() => decodeAppMessage(new Uint8Array([0xff, 0xfe, 0x7b]))).toThrow(
+      AppMessageDecodeError,
+    );
+    expect(() => decodeAppMessage(enc('a string'))).toThrow(AppMessageDecodeError);
+  });
+  it('encode refuses an invalid envelope so it is never encrypted', () => {
+    expect(() => encodeAppMessage({ v: 1, t: 'text', body: '' })).toThrow(AppMessageDecodeError);
+    expect(() => encodeAppMessage({ v: 1, t: 'nope' } as unknown as AppMessage)).toThrow(
       AppMessageDecodeError,
     );
   });
-  it("keeps non-ASCII text intact", () => {
-    const m: AppMessage = { v: 1, t: "text", body: "ñandú 🦤 日本" };
-    expect(decodeAppMessage(encodeAppMessage(m))).toEqual(m);
-  });
-  it("decode rejects unknown t, wrong v, non-JSON and non-UTF-8", () => {
-    const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
-    expect(() => decodeAppMessage(enc({ v: 1, t: "hologram" }))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessage(enc({ v: 2, t: "text", body: "x" }))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessage(new TextEncoder().encode("{not json"))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessage(new Uint8Array([0xff, 0xfe, 0x7b]))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessage(enc("a string"))).toThrow(AppMessageDecodeError);
-  });
-  it("encode refuses an invalid envelope so it is never encrypted", () => {
-    expect(() => encodeAppMessage({ v: 1, t: "text", body: "" })).toThrow(AppMessageDecodeError);
-    expect(() => encodeAppMessage({ v: 1, t: "nope" } as unknown as AppMessage)).toThrow(AppMessageDecodeError);
-  });
-  it("the error is named and carries a cause", () => {
+  it('the error is named and carries a cause', () => {
     try {
-      decodeAppMessage(new TextEncoder().encode("[]"));
+      decodeAppMessage(new TextEncoder().encode('[]'));
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(AppMessageDecodeError);
-      expect((e as Error).name).toBe("AppMessageDecodeError");
+      expect((e as Error).name).toBe('AppMessageDecodeError');
       expect((e as { cause?: unknown }).cause).toBeDefined();
     }
   });
 });
 
-describe("an unknown control message", () => {
+describe('an unknown control message', () => {
   const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
 
   it("is ignored by a receiver rather than reported, so a newer client's machinery draws nothing", () => {
-    expect(decodeAppMessageOrIgnore(enc({ v: 1, t: "call", ctl: true, callId: UUID_V7 }))).toBeNull();
+    expect(
+      decodeAppMessageOrIgnore(enc({ v: 1, t: 'call', ctl: true, callId: UUID_V7 })),
+    ).toBeNull();
   });
 
-  it("still throws from the strict decoder, which is what a sender validates with", () => {
-    expect(() => decodeAppMessage(enc({ v: 1, t: "call", ctl: true }))).toThrow(AppMessageDecodeError);
+  it('still throws from the strict decoder, which is what a sender validates with', () => {
+    expect(() => decodeAppMessage(enc({ v: 1, t: 'call', ctl: true }))).toThrow(
+      AppMessageDecodeError,
+    );
   });
 
-  it("without the marker a receiver reports it, because a CONTENT kind must read as undecryptable", () => {
-    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "hologram", id: "x" }))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: "hologram", ctl: false }))).toThrow(AppMessageDecodeError);
+  it('without the marker a receiver reports it, because a CONTENT kind must read as undecryptable', () => {
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: 'hologram', id: 'x' }))).toThrow(
+      AppMessageDecodeError,
+    );
+    expect(() => decodeAppMessageOrIgnore(enc({ v: 1, t: 'hologram', ctl: false }))).toThrow(
+      AppMessageDecodeError,
+    );
   });
 
-  it("is refused at the wrong version, an empty kind and an over-long one", () => {
-    const bad = (o: unknown) => expect(() => decodeAppMessageOrIgnore(enc(o))).toThrow(AppMessageDecodeError);
-    bad({ v: 2, t: "call", ctl: true });
-    bad({ v: 1, t: "", ctl: true });
-    bad({ v: 1, t: "x".repeat(65), ctl: true });
+  it('is refused at the wrong version, an empty kind and an over-long one', () => {
+    const bad = (o: unknown) =>
+      expect(() => decodeAppMessageOrIgnore(enc(o))).toThrow(AppMessageDecodeError);
+    bad({ v: 2, t: 'call', ctl: true });
+    bad({ v: 1, t: '', ctl: true });
+    bad({ v: 1, t: 'x'.repeat(65), ctl: true });
   });
 
-  it("never shadows a known kind: a marker on a kind this build knows parses as that kind", () => {
-    expect(decodeAppMessageOrIgnore(enc({ v: 1, t: "text", body: "hola", ctl: true }))).toEqual({ v: 1, t: "text", body: "hola" });
+  it('never shadows a known kind: a marker on a kind this build knows parses as that kind', () => {
+    expect(decodeAppMessageOrIgnore(enc({ v: 1, t: 'text', body: 'hola', ctl: true }))).toEqual({
+      v: 1,
+      t: 'text',
+      body: 'hola',
+    });
   });
 
-  it("leaves every message this build does know exactly as the strict decoder does", () => {
+  it('leaves every message this build does know exactly as the strict decoder does', () => {
     for (const m of valid) expect(decodeAppMessageOrIgnore(encodeAppMessage(m))).toEqual(m);
   });
 
-  it("reports a broken envelope the same way through both doors", () => {
-    expect(() => decodeAppMessageOrIgnore(new TextEncoder().encode("{not json"))).toThrow(AppMessageDecodeError);
-    expect(() => decodeAppMessageOrIgnore(enc("a string"))).toThrow(AppMessageDecodeError);
+  it('reports a broken envelope the same way through both doors', () => {
+    expect(() => decodeAppMessageOrIgnore(new TextEncoder().encode('{not json'))).toThrow(
+      AppMessageDecodeError,
+    );
+    expect(() => decodeAppMessageOrIgnore(enc('a string'))).toThrow(AppMessageDecodeError);
   });
 });

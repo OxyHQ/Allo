@@ -23,7 +23,11 @@ export interface MediaUriState {
   error?: unknown;
 }
 
-export function useMediaUri(ref: MediaRef | undefined, mime: string, enabled = true): MediaUriState {
+export function useMediaUri(
+  ref: MediaRef | undefined,
+  mime: string,
+  enabled = true,
+): MediaUriState {
   const file = useMediaFile(enabled ? ref : undefined);
   const bytes = file.status === 'ready' ? file.bytes : undefined;
   const blobId = ref?.blobId;
@@ -44,5 +48,9 @@ export function useMediaUri(ref: MediaRef | undefined, mime: string, enabled = t
   // Between a ref change and the effect that follows it, answer `''` rather
   // than the previous ref's URI.
   const uri = state.key === blobId ? state.uri : '';
-  return { uri, loading: file.status === 'loading' || (bytes !== undefined && uri === ''), error: file.error };
+  return {
+    uri,
+    loading: file.status === 'loading' || (bytes !== undefined && uri === ''),
+    error: file.error,
+  };
 }

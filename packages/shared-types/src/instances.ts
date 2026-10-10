@@ -6,7 +6,7 @@
  * later one is `pending` until an active instance signs
  * {@link enrollmentApprovalMessage} over the server-issued challenge.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   accountIdSchema,
   appIdSchema,
@@ -17,9 +17,9 @@ import {
   isoDateSchema,
   platformSchema,
   x25519PublicKeySchema,
-} from "./common";
+} from './common';
 
-export const INSTANCE_STATUSES = ["pending", "active", "revoked"] as const;
+export const INSTANCE_STATUSES = ['pending', 'active', 'revoked'] as const;
 export const instanceStatusSchema = z.enum(INSTANCE_STATUSES);
 export type InstanceStatus = z.infer<typeof instanceStatusSchema>;
 
@@ -98,7 +98,7 @@ export const registerInstanceRequestSchema = z.object({
 });
 export type RegisterInstanceRequest = z.infer<typeof registerInstanceRequestSchema>;
 
-export const ENROLLMENT_OUTCOMES = ["active", "pending"] as const;
+export const ENROLLMENT_OUTCOMES = ['active', 'pending'] as const;
 export const enrollmentOutcomeSchema = z.enum(ENROLLMENT_OUTCOMES);
 export type EnrollmentOutcome = z.infer<typeof enrollmentOutcomeSchema>;
 
@@ -110,11 +110,19 @@ export const registerInstanceResponseSchema = z
     challenge: enrollmentChallengeSchema.optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.enrollment === "pending" && v.challenge === undefined) {
-      ctx.addIssue({ code: "custom", path: ["challenge"], message: "a pending enrollment carries a challenge" });
+    if (v.enrollment === 'pending' && v.challenge === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['challenge'],
+        message: 'a pending enrollment carries a challenge',
+      });
     }
-    if (v.enrollment === "active" && v.challenge !== undefined) {
-      ctx.addIssue({ code: "custom", path: ["challenge"], message: "an active enrollment has no challenge" });
+    if (v.enrollment === 'active' && v.challenge !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['challenge'],
+        message: 'an active enrollment has no challenge',
+      });
     }
   });
 export type RegisterInstanceResponse = z.infer<typeof registerInstanceResponseSchema>;
@@ -155,7 +163,7 @@ export const instanceResponseSchema = z.object({
 });
 export type InstanceResponse = z.infer<typeof instanceResponseSchema>;
 
-export const PUSH_PROVIDERS = ["fcm", "apns"] as const;
+export const PUSH_PROVIDERS = ['fcm', 'apns'] as const;
 export const pushProviderSchema = z.enum(PUSH_PROVIDERS);
 export type PushProvider = z.infer<typeof pushProviderSchema>;
 
@@ -180,7 +188,7 @@ export type SetTransferKeyRequest = z.infer<typeof setTransferKeyRequestSchema>;
  * stops an approval signature being replayed as a request signature or the
  * other way round: the two messages never share a first line.
  */
-export const ENROLLMENT_SIGNING_CONTEXT = "allo-enroll-v1";
+export const ENROLLMENT_SIGNING_CONTEXT = 'allo-enroll-v1';
 
 export interface EnrollmentApprovalInput {
   accountId: string;
@@ -200,13 +208,13 @@ export interface EnrollmentApprovalInput {
 export function enrollmentApprovalMessage(input: EnrollmentApprovalInput): string {
   return (
     ENROLLMENT_SIGNING_CONTEXT +
-    "\n" +
+    '\n' +
     input.accountId +
-    "\n" +
+    '\n' +
     input.newInstanceId +
-    "\n" +
+    '\n' +
     input.newSigningPublicKey +
-    "\n" +
+    '\n' +
     input.challenge
   );
 }

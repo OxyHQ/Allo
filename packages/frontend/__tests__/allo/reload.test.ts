@@ -14,8 +14,20 @@
  * the one that just lost its key, that screen has no way out.
  */
 import { createAlloClient, testing, type AlloClient } from '@allo/core';
-import { IndexedDbSecrets, type SecretsIdb, type SecretsIdbRequest, type SecretsIdbStore, type SecretsIdbTransaction } from '@/lib/allo/secrets.web';
-import { IndexedDbStorage, type KvIdb, type KvIdbRequest, type KvIdbStore, type KvIdbTransaction } from '@/lib/allo/storage.web';
+import {
+  IndexedDbSecrets,
+  type SecretsIdb,
+  type SecretsIdbRequest,
+  type SecretsIdbStore,
+  type SecretsIdbTransaction,
+} from '@/lib/allo/secrets.web';
+import {
+  IndexedDbStorage,
+  type KvIdb,
+  type KvIdbRequest,
+  type KvIdbStore,
+  type KvIdbTransaction,
+} from '@/lib/allo/storage.web';
 
 const { createFakeAlloServer, FakeSession } = testing;
 
@@ -58,7 +70,8 @@ class FakeTransaction implements KvIdbTransaction, SecretsIdbTransaction {
   }
 
   private settle(): void {
-    if (this.issued && this.pending === 0) queueMicrotask(() => this.oncomplete?.(undefined as never));
+    if (this.issued && this.pending === 0)
+      queueMicrotask(() => this.oncomplete?.(undefined as never));
   }
 
   private run<T>(apply: () => T): FakeRequest<T> {
@@ -149,7 +162,9 @@ describe('reloading the page', () => {
     // And the server was asked to enrol exactly once, which is the fact behind
     // the screen: a second registration on an account that already has an
     // active device comes back `pending`.
-    const registrations = server.requestLog.filter((entry) => entry.method === 'POST' && entry.path === '/v1/instances');
+    const registrations = server.requestLog.filter(
+      (entry) => entry.method === 'POST' && entry.path === '/v1/instances',
+    );
     expect(registrations).toHaveLength(1);
 
     // The messages are still there, which is what "the same device" means.

@@ -8,9 +8,9 @@
  * runtime against a schema that looks correct in the editor.
  */
 
-import { createDatabase, type OxyDatabase } from "@oxy.so/db";
-import type postgres from "postgres";
-import * as schema from "./schema";
+import { createDatabase, type OxyDatabase } from '@oxy.so/db';
+import type postgres from 'postgres';
+import * as schema from './schema';
 
 export type AlloDatabase = OxyDatabase<typeof schema>;
 
@@ -30,7 +30,7 @@ export type AlloDatabase = OxyDatabase<typeof schema>;
  * own — and two spellings of one handle can disagree about what a transaction
  * is.
  */
-export type AlloTransaction = Parameters<Parameters<AlloDatabase["transaction"]>[0]>[0];
+export type AlloTransaction = Parameters<Parameters<AlloDatabase['transaction']>[0]>[0];
 
 /** What a repository accepts: the pool, or a live transaction. */
 export type AlloDatabaseOrTransaction = AlloDatabase | AlloTransaction;
@@ -49,7 +49,7 @@ export function connectPostgres(databaseUrl: string): AlloDatabase {
 
 export function getDb(): AlloDatabase {
   if (!handle) {
-    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+    throw new Error('Postgres is not connected — call connectPostgres() during startup');
   }
   return handle.db;
 }
@@ -62,7 +62,7 @@ let reachability: Promise<void> | null = null;
 
 async function probe(): Promise<void> {
   if (!handle) {
-    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+    throw new Error('Postgres is not connected — call connectPostgres() during startup');
   }
   await handle.client`select 1`;
 }
@@ -116,7 +116,7 @@ export async function checkPostgresHealth(): Promise<boolean> {
 /** The raw postgres.js client, for the migration-ledger check at boot. */
 export function getPostgresClient(): postgres.Sql {
   if (!handle) {
-    throw new Error("Postgres is not connected — call connectPostgres() during startup");
+    throw new Error('Postgres is not connected — call connectPostgres() during startup');
   }
   return handle.client;
 }

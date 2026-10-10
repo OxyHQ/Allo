@@ -1,8 +1,8 @@
-import { WebhookEventEnvelopeSchema } from "@crowdsource.you/contracts";
-import { createHmac } from "crypto";
-import express from "express";
-import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebhookEventEnvelopeSchema } from '@crowdsource.you/contracts';
+import { createHmac } from 'crypto';
+import express from 'express';
+import request from 'supertest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The webhook signature covers the bytes that arrived, so a body parser mounted
@@ -19,23 +19,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * other way would test a mock of the thing that breaks.
  */
 
-vi.mock("../../services/moderation/moderationEventStore", () => ({
+vi.mock('../../services/moderation/moderationEventStore', () => ({
   postgresProcessedEventStore: () => ({
     claim: vi.fn(async () => true),
     release: vi.fn(async () => undefined),
   }),
 }));
 
-vi.mock("../../services/moderation/ModerationInboundService", () => ({
+vi.mock('../../services/moderation/ModerationInboundService', () => ({
   recordDecisionEvent: vi.fn(async () => undefined),
   recordIgnoredEvent: vi.fn(async () => undefined),
 }));
 
-import { resetCrowdSourceConfigForTests } from "../../config/crowdsource";
-import { createCrowdSourceWebhookRoutes } from "../../routes/crowdSourceWebhook";
-import { logger } from "../../utils/logger";
+import { resetCrowdSourceConfigForTests } from '../../config/crowdsource';
+import { createCrowdSourceWebhookRoutes } from '../../routes/crowdSourceWebhook';
+import { logger } from '../../utils/logger';
 
-const SECRET = "a-test-webhook-secret-long-enough";
+const SECRET = 'a-test-webhook-secret-long-enough';
 
 /**
  * How the parser is configured, which turns out to decide the failure mode.
@@ -50,23 +50,23 @@ const SECRET = "a-test-webhook-secret-long-enough";
  *   SUCCEEDS. Silent. Allo does not configure this today, and nothing stops
  *   someone adding it — Alia has exactly this shape.
  */
-type ParserMode = "none" | "plain" | "verify-buffer";
+type ParserMode = 'none' | 'plain' | 'verify-buffer';
 
 function appWith(mode: ParserMode): express.Express {
   const app = express();
-  if (mode === "plain") {
+  if (mode === 'plain') {
     app.use(express.json());
-  } else if (mode === "verify-buffer") {
+  } else if (mode === 'verify-buffer') {
     app.use(
       express.json({
         verify: (req, _res, buf) => {
-          Reflect.set(req, "rawBody", buf);
+          Reflect.set(req, 'rawBody', buf);
         },
       }),
     );
   }
-  app.use("/webhooks", createCrowdSourceWebhookRoutes());
-  if (mode === "none") app.use(express.json());
+  app.use('/webhooks', createCrowdSourceWebhookRoutes());
+  if (mode === 'none') app.use(express.json());
   return app;
 }
 
@@ -92,8 +92,8 @@ function assertValidEnvelope(candidate: Record<string, unknown>): Record<string,
   if (!parsed.success) {
     throw new Error(
       `Test fixture is not a valid webhook envelope — the contract has moved. Issues:\n${parsed.error.issues
-        .map((issue) => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`)
-        .join("\n")}`,
+        .map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+        .join('\n')}`,
     );
   }
   return candidate;
@@ -111,30 +111,28 @@ function assertValidEnvelope(candidate: Record<string, unknown>): Record<string,
  */
 function signedDelivery(secret: string) {
   const body = assertValidEnvelope({
-    id: "evt_signed_1",
-    type: "case.created",
+    id: 'evt_signed_1',
+    type: 'case.created',
     createdAt: new Date().toISOString(),
-    organizationId: "org_1",
-    applicationId: "app_1",
-    data: { caseId: "case_1" },
+    organizationId: 'org_1',
+    applicationId: 'app_1',
+    data: { caseId: 'case_1' },
   });
   const raw = JSON.stringify(body);
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = createHmac("sha256", secret)
-    .update(`${timestamp}.${raw}`)
-    .digest("hex");
+  const signature = createHmac('sha256', secret).update(`${timestamp}.${raw}`).digest('hex');
   return {
     raw,
     headers: {
-      "content-type": "application/json",
-      "x-crowdsource-event-id": "evt_signed_1",
-      "x-crowdsource-timestamp": timestamp,
-      "x-crowdsource-signature": `v1=${signature}`,
+      'content-type': 'application/json',
+      'x-crowdsource-event-id': 'evt_signed_1',
+      'x-crowdsource-timestamp': timestamp,
+      'x-crowdsource-signature': `v1=${signature}`,
     },
   };
 }
 
-describe("crowdsource webhook mount order", () => {
+describe('crowdsource webhook mount order', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetCrowdSourceConfigForTests();
@@ -147,11 +145,11 @@ describe("crowdsource webhook mount order", () => {
     resetCrowdSourceConfigForTests();
   });
 
-  it("refuses, naming the cause, when a body parser ran first", async () => {
-    const response = await request(appWith("plain"))
-      .post("/webhooks/crowdsource")
-      .set("content-type", "application/json")
-      .send({ id: "evt_1", type: "case.decided" });
+  it('refuses, naming the cause, when a body parser ran first', async () => {
+    const response = await request(appWith('plain'))
+      .post('/webhooks/crowdsource')
+      .set('content-type', 'application/json')
+      .send({ id: 'evt_1', type: 'case.decided' });
 
     /**
      * 500, not 4xx: this is Allo misassembled, not a bad request. Answering
@@ -159,10 +157,10 @@ describe("crowdsource webhook mount order", () => {
      * decisions queue up rather than being lost while the deployment is broken.
      */
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({ message: "Webhook receiver is misconfigured" });
+    expect(response.body).toMatchObject({ message: 'Webhook receiver is misconfigured' });
   });
 
-  it("does not answer 500-misconfigured when mounted correctly", async () => {
+  it('does not answer 500-misconfigured when mounted correctly', async () => {
     /**
      * The vacuity guard for the test above. Without it, a route that returned 500
      * unconditionally — or an app that failed to mount at all — would satisfy the
@@ -172,18 +170,18 @@ describe("crowdsource webhook mount order", () => {
      * and that is the point: it got far enough to be verified, which is exactly
      * what mounting ahead of the parser buys.
      */
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
-      .set("content-type", "application/json")
-      .send({ id: "evt_1", type: "case.decided" });
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
+      .set('content-type', 'application/json')
+      .send({ id: 'evt_1', type: 'case.decided' });
 
     expect(response.status).not.toBe(404);
-    expect(response.body?.message).not.toBe("Webhook receiver is misconfigured");
+    expect(response.body?.message).not.toBe('Webhook receiver is misconfigured');
     // Unsigned: refused by signature verification, never accepted.
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
-  it("is not mounted at all without a configured secret", async () => {
+  it('is not mounted at all without a configured secret', async () => {
     /**
      * Not mounted, rather than mounted and permissive. A route that answers
      * anything without a secret is one that will eventually be reasoned about as
@@ -192,14 +190,14 @@ describe("crowdsource webhook mount order", () => {
     delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
     resetCrowdSourceConfigForTests();
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
-      .send({ id: "evt_1" });
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
+      .send({ id: 'evt_1' });
 
     expect(response.status).toBe(404);
   });
 
-  it("refuses a late mount even when the parser kept the raw bytes", async () => {
+  it('refuses a late mount even when the parser kept the raw bytes', async () => {
     /**
      * The case where the SDK's own protection DISAPPEARS, and therefore the case
      * `assertRawBody` exists for.
@@ -223,16 +221,16 @@ describe("crowdsource webhook mount order", () => {
      */
     const { raw, headers } = signedDelivery(SECRET);
 
-    const response = await request(appWith("verify-buffer"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('verify-buffer'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({ message: "Webhook receiver is misconfigured" });
+    expect(response.body).toMatchObject({ message: 'Webhook receiver is misconfigured' });
   });
 
-  it("accepts that same signed delivery when mounted correctly", async () => {
+  it('accepts that same signed delivery when mounted correctly', async () => {
     /**
      * The vacuity guard for the test above, and the one that makes it mean
      * anything: it proves the delivery really is well-formed and correctly
@@ -241,29 +239,29 @@ describe("crowdsource webhook mount order", () => {
      */
     const { raw, headers } = signedDelivery(SECRET);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBeLessThan(300);
   });
 
-  it("never authenticates by Oxy session — the HMAC is the authentication", async () => {
+  it('never authenticates by Oxy session — the HMAC is the authentication', async () => {
     /**
      * An unsigned request carrying a bearer token must not be treated as
      * authorised. This is not a user endpoint, and a session must never satisfy it.
      */
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
-      .set("authorization", "Bearer a-perfectly-valid-looking-token")
-      .set("content-type", "application/json")
-      .send({ id: "evt_1", type: "case.decided" });
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
+      .set('authorization', 'Bearer a-perfectly-valid-looking-token')
+      .set('content-type', 'application/json')
+      .send({ id: 'evt_1', type: 'case.decided' });
 
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
-  it("refuses a tampered body with signature_mismatch, not merely with a 4xx", async () => {
+  it('refuses a tampered body with signature_mismatch, not merely with a 4xx', async () => {
     /**
      * Until this existed, EVERY test in this file turned on the mount and none on
      * the cryptography — all of them would have passed with the signature check
@@ -291,17 +289,16 @@ describe("crowdsource webhook mount order", () => {
     const tamperedRaw = raw.replace('"caseId":"case_1"', '"caseId":"case_2"');
     expect(tamperedRaw).not.toBe(raw);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(tamperedRaw);
 
     expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
-    expect(logger.warn).toHaveBeenCalledWith(
-      "[CrowdSource] webhook delivery refused",
-      { rejection: "signature_mismatch" },
-    );
+    expect(response.body).toMatchObject({ rejection: 'signature_mismatch' });
+    expect(logger.warn).toHaveBeenCalledWith('[CrowdSource] webhook delivery refused', {
+      rejection: 'signature_mismatch',
+    });
   });
 });
 
@@ -321,9 +318,9 @@ describe("crowdsource webhook mount order", () => {
  * precisely the failure a rotation window invites, since the natural sloppy
  * implementation is to stop checking.
  */
-describe("crowdsource webhook secret rotation", () => {
-  const PREVIOUS_SECRET = "the-retiring-webhook-secret-x";
-  const UNRELATED_SECRET = "a-secret-nobody-configured-yy";
+describe('crowdsource webhook secret rotation', () => {
+  const PREVIOUS_SECRET = 'the-retiring-webhook-secret-x';
+  const UNRELATED_SECRET = 'a-secret-nobody-configured-yy';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -338,18 +335,18 @@ describe("crowdsource webhook secret rotation", () => {
     resetCrowdSourceConfigForTests();
   });
 
-  it("accepts a delivery signed with the PREVIOUS secret", async () => {
+  it('accepts a delivery signed with the PREVIOUS secret', async () => {
     const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBeLessThan(300);
   });
 
-  it("still accepts a delivery signed with the CURRENT secret", async () => {
+  it('still accepts a delivery signed with the CURRENT secret', async () => {
     /**
      * A rotation that accepted only the old key would be just as broken as one
      * that accepted only the new key, and in the same silent way — so both
@@ -357,15 +354,15 @@ describe("crowdsource webhook secret rotation", () => {
      */
     const { raw, headers } = signedDelivery(SECRET);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBeLessThan(300);
   });
 
-  it("still refuses a delivery signed with an unrelated secret", async () => {
+  it('still refuses a delivery signed with an unrelated secret', async () => {
     /**
      * The vacuity guard for the two above. Without it, a middleware that had
      * stopped verifying entirely — the exact thing a badly implemented rotation
@@ -373,16 +370,16 @@ describe("crowdsource webhook secret rotation", () => {
      */
     const { raw, headers } = signedDelivery(UNRELATED_SECRET);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+    expect(response.body).toMatchObject({ rejection: 'signature_mismatch' });
   });
 
-  it("refuses the previous secret once it is no longer configured", async () => {
+  it('refuses the previous secret once it is no longer configured', async () => {
     /**
      * The end of the rotation. A previous secret that keeps working after it is
      * unset is a credential that cannot actually be retired, which makes the
@@ -393,13 +390,13 @@ describe("crowdsource webhook secret rotation", () => {
 
     const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
 
-    const response = await request(appWith("none"))
-      .post("/webhooks/crowdsource")
+    const response = await request(appWith('none'))
+      .post('/webhooks/crowdsource')
       .set(headers)
       .send(raw);
 
     expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(response.body).toMatchObject({ rejection: "signature_mismatch" });
+    expect(response.body).toMatchObject({ rejection: 'signature_mismatch' });
   });
 
   it("supplies the previous secret from ALLO's config, not the SDK's env fallback", async () => {
@@ -428,16 +425,13 @@ describe("crowdsource webhook secret rotation", () => {
     resetCrowdSourceConfigForTests();
 
     // Built while configured — Allo captures the value here.
-    const app = appWith("none");
+    const app = appWith('none');
 
     // Now remove the SDK's fallback source entirely.
     delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
 
     const { raw, headers } = signedDelivery(PREVIOUS_SECRET);
-    const response = await request(app)
-      .post("/webhooks/crowdsource")
-      .set(headers)
-      .send(raw);
+    const response = await request(app).post('/webhooks/crowdsource').set(headers).send(raw);
 
     expect(response.status).toBeLessThan(300);
   });
@@ -464,16 +458,13 @@ describe("crowdsource webhook secret rotation", () => {
     process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
     resetCrowdSourceConfigForTests();
 
-    const app = appWith("none");
+    const app = appWith('none');
 
     delete process.env.CROWDSOURCE_WEBHOOK_SECRET;
     delete process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS;
 
     const { raw, headers } = signedDelivery(SECRET);
-    const response = await request(app)
-      .post("/webhooks/crowdsource")
-      .set(headers)
-      .send(raw);
+    const response = await request(app).post('/webhooks/crowdsource').set(headers).send(raw);
 
     expect(response.status).toBeLessThan(300);
   });

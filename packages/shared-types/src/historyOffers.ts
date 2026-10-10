@@ -10,11 +10,18 @@
  * donor's signing key, opens `sealedKey` with its own transfer key, and only
  * then downloads a chunk.
  */
-import { z } from "zod";
-import { archiveManifestSchema } from "./archive";
-import { accountIdSchema, base64Schema, ed25519SignatureSchema, idSchema, instanceIdSchema, isoDateSchema } from "./common";
+import { z } from 'zod';
+import { archiveManifestSchema } from './archive';
+import {
+  accountIdSchema,
+  base64Schema,
+  ed25519SignatureSchema,
+  idSchema,
+  instanceIdSchema,
+  isoDateSchema,
+} from './common';
 
-export const HISTORY_OFFER_STATUSES = ["pending", "consumed", "expired"] as const;
+export const HISTORY_OFFER_STATUSES = ['pending', 'consumed', 'expired'] as const;
 export const historyOfferStatusSchema = z.enum(HISTORY_OFFER_STATUSES);
 export type HistoryOfferStatus = z.infer<typeof historyOfferStatusSchema>;
 
@@ -56,8 +63,12 @@ export const createHistoryOfferRequestSchema = z
     manifestSignature: ed25519SignatureSchema,
   })
   .superRefine((v, ctx) => {
-    if (v.manifest.kind !== "transfer") {
-      ctx.addIssue({ code: "custom", path: ["manifest", "kind"], message: "a history offer carries a transfer manifest" });
+    if (v.manifest.kind !== 'transfer') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['manifest', 'kind'],
+        message: 'a history offer carries a transfer manifest',
+      });
     }
   });
 export type CreateHistoryOfferRequest = z.infer<typeof createHistoryOfferRequestSchema>;

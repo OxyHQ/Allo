@@ -1,9 +1,9 @@
-import { connect, constants, type ClientHttp2Session } from "http2";
+import { connect, constants, type ClientHttp2Session } from 'http2';
 
-import type { ApnsCredentials } from "../../config/push";
-import { logger } from "../../utils/logger";
-import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from "./delivery";
-import type { ApnsTokenProvider } from "./apnsAuth";
+import type { ApnsCredentials } from '../../config/push';
+import { logger } from '../../utils/logger';
+import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from './delivery';
+import type { ApnsTokenProvider } from './apnsAuth';
 
 /**
  * iOS delivery, straight to Apple over HTTP/2.
@@ -26,13 +26,13 @@ import type { ApnsTokenProvider } from "./apnsAuth";
  */
 
 /** The path APNs takes a device token on. */
-const DEVICE_PATH_PREFIX = "/3/device/";
+const DEVICE_PATH_PREFIX = '/3/device/';
 
 /** How long one request may take before it is given up on as a failure. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /** Apple's priority for an alert the user should see now. */
-const PRIORITY_IMMEDIATE = "10";
+const PRIORITY_IMMEDIATE = '10';
 
 /**
  * The APNs reasons that mean this token is permanently undeliverable.
@@ -51,9 +51,9 @@ const PRIORITY_IMMEDIATE = "10";
  * iOS token in the system over a mistake in one environment variable.
  */
 const PERMANENTLY_INVALID_REASONS: ReadonlySet<string> = new Set([
-  "BadDeviceToken",
-  "Unregistered",
-  "DeviceTokenNotForTopic",
+  'BadDeviceToken',
+  'Unregistered',
+  'DeviceTokenNotForTopic',
 ]);
 
 export interface ApnsRequest {
@@ -78,7 +78,7 @@ export function createApnsSender(
   transport: ApnsTransport,
 ): PushSender {
   return {
-    platform: "ios",
+    platform: 'ios',
     async send(devices, notification) {
       return Promise.all(
         devices.map((device) => sendOne(device, notification, credentials, tokens, transport)),
@@ -104,24 +104,24 @@ async function sendOne(
   } catch (error) {
     // A signing error, a connection that could not be opened, a timeout. None of
     // them says anything about the token, so the token survives.
-    logger.error("[Push] an APNs request did not complete", error);
-    return { kind: "failed", reason: error instanceof Error ? error.message : String(error) };
+    logger.error('[Push] an APNs request did not complete', error);
+    return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) };
   }
 
   if (response.status === constants.HTTP_STATUS_OK) {
-    return { kind: "delivered" };
+    return { kind: 'delivered' };
   }
 
   const reason = response.reason ?? `status ${response.status}`;
   if (response.reason !== undefined && PERMANENTLY_INVALID_REASONS.has(response.reason)) {
-    return { kind: "rejected", reason };
+    return { kind: 'rejected', reason };
   }
 
-  logger.warn("[Push] APNs did not deliver, and the token is being kept", {
+  logger.warn('[Push] APNs did not deliver, and the token is being kept', {
     status: response.status,
     reason,
   });
-  return { kind: "failed", reason };
+  return { kind: 'failed', reason };
 }
 
 function buildHeaders(
@@ -130,9 +130,9 @@ function buildHeaders(
 ): Record<string, string> {
   return {
     authorization: `bearer ${tokens.token()}`,
-    "apns-topic": credentials.topic,
-    "apns-push-type": "alert",
-    "apns-priority": PRIORITY_IMMEDIATE,
+    'apns-topic': credentials.topic,
+    'apns-push-type': 'alert',
+    'apns-priority': PRIORITY_IMMEDIATE,
   };
 }
 
@@ -145,7 +145,7 @@ function buildPayload(notification: PushNotification): Record<string, unknown> {
   return {
     aps: {
       alert: { title: notification.title, body: notification.body },
-      "mutable-content": 1,
+      'mutable-content': 1,
     },
     ...coordinates,
   };
@@ -180,17 +180,17 @@ export function createHttp2ApnsTransport(host: string): ApnsHttp2Transport {
     }
     const opened = connect(host);
     opened.unref();
-    opened.on("error", (error) => {
+    opened.on('error', (error) => {
       // Reported here rather than left to the individual streams: a session-level
       // error kills every stream on it, and each of those reports its own
       // failure. This is the one line that names the connection.
-      logger.warn("[Push] the APNs connection failed and will be reopened", error);
+      logger.warn('[Push] the APNs connection failed and will be reopened', error);
     });
     const forget = (): void => {
       if (session === opened) session = undefined;
     };
-    opened.on("close", forget);
-    opened.on("goaway", forget);
+    opened.on('close', forget);
+    opened.on('goaway', forget);
     session = opened;
     return opened;
   };
@@ -213,17 +213,17 @@ export function createHttp2ApnsTransport(host: string): ApnsHttp2Transport {
       };
 
       const stream = active.request({
-        [constants.HTTP2_HEADER_METHOD]: "POST",
+        [constants.HTTP2_HEADER_METHOD]: 'POST',
         [constants.HTTP2_HEADER_PATH]: request.path,
         ...request.headers,
       });
-      stream.setEncoding("utf8");
+      stream.setEncoding('utf8');
       stream.setTimeout(REQUEST_TIMEOUT_MS, () => {
         stream.destroy(new Error(`APNs did not answer within ${REQUEST_TIMEOUT_MS}ms`));
       });
 
       let status = 0;
-      let body = "";
+      let body = '';
       let settled = false;
       const settle = (outcome: () => void): void => {
         if (settled) return;
@@ -232,17 +232,17 @@ export function createHttp2ApnsTransport(host: string): ApnsHttp2Transport {
         outcome();
       };
 
-      stream.on("response", (headers) => {
+      stream.on('response', (headers) => {
         const received = headers[constants.HTTP2_HEADER_STATUS];
-        status = typeof received === "number" ? received : Number(received ?? 0);
+        status = typeof received === 'number' ? received : Number(received ?? 0);
       });
-      stream.on("data", (chunk: string) => {
+      stream.on('data', (chunk: string) => {
         body += chunk;
       });
-      stream.on("end", () => {
+      stream.on('end', () => {
         settle(() => resolve({ status, reason: readReason(body) }));
       });
-      stream.on("error", (error) => {
+      stream.on('error', (error) => {
         settle(() => reject(error));
       });
 
@@ -270,12 +270,12 @@ function readReason(body: string): string | undefined {
   if (body.length === 0) return undefined;
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === "object" && parsed !== null) {
+    if (typeof parsed === 'object' && parsed !== null) {
       const reason = (parsed as { reason?: unknown }).reason;
-      if (typeof reason === "string" && reason.length > 0) return reason;
+      if (typeof reason === 'string' && reason.length > 0) return reason;
     }
   } catch (error) {
-    logger.warn("[Push] an APNs response body was not JSON", error);
+    logger.warn('[Push] an APNs response body was not JSON', error);
   }
   return undefined;
 }

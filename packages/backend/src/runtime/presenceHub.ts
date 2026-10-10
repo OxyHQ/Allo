@@ -31,10 +31,10 @@ import {
   MAX_PRESENCE_WATCH,
   presenceWatchEventSchema,
   type PresenceState,
-} from "@allo/shared-types";
-import type { AuthenticatedInstance } from "../middleware/instanceAuth";
-import { beat, farewell, readPresence, visibleTo } from "../services/platform/presenceService";
-import { logger } from "../utils/logger";
+} from '@allo/shared-types';
+import type { AuthenticatedInstance } from '../middleware/instanceAuth';
+import { beat, farewell, readPresence, visibleTo } from '../services/platform/presenceService';
+import { logger } from '../utils/logger';
 
 /** How often the union of the watch sets is re-read. */
 export const PRESENCE_TICK_MS = 15_000;
@@ -44,7 +44,7 @@ export const VISIBILITY_TTL_MS = 60_000;
 /** What the hub needs of a socket. Narrow on purpose: the tests drive it with a plain object. */
 export interface PresenceSocket {
   readonly id: string;
-  emit(event: "presence", payload: PresenceState): unknown;
+  emit(event: 'presence', payload: PresenceState): unknown;
 }
 
 interface Watcher {
@@ -58,7 +58,8 @@ interface Watcher {
   last: Map<string, string>;
 }
 
-const fingerprint = (state: PresenceState): string => `${state.online ? "1" : "0"}:${state.lastSeenAt ?? ""}`;
+const fingerprint = (state: PresenceState): string =>
+  `${state.online ? '1' : '0'}:${state.lastSeenAt ?? ''}`;
 
 export interface PresenceHubDeps {
   now?: () => Date;
@@ -100,16 +101,19 @@ export class PresenceHub {
       visibleAt: 0,
       last: new Map(),
     });
-    if (instance.status !== "active") return;
+    if (instance.status !== 'active') return;
     this.sockets.set(instance.id, (this.sockets.get(instance.id) ?? 0) + 1);
-    await this.service.beat(instance.accountId, instance.id, { now: () => this.now, lastWrite: this.lastWrite });
+    await this.service.beat(instance.accountId, instance.id, {
+      now: () => this.now,
+      lastWrite: this.lastWrite,
+    });
     await this.pushLocal(instance.accountId);
   }
 
   /** A socket went. The instance is only gone when its last socket is. */
   async detach(socket: PresenceSocket, instance: AuthenticatedInstance): Promise<void> {
     this.watchers.delete(socket.id);
-    if (instance.status !== "active") return;
+    if (instance.status !== 'active') return;
     const remaining = (this.sockets.get(instance.id) ?? 1) - 1;
     if (remaining > 0) {
       this.sockets.set(instance.id, remaining);
@@ -122,8 +126,11 @@ export class PresenceHub {
 
   /** Still here. Moves the deadline; an account that stops beating goes offline on its own. */
   async heartbeat(instance: AuthenticatedInstance): Promise<void> {
-    if (instance.status !== "active") return;
-    await this.service.beat(instance.accountId, instance.id, { now: () => this.now, lastWrite: this.lastWrite });
+    if (instance.status !== 'active') return;
+    await this.service.beat(instance.accountId, instance.id, {
+      now: () => this.now,
+      lastWrite: this.lastWrite,
+    });
   }
 
   /**
@@ -136,16 +143,20 @@ export class PresenceHub {
     const watcher = this.watchers.get(socket.id);
     if (!watcher) return;
 
-    const accountIds = [...new Set(parsed.data.accountIds)].filter((id) => id !== watcher.accountId).slice(0, MAX_PRESENCE_WATCH);
+    const accountIds = [...new Set(parsed.data.accountIds)]
+      .filter((id) => id !== watcher.accountId)
+      .slice(0, MAX_PRESENCE_WATCH);
     watcher.watching = accountIds;
     watcher.last.clear();
     watcher.visibleAt = 0;
     if (accountIds.length === 0) return;
 
-    const answer = await this.service.readPresence(watcher.accountId, accountIds, { now: () => this.now });
+    const answer = await this.service.readPresence(watcher.accountId, accountIds, {
+      now: () => this.now,
+    });
     for (const state of answer.presence) {
       watcher.last.set(state.accountId, fingerprint(state));
-      watcher.socket.emit("presence", state);
+      watcher.socket.emit('presence', state);
     }
   }
 
@@ -158,7 +169,7 @@ export class PresenceHub {
       try {
         await this.refresh(watcher, now);
       } catch (error: unknown) {
-        logger.debug("presence tick failed for a watcher", error);
+        logger.debug('presence tick failed for a watcher', error);
       }
     }
   }
@@ -171,29 +182,33 @@ export class PresenceHub {
       try {
         await this.refresh(watcher, now);
       } catch (error: unknown) {
-        logger.debug("presence push failed", error);
+        logger.debug('presence push failed', error);
       }
     }
   }
 
   private async refresh(watcher: Watcher, now: Date): Promise<void> {
     if (now.getTime() - watcher.visibleAt > VISIBILITY_TTL_MS) {
-      watcher.visible = await this.service.visibleTo(watcher.accountId, watcher.watching, { now: () => now });
+      watcher.visible = await this.service.visibleTo(watcher.accountId, watcher.watching, {
+        now: () => now,
+      });
       watcher.visibleAt = now.getTime();
     }
-    const answer = await this.service.readPresence(watcher.accountId, watcher.watching, { now: () => now });
+    const answer = await this.service.readPresence(watcher.accountId, watcher.watching, {
+      now: () => now,
+    });
     for (const state of answer.presence) {
       const mark = fingerprint(state);
       if (watcher.last.get(state.accountId) === mark) continue;
       watcher.last.set(state.accountId, mark);
-      watcher.socket.emit("presence", state);
+      watcher.socket.emit('presence', state);
     }
   }
 
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
-      void this.tick().catch((error: unknown) => logger.debug("presence tick failed", error));
+      void this.tick().catch((error: unknown) => logger.debug('presence tick failed', error));
     }, PRESENCE_TICK_MS);
     this.timer.unref?.();
   }

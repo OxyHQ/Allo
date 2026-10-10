@@ -19,10 +19,10 @@
  * this schema (`CONVENTIONS.md`).
  */
 
-import { pgTable, text } from "drizzle-orm/pg-core";
-import { timestamptz, updatedAt } from "@oxy.so/db";
+import { pgTable, text } from 'drizzle-orm/pg-core';
+import { timestamptz, updatedAt } from '@oxy.so/db';
 
-export const accountPresence = pgTable("account_presence", {
+export const accountPresence = pgTable('account_presence', {
   /** The Oxy account. One row per account, written by whichever instance beat last. */
   accountId: text().primaryKey(),
   /** When any instance of the account was last connected. */

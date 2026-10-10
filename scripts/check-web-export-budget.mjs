@@ -3,13 +3,18 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-const DIST = resolve(process.argv[2] ?? new URL('../packages/frontend/dist', import.meta.url).pathname);
-const BUDGET_FILE = resolve(process.argv[3] ?? new URL('../performance-budgets.json', import.meta.url).pathname);
+const DIST = resolve(
+  process.argv[2] ?? new URL('../packages/frontend/dist', import.meta.url).pathname,
+);
+const BUDGET_FILE = resolve(
+  process.argv[3] ?? new URL('../performance-budgets.json', import.meta.url).pathname,
+);
 const { frontendWeb: budget } = JSON.parse(readFileSync(BUDGET_FILE, 'utf8'));
-const files = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-  const path = resolve(directory, entry.name);
-  return entry.isDirectory() ? files(path) : [path];
-});
+const files = (directory) =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(directory, entry.name);
+    return entry.isDirectory() ? files(path) : [path];
+  });
 
 const metrics = { totalBytes: 0, javaScriptGzipBytes: 0, fontBytes: 0 };
 for (const file of files(DIST)) {
@@ -19,7 +24,11 @@ for (const file of files(DIST)) {
   if (/\.(?:otf|ttf|woff2?)$/.test(file)) metrics.fontBytes += size;
 }
 
-const checks = [['totalBytes', 'maxTotalBytes'], ['javaScriptGzipBytes', 'maxJavaScriptGzipBytes'], ['fontBytes', 'maxFontBytes']];
+const checks = [
+  ['totalBytes', 'maxTotalBytes'],
+  ['javaScriptGzipBytes', 'maxJavaScriptGzipBytes'],
+  ['fontBytes', 'maxFontBytes'],
+];
 const failures = checks.filter(([metric, limit]) => metrics[metric] > budget[limit]);
 console.log(JSON.stringify({ metrics, budget }, null, 2));
 for (const [metric, limit] of failures) {

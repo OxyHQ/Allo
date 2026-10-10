@@ -40,7 +40,14 @@ interface Props {
   onAnswer: (answer: DeleteConversationAnswer) => void;
 }
 
-function DeleteConversationBody({ title, description, alsoForThemLabel, confirmLabel, cancelLabel, onAnswer }: Props) {
+function DeleteConversationBody({
+  title,
+  description,
+  alsoForThemLabel,
+  confirmLabel,
+  cancelLabel,
+  onAnswer,
+}: Props) {
   const theme = useTheme();
   const [forEveryone, setForEveryone] = useState(false);
   return (
@@ -55,10 +62,18 @@ function DeleteConversationBody({ title, description, alsoForThemLabel, confirmL
         <Checkbox checked={forEveryone} onCheckedChange={setForEveryone} label={alsoForThemLabel} />
       ) : null}
       <View style={styles.actions}>
-        <Button  onPress={() => onAnswer({ confirmed: false, forEveryone: false })} tone="neutral" appearance="outline">
+        <Button
+          onPress={() => onAnswer({ confirmed: false, forEveryone: false })}
+          tone="neutral"
+          appearance="outline"
+        >
           {cancelLabel}
         </Button>
-        <Button  onPress={() => onAnswer({ confirmed: true, forEveryone })} tone="danger" appearance="solid">
+        <Button
+          onPress={() => onAnswer({ confirmed: true, forEveryone })}
+          tone="danger"
+          appearance="solid"
+        >
           {confirmLabel}
         </Button>
       </View>
@@ -67,9 +82,13 @@ function DeleteConversationBody({ title, description, alsoForThemLabel, confirmL
 }
 
 /** Presents the dialog and resolves what the person chose. A dismissal is a `false`, like every other surface. */
-export function askDeleteConversation(options: Omit<Props, 'onAnswer'>): Promise<DeleteConversationAnswer> {
+export function askDeleteConversation(
+  options: Omit<Props, 'onAnswer'>,
+): Promise<DeleteConversationAnswer> {
   return present<DeleteConversationAnswer>(
-    (surface) => <DeleteConversationBody {...options} onAnswer={(answer) => surface.dismiss(answer)} />,
+    (surface) => (
+      <DeleteConversationBody {...options} onAnswer={(answer) => surface.dismiss(answer)} />
+    ),
     { placement: { base: 'bottom', md: 'center' }, maxWidth: 420 },
   ).then((answer) => answer ?? { confirmed: false, forEveryone: false });
 }

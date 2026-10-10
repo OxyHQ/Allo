@@ -1,21 +1,20 @@
-const pkg = require('./package.json')
-const fs = require('fs')
-const path = require('path')
-const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config')
+const pkg = require('./package.json');
+const fs = require('fs');
+const path = require('path');
+const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config');
 
-module.exports = function(_config) {
-
-    /**
-     * App version number. Should be incremented as part of a release cycle.
-     */
-  const VERSION = pkg.version
+module.exports = function (_config) {
+  /**
+   * App version number. Should be incremented as part of a release cycle.
+   */
+  const VERSION = pkg.version;
 
   /**
    * Uses built-in Expo env vars
    *
    * @see https://docs.expo.dev/build-reference/variables/#built-in-environment-variables
    */
-  const PLATFORM = process.env.EAS_BUILD_PLATFORM
+  const PLATFORM = process.env.EAS_BUILD_PLATFORM;
 
   // ONE build variant, chosen explicitly: `APP_VARIANT=development` builds the
   // development app, anything else (unset included) is the production app.
@@ -30,24 +29,23 @@ module.exports = function(_config) {
   // asserts a production config names no local host. The URL scheme is
   // intentionally shared so deep-link plumbing keeps working — Android just shows
   // an app chooser when both are installed.
-  const IS_DEV_VARIANT = process.env.APP_VARIANT === 'development'
-  const ANDROID_ID = IS_DEV_VARIANT ? 'com.allo.app.dev' : 'com.allo.app'
-  const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios'
-  const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo'
+  const IS_DEV_VARIANT = process.env.APP_VARIANT === 'development';
+  const ANDROID_ID = IS_DEV_VARIANT ? 'com.allo.app.dev' : 'com.allo.app';
+  const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios';
+  const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo';
 
   // The host whose https links open the app: the web app's own origin.
-  const APP_LINK_HOST = 'allo.you'
+  const APP_LINK_HOST = 'allo.you';
 
   // Check if google-services.json exists
-  const googleServicesPath = path.resolve(__dirname, '../../google-services.json')
-  const hasGoogleServices = fs.existsSync(googleServicesPath)
+  const googleServicesPath = path.resolve(__dirname, '../../google-services.json');
+  const hasGoogleServices = fs.existsSync(googleServicesPath);
 
-
-return {
+  return {
     expo: {
-        name: APP_NAME,
-        slug: "allo",
-        version: VERSION,
+      name: APP_NAME,
+      slug: 'allo',
+      version: VERSION,
       orientation: 'portrait',
       icon: './assets/images/allo-icon.png',
       scheme: 'allo',
@@ -55,7 +53,7 @@ return {
       newArchEnabled: true,
       experiments: {
         typedRoutes: true,
-        reactCompiler: true
+        reactCompiler: true,
       },
       ios: {
         supportsTablet: true,
@@ -65,194 +63,193 @@ return {
         // Apple Team ID is configured there.
         associatedDomains: [`applinks:${APP_LINK_HOST}`],
       },
-        android: {
-            adaptiveIcon: {
-                foregroundImage: "./assets/images/allo-icon_foreground.png",
-                backgroundImage: "./assets/images/allo-icon_background.png",
-                monochromeImage: "./assets/images/allo-icon_monochrome.png"
-            },
-            permissions: [
-                "android.permission.CAMERA",
-                "android.permission.RECORD_AUDIO"
-            ],
-            // Must match google-services.json package_name
-            package: ANDROID_ID,
-            // Point to your google-services.json for FCM (only if file exists)
-            ...(hasGoogleServices && { googleServicesFile: "../../google-services.json" }),
-            // App Links. Every https host in an autoVerify filter is VERIFIED,
-            // so each must serve an assetlinks.json naming this package and its
-            // signing key. `allo.you` is the web app (the `allo-frontend`
-            // Worker, `wrangler.toml`), and `worker/appAssociation.js` serves
-            // that file. `allo.chat` was listed here and does not resolve in
-            // DNS, so no https link ever opened the app (OxyHQ/Allo#176).
-            // `oxy.so` was listed and removed: Allo opens no oxy.so URL, oxy.so
-            // publishes no assetlinks for Allo, and on Android 11 and below one
-            // unverifiable host fails verification for the WHOLE filter.
-            // Mention removed the same entry (OxyHQ/Mention#1128).
-            // `__tests__/appConfig.test.ts` keeps both out.
-            intentFilters: [
-                    {
-                        action: 'VIEW',
-                        autoVerify: true,
-                        data: [
-                            {
-                                scheme: 'https',
-                                host: APP_LINK_HOST,
-                            },
-                        ],
-                        category: ['BROWSABLE', 'DEFAULT'],
-                    },
-                    // The development variant also opens links to a local web
-                    // server. Its own filter, without autoVerify: an http host can
-                    // never verify, and in a verified filter it would only fail it.
-                    ...(IS_DEV_VARIANT
-                        ? [
-                            {
-                                action: 'VIEW',
-                                data: [{ scheme: 'http', host: 'localhost', port: '4140' }],
-                                category: ['BROWSABLE', 'DEFAULT'],
-                            },
-                        ]
-                        : []),
-            ],
-            softwareKeyboardLayoutMode: "pan",
-            edgeToEdgeEnabled: true,
+      android: {
+        adaptiveIcon: {
+          foregroundImage: './assets/images/allo-icon_foreground.png',
+          backgroundImage: './assets/images/allo-icon_background.png',
+          monochromeImage: './assets/images/allo-icon_monochrome.png',
         },
-        web: {
-            bundler: "metro",
-            output: "static",
-            favicon: "./public/favicon.ico",
-            manifest: "./public/manifest.json",
-            meta: {
-                viewport: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no",
-                themeColor: "#4F46E5",
-                appleMobileWebAppCapable: "yes",
-                appleMobileWebAppStatusBarStyle: "default",
-                appleMobileWebAppTitle: "Allo",
-                applicationName: "Allo",
-                msapplicationTileColor: "#10b981",
-                msapplicationConfig: "/browserconfig.xml"
-            },
+        permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
+        // Must match google-services.json package_name
+        package: ANDROID_ID,
+        // Point to your google-services.json for FCM (only if file exists)
+        ...(hasGoogleServices && { googleServicesFile: '../../google-services.json' }),
+        // App Links. Every https host in an autoVerify filter is VERIFIED,
+        // so each must serve an assetlinks.json naming this package and its
+        // signing key. `allo.you` is the web app (the `allo-frontend`
+        // Worker, `wrangler.toml`), and `worker/appAssociation.js` serves
+        // that file. `allo.chat` was listed here and does not resolve in
+        // DNS, so no https link ever opened the app (OxyHQ/Allo#176).
+        // `oxy.so` was listed and removed: Allo opens no oxy.so URL, oxy.so
+        // publishes no assetlinks for Allo, and on Android 11 and below one
+        // unverifiable host fails verification for the WHOLE filter.
+        // Mention removed the same entry (OxyHQ/Mention#1128).
+        // `__tests__/appConfig.test.ts` keeps both out.
+        intentFilters: [
+          {
+            action: 'VIEW',
+            autoVerify: true,
+            data: [
+              {
+                scheme: 'https',
+                host: APP_LINK_HOST,
+              },
+            ],
+            category: ['BROWSABLE', 'DEFAULT'],
+          },
+          // The development variant also opens links to a local web
+          // server. Its own filter, without autoVerify: an http host can
+          // never verify, and in a verified filter it would only fail it.
+          ...(IS_DEV_VARIANT
+            ? [
+                {
+                  action: 'VIEW',
+                  data: [{ scheme: 'http', host: 'localhost', port: '4140' }],
+                  category: ['BROWSABLE', 'DEFAULT'],
+                },
+              ]
+            : []),
+        ],
+        softwareKeyboardLayoutMode: 'pan',
+        edgeToEdgeEnabled: true,
+      },
+      web: {
+        bundler: 'metro',
+        output: 'static',
+        favicon: './public/favicon.ico',
+        manifest: './public/manifest.json',
+        meta: {
+          viewport: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no',
+          themeColor: '#4F46E5',
+          appleMobileWebAppCapable: 'yes',
+          appleMobileWebAppStatusBarStyle: 'default',
+          appleMobileWebAppTitle: 'Allo',
+          applicationName: 'Allo',
+          msapplicationTileColor: '#10b981',
+          msapplicationConfig: '/browserconfig.xml',
+        },
         // Add Metro configuration for better module resolution
         metro: {
           resolver: {
             alias: {
-              '@react-native-async-storage/async-storage': require.resolve('@react-native-async-storage/async-storage'),
+              '@react-native-async-storage/async-storage': require.resolve(
+                '@react-native-async-storage/async-storage',
+              ),
             },
           },
         },
-        },
-        // Build the plugins array dynamically so we can exclude certain
-        // native-only plugins (like expo-notifications) from web builds.
-        plugins: (() => {
-            const base = [
-                "expo-router",
-                // Oxy-standard native splash: Allo's own paper-plane logo centered on
-                // the shared dark brand background (#0B0B0F), with the Oxy "from Oxy"
-                // bottom branding added by the "@oxy.so/expo-splash" string plugin below.
-                // The branding string MUST stay immediately after the splash tuple.
-                oxySplashScreenPlugin({
-                    image: './assets/images/splash-logo.png',
-                    imageWidth: 176,
-                    backgroundColor: '#0B0B0F'
-                }),
-                "@oxy.so/expo-splash",
-                [
-                    "expo-camera",
-                    {
-                        cameraPermission: "Allow $(PRODUCT_NAME) to access your camera",
-                        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone",
-                        recordAudioAndroid: true
-                    }
-                ],
-                "expo-image-picker",
-                "expo-video",
-                "expo-audio",
-                [
-                    "expo-secure-store",
-                    {
-                        configureAndroidBackup: true,
-                        faceIDPermission: "Allow $(PRODUCT_NAME) to access your Face ID biometric data."
-                    }
-                ],
-                'react-native-compressor',
-                [
-                    '@bitdrift/react-native',
-                    {
-                        networkInstrumentation: true,
-                    }
-                ],
-                [
-                    'expo-build-properties',
-                    {
-                      ios: {
-                        deploymentTarget: '16.4',
-                      },
-                      android: {
-                        // compileSdk 36 is required by androidx.camera 1.6.0
-                        // (pulled in by expo-camera); compileSdk can be bumped
-                        // independently of targetSdk, which stays at 35.
-                        compileSdkVersion: 36,
-                        targetSdkVersion: 35,
-                        buildToolsVersion: '36.0.0',
-                        enableProguardInReleaseBuilds: true,
-                        enableShrinkResourcesInReleaseBuilds: true,
-                        useLegacyPackaging: false,
-                        extraProguardRules: [
-                          '# @livekit/react-native-webrtc 144.2.0 moved to the PREFIXED WebRTC build',
-                          '# (livekit.org.*) but its consumer rules still keep org.jni_zero.**. R8',
-                          '# then strips livekit.org.jni_zero.JniInit, and libjingle_peerconnection',
-                          '# aborts in JNI_OnLoad at startup. Fixed upstream in',
-                          '# livekit/react-native-webrtc#107; drop once a release keeps it.',
-                          '-keep class livekit.org.jni_zero.** { *; }',
-                        ].join('\n'),
-                      },
-                    },
-                ],
-                "expo-web-browser",
-                // Allo runs under its own Android UID. This declares and requests
-                // the signature permissions so.oxy.permission.IDENTITY and
-                // DEVICE_SESSION, plus <queries> for the Commons/Accounts
-                // providers, so cold boot can ask Commons for a signed identity
-                // proof and share the device session (silent "Sign in with Oxy").
-                '@oxy.so/services/plugins/withOxySharedPermissions',
-            ];
-
-            // Only include expo-notifications for native builds (android/ios).
-            // Insert at index 3 (after 'expo-router', the splash tuple, and the
-            // "@oxy.so/expo-splash" branding string) so the splash tuple and its
-            // branding string stay contiguous at indices 1 and 2.
-            if (PLATFORM !== 'web') {
-                // Native call adapter registers LiveKit's WebRTC globals. Both
-                // plugins are required by the official Expo integration.
-                base.push('@livekit/react-native-expo-plugin');
-                base.push('@config-plugins/react-native-webrtc');
-                base.splice(3, 0, [
-                    "expo-notifications",
-                    {
-                        color: "#ffffff"
-                    }
-                ]);
-                // Add expo-contacts plugin for native platforms only
-                base.push([
-                    "expo-contacts",
-                    {
-                        contactsPermission: "Allow $(PRODUCT_NAME) to access your contacts."
-                    }
-                ]);
-            }
-
-            return base;
-        })(),
-        extra: {
-            eas: {
-                projectId: "47bac898-ae20-479b-ab0f-2d8ab2770c83"
+      },
+      // Build the plugins array dynamically so we can exclude certain
+      // native-only plugins (like expo-notifications) from web builds.
+      plugins: (() => {
+        const base = [
+          'expo-router',
+          // Oxy-standard native splash: Allo's own paper-plane logo centered on
+          // the shared dark brand background (#0B0B0F), with the Oxy "from Oxy"
+          // bottom branding added by the "@oxy.so/expo-splash" string plugin below.
+          // The branding string MUST stay immediately after the splash tuple.
+          oxySplashScreenPlugin({
+            image: './assets/images/splash-logo.png',
+            imageWidth: 176,
+            backgroundColor: '#0B0B0F',
+          }),
+          '@oxy.so/expo-splash',
+          [
+            'expo-camera',
+            {
+              cameraPermission: 'Allow $(PRODUCT_NAME) to access your camera',
+              microphonePermission: 'Allow $(PRODUCT_NAME) to access your microphone',
+              recordAudioAndroid: true,
             },
-            router: {
-                origin: false
-            }
+          ],
+          'expo-image-picker',
+          'expo-video',
+          'expo-audio',
+          [
+            'expo-secure-store',
+            {
+              configureAndroidBackup: true,
+              faceIDPermission: 'Allow $(PRODUCT_NAME) to access your Face ID biometric data.',
+            },
+          ],
+          'react-native-compressor',
+          [
+            '@bitdrift/react-native',
+            {
+              networkInstrumentation: true,
+            },
+          ],
+          [
+            'expo-build-properties',
+            {
+              ios: {
+                deploymentTarget: '16.4',
+              },
+              android: {
+                // compileSdk 36 is required by androidx.camera 1.6.0
+                // (pulled in by expo-camera); compileSdk can be bumped
+                // independently of targetSdk, which stays at 35.
+                compileSdkVersion: 36,
+                targetSdkVersion: 35,
+                buildToolsVersion: '36.0.0',
+                enableProguardInReleaseBuilds: true,
+                enableShrinkResourcesInReleaseBuilds: true,
+                useLegacyPackaging: false,
+                extraProguardRules: [
+                  '# @livekit/react-native-webrtc 144.2.0 moved to the PREFIXED WebRTC build',
+                  '# (livekit.org.*) but its consumer rules still keep org.jni_zero.**. R8',
+                  '# then strips livekit.org.jni_zero.JniInit, and libjingle_peerconnection',
+                  '# aborts in JNI_OnLoad at startup. Fixed upstream in',
+                  '# livekit/react-native-webrtc#107; drop once a release keeps it.',
+                  '-keep class livekit.org.jni_zero.** { *; }',
+                ].join('\n'),
+              },
+            },
+          ],
+          'expo-web-browser',
+          // Allo runs under its own Android UID. This declares and requests
+          // the signature permissions so.oxy.permission.IDENTITY and
+          // DEVICE_SESSION, plus <queries> for the Commons/Accounts
+          // providers, so cold boot can ask Commons for a signed identity
+          // proof and share the device session (silent "Sign in with Oxy").
+          '@oxy.so/services/plugins/withOxySharedPermissions',
+        ];
+
+        // Only include expo-notifications for native builds (android/ios).
+        // Insert at index 3 (after 'expo-router', the splash tuple, and the
+        // "@oxy.so/expo-splash" branding string) so the splash tuple and its
+        // branding string stay contiguous at indices 1 and 2.
+        if (PLATFORM !== 'web') {
+          // Native call adapter registers LiveKit's WebRTC globals. Both
+          // plugins are required by the official Expo integration.
+          base.push('@livekit/react-native-expo-plugin');
+          base.push('@config-plugins/react-native-webrtc');
+          base.splice(3, 0, [
+            'expo-notifications',
+            {
+              color: '#ffffff',
+            },
+          ]);
+          // Add expo-contacts plugin for native platforms only
+          base.push([
+            'expo-contacts',
+            {
+              contactsPermission: 'Allow $(PRODUCT_NAME) to access your contacts.',
+            },
+          ]);
+        }
+
+        return base;
+      })(),
+      extra: {
+        eas: {
+          projectId: '47bac898-ae20-479b-ab0f-2d8ab2770c83',
         },
-        owner: "oxyhq"
-    }
-};
+        router: {
+          origin: false,
+        },
+      },
+      owner: 'oxyhq',
+    },
+  };
 };

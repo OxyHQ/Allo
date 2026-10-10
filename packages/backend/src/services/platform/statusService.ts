@@ -29,11 +29,11 @@ import {
   type ListStatusViewsResponse,
   type ListStatusesResponse,
   type Status,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
-import { retainBlobs } from "../../db/platform/blobRepository";
-import { listSharedAccountsAmong } from "../../db/platform/conversationRepository";
-import { findInstanceById } from "../../db/platform/instanceRepository";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
+import { retainBlobs } from '../../db/platform/blobRepository';
+import { listSharedAccountsAmong } from '../../db/platform/conversationRepository';
+import { findInstanceById } from '../../db/platform/instanceRepository';
 import {
   findStatusById,
   findStatusByIdempotencyKey,
@@ -46,12 +46,12 @@ import {
   markStatusDeleted,
   recordView,
   type StatusRow,
-} from "../../db/platform/statusRepository";
-import { blockedEitherWay } from "../../db/social/blockRepository";
-import { statusViewReceiptsOf } from "../../db/social/userSettingsRepository";
-import { forbidden, notFound, validationFailed } from "../../utils/httpErrors";
-import { getRealtime } from "../../runtime/realtime";
-import { toStatus } from "./wire";
+} from '../../db/platform/statusRepository';
+import { blockedEitherWay } from '../../db/social/blockRepository';
+import { statusViewReceiptsOf } from '../../db/social/userSettingsRepository';
+import { forbidden, notFound, validationFailed } from '../../utils/httpErrors';
+import { getRealtime } from '../../runtime/realtime';
+import { toStatus } from './wire';
 
 /** The slack a client's clock is allowed against the server's, as everywhere else. */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -82,8 +82,12 @@ export async function createStatus(
   // server can do is refuse one that is not a status's deadline at all.
   const expiresAt = new Date(request.expiresAt);
   const ceiling = now.getTime() + STATUS_LIFETIME_MS + CLOCK_SKEW_MS;
-  if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > ceiling || expiresAt.getTime() <= now.getTime()) {
-    throw validationFailed("a status lives at most 24 hours", { path: ["expiresAt"] });
+  if (
+    Number.isNaN(expiresAt.getTime()) ||
+    expiresAt.getTime() > ceiling ||
+    expiresAt.getTime() <= now.getTime()
+  ) {
+    throw validationFailed('a status lives at most 24 hours', { path: ['expiresAt'] });
   }
 
   const row = await db.transaction(async (tx) => {
@@ -92,8 +96,8 @@ export async function createStatus(
         id: request.id,
         authorAccountId: caller.accountId,
         authorInstanceId: caller.instanceId,
-        payload: Buffer.from(request.payload, "base64"),
-        nonce: Buffer.from(request.nonce, "base64"),
+        payload: Buffer.from(request.payload, 'base64'),
+        nonce: Buffer.from(request.nonce, 'base64'),
         sha256: request.sha256,
         blobIds: request.blobIds,
         signature: request.signature,
@@ -122,7 +126,10 @@ export async function createStatus(
   // After the commit, never inside it.
   const realtime = getRealtime();
   for (const recipient of allowed) {
-    realtime.statusPosted(recipient.instanceId, { statusId: row.id, authorAccountId: caller.accountId });
+    realtime.statusPosted(recipient.instanceId, {
+      statusId: row.id,
+      authorAccountId: caller.accountId,
+    });
   }
 
   return { status: toStatus(row, null), refused };
@@ -142,14 +149,21 @@ async function screenRecipients(
   const allowed: ScreenedRecipient[] = [];
   const refused: string[] = [];
 
-  const instances = await Promise.all(request.recipients.map((r) => findInstanceById(r.instanceId, db)));
-  const candidates = request.recipients.map((recipient, index) => ({ recipient, instance: instances[index] }));
+  const instances = await Promise.all(
+    request.recipients.map((r) => findInstanceById(r.instanceId, db)),
+  );
+  const candidates = request.recipients.map((recipient, index) => ({
+    recipient,
+    instance: instances[index],
+  }));
 
   const otherAccounts = [
     ...new Set(
       candidates
         .map(({ instance }) => instance?.accountId)
-        .filter((accountId): accountId is string => Boolean(accountId) && accountId !== caller.accountId),
+        .filter(
+          (accountId): accountId is string => Boolean(accountId) && accountId !== caller.accountId,
+        ),
     ),
   ];
   const [shared, blocked] = await Promise.all([
@@ -159,21 +173,29 @@ async function screenRecipients(
 
   for (const { recipient, instance } of candidates) {
     const reachable =
-      instance?.status === "active" &&
+      instance?.status === 'active' &&
       // An author's own other devices are always allowed: that is how a status
       // shows on the phone that did not post it.
-      (instance.accountId === caller.accountId || (shared.has(instance.accountId) && !blocked.has(instance.accountId)));
+      (instance.accountId === caller.accountId ||
+        (shared.has(instance.accountId) && !blocked.has(instance.accountId)));
     if (!reachable || !instance) {
       refused.push(recipient.instanceId);
       continue;
     }
-    allowed.push({ instanceId: recipient.instanceId, accountId: instance.accountId, sealedKey: recipient.sealedKey });
+    allowed.push({
+      instanceId: recipient.instanceId,
+      accountId: instance.accountId,
+      sealedKey: recipient.sealedKey,
+    });
   }
   return { allowed, refused };
 }
 
 /** What this device may read: everything sealed to it, plus what its own account posted. */
-export async function listStatuses(caller: StatusCaller, deps: StatusServiceDeps = {}): Promise<ListStatusesResponse> {
+export async function listStatuses(
+  caller: StatusCaller,
+  deps: StatusServiceDeps = {},
+): Promise<ListStatusesResponse> {
   const db = deps.db ?? getDb();
   const [inbox, own] = await Promise.all([
     listInbox(caller.instanceId, MAX_STATUS_PAGE, db),
@@ -194,7 +216,11 @@ export async function listStatuses(caller: StatusCaller, deps: StatusServiceDeps
 }
 
 /** The author takes it down early. Nobody else can, and a stranger is not told it exists. */
-export async function deleteStatus(caller: StatusCaller, statusId: string, deps: StatusServiceDeps = {}): Promise<void> {
+export async function deleteStatus(
+  caller: StatusCaller,
+  statusId: string,
+  deps: StatusServiceDeps = {},
+): Promise<void> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const row = await requireOwn(caller, statusId, db);
@@ -208,13 +234,17 @@ export async function deleteStatus(caller: StatusCaller, statusId: string, deps:
  * honest either way: the author sees how many people saw it and the names of
  * those who publish them, and cannot tell which of the two a missing name is.
  */
-export async function viewStatus(caller: StatusCaller, statusId: string, deps: StatusServiceDeps = {}): Promise<void> {
+export async function viewStatus(
+  caller: StatusCaller,
+  statusId: string,
+  deps: StatusServiceDeps = {},
+): Promise<void> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const status = await findStatusById(statusId, db);
-  if (!status) throw notFound("no such status");
+  if (!status) throw notFound('no such status');
   if (status.authorAccountId === caller.accountId) return; // your own is not a view
-  if (!(await holdsKey(statusId, caller.instanceId, db))) throw notFound("no such status");
+  if (!(await holdsKey(statusId, caller.instanceId, db))) throw notFound('no such status');
 
   const publishes = await statusViewReceiptsOf(db, [caller.accountId]);
   await recordView(
@@ -239,17 +269,25 @@ export async function listStatusViews(
   await requireOwn(caller, statusId, db);
   const summary = await listViews(statusId, db);
   return {
-    views: summary.views.map((view) => ({ accountId: view.accountId, viewedAt: view.viewedAt.toISOString() })),
+    views: summary.views.map((view) => ({
+      accountId: view.accountId,
+      viewedAt: view.viewedAt.toISOString(),
+    })),
     total: summary.total,
   };
 }
 
-async function requireOwn(caller: StatusCaller, statusId: string, db: AlloDatabase): Promise<StatusRow> {
+async function requireOwn(
+  caller: StatusCaller,
+  statusId: string,
+  db: AlloDatabase,
+): Promise<StatusRow> {
   const row = await findStatusById(statusId, db);
   // A status that is not yours answers the same as one that does not exist:
   // an id is not proof of anything, and a 403 would confirm it is real.
-  if (!row) throw notFound("no such status");
-  if (row.authorAccountId !== caller.accountId) throw notFound("no such status");
-  if (row.authorInstanceId !== caller.instanceId && row.authorAccountId !== caller.accountId) throw forbidden("not yours");
+  if (!row) throw notFound('no such status');
+  if (row.authorAccountId !== caller.accountId) throw notFound('no such status');
+  if (row.authorInstanceId !== caller.instanceId && row.authorAccountId !== caller.accountId)
+    throw forbidden('not yours');
   return row;
 }

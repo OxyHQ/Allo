@@ -9,7 +9,13 @@
  */
 import type { ChatComposerAttachment, ChatComposerIcon } from '@oxy.so/bloom/chat-composer';
 import { formatRecordingTime } from '@oxy.so/bloom/chat-composer';
-import { RiFileTextLine, RiImageLine, RiMic2Line, RiMusic2Line, RiVideoLine } from '@oxy.so/bloom/icons';
+import {
+  RiFileTextLine,
+  RiImageLine,
+  RiMic2Line,
+  RiMusic2Line,
+  RiVideoLine,
+} from '@oxy.so/bloom/icons';
 
 import type { AlloMediaKind, AlloOutgoingAttachment } from '@/lib/chat/attachments';
 

@@ -83,7 +83,13 @@ interface PendingApprovalScreenProps {
   onSignOut?: () => void;
 }
 
-export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, onReclaim, onSignOut }: PendingApprovalScreenProps) {
+export function PendingApprovalScreen({
+  deviceName,
+  fingerprint,
+  errorMessage,
+  onReclaim,
+  onSignOut,
+}: PendingApprovalScreenProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const theme = useTheme();
   const [reclaiming, setReclaiming] = useState(false);
@@ -124,7 +130,7 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
       )}
     >
       {deviceName || fingerprint ? (
-        <Card  radius="radius-16" style={styles.codeCard} appearance="subtle">
+        <Card radius="radius-16" style={styles.codeCard} appearance="subtle">
           {deviceName ? (
             <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
               {deviceName}
@@ -150,13 +156,15 @@ export function PendingApprovalScreen({ deviceName, fingerprint, errorMessage, o
           loading={reclaiming}
           onPress={() => {
             void reclaim();
-          }} tone="neutral" appearance="outline"
+          }}
+          tone="neutral"
+          appearance="outline"
         >
           {t('enrollment.reclaim.action', 'Use this device instead')}
         </Button>
       ) : null}
       {onSignOut ? (
-        <Button  onPress={onSignOut} tone="accent" appearance="plain">
+        <Button onPress={onSignOut} tone="accent" appearance="plain">
           {t('settings.signOut', 'Sign out')}
         </Button>
       ) : null}
@@ -207,7 +215,7 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
         {t('enrollment.revoked.startOver', 'Start over')}
       </Button>
       {onSignOut ? (
-        <Button  onPress={onSignOut} tone="accent" appearance="plain">
+        <Button onPress={onSignOut} tone="accent" appearance="plain">
           {t('settings.signOut', 'Sign out')}
         </Button>
       ) : null}
@@ -220,16 +228,32 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
  * about it. Drawn from primitives rather than a chat-screen empty state, which
  * would pull the animation runtime into the boot path for a static page.
  */
-function GateFrame({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
+function GateFrame({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
   const theme = useTheme();
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]} accessibilityRole="summary">
+    <View
+      style={[styles.root, { backgroundColor: theme.colors.background }]}
+      accessibilityRole="summary"
+    >
       <View style={styles.column}>
         {icon}
         <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
           {title}
         </Text>
-        <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+        <Text
+          variant="body-regular"
+          style={[styles.centered, { color: theme.colors.textSecondary }]}
+        >
           {description}
         </Text>
         {children}
@@ -250,7 +274,13 @@ function ErrorLine({ message }: { message: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   column: { alignItems: 'center', gap: 16, width: '100%', maxWidth: 400 },
-  codeCard: { alignSelf: 'stretch', alignItems: 'center', gap: 4, paddingVertical: 16, paddingHorizontal: 20 },
+  codeCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
   fingerprint: { letterSpacing: 2, fontVariant: ['tabular-nums'], textAlign: 'center' },
   centered: { textAlign: 'center' },
 });

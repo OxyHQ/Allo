@@ -15,7 +15,12 @@ export interface ProfileIdentityProps {
 }
 
 /** Who somebody is: the picture, the name and the handle, centred. Presentational only. */
-export function ProfileIdentity({ displayName, handle, avatar, verified = false }: ProfileIdentityProps) {
+export function ProfileIdentity({
+  displayName,
+  handle,
+  avatar,
+  verified = false,
+}: ProfileIdentityProps) {
   const theme = useTheme();
   return (
     <View style={styles.root}>
@@ -25,7 +30,10 @@ export function ProfileIdentity({ displayName, handle, avatar, verified = false 
           {displayName}
         </Text>
         {handle ? (
-          <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+          <Text
+            variant="body-regular"
+            style={[styles.centered, { color: theme.colors.textSecondary }]}
+          >
             @{handle}
           </Text>
         ) : null}

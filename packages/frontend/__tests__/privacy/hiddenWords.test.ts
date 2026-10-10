@@ -1,8 +1,4 @@
-import {
-  addHiddenWord,
-  HIDDEN_WORD_MAX_LENGTH,
-  removeHiddenWord,
-} from '@/lib/privacy/hiddenWords';
+import { addHiddenWord, HIDDEN_WORD_MAX_LENGTH, removeHiddenWord } from '@/lib/privacy/hiddenWords';
 
 /**
  * EDITING A LIST OF WORDS.

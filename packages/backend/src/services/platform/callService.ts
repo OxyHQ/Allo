@@ -30,8 +30,8 @@ import {
   type CallTokenResponse,
   type CreateCallRequest,
   type IceServersResponse,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
 import {
   claimAnswer,
   claimEnd,
@@ -44,19 +44,19 @@ import {
   setParticipantState,
   settleRingingParticipants,
   type CallRow,
-} from "../../db/platform/callRepository";
-import { findMember, listMembers } from "../../db/platform/conversationRepository";
-import { listActiveInstancesForAccounts } from "../../db/platform/instanceRepository";
-import { blockedEitherWay } from "../../db/social/blockRepository";
-import { relayCallsOf } from "../../db/social/userSettingsRepository";
-import { getRealtime } from "../../runtime/realtime";
-import { AlloHttpError, forbidden, notFound, validationFailed } from "../../utils/httpErrors";
-import { uuidv7 } from "@oxy.so/db";
-import { getIceConfig } from "../../config/iceRuntime";
-import { callRoomName, type LiveKitConfig } from "../../config/livekit";
-import { getLiveKitConfig } from "../../config/sfuRuntime";
-import { mintTurnCredential, type IceConfig } from "../../config/turn";
-import { toCall } from "./wire";
+} from '../../db/platform/callRepository';
+import { findMember, listMembers } from '../../db/platform/conversationRepository';
+import { listActiveInstancesForAccounts } from '../../db/platform/instanceRepository';
+import { blockedEitherWay } from '../../db/social/blockRepository';
+import { relayCallsOf } from '../../db/social/userSettingsRepository';
+import { getRealtime } from '../../runtime/realtime';
+import { AlloHttpError, forbidden, notFound, validationFailed } from '../../utils/httpErrors';
+import { uuidv7 } from '@oxy.so/db';
+import { getIceConfig } from '../../config/iceRuntime';
+import { callRoomName, type LiveKitConfig } from '../../config/livekit';
+import { getLiveKitConfig } from '../../config/sfuRuntime';
+import { mintTurnCredential, type IceConfig } from '../../config/turn';
+import { toCall } from './wire';
 
 export interface CallCaller {
   instanceId: string;
@@ -80,21 +80,25 @@ export async function createCall(
   if (replayed) return { call: await view(replayed, db) };
 
   const mine = await findMember(request.conversationId, caller.accountId, db);
-  if (!mine || mine.state !== "joined") throw notFound("no such conversation");
+  if (!mine || mine.state !== 'joined') throw notFound('no such conversation');
 
   const members = (await listMembers(request.conversationId, db)).filter(
-    (member) => member.state === "joined" && member.accountId !== caller.accountId,
+    (member) => member.state === 'joined' && member.accountId !== caller.accountId,
   );
   const otherAccounts = [...new Set(members.map((member) => member.accountId))];
-  if (otherAccounts.length === 0) throw validationFailed("nobody to call", { path: ["conversationId"] });
+  if (otherAccounts.length === 0)
+    throw validationFailed('nobody to call', { path: ['conversationId'] });
 
   // A block cuts a ring in both directions, like everything else.
   const blocked = await blockedEitherWay(db, caller.accountId, otherAccounts);
   const reachableAccounts = otherAccounts.filter((accountId) => !blocked.has(accountId));
-  if (reachableAccounts.length === 0) throw forbidden("cannot call this conversation");
+  if (reachableAccounts.length === 0) throw forbidden('cannot call this conversation');
 
-  const devices = (await listActiveInstancesForAccounts(reachableAccounts, db)).slice(0, MAX_CALL_PARTICIPANTS);
-  if (devices.length === 0) throw validationFailed("nobody to ring", { path: ["conversationId"] });
+  const devices = (await listActiveInstancesForAccounts(reachableAccounts, db)).slice(
+    0,
+    MAX_CALL_PARTICIPANTS,
+  );
+  if (devices.length === 0) throw validationFailed('nobody to ring', { path: ['conversationId'] });
 
   const group = reachableAccounts.length > 1;
   // Either side asking is enough, and the caller counts.
@@ -154,24 +158,30 @@ export async function createCall(
  * phones answering in the same breath is the normal case for a forked ring,
  * and exactly one of them has to win.
  */
-export async function answerCall(caller: CallCaller, callId: string, deps: CallServiceDeps = {}): Promise<CallResponse> {
+export async function answerCall(
+  caller: CallCaller,
+  callId: string,
+  deps: CallServiceDeps = {},
+): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant) throw notFound("no such call");
+  if (!participant) throw notFound('no such call');
 
   const claimed = await claimAnswer(callId, now, db);
   const call = claimed ?? (await requireCall(callId, db));
   if (!claimed) {
     // Somebody else got there first. Say so rather than pretending to join.
-    const answeredBy = (await listParticipants(callId, db)).find((one) => one.state === "joined");
-    throw forbidden(answeredBy?.instanceId === caller.instanceId ? "already answered here" : "answered elsewhere");
+    const answeredBy = (await listParticipants(callId, db)).find((one) => one.state === 'joined');
+    throw forbidden(
+      answeredBy?.instanceId === caller.instanceId ? 'already answered here' : 'answered elsewhere',
+    );
   }
 
-  await setParticipantState(callId, caller.instanceId, "joined", now, db);
+  await setParticipantState(callId, caller.instanceId, 'joined', now, db);
   // This account's OTHER phones stop ringing. In a group everybody else's keep
   // going — one person picking up is not the group answering.
-  await settleRingingParticipants(callId, "left", now, db, {
+  await settleRingingParticipants(callId, 'left', now, db, {
     exceptInstanceId: caller.instanceId,
     onlyAccountId: caller.accountId,
   });
@@ -181,19 +191,23 @@ export async function answerCall(caller: CallCaller, callId: string, deps: CallS
 }
 
 /** This device says no. In a 1:1 that ends the call; in a group it is one seat refusing. */
-export async function declineCall(caller: CallCaller, callId: string, deps: CallServiceDeps = {}): Promise<CallResponse> {
+export async function declineCall(
+  caller: CallCaller,
+  callId: string,
+  deps: CallServiceDeps = {},
+): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant) throw notFound("no such call");
+  if (!participant) throw notFound('no such call');
 
-  await setParticipantState(callId, caller.instanceId, "declined", now, db);
+  await setParticipantState(callId, caller.instanceId, 'declined', now, db);
   const participants = await listParticipants(callId, db);
-  const stillRinging = participants.some((one) => one.state === "ringing");
-  const anybodyJoined = participants.some((one) => one.state === "joined");
+  const stillRinging = participants.some((one) => one.state === 'ringing');
+  const anybodyJoined = participants.some((one) => one.state === 'joined');
 
   if (!stillRinging && !anybodyJoined) {
-    const ended = await claimEnd(callId, "declined", now, db);
+    const ended = await claimEnd(callId, 'declined', now, db);
     const call = ended ?? (await requireCall(callId, db));
     announce(call, {}, await audienceOf(call, db));
     return { call: await view(call, db) };
@@ -207,29 +221,35 @@ export async function declineCall(caller: CallCaller, callId: string, deps: Call
 export async function endCall(
   caller: CallCaller,
   callId: string,
-  reason: Exclude<CallEndReason, "missed" | "answered_elsewhere" | "declined_elsewhere">,
+  reason: Exclude<CallEndReason, 'missed' | 'answered_elsewhere' | 'declined_elsewhere'>,
   deps: CallServiceDeps = {},
 ): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const existing = await requireCall(callId, db);
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (existing.initiatorInstanceId !== caller.instanceId && !participant) throw notFound("no such call");
+  if (existing.initiatorInstanceId !== caller.instanceId && !participant)
+    throw notFound('no such call');
 
   const ended = await claimEnd(callId, reason, now, db);
   const call = ended ?? existing;
   if (ended) {
-    await settleRingingParticipants(callId, reason === "cancelled" ? "missed" : "left", now, db);
+    await settleRingingParticipants(callId, reason === 'cancelled' ? 'missed' : 'left', now, db);
     announce(call, {}, await audienceOf(call, db));
   }
   return { call: await view(call, db) };
 }
 
-export async function readCall(caller: CallCaller, callId: string, deps: CallServiceDeps = {}): Promise<CallResponse> {
+export async function readCall(
+  caller: CallCaller,
+  callId: string,
+  deps: CallServiceDeps = {},
+): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const call = await requireCall(callId, db);
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (call.initiatorInstanceId !== caller.instanceId && !participant) throw notFound("no such call");
+  if (call.initiatorInstanceId !== caller.instanceId && !participant)
+    throw notFound('no such call');
   return { call: await view(call, db) };
 }
 
@@ -254,11 +274,15 @@ export async function callIceServers(
   const ice = deps.ice ?? getIceConfig();
   const now = deps.now?.() ?? new Date();
 
-  const iceServers: IceServersResponse["iceServers"] = [{ urls: [...ice.stunUrls] }];
+  const iceServers: IceServersResponse['iceServers'] = [{ urls: [...ice.stunUrls] }];
   let expiresAt = new Date(now.getTime() + 3_600_000);
   if (ice.turn) {
     const credential = mintTurnCredential(ice.turn, caller.accountId, now);
-    iceServers.push({ urls: [...ice.turn.urls], username: credential.username, credential: credential.credential });
+    iceServers.push({
+      urls: [...ice.turn.urls],
+      username: credential.username,
+      credential: credential.credential,
+    });
     expiresAt = credential.expiresAt;
   }
   return { iceServers, expiresAt: expiresAt.toISOString(), relayOnly: call.relayed };
@@ -292,20 +316,21 @@ export async function callSfuToken(
 ): Promise<CallTokenResponse> {
   const db = deps.db ?? getDb();
   const { call } = await readCall(caller, callId, deps);
-  if (!call.group) throw validationFailed("a 1:1 call does not use the SFU", { callId });
-  if (call.state === "ended") throw validationFailed("the call has ended", { callId });
+  if (!call.group) throw validationFailed('a 1:1 call does not use the SFU', { callId });
+  if (call.state === 'ended') throw validationFailed('the call has ended', { callId });
 
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant || participant.state !== "joined") {
-    throw forbidden("answer the call before asking for a place in the room");
+  if (!participant || participant.state !== 'joined') {
+    throw forbidden('answer the call before asking for a place in the room');
   }
 
   const config = deps.livekit !== undefined ? deps.livekit : getLiveKitConfig();
-  if (!config) throw new AlloHttpError("unavailable", "Group calling is not configured on this deployment");
+  if (!config)
+    throw new AlloHttpError('unavailable', 'Group calling is not configured on this deployment');
 
   const now = deps.now?.() ?? new Date();
   const room = callRoomName(callId);
-  const { AccessToken } = await import("livekit-server-sdk");
+  const { AccessToken } = await import('livekit-server-sdk');
   const grant = new AccessToken(config.apiKey, config.apiSecret, {
     identity: caller.instanceId,
     ttl: config.ttlSeconds,
@@ -331,7 +356,7 @@ export async function callSfuToken(
 
 async function requireCall(callId: string, db: AlloDatabase): Promise<CallRow> {
   const row = await findCallById(callId, db);
-  if (!row) throw notFound("no such call");
+  if (!row) throw notFound('no such call');
   return row;
 }
 
@@ -345,7 +370,11 @@ async function audienceOf(call: CallRow, db: AlloDatabase): Promise<string[]> {
   return [...new Set([call.initiatorInstanceId, ...participants.map((one) => one.instanceId)])];
 }
 
-function announce(call: CallRow, extra: { answeredByInstanceId?: string }, audience: readonly string[]): void {
+function announce(
+  call: CallRow,
+  extra: { answeredByInstanceId?: string },
+  audience: readonly string[],
+): void {
   const realtime = getRealtime();
   for (const instanceId of audience) {
     realtime.callUpdated(instanceId, {

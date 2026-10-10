@@ -48,10 +48,7 @@ function fold(word: string): string {
  * Returns a NEW list rather than mutating, so a caller can hand the result
  * straight to a mutation and keep the old one for a rollback.
  */
-export function addHiddenWord(
-  words: readonly string[],
-  candidate: string,
-): AddHiddenWordResult {
+export function addHiddenWord(words: readonly string[], candidate: string): AddHiddenWordResult {
   const word = candidate.trim();
   if (word.length === 0) return { ok: false, reason: 'empty' };
   if (word.length > HIDDEN_WORD_MAX_LENGTH) return { ok: false, reason: 'too-long' };
@@ -72,10 +69,7 @@ export function addHiddenWord(
  * Every match is removed, so a list that already contained a duplicate pair —
  * written by an older build, or by another client — can still be emptied.
  */
-export function removeHiddenWord(
-  words: readonly string[],
-  target: string,
-): readonly string[] {
+export function removeHiddenWord(words: readonly string[], target: string): readonly string[] {
   const folded = fold(target);
   return words.filter((existing) => fold(existing) !== folded);
 }

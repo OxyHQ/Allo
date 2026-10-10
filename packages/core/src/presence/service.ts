@@ -17,13 +17,21 @@
  * presence, and therefore whether it may see anybody else's. The app shows
  * that as a reason rather than drawing everyone as offline.
  */
-import { presenceResponseSchema, SERVER_TO_CLIENT_EVENTS, type PresenceState } from "@allo/shared-types";
-import type { Context } from "../context";
-import type { PresenceView } from "../types";
-import { describeError } from "../util/logger";
+import {
+  presenceResponseSchema,
+  SERVER_TO_CLIENT_EVENTS,
+  type PresenceState,
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import type { PresenceView } from '../types';
+import { describeError } from '../util/logger';
 
 /** The answer for an account nobody has said anything about yet. Frozen: a new object per read is a new snapshot per read. */
-export const PRESENCE_UNKNOWN: PresenceView = Object.freeze({ online: false, lastSeenAt: null, known: false });
+export const PRESENCE_UNKNOWN: PresenceView = Object.freeze({
+  online: false,
+  lastSeenAt: null,
+  known: false,
+});
 
 export class PresenceService {
   private readonly states = new Map<string, PresenceView>();
@@ -42,7 +50,8 @@ export class PresenceService {
   /** The accounts this client is showing. Replaces the previous set; an empty one stops the updates. */
   async watch(accountIds: readonly string[]): Promise<void> {
     const next = [...new Set(accountIds)].filter((id) => id !== this.ctx.accountId);
-    const same = next.length === this.watching.length && next.every((id, i) => id === this.watching[i]);
+    const same =
+      next.length === this.watching.length && next.every((id, i) => id === this.watching[i]);
     if (same) return;
     this.watching = next;
     this.ctx.realtime.emitPresenceWatch(next);
@@ -71,8 +80,8 @@ export class PresenceService {
     if (this.watching.length === 0) return;
     try {
       const answer = await this.ctx.http.request({
-        method: "GET",
-        path: `/v1/presence?accountIds=${this.watching.map(encodeURIComponent).join(",")}`,
+        method: 'GET',
+        path: `/v1/presence?accountIds=${this.watching.map(encodeURIComponent).join(',')}`,
         schema: presenceResponseSchema,
         signer: this.ctx.signer,
       });
@@ -81,7 +90,7 @@ export class PresenceService {
       this.invalidate();
     } catch (error) {
       // Presence is decoration: a failed read leaves what is known alone.
-      this.ctx.log.debug?.("presence refresh failed", { error: describeError(error) });
+      this.ctx.log.debug?.('presence refresh failed', { error: describeError(error) });
     }
   }
 
@@ -132,12 +141,16 @@ export class PresenceService {
 
   private remember(state: PresenceState): void {
     const current = this.states.get(state.accountId);
-    if (current && current.online === state.online && current.lastSeenAt === state.lastSeenAt) return;
-    this.states.set(state.accountId, Object.freeze({ online: state.online, lastSeenAt: state.lastSeenAt, known: true }));
+    if (current && current.online === state.online && current.lastSeenAt === state.lastSeenAt)
+      return;
+    this.states.set(
+      state.accountId,
+      Object.freeze({ online: state.online, lastSeenAt: state.lastSeenAt, known: true }),
+    );
   }
 
   private invalidate(): void {
     this.changes += 1;
-    this.ctx.emitter.emit("presence");
+    this.ctx.emitter.emit('presence');
   }
 }

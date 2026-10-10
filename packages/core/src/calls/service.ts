@@ -36,12 +36,12 @@ import {
   SERVER_TO_CLIENT_EVENTS,
   type CallEndReason,
   type CallMode,
-} from "@allo/shared-types";
-import type { Context } from "../context";
-import { InvalidStateError, NotFoundError } from "../errors";
-import { uuidV7 } from "../util/ids";
-import { describeError } from "../util/logger";
-import type { CallMediaAdapter, SessionDescription } from "./media";
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { InvalidStateError, NotFoundError } from '../errors';
+import { uuidV7 } from '../util/ids';
+import { describeError } from '../util/logger';
+import type { CallMediaAdapter, SessionDescription } from './media';
 
 /** One finished call, as the history list shows it. */
 export interface CallHistoryEntry {
@@ -51,7 +51,7 @@ export interface CallHistoryEntry {
   conversationId: string;
   withAccountIds: string[];
   mode: CallMode;
-  outcome: "answered" | "not_answered" | "declined" | "cancelled" | "failed";
+  outcome: 'answered' | 'not_answered' | 'declined' | 'cancelled' | 'failed';
   incoming: boolean;
   /** ISO, when it happened. */
   at: string;
@@ -60,7 +60,7 @@ export interface CallHistoryEntry {
 }
 
 /** Where a call is, as a screen sees it. */
-export type CallPhase = "ringing" | "connecting" | "active" | "ended";
+export type CallPhase = 'ringing' | 'connecting' | 'active' | 'ended';
 
 export interface CallView {
   id: string;
@@ -139,7 +139,7 @@ export class CallsService {
     // does. Dropping the cache here is what keeps `history()` to the SDK-wide
     // contract — a getter safe to call on every render — instead of pushing
     // that onto every consumer.
-    this.unwatchConversations = ctx.emitter.subscribe("conversations", () => {
+    this.unwatchConversations = ctx.emitter.subscribe('conversations', () => {
       this.historyCache = null;
     });
   }
@@ -169,7 +169,7 @@ export class CallsService {
     const out: CallHistoryEntry[] = [];
     for (const conversation of this.ctx.conversations.list()) {
       for (const item of this.ctx.messages.timeline(conversation.id)) {
-        if (item.content.kind !== "call") continue;
+        if (item.content.kind !== 'call') continue;
         const call = item.content.call;
         out.push({
           id: item.id,
@@ -191,10 +191,11 @@ export class CallsService {
   // ---- starting, answering, ending -----------------------------------------
 
   /** Rings every other member's devices. Resolves once the server has the call, not once somebody answers. */
-  async start(conversationId: string, mode: CallMode = "voice"): Promise<CallView> {
+  async start(conversationId: string, mode: CallMode = 'voice'): Promise<CallView> {
     const { ctx } = this;
     ctx.instance.assertActive();
-    if (this.live && this.live.view.phase !== "ended") throw new InvalidStateError("already in a call");
+    if (this.live && this.live.view.phase !== 'ended')
+      throw new InvalidStateError('already in a call');
     const conversation = ctx.conversations.get(conversationId);
     if (!conversation) throw new NotFoundError(`conversation ${conversationId}`);
 
@@ -205,12 +206,12 @@ export class CallsService {
      * check above and both placed a call; one then rang out while the other
      * was being answered.
      */
-    if (this.starting) throw new InvalidStateError("already placing a call");
+    if (this.starting) throw new InvalidStateError('already placing a call');
     this.starting = true;
     try {
       const res = await ctx.http.request({
-        method: "POST",
-        path: "/v1/calls",
+        method: 'POST',
+        path: '/v1/calls',
         body: { idempotencyKey: uuidV7(ctx.now()), conversationId, mode },
         schema: callResponseSchema,
         signer: ctx.signer,
@@ -221,12 +222,12 @@ export class CallsService {
           id: call.id,
           conversationId,
           mode,
-          phase: "ringing",
+          phase: 'ringing',
           outgoing: true,
           withAccountIds: conversation.memberAccountIds.filter((id) => id !== ctx.accountId),
           endReason: null,
           muted: false,
-          cameraOn: mode === "video",
+          cameraOn: mode === 'video',
           startedAt: call.startedAt,
           answeredAt: null,
         },
@@ -240,7 +241,7 @@ export class CallsService {
       await this.withMedia(call.id, async (media) => {
         await this.prepare(media, call.id);
         const offer = await media.createOffer();
-        await this.signal(conversationId, { kind: "offer", sdp: offer.sdp });
+        await this.signal(conversationId, { kind: 'offer', sdp: offer.sdp });
         this.streamCandidates(conversationId, media);
       });
       return this.live.view;
@@ -253,12 +254,20 @@ export class CallsService {
   async answer(): Promise<void> {
     const { ctx } = this;
     const live = this.requireLive();
-    if (live.view.outgoing) throw new InvalidStateError("this device started the call");
-    await ctx.http.request({ method: "POST", path: `/v1/calls/${live.view.id}/answer`, schema: callResponseSchema, signer: ctx.signer });
+    if (live.view.outgoing) throw new InvalidStateError('this device started the call');
+    await ctx.http.request({
+      method: 'POST',
+      path: `/v1/calls/${live.view.id}/answer`,
+      schema: callResponseSchema,
+      signer: ctx.signer,
+    });
     // With no media there is no description to exchange, so the server's word
     // is the whole truth and the call is active. With media, `active` means
     // the answer has been exchanged and the connection is up.
-    this.set({ phase: this.media ? "connecting" : "active", answeredAt: new Date(ctx.now()).toISOString() });
+    this.set({
+      phase: this.media ? 'connecting' : 'active',
+      answeredAt: new Date(ctx.now()).toISOString(),
+    });
     // The answer itself waits for the offer; `onCallMessage` sends it when the
     // offer arrives, which may already have happened.
     await this.answerOfferIfReady();
@@ -267,25 +276,37 @@ export class CallsService {
   async decline(): Promise<void> {
     const live = this.requireLive();
     await this.ctx.http
-      .request({ method: "POST", path: `/v1/calls/${live.view.id}/decline`, schema: callResponseSchema, signer: this.ctx.signer })
-      .catch((error) => this.ctx.log.warn?.("decline failed", { error: describeError(error) }));
-    await this.finish("declined");
+      .request({
+        method: 'POST',
+        path: `/v1/calls/${live.view.id}/decline`,
+        schema: callResponseSchema,
+        signer: this.ctx.signer,
+      })
+      .catch((error) => this.ctx.log.warn?.('decline failed', { error: describeError(error) }));
+    await this.finish('declined');
   }
 
   /** Hangs up, or cancels a ring this device started. */
-  async end(reason: CallEndReason = "hangup"): Promise<void> {
+  async end(reason: CallEndReason = 'hangup'): Promise<void> {
     const live = this.requireLive();
-    const wire = live.view.phase === "ringing" && live.view.outgoing ? "cancelled" : reason === "declined" ? "declined" : "hangup";
+    const wire =
+      live.view.phase === 'ringing' && live.view.outgoing
+        ? 'cancelled'
+        : reason === 'declined'
+          ? 'declined'
+          : 'hangup';
     await this.ctx.http
       .request({
-        method: "POST",
+        method: 'POST',
         path: `/v1/calls/${live.view.id}/end`,
         body: { reason: wire },
         schema: callResponseSchema,
         signer: this.ctx.signer,
       })
-      .catch((error) => this.ctx.log.warn?.("end failed", { error: describeError(error) }));
-    await this.signal(live.view.conversationId, { kind: "end", reason: wire }).catch(() => undefined);
+      .catch((error) => this.ctx.log.warn?.('end failed', { error: describeError(error) }));
+    await this.signal(live.view.conversationId, { kind: 'end', reason: wire }).catch(
+      () => undefined,
+    );
     await this.finish(reason);
   }
 
@@ -307,13 +328,19 @@ export class CallsService {
 
   /** `call.incoming`: somebody is calling this device. The offer arrives separately, encrypted. */
   onIncoming(payload: unknown): void {
-    const parsed = SERVER_TO_CLIENT_EVENTS["call.incoming"].safeParse(payload);
+    const parsed = SERVER_TO_CLIENT_EVENTS['call.incoming'].safeParse(payload);
     if (!parsed.success) return;
     const event = parsed.data;
-    if (this.live && this.live.view.phase !== "ended") {
+    if (this.live && this.live.view.phase !== 'ended') {
       // Busy. The server is told so the caller hears it rather than ringing out.
       void this.ctx.http
-        .request({ method: "POST", path: `/v1/calls/${event.callId}/end`, body: { reason: "busy" }, schema: callResponseSchema, signer: this.ctx.signer })
+        .request({
+          method: 'POST',
+          path: `/v1/calls/${event.callId}/end`,
+          body: { reason: 'busy' },
+          schema: callResponseSchema,
+          signer: this.ctx.signer,
+        })
         .catch(() => undefined);
       return;
     }
@@ -322,7 +349,7 @@ export class CallsService {
         id: event.callId,
         conversationId: event.conversationId,
         mode: event.mode,
-        phase: "ringing",
+        phase: 'ringing',
         outgoing: false,
         withAccountIds: [event.initiatorAccountId],
         endReason: null,
@@ -345,26 +372,26 @@ export class CallsService {
    * deciding for itself.
    */
   onUpdated(payload: unknown): void {
-    const parsed = SERVER_TO_CLIENT_EVENTS["call.updated"].safeParse(payload);
+    const parsed = SERVER_TO_CLIENT_EVENTS['call.updated'].safeParse(payload);
     if (!parsed.success) return;
     const event = parsed.data;
     const live = this.live;
     if (!live || live.view.id !== event.callId) return;
-    if (event.state === "ended") {
+    if (event.state === 'ended') {
       // A ring nobody answered was ended by the SERVER, so the caller writes
       // it; anything else was ended by a device, and that device writes it.
-      const expired = event.endReason === "missed";
-      void this.finish(event.endReason ?? "hangup", expired && live.view.outgoing);
+      const expired = event.endReason === 'missed';
+      void this.finish(event.endReason ?? 'hangup', expired && live.view.outgoing);
       return;
     }
-    if (event.state === "active" && live.view.phase === "ringing") {
+    if (event.state === 'active' && live.view.phase === 'ringing') {
       const mine = event.answeredByInstanceId === this.ctx.instanceId;
       if (!mine && !live.view.outgoing) {
         // Another of this account's devices took it.
-        void this.finish("answered_elsewhere");
+        void this.finish('answered_elsewhere');
         return;
       }
-      this.set({ phase: this.media ? "connecting" : "active" });
+      this.set({ phase: this.media ? 'connecting' : 'active' });
     }
   }
 
@@ -377,44 +404,52 @@ export class CallsService {
    * it came from — see the header for why that, and not a comparison, is the
    * check this file can honestly make.
    */
-  async onCallMessage(conversationId: string, message: { callId: string; kind: string; sdp?: string; candidates?: string[]; reason?: string }): Promise<void> {
+  async onCallMessage(
+    conversationId: string,
+    message: { callId: string; kind: string; sdp?: string; candidates?: string[]; reason?: string },
+  ): Promise<void> {
     const live = this.live;
     if (!live || live.view.id !== message.callId || live.view.conversationId !== conversationId) {
       // Early, or for a call this device is not in. Keep the signalling a ring
       // will need; anything else is not ours to hold.
-      if (message.kind === "offer" && message.sdp) this.pendingFor(message.callId).offer = message.sdp;
-      else if (message.kind === "ice" && message.candidates) this.pendingFor(message.callId).candidates.push(...message.candidates);
+      if (message.kind === 'offer' && message.sdp)
+        this.pendingFor(message.callId).offer = message.sdp;
+      else if (message.kind === 'ice' && message.candidates)
+        this.pendingFor(message.callId).candidates.push(...message.candidates);
       return;
     }
     switch (message.kind) {
-      case "offer":
+      case 'offer':
         if (!message.sdp) return;
-        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated("offer");
+        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated('offer');
         this.pendingFor(live.view.id).offer = message.sdp;
-        if (live.view.phase === "connecting") await this.answerOfferIfReady();
+        if (live.view.phase === 'connecting') await this.answerOfferIfReady();
         break;
-      case "answer": {
+      case 'answer': {
         if (!message.sdp || !live.view.outgoing) return;
-        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated("answer");
+        if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated('answer');
         const answer: SessionDescription = { sdp: message.sdp };
         await this.withMedia(live.view.id, async (media) => {
           await media.acceptAnswer(answer);
           live.remoteDescriptionSet = true;
           await this.drainCandidates(media);
         });
-        this.set({ phase: "active", answeredAt: live.view.answeredAt ?? new Date(this.ctx.now()).toISOString() });
+        this.set({
+          phase: 'active',
+          answeredAt: live.view.answeredAt ?? new Date(this.ctx.now()).toISOString(),
+        });
         break;
       }
-      case "ice":
+      case 'ice':
         if (!message.candidates) return;
         await this.withMedia(live.view.id, async (media) => {
           if (live.remoteDescriptionSet) await media.addCandidates(message.candidates!);
           else this.pendingFor(live.view.id).candidates.push(...message.candidates!);
         });
         break;
-      case "end":
+      case 'end':
         // They ended it, so the record is theirs to write.
-        await this.finish((message.reason as CallEndReason) ?? "hangup", false);
+        await this.finish((message.reason as CallEndReason) ?? 'hangup', false);
         break;
     }
   }
@@ -425,23 +460,25 @@ export class CallsService {
     if (!live || live.view.outgoing) return;
     const pending = this.pendingFor(live.view.id);
     const offerSdp = pending.offer;
-    if (!offerSdp || live.view.phase !== "connecting") return;
+    if (!offerSdp || live.view.phase !== 'connecting') return;
     pending.offer = null;
     await this.withMedia(live.view.id, async (media) => {
       await this.prepare(media, live.view.id);
       const answer = await media.acceptOffer({ sdp: offerSdp });
       live.remoteDescriptionSet = true;
-      await this.signal(live.view.conversationId, { kind: "answer", sdp: answer.sdp });
+      await this.signal(live.view.conversationId, { kind: 'answer', sdp: answer.sdp });
       this.streamCandidates(live.view.conversationId, media);
       await this.drainCandidates(media);
     });
-    this.set({ phase: "active" });
+    this.set({ phase: 'active' });
   }
 
   /** A description with no DTLS fingerprint is an unauthenticated call. End it rather than connect it. */
-  private async refuseUnauthenticated(what: "offer" | "answer"): Promise<void> {
-    this.ctx.log.error?.(`the ${what} carries no DTLS fingerprint; ending the call`, { callId: this.live?.view.id });
-    await this.end("failed");
+  private async refuseUnauthenticated(what: 'offer' | 'answer'): Promise<void> {
+    this.ctx.log.error?.(`the ${what} carries no DTLS fingerprint; ending the call`, {
+      callId: this.live?.view.id,
+    });
+    await this.end('failed');
   }
 
   /** The buffer for a call, created on first use. Keyed by call id, so nothing is ever copied between two of them. */
@@ -455,14 +492,18 @@ export class CallsService {
   /** Asks the server where the media may go, and hands it to the adapter without interpreting it. */
   private async prepare(media: CallMediaAdapter, callId: string): Promise<void> {
     const ice = await this.ctx.http.request({
-      method: "GET",
+      method: 'GET',
       path: `/v1/calls/${callId}/ice`,
       schema: iceServersResponseSchema,
       signer: this.ctx.signer,
     });
     await media.prepare({
-      mode: this.live?.view.mode ?? "voice",
-      iceServers: ice.iceServers.map((s) => ({ urls: [...s.urls], username: s.username, credential: s.credential })),
+      mode: this.live?.view.mode ?? 'voice',
+      iceServers: ice.iceServers.map((s) => ({
+        urls: [...s.urls],
+        username: s.username,
+        credential: s.credential,
+      })),
       relayOnly: ice.relayOnly,
     });
   }
@@ -471,8 +512,9 @@ export class CallsService {
     const live = this.live;
     if (!live || live.stopCandidates) return;
     live.stopCandidates = media.onCandidates((candidates) => {
-      void this.signal(conversationId, { kind: "ice", candidates: [...candidates] }).catch((error) =>
-        this.ctx.log.debug?.("sending candidates failed", { error: describeError(error) }),
+      void this.signal(conversationId, { kind: 'ice', candidates: [...candidates] }).catch(
+        (error) =>
+          this.ctx.log.debug?.('sending candidates failed', { error: describeError(error) }),
       );
     });
   }
@@ -488,13 +530,18 @@ export class CallsService {
 
   private async signal(
     conversationId: string,
-    body: { kind: "offer" | "answer" | "ice" | "key" | "end"; sdp?: string; candidates?: string[]; reason?: string },
+    body: {
+      kind: 'offer' | 'answer' | 'ice' | 'key' | 'end';
+      sdp?: string;
+      candidates?: string[];
+      reason?: string;
+    },
   ): Promise<void> {
     const live = this.live;
     if (!live) return;
     await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "call",
+      t: 'call',
       ctl: true,
       callId: live.view.id,
       kind: body.kind,
@@ -505,9 +552,12 @@ export class CallsService {
   }
 
   /** Runs `fn` when there is an adapter; without one the call still rings and ends, it just carries no audio. */
-  private async withMedia(callId: string, fn: (media: CallMediaAdapter) => Promise<void>): Promise<void> {
+  private async withMedia(
+    callId: string,
+    fn: (media: CallMediaAdapter) => Promise<void>,
+  ): Promise<void> {
     if (!this.media) {
-      this.ctx.log.debug?.("no media adapter: signalling only", { callId });
+      this.ctx.log.debug?.('no media adapter: signalling only', { callId });
       return;
     }
     await fn(this.media);
@@ -525,41 +575,48 @@ export class CallsService {
    */
   private async finish(reason: CallEndReason, writeLog = true): Promise<void> {
     const live = this.live;
-    if (!live || live.view.phase === "ended") return;
+    if (!live || live.view.phase === 'ended') return;
     live.stopCandidates?.();
     live.stopCandidates = null;
     this.pending = null;
-    await this.media?.close().catch((error) => this.ctx.log.warn?.("closing the media failed", { error: describeError(error) }));
+    await this.media
+      ?.close()
+      .catch((error) =>
+        this.ctx.log.warn?.('closing the media failed', { error: describeError(error) }),
+      );
     const answered = live.view.answeredAt !== null;
-    this.set({ phase: "ended", endReason: reason });
+    this.set({ phase: 'ended', endReason: reason });
     // The log is a message like any other, so it reaches every device of both
     // accounts the way everything else does.
     const outcome = answered
-      ? "answered"
-      : reason === "declined" || reason === "declined_elsewhere"
-        ? "declined"
-        : reason === "cancelled"
-          ? "cancelled"
-          : reason === "failed"
-            ? "failed"
-            : "not_answered";
+      ? 'answered'
+      : reason === 'declined' || reason === 'declined_elsewhere'
+        ? 'declined'
+        : reason === 'cancelled'
+          ? 'cancelled'
+          : reason === 'failed'
+            ? 'failed'
+            : 'not_answered';
     if (!writeLog) return;
     try {
       await this.ctx.outbox.enqueueMessage(live.view.conversationId, {
         v: 1,
-        t: "call_log",
+        t: 'call_log',
         callId: live.view.id,
         mode: live.view.mode,
         outcome,
-        ...(answered ? { durationMs: Math.max(0, this.ctx.now() - Date.parse(live.view.answeredAt!)) } : {}),
+        ...(answered
+          ? { durationMs: Math.max(0, this.ctx.now() - Date.parse(live.view.answeredAt!)) }
+          : {}),
       });
     } catch (error) {
-      this.ctx.log.warn?.("the call log could not be written", { error: describeError(error) });
+      this.ctx.log.warn?.('the call log could not be written', { error: describeError(error) });
     }
   }
 
   private requireLive(): Live {
-    if (!this.live || this.live.view.phase === "ended") throw new InvalidStateError("no call in progress");
+    if (!this.live || this.live.view.phase === 'ended')
+      throw new InvalidStateError('no call in progress');
     return this.live;
   }
 
@@ -570,7 +627,7 @@ export class CallsService {
   }
 
   private invalidate(): void {
-    this.ctx.emitter.emit("call");
+    this.ctx.emitter.emit('call');
   }
 
   /**
@@ -586,7 +643,11 @@ export class CallsService {
     this.live?.stopCandidates?.();
     if (this.live) this.live.stopCandidates = null;
     this.pending = null;
-    void this.media?.close().catch((error) => this.ctx.log.warn?.("closing the media failed", { error: describeError(error) }));
+    void this.media
+      ?.close()
+      .catch((error) =>
+        this.ctx.log.warn?.('closing the media failed', { error: describeError(error) }),
+      );
   }
 }
 
@@ -598,5 +659,5 @@ export class CallsService {
  * claimed a different one would be claiming something the SDP itself refutes.
  */
 export function fingerprintOf(sdp: string): string {
-  return /^a=fingerprint:(.+)$/m.exec(sdp)?.[1].trim() ?? "";
+  return /^a=fingerprint:(.+)$/m.exec(sdp)?.[1].trim() ?? '';
 }

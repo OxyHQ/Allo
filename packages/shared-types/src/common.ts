@@ -8,7 +8,7 @@
  * 24-hex too. Nothing may assume a format, so
  * {@link idSchema} accepts the alphabet both shapes share and nothing narrower.
  */
-import { z } from "zod";
+import { z } from 'zod';
 
 /** Standard base64, padded, non-empty. `max` bounds the ENCODED length. */
 export const base64Schema = (max?: number) => {
@@ -28,7 +28,7 @@ export const base64UrlSchema = (max?: number) => {
  * band, no format assumption.
  */
 export const ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
-export const idSchema = z.string().regex(ID_PATTERN, "expected an opaque text id");
+export const idSchema = z.string().regex(ID_PATTERN, 'expected an opaque text id');
 export type Id = z.infer<typeof idSchema>;
 
 export const accountIdSchema = idSchema;
@@ -39,10 +39,10 @@ export const blobIdSchema = idSchema;
 
 /** The product an instance belongs to: `allo`, `mention`, … */
 export const APP_ID_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
-export const appIdSchema = z.string().regex(APP_ID_PATTERN, "expected an app id");
+export const appIdSchema = z.string().regex(APP_ID_PATTERN, 'expected an app id');
 export type AppId = z.infer<typeof appIdSchema>;
 
-export const PLATFORMS = ["ios", "android", "web", "desktop", "node"] as const;
+export const PLATFORMS = ['ios', 'android', 'web', 'desktop', 'node'] as const;
 export const platformSchema = z.enum(PLATFORMS);
 export type Platform = z.infer<typeof platformSchema>;
 
@@ -52,10 +52,13 @@ export type IsoDate = z.infer<typeof isoDateSchema>;
 
 /** Lowercase hex SHA-256 digest. */
 export const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
-export const sha256HexSchema = z.string().regex(SHA256_HEX_PATTERN, "expected lowercase hex sha-256");
+export const sha256HexSchema = z
+  .string()
+  .regex(SHA256_HEX_PATTERN, 'expected lowercase hex sha-256');
 
 /** SHA-256 of the empty string — the body digest of a request with no body. */
-export const EMPTY_BODY_SHA256_HEX = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+export const EMPTY_BODY_SHA256_HEX =
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 /** A raw 32-byte Ed25519 public key, base64: exactly 44 characters. */
 export const ed25519PublicKeySchema = z.base64().length(44);
@@ -71,22 +74,22 @@ export const nonNegativeIntSchema = z.number().int().min(0).max(Number.MAX_SAFE_
 export const idempotencyKeySchema = z.string().min(1).max(128);
 
 export const ALLO_ERROR_CODES = [
-  "unauthorized",
-  "forbidden",
-  "not_found",
-  "validation_failed",
-  "epoch_conflict",
-  "group_info_missing",
-  "instance_not_active",
-  "instance_revoked",
-  "key_packages_exhausted",
-  "idempotency_conflict",
-  "payload_too_large",
-  "transfer_key_missing",
-  "backup_not_found",
-  "rate_limited",
-  "unavailable",
-  "internal",
+  'unauthorized',
+  'forbidden',
+  'not_found',
+  'validation_failed',
+  'epoch_conflict',
+  'group_info_missing',
+  'instance_not_active',
+  'instance_revoked',
+  'key_packages_exhausted',
+  'idempotency_conflict',
+  'payload_too_large',
+  'transfer_key_missing',
+  'backup_not_found',
+  'rate_limited',
+  'unavailable',
+  'internal',
 ] as const;
 export const alloErrorCodeSchema = z.enum(ALLO_ERROR_CODES);
 export type AlloErrorCode = z.infer<typeof alloErrorCodeSchema>;
@@ -116,14 +119,14 @@ export type EpochConflictDetails = z.infer<typeof epochConflictDetailsSchema>;
 // Hermes, and `Buffer` / `atob` are not on every one of them.
 // ---------------------------------------------------------------------------
 
-const B64URL_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const B64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const B64URL_LOOKUP: Record<string, number> = Object.fromEntries(
   Array.from(B64URL_ALPHABET, (c, i) => [c, i] as const),
 );
 
 /** Encode bytes as unpadded base64url. */
 export function base64UrlEncode(bytes: Uint8Array): string {
-  let out = "";
+  let out = '';
   let i = 0;
   for (; i + 2 < bytes.length; i += 3) {
     const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
@@ -149,14 +152,14 @@ export function base64UrlEncode(bytes: Uint8Array): string {
 
 /** Decode unpadded base64url. Throws `RangeError` on any character or length that is not base64url. */
 export function base64UrlDecode(text: string): Uint8Array {
-  if (text.length % 4 === 1) throw new RangeError("malformed base64url: impossible length");
+  if (text.length % 4 === 1) throw new RangeError('malformed base64url: impossible length');
   const bytes = new Uint8Array(Math.floor((text.length * 3) / 4));
   let acc = 0;
   let bits = 0;
   let o = 0;
   for (const c of text) {
     const v = B64URL_LOOKUP[c];
-    if (v === undefined) throw new RangeError("malformed base64url: bad character");
+    if (v === undefined) throw new RangeError('malformed base64url: bad character');
     acc = (acc << 6) | v;
     bits += 6;
     if (bits >= 8) {

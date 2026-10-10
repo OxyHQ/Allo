@@ -11,7 +11,12 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { useAddModeratedUser, useModeratedUsers, useRemoveModeratedUser, type ModeratedUser } from '@/hooks/usePrivacySettings';
+import {
+  useAddModeratedUser,
+  useModeratedUsers,
+  useRemoveModeratedUser,
+  type ModeratedUser,
+} from '@/hooks/usePrivacySettings';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import type { ModerationList } from '@/lib/privacy/api';
 import { getErrorMessage } from '@/utils/errors';

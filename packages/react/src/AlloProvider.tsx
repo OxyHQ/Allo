@@ -4,10 +4,10 @@
  * instance error). It does NOT start the client: the app decides when, once
  * the Oxy session is known, and calls `client.start()` itself.
  */
-import type { AlloClient } from "@allo/core";
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { InstanceErrorTracker } from "./errorTracker";
-import { DEFAULT_MEDIA_CACHE_SIZE, MediaCache } from "./mediaCache";
+import type { AlloClient } from '@allo/core';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { InstanceErrorTracker } from './errorTracker';
+import { DEFAULT_MEDIA_CACHE_SIZE, MediaCache } from './mediaCache';
 
 export interface AlloContextValue {
   client: AlloClient;
@@ -16,7 +16,7 @@ export interface AlloContextValue {
 }
 
 const AlloContext = createContext<AlloContextValue | null>(null);
-AlloContext.displayName = "AlloContext";
+AlloContext.displayName = 'AlloContext';
 
 export interface AlloProviderProps {
   client: AlloClient;
@@ -25,16 +25,25 @@ export interface AlloProviderProps {
   children?: ReactNode;
 }
 
-export function AlloProvider({ client, mediaCacheSize = DEFAULT_MEDIA_CACHE_SIZE, children }: AlloProviderProps) {
+export function AlloProvider({
+  client,
+  mediaCacheSize = DEFAULT_MEDIA_CACHE_SIZE,
+  children,
+}: AlloProviderProps) {
   const value = useMemo<AlloContextValue>(
-    () => ({ client, mediaCache: new MediaCache(mediaCacheSize), instanceErrors: new InstanceErrorTracker(client) }),
+    () => ({
+      client,
+      mediaCache: new MediaCache(mediaCacheSize),
+      instanceErrors: new InstanceErrorTracker(client),
+    }),
     [client, mediaCacheSize],
   );
   useEffect(() => value.instanceErrors.attach(), [value]);
   return <AlloContext.Provider value={value}>{children}</AlloContext.Provider>;
 }
 
-const OUTSIDE_PROVIDER = "@allo/react: no AlloProvider found. Wrap the tree in <AlloProvider client={client}> before using Allo hooks.";
+const OUTSIDE_PROVIDER =
+  '@allo/react: no AlloProvider found. Wrap the tree in <AlloProvider client={client}> before using Allo hooks.';
 
 /** Internal: the whole context. Throws outside the provider. */
 export function useAlloContext(): AlloContextValue {

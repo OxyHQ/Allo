@@ -1,7 +1,7 @@
-import type { StatusDraft, StatusView, StatusViewerView } from "@allo/core";
-import { useCallback, useMemo } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot } from "../internal/useClientSnapshot";
+import type { StatusDraft, StatusView, StatusViewerView } from '@allo/core';
+import { useCallback, useMemo } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { useClientSnapshot } from '../internal/useClientSnapshot';
 
 export interface Statuses {
   /** Everything this device can read, newest first. Stable between `statuses` emissions. */
@@ -31,7 +31,7 @@ export interface Statuses {
  */
 export function useStatuses(): Statuses {
   const { client } = useAlloContext();
-  const all = useClientSnapshot(client, "statuses", () => client.statuses.list());
+  const all = useClientSnapshot(client, 'statuses', () => client.statuses.list());
   const mine = useMemo(() => all.filter((status) => status.mine), [all]);
 
   const post = useCallback((draft: StatusDraft) => client.statuses.post(draft), [client]);

@@ -78,10 +78,18 @@ export default function MembersRoute() {
           if (href) router.push(href);
         }}
         // Leaving is its own action, with its own confirmation: your row offers no removal.
-        onRemove={canManage ? (accountId) => (accountId === ctx.me ? undefined : void remove(accountId)) : undefined}
+        onRemove={
+          canManage
+            ? (accountId) => (accountId === ctx.me ? undefined : void remove(accountId))
+            : undefined
+        }
         onAddMembers={canManage ? () => router.push(`/new?addTo=${conversationId}`) : undefined}
         addMembersLabel={t('chat.group.addMember')}
-        labels={{ remove: t('chat.group.removeMember'), owner: t('chat.role.owner'), admin: t('chat.role.admin') }}
+        labels={{
+          remove: t('chat.group.removeMember'),
+          owner: t('chat.role.owner'),
+          admin: t('chat.role.admin'),
+        }}
       />
     </Page>
   );

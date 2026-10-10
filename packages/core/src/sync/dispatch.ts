@@ -19,15 +19,19 @@ import {
   type AppMessage,
   type ConversationEvent,
   type ConversationSummary,
-} from "@allo/shared-types";
-import type { Context } from "../context";
-import { DecryptError, FutureEpochError, JoinRefusedError } from "../errors";
-import { Model } from "../storage/model";
-import { pendingCommitRecordSchema, type ConversationRecord, type EventRecord } from "../storage/records";
-import type { StoreBatch } from "../storage/store";
-import { base64Decode, base64Encode, utf8Decode } from "../util/bytes";
-import { describeError } from "../util/logger";
-import type { GroupState, JoinerAdmission } from "../crypto/engine";
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { DecryptError, FutureEpochError, JoinRefusedError } from '../errors';
+import { Model } from '../storage/model';
+import {
+  pendingCommitRecordSchema,
+  type ConversationRecord,
+  type EventRecord,
+} from '../storage/records';
+import type { StoreBatch } from '../storage/store';
+import { base64Decode, base64Encode, utf8Decode } from '../util/bytes';
+import { describeError } from '../util/logger';
+import type { GroupState, JoinerAdmission } from '../crypto/engine';
 
 export interface DispatchOutcome {
   /** A commit or a join changed the epoch: replay what was queued for the conversation. */
@@ -65,7 +69,12 @@ class Work {
     this.stateChanged = true;
   }
 
-  record(fields: { message: AppMessage | null; failure: string | null; system: string | null; localKey: string | null }): EventRecord {
+  record(fields: {
+    message: AppMessage | null;
+    failure: string | null;
+    system: string | null;
+    localKey: string | null;
+  }): EventRecord {
     const e = this.event;
     const record: EventRecord = {
       id: e.id,
@@ -78,7 +87,7 @@ class Work {
       createdAt: e.createdAt,
       ...fields,
     };
-    this.batch.putJson("event", Model.eventId(record), record);
+    this.batch.putJson('event', Model.eventId(record), record);
     this.after.push(() => this.ctx.model.putEvent(record));
     this.timelineTouched = true;
     return record;
@@ -92,26 +101,30 @@ export class Dispatcher {
    * `cursor` is staged into the batch so the delivery and its consequences
    * land together. `replaying` marks a queued event being retried.
    */
-  async dispatch(event: ConversationEvent, cursor: string | null, replaying = false): Promise<DispatchOutcome> {
+  async dispatch(
+    event: ConversationEvent,
+    cursor: string | null,
+    replaying = false,
+  ): Promise<DispatchOutcome> {
     const { ctx } = this;
     return ctx.mutex.run(async () => {
       const w = new Work(ctx, event);
-      if (cursor !== null) w.batch.putJson("cursor", "sync", { cursor });
+      if (cursor !== null) w.batch.putJson('cursor', 'sync', { cursor });
       let epochAdvanced = false;
       if (!ctx.model.hasEvent(event.conversationId, event.id)) {
         try {
           switch (event.kind) {
-            case "control":
+            case 'control':
               await this.onControl(w);
               break;
-            case "mls_welcome":
+            case 'mls_welcome':
               epochAdvanced = await this.onWelcome(w);
               break;
-            case "mls_commit":
-            case "mls_proposal":
+            case 'mls_commit':
+            case 'mls_proposal':
               epochAdvanced = await this.onHandshake(w);
               break;
-            case "app_message":
+            case 'app_message':
               await this.onAppMessage(w);
               break;
           }
@@ -128,11 +141,12 @@ export class Dispatcher {
   private async finish(w: Work, cursor: string | null, replaying: boolean): Promise<void> {
     const { ctx } = this;
     const id = w.event.conversationId;
-    if (replaying && !w.queued) w.batch.delete("queued", Model.queuedId({ event: w.event }));
-    if (w.conv && w.event.seq > w.conv.lastSeq && !w.queued) w.setConv({ ...w.conv, lastSeq: w.event.seq });
+    if (replaying && !w.queued) w.batch.delete('queued', Model.queuedId({ event: w.event }));
+    if (w.conv && w.event.seq > w.conv.lastSeq && !w.queued)
+      w.setConv({ ...w.conv, lastSeq: w.event.seq });
     if (w.convChanged && w.conv) {
       const next = w.conv;
-      w.batch.putJson("conversation", next.id, next);
+      w.batch.putJson('conversation', next.id, next);
       w.after.push(() => ctx.model.conversations.set(next.id, next));
     }
     if (w.stateChanged && w.state) {
@@ -149,7 +163,7 @@ export class Dispatcher {
 
   private queue(w: Work): void {
     const record = { event: w.event };
-    w.batch.putJson("queued", Model.queuedId(record), record);
+    w.batch.putJson('queued', Model.queuedId(record), record);
     w.after.push(() => this.ctx.model.pushQueued(record));
     w.queued = true;
     // Nothing else from this delivery may land: the batch keeps only the cursor and the queue entry.
@@ -162,16 +176,18 @@ export class Dispatcher {
 
   private async onControl(w: Work): Promise<void> {
     const { ctx } = this;
-    const parsed = controlEventSchema.safeParse(JSON.parse(utf8Decode(base64Decode(w.event.payload))));
+    const parsed = controlEventSchema.safeParse(
+      JSON.parse(utf8Decode(base64Decode(w.event.payload))),
+    );
     if (!parsed.success) {
-      ctx.log.warn?.("control event did not parse", { conversationId: w.event.conversationId });
+      ctx.log.warn?.('control event did not parse', { conversationId: w.event.conversationId });
       return;
     }
     const control = parsed.data;
     const state = w.state;
     let system: string | null = null;
-    if (control.t === "instance_revoked") {
-      system = "device_removed";
+    if (control.t === 'instance_revoked') {
+      system = 'device_removed';
       if (state && ctx.engine.isActive(state) && !w.conv?.removed) {
         const members = ctx.engine.membersOf(state);
         if (members.some((m) => m.instanceId === control.instanceId)) {
@@ -179,20 +195,45 @@ export class Dispatcher {
           const sameAccount = remaining.filter((m) => m.accountId === control.accountId);
           if (this.isElector(sameAccount.length ? sameAccount : remaining)) {
             const conversationId = w.event.conversationId;
-            w.after.push(() => void ctx.outbox.enqueueCommit(conversationId, { adds: [], removes: [control.instanceId], reason: "revoked" }));
+            w.after.push(
+              () =>
+                void ctx.outbox.enqueueCommit(conversationId, {
+                  adds: [],
+                  removes: [control.instanceId],
+                  reason: 'revoked',
+                }),
+            );
           }
         }
       }
-    } else if (control.t === "member_left") {
-      system = "member_left";
-      if (w.conv) w.setConv({ ...w.conv, members: w.conv.members.map((m) => (m.accountId === control.accountId ? { ...m, state: "left" as const } : m)) });
-      if (state && ctx.engine.isActive(state) && !w.conv?.removed && control.accountId !== ctx.accountId) {
+    } else if (control.t === 'member_left') {
+      system = 'member_left';
+      if (w.conv)
+        w.setConv({
+          ...w.conv,
+          members: w.conv.members.map((m) =>
+            m.accountId === control.accountId ? { ...m, state: 'left' as const } : m,
+          ),
+        });
+      if (
+        state &&
+        ctx.engine.isActive(state) &&
+        !w.conv?.removed &&
+        control.accountId !== ctx.accountId
+      ) {
         const members = ctx.engine.membersOf(state);
         const leaving = members.filter((m) => m.accountId === control.accountId);
         const remaining = members.filter((m) => m.accountId !== control.accountId);
         if (leaving.length && this.isElector(remaining)) {
           const conversationId = w.event.conversationId;
-          w.after.push(() => void ctx.outbox.enqueueCommit(conversationId, { adds: [], removes: leaving.map((m) => m.instanceId), reason: "member_left" }));
+          w.after.push(
+            () =>
+              void ctx.outbox.enqueueCommit(conversationId, {
+                adds: [],
+                removes: leaving.map((m) => m.instanceId),
+                reason: 'member_left',
+              }),
+          );
         }
       }
     }
@@ -203,7 +244,11 @@ export class Dispatcher {
   private readonly admission: JoinerAdmission = {
     trustedInstancesOf: async (accountId) => {
       const { trusted, refused } = await this.ctx.instance.trustedInstancesOf(accountId);
-      if (refused.size) this.ctx.log.warn?.("instances refused by the approval chain", { accountId, count: refused.size });
+      if (refused.size)
+        this.ctx.log.warn?.('instances refused by the approval chain', {
+          accountId,
+          count: refused.size,
+        });
       return trusted.map((i) => ({ id: i.id, signingPublicKey: i.signingPublicKey }));
     },
   };
@@ -235,19 +280,28 @@ export class Dispatcher {
        */
       const current = await this.fetchSummary(id);
       if (current.mlsGroupId === base64Encode(ctx.engine.groupIdOf(w.state))) {
-        ctx.log.debug?.("welcome for a conversation already joined; ignored", { conversationId: id });
+        ctx.log.debug?.('welcome for a conversation already joined; ignored', {
+          conversationId: id,
+        });
         return false;
       }
-      ctx.log.info?.("this conversation's group was replaced; joining the new one", { conversationId: id });
+      ctx.log.info?.("this conversation's group was replaced; joining the new one", {
+        conversationId: id,
+      });
     }
     const welcome = base64Decode(w.event.payload);
     const ref = ctx.engine.welcomeRefs(welcome).find((r) => ctx.instance.hasKeyPackage(r));
     // The summary first: if the server is unreachable the delivery is retried, nothing consumed.
     const summary = await this.fetchSummary(id);
     if (!ref) {
-      ctx.log.warn?.("welcome names no key package this instance holds", { conversationId: id });
+      ctx.log.warn?.('welcome names no key package this instance holds', { conversationId: id });
       w.setConv(this.recordFromSummary(summary, w.conv, null));
-      w.record({ message: null, failure: "welcome_without_key_package", system: null, localKey: null });
+      w.record({
+        message: null,
+        failure: 'welcome_without_key_package',
+        system: null,
+        localKey: null,
+      });
       return false;
     }
     const bundle = await ctx.instance.takeKeyPackage(ref);
@@ -256,9 +310,12 @@ export class Dispatcher {
     try {
       state = await ctx.engine.joinFromWelcome(welcome, bundle);
     } catch (error) {
-      ctx.log.warn?.("welcome could not be joined", { conversationId: id, error: describeError(error) });
+      ctx.log.warn?.('welcome could not be joined', {
+        conversationId: id,
+        error: describeError(error),
+      });
       w.setConv(this.recordFromSummary(summary, w.conv, null));
-      w.record({ message: null, failure: "welcome_rejected", system: null, localKey: null });
+      w.record({ message: null, failure: 'welcome_rejected', system: null, localKey: null });
       return false;
     }
     w.setState(state);
@@ -268,11 +325,21 @@ export class Dispatcher {
   }
 
   private async fetchSummary(conversationId: string): Promise<ConversationSummary> {
-    const res = await this.ctx.http.request({ method: "GET", path: `/v1/conversations/${conversationId}`, schema: conversationResponseSchema, signer: this.ctx.signer });
+    const res = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/conversations/${conversationId}`,
+      schema: conversationResponseSchema,
+      signer: this.ctx.signer,
+    });
     return res.conversation;
   }
 
-  private recordFromSummary(summary: ConversationSummary, existing: ConversationRecord | undefined, joinedEpoch: number | null, joinSeq?: number): ConversationRecord {
+  private recordFromSummary(
+    summary: ConversationSummary,
+    existing: ConversationRecord | undefined,
+    joinedEpoch: number | null,
+    joinSeq?: number,
+  ): ConversationRecord {
     return {
       id: summary.id,
       kind: summary.kind,
@@ -281,7 +348,11 @@ export class Dispatcher {
       createdByAccountId: summary.createdByAccountId,
       createdAt: summary.createdAt,
       name: existing?.name ?? null,
-      members: summary.members.map((m) => ({ accountId: m.accountId, role: m.role, state: m.state })),
+      members: summary.members.map((m) => ({
+        accountId: m.accountId,
+        role: m.role,
+        state: m.state,
+      })),
       lastSeq: joinSeq ?? existing?.lastSeq ?? 0,
       joinedEpoch: joinedEpoch ?? existing?.joinedEpoch ?? null,
       lastReadSeq: existing?.lastReadSeq ?? 0,
@@ -297,16 +368,23 @@ export class Dispatcher {
     const { ctx } = this;
     const { event, conv, state } = w;
     if (!state) throw new NoStateYet();
-    if (conv?.joinedEpoch !== null && conv !== undefined && event.epoch < conv.joinedEpoch) return false; // before this leaf existed
+    if (conv?.joinedEpoch !== null && conv !== undefined && event.epoch < conv.joinedEpoch)
+      return false; // before this leaf existed
     if (event.senderInstanceId === ctx.instanceId) {
       // Our own commit, seen through a gap fill before the outbox recorded it: apply the pending state if it is the one.
-      const pending = await ctx.store.getJson("pendingCommit", event.conversationId, pendingCommitRecordSchema);
-      if (pending && pending.epoch === event.epoch && event.kind === "mls_commit") {
+      const pending = await ctx.store.getJson(
+        'pendingCommit',
+        event.conversationId,
+        pendingCommitRecordSchema,
+      );
+      if (pending && pending.epoch === event.epoch && event.kind === 'mls_commit') {
         w.setState(ctx.engine.deserializeGroup(base64Decode(pending.nextState)));
         w.record({ message: null, failure: null, system: null, localKey: pending.outboxItemId });
         return true;
       }
-      ctx.log.warn?.("own handshake message with no pending state; skipped", { conversationId: event.conversationId });
+      ctx.log.warn?.('own handshake message with no pending state; skipped', {
+        conversationId: event.conversationId,
+      });
       return false;
     }
     let result;
@@ -316,35 +394,61 @@ export class Dispatcher {
       // processes it: the leaf on the wire must name the server-authenticated sender, and the engine
       // checks that sender against its account's verified chain and against the tree (engine invariant 6).
       const joiner = ctx.engine.externalJoinerOf(payload);
-      if (joiner && (joiner.accountId !== event.senderAccountId || joiner.instanceId !== event.senderInstanceId)) {
-        throw new JoinRefusedError(`the leaf names ${joiner.accountId}:${joiner.instanceId}, the sender is ${event.senderAccountId}:${event.senderInstanceId}`);
+      if (
+        joiner &&
+        (joiner.accountId !== event.senderAccountId || joiner.instanceId !== event.senderInstanceId)
+      ) {
+        throw new JoinRefusedError(
+          `the leaf names ${joiner.accountId}:${joiner.instanceId}, the sender is ${event.senderAccountId}:${event.senderInstanceId}`,
+        );
       }
-      result = await ctx.engine.processIncoming(state, payload, joiner ? this.admission : undefined);
+      result = await ctx.engine.processIncoming(
+        state,
+        payload,
+        joiner ? this.admission : undefined,
+      );
     } catch (error) {
       if (error instanceof FutureEpochError) throw error;
       if (error instanceof DecryptError) {
-        ctx.log.warn?.("handshake message rejected", { conversationId: event.conversationId, error: describeError(error) });
-        if (error instanceof JoinRefusedError && event.kind === "mls_commit" && conv && !conv.refusedCommit) {
+        ctx.log.warn?.('handshake message rejected', {
+          conversationId: event.conversationId,
+          error: describeError(error),
+        });
+        if (
+          error instanceof JoinRefusedError &&
+          event.kind === 'mls_commit' &&
+          conv &&
+          !conv.refusedCommit
+        ) {
           // The server accepted this commit and moved on; this device did not. Said once, kept for good: fail closed.
           w.setConv({ ...conv, refusedCommit: { epoch: event.epoch, reason: error.message } });
         }
-        w.record({ message: null, failure: error instanceof JoinRefusedError ? "joiner_refused" : null, system: null, localKey: null });
+        w.record({
+          message: null,
+          failure: error instanceof JoinRefusedError ? 'joiner_refused' : null,
+          system: null,
+          localKey: null,
+        });
         return false;
       }
       throw error;
     }
     w.setState(result.next);
-    if (conv && result.kind === "commit") {
+    if (conv && result.kind === 'commit') {
       // Membership follows the tree: every account with a leaf is joined.
       const accounts = new Set(ctx.engine.membersOf(result.next).map((m) => m.accountId));
-      const members = conv.members.map((m) => (accounts.has(m.accountId) ? { ...m, state: "joined" as const } : m));
-      for (const a of accounts) if (!members.some((m) => m.accountId === a)) members.push({ accountId: a, role: "member", state: "joined" });
+      const members = conv.members.map((m) =>
+        accounts.has(m.accountId) ? { ...m, state: 'joined' as const } : m,
+      );
+      for (const a of accounts)
+        if (!members.some((m) => m.accountId === a))
+          members.push({ accountId: a, role: 'member', state: 'joined' });
       w.setConv({ ...conv, members, removed: result.removedSelf ? true : conv.removed });
     } else if (conv && result.removedSelf) {
       w.setConv({ ...conv, removed: true });
     }
     w.record({ message: null, failure: null, system: null, localKey: null });
-    return result.kind === "commit";
+    return result.kind === 'commit';
   }
 
   // ---- application ---------------------------------------------------------
@@ -361,7 +465,8 @@ export class Dispatcher {
     try {
       const result = await ctx.engine.processIncoming(state, base64Decode(event.payload));
       w.setState(result.next);
-      if (result.kind !== "application" || !result.plaintext) failure = "not_an_application_message";
+      if (result.kind !== 'application' || !result.plaintext)
+        failure = 'not_an_application_message';
       else {
         try {
           // A control kind from a newer client decodes to `null`: nothing to
@@ -370,24 +475,29 @@ export class Dispatcher {
           message = decodeAppMessageOrIgnore(result.plaintext);
           if (message === null) ignorable = true;
         } catch (error) {
-          failure = error instanceof AppMessageDecodeError ? "unsupported_message" : "undecodable";
+          failure = error instanceof AppMessageDecodeError ? 'unsupported_message' : 'undecodable';
         }
       }
     } catch (error) {
       if (error instanceof FutureEpochError) throw error;
-      if (error instanceof DecryptError) failure = "undecryptable";
+      if (error instanceof DecryptError) failure = 'undecryptable';
       else throw error;
     }
     if (ignorable) return; // a control kind this build does not know: recorded as nothing
-    if (message?.t === "typing") return; // never stored
+    if (message?.t === 'typing') return; // never stored
     w.record({ message, failure, system: null, localKey: null });
     if (!conv || !message) return;
     let next = conv;
-    if (message.t === "conversation" && message.name !== undefined) next = { ...next, name: message.name };
-    if (message.t === "text" || message.t === "media") next = { ...next, lastActivityAt: event.createdAt };
+    if (message.t === 'conversation' && message.name !== undefined)
+      next = { ...next, name: message.name };
+    if (message.t === 'text' || message.t === 'media')
+      next = { ...next, lastActivityAt: event.createdAt };
     if (next !== conv) w.setConv(next);
     // A message from ANOTHER account was imported: tell its sender, throttled. Own instances' messages get no receipt.
-    if ((message.t === "text" || message.t === "media") && event.senderAccountId !== ctx.accountId) {
+    if (
+      (message.t === 'text' || message.t === 'media') &&
+      event.senderAccountId !== ctx.accountId
+    ) {
       const conversationId = event.conversationId;
       w.after.push(() => ctx.messages.noteDelivered(conversationId));
     }
@@ -398,28 +508,46 @@ export class Dispatcher {
      * crossed it in flight survives.
      */
     /** Signalling: the offer, the answer, the candidates and the end, all encrypted. */
-    if (message.t === "call") {
+    if (message.t === 'call') {
       const conversationId = event.conversationId;
       const payload = message;
       w.after.push(() =>
         ctx.calls
           .onCallMessage(conversationId, payload)
-          .catch((error) => ctx.log.warn?.("handling a call message failed", { error: describeError(error) })),
+          .catch((error) =>
+            ctx.log.warn?.('handling a call message failed', { error: describeError(error) }),
+          ),
       );
     }
-    if (message.t === "clear_history") {
+    if (message.t === 'clear_history') {
       const conversationId = event.conversationId;
       const upTo = event.seq - 1;
       w.after.push(() => ctx.messages.applyClear(conversationId, upTo));
     }
-    if (message.t === "media") {
-      const key = { blobId: message.blobId, conversationId: event.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };
-      w.batch.putJson("mediaKey", key.blobId, key);
+    if (message.t === 'media') {
+      const key = {
+        blobId: message.blobId,
+        conversationId: event.conversationId,
+        key: message.key,
+        nonce: message.nonce,
+        sha256: message.sha256,
+        mime: message.mime,
+        size: message.size,
+      };
+      w.batch.putJson('mediaKey', key.blobId, key);
       w.after.push(() => ctx.model.mediaKeys.set(key.blobId, key));
       if (message.thumbnail) {
         const t = message.thumbnail;
-        const tk = { blobId: t.blobId, conversationId: event.conversationId, key: t.key, nonce: t.nonce, sha256: t.sha256, mime: "image/*", size: 0 };
-        w.batch.putJson("mediaKey", tk.blobId, tk);
+        const tk = {
+          blobId: t.blobId,
+          conversationId: event.conversationId,
+          key: t.key,
+          nonce: t.nonce,
+          sha256: t.sha256,
+          mime: 'image/*',
+          size: 0,
+        };
+        w.batch.putJson('mediaKey', tk.blobId, tk);
         w.after.push(() => ctx.model.mediaKeys.set(tk.blobId, tk));
       }
     }
@@ -428,8 +556,8 @@ export class Dispatcher {
 
 /** Internal: no group state for the conversation yet (welcome still to come). Queued like a future epoch. */
 class NoStateYet extends Error {
-  override readonly name = "NoStateYet";
+  override readonly name = 'NoStateYet';
   constructor() {
-    super("no group state for this conversation yet");
+    super('no group state for this conversation yet');
   }
 }

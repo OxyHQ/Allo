@@ -1,9 +1,9 @@
-import type { PushConfig, PushPlatform } from "../../config/push";
-import { pushConfig } from "../../config/push";
-import { createApnsSender, createHttp2ApnsTransport } from "./apns";
-import { createApnsTokenProvider } from "./apnsAuth";
-import type { PushSender } from "./delivery";
-import { createFcmSender, createFirebaseTransport } from "./fcm";
+import type { PushConfig, PushPlatform } from '../../config/push';
+import { pushConfig } from '../../config/push';
+import { createApnsSender, createHttp2ApnsTransport } from './apns';
+import { createApnsTokenProvider } from './apnsAuth';
+import type { PushSender } from './delivery';
+import { createFcmSender, createFirebaseTransport } from './fcm';
 
 /**
  * The senders this process delivers through, built once from the configuration.
@@ -22,14 +22,14 @@ export function createPushSenders(config: PushConfig): ReadonlyMap<PushPlatform,
   const senders = new Map<PushPlatform, PushSender>();
 
   if (config.fcm !== undefined) {
-    senders.set("android", createFcmSender(createFirebaseTransport(config.fcm)));
+    senders.set('android', createFcmSender(createFirebaseTransport(config.fcm)));
   }
 
   if (config.apns !== undefined) {
     const credentials = config.apns;
     const transport = createHttp2ApnsTransport(credentials.host);
     senders.set(
-      "ios",
+      'ios',
       createApnsSender(credentials, createApnsTokenProvider(credentials), transport.send),
     );
   }

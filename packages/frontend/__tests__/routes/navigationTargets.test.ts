@@ -124,8 +124,7 @@ export interface NavigationTarget {
  * lists what can be checked, not what exists.
  */
 export function navigationTargets(): NavigationTarget[] {
-  const calls =
-    /(?:router|navigation)\s*\.\s*(?:push|replace|navigate)\(\s*(['"`])([^'"`]*)\1/g;
+  const calls = /(?:router|navigation)\s*\.\s*(?:push|replace|navigate)\(\s*(['"`])([^'"`]*)\1/g;
   const redirects = /href=\{?\s*(['"`])([^'"`]*)\1/g;
 
   const targets: NavigationTarget[] = [];

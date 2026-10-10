@@ -12,14 +12,24 @@ import { PressableScale } from '@oxy.so/bloom/pressable-scale';
 import { Sticker as StickerTile } from '@oxy.so/bloom/sticker';
 import { Text } from '@oxy.so/bloom/typography';
 import type { Sticker } from '@oxy.so/stickers';
-import { useInstallStickerPack, useInstalledStickerPacks, useStickerShop } from '@oxy.so/stickers/react';
+import {
+  useInstallStickerPack,
+  useInstalledStickerPacks,
+  useStickerShop,
+} from '@oxy.so/stickers/react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, View } from 'react-native';
 
 /** Four 72px tiles fit the 324px picker panel with its gaps. */
 const TILE = 72;
 
-export function StickerPicker({ onSelect, height }: { onSelect: (sticker: Sticker) => void; height: number }) {
+export function StickerPicker({
+  onSelect,
+  height,
+}: {
+  onSelect: (sticker: Sticker) => void;
+  height: number;
+}) {
   const { t } = useTranslation();
   const installed = useInstalledStickerPacks();
 
@@ -62,7 +72,9 @@ function StickerShop({ height }: { height: number }) {
       <Text variant="body-2-regular">{t('composer.stickers.empty')}</Text>
       {(shop.data?.items ?? []).map((pack) => (
         <View key={pack.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {pack.cover ? <StickerTile fallback={pack.cover.fallback.url} size={48} decorative /> : null}
+          {pack.cover ? (
+            <StickerTile fallback={pack.cover.fallback.url} size={48} decorative />
+          ) : null}
           <Text variant="body-medium" style={{ flex: 1 }} numberOfLines={1}>
             {pack.title}
           </Text>

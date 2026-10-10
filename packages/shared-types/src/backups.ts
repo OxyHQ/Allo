@@ -9,9 +9,9 @@
  * so a client can refuse a mistyped phrase before it downloads a single chunk.
  * A wrong `keyCheck` proves nothing to the server — it stores and returns it.
  */
-import { z } from "zod";
-import { archiveManifestSchema } from "./archive";
-import { accountIdSchema, ed25519SignatureSchema, instanceIdSchema, isoDateSchema } from "./common";
+import { z } from 'zod';
+import { archiveManifestSchema } from './archive';
+import { accountIdSchema, ed25519SignatureSchema, instanceIdSchema, isoDateSchema } from './common';
 
 /** HMAC-SHA256 output, base64: exactly 32 bytes → 44 characters. */
 export const backupKeyCheckSchema = z.base64().length(44);
@@ -39,8 +39,12 @@ export const putBackupRequestSchema = z
     manifestSignature: ed25519SignatureSchema,
   })
   .superRefine((v, ctx) => {
-    if (v.manifest.kind !== "backup") {
-      ctx.addIssue({ code: "custom", path: ["manifest", "kind"], message: "a backup carries a backup manifest" });
+    if (v.manifest.kind !== 'backup') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['manifest', 'kind'],
+        message: 'a backup carries a backup manifest',
+      });
     }
   });
 export type PutBackupRequest = z.infer<typeof putBackupRequestSchema>;

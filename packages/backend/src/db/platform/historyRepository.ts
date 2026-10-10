@@ -23,17 +23,17 @@
  * wrote it is who reads it. Neither table has a listing for anybody else.
  */
 
-import { and, asc, eq, inArray, isNull, lt, lte, notExists, sql } from "drizzle-orm";
-import { publicColumns } from "@oxy.so/db/assert";
-import { uuidv7 } from "@oxy.so/db";
-import { HISTORY_OFFER_TTL_MS, type ArchiveManifest } from "@allo/shared-types";
-import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
-import { PROTECTED_COLUMNS } from "../protectedColumns";
-import { blobs } from "../schema/blobs";
-import { namedByLiveStatus } from "./statusRepository";
-import { conversationEvents } from "../schema/events";
-import { accountBackups, historyOffers } from "../schema/history";
+import { and, asc, eq, inArray, isNull, lt, lte, notExists, sql } from 'drizzle-orm';
+import { publicColumns } from '@oxy.so/db/assert';
+import { uuidv7 } from '@oxy.so/db';
+import { HISTORY_OFFER_TTL_MS, type ArchiveManifest } from '@allo/shared-types';
+import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
+import { PROTECTED_COLUMNS } from '../protectedColumns';
+import { blobs } from '../schema/blobs';
+import { namedByLiveStatus } from './statusRepository';
+import { conversationEvents } from '../schema/events';
+import { accountBackups, historyOffers } from '../schema/history';
 
 /** How long a released chunk lives after the last thing naming it let go. */
 export const CHUNK_RELEASE_TTL_MS = 24 * 60 * 60 * 1_000;
@@ -80,7 +80,7 @@ export async function insertHistoryOffer(
   input: InsertHistoryOfferInput,
   db: AlloDatabaseOrTransaction,
 ): Promise<HistoryOfferRow> {
-  const tx = requireTransaction(db, "insertHistoryOffer");
+  const tx = requireTransaction(db, 'insertHistoryOffer');
   const [row] = await tx
     .insert(historyOffers)
     .values({
@@ -92,7 +92,7 @@ export async function insertHistoryOffer(
       sealedKey: input.sealedKey,
       manifestSignature: input.manifestSignature,
       chunkBlobIds: [...input.manifest.chunkBlobIds],
-      status: "pending",
+      status: 'pending',
       expiresAt: new Date(input.now.getTime() + HISTORY_OFFER_TTL_MS),
     })
     .returning(HISTORY_OFFER_COLUMNS);
@@ -103,7 +103,11 @@ export async function findHistoryOfferById(
   id: string,
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<HistoryOfferRow | null> {
-  const [row] = await db.select(HISTORY_OFFER_COLUMNS).from(historyOffers).where(eq(historyOffers.id, id)).limit(1);
+  const [row] = await db
+    .select(HISTORY_OFFER_COLUMNS)
+    .from(historyOffers)
+    .where(eq(historyOffers.id, id))
+    .limit(1);
   return row ?? null;
 }
 
@@ -115,7 +119,12 @@ export async function listPendingOffersForRecipient(
   return db
     .select(HISTORY_OFFER_COLUMNS)
     .from(historyOffers)
-    .where(and(eq(historyOffers.recipientInstanceId, recipientInstanceId), eq(historyOffers.status, "pending")))
+    .where(
+      and(
+        eq(historyOffers.recipientInstanceId, recipientInstanceId),
+        eq(historyOffers.status, 'pending'),
+      ),
+    )
     .orderBy(asc(historyOffers.createdAt), asc(historyOffers.id));
 }
 
@@ -131,20 +140,23 @@ export async function expireReplacedOffers(
   exceptOfferId: string,
   db: AlloDatabaseOrTransaction,
 ): Promise<HistoryOfferRow[]> {
-  const tx = requireTransaction(db, "expireReplacedOffers");
+  const tx = requireTransaction(db, 'expireReplacedOffers');
   const rows = await tx
     .update(historyOffers)
-    .set({ status: "expired" })
+    .set({ status: 'expired' })
     .where(
       and(
         eq(historyOffers.donorInstanceId, donorInstanceId),
         eq(historyOffers.recipientInstanceId, recipientInstanceId),
-        eq(historyOffers.status, "pending"),
+        eq(historyOffers.status, 'pending'),
         sql`${historyOffers.id} <> ${exceptOfferId}`,
       ),
     )
     .returning(HISTORY_OFFER_COLUMNS);
-  await releaseChunkBlobs(rows.flatMap((row) => row.chunkBlobIds), tx);
+  await releaseChunkBlobs(
+    rows.flatMap((row) => row.chunkBlobIds),
+    tx,
+  );
   return rows;
 }
 
@@ -159,19 +171,24 @@ export async function expireDueOffers(
   recipientInstanceId: string | undefined,
   db: AlloDatabaseOrTransaction,
 ): Promise<number> {
-  const tx = requireTransaction(db, "expireDueOffers");
+  const tx = requireTransaction(db, 'expireDueOffers');
   const rows = await tx
     .update(historyOffers)
-    .set({ status: "expired" })
+    .set({ status: 'expired' })
     .where(
       and(
-        eq(historyOffers.status, "pending"),
+        eq(historyOffers.status, 'pending'),
         lte(historyOffers.expiresAt, now),
-        recipientInstanceId === undefined ? undefined : eq(historyOffers.recipientInstanceId, recipientInstanceId),
+        recipientInstanceId === undefined
+          ? undefined
+          : eq(historyOffers.recipientInstanceId, recipientInstanceId),
       ),
     )
     .returning({ chunkBlobIds: historyOffers.chunkBlobIds });
-  await releaseChunkBlobs(rows.flatMap((row) => row.chunkBlobIds), tx);
+  await releaseChunkBlobs(
+    rows.flatMap((row) => row.chunkBlobIds),
+    tx,
+  );
   return rows.length;
 }
 
@@ -185,11 +202,11 @@ export async function consumeHistoryOffer(
   now: Date,
   db: AlloDatabaseOrTransaction,
 ): Promise<HistoryOfferRow | null> {
-  const tx = requireTransaction(db, "consumeHistoryOffer");
+  const tx = requireTransaction(db, 'consumeHistoryOffer');
   const [row] = await tx
     .update(historyOffers)
-    .set({ status: "consumed", consumedAt: now })
-    .where(and(eq(historyOffers.id, id), eq(historyOffers.status, "pending")))
+    .set({ status: 'consumed', consumedAt: now })
+    .where(and(eq(historyOffers.id, id), eq(historyOffers.status, 'pending')))
     .returning(HISTORY_OFFER_COLUMNS);
   if (!row) return null;
   await releaseChunkBlobs(row.chunkBlobIds, tx);
@@ -237,13 +254,16 @@ export interface PutBackupInput {
  * cannot both insert; the loser's chunks are released by the winner's next
  * write or by the orphan pass.
  */
-export async function putBackup(input: PutBackupInput, db: AlloDatabaseOrTransaction): Promise<AccountBackupRow> {
-  const tx = requireTransaction(db, "putBackup");
+export async function putBackup(
+  input: PutBackupInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<AccountBackupRow> {
+  const tx = requireTransaction(db, 'putBackup');
   const previous = await tx
     .select({ chunkBlobIds: accountBackups.chunkBlobIds })
     .from(accountBackups)
     .where(eq(accountBackups.accountId, input.accountId))
-    .for("update");
+    .for('update');
   const chunkBlobIds = [...input.manifest.chunkBlobIds];
   const values = {
     instanceId: input.instanceId,
@@ -265,9 +285,15 @@ export async function putBackup(input: PutBackupInput, db: AlloDatabaseOrTransac
 }
 
 /** Delete the account's backup and release its chunks. Null when there was none. */
-export async function deleteBackup(accountId: string, db: AlloDatabaseOrTransaction): Promise<AccountBackupRow | null> {
-  const tx = requireTransaction(db, "deleteBackup");
-  const [row] = await tx.delete(accountBackups).where(eq(accountBackups.accountId, accountId)).returning(ACCOUNT_BACKUP_COLUMNS);
+export async function deleteBackup(
+  accountId: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<AccountBackupRow | null> {
+  const tx = requireTransaction(db, 'deleteBackup');
+  const [row] = await tx
+    .delete(accountBackups)
+    .where(eq(accountBackups.accountId, accountId))
+    .returning(ACCOUNT_BACKUP_COLUMNS);
   if (!row) return null;
   await releaseChunkBlobs(row.chunkBlobIds, tx);
   return row;
@@ -286,14 +312,23 @@ export async function findChunkBlobOwners(
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<ChunkBlobOwner[]> {
   if (ids.length === 0) return [];
-  return db.select({ id: blobs.id, uploaderAccountId: blobs.uploaderAccountId }).from(blobs).where(inArray(blobs.id, [...ids]));
+  return db
+    .select({ id: blobs.id, uploaderAccountId: blobs.uploaderAccountId })
+    .from(blobs)
+    .where(inArray(blobs.id, [...ids]));
 }
 
 /** An offer or the backup names these blobs: undated until released. */
-export async function retainChunkBlobs(ids: readonly string[], db: AlloDatabaseOrTransaction): Promise<void> {
-  const tx = requireTransaction(db, "retainChunkBlobs");
+export async function retainChunkBlobs(
+  ids: readonly string[],
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  const tx = requireTransaction(db, 'retainChunkBlobs');
   if (ids.length === 0) return;
-  await tx.update(blobs).set({ expiresAt: null }).where(inArray(blobs.id, [...ids]));
+  await tx
+    .update(blobs)
+    .set({ expiresAt: null })
+    .where(inArray(blobs.id, [...ids]));
 }
 
 /** `NOT EXISTS (pending offer naming the blob)`, correlated on the outer `blobs` row. */
@@ -302,7 +337,12 @@ export const namedByPendingOffer = (db: AlloDatabaseOrTransaction) =>
     db
       .select({ one: sql`1` })
       .from(historyOffers)
-      .where(and(eq(historyOffers.status, "pending"), sql`${blobs.id} = any(${historyOffers.chunkBlobIds})`)),
+      .where(
+        and(
+          eq(historyOffers.status, 'pending'),
+          sql`${blobs.id} = any(${historyOffers.chunkBlobIds})`,
+        ),
+      ),
   );
 
 /** `NOT EXISTS (backup naming the blob)`. */
@@ -332,14 +372,25 @@ export const namedByEvent = (db: AlloDatabaseOrTransaction) =>
  * the statement, which is why the caller inserts or marks first and releases
  * last: what is still live is whatever is live THEN.
  */
-export async function releaseChunkBlobs(ids: readonly string[], db: AlloDatabaseOrTransaction): Promise<void> {
-  const tx = requireTransaction(db, "releaseChunkBlobs");
+export async function releaseChunkBlobs(
+  ids: readonly string[],
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  const tx = requireTransaction(db, 'releaseChunkBlobs');
   const unique = [...new Set(ids)];
   if (unique.length === 0) return;
   await tx
     .update(blobs)
     .set({ expiresAt: sql`now() + make_interval(secs => ${CHUNK_RELEASE_TTL_MS / 1_000})` })
-    .where(and(inArray(blobs.id, unique), namedByPendingOffer(tx), namedByBackup(tx), namedByEvent(tx), namedByLiveStatus(tx)));
+    .where(
+      and(
+        inArray(blobs.id, unique),
+        namedByPendingOffer(tx),
+        namedByBackup(tx),
+        namedByEvent(tx),
+        namedByLiveStatus(tx),
+      ),
+    );
 }
 
 /**
@@ -356,7 +407,10 @@ export async function releaseChunkBlobs(ids: readonly string[], db: AlloDatabase
  * pass exists as a backstop — `runExpirySweep` releases due offers before it
  * deletes them, so in the ordinary course this finds nothing.
  */
-export async function dateOrphanedChunkBlobs(now: Date, db: AlloDatabase = getDb()): Promise<string[]> {
+export async function dateOrphanedChunkBlobs(
+  now: Date,
+  db: AlloDatabase = getDb(),
+): Promise<string[]> {
   const threshold = new Date(now.getTime() - ORPHAN_CHUNK_MIN_AGE_MS);
   const rows = await db
     .update(blobs)

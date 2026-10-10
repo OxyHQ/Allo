@@ -26,19 +26,19 @@
  * shared instance.
  */
 
-import { join } from "node:path";
+import { join } from 'node:path';
 import {
   MIGRATION_RUNS,
   type MigrationRun,
   readTargetDatabase,
   runMigrations,
-} from "@oxy.so/db/migrate";
+} from '@oxy.so/db/migrate';
 
-const PACKAGE_ROOT = join(__dirname, "..", "..");
+const PACKAGE_ROOT = join(__dirname, '..', '..');
 
 /** `--dry-run` reports what WOULD be applied and writes nothing, not even the ledger. */
 function isDryRun(argv: readonly string[]): boolean {
-  return argv.includes("--dry-run");
+  return argv.includes('--dry-run');
 }
 
 /**
@@ -49,16 +49,16 @@ function isDryRun(argv: readonly string[]): boolean {
  * drop-applied-too-early outage the phases exist to prevent.
  */
 function readPhase(argv: readonly string[]): MigrationRun {
-  const prefix = "--phase=";
+  const prefix = '--phase=';
   const flag = argv.find((arg) => arg.startsWith(prefix));
   if (!flag) {
-    throw new Error(`--phase is required. Use one of: ${MIGRATION_RUNS.join(", ")}.`);
+    throw new Error(`--phase is required. Use one of: ${MIGRATION_RUNS.join(', ')}.`);
   }
 
   const value = flag.slice(prefix.length).trim();
   if (!(MIGRATION_RUNS as readonly string[]).includes(value)) {
     throw new Error(
-      `Unrecognised --phase=${JSON.stringify(value)}. Use one of: ${MIGRATION_RUNS.join(", ")}.`,
+      `Unrecognised --phase=${JSON.stringify(value)}. Use one of: ${MIGRATION_RUNS.join(', ')}.`,
     );
   }
   return value as MigrationRun;
@@ -73,12 +73,12 @@ async function main(): Promise<void> {
 
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required to run migrations");
+    throw new Error('DATABASE_URL is required to run migrations');
   }
 
   await runMigrations({
     databaseUrl,
-    migrationsFolder: join(PACKAGE_ROOT, "drizzle"),
+    migrationsFolder: join(PACKAGE_ROOT, 'drizzle'),
     /**
      * None. This schema uses no PostGIS, no pgvector and no pg_trgm — and an
      * extension is a PRIVILEGED operation the owning role cannot perform, so a

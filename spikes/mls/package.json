@@ -1,6 +1,6 @@
 {
   "name": "mls-spike",
-  
+
   "type": "module",
   "private": true,
   "devDependencies": {

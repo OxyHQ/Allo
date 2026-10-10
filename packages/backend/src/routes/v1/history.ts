@@ -9,20 +9,24 @@
  * request cannot be posted at another instance's path by mistake.
  */
 
-import { Router, type RequestHandler } from "express";
-import { createHistoryOfferRequestSchema, idSchema, instanceIdSchema } from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
-import { consumeOffer, createHistoryOffer, listPendingHistoryOffers } from "../../services/platform/historyService";
-import { validationFailed } from "../../utils/httpErrors";
-import { asyncRoute } from "./asyncRoute";
-import { parseBody, parseParam } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import { createHistoryOfferRequestSchema, idSchema, instanceIdSchema } from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
+import {
+  consumeOffer,
+  createHistoryOffer,
+  listPendingHistoryOffers,
+} from '../../services/platform/historyService';
+import { validationFailed } from '../../utils/httpErrors';
+import { asyncRoute } from './asyncRoute';
+import { parseBody, parseParam } from './validate';
 
 export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   // `me` before `:id`, so it is never read as an id.
   router.get(
-    "/instances/me/history-offers",
+    '/instances/me/history-offers',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -31,24 +35,24 @@ export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Rou
   );
 
   router.post(
-    "/instances/me/history-offers/:id/consume",
+    '/instances/me/history-offers/:id/consume',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const id = parseParam(idSchema, req.params.id, "id");
+      const id = parseParam(idSchema, req.params.id, 'id');
       res.json({ offer: await consumeOffer({ id: me.id, accountId: me.accountId }, id) });
     }),
   );
 
   router.post(
-    "/instances/:id/history-offers",
+    '/instances/:id/history-offers',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const recipientId = parseParam(instanceIdSchema, req.params.id, "id");
+      const recipientId = parseParam(instanceIdSchema, req.params.id, 'id');
       const request = parseBody(createHistoryOfferRequestSchema, req);
       if (request.recipientInstanceId !== recipientId) {
-        throw validationFailed("recipientInstanceId does not match the instance in the path");
+        throw validationFailed('recipientInstanceId does not match the instance in the path');
       }
       const offer = await createHistoryOffer({ id: me.id, accountId: me.accountId }, request);
       res.status(201).json({ offer });

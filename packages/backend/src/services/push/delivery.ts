@@ -1,4 +1,4 @@
-import type { PushPlatform } from "../../config/push";
+import type { PushPlatform } from '../../config/push';
 
 /**
  * The shapes every push sender speaks, and the distinction the whole subsystem
@@ -51,9 +51,9 @@ export interface PushNotification {
  * recoverable by waiting; the other is not recoverable at all.
  */
 export type PushDeliveryOutcome =
-  | { readonly kind: "delivered" }
-  | { readonly kind: "rejected"; readonly reason: string }
-  | { readonly kind: "failed"; readonly reason: string };
+  | { readonly kind: 'delivered' }
+  | { readonly kind: 'rejected'; readonly reason: string }
+  | { readonly kind: 'failed'; readonly reason: string };
 
 /**
  * One provider.

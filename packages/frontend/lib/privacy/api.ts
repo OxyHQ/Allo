@@ -155,9 +155,11 @@ const LIST_FIELDS = {
 } as const satisfies Record<ModerationList, { idField: string; listField: string }>;
 
 function toIdList(body: unknown, listField: string): string[] {
-  const envelope = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null;
+  const envelope =
+    typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null;
   const inner = envelope !== null && 'data' in envelope ? envelope.data : envelope;
-  const record = typeof inner === 'object' && inner !== null ? (inner as Record<string, unknown>) : null;
+  const record =
+    typeof inner === 'object' && inner !== null ? (inner as Record<string, unknown>) : null;
   const list = record?.[listField];
   return Array.isArray(list) ? list.filter((id): id is string => typeof id === 'string') : [];
 }

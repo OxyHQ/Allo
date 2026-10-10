@@ -100,7 +100,11 @@ const IS_NATIVE = Platform.OS !== 'web';
 
 /** Bloom draws the notice icon at 16px in the secondary icon colour; a spinner in the same slot and colour. */
 const BusyNoticeIcon: ChatComposerIcon = ({ fill }) => (
-  <ActivityIndicator size="small" color={typeof fill === 'string' ? fill : undefined} testID="composer-notice-busy" />
+  <ActivityIndicator
+    size="small"
+    color={typeof fill === 'string' ? fill : undefined}
+    testID="composer-notice-busy"
+  />
 );
 
 /** The failure glyph in the theme's error colour, whatever secondary tint Bloom passes. */
@@ -187,9 +191,10 @@ export function Composer({
 
   /** Put the caret back where the edit left it (web; native keeps its own). */
   const restoreCaret = useCallback((at: number) => {
-    const node = field.current as unknown as
-      | { focus?: () => void; setSelectionRange?: (start: number, end: number) => void }
-      | null;
+    const node = field.current as unknown as {
+      focus?: () => void;
+      setSelectionRange?: (start: number, end: number) => void;
+    } | null;
     if (!node?.setSelectionRange) return;
     requestAnimationFrame(() => {
       node.focus?.();
@@ -201,7 +206,9 @@ export function Composer({
     (next: string) => {
       setValue(next);
       noteTyping(next);
-      setMention(mentionables.length > 0 ? mentionFragment(next, caretIn(field.current, next)) : null);
+      setMention(
+        mentionables.length > 0 ? mentionFragment(next, caretIn(field.current, next)) : null,
+      );
       setActiveIndex(0);
     },
     [mentionables.length, noteTyping],
@@ -242,7 +249,11 @@ export function Composer({
     (suggestion: ChatComposerSuggestion) => {
       if (!mention) return;
       const person = mentionables.find((candidate) => candidate.id === suggestion.id);
-      const applied = applyMention(value, mention, person?.handle ?? person?.label ?? suggestion.label);
+      const applied = applyMention(
+        value,
+        mention,
+        person?.handle ?? person?.label ?? suggestion.label,
+      );
       setValue(applied.value);
       setMention(null);
       setActiveIndex(0);
@@ -287,11 +298,15 @@ export function Composer({
   const attachItems = useMemo<AttachmentMenuItem[]>(
     () => [
       { id: 'gallery', label: t('composer.attach.gallery'), icon: RiGalleryLine },
-      ...(IS_NATIVE ? [{ id: 'camera', label: t('composer.attach.camera'), icon: RiCameraLine }] : []),
+      ...(IS_NATIVE
+        ? [{ id: 'camera', label: t('composer.attach.camera'), icon: RiCameraLine }]
+        : []),
       { id: 'file', label: t('composer.attach.file'), icon: RiFileTextLine },
       { id: 'location', label: t('composer.attach.location'), icon: RiMapPinLine },
       // A browser has no address book, so there is no picker to open there.
-      ...(IS_NATIVE ? [{ id: 'contact', label: t('composer.attach.contact'), icon: RiContactsBookLine }] : []),
+      ...(IS_NATIVE
+        ? [{ id: 'contact', label: t('composer.attach.contact'), icon: RiContactsBookLine }]
+        : []),
       { id: 'poll', label: t('composer.attach.poll'), icon: RiBarChartHorizontalLine },
     ],
     [t],
@@ -418,7 +433,11 @@ export function Composer({
       onCancel={() => void voice.cancel()}
       onDelete={() => void voice.cancel()}
       onSend={() => void sendVoice()}
-      labels={{ cancel: t('common.cancel'), send: t('composer.send'), recording: t('composer.voice.recording') }}
+      labels={{
+        cancel: t('common.cancel'),
+        send: t('composer.send'),
+        recording: t('composer.voice.recording'),
+      }}
     />
   ) : undefined;
 
@@ -429,54 +448,73 @@ export function Composer({
 
   return (
     <>
-    <ChatComposer
-      value={value}
-      onValueChange={onValueChange}
-      onSend={send}
-      inputRef={field}
-      placeholder={t('composer.placeholder')}
-      notice={notice}
-      noticeIcon={noticeBusy ? BusyNoticeIcon : noticeError ? ErrorNoticeIcon : undefined}
-      banner={banner}
-      recorder={recorder}
-      attachments={tiles}
-      onRemoveAttachment={unstage}
-      suggestions={suggestions}
-      suggestionKind="mention"
-      activeIndex={activeIndex}
-      onActiveIndexChange={setActiveIndex}
-      onSelectSuggestion={acceptMention}
-      leading={
-        canAttach ? (
-          <AttachmentMenu
-            items={attachItems}
-            onSelect={(id) => {
-              pick(id).catch((error: unknown) => logger.warn('[composer] an attachment could not be added', error));
-            }}
-            label={t('composer.attach.label')}
-          >
-            <ComposerIconButton icon={RiAttachment2} accessibilityLabel={t('composer.attach.label')} />
-          </AttachmentMenu>
-        ) : undefined
-      }
-      emojiSlot={
-        notice === undefined ? (
-          <EmojiButton
-            onSelect={insertAtCaret}
-            // Not while editing: an edit changes a text message, and a sticker
-            // is a new one.
-            onSelectSticker={target?.kind === 'edit' ? undefined : (sticker) => void onSendSticker(sticker).catch(() => undefined)}
-          />
-        ) : undefined
-      }
-      onMicPress={target?.kind === 'edit' || staged.length > 0 ? undefined : () => void startVoice()}
-      onEscape={mention || target ? onEscape : undefined}
-      labels={{ send: t('composer.send'), mic: t('composer.voice.record'), input: t('composer.placeholder') }}
-    />
-    {/* Mounted beside the composer rather than inside the menu: the menu closes
+      <ChatComposer
+        value={value}
+        onValueChange={onValueChange}
+        onSend={send}
+        inputRef={field}
+        placeholder={t('composer.placeholder')}
+        notice={notice}
+        noticeIcon={noticeBusy ? BusyNoticeIcon : noticeError ? ErrorNoticeIcon : undefined}
+        banner={banner}
+        recorder={recorder}
+        attachments={tiles}
+        onRemoveAttachment={unstage}
+        suggestions={suggestions}
+        suggestionKind="mention"
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        onSelectSuggestion={acceptMention}
+        leading={
+          canAttach ? (
+            <AttachmentMenu
+              items={attachItems}
+              onSelect={(id) => {
+                pick(id).catch((error: unknown) =>
+                  logger.warn('[composer] an attachment could not be added', error),
+                );
+              }}
+              label={t('composer.attach.label')}
+            >
+              <ComposerIconButton
+                icon={RiAttachment2}
+                accessibilityLabel={t('composer.attach.label')}
+              />
+            </AttachmentMenu>
+          ) : undefined
+        }
+        emojiSlot={
+          notice === undefined ? (
+            <EmojiButton
+              onSelect={insertAtCaret}
+              // Not while editing: an edit changes a text message, and a sticker
+              // is a new one.
+              onSelectSticker={
+                target?.kind === 'edit'
+                  ? undefined
+                  : (sticker) => void onSendSticker(sticker).catch(() => undefined)
+              }
+            />
+          ) : undefined
+        }
+        onMicPress={
+          target?.kind === 'edit' || staged.length > 0 ? undefined : () => void startVoice()
+        }
+        onEscape={mention || target ? onEscape : undefined}
+        labels={{
+          send: t('composer.send'),
+          mic: t('composer.voice.record'),
+          input: t('composer.placeholder'),
+        }}
+      />
+      {/* Mounted beside the composer rather than inside the menu: the menu closes
         on a selection, and a sheet that unmounts with its trigger closes with
         it. */}
-    <PollComposer open={composingPoll} onClose={() => setComposingPoll(false)} onSend={sendPoll} />
+      <PollComposer
+        open={composingPoll}
+        onClose={() => setComposingPoll(false)}
+        onSend={sendPoll}
+      />
     </>
   );
 }

@@ -10,24 +10,24 @@
  * id is not proof that a status exists, and a 403 would make it one.
  */
 
-import { Router, type RequestHandler } from "express";
-import { createStatusRequestSchema, idSchema } from "@allo/shared-types";
+import { Router, type RequestHandler } from 'express';
+import { createStatusRequestSchema, idSchema } from '@allo/shared-types';
 import {
   createStatus,
   deleteStatus,
   listStatuses,
   listStatusViews,
   viewStatus,
-} from "../../services/platform/statusService";
-import { asyncRoute } from "./asyncRoute";
-import { callerOf } from "./conversations";
-import { parseBody, parseParam } from "./validate";
+} from '../../services/platform/statusService';
+import { asyncRoute } from './asyncRoute';
+import { callerOf } from './conversations';
+import { parseBody, parseParam } from './validate';
 
 export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   router.post(
-    "/statuses",
+    '/statuses',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
@@ -40,7 +40,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
   );
 
   router.get(
-    "/statuses",
+    '/statuses',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
@@ -49,40 +49,40 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
   );
 
   router.delete(
-    "/statuses/:id",
+    '/statuses/:id',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
       await deleteStatus(
         { instanceId: caller.instanceId, accountId: caller.accountId },
-        parseParam(idSchema, req.params.id, "id"),
+        parseParam(idSchema, req.params.id, 'id'),
       );
       res.status(204).end();
     }),
   );
 
   router.post(
-    "/statuses/:id/views",
+    '/statuses/:id/views',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
       await viewStatus(
         { instanceId: caller.instanceId, accountId: caller.accountId },
-        parseParam(idSchema, req.params.id, "id"),
+        parseParam(idSchema, req.params.id, 'id'),
       );
       res.status(204).end();
     }),
   );
 
   router.get(
-    "/statuses/:id/views",
+    '/statuses/:id/views',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
       res.json(
         await listStatusViews(
           { instanceId: caller.instanceId, accountId: caller.accountId },
-          parseParam(idSchema, req.params.id, "id"),
+          parseParam(idSchema, req.params.id, 'id'),
         ),
       );
     }),

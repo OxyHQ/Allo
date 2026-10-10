@@ -18,7 +18,10 @@
 import type { Sticker } from '@oxy.so/stickers';
 import type { StickerView } from '@allo/core';
 
-export function isSentSticker(sticker: Sticker | null | undefined, ref: StickerView): sticker is Sticker {
+export function isSentSticker(
+  sticker: Sticker | null | undefined,
+  ref: StickerView,
+): sticker is Sticker {
   if (!sticker) return false;
   return (
     sticker.id === ref.stickerId &&

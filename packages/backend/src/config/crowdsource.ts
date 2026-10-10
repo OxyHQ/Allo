@@ -1,4 +1,4 @@
-import * as z from "zod";
+import * as z from 'zod';
 
 /**
  * CrowdSource participatory moderation configuration (§14.6).
@@ -32,7 +32,7 @@ import * as z from "zod";
  */
 
 const emptyAsUndefined = (value: unknown): unknown =>
-  typeof value === "string" && value.trim().length === 0 ? undefined : value;
+  typeof value === 'string' && value.trim().length === 0 ? undefined : value;
 
 const optionalString = (minimumLength = 1) =>
   z.preprocess(emptyAsUndefined, z.string().trim().min(minimumLength).optional());
@@ -41,9 +41,9 @@ const booleanFromEnv = (fallback: boolean) =>
   z.preprocess(
     emptyAsUndefined,
     z
-      .enum(["true", "false"])
-      .default(fallback ? "true" : "false")
-      .transform((value) => value === "true"),
+      .enum(['true', 'false'])
+      .default(fallback ? 'true' : 'false')
+      .transform((value) => value === 'true'),
   );
 
 const integerFromEnv = (fallback: number, minimum: number, maximum: number) =>
@@ -58,8 +58,8 @@ const httpOrigin = z
   .url()
   .refine((value) => {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  }, "must use http:// or https://")
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  }, 'must use http:// or https://')
   .refine((value) => {
     const url = new URL(value);
     return (
@@ -69,8 +69,8 @@ const httpOrigin = z
       url.username.length === 0 &&
       url.password.length === 0
     );
-  }, "must be an origin without credentials, path, query or fragment")
-  .transform((value) => value.replace(/\/+$/, ""));
+  }, 'must be an origin without credentials, path, query or fragment')
+  .transform((value) => value.replace(/\/+$/, ''));
 
 const crowdSourceEnvSchema = z
   .object({
@@ -93,7 +93,7 @@ const crowdSourceEnvSchema = z
      */
     CROWDSOURCE_ENFORCEMENT_MODE: z.preprocess(
       emptyAsUndefined,
-      z.enum(["observe", "manual", "automatic"]).default("observe"),
+      z.enum(['observe', 'manual', 'automatic']).default('observe'),
     ),
   })
   .superRefine((environment, context) => {
@@ -113,10 +113,10 @@ const crowdSourceEnvSchema = z
 
     if (!environment.CROWDSOURCE_WEBHOOK_SECRET) {
       context.addIssue({
-        code: "custom",
-        path: ["CROWDSOURCE_WEBHOOK_SECRET"],
+        code: 'custom',
+        path: ['CROWDSOURCE_WEBHOOK_SECRET'],
         message:
-          "is required when CROWDSOURCE_ENABLED=true — without it no decision can be verified, so reports would leave and nothing could come back",
+          'is required when CROWDSOURCE_ENABLED=true — without it no decision can be verified, so reports would leave and nothing could come back',
       });
     }
   });
@@ -128,7 +128,7 @@ export interface CrowdSourceConfig {
   readonly webhookPreviousSecret?: string;
   readonly outboxBatchSize: number;
   readonly outboxPollIntervalMs: number;
-  readonly enforcementMode: "observe" | "manual" | "automatic";
+  readonly enforcementMode: 'observe' | 'manual' | 'automatic';
 }
 
 export function loadCrowdSourceConfig(

@@ -1,6 +1,6 @@
-import { createPrivateKey, sign, type KeyObject } from "crypto";
+import { createPrivateKey, sign, type KeyObject } from 'crypto';
 
-import type { ApnsCredentials } from "../../config/push";
+import type { ApnsCredentials } from '../../config/push';
 
 /**
  * The provider token APNs authenticates every request with.
@@ -63,7 +63,7 @@ function mintToken(
   privateKey: KeyObject,
   currentTime: number,
 ): string {
-  const header = encodeSegment({ alg: "ES256", kid: credentials.keyId });
+  const header = encodeSegment({ alg: 'ES256', kid: credentials.keyId });
   const claims = encodeSegment({
     iss: credentials.teamId,
     iat: Math.floor(currentTime / 1000),
@@ -75,13 +75,13 @@ function mintToken(
    * and the failure arrives as APNs refusing every request with
    * `InvalidProviderToken` rather than as an error here.
    */
-  const signature = sign("sha256", Buffer.from(signingInput, "utf8"), {
+  const signature = sign('sha256', Buffer.from(signingInput, 'utf8'), {
     key: privateKey,
-    dsaEncoding: "ieee-p1363",
+    dsaEncoding: 'ieee-p1363',
   });
-  return `${signingInput}.${signature.toString("base64url")}`;
+  return `${signingInput}.${signature.toString('base64url')}`;
 }
 
 function encodeSegment(value: Record<string, string | number>): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }

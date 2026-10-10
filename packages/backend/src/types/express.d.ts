@@ -8,7 +8,7 @@
  * `OxyAuthRequest` augmentation and are not repeated here.
  */
 
-import type { AuthenticatedInstance } from "../middleware/instanceAuth";
+import type { AuthenticatedInstance } from '../middleware/instanceAuth';
 
 declare global {
   namespace Express {

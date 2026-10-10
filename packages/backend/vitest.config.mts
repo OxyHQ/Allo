@@ -1,5 +1,5 @@
-import path from "path";
-import { defineConfig } from "vitest/config";
+import path from 'path';
+import { defineConfig } from 'vitest/config';
 
 const backendRoot = import.meta.dirname;
 
@@ -7,9 +7,9 @@ export default defineConfig({
   root: backendRoot,
   test: {
     globals: true,
-    environment: "node",
-    setupFiles: [path.resolve(backendRoot, "src/__tests__/setup.ts")],
-    include: [path.resolve(backendRoot, "src/__tests__/**/*.test.ts")],
+    environment: 'node',
+    setupFiles: [path.resolve(backendRoot, 'src/__tests__/setup.ts')],
+    include: [path.resolve(backendRoot, 'src/__tests__/**/*.test.ts')],
     /**
      * No `globalSetup`. The `*.realdb.test.ts` suites each create their own
      * throwaway, fully-migrated Postgres database (`src/db/testDatabase.ts`),
@@ -21,7 +21,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@allo/shared-types": path.resolve(backendRoot, "../shared-types/src"),
+      '@allo/shared-types': path.resolve(backendRoot, '../shared-types/src'),
     },
   },
 });

@@ -1,24 +1,21 @@
-import { Router, Response } from "express";
-import type { OxyAuthRequest as AuthRequest } from "@oxy.so/core/server";
-import { getRequiredOxyUserId as getAuthenticatedUserId } from "@oxy.so/core/server";
-import { getDb } from "../db";
-import { listReportsByReporter } from "../db/moderation/reportRepository";
+import { Router, Response } from 'express';
+import type { OxyAuthRequest as AuthRequest } from '@oxy.so/core/server';
+import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxy.so/core/server';
+import { getDb } from '../db';
+import { listReportsByReporter } from '../db/moderation/reportRepository';
 import {
   isReportedType,
   REPORT_CATEGORIES,
   REPORTED_TYPES,
   type ReportCategory,
-} from "../db/schema/moderation";
-import {
-  createReport,
-  DuplicateReportError,
-} from "../services/moderation/ReportIntakeService";
+} from '../db/schema/moderation';
+import { createReport, DuplicateReportError } from '../services/moderation/ReportIntakeService';
 import {
   reportedIdentifierProblem,
   resolveModerationSubject,
-} from "../services/moderation/subjectIdentity";
-import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
-import { logger } from "../utils/logger";
+} from '../services/moderation/subjectIdentity';
+import { sendErrorResponse, sendSuccessResponse } from '../utils/apiHelpers';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -26,7 +23,7 @@ const MAX_CATEGORIES = 6;
 const MAX_DETAILS_LENGTH = 500;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseCategories(value: unknown): ReportCategory[] | null {
@@ -36,7 +33,7 @@ function parseCategories(value: unknown): ReportCategory[] | null {
   const allowed = new Set<string>(REPORT_CATEGORIES);
   const parsed: ReportCategory[] = [];
   for (const entry of value) {
-    if (typeof entry !== "string" || !allowed.has(entry)) return null;
+    if (typeof entry !== 'string' || !allowed.has(entry)) return null;
     const category = entry as ReportCategory;
     if (!parsed.includes(category)) parsed.push(category);
   }
@@ -70,25 +67,25 @@ function parseCategories(value: unknown): ReportCategory[] | null {
  * mistake as refusing a reported message, and the 400 would additionally tell
  * any client which identifiers Allo considers real.
  */
-router.post("/", async (req: AuthRequest, res: Response) => {
+router.post('/', async (req: AuthRequest, res: Response) => {
   const body: unknown = req.body;
   if (!isRecord(body)) {
-    return sendErrorResponse(res, 400, "Bad Request", "A JSON object body is required");
+    return sendErrorResponse(res, 400, 'Bad Request', 'A JSON object body is required');
   }
 
   const reportedType: unknown = body.reportedType;
-  if (typeof reportedType !== "string" || !isReportedType(reportedType)) {
+  if (typeof reportedType !== 'string' || !isReportedType(reportedType)) {
     return sendErrorResponse(
       res,
       400,
-      "Bad Request",
-      `reportedType must be one of: ${REPORTED_TYPES.join(", ")}`,
+      'Bad Request',
+      `reportedType must be one of: ${REPORTED_TYPES.join(', ')}`,
     );
   }
 
   const reportedId = body.reportedId;
-  if (typeof reportedId !== "string" || reportedId.trim().length === 0) {
-    return sendErrorResponse(res, 400, "Bad Request", "reportedId is required");
+  if (typeof reportedId !== 'string' || reportedId.trim().length === 0) {
+    return sendErrorResponse(res, 400, 'Bad Request', 'reportedId is required');
   }
 
   /**
@@ -100,7 +97,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
    */
   const identifierProblem = reportedIdentifierProblem(reportedId.trim());
   if (identifierProblem !== undefined) {
-    return sendErrorResponse(res, 400, "Bad Request", identifierProblem);
+    return sendErrorResponse(res, 400, 'Bad Request', identifierProblem);
   }
 
   const categories = parseCategories(body.categories);
@@ -108,19 +105,17 @@ router.post("/", async (req: AuthRequest, res: Response) => {
     return sendErrorResponse(
       res,
       400,
-      "Bad Request",
-      `categories must be a non-empty array of at most ${MAX_CATEGORIES} values from: ${REPORT_CATEGORIES.join(", ")}`,
+      'Bad Request',
+      `categories must be a non-empty array of at most ${MAX_CATEGORIES} values from: ${REPORT_CATEGORIES.join(', ')}`,
     );
   }
 
   const rawDetails: unknown = body.details;
-  if (rawDetails !== undefined && typeof rawDetails !== "string") {
-    return sendErrorResponse(res, 400, "Bad Request", "details must be a string");
+  if (rawDetails !== undefined && typeof rawDetails !== 'string') {
+    return sendErrorResponse(res, 400, 'Bad Request', 'details must be a string');
   }
   const details =
-    typeof rawDetails === "string"
-      ? rawDetails.trim().slice(0, MAX_DETAILS_LENGTH)
-      : undefined;
+    typeof rawDetails === 'string' ? rawDetails.trim().slice(0, MAX_DETAILS_LENGTH) : undefined;
 
   try {
     const reporter = getAuthenticatedUserId(req);
@@ -138,11 +133,11 @@ router.post("/", async (req: AuthRequest, res: Response) => {
      */
     const subject = resolveModerationSubject(reportedId);
     if (
-      reportedType === "user" &&
-      subject.kind === "oxy-account" &&
+      reportedType === 'user' &&
+      subject.kind === 'oxy-account' &&
       subject.reportedId === reporter
     ) {
-      return sendErrorResponse(res, 400, "Bad Request", "You cannot report yourself");
+      return sendErrorResponse(res, 400, 'Bad Request', 'You cannot report yourself');
     }
 
     /**
@@ -163,7 +158,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
       res,
       201,
       { id: report.id, createdAt: report.createdAt },
-      "Report received",
+      'Report received',
     );
   } catch (error) {
     /**
@@ -176,7 +171,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
         res,
         200,
         { id: error.existing.id, createdAt: error.existing.createdAt },
-        "You have already reported this",
+        'You have already reported this',
       );
     }
 
@@ -185,13 +180,8 @@ router.post("/", async (req: AuthRequest, res: Response) => {
      * account someone reported, and an operational log is not the place to
      * accumulate a list of who has been accused of what.
      */
-    logger.error("[Reports] Failed to create report", error);
-    return sendErrorResponse(
-      res,
-      500,
-      "Internal Server Error",
-      "Failed to record report",
-    );
+    logger.error('[Reports] Failed to create report', error);
+    return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to record report');
   }
 });
 
@@ -204,7 +194,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
  * operational state, and exposing them would tell a reporter which reports left
  * the deployment.
  */
-router.get("/mine", async (req: AuthRequest, res: Response) => {
+router.get('/mine', async (req: AuthRequest, res: Response) => {
   try {
     const reporter = getAuthenticatedUserId(req);
     /**
@@ -219,13 +209,8 @@ router.get("/mine", async (req: AuthRequest, res: Response) => {
      */
     return sendSuccessResponse(res, 200, await listReportsByReporter(reporter, getDb()));
   } catch (error) {
-    logger.error("[Reports] Failed to list reports", error);
-    return sendErrorResponse(
-      res,
-      500,
-      "Internal Server Error",
-      "Failed to load reports",
-    );
+    logger.error('[Reports] Failed to list reports', error);
+    return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to load reports');
   }
 });
 

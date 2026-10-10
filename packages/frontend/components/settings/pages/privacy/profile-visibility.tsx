@@ -42,7 +42,9 @@ export default function ProfileVisibilityScreen() {
       <SettingsSection description={t('settings.privacy.description')}>
         <SettingsCard>
           {PROFILE_VISIBILITIES.map((visibility) => {
-            const saving = updateSettings.isPending && updateSettings.variables?.profileVisibility === visibility;
+            const saving =
+              updateSettings.isPending &&
+              updateSettings.variables?.profileVisibility === visibility;
             return (
               <SettingsRow
                 key={visibility}

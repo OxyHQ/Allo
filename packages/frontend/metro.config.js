@@ -94,7 +94,11 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: 'sourceFile', filePath: harnessAlias };
   }
   // `./client` only where AlloRoot asks for it — the SDK has a module of that name too.
-  if (HARNESS && moduleName === './client' && context.originModulePath.endsWith('/lib/allo/AlloRoot.tsx')) {
+  if (
+    HARNESS &&
+    moduleName === './client' &&
+    context.originModulePath.endsWith('/lib/allo/AlloRoot.tsx')
+  ) {
     return { type: 'sourceFile', filePath: path.resolve(__dirname, 'harness/client.ts') };
   }
   if (NODE_CRYPTO_NAMES.has(moduleName)) {

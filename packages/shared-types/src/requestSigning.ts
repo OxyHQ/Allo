@@ -17,20 +17,25 @@
  * ({@link socketAuthSchema}) with the path fixed to {@link SOCKET_SIGNING_PATH}
  * and an empty body.
  */
-import { z } from "zod";
-import { ed25519SignatureSchema, instanceIdSchema, nonNegativeIntSchema, SHA256_HEX_PATTERN } from "./common";
+import { z } from 'zod';
+import {
+  ed25519SignatureSchema,
+  instanceIdSchema,
+  nonNegativeIntSchema,
+  SHA256_HEX_PATTERN,
+} from './common';
 
-export const INSTANCE_HEADER = "x-allo-instance";
-export const TIMESTAMP_HEADER = "x-allo-timestamp";
-export const SIGNATURE_HEADER = "x-allo-signature";
+export const INSTANCE_HEADER = 'x-allo-instance';
+export const TIMESTAMP_HEADER = 'x-allo-timestamp';
+export const SIGNATURE_HEADER = 'x-allo-signature';
 
 /** Domain separator, first line of every signed request message. */
-export const REQUEST_SIGNING_CONTEXT = "allo-v1";
+export const REQUEST_SIGNING_CONTEXT = 'allo-v1';
 
 export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /** The `pathWithQuery` a Socket.IO handshake is signed over. Its body is empty. */
-export const SOCKET_SIGNING_PATH = "/socket";
+export const SOCKET_SIGNING_PATH = '/socket';
 
 export interface SignedRequestInput {
   /** HTTP method; upper-cased before signing, so `get` and `GET` sign the same bytes. */
@@ -56,21 +61,24 @@ export interface SignedRequestInput {
  * signer bug fails at the signer rather than as a 401 at the far end.
  */
 export function signedRequestMessage(input: SignedRequestInput): string {
-  if (!/^[A-Za-z]+$/.test(input.method)) throw new RangeError("method must be an HTTP method token");
-  if (!input.pathWithQuery.startsWith("/")) throw new RangeError("pathWithQuery must start with '/'");
+  if (!/^[A-Za-z]+$/.test(input.method))
+    throw new RangeError('method must be an HTTP method token');
+  if (!input.pathWithQuery.startsWith('/'))
+    throw new RangeError("pathWithQuery must start with '/'");
   if (!Number.isInteger(input.timestampMs) || input.timestampMs < 0) {
-    throw new RangeError("timestampMs must be a non-negative integer");
+    throw new RangeError('timestampMs must be a non-negative integer');
   }
-  if (!SHA256_HEX_PATTERN.test(input.bodySha256Hex)) throw new RangeError("bodySha256Hex must be 64 lowercase hex chars");
+  if (!SHA256_HEX_PATTERN.test(input.bodySha256Hex))
+    throw new RangeError('bodySha256Hex must be 64 lowercase hex chars');
   return (
     REQUEST_SIGNING_CONTEXT +
-    "\n" +
+    '\n' +
     input.method.toUpperCase() +
-    "\n" +
+    '\n' +
     input.pathWithQuery +
-    "\n" +
+    '\n' +
     String(input.timestampMs) +
-    "\n" +
+    '\n' +
     input.bodySha256Hex
   );
 }

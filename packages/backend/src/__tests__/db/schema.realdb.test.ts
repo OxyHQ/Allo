@@ -12,30 +12,30 @@
  * not in `db/schema/` is not this suite's business.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, getTableName, is, sql } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
-import { createDatabase, constraintNameOf } from "@oxy.so/db";
-import { findUnsupportedExpiryColumns } from "@oxy.so/db/assert";
-import type postgres from "postgres";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq, getTableName, is, sql } from 'drizzle-orm';
+import { PgTable } from 'drizzle-orm/pg-core';
+import { createDatabase, constraintNameOf } from '@oxy.so/db';
+import { findUnsupportedExpiryColumns } from '@oxy.so/db/assert';
+import type postgres from 'postgres';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import {
   EXPIRY_SWEEP_TARGETS,
   runExpirySweep,
   startExpirySweep,
   stopExpirySweep,
-} from "../../db/expiry";
+} from '../../db/expiry';
 import {
   MAX_REPORT_DELIVERY_ERROR_LENGTH,
   MAX_REPORT_DETAILS_LENGTH,
   MAX_REPORT_LOCAL_STATUS_REASON_LENGTH,
-} from "../../db/schema/moderation";
-import * as schema from "../../db/schema";
+} from '../../db/schema/moderation';
+import * as schema from '../../db/schema';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>["db"];
+let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
 let client: postgres.Sql;
 
 const silentLog = { info: () => undefined, debug: () => undefined };
@@ -44,7 +44,7 @@ const silentLog = { info: () => undefined, debug: () => undefined };
 let counter = 0;
 function id(prefix: string): string {
   counter += 1;
-  return `${prefix}-${String(counter).padStart(4, "0")}`;
+  return `${prefix}-${String(counter).padStart(4, '0')}`;
 }
 
 beforeAll(async () => {
@@ -59,8 +59,8 @@ afterAll(async () => {
   await handle?.drop();
 });
 
-describe("the migrations", () => {
-  it("create every table the schema declares", async () => {
+describe('the migrations', () => {
+  it('create every table the schema declares', async () => {
     const rows = await client<{ table_name: string }[]>`
       select table_name from information_schema.tables
       where table_schema = 'public' and table_type = 'BASE TABLE'
@@ -78,10 +78,10 @@ describe("the migrations", () => {
       .map((table) => getTableName(table))
       .sort();
     expect(declared.length).toBeGreaterThanOrEqual(7);
-    expect(declared).toContain("reports");
-    expect(declared).toContain("moderation_outbox");
-    expect(declared).toContain("user_settings");
-    expect(declared).toContain("blocks");
+    expect(declared).toContain('reports');
+    expect(declared).toContain('moderation_outbox');
+    expect(declared).toContain('user_settings');
+    expect(declared).toContain('blocks');
 
     for (const table of declared) {
       expect(names, `${table} is declared but was not created`).toContain(table);
@@ -89,36 +89,36 @@ describe("the migrations", () => {
   });
 });
 
-describe("the expiry sweep", () => {
-  it("registers exactly the tables whose rows carry a deadline", () => {
+describe('the expiry sweep', () => {
+  it('registers exactly the tables whose rows carry a deadline', () => {
     // Named, not counted: a count alone passes if someone registers the same
     // table twice, and the whole point is that no deadline table is missing.
     const tables = EXPIRY_SWEEP_TARGETS.map((target) => getTableName(target.table)).sort();
     expect(tables).toEqual([
-      "blobs",
-      "call_participants",
-      "calls",
-      "history_offers",
-      "instance_deliveries",
-      "moderation_events",
-      "moderation_outbox",
-      "status_keys",
-      "status_views",
-      "statuses",
+      'blobs',
+      'call_participants',
+      'calls',
+      'history_offers',
+      'instance_deliveries',
+      'moderation_events',
+      'moderation_outbox',
+      'status_keys',
+      'status_views',
+      'statuses',
     ]);
   });
 
-  it("every registered column has a supporting index", async () => {
+  it('every registered column has a supporting index', async () => {
     // Without a leading btree the sweep is a full table scan on every run.
     const violations = await findUnsupportedExpiryColumns(db, EXPIRY_SWEEP_TARGETS);
     expect(violations).toEqual([]);
   });
 
-  it("deletes expired rows and leaves live ones", async () => {
+  it('deletes expired rows and leaves live ones', async () => {
     const past = new Date(Date.now() - 60_000);
     const future = new Date(Date.now() + 3_600_000);
-    const expiredId = id("evt-expired");
-    const liveId = id("evt-live");
+    const expiredId = id('evt-expired');
+    const liveId = id('evt-live');
 
     await db.insert(schema.moderationEvents).values([
       { id: expiredId, expiresAt: past },
@@ -126,7 +126,7 @@ describe("the expiry sweep", () => {
     ]);
 
     const results = await runExpirySweep(db, silentLog);
-    const events = results.find((result) => result.table.includes("moderation_events"));
+    const events = results.find((result) => result.table.includes('moderation_events'));
     expect(events?.deleted).toBeGreaterThanOrEqual(1);
 
     const remaining = await db
@@ -155,28 +155,28 @@ describe("the expiry sweep", () => {
    * Reading the file rather than importing it because importing `server.ts`
    * boots an HTTP listener and opens a database connection.
    */
-  it("is actually started by server.ts", () => {
-    const source = readFileSync(join(__dirname, "..", "..", "..", "server.ts"), "utf8");
+  it('is actually started by server.ts', () => {
+    const source = readFileSync(join(__dirname, '..', '..', '..', 'server.ts'), 'utf8');
 
     // Vacuity floor: if the path were wrong or the file empty, every `toContain`
     // below would fail rather than pass, but this says so directly.
     expect(source.length).toBeGreaterThan(3_000);
-    expect(source).toContain("bootServer");
+    expect(source).toContain('bootServer');
 
     // Either quote style: the formatter, not this test, decides which one the source uses.
     expect(source).toMatch(/from ["']\.\/src\/db\/expiry["']/);
-    expect(source).toContain("startExpirySweep(");
+    expect(source).toContain('startExpirySweep(');
   });
 
-  it("sweeps once immediately on start, and says so even when it reaped nothing", async () => {
+  it('sweeps once immediately on start, and says so even when it reaped nothing', async () => {
     const lines: { level: string; message: string }[] = [];
     const log = {
-      info: (message: string) => lines.push({ level: "info", message }),
-      debug: (message: string) => lines.push({ level: "debug", message }),
-      error: (message: string) => lines.push({ level: "error", message }),
+      info: (message: string) => lines.push({ level: 'info', message }),
+      debug: (message: string) => lines.push({ level: 'debug', message }),
+      error: (message: string) => lines.push({ level: 'error', message }),
     };
 
-    const expiredId = id("evt-start-expired");
+    const expiredId = id('evt-start-expired');
     await db
       .insert(schema.moderationEvents)
       .values({ id: expiredId, expiresAt: new Date(Date.now() - 60_000) });
@@ -188,38 +188,43 @@ describe("the expiry sweep", () => {
       // return. The line is written once EVERY table has been swept; waiting
       // for the moderation row alone raced the remaining tables' deletes and
       // read the log before the summary existed (seen under a full parallel run).
-      await expect.poll(() => lines.some((line) => line.message.includes("expiry sweep:"))).toBe(true);
+      await expect
+        .poll(() => lines.some((line) => line.message.includes('expiry sweep:')))
+        .toBe(true);
     } finally {
       stopExpirySweep();
     }
     expect(
-      await db.select().from(schema.moderationEvents).where(eq(schema.moderationEvents.id, expiredId)),
+      await db
+        .select()
+        .from(schema.moderationEvents)
+        .where(eq(schema.moderationEvents.id, expiredId)),
     ).toHaveLength(0);
 
     // "Reaped nothing" and "never ran" must be distinguishable in the log, which
     // is the whole reason the summary is emitted unconditionally.
-    const swept = lines.find((line) => line.message.includes("expiry sweep:"));
-    expect(swept?.level).toBe("info");
+    const swept = lines.find((line) => line.message.includes('expiry sweep:'));
+    expect(swept?.level).toBe('info');
     expect(swept?.message).toContain(`tablesSwept=${EXPIRY_SWEEP_TARGETS.length}`);
 
     lines.length = 0;
     await runExpirySweep(db, log);
     expect(lines).toEqual([
       {
-        level: "debug",
+        level: 'debug',
         message: `expiry sweep: tablesSwept=${EXPIRY_SWEEP_TARGETS.length} deleted=0`,
       },
     ]);
   });
 });
 
-describe("the outbox claim, which must stay idempotent", () => {
-  it("treats a repeated enqueue of the same id as a no-op", async () => {
-    const outboxId = id("outbox");
+describe('the outbox claim, which must stay idempotent', () => {
+  it('treats a repeated enqueue of the same id as a no-op', async () => {
+    const outboxId = id('outbox');
     const expiresAt = new Date(Date.now() + 3_600_000);
     await db
       .insert(schema.moderationOutbox)
-      .values({ id: outboxId, kind: "report.submit", expiresAt });
+      .values({ id: outboxId, kind: 'report.submit', expiresAt });
 
     // Both rendered as text by Postgres, so the comparison cannot depend on how
     // the driver happens to decode a timestamptz.
@@ -232,7 +237,7 @@ describe("the outbox claim, which must stay idempotent", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     await db
       .insert(schema.moderationOutbox)
-      .values({ id: outboxId, kind: "report.submit", expiresAt })
+      .values({ id: outboxId, kind: 'report.submit', expiresAt })
       .onConflictDoNothing();
     const after = await probe();
 
@@ -244,15 +249,15 @@ describe("the outbox claim, which must stay idempotent", () => {
   });
 });
 
-describe("closed value sets are enforced by the database, not just by TypeScript", () => {
-  it("refuses a report with an empty category array", async () => {
+describe('closed value sets are enforced by the database, not just by TypeScript', () => {
+  it('refuses a report with an empty category array', async () => {
     const error = await db
       .insert(schema.reports)
       .values({
-        id: id("report"),
-        reportedType: "user",
-        reportedId: "oxy-user-9",
-        reporter: "oxy-user-8",
+        id: id('report'),
+        reportedType: 'user',
+        reportedId: 'oxy-user-9',
+        reporter: 'oxy-user-8',
         categories: [],
       })
       .then(
@@ -262,7 +267,7 @@ describe("closed value sets are enforced by the database, not just by TypeScript
     expect(error).not.toBeNull();
     // Containment alone is satisfied by an empty array; this is a separate
     // constraint.
-    expect(constraintNameOf(error)).toBe("reports_categories_non_empty_check");
+    expect(constraintNameOf(error)).toBe('reports_categories_non_empty_check');
   });
 
   /**
@@ -275,30 +280,30 @@ describe("closed value sets are enforced by the database, not just by TypeScript
    * application: a migration, a repair script, `psql`. Reaching the server the
    * way those do is the only way to find out whether it is really enforced.
    */
-  it("refuses a report category outside the tuple", async () => {
+  it('refuses a report category outside the tuple', async () => {
     const error = await client`
       insert into reports (id, reported_type, reported_id, reporter, categories)
-      values (${id("report")}, 'user', 'oxy-user-9', 'oxy-user-7', array['spam', 'not_a_category'])
+      values (${id('report')}, 'user', 'oxy-user-9', 'oxy-user-7', array['spam', 'not_a_category'])
     `.then(
       () => null,
       (caught: unknown) => caught,
     );
     expect(error).not.toBeNull();
-    expect(constraintNameOf(error)).toBe("reports_categories_within_check");
+    expect(constraintNameOf(error)).toBe('reports_categories_within_check');
   });
 
-  it("refuses a reported type outside the tuple", async () => {
+  it('refuses a reported type outside the tuple', async () => {
     // `text({ enum })` emits no DDL, so this passes tsc-shaped code and must be
     // stopped by the CHECK rendered from the same tuple.
     const error = await client`
       insert into reports (id, reported_type, reported_id, reporter, categories)
-      values (${id("report")}, 'starship', 'oxy-user-9', 'oxy-user-7', array['spam'])
+      values (${id('report')}, 'starship', 'oxy-user-9', 'oxy-user-7', array['spam'])
     `.then(
       () => null,
       (caught: unknown) => caught,
     );
     expect(error).not.toBeNull();
-    expect(String(error)).toContain("reports_reported_type_check");
+    expect(String(error)).toContain('reports_reported_type_check');
   });
 
   /**
@@ -311,18 +316,18 @@ describe("closed value sets are enforced by the database, not just by TypeScript
    * writer that does not exist yet.
    */
   it.each([
-    ["details", "reports_details_length_check", MAX_REPORT_DETAILS_LENGTH],
+    ['details', 'reports_details_length_check', MAX_REPORT_DETAILS_LENGTH],
     [
-      "local_status_reason",
-      "reports_local_status_reason_length_check",
+      'local_status_reason',
+      'reports_local_status_reason_length_check',
       MAX_REPORT_LOCAL_STATUS_REASON_LENGTH,
     ],
     [
-      "last_delivery_error",
-      "reports_last_delivery_error_length_check",
+      'last_delivery_error',
+      'reports_last_delivery_error_length_check',
       MAX_REPORT_DELIVERY_ERROR_LENGTH,
     ],
-  ])("bounds %s at its declared length", async (column, constraint, limit) => {
+  ])('bounds %s at its declared length', async (column, constraint, limit) => {
     // A distinct (reporter, subject) per insert: every row here is a REPORT, and
     // `reports_reporter_reported_id_reported_type_key` would otherwise reject the
     // second one for a reason that has nothing to do with the bound under test.
@@ -330,8 +335,8 @@ describe("closed value sets are enforced by the database, not just by TypeScript
       client`
         insert into reports (id, reported_type, reported_id, reporter, categories, ${client(column)})
         values (
-          ${id("report")}, 'user', ${id("subject")}, ${id("reporter")},
-          array['spam'], ${"x".repeat(length)}
+          ${id('report')}, 'user', ${id('subject')}, ${id('reporter')},
+          array['spam'], ${'x'.repeat(length)}
         )
       `.then(
         () => null,
@@ -346,25 +351,25 @@ describe("closed value sets are enforced by the database, not just by TypeScript
   });
 });
 
-describe("the transaction guard the moderation services depend on", () => {
-  it("commits a report and its outbox row together, or neither", async () => {
-    const reportId = id("report");
-    const outboxId = id("outbox");
+describe('the transaction guard the moderation services depend on', () => {
+  it('commits a report and its outbox row together, or neither', async () => {
+    const reportId = id('report');
+    const outboxId = id('outbox');
     const expiresAt = new Date(Date.now() + 3_600_000);
 
     const error = await db
       .transaction(async (tx) => {
         await tx.insert(schema.reports).values({
           id: reportId,
-          reportedType: "user",
-          reportedId: "oxy-user-9",
-          reporter: "oxy-user-6",
-          categories: ["spam"],
+          reportedType: 'user',
+          reportedId: 'oxy-user-9',
+          reporter: 'oxy-user-6',
+          categories: ['spam'],
         });
         await tx
           .insert(schema.moderationOutbox)
-          .values({ id: outboxId, kind: "report.submit", expiresAt });
-        throw new Error("deliberate rollback");
+          .values({ id: outboxId, kind: 'report.submit', expiresAt });
+        throw new Error('deliberate rollback');
       })
       .then(
         () => null,
@@ -372,10 +377,7 @@ describe("the transaction guard the moderation services depend on", () => {
       );
 
     expect(error).not.toBeNull();
-    const reports = await db
-      .select()
-      .from(schema.reports)
-      .where(eq(schema.reports.id, reportId));
+    const reports = await db.select().from(schema.reports).where(eq(schema.reports.id, reportId));
     const outbox = await db
       .select()
       .from(schema.moderationOutbox)
@@ -386,8 +388,8 @@ describe("the transaction guard the moderation services depend on", () => {
   });
 });
 
-describe("timestamps", () => {
-  it("stores every timestamp as timestamptz", async () => {
+describe('timestamps', () => {
+  it('stores every timestamp as timestamptz', async () => {
     const rows = await client<{ table_name: string; column_name: string }[]>`
       select table_name, column_name from information_schema.columns
       where table_schema = 'public'
@@ -399,12 +401,12 @@ describe("timestamps", () => {
   });
 });
 
-describe("sanity", () => {
-  it("uses the schema helpers rather than raw SQL for ordinary reads", async () => {
+describe('sanity', () => {
+  it('uses the schema helpers rather than raw SQL for ordinary reads', async () => {
     const count = await db
       .select({ total: sql<number>`count(*)::int` })
       .from(schema.reports)
-      .where(eq(schema.reports.reportedType, "user"));
+      .where(eq(schema.reports.reportedType, 'user'));
     expect(count[0].total).toBeGreaterThanOrEqual(0);
   });
 });

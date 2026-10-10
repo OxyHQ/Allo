@@ -25,7 +25,12 @@ jest.mock('react-i18next', () => ({
 const { createFakeAlloServer, FakeSession, MemorySecrets, MemoryStorage, until } = testing;
 type FakeServer = ReturnType<typeof createFakeAlloServer>;
 
-async function makeClient(server: FakeServer, accountId: string, name: string, start = true): Promise<AlloClient> {
+async function makeClient(
+  server: FakeServer,
+  accountId: string,
+  name: string,
+  start = true,
+): Promise<AlloClient> {
   const client = createAlloClient({
     baseUrl: server.baseUrl,
     appId: 'allo',
@@ -60,7 +65,9 @@ function mount(client: AlloClient) {
 }
 
 function texts(renderer: TestRenderer.ReactTestRenderer): string[] {
-  return renderer.root.findAllByType(Text).map((node) => String(React.Children.toArray(node.props.children).join('')));
+  return renderer.root
+    .findAllByType(Text)
+    .map((node) => String(React.Children.toArray(node.props.children).join('')));
 }
 
 /**

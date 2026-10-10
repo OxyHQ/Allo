@@ -4,7 +4,7 @@
  * no getter for this; it only emits. The record clears when the instance
  * becomes `active`.
  */
-import { AlloError, type AlloClient } from "@allo/core";
+import { AlloError, type AlloClient } from '@allo/core';
 
 export class InstanceErrorTracker {
   private last: AlloError | undefined;
@@ -18,12 +18,12 @@ export class InstanceErrorTracker {
     if (this.detach) return this.detach;
     const offError = this.client.onError((error) => {
       if (!(error instanceof AlloError)) return;
-      if (this.client.instance.state() === "active") return;
+      if (this.client.instance.state() === 'active') return;
       this.last = error;
       this.notify();
     });
-    const offInstance = this.client.subscribe("instance", () => {
-      if (this.client.instance.state() === "active" && this.last !== undefined) {
+    const offInstance = this.client.subscribe('instance', () => {
+      if (this.client.instance.state() === 'active' && this.last !== undefined) {
         this.last = undefined;
         this.notify();
       }

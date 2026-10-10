@@ -101,7 +101,11 @@ function moduleUses(source: ts.SourceFile): ModuleUse[] {
               clause.namedBindings.elements.length > 0 &&
               clause.namedBindings.elements.every((element) => element.isTypeOnly));
       uses.push({ specifier: node.moduleSpecifier.text, typeOnly });
-    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+    } else if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
       uses.push({ specifier: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
     } else if (ts.isCallExpression(node)) {
       const callee = node.expression;
@@ -123,7 +127,8 @@ function requestPaths(source: ts.SourceFile): string[] {
   const paths: string[] = [];
   const literalText = (node: ts.Expression): string | undefined => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-    if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map((span) => `\${}${span.literal.text}`).join('');
+    if (ts.isTemplateExpression(node))
+      return node.head.text + node.templateSpans.map((span) => `\${}${span.literal.text}`).join('');
     return undefined;
   };
   const visit = (node: ts.Node) => {
@@ -149,7 +154,13 @@ function requestPaths(source: ts.SourceFile): string[] {
 
 /** The census over one file. Exported so the positive control runs the same code as the measurement. */
 export function findingsFor(file: string, text: string): Finding[] {
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const source = ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const findings: Finding[] = [];
   const inChatPath = isChatPath(file);
   const inLibAllo = file.startsWith('lib/allo/');
@@ -161,8 +172,16 @@ export function findingsFor(file: string, text: string): Finding[] {
     if (use.specifier === '@react-native-async-storage/async-storage' && inChatPath) {
       findings.push({ file, rule: 2, detail: 'imports AsyncStorage on the chat path' });
     }
-    if ((use.specifier === '@allo/core' || use.specifier.startsWith('@allo/core/')) && !inLibAllo && !use.typeOnly) {
-      findings.push({ file, rule: 4, detail: `value import of ${use.specifier} outside lib/allo/` });
+    if (
+      (use.specifier === '@allo/core' || use.specifier.startsWith('@allo/core/')) &&
+      !inLibAllo &&
+      !use.typeOnly
+    ) {
+      findings.push({
+        file,
+        rule: 4,
+        detail: `value import of ${use.specifier} outside lib/allo/`,
+      });
     }
   }
   for (const path of requestPaths(source)) {
@@ -243,8 +262,18 @@ describe('no legacy chat path', () => {
     `;
     expect(findingsFor('components/chat/Fine.tsx', allowed)).toEqual([]);
     // AsyncStorage in a preference store is off the chat path and permitted.
-    expect(findingsFor('stores/somePreference.ts', "import AsyncStorage from '@react-native-async-storage/async-storage'; export default AsyncStorage;")).toEqual([]);
+    expect(
+      findingsFor(
+        'stores/somePreference.ts',
+        "import AsyncStorage from '@react-native-async-storage/async-storage'; export default AsyncStorage;",
+      ),
+    ).toEqual([]);
     // A value import of @allo/core inside lib/allo/ is the one place it belongs.
-    expect(findingsFor('lib/allo/client.ts', "import { createAlloClient } from '@allo/core'; export default createAlloClient;")).toEqual([]);
+    expect(
+      findingsFor(
+        'lib/allo/client.ts',
+        "import { createAlloClient } from '@allo/core'; export default createAlloClient;",
+      ),
+    ).toEqual([]);
   });
 });

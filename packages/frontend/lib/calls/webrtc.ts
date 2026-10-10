@@ -91,7 +91,10 @@ export function createCallMedia(): WebRtcCallMedia {
         iceServers: plan.iceServers,
         iceTransportPolicy: plan.relayOnly ? 'relay' : 'all',
       });
-      local = await navigator.mediaDevices.getUserMedia({ audio: true, video: plan.mode === 'video' });
+      local = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: plan.mode === 'video',
+      });
       for (const track of local.getTracks()) pc.addTrack(track, local);
 
       pc.ontrack = (event) => {

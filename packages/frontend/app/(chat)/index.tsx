@@ -9,6 +9,9 @@ import { useSplitLayout } from '@/hooks/useSplitLayout';
 export default function ChatsRoute() {
   const split = useSplitLayout();
   const { t } = useTranslation();
-  if (split) return <EmptyDetail title={t('chat.select.title')} description={t('chat.select.description')} />;
+  if (split)
+    return (
+      <EmptyDetail title={t('chat.select.title')} description={t('chat.select.description')} />
+    );
   return <ConversationList />;
 }

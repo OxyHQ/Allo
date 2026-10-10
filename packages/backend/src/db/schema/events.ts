@@ -9,12 +9,12 @@
  * `GET /v1/sync`) name it explicitly.
  */
 
-import { sql } from "drizzle-orm";
-import { bigint, check, index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { bytea, createdAt } from "@oxy.so/db";
-import { EVENT_KINDS } from "@allo/shared-types";
-import { checkOneOf } from "./columns";
-import { conversations } from "./conversations";
+import { sql } from 'drizzle-orm';
+import { bigint, check, index, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bytea, createdAt } from '@oxy.so/db';
+import { EVENT_KINDS } from '@allo/shared-types';
+import { checkOneOf } from './columns';
+import { conversations } from './conversations';
 
 export type EventKind = (typeof EVENT_KINDS)[number];
 
@@ -34,15 +34,15 @@ export type EventKind = (typeof EVENT_KINDS)[number];
  * per blob.
  */
 export const conversationEvents = pgTable(
-  "conversation_events",
+  'conversation_events',
   {
     id: text().primaryKey(),
     conversationId: text()
       .notNull()
-      .references(() => conversations.id, { onDelete: "cascade" }),
-    seq: bigint({ mode: "number" }).notNull(),
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    seq: bigint({ mode: 'number' }).notNull(),
     kind: text({ enum: EVENT_KINDS }).notNull(),
-    epoch: bigint({ mode: "number" }).notNull(),
+    epoch: bigint({ mode: 'number' }).notNull(),
     /** An Oxy account id, or `allo:server` (`SERVER_SENDER_ID`) for `control`. */
     senderAccountId: text().notNull(),
     senderInstanceId: text(),
@@ -52,13 +52,13 @@ export const conversationEvents = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("conversation_events_conversation_id_seq_key").on(t.conversationId, t.seq),
-    uniqueIndex("conversation_events_sender_instance_id_idempotency_key_key")
+    uniqueIndex('conversation_events_conversation_id_seq_key').on(t.conversationId, t.seq),
+    uniqueIndex('conversation_events_sender_instance_id_idempotency_key_key')
       .on(t.senderInstanceId, t.idempotencyKey)
       .where(sql`idempotency_key is not null`),
-    index("conversation_events_blob_ids_gin_idx").using("gin", t.blobIds),
-    checkOneOf("conversation_events_kind_check", t.kind, EVENT_KINDS),
-    check("conversation_events_seq_check", sql`${t.seq} >= 1`),
-    check("conversation_events_epoch_check", sql`${t.epoch} >= 0`),
+    index('conversation_events_blob_ids_gin_idx').using('gin', t.blobIds),
+    checkOneOf('conversation_events_kind_check', t.kind, EVENT_KINDS),
+    check('conversation_events_seq_check', sql`${t.seq} >= 1`),
+    check('conversation_events_epoch_check', sql`${t.epoch} >= 0`),
   ],
 );

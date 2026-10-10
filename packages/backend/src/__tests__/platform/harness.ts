@@ -9,10 +9,10 @@
  * serialised ONCE, by the helper, and handed to supertest as a string.
  */
 
-import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
-import express, { type RequestHandler } from "express";
-import request, { type Test } from "supertest";
-import type { ZodType } from "zod";
+import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import express, { type RequestHandler } from 'express';
+import request, { type Test } from 'supertest';
+import type { ZodType } from 'zod';
 import {
   BLOB_SHA256_HEADER,
   INSTANCE_HEADER,
@@ -24,24 +24,30 @@ import {
   type Platform,
   type RegisterInstanceResponse,
   type SyncNudgeEvent,
-} from "@allo/shared-types";
-import { createApp, type CreateAppDependencies } from "../../app";
-import { checkPostgresHealth, closePostgres, connectPostgres, getDb, type AlloDatabase } from "../../db";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import { requireInstance, sha256Hex } from "../../middleware/instanceAuth";
-import { clearRealtime, setRealtime, type Realtime } from "../../runtime/realtime";
+} from '@allo/shared-types';
+import { createApp, type CreateAppDependencies } from '../../app';
+import {
+  checkPostgresHealth,
+  closePostgres,
+  connectPostgres,
+  getDb,
+  type AlloDatabase,
+} from '../../db';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
+import { requireInstance, sha256Hex } from '../../middleware/instanceAuth';
+import { clearRealtime, setRealtime, type Realtime } from '../../runtime/realtime';
 
-export const USER_HEADER = "x-test-user";
+export const USER_HEADER = 'x-test-user';
 
 /** Oxy auth stand-in: the account is whatever `x-test-user` says; none is 401. */
 export const fakeOxyAuth: RequestHandler = (req, res, next) => {
   const userId = req.get(USER_HEADER);
   if (!userId) {
-    res.status(401).json({ error: { code: "unauthorized", message: "no session" } });
+    res.status(401).json({ error: { code: 'unauthorized', message: 'no session' } });
     return;
   }
-  Reflect.set(req, "userId", userId);
-  Reflect.set(req, "user", { id: userId });
+  Reflect.set(req, 'userId', userId);
+  Reflect.set(req, 'user', { id: userId });
   next();
 };
 
@@ -95,7 +101,12 @@ export function recordedRealtime(): RecordedRealtime {
       r.callRings.push({ instanceId, callId: event.callId });
     },
     callUpdated(instanceId, event) {
-      r.callUpdates.push({ instanceId, callId: event.callId, state: event.state, endReason: event.endReason });
+      r.callUpdates.push({
+        instanceId,
+        callId: event.callId,
+        state: event.state,
+        endReason: event.endReason,
+      });
     },
     historyOffer(instanceId, event) {
       r.historyOffers.push({ instanceId, offerId: event.offerId });
@@ -136,7 +147,9 @@ export interface PlatformHarness {
 
 export const TEST_BLOB_MAX_BYTES = 64 * 1024;
 
-export async function createPlatformHarness(overrides: Partial<CreateAppDependencies> = {}): Promise<PlatformHarness> {
+export async function createPlatformHarness(
+  overrides: Partial<CreateAppDependencies> = {},
+): Promise<PlatformHarness> {
   const handle = await setUpTestDatabase();
   const db = connectPostgres(handle.databaseUrl);
   const realtime = recordedRealtime();
@@ -174,13 +187,13 @@ export interface Ed25519Key {
 }
 
 export function generateEd25519(): Ed25519Key {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(12);
-  return { privateKey, publicKeyBase64: Buffer.from(raw).toString("base64") };
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const raw = publicKey.export({ format: 'der', type: 'spki' }).subarray(12);
+  return { privateKey, publicKeyBase64: Buffer.from(raw).toString('base64') };
 }
 
 export function signMessage(key: Ed25519Key, message: string): string {
-  return sign(null, Buffer.from(message, "utf8"), key.privateKey).toString("base64");
+  return sign(null, Buffer.from(message, 'utf8'), key.privateKey).toString('base64');
 }
 
 export interface X25519Key {
@@ -191,12 +204,12 @@ export interface X25519Key {
 
 /** A real X25519 pair: the transfer key an instance registers. The SPKI prefix is 12 bytes, as for Ed25519. */
 export function generateX25519(): X25519Key {
-  const { publicKey, privateKey } = generateKeyPairSync("x25519");
-  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(12);
-  return { privateKey, publicKeyBase64: Buffer.from(raw).toString("base64") };
+  const { publicKey, privateKey } = generateKeyPairSync('x25519');
+  const raw = publicKey.export({ format: 'der', type: 'spki' }).subarray(12);
+  return { privateKey, publicKeyBase64: Buffer.from(raw).toString('base64') };
 }
 
-type Method = "get" | "post" | "put" | "delete";
+type Method = 'get' | 'post' | 'put' | 'delete';
 
 export class TestInstance {
   constructor(
@@ -212,17 +225,23 @@ export class TestInstance {
   static async register(
     app: express.Express,
     accountId: string,
-    options: { platform?: Platform; displayName?: string; appId?: string; key?: Ed25519Key; transferKey?: X25519Key } = {},
+    options: {
+      platform?: Platform;
+      displayName?: string;
+      appId?: string;
+      key?: Ed25519Key;
+      transferKey?: X25519Key;
+    } = {},
   ): Promise<TestInstance> {
     const key = options.key ?? generateEd25519();
     const transferKey = options.transferKey ?? generateX25519();
     const response = await request(app)
-      .post("/v1/instances")
+      .post('/v1/instances')
       .set(USER_HEADER, accountId)
       .send({
-        appId: options.appId ?? "allo",
-        platform: options.platform ?? "web",
-        displayName: options.displayName ?? "test device",
+        appId: options.appId ?? 'allo',
+        platform: options.platform ?? 'web',
+        displayName: options.displayName ?? 'test device',
         signingPublicKey: key.publicKeyBase64,
         transferPublicKey: transferKey.publicKeyBase64,
       });
@@ -234,7 +253,12 @@ export class TestInstance {
   }
 
   /** The three headers for `method path` with `body` (already serialised). */
-  headers(method: string, pathWithQuery: string, body: Buffer | string = "", timestampMs = Date.now()): Record<string, string> {
+  headers(
+    method: string,
+    pathWithQuery: string,
+    body: Buffer | string = '',
+    timestampMs = Date.now(),
+  ): Record<string, string> {
     const message = signedRequestMessage({
       method,
       pathWithQuery,
@@ -250,27 +274,34 @@ export class TestInstance {
   }
 
   /** A signed JSON request. `body` is serialised here so the hash covers exactly the bytes sent. */
-  signed(method: Method, pathWithQuery: string, body?: unknown, options: { timestampMs?: number; headers?: Record<string, string> } = {}): Test {
-    const raw = body === undefined ? "" : JSON.stringify(body);
-    let test = request(this.app)[method](pathWithQuery).set(this.headers(method.toUpperCase(), pathWithQuery, raw, options.timestampMs));
+  signed(
+    method: Method,
+    pathWithQuery: string,
+    body?: unknown,
+    options: { timestampMs?: number; headers?: Record<string, string> } = {},
+  ): Test {
+    const raw = body === undefined ? '' : JSON.stringify(body);
+    let test = request(this.app)
+      [method](pathWithQuery)
+      .set(this.headers(method.toUpperCase(), pathWithQuery, raw, options.timestampMs));
     if (options.headers) test = test.set(options.headers);
-    if (body !== undefined) test = test.set("content-type", "application/json").send(raw);
+    if (body !== undefined) test = test.set('content-type', 'application/json').send(raw);
     return test;
   }
 
   /** A signed blob upload. */
   uploadBlob(bytes: Buffer, declaredSha256 = sha256Hex(bytes)): Test {
     return request(this.app)
-      .post("/v1/blobs")
-      .set(this.headers("POST", "/v1/blobs", bytes))
+      .post('/v1/blobs')
+      .set(this.headers('POST', '/v1/blobs', bytes))
       .set(BLOB_SHA256_HEADER, declaredSha256)
-      .set("content-type", "application/octet-stream")
+      .set('content-type', 'application/octet-stream')
       .send(bytes);
   }
 
   approvalSignatureFor(target: TestInstance): string {
     const challenge = target.registration.challenge;
-    if (!challenge) throw new Error("target has no challenge");
+    if (!challenge) throw new Error('target has no challenge');
     return signMessage(
       this.key,
       enrollmentApprovalMessage({
@@ -284,18 +315,20 @@ export class TestInstance {
 
   /** Approve `target` from this (active) instance. */
   async approve(target: TestInstance): Promise<void> {
-    const response = await this.signed("post", `/v1/instances/${target.id}/approve`, {
+    const response = await this.signed('post', `/v1/instances/${target.id}/approve`, {
       approvalSignature: this.approvalSignatureFor(target),
     });
-    if (response.status !== 200) throw new Error(`approve failed: ${response.status} ${JSON.stringify(response.body)}`);
+    if (response.status !== 200)
+      throw new Error(`approve failed: ${response.status} ${JSON.stringify(response.body)}`);
   }
 
   /** Upload `count` throwaway key packages. */
   async stockKeyPackages(count: number): Promise<void> {
-    const response = await this.signed("put", "/v1/key-packages", {
+    const response = await this.signed('put', '/v1/key-packages', {
       keyPackages: Array.from({ length: count }, () => keyPackageUpload()),
     });
-    if (response.status !== 200) throw new Error(`upload failed: ${response.status} ${JSON.stringify(response.body)}`);
+    if (response.status !== 200)
+      throw new Error(`upload failed: ${response.status} ${JSON.stringify(response.body)}`);
   }
 }
 
@@ -304,95 +337,98 @@ export function keyPackageUpload() {
   refCounter += 1;
   return {
     ciphersuite: 1,
-    ref: Buffer.from(`ref-${process.pid}-${Date.now()}-${refCounter}`).toString("base64"),
-    data: Buffer.from(`kp-${refCounter}`).toString("base64"),
+    ref: Buffer.from(`ref-${process.pid}-${Date.now()}-${refCounter}`).toString('base64'),
+    data: Buffer.from(`kp-${refCounter}`).toString('base64'),
   };
 }
 
 export function base64(text: string): string {
-  return Buffer.from(text, "utf8").toString("base64");
+  return Buffer.from(text, 'utf8').toString('base64');
 }
 
 let groupCounter = 0;
 export function mlsGroupId(): string {
   groupCounter += 1;
-  return Buffer.from(`group-${process.pid}-${Date.now()}-${groupCounter}`).toString("base64");
+  return Buffer.from(`group-${process.pid}-${Date.now()}-${groupCounter}`).toString('base64');
 }
 
 let accountCounter = 0;
-export function accountId(prefix = "acct"): string {
+export function accountId(prefix = 'acct'): string {
   accountCounter += 1;
   // `idSchema` wants 8..64 chars of its alphabet; a short prefix is padded past that.
-  return `${prefix}-${String(process.pid % 10_000).padStart(4, "0")}-${String(accountCounter).padStart(4, "0")}`;
+  return `${prefix}-${String(process.pid % 10_000).padStart(4, '0')}-${String(accountCounter).padStart(4, '0')}`;
 }
 
 /** Parse `body` with `schema`, failing with the issues rather than a generic mismatch. */
-export function expectParses<S extends ZodType>(schema: S, body: unknown): ReturnType<S["parse"]> {
+export function expectParses<S extends ZodType>(schema: S, body: unknown): ReturnType<S['parse']> {
   const result = schema.safeParse(body);
   if (!result.success) {
     throw new Error(
-      `response does not satisfy its schema:\n${result.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")}\n${JSON.stringify(body).slice(0, 500)}`,
+      `response does not satisfy its schema:\n${result.error.issues.map((i) => `  ${i.path.join('.') || '(root)'}: ${i.message}`).join('\n')}\n${JSON.stringify(body).slice(0, 500)}`,
     );
   }
-  return result.data as ReturnType<S["parse"]>;
+  return result.data as ReturnType<S['parse']>;
 }
 
 /** Three accounts, one active instance each, and a group created by `a` adding `b` and `c`. */
 export async function groupOfThree(app: express.Express) {
-  const a = await TestInstance.register(app, accountId("ga"));
-  const b = await TestInstance.register(app, accountId("gb"));
-  const c = await TestInstance.register(app, accountId("gc"));
+  const a = await TestInstance.register(app, accountId('ga'));
+  const b = await TestInstance.register(app, accountId('gb'));
+  const c = await TestInstance.register(app, accountId('gc'));
   await b.stockKeyPackages(3);
   await c.stockKeyPackages(3);
-  const created = await a.signed("post", "/v1/conversations", {
-    kind: "group",
+  const created = await a.signed('post', '/v1/conversations', {
+    kind: 'group',
     mlsGroupId: mlsGroupId(),
     memberAccountIds: [b.accountId, c.accountId],
     idempotencyKey: `create-group-${Date.now()}-${Math.random()}`,
     initialCommit: {
       idempotencyKey: `commit0-group-${Date.now()}-${Math.random()}`,
-      kind: "mls_commit",
+      kind: 'mls_commit',
       epoch: 0,
-      payload: base64("commit-0"),
+      payload: base64('commit-0'),
       commit: {
         newEpoch: 1,
-        groupInfo: base64("gi-1"),
+        groupInfo: base64('gi-1'),
         addedLeaves: [
           { instanceId: b.id, accountId: b.accountId },
           { instanceId: c.id, accountId: c.accountId },
         ],
         removedLeaves: [],
-        welcome: { payload: base64("welcome-0"), recipients: [b.id, c.id] },
+        welcome: { payload: base64('welcome-0'), recipients: [b.id, c.id] },
       },
     },
   });
-  if (created.status !== 201) throw new Error(`group create failed: ${created.status} ${JSON.stringify(created.body)}`);
+  if (created.status !== 201)
+    throw new Error(`group create failed: ${created.status} ${JSON.stringify(created.body)}`);
   return { a, b, c, conversationId: created.body.conversation.id as string };
 }
 
 /** Two accounts, one active instance each with key packages, and a DM created by `a` adding `b`. */
 export async function dmBetween(app: express.Express, options: { stock?: number } = {}) {
-  const a = await TestInstance.register(app, accountId("a"));
-  const b = await TestInstance.register(app, accountId("b"));
+  const a = await TestInstance.register(app, accountId('a'));
+  const b = await TestInstance.register(app, accountId('b'));
   await b.stockKeyPackages(options.stock ?? 3);
-  const created = await a.signed("post", "/v1/conversations", {
-    kind: "dm",
+  const created = await a.signed('post', '/v1/conversations', {
+    kind: 'dm',
     mlsGroupId: mlsGroupId(),
     memberAccountIds: [b.accountId],
     idempotencyKey: `create-${Date.now()}-${Math.random()}`,
     initialCommit: {
       idempotencyKey: `commit0-${Date.now()}-${Math.random()}`,
-      kind: "mls_commit",
+      kind: 'mls_commit',
       epoch: 0,
-      payload: base64("commit-0"),
+      payload: base64('commit-0'),
       commit: {
-        newEpoch: 1, groupInfo: base64("gi-1"),
+        newEpoch: 1,
+        groupInfo: base64('gi-1'),
         addedLeaves: [{ instanceId: b.id, accountId: b.accountId }],
         removedLeaves: [],
-        welcome: { payload: base64("welcome-0"), recipients: [b.id] },
+        welcome: { payload: base64('welcome-0'), recipients: [b.id] },
       },
     },
   });
-  if (created.status !== 201) throw new Error(`dm create failed: ${created.status} ${JSON.stringify(created.body)}`);
+  if (created.status !== 201)
+    throw new Error(`dm create failed: ${created.status} ${JSON.stringify(created.body)}`);
   return { a, b, conversationId: created.body.conversation.id as string, created };
 }

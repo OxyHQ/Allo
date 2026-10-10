@@ -20,8 +20,8 @@
  * (HPKE, info {@link HISTORY_KEY_SEAL_INFO}), or, for a backup, it IS the key
  * derived from the recovery phrase (salt {@link BACKUP_KDF_SALT}).
  */
-import { z } from "zod";
-import { appMessageSchema } from "./appMessage";
+import { z } from 'zod';
+import { appMessageSchema } from './appMessage';
 import {
   accountIdSchema,
   appIdSchema,
@@ -33,9 +33,9 @@ import {
   isoDateSchema,
   nonNegativeIntSchema,
   sha256HexSchema,
-} from "./common";
-import { conversationKindSchema } from "./conversations";
-import { senderAccountIdSchema } from "./events";
+} from './common';
+import { conversationKindSchema } from './conversations';
+import { senderAccountIdSchema } from './events';
 
 export const ARCHIVE_VERSION = 1;
 
@@ -45,20 +45,26 @@ export const ARCHIVE_CHUNK_MAX_BYTES = 4 * 1024 * 1024;
 export const ARCHIVE_MAX_CHUNKS = 512;
 
 /** The AAD of chunk `index` of `total`: `"allo-archive-v1:" + index + "/" + total`. */
-export const ARCHIVE_CHUNK_AAD_PREFIX = "allo-archive-v1:";
+export const ARCHIVE_CHUNK_AAD_PREFIX = 'allo-archive-v1:';
 export function archiveChunkAad(index: number, total: number): string {
-  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 0 || total < 1 || index >= total) {
-    throw new RangeError("chunk index must be an integer in [0, total)");
+  if (
+    !Number.isInteger(index) ||
+    !Number.isInteger(total) ||
+    index < 0 ||
+    total < 1 ||
+    index >= total
+  ) {
+    throw new RangeError('chunk index must be an integer in [0, total)');
   }
   return `${ARCHIVE_CHUNK_AAD_PREFIX}${index}/${total}`;
 }
 
 /** HPKE `info` when a donor seals the archive key to a recipient's transfer key. */
-export const HISTORY_KEY_SEAL_INFO = "allo-history-key-v1";
+export const HISTORY_KEY_SEAL_INFO = 'allo-history-key-v1';
 /** The UTF-8 string a backup's `keyCheck` is the HMAC-SHA256 of, under the backup key. */
-export const BACKUP_KEY_CHECK_MESSAGE = "allo-backup-key-check-v1";
+export const BACKUP_KEY_CHECK_MESSAGE = 'allo-backup-key-check-v1';
 /** HKDF-SHA256 salt of the backup key: `HKDF(ikm = phrase entropy, salt, info = accountId)`. */
-export const BACKUP_KDF_SALT = "allo-backup-v1";
+export const BACKUP_KDF_SALT = 'allo-backup-v1';
 
 /** A 32-byte AES-256 key, base64 (44 chars). */
 const aesKeySchema = z.base64().length(44);
@@ -121,7 +127,7 @@ export const archiveSchema = archiveV1Schema;
 export type Archive = ArchiveV1;
 
 export class ArchiveDecodeError extends Error {
-  override readonly name = "ArchiveDecodeError";
+  override readonly name = 'ArchiveDecodeError';
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
     if (options?.cause !== undefined) (this as { cause?: unknown }).cause = options.cause;
@@ -134,7 +140,7 @@ export class ArchiveDecodeError extends Error {
  */
 export function encodeArchive(archive: Archive): Uint8Array {
   const parsed = archiveSchema.safeParse(archive);
-  if (!parsed.success) throw new ArchiveDecodeError("not a valid Archive", { cause: parsed.error });
+  if (!parsed.success) throw new ArchiveDecodeError('not a valid Archive', { cause: parsed.error });
   return new TextEncoder().encode(JSON.stringify(parsed.data));
 }
 
@@ -142,12 +148,12 @@ export function encodeArchive(archive: Archive): Uint8Array {
 export function decodeArchive(bytes: Uint8Array): Archive {
   let json: unknown;
   try {
-    json = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch (cause) {
-    throw new ArchiveDecodeError("Archive is not UTF-8 JSON", { cause });
+    throw new ArchiveDecodeError('Archive is not UTF-8 JSON', { cause });
   }
   const parsed = archiveSchema.safeParse(json);
-  if (!parsed.success) throw new ArchiveDecodeError("not a valid Archive", { cause: parsed.error });
+  if (!parsed.success) throw new ArchiveDecodeError('not a valid Archive', { cause: parsed.error });
   return parsed.data;
 }
 
@@ -155,7 +161,7 @@ export function decodeArchive(bytes: Uint8Array): Archive {
 // The manifest: what the server stores about an archive, signed by its producer.
 // ---------------------------------------------------------------------------
 
-export const ARCHIVE_KINDS = ["transfer", "backup"] as const;
+export const ARCHIVE_KINDS = ['transfer', 'backup'] as const;
 export const archiveKindSchema = z.enum(ARCHIVE_KINDS);
 export type ArchiveKind = z.infer<typeof archiveKindSchema>;
 
@@ -173,7 +179,7 @@ export const archiveManifestSchema = z.object({
 export type ArchiveManifest = z.infer<typeof archiveManifestSchema>;
 
 /** Domain separator of the manifest signature. */
-export const ARCHIVE_MANIFEST_SIGNING_CONTEXT = "allo-archive-manifest-v1";
+export const ARCHIVE_MANIFEST_SIGNING_CONTEXT = 'allo-archive-manifest-v1';
 
 /**
  * Canonical JSON: object keys sorted (recursively, by UTF-16 code unit
@@ -183,24 +189,29 @@ export const ARCHIVE_MANIFEST_SIGNING_CONTEXT = "allo-archive-manifest-v1";
  * cannot carry (a function, a symbol, a bigint, NaN or Infinity).
  */
 export function canonicalJson(value: unknown): string {
-  if (value === null) return "null";
+  if (value === null) return 'null';
   switch (typeof value) {
-    case "string":
+    case 'string':
       return JSON.stringify(value);
-    case "boolean":
-      return value ? "true" : "false";
-    case "number":
-      if (!Number.isFinite(value)) throw new TypeError("canonical JSON cannot carry a non-finite number");
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'number':
+      if (!Number.isFinite(value))
+        throw new TypeError('canonical JSON cannot carry a non-finite number');
       return JSON.stringify(value);
-    case "object": {
+    case 'object': {
       if (Array.isArray(value)) {
-        return "[" + value.map((item) => (item === undefined ? "null" : canonicalJson(item))).join(",") + "]";
+        return (
+          '[' +
+          value.map((item) => (item === undefined ? 'null' : canonicalJson(item))).join(',') +
+          ']'
+        );
       }
       const obj = value as Record<string, unknown>;
       const keys = Object.keys(obj)
         .filter((k) => obj[k] !== undefined)
         .sort();
-      return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson(obj[k])).join(",") + "}";
+      return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalJson(obj[k])).join(',') + '}';
     }
     default:
       throw new TypeError(`canonical JSON cannot carry a ${typeof value}`);
@@ -214,5 +225,5 @@ export function canonicalJson(value: unknown): string {
  *     "allo-archive-manifest-v1\n" + canonicalJson(manifest)
  */
 export function archiveManifestMessage(manifest: ArchiveManifest): string {
-  return ARCHIVE_MANIFEST_SIGNING_CONTEXT + "\n" + canonicalJson(manifest);
+  return ARCHIVE_MANIFEST_SIGNING_CONTEXT + '\n' + canonicalJson(manifest);
 }

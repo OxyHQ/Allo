@@ -1,12 +1,9 @@
-import { DecisionSchema } from "@crowdsource.you/contracts";
-import {
-  applyReportDecision,
-  findReportByCaseId,
-} from "../../db/moderation/reportRepository";
-import type { ModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
-import { crowdSourceConfig } from "../../config/crowdsource";
-import { logger } from "../../utils/logger";
-import { reportStateForDecision } from "./reportStatus";
+import { DecisionSchema } from '@crowdsource.you/contracts';
+import { applyReportDecision, findReportByCaseId } from '../../db/moderation/reportRepository';
+import type { ModerationOutboxEvent } from '../../db/moderation/moderationOutboxRepository';
+import { crowdSourceConfig } from '../../config/crowdsource';
+import { logger } from '../../utils/logger';
+import { reportStateForDecision } from './reportStatus';
 
 /**
  * Applying a decision that came back.
@@ -59,7 +56,7 @@ export class ModerationDecisionRejectedError extends Error {
 
   constructor(message: string) {
     super(message);
-    this.name = "ModerationDecisionRejectedError";
+    this.name = 'ModerationDecisionRejectedError';
   }
 }
 
@@ -73,26 +70,22 @@ export class ModerationDecisionRejectedError extends Error {
  * `manual_review` — because "we could not tell" is a question for a person, not a
  * silent `none`.
  */
-export function plannedActionForOutcome(
-  outcome: string,
-): "restrict" | "restore" | "manual_review" {
+export function plannedActionForOutcome(outcome: string): 'restrict' | 'restore' | 'manual_review' {
   switch (outcome) {
-    case "violation":
-      return "restrict";
-    case "no_violation":
-      return "restore";
+    case 'violation':
+      return 'restrict';
+    case 'no_violation':
+      return 'restore';
     default:
-      return "manual_review";
+      return 'manual_review';
   }
 }
 
 /** Handle one `decision.apply` outbox event. */
-export async function applyDecisionOutboxEvent(
-  event: ModerationOutboxEvent,
-): Promise<void> {
+export async function applyDecisionOutboxEvent(event: ModerationOutboxEvent): Promise<void> {
   const caseId = event.payload.caseId;
   if (caseId === undefined) {
-    throw new ModerationDecisionRejectedError("A decision.apply event carried no caseId.");
+    throw new ModerationDecisionRejectedError('A decision.apply event carried no caseId.');
   }
 
   const parsed = DecisionSchema.safeParse(event.payload.decision);
@@ -117,7 +110,7 @@ export async function applyDecisionOutboxEvent(
      * case can be merged (§7.3) so the decision may name a case another report
      * opened, and a report can be deleted. Nothing to apply and nothing to retry.
      */
-    logger.warn("[CrowdSource] decision has no local report", { caseId });
+    logger.warn('[CrowdSource] decision has no local report', { caseId });
     return;
   }
 
@@ -129,7 +122,7 @@ export async function applyDecisionOutboxEvent(
    */
   const storedRevision = report.decisionRevision ?? 0;
   if (decision.revision <= storedRevision) {
-    logger.info("[CrowdSource] ignoring superseded decision revision", {
+    logger.info('[CrowdSource] ignoring superseded decision revision', {
       caseId,
       arrived: decision.revision,
       stored: storedRevision,
@@ -169,7 +162,7 @@ export async function applyDecisionOutboxEvent(
     enforcedAction: plannedAction,
   });
 
-  logger.info("[CrowdSource] decision recorded", {
+  logger.info('[CrowdSource] decision recorded', {
     caseId,
     outcome: decision.outcome,
     revision: decision.revision,

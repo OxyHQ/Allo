@@ -15,4 +15,3 @@ export const INITIALIZATION_TIMEOUT = {
   AUTH: 5000,
   SPLASH_FADE_DELAY: 400,
 } as const;
-

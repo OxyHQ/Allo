@@ -44,7 +44,8 @@ export function EmojiButton({
   // The dataset carries English names for the search to match on; the nine
   // labels somebody actually READS come from the bundles.
   const groups = useMemo(
-    () => EMOJI_GROUPS.map((group) => ({ ...group, label: t(`composer.emoji.group.${group.key}`) })),
+    () =>
+      EMOJI_GROUPS.map((group) => ({ ...group, label: t(`composer.emoji.group.${group.key}`) })),
     [t],
   );
 
@@ -62,7 +63,8 @@ export function EmojiButton({
         side="top"
         align="end"
         minWidth={PANEL_WIDTH}
-        maxWidth={PANEL_WIDTH}>
+        maxWidth={PANEL_WIDTH}
+      >
         <EmojiPicker
           groups={groups}
           onSelectEmoji={onSelect}

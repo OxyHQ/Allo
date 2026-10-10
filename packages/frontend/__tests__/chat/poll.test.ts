@@ -19,7 +19,9 @@ const form = (overrides: Partial<Parameters<typeof pollDraft>[0]> = {}) => ({
 
 describe('pollDraft', () => {
   it('trims the question and the options', () => {
-    expect(pollDraft(form({ question: '  Which day?  ', options: [' Thursday ', 'Friday  '] }))).toEqual({
+    expect(
+      pollDraft(form({ question: '  Which day?  ', options: [' Thursday ', 'Friday  '] })),
+    ).toEqual({
       question: 'Which day?',
       options: ['Thursday', 'Friday'],
     });

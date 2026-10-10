@@ -1,18 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { REPORT_CATEGORIES } from "../../../db/schema/moderation";
-import {
-  loadCrowdSourceConfig,
-  resetCrowdSourceConfigForTests,
-} from "../../../config/crowdsource";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { REPORT_CATEGORIES } from '../../../db/schema/moderation';
+import { loadCrowdSourceConfig, resetCrowdSourceConfigForTests } from '../../../config/crowdsource';
 import {
   REPORT_TAXONOMY_VERSION,
   allegationsForCategories,
-} from "../../../services/moderation/reportTaxonomy";
+} from '../../../services/moderation/reportTaxonomy';
 
-vi.mock("../../../services/moderation/subjects/registry", async () => {
+vi.mock('../../../services/moderation/subjects/registry', async () => {
   const actual = await vi.importActual<
-    typeof import("../../../services/moderation/subjects/registry")
-  >("../../../services/moderation/subjects/registry");
+    typeof import('../../../services/moderation/subjects/registry')
+  >('../../../services/moderation/subjects/registry');
   return { ...actual, subjectProviderFor: vi.fn() };
 });
 
@@ -21,37 +18,29 @@ import {
   ModerationSubjectUnsupportedError,
   buildModerationReportInput,
   snapshotHash,
-} from "../../../services/moderation/EvidenceSnapshotService";
-import { subjectProviderFor } from "../../../services/moderation/subjects/registry";
+} from '../../../services/moderation/EvidenceSnapshotService';
+import { subjectProviderFor } from '../../../services/moderation/subjects/registry';
 
-describe("allegation mapping", () => {
-  it("produces a stable ORDER for the same categories in any input order", () => {
+describe('allegation mapping', () => {
+  it('produces a stable ORDER for the same categories in any input order', () => {
     /**
      * Not cosmetic. Ingress fingerprints the whole envelope to detect §10.5's
      * "same external id, different body", so a list whose order followed however a
      * client happened to send its categories would turn a legitimate outbox retry
      * into a permanent 409 — days later, as a report silently stuck in a queue.
      */
-    const forward = allegationsForCategories([
-      "spam",
-      "harassment",
-      "hate_speech",
-    ]);
-    const reversed = allegationsForCategories([
-      "hate_speech",
-      "harassment",
-      "spam",
-    ]);
+    const forward = allegationsForCategories(['spam', 'harassment', 'hate_speech']);
+    const reversed = allegationsForCategories(['hate_speech', 'harassment', 'spam']);
     expect(forward).toEqual(reversed);
     expect(forward).toEqual([...forward].sort());
   });
 
-  it("deduplicates codes that share a mapping", () => {
-    const codes = allegationsForCategories(["other", "other"]);
-    expect(codes).toEqual(["other.unclassifiable"]);
+  it('deduplicates codes that share a mapping', () => {
+    const codes = allegationsForCategories(['other', 'other']);
+    expect(codes).toEqual(['other.unclassifiable']);
   });
 
-  it("maps every category to a real taxonomy code", () => {
+  it('maps every category to a real taxonomy code', () => {
     /** The vacuity floor: a mapping that silently returned nothing is not a report. */
     for (const category of REPORT_CATEGORIES) {
       const codes = allegationsForCategories([category]);
@@ -60,43 +49,41 @@ describe("allegation mapping", () => {
     }
   });
 
-  it("does not claim an integrity allegation for misinformation", () => {
+  it('does not claim an integrity allegation for misinformation', () => {
     /**
      * A reporter clicking "misinformation" is not alleging organised manipulation
      * or intent to defraud. Forcing it into `integrity.*` would tell a jury the
      * reporter alleged something they did not.
      */
-    expect(allegationsForCategories(["misinformation"])).toEqual([
-      "other.policy_specific",
-    ]);
+    expect(allegationsForCategories(['misinformation'])).toEqual(['other.policy_specific']);
   });
 });
 
-describe("report envelope input", () => {
+describe('report envelope input', () => {
   const report = {
-    id: "report-1",
-    reportedType: "user",
-    reportedId: "user-1",
-    reporter: "reporter-1",
-    categories: ["harassment", "spam"],
-    details: "  they keep messaging me  ",
-    createdAt: new Date("2026-07-30T10:00:00.000Z"),
+    id: 'report-1',
+    reportedType: 'user',
+    reportedId: 'user-1',
+    reporter: 'reporter-1',
+    categories: ['harassment', 'spam'],
+    details: '  they keep messaging me  ',
+    createdAt: new Date('2026-07-30T10:00:00.000Z'),
   } as unknown as Parameters<typeof buildModerationReportInput>[0];
 
   const snapshot = {
     subject: {
-      externalId: "user-1",
-      type: "identity.profile",
-      author: { oxyUserId: "user-1" },
+      externalId: 'user-1',
+      type: 'identity.profile',
+      author: { oxyUserId: 'user-1' },
     },
-    content: { type: "profile" as const, data: { displayName: "Someone" } },
+    content: { type: 'profile' as const, data: { displayName: 'Someone' } },
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
-      subjectType: "identity.profile",
+      reportedType: 'user',
+      subjectType: 'identity.profile',
       snapshot: async () => snapshot,
     });
   });
@@ -111,8 +98,8 @@ describe("report envelope input", () => {
      * (§10.5), because the envelope bytes would differ each time.
      */
     const built = await buildModerationReportInput(report);
-    expect(built?.reportInput.submittedAt).toEqual(new Date("2026-07-30T10:00:00.000Z"));
-    expect(built?.reportInput.externalReportId).toBe("report-1");
+    expect(built?.reportInput.submittedAt).toEqual(new Date('2026-07-30T10:00:00.000Z'));
+    expect(built?.reportInput.externalReportId).toBe('report-1');
   });
 
   it("attaches the reporter's words to the FIRST allegation only", async () => {
@@ -125,13 +112,13 @@ describe("report envelope input", () => {
     const allegations = built?.reportInput.allegations ?? [];
 
     expect(allegations.length).toBeGreaterThan(1);
-    expect(allegations[0]).toHaveProperty("details", "they keep messaging me");
+    expect(allegations[0]).toHaveProperty('details', 'they keep messaging me');
     for (const allegation of allegations.slice(1)) {
-      expect(allegation).not.toHaveProperty("details");
+      expect(allegation).not.toHaveProperty('details');
     }
   });
 
-  it("declares that no evidence attachments will ever accompany an Allo case", async () => {
+  it('declares that no evidence attachments will ever accompany an Allo case', async () => {
     /**
      * Not "not implemented yet". Allo is end-to-end encrypted, so a jury will never
      * receive conversation material from this application. Telling them so lets
@@ -145,21 +132,21 @@ describe("report envelope input", () => {
     });
   });
 
-  it("binds the reporter by Oxy id and carries no other principal", async () => {
+  it('binds the reporter by Oxy id and carries no other principal', async () => {
     const built = await buildModerationReportInput(report);
-    expect(built?.reportInput.reportedBy).toEqual({ oxyUserId: "reporter-1" });
+    expect(built?.reportInput.reportedBy).toEqual({ oxyUserId: 'reporter-1' });
   });
 
-  it("returns null when the account is gone", async () => {
+  it('returns null when the account is gone', async () => {
     vi.mocked(subjectProviderFor).mockReturnValue({
-      reportedType: "user",
-      subjectType: "identity.profile",
+      reportedType: 'user',
+      subjectType: 'identity.profile',
       snapshot: async () => null,
     });
     await expect(buildModerationReportInput(report)).resolves.toBeNull();
   });
 
-  it("throws a non-retryable error when the type has no provider", async () => {
+  it('throws a non-retryable error when the type has no provider', async () => {
     /**
      * Unreachable by design — such a report never gets a delivery event — so an
      * event that arrives here is a DEFECT. `retryable: false` dead-letters it where
@@ -169,7 +156,7 @@ describe("report envelope input", () => {
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
     const thrown = await buildModerationReportInput(report).catch((error: unknown) => error);
     expect(thrown).toBeInstanceOf(ModerationSubjectUnsupportedError);
-    expect(thrown).toHaveProperty("retryable", false);
+    expect(thrown).toHaveProperty('retryable', false);
   });
 
   /**
@@ -181,21 +168,21 @@ describe("report envelope input", () => {
    * composed into an envelope and posted is a disclosure, not a stall, and it is
    * not recoverable by fixing the bug afterwards.
    */
-  describe("a subject that is not an Oxy account", () => {
+  describe('a subject that is not an Oxy account', () => {
     async function buildFor(reportedId: string): Promise<unknown> {
       return await buildModerationReportInput({ ...report, reportedId }).catch(
         (error: unknown) => error,
       );
     }
 
-    it("refuses to describe a handle", async () => {
-      const thrown = await buildFor("@someone");
+    it('refuses to describe a handle', async () => {
+      const thrown = await buildFor('@someone');
 
       expect(thrown).toBeInstanceOf(ModerationSubjectNotAnOxyAccountError);
-      expect(thrown).toHaveProperty("retryable", false);
+      expect(thrown).toHaveProperty('retryable', false);
     });
 
-    it("never calls the provider at all", async () => {
+    it('never calls the provider at all', async () => {
       /**
        * Refused BEFORE the description is built, not filtered after. A provider
        * that had already run would have made the read, and for a subject type that
@@ -204,88 +191,88 @@ describe("report envelope input", () => {
        */
       const snapshotFn = vi.fn().mockResolvedValue(snapshot);
       vi.mocked(subjectProviderFor).mockReturnValue({
-        reportedType: "user",
-        subjectType: "identity.profile",
+        reportedType: 'user',
+        subjectType: 'identity.profile',
         snapshot: snapshotFn,
       });
 
-      await buildFor("@someone");
+      await buildFor('@someone');
       expect(snapshotFn).not.toHaveBeenCalled();
     });
 
-    it("keeps the identifier out of the error message", async () => {
+    it('keeps the identifier out of the error message', async () => {
       /**
        * The message travels: `ModerationDeliveryWorker` copies a thrown message
        * into `Report.lastDeliveryError` and the logger prints it. An identifier
        * interpolated here would put it into both.
        */
-      const handle = "@aVeryDistinctiveHandle";
+      const handle = '@aVeryDistinctiveHandle';
       const thrown = await buildFor(handle);
 
       expect(thrown).toBeInstanceOf(Error);
       if (thrown instanceof Error) {
         expect(thrown.message).not.toContain(handle);
-        expect(thrown.message).not.toContain("aVeryDistinctiveHandle");
-        expect(thrown.message).toContain("report-1");
+        expect(thrown.message).not.toContain('aVeryDistinctiveHandle');
+        expect(thrown.message).toContain('report-1');
       }
     });
 
-    it("still describes an account id, trimmed", async () => {
+    it('still describes an account id, trimmed', async () => {
       /**
        * The counterpart, and the one that would make this guard a regression if it
        * were missing: an ordinary account report must resolve and deliver.
        */
       const snapshotFn = vi.fn().mockResolvedValue(snapshot);
       vi.mocked(subjectProviderFor).mockReturnValue({
-        reportedType: "user",
-        subjectType: "identity.profile",
+        reportedType: 'user',
+        subjectType: 'identity.profile',
         snapshot: snapshotFn,
       });
 
-      const built = await buildModerationReportInput({ ...report, reportedId: " user-1 " });
+      const built = await buildModerationReportInput({ ...report, reportedId: ' user-1 ' });
 
       expect(built).not.toBeNull();
-      expect(snapshotFn).toHaveBeenCalledWith("user-1");
+      expect(snapshotFn).toHaveBeenCalledWith('user-1');
     });
   });
 });
 
-describe("snapshot hash", () => {
+describe('snapshot hash', () => {
   const base = {
     subject: {
-      externalId: "user-1",
-      type: "identity.profile",
-      author: { oxyUserId: "user-1" },
+      externalId: 'user-1',
+      type: 'identity.profile',
+      author: { oxyUserId: 'user-1' },
     },
-    content: { type: "profile" as const, data: { displayName: "Someone" } },
+    content: { type: 'profile' as const, data: { displayName: 'Someone' } },
   };
 
-  it("is stable for identical material", () => {
+  it('is stable for identical material', () => {
     expect(snapshotHash(base)).toBe(snapshotHash({ ...base }));
     expect(snapshotHash(base)).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
-  it("changes when the material changes", () => {
+  it('changes when the material changes', () => {
     const edited = {
       ...base,
-      content: { type: "profile" as const, data: { displayName: "Someone Else" } },
+      content: { type: 'profile' as const, data: { displayName: 'Someone Else' } },
     };
     expect(snapshotHash(edited)).not.toBe(snapshotHash(base));
   });
 });
 
-describe("crowdsource configuration", () => {
+describe('crowdsource configuration', () => {
   beforeEach(() => {
     resetCrowdSourceConfigForTests();
   });
 
-  it("defaults to disabled and to observe mode", () => {
+  it('defaults to disabled and to observe mode', () => {
     const config = loadCrowdSourceConfig({});
     expect(config.enabled).toBe(false);
-    expect(config.enforcementMode).toBe("observe");
+    expect(config.enforcementMode).toBe('observe');
   });
 
-  it("requires the return path once enabled", () => {
+  it('requires the return path once enabled', () => {
     /**
      * A half-configured integration is worse than a disabled one: reports leave and
      * nothing can come back, and the gap is invisible until somebody asks why a
@@ -296,67 +283,67 @@ describe("crowdsource configuration", () => {
      * `crowdSourceForOxyService()`, so its absence is reported by the client
      * rather than refusing the boot.
      */
-    expect(() => loadCrowdSourceConfig({ CROWDSOURCE_ENABLED: "true" })).toThrow(
+    expect(() => loadCrowdSourceConfig({ CROWDSOURCE_ENABLED: 'true' })).toThrow(
       /CROWDSOURCE_WEBHOOK_SECRET/,
     );
   });
 
-  it("has no surface for a CrowdSource service key", () => {
+  it('has no surface for a CrowdSource service key', () => {
     /**
      * The key is not merely unused: a config that still ACCEPTED one would keep
      * it alive in every `.env`, every parameter store and every rotation runbook,
      * for a value nothing reads. Setting it must change nothing.
      */
     const config = loadCrowdSourceConfig({
-      CROWDSOURCE_ENABLED: "true",
-      CROWDSOURCE_SERVICE_KEY: "cs_live_should_be_ignored",
-      CROWDSOURCE_WEBHOOK_SECRET: "a-secret-of-sufficient-length",
+      CROWDSOURCE_ENABLED: 'true',
+      CROWDSOURCE_SERVICE_KEY: 'cs_live_should_be_ignored',
+      CROWDSOURCE_WEBHOOK_SECRET: 'a-secret-of-sufficient-length',
     });
-    expect(Object.keys(config)).not.toContain("serviceKey");
-    expect(JSON.stringify(config)).not.toContain("cs_live_should_be_ignored");
+    expect(Object.keys(config)).not.toContain('serviceKey');
+    expect(JSON.stringify(config)).not.toContain('cs_live_should_be_ignored');
   });
 
-  it("rejects a webhook secret short enough to brute-force", () => {
+  it('rejects a webhook secret short enough to brute-force', () => {
     /**
      * This secret is the only thing between a forged request and a moderation
      * decision acting on Allo accounts. A short one passes every functional test.
      */
     expect(() =>
       loadCrowdSourceConfig({
-        CROWDSOURCE_ENABLED: "true",
-        CROWDSOURCE_WEBHOOK_SECRET: "tooshort",
+        CROWDSOURCE_ENABLED: 'true',
+        CROWDSOURCE_WEBHOOK_SECRET: 'tooshort',
       }),
     ).toThrow();
   });
 
-  it("accepts a fully configured environment", () => {
+  it('accepts a fully configured environment', () => {
     const config = loadCrowdSourceConfig({
-      CROWDSOURCE_ENABLED: "true",
-      CROWDSOURCE_WEBHOOK_SECRET: "a-secret-of-sufficient-length",
-      CROWDSOURCE_BASE_URL: "https://crowdsource.oxy.so/",
+      CROWDSOURCE_ENABLED: 'true',
+      CROWDSOURCE_WEBHOOK_SECRET: 'a-secret-of-sufficient-length',
+      CROWDSOURCE_BASE_URL: 'https://crowdsource.oxy.so/',
     });
     expect(config.enabled).toBe(true);
     // Trailing slash normalised, so a base URL cannot produce a double slash.
-    expect(config.baseUrl).toBe("https://crowdsource.oxy.so");
+    expect(config.baseUrl).toBe('https://crowdsource.oxy.so');
   });
 
-  it("has no surface for an application id at all", () => {
+  it('has no surface for an application id at all', () => {
     /**
      * `CROWDSOURCE_APP_ID` is the IDOR the tenancy model exists to prevent: the
      * applicationId is CrowdSource's answer about who this token is, and a variable
      * holding one could only agree with it by luck. Setting it must change nothing.
      */
-    const config = loadCrowdSourceConfig({ CROWDSOURCE_APP_ID: "some-other-tenant" });
-    expect(Object.keys(config)).not.toContain("applicationId");
-    expect(JSON.stringify(config)).not.toContain("some-other-tenant");
+    const config = loadCrowdSourceConfig({ CROWDSOURCE_APP_ID: 'some-other-tenant' });
+    expect(Object.keys(config)).not.toContain('applicationId');
+    expect(JSON.stringify(config)).not.toContain('some-other-tenant');
   });
 
-  it("rejects a base URL carrying a path, query or credentials", () => {
+  it('rejects a base URL carrying a path, query or credentials', () => {
     for (const baseUrl of [
-      "https://user:pass@crowdsource.oxy.so",
-      "https://crowdsource.oxy.so/v1",
-      "https://crowdsource.oxy.so?a=1",
-      "ftp://crowdsource.oxy.so",
+      'https://user:pass@crowdsource.oxy.so',
+      'https://crowdsource.oxy.so/v1',
+      'https://crowdsource.oxy.so?a=1',
+      'ftp://crowdsource.oxy.so',
     ]) {
       expect(() => loadCrowdSourceConfig({ CROWDSOURCE_BASE_URL: baseUrl })).toThrow();
     }

@@ -1,4 +1,8 @@
-import { SecureStoreSecrets, secureStoreKey, type SecureStoreLike } from '@/lib/allo/secrets.native';
+import {
+  SecureStoreSecrets,
+  secureStoreKey,
+  type SecureStoreLike,
+} from '@/lib/allo/secrets.native';
 
 /**
  * The Keychain/Keystore secret store, against a fake `expo-secure-store` that

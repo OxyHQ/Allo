@@ -74,7 +74,10 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 
-const mockSession: { user: { id: string } | null; isLoading: boolean } = { user: { id: ACCOUNT }, isLoading: false };
+const mockSession: { user: { id: string } | null; isLoading: boolean } = {
+  user: { id: ACCOUNT },
+  isLoading: false,
+};
 const mockLogout = jest.fn();
 jest.mock('@oxy.so/services', () => ({
   useOxy: () => ({ ...mockSession, oxyServices: {}, logout: mockLogout }),
@@ -89,7 +92,9 @@ const settle = async () => {
   });
 };
 
-const registrations = () => mockServer.requestLog.filter((entry) => entry.method === 'POST' && entry.path === '/v1/instances').length;
+const registrations = () =>
+  mockServer.requestLog.filter((entry) => entry.method === 'POST' && entry.path === '/v1/instances')
+    .length;
 
 describe('a session that goes away', () => {
   it('keeps this device enrolled and enrols nothing new when the session comes back', async () => {

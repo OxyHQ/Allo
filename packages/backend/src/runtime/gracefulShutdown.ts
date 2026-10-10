@@ -10,12 +10,12 @@
  * 6. exit 0. The deadline forces open connections closed and exits 1.
  */
 
-import type http from "node:http";
-import type { Server as SocketIOServer } from "socket.io";
-import { logger } from "../utils/logger";
-import { markRuntimeShuttingDown } from "./health";
-import { clearRealtime } from "./realtime";
-import { closeSocketRedisAdapter } from "./socketRedisAdapter";
+import type http from 'node:http';
+import type { Server as SocketIOServer } from 'socket.io';
+import { logger } from '../utils/logger';
+import { markRuntimeShuttingDown } from './health';
+import { clearRealtime } from './realtime';
+import { closeSocketRedisAdapter } from './socketRedisAdapter';
 
 export const SHUTDOWN_DEADLINE_MS = 10_000;
 
@@ -43,12 +43,12 @@ export function registerGracefulShutdown(deps: GracefulShutdownDeps): () => void
     const httpClosed = new Promise<void>((resolve) => {
       if (!deps.server.listening) return resolve();
       deps.server.close((error) => {
-        if (error) logger.warn("HTTP server close reported an error", error);
+        if (error) logger.warn('HTTP server close reported an error', error);
         resolve();
       });
     });
     const hardTimeout = setTimeout(() => {
-      logger.warn("Shutdown timed out - forcing open connections closed");
+      logger.warn('Shutdown timed out - forcing open connections closed');
       deps.server.closeAllConnections?.();
       exit(1);
     }, SHUTDOWN_DEADLINE_MS);
@@ -71,17 +71,17 @@ export function registerGracefulShutdown(deps: GracefulShutdownDeps): () => void
         deps.closePostgres(),
       ]);
       clearTimeout(hardTimeout);
-      logger.info("HTTP, sockets, Redis and PostgreSQL closed");
+      logger.info('HTTP, sockets, Redis and PostgreSQL closed');
       exit(0);
     })();
   };
 
-  const onTerm = () => shutdown("SIGTERM");
-  const onInt = () => shutdown("SIGINT");
-  process.on("SIGTERM", onTerm);
-  process.on("SIGINT", onInt);
+  const onTerm = () => shutdown('SIGTERM');
+  const onInt = () => shutdown('SIGINT');
+  process.on('SIGTERM', onTerm);
+  process.on('SIGINT', onInt);
   return () => {
-    process.off("SIGTERM", onTerm);
-    process.off("SIGINT", onInt);
+    process.off('SIGTERM', onTerm);
+    process.off('SIGINT', onInt);
   };
 }

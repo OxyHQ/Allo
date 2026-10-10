@@ -1,7 +1,7 @@
-import type { BackupStatus } from "@allo/core";
-import { useCallback, useMemo } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot } from "../internal/useClientSnapshot";
+import type { BackupStatus } from '@allo/core';
+import { useCallback, useMemo } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { useClientSnapshot } from '../internal/useClientSnapshot';
 
 export interface Backup {
   /** Referentially stable between `backup` emissions. `remote` is `null` until `refreshStatus()` has asked the server. */
@@ -30,11 +30,14 @@ export interface Backup {
 /** Encrypted account backup and recovery. Subscribes to `backup`. */
 export function useBackup(): Backup {
   const { client } = useAlloContext();
-  const status = useClientSnapshot(client, "backup", () => client.backup.status());
+  const status = useClientSnapshot(client, 'backup', () => client.backup.status());
   const enable = useCallback(() => client.backup.enable(), [client]);
   const refresh = useCallback(() => client.backup.refresh(), [client]);
   const disable = useCallback(() => client.backup.disable(), [client]);
   const restore = useCallback((phrase: string) => client.backup.restore(phrase), [client]);
   const refreshStatus = useCallback(() => client.backup.refreshStatus(), [client]);
-  return useMemo(() => ({ status, enable, refresh, disable, restore, refreshStatus }), [status, enable, refresh, disable, restore, refreshStatus]);
+  return useMemo(
+    () => ({ status, enable, refresh, disable, restore, refreshStatus }),
+    [status, enable, refresh, disable, restore, refreshStatus],
+  );
 }

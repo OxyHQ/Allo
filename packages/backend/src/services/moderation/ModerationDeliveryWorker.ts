@@ -3,11 +3,11 @@ import {
   findReportById,
   markReportDeliveryFailed,
   markReportSubmitted,
-} from "../../db/moderation/reportRepository";
-import type { ModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
-import { logger } from "../../utils/logger";
-import { getCrowdSourceClient } from "./crowdSourceClient";
-import { buildModerationReportInput } from "./EvidenceSnapshotService";
+} from '../../db/moderation/reportRepository';
+import type { ModerationOutboxEvent } from '../../db/moderation/moderationOutboxRepository';
+import { logger } from '../../utils/logger';
+import { getCrowdSourceClient } from './crowdSourceClient';
+import { buildModerationReportInput } from './EvidenceSnapshotService';
 
 /**
  * Delivering a stored report to CrowdSource.
@@ -38,8 +38,8 @@ export class CrowdSourceUnavailableError extends Error {
   readonly retryable = true;
 
   constructor() {
-    super("The CrowdSource integration is not configured in this deployment.");
-    this.name = "CrowdSourceUnavailableError";
+    super('The CrowdSource integration is not configured in this deployment.');
+    this.name = 'CrowdSourceUnavailableError';
   }
 }
 
@@ -54,17 +54,15 @@ export class ModerationDeliveryRejectedError extends Error {
 
   constructor(message: string) {
     super(message);
-    this.name = "ModerationDeliveryRejectedError";
+    this.name = 'ModerationDeliveryRejectedError';
   }
 }
 
 /** Handle one `report.submit` outbox event. */
-export async function deliverReportOutboxEvent(
-  event: ModerationOutboxEvent,
-): Promise<void> {
+export async function deliverReportOutboxEvent(event: ModerationOutboxEvent): Promise<void> {
   const reportId = event.payload.reportId;
   if (reportId === undefined) {
-    throw new ModerationDeliveryRejectedError("A report.submit event carried no reportId.");
+    throw new ModerationDeliveryRejectedError('A report.submit event carried no reportId.');
   }
 
   const report = await findReportById(reportId);
@@ -74,7 +72,7 @@ export async function deliverReportOutboxEvent(
      * nothing to fix, so the event completes — retrying would keep looking for a
      * row that no longer exists.
      */
-    logger.warn("[CrowdSource] delivery event has no report", { reportId });
+    logger.warn('[CrowdSource] delivery event has no report', { reportId });
     return;
   }
 
@@ -93,9 +91,9 @@ export async function deliverReportOutboxEvent(
   if (input === null) {
     await closeUndeliverableReport(
       reportId,
-      "The reported account no longer exists, so there is nothing to review.",
+      'The reported account no longer exists, so there is nothing to review.',
     );
-    logger.info("[CrowdSource] report closed: subject unavailable", { reportId });
+    logger.info('[CrowdSource] report closed: subject unavailable', { reportId });
     return;
   }
 
@@ -128,7 +126,7 @@ export async function deliverReportOutboxEvent(
     contentSnapshotHash: input.snapshotHash,
   });
 
-  logger.info("[CrowdSource] report delivered", {
+  logger.info('[CrowdSource] report delivered', {
     reportId,
     caseId: receipt.caseId,
     merged: receipt.merged,

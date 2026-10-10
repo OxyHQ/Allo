@@ -34,16 +34,23 @@ import {
   STATUS_PAYLOAD_VERSION,
   type Status,
   type StatusMedia,
-} from "@allo/shared-types";
-import type { Context } from "../context";
-import { openWith, sealTo } from "../crypto/transfer";
-import { signUtf8, verifyEd25519 } from "../crypto/signing";
-import { InvalidStateError, NotFoundError } from "../errors";
-import type { StatusAudience, StatusDraft, StatusView, StatusViewerView } from "../types";
-import { base64Decode, base64Encode, randomBytes, sha256Hex, utf8Decode, utf8Encode } from "../util/bytes";
-import { uuidV7 } from "../util/ids";
-import { describeError } from "../util/logger";
-import { decryptBytes, encryptBytes, uploadEncryptedBlob } from "../media/service";
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { openWith, sealTo } from '../crypto/transfer';
+import { signUtf8, verifyEd25519 } from '../crypto/signing';
+import { InvalidStateError, NotFoundError } from '../errors';
+import type { StatusAudience, StatusDraft, StatusView, StatusViewerView } from '../types';
+import {
+  base64Decode,
+  base64Encode,
+  randomBytes,
+  sha256Hex,
+  utf8Decode,
+  utf8Encode,
+} from '../util/bytes';
+import { uuidV7 } from '../util/ids';
+import { describeError } from '../util/logger';
+import { decryptBytes, encryptBytes, uploadEncryptedBlob } from '../media/service';
 
 interface Held {
   view: StatusView;
@@ -69,8 +76,8 @@ export class StatusService {
   async refresh(): Promise<void> {
     const { ctx } = this;
     const answer = await ctx.http.request({
-      method: "GET",
-      path: "/v1/statuses",
+      method: 'GET',
+      path: '/v1/statuses',
       schema: listStatusesResponseSchema,
       signer: ctx.signer,
     });
@@ -87,7 +94,7 @@ export class StatusService {
         if (held) next.set(status.id, held);
       } catch (error) {
         // One status nobody can open must not stop the rest being drawn.
-        ctx.log.debug?.("status could not be opened", { error: describeError(error) });
+        ctx.log.debug?.('status could not be opened', { error: describeError(error) });
       }
     }
     this.held = next;
@@ -97,7 +104,9 @@ export class StatusService {
   /** The socket said somebody posted. */
   onPosted(): void {
     this.stale = true;
-    void this.refresh().catch((error) => this.ctx.log.debug?.("status refresh failed", { error: describeError(error) }));
+    void this.refresh().catch((error) =>
+      this.ctx.log.debug?.('status refresh failed', { error: describeError(error) }),
+    );
   }
 
   /**
@@ -110,8 +119,10 @@ export class StatusService {
    */
   async post(draft: StatusDraft): Promise<string> {
     const { ctx } = this;
-    if (draft.kind === "text" && !draft.caption) throw new InvalidStateError("a text status needs words");
-    if (draft.kind !== "text" && !draft.media) throw new InvalidStateError("a picture status needs a picture");
+    if (draft.kind === 'text' && !draft.caption)
+      throw new InvalidStateError('a text status needs words');
+    if (draft.kind !== 'text' && !draft.media)
+      throw new InvalidStateError('a picture status needs a picture');
 
     const key = randomBytes(32);
     const media = draft.media ? await this.uploadMedia(draft.media) : null;
@@ -131,16 +142,21 @@ export class StatusService {
     const id = uuidV7(ctx.now());
     const expiresAt = new Date(ctx.now() + STATUS_LIFETIME_MS - 1000).toISOString();
     const recipients = await this.sealTo(await this.audienceOf(draft.audience), key);
-    if (recipients.length === 0) throw new InvalidStateError("nobody to post to");
+    if (recipients.length === 0) throw new InvalidStateError('nobody to post to');
 
     const signature = signUtf8(
       ctx.signer.key,
-      statusSignatureMessage({ statusId: id, authorAccountId: ctx.accountId, sha256: digest, expiresAt }),
+      statusSignatureMessage({
+        statusId: id,
+        authorAccountId: ctx.accountId,
+        sha256: digest,
+        expiresAt,
+      }),
     );
 
     const answer = await ctx.http.request({
-      method: "POST",
-      path: "/v1/statuses",
+      method: 'POST',
+      path: '/v1/statuses',
       body: {
         id,
         idempotencyKey: id,
@@ -171,7 +187,11 @@ export class StatusService {
     const { ctx } = this;
     const held = this.held.get(statusId);
     if (!held || held.view.mine) return;
-    await ctx.http.request({ method: "POST", path: `/v1/statuses/${statusId}/views`, signer: ctx.signer });
+    await ctx.http.request({
+      method: 'POST',
+      path: `/v1/statuses/${statusId}/views`,
+      signer: ctx.signer,
+    });
     if (held.view.seen) return;
     this.held.set(statusId, { ...held, view: { ...held.view, seen: true } });
     this.invalidate();
@@ -180,7 +200,7 @@ export class StatusService {
   /** Who saw one of yours. The author's question; the server refuses it from anybody else. */
   async viewers(statusId: string): Promise<StatusViewerView> {
     const answer = await this.ctx.http.request({
-      method: "GET",
+      method: 'GET',
       path: `/v1/statuses/${statusId}/views`,
       schema: listStatusViewsResponseSchema,
       signer: this.ctx.signer,
@@ -190,7 +210,11 @@ export class StatusService {
 
   /** Take one of yours down before its deadline. */
   async remove(statusId: string): Promise<void> {
-    await this.ctx.http.request({ method: "DELETE", path: `/v1/statuses/${statusId}`, signer: this.ctx.signer });
+    await this.ctx.http.request({
+      method: 'DELETE',
+      path: `/v1/statuses/${statusId}`,
+      signer: this.ctx.signer,
+    });
     this.held.delete(statusId);
     this.invalidate();
   }
@@ -198,15 +222,16 @@ export class StatusService {
   /** The picture or video, decrypted. Fetched on demand: a list of statuses downloads nothing. */
   async media(statusId: string, options: { signal?: AbortSignal } = {}): Promise<Uint8Array> {
     const held = this.held.get(statusId);
-    if (!held?.media) throw new NotFoundError("no media for this status");
+    if (!held?.media) throw new NotFoundError('no media for this status');
     const ciphertext = await this.ctx.http.request<Uint8Array>({
-      method: "GET",
+      method: 'GET',
       path: `/v1/blobs/${held.media.blobId}`,
       binary: true,
       signer: this.ctx.signer,
       signal: options.signal,
     });
-    if (sha256Hex(ciphertext) !== held.media.sha256) throw new InvalidStateError("status media failed its digest");
+    if (sha256Hex(ciphertext) !== held.media.sha256)
+      throw new InvalidStateError('status media failed its digest');
     return decryptBytes(base64Decode(held.media.key), base64Decode(held.media.nonce), ciphertext);
   }
 
@@ -214,7 +239,9 @@ export class StatusService {
   start(): void {
     if (!this.stale) return;
     this.stale = false;
-    void this.refresh().catch((error) => this.ctx.log.debug?.("status refresh failed", { error: describeError(error) }));
+    void this.refresh().catch((error) =>
+      this.ctx.log.debug?.('status refresh failed', { error: describeError(error) }),
+    );
   }
 
   stop(): void {
@@ -234,8 +261,9 @@ export class StatusService {
         if (accountId !== ctx.accountId) everyone.add(accountId);
       }
     }
-    if (audience.mode === "only") return audience.accountIds.filter((id) => everyone.has(id));
-    if (audience.mode === "except") return [...everyone].filter((id) => !audience.accountIds.includes(id));
+    if (audience.mode === 'only') return audience.accountIds.filter((id) => everyone.has(id));
+    if (audience.mode === 'except')
+      return [...everyone].filter((id) => !audience.accountIds.includes(id));
     return [...everyone];
   }
 
@@ -244,7 +272,10 @@ export class StatusService {
    * and to this account's OWN other devices, so a status shows on the phone
    * that did not post it.
    */
-  private async sealTo(accountIds: readonly string[], key: Uint8Array): Promise<{ instanceId: string; sealedKey: string }[]> {
+  private async sealTo(
+    accountIds: readonly string[],
+    key: Uint8Array,
+  ): Promise<{ instanceId: string; sealedKey: string }[]> {
     const { ctx } = this;
     const recipients: { instanceId: string; sealedKey: string }[] = [];
     for (const accountId of [...new Set([...accountIds, ctx.accountId])]) {
@@ -253,14 +284,16 @@ export class StatusService {
         if (instance.id === ctx.instanceId || !instance.transferPublicKey) continue;
         recipients.push({
           instanceId: instance.id,
-          sealedKey: base64Encode(await sealTo(base64Decode(instance.transferPublicKey), key, STATUS_KEY_SEAL_INFO)),
+          sealedKey: base64Encode(
+            await sealTo(base64Decode(instance.transferPublicKey), key, STATUS_KEY_SEAL_INFO),
+          ),
         });
       }
     }
     return recipients;
   }
 
-  private async uploadMedia(input: NonNullable<StatusDraft["media"]>): Promise<StatusMedia> {
+  private async uploadMedia(input: NonNullable<StatusDraft['media']>): Promise<StatusMedia> {
     const key = randomBytes(32);
     const { ciphertext, nonce } = encryptBytes(key, input.bytes);
     const blobId = await uploadEncryptedBlob(this.ctx, ciphertext);
@@ -298,7 +331,11 @@ export class StatusService {
     const ciphertext = base64Decode(status.payload);
     if (sha256Hex(ciphertext) !== status.sha256) return null;
 
-    const key = await openWith(ctx.instance.transferSecretKey, base64Decode(status.sealedKey), STATUS_KEY_SEAL_INFO);
+    const key = await openWith(
+      ctx.instance.transferSecretKey,
+      base64Decode(status.sealedKey),
+      STATUS_KEY_SEAL_INFO,
+    );
     const plaintext = decryptBytes(key, base64Decode(status.nonce), ciphertext);
     const parsed = statusPayloadSchema.safeParse(JSON.parse(utf8Decode(plaintext)));
     // A version this build does not know shows nothing rather than guessing.
@@ -312,7 +349,7 @@ export class StatusService {
 
   private viewOf(
     status: Status,
-    payload: { kind: StatusView["kind"]; caption?: string; media?: StatusMedia | null },
+    payload: { kind: StatusView['kind']; caption?: string; media?: StatusMedia | null },
     mine: boolean,
   ): StatusView {
     return Object.freeze({
@@ -332,10 +369,14 @@ export class StatusService {
     const now = this.ctx.now();
     // A status past its deadline is gone here the moment it is, whatever the
     // server still has: the deadline is the promise, not the row.
-    const live = [...this.held.values()].filter((held) => new Date(held.view.expiresAt).getTime() > now);
-    this.cache = Object.freeze(
-      live.map((held) => held.view).sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)),
+    const live = [...this.held.values()].filter(
+      (held) => new Date(held.view.expiresAt).getTime() > now,
     );
-    this.ctx.emitter.emit("statuses");
+    this.cache = Object.freeze(
+      live
+        .map((held) => held.view)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)),
+    );
+    this.ctx.emitter.emit('statuses');
   }
 }

@@ -65,7 +65,11 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       setClient(null);
       // Stopped in both cases — an account switch and a session that is not
       // there right now are the same thing to this device's keys.
-      previous.client.stop().catch((error: unknown) => logger.warn('[allo] retiring the previous client failed', error));
+      previous.client
+        .stop()
+        .catch((error: unknown) =>
+          logger.warn('[allo] retiring the previous client failed', error),
+        );
     }
     if (accountId === null) return;
 

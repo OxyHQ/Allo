@@ -11,7 +11,7 @@
  * of events it has seen from that sender; it is the sender's responsibility
  * to prefer `event` once the id is known.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   base64Schema,
   blobIdSchema,
@@ -20,7 +20,7 @@ import {
   idempotencyKeySchema,
   nonNegativeIntSchema,
   sha256HexSchema,
-} from "./common";
+} from './common';
 
 export const APP_MESSAGE_VERSION = 1;
 
@@ -39,13 +39,21 @@ export const MAX_CONTACT_DETAIL_LENGTH = 128;
 export const MAX_STICKER_ID_LENGTH = 64;
 export const MAX_STICKER_EMOJI_LENGTH = 32;
 
-export const eventRefSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("event"), conversationId: conversationIdSchema, eventId: eventIdSchema }),
-  z.object({ kind: z.literal("local"), conversationId: conversationIdSchema, idempotencyKey: idempotencyKeySchema }),
+export const eventRefSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('event'),
+    conversationId: conversationIdSchema,
+    eventId: eventIdSchema,
+  }),
+  z.object({
+    kind: z.literal('local'),
+    conversationId: conversationIdSchema,
+    idempotencyKey: idempotencyKeySchema,
+  }),
 ]);
 export type EventRef = z.infer<typeof eventRefSchema>;
 
-export const MEDIA_KINDS = ["image", "video", "audio", "voice", "file"] as const;
+export const MEDIA_KINDS = ['image', 'video', 'audio', 'voice', 'file'] as const;
 export const mediaKindSchema = z.enum(MEDIA_KINDS);
 export type MediaKind = z.infer<typeof mediaKindSchema>;
 
@@ -68,32 +76,32 @@ const v = z.literal(APP_MESSAGE_VERSION);
 
 export const textMessageSchema = z.object({
   v,
-  t: z.literal("text"),
+  t: z.literal('text'),
   body: z.string().min(1).max(MAX_TEXT_BODY_LENGTH),
   replyTo: eventRefSchema.optional(),
 });
 export const editMessageSchema = z.object({
   v,
-  t: z.literal("edit"),
+  t: z.literal('edit'),
   target: eventRefSchema,
   body: z.string().min(1).max(MAX_TEXT_BODY_LENGTH),
 });
 export const deleteMessageSchema = z.object({
   v,
-  t: z.literal("delete"),
+  t: z.literal('delete'),
   target: eventRefSchema,
 });
 export const reactionMessageSchema = z.object({
   v,
-  t: z.literal("reaction"),
+  t: z.literal('reaction'),
   target: eventRefSchema,
   key: z.string().min(1).max(MAX_REACTION_KEY_LENGTH),
-  op: z.enum(["add", "remove"]),
+  op: z.enum(['add', 'remove']),
 });
 /** A read receipt. Encrypted like everything else: the server sees nothing. */
 export const readMessageSchema = z.object({
   v,
-  t: z.literal("read"),
+  t: z.literal('read'),
   upTo: eventRefSchema,
 });
 /**
@@ -103,12 +111,12 @@ export const readMessageSchema = z.object({
  */
 export const deliveredMessageSchema = z.object({
   v,
-  t: z.literal("delivered"),
+  t: z.literal('delivered'),
   upTo: eventRefSchema,
 });
 export const mediaMessageSchema = z.object({
   v,
-  t: z.literal("media"),
+  t: z.literal('media'),
   blobId: blobIdSchema,
   key: mediaKeySchema,
   nonce: mediaNonceSchema,
@@ -128,7 +136,7 @@ export const mediaMessageSchema = z.object({
 /** Group metadata. E2EE, so the server never learns a name. */
 export const conversationMessageSchema = z.object({
   v,
-  t: z.literal("conversation"),
+  t: z.literal('conversation'),
   name: z.string().min(1).max(MAX_CONVERSATION_NAME_LENGTH).optional(),
 });
 /**
@@ -138,10 +146,15 @@ export const conversationMessageSchema = z.object({
  */
 export const pollMessageSchema = z.object({
   v,
-  t: z.literal("poll"),
+  t: z.literal('poll'),
   question: z.string().min(1).max(MAX_POLL_QUESTION_LENGTH),
   options: z
-    .array(z.object({ id: z.string().min(1).max(64), label: z.string().min(1).max(MAX_POLL_OPTION_LENGTH) }))
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        label: z.string().min(1).max(MAX_POLL_OPTION_LENGTH),
+      }),
+    )
     .min(2)
     .max(MAX_POLL_OPTIONS),
   /** Whether a voter may choose more than one option. */
@@ -162,7 +175,7 @@ export const pollMessageSchema = z.object({
  */
 export const pollVoteMessageSchema = z.object({
   v,
-  t: z.literal("poll_vote"),
+  t: z.literal('poll_vote'),
   target: eventRefSchema,
   optionIds: z.array(z.string().min(1).max(64)).max(MAX_POLL_OPTIONS),
 });
@@ -173,7 +186,7 @@ export const pollVoteMessageSchema = z.object({
  */
 export const locationMessageSchema = z.object({
   v,
-  t: z.literal("location"),
+  t: z.literal('location'),
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   label: z.string().min(1).max(MAX_PLACE_LABEL_LENGTH).optional(),
@@ -187,7 +200,7 @@ export const locationMessageSchema = z.object({
  */
 export const contactMessageSchema = z.object({
   v,
-  t: z.literal("contact"),
+  t: z.literal('contact'),
   name: z.string().min(1).max(MAX_CONTACT_NAME_LENGTH),
   accountId: z.string().min(1).max(64).optional(),
   handle: z.string().min(1).max(MAX_CONTACT_DETAIL_LENGTH).optional(),
@@ -209,7 +222,7 @@ export const contactMessageSchema = z.object({
  */
 export const stickerMessageSchema = z.object({
   v,
-  t: z.literal("sticker"),
+  t: z.literal('sticker'),
   stickerId: z.string().min(1).max(MAX_STICKER_ID_LENGTH),
   packId: z.string().min(1).max(MAX_STICKER_ID_LENGTH),
   sha256: sha256HexSchema,
@@ -223,9 +236,9 @@ export const stickerMessageSchema = z.object({
  */
 export const pinMessageSchema = z.object({
   v,
-  t: z.literal("pin"),
+  t: z.literal('pin'),
   target: eventRefSchema,
-  op: z.enum(["pin", "unpin"]),
+  op: z.enum(['pin', 'unpin']),
 });
 
 /**
@@ -251,10 +264,10 @@ export const pinMessageSchema = z.object({
  */
 export const callMessageSchema = z.object({
   v,
-  t: z.literal("call"),
+  t: z.literal('call'),
   ctl: z.literal(true),
   callId: idempotencyKeySchema,
-  kind: z.enum(["offer", "answer", "ice", "key", "end"]),
+  kind: z.enum(['offer', 'answer', 'ice', 'key', 'end']),
   /** The SDP, for `offer` and `answer`. Its DTLS fingerprint is what makes the media end to end. */
   sdp: z.string().min(1).max(MAX_TEXT_BODY_LENGTH).optional(),
   /** A batch of ICE candidates, for `ice`. An empty array is the end-of-candidates marker. */
@@ -281,10 +294,10 @@ export const callMessageSchema = z.object({
  */
 export const callLogMessageSchema = z.object({
   v,
-  t: z.literal("call_log"),
+  t: z.literal('call_log'),
   callId: idempotencyKeySchema,
-  mode: z.enum(["voice", "video"]),
-  outcome: z.enum(["answered", "not_answered", "declined", "cancelled", "failed"]),
+  mode: z.enum(['voice', 'video']),
+  outcome: z.enum(['answered', 'not_answered', 'declined', 'cancelled', 'failed']),
   /** How long it lasted, for an answered one. */
   durationMs: nonNegativeIntSchema.optional(),
 });
@@ -310,18 +323,18 @@ export const callLogMessageSchema = z.object({
  */
 export const clearHistoryMessageSchema = z.object({
   v,
-  t: z.literal("clear_history"),
+  t: z.literal('clear_history'),
   ctl: z.literal(true),
 });
 
 /** Only ever sent over the socket `typing` channel; never stored as an event. */
 export const typingMessageSchema = z.object({
   v,
-  t: z.literal("typing"),
+  t: z.literal('typing'),
   on: z.boolean(),
 });
 
-export const appMessageSchema = z.discriminatedUnion("t", [
+export const appMessageSchema = z.discriminatedUnion('t', [
   textMessageSchema,
   editMessageSchema,
   deleteMessageSchema,
@@ -342,7 +355,7 @@ export const appMessageSchema = z.discriminatedUnion("t", [
   typingMessageSchema,
 ]);
 export type AppMessage = z.infer<typeof appMessageSchema>;
-export type AppMessageKind = AppMessage["t"];
+export type AppMessageKind = AppMessage['t'];
 
 /**
  * A CONTROL message this client does not know, which says so itself.
@@ -377,7 +390,7 @@ export const unknownControlMessageSchema = z.object({
 export type UnknownControlMessage = z.infer<typeof unknownControlMessageSchema>;
 
 export class AppMessageDecodeError extends Error {
-  override readonly name = "AppMessageDecodeError";
+  override readonly name = 'AppMessageDecodeError';
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
     if (options?.cause !== undefined) (this as { cause?: unknown }).cause = options.cause;
@@ -390,14 +403,16 @@ export class AppMessageDecodeError extends Error {
  */
 export function encodeAppMessage(message: AppMessage): Uint8Array {
   const parsed = appMessageSchema.safeParse(message);
-  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+  if (!parsed.success)
+    throw new AppMessageDecodeError('not a valid AppMessage', { cause: parsed.error });
   return new TextEncoder().encode(JSON.stringify(parsed.data));
 }
 
 /** The inverse of {@link encodeAppMessage}. Throws {@link AppMessageDecodeError} on anything else. */
 export function decodeAppMessage(bytes: Uint8Array): AppMessage {
   const parsed = appMessageSchema.safeParse(parseJson(bytes));
-  if (!parsed.success) throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+  if (!parsed.success)
+    throw new AppMessageDecodeError('not a valid AppMessage', { cause: parsed.error });
   return parsed.data;
 }
 
@@ -415,13 +430,13 @@ export function decodeAppMessageOrIgnore(bytes: Uint8Array): AppMessage | null {
   const parsed = appMessageSchema.safeParse(json);
   if (parsed.success) return parsed.data;
   if (unknownControlMessageSchema.safeParse(json).success) return null;
-  throw new AppMessageDecodeError("not a valid AppMessage", { cause: parsed.error });
+  throw new AppMessageDecodeError('not a valid AppMessage', { cause: parsed.error });
 }
 
 function parseJson(bytes: Uint8Array): unknown {
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch (cause) {
-    throw new AppMessageDecodeError("AppMessage is not UTF-8 JSON", { cause });
+    throw new AppMessageDecodeError('AppMessage is not UTF-8 JSON', { cause });
   }
 }

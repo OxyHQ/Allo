@@ -41,16 +41,16 @@ import {
   type ConversationSummary,
   type StoredGroupInfo,
   type SubmitEventRequest,
-} from "@allo/shared-types";
-import type { Context } from "../context";
-import type { GroupState } from "../crypto/engine";
-import { EpochConflictError, InvalidStateError, NotFoundError, TransportError } from "../errors";
-import { Model } from "../storage/model";
-import type { ConversationRecord, EventRecord } from "../storage/records";
-import type { ConversationView, TimelineContent } from "../types";
-import { base64Decode, base64Encode, randomBytes } from "../util/bytes";
-import { uuidV7 } from "../util/ids";
-import { describeError } from "../util/logger";
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import type { GroupState } from '../crypto/engine';
+import { EpochConflictError, InvalidStateError, NotFoundError, TransportError } from '../errors';
+import { Model } from '../storage/model';
+import type { ConversationRecord, EventRecord } from '../storage/records';
+import type { ConversationView, TimelineContent } from '../types';
+import { base64Decode, base64Encode, randomBytes } from '../util/bytes';
+import { uuidV7 } from '../util/ids';
+import { describeError } from '../util/logger';
 
 /** How long the elector waits before asking the server again about a member account that still has no reachable device. */
 export const REACH_THROTTLE_MS = 60_000;
@@ -65,7 +65,7 @@ export const MAX_JOIN_ATTEMPTS = 3;
 /** Conversations whose stored GroupInfo one reconcile checks (and re-publishes), so a large account does not burst at start. */
 export const REPUBLISH_BATCH = 20;
 
-type JoinStatus = "joining" | "waiting_for_member";
+type JoinStatus = 'joining' | 'waiting_for_member';
 
 /**
  * What a conversation's `lastMessage` may be: everything somebody SENT, which
@@ -73,15 +73,15 @@ type JoinStatus = "joining" | "waiting_for_member";
  * could not decrypt, and a system note the app writes itself. A new message
  * kind belongs here, or the row keeps showing the one before it.
  */
-const LAST_MESSAGE_KINDS = new Set<TimelineContent["kind"]>([
-  "text",
-  "media",
-  "poll",
-  "location",
-  "contact",
-  "sticker",
-  "call",
-  "deleted",
+const LAST_MESSAGE_KINDS = new Set<TimelineContent['kind']>([
+  'text',
+  'media',
+  'poll',
+  'location',
+  'contact',
+  'sticker',
+  'call',
+  'deleted',
 ]);
 
 export class ConversationsService {
@@ -130,7 +130,7 @@ export class ConversationsService {
     if (conversationId) this.views.delete(conversationId);
     else this.views.clear();
     this.listCache = null;
-    this.ctx.emitter.emit("conversations");
+    this.ctx.emitter.emit('conversations');
   }
 
   get(conversationId: string): ConversationView | undefined {
@@ -155,9 +155,13 @@ export class ConversationsService {
   list(): ConversationView[] {
     if (!this.listCache) {
       this.listCache = [...this.ctx.model.conversations.values()]
-        .filter((record) => record.clearedUpToSeq === undefined || record.lastSeq > record.clearedUpToSeq)
+        .filter(
+          (record) => record.clearedUpToSeq === undefined || record.lastSeq > record.clearedUpToSeq,
+        )
         .map((record) => this.get(record.id)!)
-        .sort((a, b) => (a.lastActivityAt > b.lastActivityAt ? -1 : a.lastActivityAt < b.lastActivityAt ? 1 : 0));
+        .sort((a, b) =>
+          a.lastActivityAt > b.lastActivityAt ? -1 : a.lastActivityAt < b.lastActivityAt ? 1 : 0,
+        );
     }
     return this.listCache;
   }
@@ -169,22 +173,27 @@ export class ConversationsService {
     const lastMessage = [...timeline].reverse().find((i) => LAST_MESSAGE_KINDS.has(i.content.kind));
     const me = record.members.find((m) => m.accountId === ctx.accountId);
     const joined = !!state && ctx.engine.isActive(state) && !record.removed;
-    const memberAccountIds = record.members.filter((m) => m.state === "joined").map((m) => m.accountId);
-    const joinState: ConversationView["joinState"] = joined
-      ? "joined"
-      : (this.joinStatus.get(record.id) ?? (me?.state === "joined" && !record.removed ? "joining" : "waiting_for_member"));
+    const memberAccountIds = record.members
+      .filter((m) => m.state === 'joined')
+      .map((m) => m.accountId);
+    const joinState: ConversationView['joinState'] = joined
+      ? 'joined'
+      : (this.joinStatus.get(record.id) ??
+        (me?.state === 'joined' && !record.removed ? 'joining' : 'waiting_for_member'));
     return {
       id: record.id,
       kind: record.kind,
       appId: record.appId,
       title: record.name,
       memberAccountIds,
-      myRole: me?.role ?? "member",
+      myRole: me?.role ?? 'member',
       epoch: state ? ctx.engine.epochOf(state) : 0,
       joined,
       joinState,
-      integrity: record.refusedCommit ? "refused_commit" : "ok",
-      ...(record.refusedCommit ? { refusedEpoch: record.refusedCommit.epoch, refusalReason: record.refusedCommit.reason } : {}),
+      integrity: record.refusedCommit ? 'refused_commit' : 'ok',
+      ...(record.refusedCommit
+        ? { refusedEpoch: record.refusedCommit.epoch, refusalReason: record.refusedCommit.reason }
+        : {}),
       unreachableMemberAccountIds: this.unreachableMembersOf(record.id),
       lastMessage,
       unreadCount: ctx.messages.unreadCount(record.id),
@@ -206,7 +215,11 @@ export class ConversationsService {
     const state = ctx.groups.get(conversationId);
     if (!record || !state) return [];
     const withLeaf = new Set(ctx.engine.membersOf(state).map((m) => m.accountId));
-    return record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId && !withLeaf.has(m.accountId)).map((m) => m.accountId);
+    return record.members
+      .filter(
+        (m) => m.state === 'joined' && m.accountId !== ctx.accountId && !withLeaf.has(m.accountId),
+      )
+      .map((m) => m.accountId);
   }
 
   /**
@@ -219,63 +232,83 @@ export class ConversationsService {
     const { ctx } = this;
     const record = ctx.model.conversations.get(conversationId);
     if (!record) return false;
-    const others = record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId).length;
+    const others = record.members.filter(
+      (m) => m.state === 'joined' && m.accountId !== ctx.accountId,
+    ).length;
     return others > 0 && this.unreachableMembersOf(conversationId).length === others;
   }
 
   // ---- creation ------------------------------------------------------------
 
   createDirect(accountId: string): Promise<ConversationView> {
-    if (accountId === this.ctx.accountId) throw new InvalidStateError("a dm needs another account");
-    return this.create("dm", [accountId]);
+    if (accountId === this.ctx.accountId) throw new InvalidStateError('a dm needs another account');
+    return this.create('dm', [accountId]);
   }
 
   createGroup(memberAccountIds: string[]): Promise<ConversationView> {
     const others = [...new Set(memberAccountIds)].filter((a) => a !== this.ctx.accountId);
-    return this.create("group", others);
+    return this.create('group', others);
   }
 
-  private async create(kind: "dm" | "group", others: string[]): Promise<ConversationView> {
+  private async create(kind: 'dm' | 'group', others: string[]): Promise<ConversationView> {
     const { ctx } = this;
     ctx.instance.assertActive();
     // A member with no trusted active instance (never installed Allo, or every device gone) is still a member:
     // the server keeps the row, the group starts with whatever leaves exist (possibly only this one), and the
     // elector rule adds the account's first device when it appears. `initialCommit` only when there is a leaf to add.
-    const targets = await this.trustedLeafTargets([ctx.accountId, ...others], new Set([ctx.instanceId]));
+    const targets = await this.trustedLeafTargets(
+      [ctx.accountId, ...others],
+      new Set([ctx.instanceId]),
+    );
     const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
     const groupId = randomBytes(16);
     const state = await ctx.engine.createGroup(ctx.identity, groupId);
     let initialCommit: SubmitEventRequest | undefined;
     let next = state;
     if (claimed.keyPackages.length > 0) {
-      const result = await ctx.engine.commit(state, { addKeyPackages: claimed.keyPackages.map((k) => base64Decode(k.data)) });
+      const result = await ctx.engine.commit(state, {
+        addKeyPackages: claimed.keyPackages.map((k) => base64Decode(k.data)),
+      });
       next = result.next;
       initialCommit = {
         idempotencyKey: uuidV7(ctx.now()),
-        kind: "mls_commit",
+        kind: 'mls_commit',
         epoch: 0,
         payload: base64Encode(result.commit),
         commit: {
           newEpoch: 1,
-          kind: "member",
+          kind: 'member',
           addedLeaves: result.added,
           removedLeaves: [],
-          ...(result.welcome ? { welcome: { payload: base64Encode(result.welcome), recipients: claimed.keyPackages.map((k) => k.instanceId) } } : {}),
+          ...(result.welcome
+            ? {
+                welcome: {
+                  payload: base64Encode(result.welcome),
+                  recipients: claimed.keyPackages.map((k) => k.instanceId),
+                },
+              }
+            : {}),
           groupInfo: base64Encode(result.groupInfo),
         },
       };
     }
     const res = await ctx.http.request({
-      method: "POST",
-      path: "/v1/conversations",
-      body: { kind, mlsGroupId: base64Encode(groupId), memberAccountIds: others, idempotencyKey: uuidV7(ctx.now()), ...(initialCommit ? { initialCommit } : {}) },
+      method: 'POST',
+      path: '/v1/conversations',
+      body: {
+        kind,
+        mlsGroupId: base64Encode(groupId),
+        memberAccountIds: others,
+        idempotencyKey: uuidV7(ctx.now()),
+        ...(initialCommit ? { initialCommit } : {}),
+      },
       schema: createConversationResponseSchema,
       signer: ctx.signer,
     });
     const summary = res.conversation;
     if (!res.created) {
       // Another end created it first: our group is discarded; we are (or will be) added as a leaf by the elector of our account.
-      ctx.log.info?.("conversation already existed", { conversationId: summary.id });
+      ctx.log.info?.('conversation already existed', { conversationId: summary.id });
       await ctx.mutex.run(async () => {
         if (!ctx.model.conversations.get(summary.id)) await this.storeSummary(summary, null);
       });
@@ -286,24 +319,32 @@ export class ConversationsService {
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, summary.id, next);
       const record = this.recordFromSummary(summary, ctx.engine.epochOf(next));
-      batch.putJson("conversation", record.id, record);
+      batch.putJson('conversation', record.id, record);
       await ctx.store.commit(batch);
       ctx.groups.commitInMemory(summary.id, next);
       ctx.model.conversations.set(record.id, record);
     });
-    if (claimed.missing.length) ctx.log.info?.("instances with no key packages were not added", { count: claimed.missing.length });
+    if (claimed.missing.length)
+      ctx.log.info?.('instances with no key packages were not added', {
+        count: claimed.missing.length,
+      });
     // The initial commit carried the GroupInfo of epoch 1. Without one the group sits at epoch 0 with no commit
     // to carry it, so the creator publishes it now: the member's first device, or its own next one, joins from it.
     if (initialCommit) this.groupInfoChecked.add(summary.id);
     else await this.publishGroupInfo(summary.id, next);
     // The accounts just looked up and found without a device need not be asked again by the next reconcile.
     const reached = new Set(targets.map((t) => t.accountId));
-    for (const accountId of others) if (!reached.has(accountId)) this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
+    for (const accountId of others)
+      if (!reached.has(accountId))
+        this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
     this.invalidate(summary.id);
     return this.get(summary.id)!;
   }
 
-  private recordFromSummary(summary: ConversationSummary, joinedEpoch: number | null): ConversationRecord {
+  private recordFromSummary(
+    summary: ConversationSummary,
+    joinedEpoch: number | null,
+  ): ConversationRecord {
     const existing = this.ctx.model.conversations.get(summary.id);
     return {
       id: summary.id,
@@ -313,7 +354,11 @@ export class ConversationsService {
       createdByAccountId: summary.createdByAccountId,
       createdAt: summary.createdAt,
       name: existing?.name ?? null,
-      members: summary.members.map((m) => ({ accountId: m.accountId, role: m.role, state: m.state })),
+      members: summary.members.map((m) => ({
+        accountId: m.accountId,
+        role: m.role,
+        state: m.state,
+      })),
       lastSeq: existing?.lastSeq ?? summary.lastSeq,
       joinedEpoch: joinedEpoch ?? existing?.joinedEpoch ?? null,
       lastReadSeq: existing?.lastReadSeq ?? 0,
@@ -323,20 +368,31 @@ export class ConversationsService {
     };
   }
 
-  private async storeSummary(summary: ConversationSummary, joinedEpoch: number | null): Promise<void> {
+  private async storeSummary(
+    summary: ConversationSummary,
+    joinedEpoch: number | null,
+  ): Promise<void> {
     const record = this.recordFromSummary(summary, joinedEpoch);
-    await this.ctx.store.putJson("conversation", record.id, record);
+    await this.ctx.store.putJson('conversation', record.id, record);
     this.ctx.model.conversations.set(record.id, record);
     this.invalidate(record.id);
   }
 
   /** Trusted, active instances of the given accounts, minus `exclude`. Refused ones are logged, never added; an account with none contributes nothing. */
-  private async trustedLeafTargets(accountIds: string[], exclude: Set<string>): Promise<Array<{ instanceId: string; accountId: string }>> {
+  private async trustedLeafTargets(
+    accountIds: string[],
+    exclude: Set<string>,
+  ): Promise<Array<{ instanceId: string; accountId: string }>> {
     const out: Array<{ instanceId: string; accountId: string }> = [];
     for (const accountId of accountIds) {
       const { trusted, refused } = await this.ctx.instance.trustedInstancesOf(accountId);
-      if (refused.size) this.ctx.log.warn?.("instances refused by the approval chain", { accountId, count: refused.size });
-      for (const i of trusted) if (!exclude.has(i.id)) out.push({ instanceId: i.id, accountId: i.accountId });
+      if (refused.size)
+        this.ctx.log.warn?.('instances refused by the approval chain', {
+          accountId,
+          count: refused.size,
+        });
+      for (const i of trusted)
+        if (!exclude.has(i.id)) out.push({ instanceId: i.id, accountId: i.accountId });
     }
     return out;
   }
@@ -348,14 +404,22 @@ export class ConversationsService {
     ctx.instance.assertActive();
     const state = this.requireState(conversationId);
     const present = new Set(ctx.engine.membersOf(state).map((m) => m.instanceId));
-    const targets = (await this.trustedLeafTargets([accountId], present)).filter((t) => !present.has(t.instanceId));
-    if (targets.length === 0) throw new InvalidStateError("no trusted instance of that account can be added");
+    const targets = (await this.trustedLeafTargets([accountId], present)).filter(
+      (t) => !present.has(t.instanceId),
+    );
+    if (targets.length === 0)
+      throw new InvalidStateError('no trusted instance of that account can be added');
     const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
-    if (claimed.keyPackages.length === 0) throw new InvalidStateError("that account has no key packages available");
+    if (claimed.keyPackages.length === 0)
+      throw new InvalidStateError('that account has no key packages available');
     await ctx.outbox.enqueueCommit(conversationId, {
-      adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId, keyPackage: k.data })),
+      adds: claimed.keyPackages.map((k) => ({
+        instanceId: k.instanceId,
+        accountId,
+        keyPackage: k.data,
+      })),
       removes: [],
-      reason: "add_member",
+      reason: 'add_member',
     });
   }
 
@@ -365,7 +429,11 @@ export class ConversationsService {
     const state = this.requireState(conversationId);
     const leaves = ctx.engine.membersOf(state).filter((m) => m.accountId === accountId);
     if (leaves.length === 0) throw new NotFoundError(`member ${accountId}`);
-    await ctx.outbox.enqueueCommit(conversationId, { adds: [], removes: leaves.map((m) => m.instanceId), reason: "remove_member" });
+    await ctx.outbox.enqueueCommit(conversationId, {
+      adds: [],
+      removes: leaves.map((m) => m.instanceId),
+      reason: 'remove_member',
+    });
   }
 
   /** Leaves server-side; the other members' elector removes this account's leaves on the `member_left` control. */
@@ -374,13 +442,19 @@ export class ConversationsService {
     ctx.instance.assertActive();
     const record = ctx.model.conversations.get(conversationId);
     if (!record) throw new NotFoundError(`conversation ${conversationId}`);
-    await ctx.http.request({ method: "POST", path: `/v1/conversations/${conversationId}/leave`, signer: ctx.signer });
+    await ctx.http.request({
+      method: 'POST',
+      path: `/v1/conversations/${conversationId}/leave`,
+      signer: ctx.signer,
+    });
     const next: ConversationRecord = {
       ...record,
       removed: true,
-      members: record.members.map((m) => (m.accountId === ctx.accountId ? { ...m, state: "left" as const } : m)),
+      members: record.members.map((m) =>
+        m.accountId === ctx.accountId ? { ...m, state: 'left' as const } : m,
+      ),
     };
-    await ctx.store.putJson("conversation", next.id, next);
+    await ctx.store.putJson('conversation', next.id, next);
     ctx.model.conversations.set(next.id, next);
     this.invalidate(conversationId);
   }
@@ -388,10 +462,10 @@ export class ConversationsService {
   async rename(conversationId: string, name: string): Promise<void> {
     const { ctx } = this;
     this.requireState(conversationId);
-    await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "conversation", name });
+    await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: 'conversation', name });
     const record = ctx.model.conversations.get(conversationId)!;
     const next = { ...record, name };
-    await ctx.store.putJson("conversation", next.id, next);
+    await ctx.store.putJson('conversation', next.id, next);
     ctx.model.conversations.set(next.id, next);
     this.invalidate(conversationId);
   }
@@ -400,7 +474,8 @@ export class ConversationsService {
     const state = this.ctx.groups.get(conversationId);
     const record = this.ctx.model.conversations.get(conversationId);
     if (!state || !record) throw new NotFoundError(`conversation ${conversationId}`);
-    if (!this.ctx.engine.isActive(state) || record.removed) throw new InvalidStateError("this instance is no longer in the conversation");
+    if (!this.ctx.engine.isActive(state) || record.removed)
+      throw new InvalidStateError('this instance is no longer in the conversation');
     return state;
   }
 
@@ -410,7 +485,12 @@ export class ConversationsService {
   async refreshFromServer(): Promise<void> {
     const { ctx } = this;
     if (!ctx.instance.isActive) return;
-    const res = await ctx.http.request({ method: "GET", path: "/v1/conversations", schema: listConversationsResponseSchema, signer: ctx.signer });
+    const res = await ctx.http.request({
+      method: 'GET',
+      path: '/v1/conversations',
+      schema: listConversationsResponseSchema,
+      signer: ctx.signer,
+    });
     /**
      * Conversations whose MLS group has lost EVERY active leaf.
      *
@@ -423,9 +503,9 @@ export class ConversationsService {
      */
     const dead = res.conversations.filter(
       (summary) =>
-        summary.myLeafState !== "active" &&
-        summary.leaves.every((leaf) => leaf.state !== "active") &&
-        summary.members.some((m) => m.accountId === ctx.accountId && m.state === "joined"),
+        summary.myLeafState !== 'active' &&
+        summary.leaves.every((leaf) => leaf.state !== 'active') &&
+        summary.members.some((m) => m.accountId === ctx.accountId && m.state === 'joined'),
     );
     /** Conversations whose group was replaced under us; dropped after the pass, then rejoined. */
     const stale: string[] = [];
@@ -449,16 +529,23 @@ export class ConversationsService {
          */
         const state = ctx.groups.get(summary.id);
         if (state && summary.mlsGroupId !== base64Encode(ctx.engine.groupIdOf(state))) {
-          ctx.log.warn?.("this conversation's group was replaced; dropping the stale state and rejoining", {
-            conversationId: summary.id,
-          });
+          ctx.log.warn?.(
+            "this conversation's group was replaced; dropping the stale state and rejoining",
+            {
+              conversationId: summary.id,
+            },
+          );
           stale.push(summary.id);
           continue;
         }
-        const members = summary.members.map((m) => ({ accountId: m.accountId, role: m.role, state: m.state }));
+        const members = summary.members.map((m) => ({
+          accountId: m.accountId,
+          role: m.role,
+          state: m.state,
+        }));
         if (JSON.stringify(members) !== JSON.stringify(existing.members)) {
           const next = { ...existing, members };
-          await ctx.store.putJson("conversation", next.id, next);
+          await ctx.store.putJson('conversation', next.id, next);
           ctx.model.conversations.set(next.id, next);
           ctx.messages.invalidate(next.id); // the hold on pending echoes follows the member rows
           this.invalidate(next.id);
@@ -484,7 +571,10 @@ export class ConversationsService {
       try {
         await this.revive(summary.id);
       } catch (error) {
-        ctx.log.warn?.("could not revive a conversation with no live device", { conversationId: summary.id, error: describeError(error) });
+        ctx.log.warn?.('could not revive a conversation with no live device', {
+          conversationId: summary.id,
+          error: describeError(error),
+        });
       }
     }
   }
@@ -507,20 +597,27 @@ export class ConversationsService {
     ctx.instance.assertActive();
     const record = ctx.model.conversations.get(conversationId);
     if (!record) throw new NotFoundError(`no such conversation: ${conversationId}`);
-    const others = record.members.filter((m) => m.state === "joined" && m.accountId !== ctx.accountId).map((m) => m.accountId);
+    const others = record.members
+      .filter((m) => m.state === 'joined' && m.accountId !== ctx.accountId)
+      .map((m) => m.accountId);
 
-    const targets = await this.trustedLeafTargets([ctx.accountId, ...others], new Set([ctx.instanceId]));
+    const targets = await this.trustedLeafTargets(
+      [ctx.accountId, ...others],
+      new Set([ctx.instanceId]),
+    );
     const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
     const groupId = randomBytes(16);
     const state = await ctx.engine.createGroup(ctx.identity, groupId);
     let initialCommit: SubmitEventRequest | undefined;
     let next = state;
     if (claimed.keyPackages.length > 0) {
-      const result = await ctx.engine.commit(state, { addKeyPackages: claimed.keyPackages.map((k) => base64Decode(k.data)) });
+      const result = await ctx.engine.commit(state, {
+        addKeyPackages: claimed.keyPackages.map((k) => base64Decode(k.data)),
+      });
       next = result.next;
       initialCommit = {
         idempotencyKey: uuidV7(ctx.now()),
-        kind: "mls_commit",
+        kind: 'mls_commit',
         epoch: 0,
         payload: base64Encode(result.commit),
         commit: {
@@ -528,18 +625,29 @@ export class ConversationsService {
           // A founding commit like any other: the group underneath is new, and
           // its GroupInfo goes up with it so a leafless device can join the
           // revived group by itself rather than waiting to be added again.
-          kind: "member",
+          kind: 'member',
           addedLeaves: result.added,
           removedLeaves: [],
-          ...(result.welcome ? { welcome: { payload: base64Encode(result.welcome), recipients: claimed.keyPackages.map((k) => k.instanceId) } } : {}),
+          ...(result.welcome
+            ? {
+                welcome: {
+                  payload: base64Encode(result.welcome),
+                  recipients: claimed.keyPackages.map((k) => k.instanceId),
+                },
+              }
+            : {}),
           groupInfo: base64Encode(result.groupInfo),
         },
       };
     }
     const res = await ctx.http.request({
-      method: "POST",
+      method: 'POST',
       path: `/v1/conversations/${conversationId}/reset`,
-      body: { mlsGroupId: base64Encode(groupId), idempotencyKey: uuidV7(ctx.now()), ...(initialCommit ? { initialCommit } : {}) },
+      body: {
+        mlsGroupId: base64Encode(groupId),
+        idempotencyKey: uuidV7(ctx.now()),
+        ...(initialCommit ? { initialCommit } : {}),
+      },
       schema: resetConversationResponseSchema,
       signer: ctx.signer,
     });
@@ -547,13 +655,19 @@ export class ConversationsService {
     await ctx.mutex.run(async () => {
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, summary.id, next);
-      const rebuilt = { ...this.recordFromSummary(summary, ctx.engine.epochOf(next)), removed: false };
-      batch.putJson("conversation", rebuilt.id, rebuilt);
+      const rebuilt = {
+        ...this.recordFromSummary(summary, ctx.engine.epochOf(next)),
+        removed: false,
+      };
+      batch.putJson('conversation', rebuilt.id, rebuilt);
       await ctx.store.commit(batch);
       ctx.groups.commitInMemory(summary.id, next);
       ctx.model.conversations.set(rebuilt.id, rebuilt);
     });
-    ctx.log.info?.("revived a conversation whose group had no live device", { conversationId, added: claimed.keyPackages.length });
+    ctx.log.info?.('revived a conversation whose group had no live device', {
+      conversationId,
+      added: claimed.keyPackages.length,
+    });
     this.invalidate(conversationId);
     return this.get(conversationId)!;
   }
@@ -567,7 +681,9 @@ export class ConversationsService {
     try {
       await this.selfJoin();
       await this.republishGroupInfo();
-      const own = ctx.instance.trustedOwnInstances().trusted.filter((i) => i.status === "active" && i.id !== ctx.instanceId);
+      const own = ctx.instance
+        .trustedOwnInstances()
+        .trusted.filter((i) => i.status === 'active' && i.id !== ctx.instanceId);
       /** Own instances that share, or are being given, a leaf in a conversation this instance is the elector of. */
       const electorFor = new Set<string>();
       for (const conversationId of ctx.groups.ids()) {
@@ -578,16 +694,20 @@ export class ConversationsService {
         const present = new Set(members.map((m) => m.instanceId));
         const pendingAdds = ctx.model
           .outboxItems(conversationId)
-          .filter((i) => i.kind === "commit" && i.state === "pending")
+          .filter((i) => i.kind === 'commit' && i.state === 'pending')
           .flatMap((i) => i.commit?.adds ?? []);
         const pendingInstances = new Set(pendingAdds.map((a) => a.instanceId));
         const pendingAccounts = new Set(pendingAdds.map((a) => a.accountId));
         const nudged = this.nudged.delete(conversationId);
 
         // Rule 1, own devices: the lowest-id leaf of MY account adds my other trusted instances.
-        const ownLeaves = members.filter((m) => m.accountId === ctx.accountId).map((m) => m.instanceId).sort();
+        const ownLeaves = members
+          .filter((m) => m.accountId === ctx.accountId)
+          .map((m) => m.instanceId)
+          .sort();
         if (own.length && ownLeaves[0] === ctx.instanceId) {
-          for (const i of own) if (present.has(i.id) || pendingInstances.has(i.id)) electorFor.add(i.id);
+          for (const i of own)
+            if (present.has(i.id) || pendingInstances.has(i.id)) electorFor.add(i.id);
           const missing = own.filter((i) => !present.has(i.id) && !pendingInstances.has(i.id));
           if (missing.length) {
             for (const i of missing) electorFor.add(i.id);
@@ -595,13 +715,20 @@ export class ConversationsService {
               const claimed = await ctx.instance.claimKeyPackages(missing.map((i) => i.id));
               if (claimed.keyPackages.length) {
                 await ctx.outbox.enqueueCommit(conversationId, {
-                  adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId: ctx.accountId, keyPackage: k.data })),
+                  adds: claimed.keyPackages.map((k) => ({
+                    instanceId: k.instanceId,
+                    accountId: ctx.accountId,
+                    keyPackage: k.data,
+                  })),
                   removes: [],
-                  reason: "add_instances",
+                  reason: 'add_instances',
                 });
               }
             } catch (error) {
-              ctx.log.warn?.("could not add own instances", { conversationId, error: describeError(error) });
+              ctx.log.warn?.('could not add own instances', {
+                conversationId,
+                error: describeError(error),
+              });
             }
           }
         }
@@ -627,13 +754,19 @@ export class ConversationsService {
              * is forging approvals". So the two are counted apart, and the
              * chain one is the only one worth a warning.
              */
-            const forged = [...refused.values()].filter((why) => !why.startsWith("status is")).length;
-            if (forged) ctx.log.warn?.("instances refused by the approval chain", { accountId, count: forged });
+            const forged = [...refused.values()].filter(
+              (why) => !why.startsWith('status is'),
+            ).length;
+            if (forged)
+              ctx.log.warn?.('instances refused by the approval chain', {
+                accountId,
+                count: forged,
+              });
             const targets = trusted.filter((i) => !present.has(i.id));
             if (targets.length === 0) {
               // The branch that used to say nothing at all, which is why a
               // conversation stuck like this looked like it was still working.
-              ctx.log.info?.("nobody to add for this member", {
+              ctx.log.info?.('nobody to add for this member', {
                 conversationId,
                 accountId,
                 trusted: trusted.length,
@@ -654,12 +787,20 @@ export class ConversationsService {
             }
             this.reachRetried.delete(key);
             await ctx.outbox.enqueueCommit(conversationId, {
-              adds: claimed.keyPackages.map((k) => ({ instanceId: k.instanceId, accountId, keyPackage: k.data })),
+              adds: claimed.keyPackages.map((k) => ({
+                instanceId: k.instanceId,
+                accountId,
+                keyPackage: k.data,
+              })),
               removes: [],
-              reason: "reach_member",
+              reason: 'reach_member',
             });
           } catch (error) {
-            ctx.log.warn?.("could not reach a member's devices", { conversationId, accountId, error: describeError(error) });
+            ctx.log.warn?.("could not reach a member's devices", {
+              conversationId,
+              accountId,
+              error: describeError(error),
+            });
           }
         }
       }
@@ -678,13 +819,16 @@ export class ConversationsService {
     const { ctx } = this;
     for (const record of [...ctx.model.conversations.values()]) {
       if (record.removed) continue;
-      if (record.members.find((m) => m.accountId === ctx.accountId)?.state !== "joined") continue;
+      if (record.members.find((m) => m.accountId === ctx.accountId)?.state !== 'joined') continue;
       const state = ctx.groups.get(record.id);
       if (state && ctx.engine.isActive(state)) continue;
       try {
         await this.joinConversation(record.id);
       } catch (error) {
-        ctx.log.warn?.("self-join failed", { conversationId: record.id, error: describeError(error) });
+        ctx.log.warn?.('self-join failed', {
+          conversationId: record.id,
+          error: describeError(error),
+        });
       }
     }
   }
@@ -720,34 +864,39 @@ export class ConversationsService {
          * add this device with. An account that has never held a leaf here is
          * a newcomer, and a newcomer waits for the elector.
          */
-        if (record?.kind === "dm" && !this.rekeyTried.has(conversationId)) {
+        if (record?.kind === 'dm' && !this.rekeyTried.has(conversationId)) {
           const summary = await this.fetchSummary(conversationId);
           const ours = summary.leaves.filter((leaf) => leaf.accountId === ctx.accountId);
-          const fellOut = !ours.some((leaf) => leaf.state === "active") && ours.some((leaf) => leaf.state === "removed");
+          const fellOut =
+            !ours.some((leaf) => leaf.state === 'active') &&
+            ours.some((leaf) => leaf.state === 'removed');
           if (fellOut) {
             this.rekeyTried.add(conversationId);
             try {
               await this.revive(conversationId);
               return;
             } catch (error) {
-              ctx.log.info?.("this direct conversation could not be re-keyed; waiting for a member", {
-                conversationId,
-                reason: describeError(error),
-              });
+              ctx.log.info?.(
+                'this direct conversation could not be re-keyed; waiting for a member',
+                {
+                  conversationId,
+                  reason: describeError(error),
+                },
+              );
             }
           }
         }
-        this.setJoinStatus(conversationId, "waiting_for_member");
+        this.setJoinStatus(conversationId, 'waiting_for_member');
         return;
       }
-      this.setJoinStatus(conversationId, "joining");
+      this.setJoinStatus(conversationId, 'joining');
       const summary = await this.fetchSummary(conversationId);
-      if (summary.members.find((m) => m.accountId === ctx.accountId)?.state !== "joined") return;
+      if (summary.members.find((m) => m.accountId === ctx.accountId)?.state !== 'joined') return;
       const live = ctx.groups.get(conversationId);
       if (live && ctx.engine.isActive(live)) return; // a Welcome landed meanwhile
       let resync: boolean;
       switch (summary.myLeafState) {
-        case "active":
+        case 'active':
           // Lost state: the server still lists this leaf. Act on the second sighting only (see `resyncSeen`).
           if (!this.resyncSeen.has(conversationId)) {
             this.resyncSeen.add(conversationId);
@@ -756,20 +905,22 @@ export class ConversationsService {
           }
           resync = true;
           break;
-        case "pending_welcome":
+        case 'pending_welcome':
           return; // an elector added this instance; its Welcome is in the delivery stream
         default:
           resync = false;
       }
-      const join = await ctx.engine.joinExternal(ctx.identity, base64Decode(stored.data), { resync });
+      const join = await ctx.engine.joinExternal(ctx.identity, base64Decode(stored.data), {
+        resync,
+      });
       const request: SubmitEventRequest = {
         idempotencyKey: uuidV7(ctx.now()),
-        kind: "mls_commit",
+        kind: 'mls_commit',
         epoch: join.epoch,
         payload: base64Encode(join.commit),
         commit: {
           newEpoch: join.epoch + 1,
-          kind: resync ? "resync" : "external",
+          kind: resync ? 'resync' : 'external',
           addedLeaves: [{ accountId: ctx.accountId, instanceId: ctx.instanceId }],
           removedLeaves: resync ? [ctx.instanceId] : [],
           groupInfo: base64Encode(join.groupInfo),
@@ -777,37 +928,47 @@ export class ConversationsService {
       };
       try {
         const res = await ctx.http.request({
-          method: "POST",
+          method: 'POST',
           path: `/v1/conversations/${conversationId}/events`,
           body: request,
           schema: submitEventResponseSchema,
           signer: ctx.signer,
         });
         await this.adoptJoin(conversationId, summary, join.next, join.epoch, res.event);
-        ctx.log.info?.(resync ? "resynced by external commit" : "joined by external commit", { conversationId, epoch: join.epoch + 1 });
+        ctx.log.info?.(resync ? 'resynced by external commit' : 'joined by external commit', {
+          conversationId,
+          epoch: join.epoch + 1,
+        });
         return;
       } catch (error) {
         if (error instanceof EpochConflictError) {
           // The joiner adopted nothing (engine invariant 2): rebuild from the GroupInfo of the winning epoch, unless
           // the winner was an elector adding this very instance, in which case its Welcome is what to wait for.
           const again = await this.fetchSummary(conversationId);
-          if (!resync && again.myLeafState !== null && again.myLeafState !== "removed") return;
+          if (!resync && again.myLeafState !== null && again.myLeafState !== 'removed') return;
           continue;
         }
-        if (error instanceof TransportError && error.serverCode === "group_info_missing") {
-          this.setJoinStatus(conversationId, "waiting_for_member");
+        if (error instanceof TransportError && error.serverCode === 'group_info_missing') {
+          this.setJoinStatus(conversationId, 'waiting_for_member');
           return;
         }
         throw error;
       }
     }
-    ctx.log.info?.("self-join lost the epoch race repeatedly; will try again after the next sync", { conversationId });
+    ctx.log.info?.('self-join lost the epoch race repeatedly; will try again after the next sync', {
+      conversationId,
+    });
   }
 
   /** The stored GroupInfo for the current epoch, or `null` when the server holds none (or predates the route). */
   private async fetchGroupInfo(conversationId: string): Promise<StoredGroupInfo | null> {
     try {
-      const res = await this.ctx.http.request({ method: "GET", path: `/v1/conversations/${conversationId}/group-info`, schema: groupInfoResponseSchema, signer: this.ctx.signer });
+      const res = await this.ctx.http.request({
+        method: 'GET',
+        path: `/v1/conversations/${conversationId}/group-info`,
+        schema: groupInfoResponseSchema,
+        signer: this.ctx.signer,
+      });
       return res.groupInfo;
     } catch (error) {
       if (error instanceof TransportError && error.status === 404) return null;
@@ -816,20 +977,37 @@ export class ConversationsService {
   }
 
   private async fetchSummary(conversationId: string): Promise<ConversationSummary> {
-    const res = await this.ctx.http.request({ method: "GET", path: `/v1/conversations/${conversationId}`, schema: conversationResponseSchema, signer: this.ctx.signer });
+    const res = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/conversations/${conversationId}`,
+      schema: conversationResponseSchema,
+      signer: this.ctx.signer,
+    });
     return res.conversation;
   }
 
   /** The server accepted our external commit: the joined state, the record and our own event land in one batch. */
-  private async adoptJoin(conversationId: string, summary: ConversationSummary, next: GroupState, epoch: number, accepted: { id: string; seq: number; createdAt: string }): Promise<void> {
+  private async adoptJoin(
+    conversationId: string,
+    summary: ConversationSummary,
+    next: GroupState,
+    epoch: number,
+    accepted: { id: string; seq: number; createdAt: string },
+  ): Promise<void> {
     const { ctx } = this;
     await ctx.mutex.run(async () => {
       const existing = ctx.model.conversations.get(conversationId);
       const joinedEpoch = ctx.engine.epochOf(next);
       // Membership follows the tree, as after any commit: every account with a leaf is joined.
       const accounts = new Set(ctx.engine.membersOf(next).map((m) => m.accountId));
-      const members = summary.members.map((m) => ({ accountId: m.accountId, role: m.role, state: accounts.has(m.accountId) ? ("joined" as const) : m.state }));
-      for (const a of accounts) if (!members.some((m) => m.accountId === a)) members.push({ accountId: a, role: "member", state: "joined" });
+      const members = summary.members.map((m) => ({
+        accountId: m.accountId,
+        role: m.role,
+        state: accounts.has(m.accountId) ? ('joined' as const) : m.state,
+      }));
+      for (const a of accounts)
+        if (!members.some((m) => m.accountId === a))
+          members.push({ accountId: a, role: 'member', state: 'joined' });
       const record: ConversationRecord = {
         id: summary.id,
         kind: summary.kind,
@@ -850,7 +1028,7 @@ export class ConversationsService {
         id: accepted.id,
         conversationId,
         seq: accepted.seq,
-        kind: "mls_commit",
+        kind: 'mls_commit',
         epoch,
         senderAccountId: ctx.accountId,
         senderInstanceId: ctx.instanceId,
@@ -862,8 +1040,8 @@ export class ConversationsService {
       };
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, conversationId, next);
-      batch.putJson("conversation", record.id, record);
-      batch.putJson("event", Model.eventId(event), event);
+      batch.putJson('conversation', record.id, record);
+      batch.putJson('event', Model.eventId(event), event);
       await ctx.store.commit(batch);
       ctx.groups.commitInMemory(conversationId, next);
       ctx.model.conversations.set(record.id, record);
@@ -909,7 +1087,7 @@ export class ConversationsService {
         if (stored && stored.epoch >= ctx.engine.epochOf(state)) continue;
         await this.publishGroupInfo(conversationId, state);
       } catch (error) {
-        ctx.log.warn?.("group info check failed", { conversationId, error: describeError(error) });
+        ctx.log.warn?.('group info check failed', { conversationId, error: describeError(error) });
       }
     }
   }
@@ -920,13 +1098,24 @@ export class ConversationsService {
     try {
       const epoch = ctx.engine.epochOf(state);
       const data = base64Encode(await ctx.engine.publishGroupInfo(state));
-      await ctx.http.request({ method: "PUT", path: `/v1/conversations/${conversationId}/group-info`, body: { epoch, data }, signer: ctx.signer });
+      await ctx.http.request({
+        method: 'PUT',
+        path: `/v1/conversations/${conversationId}/group-info`,
+        body: { epoch, data },
+        signer: ctx.signer,
+      });
       this.groupInfoChecked.add(conversationId);
-      ctx.log.debug?.("group info published", { conversationId, epoch });
+      ctx.log.debug?.('group info published', { conversationId, epoch });
     } catch (error) {
-      if (error instanceof EpochConflictError) this.groupInfoChecked.add(conversationId); // behind: the commit that catches us up carries one
-      else if (error instanceof TransportError && error.status === 404) this.groupInfoChecked.add(conversationId); // a server without the route
-      else ctx.log.warn?.("group info publish failed", { conversationId, error: describeError(error) });
+      if (error instanceof EpochConflictError)
+        this.groupInfoChecked.add(conversationId); // behind: the commit that catches us up carries one
+      else if (error instanceof TransportError && error.status === 404)
+        this.groupInfoChecked.add(conversationId); // a server without the route
+      else
+        ctx.log.warn?.('group info publish failed', {
+          conversationId,
+          error: describeError(error),
+        });
     }
   }
 
@@ -934,7 +1123,9 @@ export class ConversationsService {
     if (this.stopped || this.retryTimer) return;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
-      void this.reconcile().catch((error) => this.ctx.log.debug?.("reconcile retry failed", { error: describeError(error) }));
+      void this.reconcile().catch((error) =>
+        this.ctx.log.debug?.('reconcile retry failed', { error: describeError(error) }),
+      );
     }, REACH_RETRY_MS);
   }
 }

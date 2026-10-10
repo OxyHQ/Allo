@@ -1,9 +1,18 @@
-import { act, waitFor as rtlWaitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import { useTimeline } from "../index";
-import { fakeServer, makeClient, renderAlloHook, stopAll, texts, waitFor, waitJoined, type TestClient } from "./helpers";
+import { act, waitFor as rtlWaitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { useTimeline } from '../index';
+import {
+  fakeServer,
+  makeClient,
+  renderAlloHook,
+  stopAll,
+  texts,
+  waitFor,
+  waitJoined,
+  type TestClient,
+} from './helpers';
 
-describe("useTimeline", () => {
+describe('useTimeline', () => {
   const started: TestClient[] = [];
   afterEach(async () => {
     await stopAll(...started.splice(0));
@@ -11,10 +20,10 @@ describe("useTimeline", () => {
 
   it("shows the local echo pending then accepted, the other party's message, and edit/react/markRead", async () => {
     const server = fakeServer();
-    const alice = await makeClient(server, "acc-alice-01", "Alice web");
-    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const alice = await makeClient(server, 'acc-alice-01', 'Alice web');
+    const bob = await makeClient(server, 'acc-bob-0001', 'Bob iOS', 'ios');
     started.push(alice, bob);
-    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    const conv = await alice.client.conversations.createDirect('acc-bob-0001');
     await waitJoined(bob, conv.id);
 
     const aliceHook = renderAlloHook(alice.client, () => useTimeline(conv.id));
@@ -24,105 +33,133 @@ describe("useTimeline", () => {
 
     // local echo: pending while alice's network is down, accepted once the server has it
     server.setOffline(alice.client.instanceId!, true);
-    let localKey = "";
+    let localKey = '';
     await act(async () => {
-      localKey = await aliceHook.result.current.send("hi bob");
+      localKey = await aliceHook.result.current.send('hi bob');
     });
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("pending"));
+    await rtlWaitFor(() =>
+      expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe(
+        'pending',
+      ),
+    );
     const echo = aliceHook.result.current.items.find((i) => i.localKey === localKey)!;
     expect(echo.isOwn).toBe(true);
     expect(echo.seq).toBeNull();
     server.setOffline(alice.client.instanceId!, false);
     // accepted once the server has it; bob's delivered receipt may already have moved it on by the time this polls
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).not.toBe("pending"), { timeout: 10_000 });
+    await rtlWaitFor(
+      () =>
+        expect(
+          aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState,
+        ).not.toBe('pending'),
+      { timeout: 10_000 },
+    );
     const accepted = aliceHook.result.current.items.find((i) => i.localKey === localKey)!;
-    expect(["accepted", "delivered"]).toContain(accepted.sendState);
+    expect(['accepted', 'delivered']).toContain(accepted.sendState);
     expect(accepted.seq).not.toBeNull();
 
     // the other party sees it
-    await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(["hi bob"]));
+    await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(['hi bob']));
     expect(bobHook.result.current.items[0].id).toBe(accepted.id);
     expect(bobHook.result.current.items[0].isOwn).toBe(false);
 
     // and their reply reaches alice's hook
     await act(async () => {
-      await bobHook.result.current.send("hi alice", { replyTo: accepted.id });
+      await bobHook.result.current.send('hi alice', { replyTo: accepted.id });
     });
-    await rtlWaitFor(() => expect(texts(aliceHook.result.current.items)).toEqual(["hi bob", "hi alice"]));
+    await rtlWaitFor(() =>
+      expect(texts(aliceHook.result.current.items)).toEqual(['hi bob', 'hi alice']),
+    );
     expect(aliceHook.result.current.items[1].replyTo).toBe(accepted.id);
 
     // edit
     await act(async () => {
-      await aliceHook.result.current.edit(accepted.id, "hi bob (edited)");
+      await aliceHook.result.current.edit(accepted.id, 'hi bob (edited)');
     });
-    await rtlWaitFor(() => expect(bobHook.result.current.items[0].content).toEqual({ kind: "text", body: "hi bob (edited)", isEdited: true }));
+    await rtlWaitFor(() =>
+      expect(bobHook.result.current.items[0].content).toEqual({
+        kind: 'text',
+        body: 'hi bob (edited)',
+        isEdited: true,
+      }),
+    );
 
     // react (toggle on)
     await act(async () => {
-      await bobHook.result.current.react(accepted.id, "👍");
+      await bobHook.result.current.react(accepted.id, '👍');
     });
-    await rtlWaitFor(() => expect(aliceHook.result.current.items[0].reactions).toEqual([{ key: "👍", accountIds: ["acc-bob-0001"] }]));
+    await rtlWaitFor(() =>
+      expect(aliceHook.result.current.items[0].reactions).toEqual([
+        { key: '👍', accountIds: ['acc-bob-0001'] },
+      ]),
+    );
 
     // markRead: bob reads → alice's message shows read
     await act(async () => {
       await bobHook.result.current.markRead();
     });
-    await rtlWaitFor(() => expect(aliceHook.result.current.items[0].sendState).toBe("read"));
+    await rtlWaitFor(() => expect(aliceHook.result.current.items[0].sendState).toBe('read'));
 
     // remove
     await act(async () => {
       await aliceHook.result.current.remove(accepted.id);
     });
-    await rtlWaitFor(() => expect(bobHook.result.current.items[0].content).toEqual({ kind: "deleted" }));
+    await rtlWaitFor(() =>
+      expect(bobHook.result.current.items[0].content).toEqual({ kind: 'deleted' }),
+    );
   });
 
-  it("windows the newest pageSize items and loadOlder widens the window without sliding it", async () => {
+  it('windows the newest pageSize items and loadOlder widens the window without sliding it', async () => {
     const server = fakeServer();
-    const alice = await makeClient(server, "acc-alice-01", "Alice web");
-    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const alice = await makeClient(server, 'acc-alice-01', 'Alice web');
+    const bob = await makeClient(server, 'acc-bob-0001', 'Bob iOS', 'ios');
     started.push(alice, bob);
-    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    const conv = await alice.client.conversations.createDirect('acc-bob-0001');
     await waitJoined(bob, conv.id);
     for (let i = 1; i <= 7; i++) await alice.client.messages.send(conv.id, `m${i}`);
     await alice.client.sync.flush();
     await waitFor(() => texts(alice.client.messages.timeline(conv.id)).length === 7);
 
     const { result } = renderAlloHook(alice.client, () => useTimeline(conv.id, { pageSize: 3 }));
-    expect(texts(result.current.items)).toEqual(["m5", "m6", "m7"]);
+    expect(texts(result.current.items)).toEqual(['m5', 'm6', 'm7']);
     expect(result.current.reachedStart).toBe(false);
 
     await act(async () => {
       const page = await result.current.loadOlder();
-      expect(texts(page.items)).toEqual(["m2", "m3", "m4"]);
+      expect(texts(page.items)).toEqual(['m2', 'm3', 'm4']);
       expect(page.reachedStart).toBe(false);
     });
-    await rtlWaitFor(() => expect(texts(result.current.items)).toEqual(["m2", "m3", "m4", "m5", "m6", "m7"]));
+    await rtlWaitFor(() =>
+      expect(texts(result.current.items)).toEqual(['m2', 'm3', 'm4', 'm5', 'm6', 'm7']),
+    );
     expect(result.current.reachedStart).toBe(false);
 
     // a new message extends the window at the new end and keeps m2 at the old end
     await act(async () => {
-      await result.current.send("m8");
+      await result.current.send('m8');
     });
-    await rtlWaitFor(() => expect(texts(result.current.items)).toEqual(["m2", "m3", "m4", "m5", "m6", "m7", "m8"]));
+    await rtlWaitFor(() =>
+      expect(texts(result.current.items)).toEqual(['m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8']),
+    );
 
     // the last page is shorter than pageSize and says so
     await act(async () => {
       const page = await result.current.loadOlder();
-      expect(texts(page.items)).toEqual(["m1"]);
+      expect(texts(page.items)).toEqual(['m1']);
       expect(page.reachedStart).toBe(true);
     });
     await rtlWaitFor(() => expect(result.current.reachedStart).toBe(true));
-    expect(texts(result.current.items)).toEqual(["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"]);
+    expect(texts(result.current.items)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8']);
   });
 
   it("typing reflects the other party's setTyping", async () => {
     const server = fakeServer();
-    const alice = await makeClient(server, "acc-alice-01", "Alice web");
-    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const alice = await makeClient(server, 'acc-alice-01', 'Alice web');
+    const bob = await makeClient(server, 'acc-bob-0001', 'Bob iOS', 'ios');
     started.push(alice, bob);
-    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    const conv = await alice.client.conversations.createDirect('acc-bob-0001');
     await waitJoined(bob, conv.id);
-    await waitFor(() => alice.client.sync.state() === "live" && bob.client.sync.state() === "live");
+    await waitFor(() => alice.client.sync.state() === 'live' && bob.client.sync.state() === 'live');
 
     const { result } = renderAlloHook(alice.client, () => useTimeline(conv.id));
     expect(result.current.typing).toBe(false);
@@ -138,34 +175,54 @@ describe("useTimeline", () => {
 
   it("an own message becomes delivered once the other account's client has synced it, then read, and is never downgraded", async () => {
     const server = fakeServer();
-    const alice = await makeClient(server, "acc-alice-01", "Alice web");
-    const bob = await makeClient(server, "acc-bob-0001", "Bob iOS", "ios");
+    const alice = await makeClient(server, 'acc-alice-01', 'Alice web');
+    const bob = await makeClient(server, 'acc-bob-0001', 'Bob iOS', 'ios');
     started.push(alice, bob);
-    const conv = await alice.client.conversations.createDirect("acc-bob-0001");
+    const conv = await alice.client.conversations.createDirect('acc-bob-0001');
     await waitJoined(bob, conv.id);
 
     const aliceHook = renderAlloHook(alice.client, () => useTimeline(conv.id));
     const bobHook = renderAlloHook(bob.client, () => useTimeline(conv.id));
-    let localKey = "";
+    let localKey = '';
     await act(async () => {
-      localKey = await aliceHook.result.current.send("are you there");
+      localKey = await aliceHook.result.current.send('are you there');
     });
-    await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(["are you there"]));
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("delivered"), { timeout: 10_000 });
+    await rtlWaitFor(() => expect(texts(bobHook.result.current.items)).toEqual(['are you there']));
+    await rtlWaitFor(
+      () =>
+        expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe(
+          'delivered',
+        ),
+      { timeout: 10_000 },
+    );
     // the receipt is an encrypted app message: the server never saw the word
-    for (const e of server.eventsOf(conv.id)) expect(e.payload.includes("delivered")).toBe(false);
+    for (const e of server.eventsOf(conv.id)) expect(e.payload.includes('delivered')).toBe(false);
 
     await act(async () => {
       await bobHook.result.current.markRead();
     });
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("read"), { timeout: 10_000 });
+    await rtlWaitFor(
+      () =>
+        expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe(
+          'read',
+        ),
+      { timeout: 10_000 },
+    );
 
     // bob's trailing delivered receipt for the second message must not move the first back
-    let second = "";
+    let second = '';
     await act(async () => {
-      second = await aliceHook.result.current.send("still there?");
+      second = await aliceHook.result.current.send('still there?');
     });
-    await rtlWaitFor(() => expect(aliceHook.result.current.items.find((i) => i.localKey === second)?.sendState).toBe("delivered"), { timeout: 10_000 });
-    expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe("read");
+    await rtlWaitFor(
+      () =>
+        expect(aliceHook.result.current.items.find((i) => i.localKey === second)?.sendState).toBe(
+          'delivered',
+        ),
+      { timeout: 10_000 },
+    );
+    expect(aliceHook.result.current.items.find((i) => i.localKey === localKey)?.sendState).toBe(
+      'read',
+    );
   });
 });

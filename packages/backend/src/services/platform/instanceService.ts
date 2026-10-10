@@ -2,7 +2,7 @@
  * Enrollment and the instance lifecycle (`docs/platform/api-v1.md`, Instances).
  */
 
-import { randomBytes } from "node:crypto";
+import { randomBytes } from 'node:crypto';
 import {
   base64UrlEncode,
   enrollmentApprovalMessage,
@@ -12,14 +12,14 @@ import {
   type RegisterInstanceResponse,
   type SetPushTokenRequest,
   type SetTransferKeyRequest,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
 import {
   listConversationIdsWithLiveLeaf,
   listConversationsAwaitingAccountLeaf,
   markLeafRemoved,
-} from "../../db/platform/conversationRepository";
-import { appendControlEvent } from "../../db/platform/eventRepository";
+} from '../../db/platform/conversationRepository';
+import { appendControlEvent } from '../../db/platform/eventRepository';
 import {
   activateInstance,
   clearPushToken,
@@ -32,12 +32,12 @@ import {
   setPushToken,
   setTransferPublicKey,
   type InstanceRow,
-} from "../../db/platform/instanceRepository";
-import { verifyEd25519 } from "../../middleware/instanceAuth";
-import { getRealtime } from "../../runtime/realtime";
-import { AlloHttpError, forbidden, notFound, unauthorized } from "../../utils/httpErrors";
-import { toClientInstance, toPublicInstance } from "./wire";
-import { logger } from "../../utils/logger";
+} from '../../db/platform/instanceRepository';
+import { verifyEd25519 } from '../../middleware/instanceAuth';
+import { getRealtime } from '../../runtime/realtime';
+import { AlloHttpError, forbidden, notFound, unauthorized } from '../../utils/httpErrors';
+import { toClientInstance, toPublicInstance } from './wire';
+import { logger } from '../../utils/logger';
 
 export interface InstanceServiceDeps {
   db?: AlloDatabase;
@@ -64,24 +64,27 @@ export async function registerInstance(
           displayName: request.displayName,
           signingPublicKey: request.signingPublicKey,
           transferPublicKey: request.transferPublicKey,
-          status: bootstrap ? "active" : "pending",
+          status: bootstrap ? 'active' : 'pending',
           enrollmentChallenge: challenge,
         },
         tx,
       );
     } catch (error: unknown) {
-      const { isUniqueViolation } = await import("@oxy.so/db");
-      if (isUniqueViolation(error, "client_instances_account_id_signing_public_key_key")) {
-        throw new AlloHttpError("idempotency_conflict", "This signing key is already enrolled on the account");
+      const { isUniqueViolation } = await import('@oxy.so/db');
+      if (isUniqueViolation(error, 'client_instances_account_id_signing_public_key_key')) {
+        throw new AlloHttpError(
+          'idempotency_conflict',
+          'This signing key is already enrolled on the account',
+        );
       }
       throw error;
     }
     const instance = toClientInstance(row);
     return bootstrap
-      ? { instance, enrollment: "active" }
-      : { instance, enrollment: "pending", challenge: challenge as string };
+      ? { instance, enrollment: 'active' }
+      : { instance, enrollment: 'pending', challenge: challenge as string };
   });
-  if (response.enrollment === "active") await nudgeConversationsAwaitingAccount(accountId, db);
+  if (response.enrollment === 'active') await nudgeConversationsAwaitingAccount(accountId, db);
   return response;
 }
 
@@ -94,7 +97,10 @@ export async function registerInstance(
  * transaction has committed, so a nudged client that syncs at once sees the
  * instance in the account's listing.
  */
-async function nudgeConversationsAwaitingAccount(accountId: string, db: AlloDatabase): Promise<void> {
+async function nudgeConversationsAwaitingAccount(
+  accountId: string,
+  db: AlloDatabase,
+): Promise<void> {
   // Best effort: the activating write has committed, and a failed nudge must
   // not turn a successful registration or approval into a 500. The electors
   // still find the new leaf on their sync interval.
@@ -105,11 +111,16 @@ async function nudgeConversationsAwaitingAccount(accountId: string, db: AlloData
       realtime.nudge(activeLeafInstanceIds, { conversationId });
     }
   } catch (error) {
-    logger.warn("nudging conversations awaiting an account failed", { error: error instanceof Error ? error.message : String(error) });
+    logger.warn('nudging conversations awaiting an account failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
-export async function listOwnInstances(accountId: string, deps: InstanceServiceDeps = {}): Promise<ClientInstance[]> {
+export async function listOwnInstances(
+  accountId: string,
+  deps: InstanceServiceDeps = {},
+): Promise<ClientInstance[]> {
   const rows = await listInstancesByAccount(accountId, deps.db ?? getDb());
   return rows.map(toClientInstance);
 }
@@ -134,23 +145,30 @@ export async function listPublicInstances(
 ): Promise<PublicInstance[]> {
   const db = deps.db ?? getDb();
   const all = await listInstancesByAccount(accountId, db);
-  return all.filter((row) => row.status !== "pending").map(toPublicInstance);
+  return all.filter((row) => row.status !== 'pending').map(toPublicInstance);
 }
 
 export async function listPendingEnrollments(
   accountId: string,
   deps: InstanceServiceDeps = {},
 ): Promise<{ instance: ClientInstance; challenge: string }[]> {
-  const rows = await listInstancesByAccountAndStatus(accountId, "pending", deps.db ?? getDb());
+  const rows = await listInstancesByAccountAndStatus(accountId, 'pending', deps.db ?? getDb());
   return rows
     .filter((row) => row.enrollmentChallenge !== null)
-    .map((row) => ({ instance: toClientInstance(row), challenge: row.enrollmentChallenge as string }));
+    .map((row) => ({
+      instance: toClientInstance(row),
+      challenge: row.enrollmentChallenge as string,
+    }));
 }
 
 /** Load an instance of the caller's account, or `not_found`. Another account's is also `not_found`: nothing leaks. */
-async function requireOwnInstance(accountId: string, id: string, db: AlloDatabase): Promise<InstanceRow> {
+async function requireOwnInstance(
+  accountId: string,
+  id: string,
+  db: AlloDatabase,
+): Promise<InstanceRow> {
   const row = await findInstanceById(id, db);
-  if (!row || row.accountId !== accountId) throw notFound("Instance not found");
+  if (!row || row.accountId !== accountId) throw notFound('Instance not found');
   return row;
 }
 
@@ -162,10 +180,11 @@ export async function approveInstance(
 ): Promise<ClientInstance> {
   const db = deps.db ?? getDb();
   const approverRow = await findInstanceById(approver.id, db);
-  if (!approverRow || approverRow.status !== "active") throw forbidden("Only an active instance may approve");
+  if (!approverRow || approverRow.status !== 'active')
+    throw forbidden('Only an active instance may approve');
   const target = await requireOwnInstance(approver.accountId, targetId, db);
-  if (target.status !== "pending" || target.enrollmentChallenge === null) {
-    throw new AlloHttpError("idempotency_conflict", "The instance is not awaiting approval");
+  if (target.status !== 'pending' || target.enrollmentChallenge === null) {
+    throw new AlloHttpError('idempotency_conflict', 'The instance is not awaiting approval');
   }
   const message = enrollmentApprovalMessage({
     accountId: approver.accountId,
@@ -174,10 +193,17 @@ export async function approveInstance(
     challenge: target.enrollmentChallenge,
   });
   if (!verifyEd25519(message, approvalSignature, approverRow.signingPublicKey)) {
-    throw unauthorized("The approval signature does not verify against the approving instance's key");
+    throw unauthorized(
+      "The approval signature does not verify against the approving instance's key",
+    );
   }
-  const activated = await activateInstance(target.id, { approvedByInstanceId: approver.id, approvalSignature }, db);
-  if (!activated) throw new AlloHttpError("idempotency_conflict", "The instance was resolved concurrently");
+  const activated = await activateInstance(
+    target.id,
+    { approvedByInstanceId: approver.id, approvalSignature },
+    db,
+  );
+  if (!activated)
+    throw new AlloHttpError('idempotency_conflict', 'The instance was resolved concurrently');
   getRealtime().instanceApproved(activated.id, { instanceId: activated.id });
   await nudgeConversationsAwaitingAccount(approver.accountId, db);
   return toClientInstance(activated);
@@ -190,9 +216,10 @@ export async function rejectInstance(
 ): Promise<ClientInstance> {
   const db = deps.db ?? getDb();
   const target = await requireOwnInstance(caller.accountId, targetId, db);
-  if (target.status !== "pending") throw new AlloHttpError("idempotency_conflict", "The instance is not pending");
+  if (target.status !== 'pending')
+    throw new AlloHttpError('idempotency_conflict', 'The instance is not pending');
   const row = await revokeInstanceRow(target.id, db);
-  if (!row) throw notFound("Instance not found");
+  if (!row) throw notFound('Instance not found');
   return toClientInstance(row);
 }
 
@@ -209,10 +236,14 @@ export async function rejectInstance(
  * somebody whose last active device is gone). Either way the target must
  * belong to the account, which `requireOwnInstance` is what enforces.
  */
-export async function revokeInstance(accountId: string, targetId: string, deps: InstanceServiceDeps = {}): Promise<ClientInstance> {
+export async function revokeInstance(
+  accountId: string,
+  targetId: string,
+  deps: InstanceServiceDeps = {},
+): Promise<ClientInstance> {
   const db = deps.db ?? getDb();
   const target = await requireOwnInstance(accountId, targetId, db);
-  if (target.status === "revoked") return toClientInstance(target);
+  if (target.status === 'revoked') return toClientInstance(target);
 
   const conversationIds = await listConversationIdsWithLiveLeaf(target.id, db);
   const nudges = new Map<string, string[]>();
@@ -223,7 +254,7 @@ export async function revokeInstance(accountId: string, targetId: string, deps: 
       const appended = await appendControlEvent(
         {
           conversationId,
-          control: { t: "instance_revoked", instanceId: target.id, accountId: target.accountId },
+          control: { t: 'instance_revoked', instanceId: target.id, accountId: target.accountId },
           excludeInstanceIds: [target.id],
         },
         tx,
@@ -232,7 +263,7 @@ export async function revokeInstance(accountId: string, targetId: string, deps: 
     }
     return revoked;
   });
-  if (!row) throw notFound("Instance not found");
+  if (!row) throw notFound('Instance not found');
 
   const realtime = getRealtime();
   realtime.instanceRevoked(target.accountId, { instanceId: target.id });
@@ -254,7 +285,7 @@ export async function setInstanceTransferKey(
   deps: InstanceServiceDeps = {},
 ): Promise<ClientInstance> {
   const row = await setTransferPublicKey(instanceId, request.transferPublicKey, deps.db ?? getDb());
-  if (!row) throw notFound("Instance not found");
+  if (!row) throw notFound('Instance not found');
   return toClientInstance(row);
 }
 
@@ -266,6 +297,9 @@ export async function setInstancePushToken(
   await setPushToken(instanceId, request.provider, request.token, deps.db ?? getDb());
 }
 
-export async function clearInstancePushToken(instanceId: string, deps: InstanceServiceDeps = {}): Promise<void> {
+export async function clearInstancePushToken(
+  instanceId: string,
+  deps: InstanceServiceDeps = {},
+): Promise<void> {
   await clearPushToken(instanceId, deps.db ?? getDb());
 }

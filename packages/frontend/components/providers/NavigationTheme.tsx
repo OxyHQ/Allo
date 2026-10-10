@@ -3,7 +3,13 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useTheme } from '@oxy.so/bloom/theme';
 
 /** Expo's navigator uses its own theme; scene paint must follow the owning Bloom surface. */
-export function NavigationTheme({ children, transparent = false }: { children: ReactNode; transparent?: boolean }) {
+export function NavigationTheme({
+  children,
+  transparent = false,
+}: {
+  children: ReactNode;
+  transparent?: boolean;
+}) {
   const { colors, isDark } = useTheme();
   const value = useMemo(
     () => ({

@@ -25,17 +25,17 @@ export class Namespace {
 }
 
 export type RecordKind =
-  | "conversation"
-  | "groupState"
-  | "pendingCommit"
-  | "event"
-  | "outbox"
-  | "cursor"
-  | "keyPackage"
-  | "mediaKey"
-  | "queued"
-  | "historyOffered"
-  | "backupState";
+  | 'conversation'
+  | 'groupState'
+  | 'pendingCommit'
+  | 'event'
+  | 'outbox'
+  | 'cursor'
+  | 'keyPackage'
+  | 'mediaKey'
+  | 'queued'
+  | 'historyOffered'
+  | 'backupState';
 
 export class InstanceNamespace {
   constructor(
@@ -52,11 +52,11 @@ export class InstanceNamespace {
   }
 
   key(kind: RecordKind, ...parts: string[]): string {
-    return `${this.kindPrefix(kind)}${parts.join("/")}`;
+    return `${this.kindPrefix(kind)}${parts.join('/')}`;
   }
 }
 
 /** Server seqs are dense integers; zero-padding keeps prefix listings in seq order. */
 export function seqKey(seq: number): string {
-  return String(seq).padStart(12, "0");
+  return String(seq).padStart(12, '0');
 }

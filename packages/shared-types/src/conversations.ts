@@ -2,7 +2,7 @@
  * Conversations: a DM or a group, one MLS group each. The server knows who
  * is in it and which instances hold a leaf; it never knows its name.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   accountIdSchema,
   appIdSchema,
@@ -12,22 +12,22 @@ import {
   instanceIdSchema,
   isoDateSchema,
   nonNegativeIntSchema,
-} from "./common";
-import { submitEventRequestSchema } from "./events";
+} from './common';
+import { submitEventRequestSchema } from './events';
 
-export const CONVERSATION_KINDS = ["dm", "group"] as const;
+export const CONVERSATION_KINDS = ['dm', 'group'] as const;
 export const conversationKindSchema = z.enum(CONVERSATION_KINDS);
 export type ConversationKind = z.infer<typeof conversationKindSchema>;
 
-export const MEMBER_ROLES = ["owner", "admin", "member"] as const;
+export const MEMBER_ROLES = ['owner', 'admin', 'member'] as const;
 export const memberRoleSchema = z.enum(MEMBER_ROLES);
 export type MemberRole = z.infer<typeof memberRoleSchema>;
 
-export const MEMBER_STATES = ["joined", "left", "removed"] as const;
+export const MEMBER_STATES = ['joined', 'left', 'removed'] as const;
 export const memberStateSchema = z.enum(MEMBER_STATES);
 export type MemberState = z.infer<typeof memberStateSchema>;
 
-export const LEAF_STATES = ["pending_welcome", "active", "removed"] as const;
+export const LEAF_STATES = ['pending_welcome', 'active', 'removed'] as const;
 export const leafStateSchema = z.enum(LEAF_STATES);
 export type LeafState = z.infer<typeof leafStateSchema>;
 
@@ -83,18 +83,34 @@ export const createConversationRequestSchema = z
     initialCommit: submitEventRequestSchema.optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.kind === "dm" && v.memberAccountIds.length !== 1) {
-      ctx.addIssue({ code: "custom", path: ["memberAccountIds"], message: "a dm names exactly one other account" });
+    if (v.kind === 'dm' && v.memberAccountIds.length !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memberAccountIds'],
+        message: 'a dm names exactly one other account',
+      });
     }
     if (new Set(v.memberAccountIds).size !== v.memberAccountIds.length) {
-      ctx.addIssue({ code: "custom", path: ["memberAccountIds"], message: "an account is listed twice" });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memberAccountIds'],
+        message: 'an account is listed twice',
+      });
     }
     if (v.initialCommit !== undefined) {
-      if (v.initialCommit.kind !== "mls_commit") {
-        ctx.addIssue({ code: "custom", path: ["initialCommit", "kind"], message: "the initial commit is an mls_commit" });
+      if (v.initialCommit.kind !== 'mls_commit') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['initialCommit', 'kind'],
+          message: 'the initial commit is an mls_commit',
+        });
       }
       if (v.initialCommit.epoch !== 0) {
-        ctx.addIssue({ code: "custom", path: ["initialCommit", "epoch"], message: "the initial commit is at epoch 0" });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['initialCommit', 'epoch'],
+          message: 'the initial commit is at epoch 0',
+        });
       }
     }
   });
@@ -141,7 +157,9 @@ export const resetConversationRequestSchema = z.object({
 });
 export type ResetConversationRequest = z.infer<typeof resetConversationRequestSchema>;
 
-export const resetConversationResponseSchema = z.object({ conversation: conversationSummarySchema });
+export const resetConversationResponseSchema = z.object({
+  conversation: conversationSummarySchema,
+});
 export type ResetConversationResponse = z.infer<typeof resetConversationResponseSchema>;
 
 /** `GET /v1/conversations` */
@@ -162,6 +180,6 @@ export type ConversationResponse = z.infer<typeof conversationResponseSchema>;
  * refused rather than keyed.
  */
 export function dmKeyFor(appId: string, accountA: string, accountB: string): string {
-  if (accountA === accountB) throw new RangeError("a dm needs two different accounts");
-  return `${appId}:${[accountA, accountB].sort().join(":")}`;
+  if (accountA === accountB) throw new RangeError('a dm needs two different accounts');
+  return `${appId}:${[accountA, accountB].sort().join(':')}`;
 }

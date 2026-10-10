@@ -25,8 +25,8 @@
  * `lastSeenAt` is truncated to the minute. A second-accurate last seen is a
  * better tracking signal than the dot itself.
  */
-import { z } from "zod";
-import { accountIdSchema, isoDateSchema } from "./common";
+import { z } from 'zod';
+import { accountIdSchema, isoDateSchema } from './common';
 
 /** How many accounts one client may watch at once — a screen, not an address book. */
 export const MAX_PRESENCE_WATCH = 200;
@@ -57,7 +57,7 @@ export type PresenceState = z.infer<typeof presenceStateSchema>;
 export const presenceQuerySchema = z.object({
   accountIds: z
     .string()
-    .transform((value) => value.split(",").filter((id) => id.length > 0))
+    .transform((value) => value.split(',').filter((id) => id.length > 0))
     .pipe(z.array(accountIdSchema).min(1).max(MAX_PRESENCE_WATCH)),
 });
 export type PresenceQuery = z.infer<typeof presenceQuerySchema>;

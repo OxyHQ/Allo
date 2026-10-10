@@ -27,7 +27,9 @@ export function HistoryTransferBanner() {
     if (progress.phase === 'idle') return null;
     const receiving = progress.phase === 'downloading' || progress.phase === 'importing';
     const otherId = receiving ? progress.fromInstanceId : progress.toInstanceId;
-    const name = otherId ? instances.find((instance) => instance.id === otherId)?.displayName : undefined;
+    const name = otherId
+      ? instances.find((instance) => instance.id === otherId)?.displayName
+      : undefined;
     const label = receiving
       ? name
         ? t('transfer.receivingFrom', 'Receiving history from {{name}}', { name })
@@ -50,7 +52,11 @@ export function HistoryTransferBanner() {
       testID="history-transfer-banner"
     >
       <ActivityIndicator size="small" color={theme.colors.primarySubtleForeground} />
-      <Text variant="caption-1-medium" numberOfLines={1} style={[styles.text, { color: theme.colors.primarySubtleForeground }]}>
+      <Text
+        variant="caption-1-medium"
+        numberOfLines={1}
+        style={[styles.text, { color: theme.colors.primarySubtleForeground }]}
+      >
         {text}
       </Text>
     </View>
@@ -58,6 +64,13 @@ export function HistoryTransferBanner() {
 }
 
 const styles = StyleSheet.create({
-  banner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
   text: { flexShrink: 1 },
 });

@@ -11,7 +11,11 @@ import { isSentSticker, stickerDraftOf } from '@/lib/chat/stickerRef';
 const SHA = 'a'.repeat(64);
 const OTHER = 'b'.repeat(64);
 
-function sticker(overrides: Partial<Sticker> = {}, animationSha = SHA, animationPathSha = SHA): Sticker {
+function sticker(
+  overrides: Partial<Sticker> = {},
+  animationSha = SHA,
+  animationPathSha = SHA,
+): Sticker {
   return {
     id: 'stk-1',
     packId: 'pack-1',
@@ -25,7 +29,12 @@ function sticker(overrides: Partial<Sticker> = {}, animationSha = SHA, animation
       mime: 'application/json',
       bytes: 100,
     },
-    fallback: { url: 'https://cloud.oxy.so/content/2026/09/cc/c.webp', sha256: 'c'.repeat(64), mime: 'image/webp', bytes: 10 },
+    fallback: {
+      url: 'https://cloud.oxy.so/content/2026/09/cc/c.webp',
+      sha256: 'c'.repeat(64),
+      mime: 'image/webp',
+      bytes: 10,
+    },
     ...overrides,
   };
 }

@@ -11,13 +11,13 @@
  * nobody should pay nothing for a feature it does not use.
  */
 
-import { and, desc, eq, gt, inArray, notExists, sql } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import { requireTransaction } from "../moderation/transactionGuard";
-import type { AlloDatabase, AlloDatabaseOrTransaction } from "../index";
-import { blobs } from "../schema/blobs";
-import { namedByBackup, namedByEvent, namedByPendingOffer } from "./historyRepository";
-import { statuses, statusKeys, statusViews } from "../schema/statuses";
+import { and, desc, eq, gt, inArray, notExists, sql } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import { requireTransaction } from '../moderation/transactionGuard';
+import type { AlloDatabase, AlloDatabaseOrTransaction } from '../index';
+import { blobs } from '../schema/blobs';
+import { namedByBackup, namedByEvent, namedByPendingOffer } from './historyRepository';
+import { statuses, statusKeys, statusViews } from '../schema/statuses';
 
 /** The whole row, ciphertext included. Named so the reader sees the opt-in. */
 const STATUS_WITH_CIPHERTEXT = {
@@ -52,12 +52,12 @@ export interface InsertStatusInput {
   expiresAt: Date;
 }
 
-export async function insertStatus(input: InsertStatusInput, db: AlloDatabaseOrTransaction): Promise<StatusRow> {
-  requireTransaction(db, "insertStatus");
-  const [row] = await db
-    .insert(statuses)
-    .values(input)
-    .returning(STATUS_WITH_CIPHERTEXT);
+export async function insertStatus(
+  input: InsertStatusInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<StatusRow> {
+  requireTransaction(db, 'insertStatus');
+  const [row] = await db.insert(statuses).values(input).returning(STATUS_WITH_CIPHERTEXT);
   return row;
 }
 
@@ -70,13 +70,25 @@ export async function findStatusByIdempotencyKey(
   const [row] = await db
     .select(STATUS_WITH_CIPHERTEXT)
     .from(statuses)
-    .where(and(eq(statuses.authorInstanceId, authorInstanceId), eq(statuses.idempotencyKey, idempotencyKey)))
+    .where(
+      and(
+        eq(statuses.authorInstanceId, authorInstanceId),
+        eq(statuses.idempotencyKey, idempotencyKey),
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
 
-export async function findStatusById(id: string, db: AlloDatabaseOrTransaction): Promise<StatusRow | null> {
-  const [row] = await db.select(STATUS_WITH_CIPHERTEXT).from(statuses).where(eq(statuses.id, id)).limit(1);
+export async function findStatusById(
+  id: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<StatusRow | null> {
+  const [row] = await db
+    .select(STATUS_WITH_CIPHERTEXT)
+    .from(statuses)
+    .where(eq(statuses.id, id))
+    .limit(1);
   return row ?? null;
 }
 
@@ -88,8 +100,11 @@ export interface InsertStatusKeyInput {
   expiresAt: Date;
 }
 
-export async function insertStatusKeys(rows: readonly InsertStatusKeyInput[], db: AlloDatabaseOrTransaction): Promise<void> {
-  requireTransaction(db, "insertStatusKeys");
+export async function insertStatusKeys(
+  rows: readonly InsertStatusKeyInput[],
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  requireTransaction(db, 'insertStatusKeys');
   if (rows.length === 0) return;
   await db
     .insert(statusKeys)
@@ -103,7 +118,11 @@ export interface InboxRow {
 }
 
 /** Everything live that is sealed to THIS instance, newest first. */
-export async function listInbox(instanceId: string, limit: number, db: AlloDatabaseOrTransaction): Promise<InboxRow[]> {
+export async function listInbox(
+  instanceId: string,
+  limit: number,
+  db: AlloDatabaseOrTransaction,
+): Promise<InboxRow[]> {
   const rows = await db
     .select({ ...STATUS_WITH_CIPHERTEXT, sealedKey: statusKeys.sealedKey })
     .from(statusKeys)
@@ -116,7 +135,7 @@ export async function listInbox(instanceId: string, limit: number, db: AlloDatab
         eq(statusKeys.instanceId, instanceId),
         gt(statusKeys.expiresAt, sql`now()`),
         gt(statuses.expiresAt, sql`now()`),
-        eq(statuses.state, "live"),
+        eq(statuses.state, 'live'),
       ),
     )
     .orderBy(desc(statuses.createdAt))
@@ -125,17 +144,31 @@ export async function listInbox(instanceId: string, limit: number, db: AlloDatab
 }
 
 /** What this account has posted and not yet lost, newest first. The author holds the key already. */
-export async function listOwn(accountId: string, limit: number, db: AlloDatabaseOrTransaction): Promise<StatusRow[]> {
+export async function listOwn(
+  accountId: string,
+  limit: number,
+  db: AlloDatabaseOrTransaction,
+): Promise<StatusRow[]> {
   return db
     .select(STATUS_WITH_CIPHERTEXT)
     .from(statuses)
-    .where(and(eq(statuses.authorAccountId, accountId), gt(statuses.expiresAt, sql`now()`), eq(statuses.state, "live")))
+    .where(
+      and(
+        eq(statuses.authorAccountId, accountId),
+        gt(statuses.expiresAt, sql`now()`),
+        eq(statuses.state, 'live'),
+      ),
+    )
     .orderBy(desc(statuses.createdAt))
     .limit(limit);
 }
 
 /** Whether this instance holds a key for this status — i.e. whether it may read or view it. */
-export async function holdsKey(statusId: string, instanceId: string, db: AlloDatabaseOrTransaction): Promise<boolean> {
+export async function holdsKey(
+  statusId: string,
+  instanceId: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<boolean> {
   const [row] = await db
     .select({ id: statusKeys.id })
     .from(statusKeys)
@@ -148,8 +181,12 @@ export async function holdsKey(statusId: string, instanceId: string, db: AlloDat
  * The author took it down. The row stays until its deadline so a device that
  * already has it can be told it is gone, and the blobs are released with it.
  */
-export async function markStatusDeleted(id: string, at: Date, db: AlloDatabaseOrTransaction): Promise<void> {
-  await db.update(statuses).set({ state: "deleted", expiresAt: at }).where(eq(statuses.id, id));
+export async function markStatusDeleted(
+  id: string,
+  at: Date,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  await db.update(statuses).set({ state: 'deleted', expiresAt: at }).where(eq(statuses.id, id));
   await db.update(statusKeys).set({ expiresAt: at }).where(eq(statusKeys.statusId, id));
 }
 
@@ -162,14 +199,17 @@ export interface RecordViewInput {
 }
 
 /** One row per viewing ACCOUNT. Seeing it twice is not seeing it twice. */
-export async function recordView(input: RecordViewInput, db: AlloDatabaseOrTransaction): Promise<void> {
+export async function recordView(
+  input: RecordViewInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
   await db
     .insert(statusViews)
     .values({
       id: uuidv7(),
       statusId: input.statusId,
       accountId: input.accountId,
-      published: input.published ? "yes" : "no",
+      published: input.published ? 'yes' : 'no',
       viewedAt: input.viewedAt,
       expiresAt: input.expiresAt,
     })
@@ -182,14 +222,23 @@ export interface ViewsSummary {
 }
 
 /** Who viewed, as the author may see it: the names that publish, and the count of everybody. */
-export async function listViews(statusId: string, db: AlloDatabaseOrTransaction): Promise<ViewsSummary> {
+export async function listViews(
+  statusId: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<ViewsSummary> {
   const rows = await db
-    .select({ accountId: statusViews.accountId, viewedAt: statusViews.viewedAt, published: statusViews.published })
+    .select({
+      accountId: statusViews.accountId,
+      viewedAt: statusViews.viewedAt,
+      published: statusViews.published,
+    })
     .from(statusViews)
     .where(eq(statusViews.statusId, statusId))
     .orderBy(desc(statusViews.viewedAt));
   return {
-    views: rows.filter((row) => row.published === "yes").map(({ accountId, viewedAt }) => ({ accountId, viewedAt })),
+    views: rows
+      .filter((row) => row.published === 'yes')
+      .map(({ accountId, viewedAt }) => ({ accountId, viewedAt })),
     total: rows.length,
   };
 }
@@ -206,7 +255,13 @@ export const namedByLiveStatus = (db: AlloDatabaseOrTransaction) =>
     db
       .select({ one: sql`1` })
       .from(statuses)
-      .where(and(sql`${statuses.expiresAt} > now()`, eq(statuses.state, "live"), sql`${statuses.blobIds} @> array[${blobs.id}]::text[]`)),
+      .where(
+        and(
+          sql`${statuses.expiresAt} > now()`,
+          eq(statuses.state, 'live'),
+          sql`${statuses.blobIds} @> array[${blobs.id}]::text[]`,
+        ),
+      ),
   );
 
 /**
@@ -229,7 +284,15 @@ export async function releaseDueStatusBlobs(db: AlloDatabase): Promise<number> {
     const dated = await tx
       .update(blobs)
       .set({ expiresAt: sql`now() + make_interval(secs => ${STATUS_BLOB_RELEASE_TTL_MS / 1_000})` })
-      .where(and(inArray(blobs.id, ids), namedByPendingOffer(tx), namedByBackup(tx), namedByEvent(tx), namedByLiveStatus(tx)))
+      .where(
+        and(
+          inArray(blobs.id, ids),
+          namedByPendingOffer(tx),
+          namedByBackup(tx),
+          namedByEvent(tx),
+          namedByLiveStatus(tx),
+        ),
+      )
       .returning({ id: blobs.id });
     return dated.length;
   });
@@ -245,11 +308,20 @@ export async function releaseDueStatusBlobs(db: AlloDatabase): Promise<number> {
 export const STATUS_BLOB_RELEASE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Statuses of these ids that are still live. Used to keep a listing honest about what it hands back. */
-export async function liveStatusIds(ids: readonly string[], db: AlloDatabaseOrTransaction): Promise<Set<string>> {
+export async function liveStatusIds(
+  ids: readonly string[],
+  db: AlloDatabaseOrTransaction,
+): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await db
     .select({ id: statuses.id })
     .from(statuses)
-    .where(and(inArray(statuses.id, [...ids]), gt(statuses.expiresAt, sql`now()`), eq(statuses.state, "live")));
+    .where(
+      and(
+        inArray(statuses.id, [...ids]),
+        gt(statuses.expiresAt, sql`now()`),
+        eq(statuses.state, 'live'),
+      ),
+    );
   return new Set(rows.map((row) => row.id));
 }

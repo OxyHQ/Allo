@@ -11,18 +11,18 @@
  * ahead of the JSON parser, so `app.ts` mounts it itself.
  */
 
-import { Router, type RequestHandler } from "express";
-import { createInstanceRoutes } from "./instances";
-import { createKeyPackageRoutes } from "./keyPackages";
-import { createConversationRoutes } from "./conversations";
-import { createEventRoutes } from "./events";
-import { createSyncRoutes } from "./sync";
-import { createBlobReadRoutes } from "./blobs";
-import { createHistoryRoutes } from "./history";
-import { createBackupRoutes } from "./backups";
-import { createPresenceRoutes } from "./presence";
-import { createStatusRoutes } from "./statuses";
-import { createCallRoutes } from "./calls";
+import { Router, type RequestHandler } from 'express';
+import { createInstanceRoutes } from './instances';
+import { createKeyPackageRoutes } from './keyPackages';
+import { createConversationRoutes } from './conversations';
+import { createEventRoutes } from './events';
+import { createSyncRoutes } from './sync';
+import { createBlobReadRoutes } from './blobs';
+import { createHistoryRoutes } from './history';
+import { createBackupRoutes } from './backups';
+import { createPresenceRoutes } from './presence';
+import { createStatusRoutes } from './statuses';
+import { createCallRoutes } from './calls';
 
 export interface V1RouterDeps {
   /** `requireInstance()` from `middleware/instanceAuth.ts`, or a test double. */

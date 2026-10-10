@@ -2,7 +2,7 @@
  * Local identifiers. A uuid v7 (time-ordered, random tail) so ids the SDK
  * mints sort by creation and satisfy `idSchema` / `idempotencyKeySchema`.
  */
-import { hexEncode, randomBytes } from "./bytes";
+import { hexEncode, randomBytes } from './bytes';
 
 let lastMs = 0;
 let counter = 0;

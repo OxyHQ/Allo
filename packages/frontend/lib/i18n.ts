@@ -94,4 +94,3 @@ export async function initializeI18n(): Promise<void> {
 }
 
 export default i18n;
-

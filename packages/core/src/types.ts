@@ -4,9 +4,9 @@
  * imports React, Expo or a Matrix-shaped thing; the wire types come from
  * `@allo/shared-types`.
  */
-import type { AppMessage, ClientInstance, MediaKind, Platform } from "@allo/shared-types";
-import type { CryptoProvider } from "ts-mls";
-import type { Logger } from "./util/logger";
+import type { AppMessage, ClientInstance, MediaKind, Platform } from '@allo/shared-types';
+import type { CryptoProvider } from 'ts-mls';
+import type { Logger } from './util/logger';
 
 // ---------------------------------------------------------------------------
 // Adapters the host supplies
@@ -20,7 +20,9 @@ export interface OxySessionAdapter {
   subscribe(cb: () => void): () => void;
 }
 
-export type StorageOp = { type: "set"; key: string; value: Uint8Array } | { type: "delete"; key: string };
+export type StorageOp =
+  | { type: 'set'; key: string; value: Uint8Array }
+  | { type: 'delete'; key: string };
 
 /**
  * A byte KV with prefix scan and an atomic batch. Every value the SDK writes
@@ -98,7 +100,7 @@ export interface AlloClientOptions {
    * answers, declines and ends — it simply carries no media (ADR 0002,
    * Decision 5).
    */
-  media?: import("./calls/media").CallMediaAdapter;
+  media?: import('./calls/media').CallMediaAdapter;
   /** Live sync interval in ms. Default 30 000. */
   syncIntervalMs?: number;
   /** How long after a sync that makes a backup due the automatic refresh waits, ms. Default 10 000. */
@@ -109,9 +111,9 @@ export interface AlloClientOptions {
 // View models
 // ---------------------------------------------------------------------------
 
-export type InstanceState = "unregistered" | "pending-approval" | "active" | "revoked";
-export type SyncState = "idle" | "syncing" | "live" | "offline" | "error";
-export type SendState = "pending" | "accepted" | "delivered" | "read" | "failed";
+export type InstanceState = 'unregistered' | 'pending-approval' | 'active' | 'revoked';
+export type SyncState = 'idle' | 'syncing' | 'live' | 'offline' | 'error';
+export type SendState = 'pending' | 'accepted' | 'delivered' | 'read' | 'failed';
 
 export interface InstanceView {
   id: string;
@@ -122,7 +124,7 @@ export interface InstanceView {
   signingPublicKey: string;
   /** `null` on an instance registered before transfer keys existed and not yet upgraded: it cannot receive history. */
   transferPublicKey: string | null;
-  status: ClientInstance["status"];
+  status: ClientInstance['status'];
   isThis: boolean;
   approvedByInstanceId: string | null;
   enrolledAt: string | null;
@@ -231,8 +233,8 @@ export interface StickerView {
  */
 export interface CallLogView {
   callId: string;
-  mode: "voice" | "video";
-  outcome: "answered" | "not_answered" | "declined" | "cancelled" | "failed";
+  mode: 'voice' | 'video';
+  outcome: 'answered' | 'not_answered' | 'declined' | 'cancelled' | 'failed';
   /** Whether it came to this account. The same event reads differently at each end. */
   incoming: boolean;
   /** How long it lasted, for an answered one. */
@@ -240,16 +242,16 @@ export interface CallLogView {
 }
 
 export type TimelineContent =
-  | { kind: "text"; body: string; isEdited: boolean }
-  | { kind: "media"; media: MediaView }
-  | { kind: "poll"; poll: PollView }
-  | { kind: "location"; place: PlaceView }
-  | { kind: "contact"; contact: ContactCardView }
-  | { kind: "sticker"; sticker: StickerView }
-  | { kind: "call"; call: CallLogView }
-  | { kind: "deleted" }
-  | { kind: "undecryptable"; reason: string }
-  | { kind: "system"; text: string };
+  | { kind: 'text'; body: string; isEdited: boolean }
+  | { kind: 'media'; media: MediaView }
+  | { kind: 'poll'; poll: PollView }
+  | { kind: 'location'; place: PlaceView }
+  | { kind: 'contact'; contact: ContactCardView }
+  | { kind: 'sticker'; sticker: StickerView }
+  | { kind: 'call'; call: CallLogView }
+  | { kind: 'deleted' }
+  | { kind: 'undecryptable'; reason: string }
+  | { kind: 'system'; text: string };
 
 export interface TimelineItemView {
   /** The server event id, or the local key while the item is still a local echo. */
@@ -278,17 +280,17 @@ export interface TimelineItemView {
    * off, and releases it on its own if the local epoch ever advances.
    * Derived, never stored.
    */
-  holdReason?: "no_reachable_member" | "epoch_stalled";
+  holdReason?: 'no_reachable_member' | 'epoch_stalled';
 }
 
 export interface ConversationView {
   id: string;
-  kind: "dm" | "group";
+  kind: 'dm' | 'group';
   appId: string;
   /** From the E2EE `conversation` message; `null` until one arrives. The UI composes person names via `people`. */
   title: string | null;
   memberAccountIds: string[];
-  myRole: "owner" | "admin" | "member";
+  myRole: 'owner' | 'admin' | 'member';
   epoch: number;
   /** Whether this instance holds an active MLS leaf: it can read and send. */
   joined: boolean;
@@ -302,7 +304,7 @@ export interface ConversationView {
    * the field), so a member's device has to add this one — "This device is
    * being added…" — and that is also what a removed or left member reads.
    */
-  joinState: "joined" | "joining" | "waiting_for_member";
+  joinState: 'joined' | 'joining' | 'waiting_for_member';
   /**
    * `refused_commit`: this device refused a commit the server had already
    * accepted, because its joiner could not be verified (a device outside the
@@ -313,7 +315,7 @@ export interface ConversationView {
    * else: fail closed. `refusedEpoch` is the epoch the refused commit left,
    * `refusalReason` the engine's reason. Persisted; never cleared by the SDK.
    */
-  integrity: "ok" | "refused_commit";
+  integrity: 'ok' | 'refused_commit';
   refusedEpoch?: number;
   refusalReason?: string;
   /**
@@ -345,7 +347,7 @@ export interface UploadMediaMeta {
 // History transfer and backup
 // ---------------------------------------------------------------------------
 
-export type HistoryPhase = "idle" | "exporting" | "uploading" | "downloading" | "importing";
+export type HistoryPhase = 'idle' | 'exporting' | 'uploading' | 'downloading' | 'importing';
 
 /** Topic `history`. `done`/`total` count chunks while uploading or downloading, and events while importing. */
 export interface HistoryProgress {
@@ -425,18 +427,18 @@ export interface LoadOlderResult {
 }
 
 export type SubscriptionTopic =
-  | "conversations"
-  | "call"
-  | "presence"
-  | "statuses"
+  | 'conversations'
+  | 'call'
+  | 'presence'
+  | 'statuses'
   | `timeline:${string}`
-  | "instance"
-  | "instances"
-  | "sync"
+  | 'instance'
+  | 'instances'
+  | 'sync'
   | `typing:${string}`
-  | "history"
-  | "backup"
-  | "error";
+  | 'history'
+  | 'backup'
+  | 'error';
 
 /**
  * One account's presence, as this device knows it.
@@ -457,7 +459,7 @@ export interface PresenceView {
 export interface StatusView {
   readonly id: string;
   readonly authorAccountId: string;
-  readonly kind: "text" | "image" | "video";
+  readonly kind: 'text' | 'image' | 'video';
   readonly caption?: string;
   readonly hasMedia: boolean;
   readonly createdAt: string;
@@ -476,12 +478,12 @@ export interface StatusView {
  * account outside it cannot be reached by naming it.
  */
 export interface StatusAudience {
-  readonly mode: "all" | "only" | "except";
+  readonly mode: 'all' | 'only' | 'except';
   readonly accountIds: readonly string[];
 }
 
 export interface StatusDraft {
-  readonly kind: "text" | "image" | "video";
+  readonly kind: 'text' | 'image' | 'video';
   readonly caption?: string;
   readonly media?: {
     readonly bytes: Uint8Array;

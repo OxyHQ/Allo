@@ -11,10 +11,10 @@
  * `ct` the AEAD ciphertext (plaintext + 16-byte tag). `info` is the caller's
  * domain separator ({@link HISTORY_KEY_SEAL_INFO} for a history offer).
  */
-import { x25519 } from "@noble/curves/ed25519.js";
-import { DecryptError, InvalidStateError } from "../errors";
-import { concatBytes } from "../util/bytes";
-import { createNobleHpkeSuite } from "./nobleCryptoProvider";
+import { x25519 } from '@noble/curves/ed25519.js';
+import { DecryptError, InvalidStateError } from '../errors';
+import { concatBytes } from '../util/bytes';
+import { createNobleHpkeSuite } from './nobleCryptoProvider';
 
 export const TRANSFER_KEY_BYTES = 32;
 const ENC_BYTES = 32;
@@ -37,26 +37,41 @@ export function generateTransferKey(): TransferKeyPair {
 }
 
 export function transferKeyFromSecret(secretKey: Uint8Array): TransferKeyPair {
-  if (secretKey.length !== TRANSFER_KEY_BYTES) throw new InvalidStateError("transfer key must be 32 bytes");
+  if (secretKey.length !== TRANSFER_KEY_BYTES)
+    throw new InvalidStateError('transfer key must be 32 bytes');
   return { secretKey, publicKey: x25519.getPublicKey(secretKey) };
 }
 
-const ab = (b: Uint8Array): ArrayBuffer => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+const ab = (b: Uint8Array): ArrayBuffer =>
+  b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 const utf8 = new TextEncoder();
 
 /** HPKE-seals `plaintext` to a raw 32-byte X25519 public key. Returns `enc || ct`. */
-export async function sealTo(recipientPublicKey: Uint8Array, plaintext: Uint8Array, info: string): Promise<Uint8Array> {
-  if (recipientPublicKey.length !== TRANSFER_KEY_BYTES) throw new InvalidStateError("recipient transfer key must be 32 bytes");
+export async function sealTo(
+  recipientPublicKey: Uint8Array,
+  plaintext: Uint8Array,
+  info: string,
+): Promise<Uint8Array> {
+  if (recipientPublicKey.length !== TRANSFER_KEY_BYTES)
+    throw new InvalidStateError('recipient transfer key must be 32 bytes');
   const suite = createNobleHpkeSuite();
   const pk = await suite.kem.deserializePublicKey(ab(recipientPublicKey));
-  const { enc, ct } = await suite.seal({ recipientPublicKey: pk, info: ab(utf8.encode(info)) }, ab(plaintext));
+  const { enc, ct } = await suite.seal(
+    { recipientPublicKey: pk, info: ab(utf8.encode(info)) },
+    ab(plaintext),
+  );
   return concatBytes(new Uint8Array(enc), new Uint8Array(ct));
 }
 
 /** The inverse of {@link sealTo}. Throws {@link DecryptError} on anything the key does not open. */
-export async function openWith(secretKey: Uint8Array, sealed: Uint8Array, info: string): Promise<Uint8Array> {
-  if (secretKey.length !== TRANSFER_KEY_BYTES) throw new InvalidStateError("transfer key must be 32 bytes");
-  if (sealed.length < ENC_BYTES + TAG_BYTES) throw new DecryptError("sealed key is too short");
+export async function openWith(
+  secretKey: Uint8Array,
+  sealed: Uint8Array,
+  info: string,
+): Promise<Uint8Array> {
+  if (secretKey.length !== TRANSFER_KEY_BYTES)
+    throw new InvalidStateError('transfer key must be 32 bytes');
+  if (sealed.length < ENC_BYTES + TAG_BYTES) throw new DecryptError('sealed key is too short');
   const suite = createNobleHpkeSuite();
   try {
     const sk = await suite.kem.deserializePrivateKey(ab(secretKey));
@@ -66,6 +81,6 @@ export async function openWith(secretKey: Uint8Array, sealed: Uint8Array, info: 
     );
     return new Uint8Array(opened);
   } catch (cause) {
-    throw new DecryptError("sealed key did not open with this transfer key", { cause });
+    throw new DecryptError('sealed key did not open with this transfer key', { cause });
   }
 }

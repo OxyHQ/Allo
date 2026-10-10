@@ -1,9 +1,13 @@
-import { Router, type RequestHandler } from "express";
-import { conversationIdSchema, listEventsQuerySchema, submitEventRequestSchema } from "@allo/shared-types";
-import { listConversationEvents, submitEvent } from "../../services/platform/eventService";
-import { asyncRoute } from "./asyncRoute";
-import { callerOf } from "./conversations";
-import { parseBody, parseParam, parseQuery } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import {
+  conversationIdSchema,
+  listEventsQuerySchema,
+  submitEventRequestSchema,
+} from '@allo/shared-types';
+import { listConversationEvents, submitEvent } from '../../services/platform/eventService';
+import { asyncRoute } from './asyncRoute';
+import { callerOf } from './conversations';
+import { parseBody, parseParam, parseQuery } from './validate';
 
 /**
  * The event log. The body is `SubmitEventRequest`: an idempotency key, a kind,
@@ -13,21 +17,21 @@ import { parseBody, parseParam, parseQuery } from "./validate";
  */
 export function createEventRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
-  router.use("/conversations/:id/events", deps.instanceAuth);
+  router.use('/conversations/:id/events', deps.instanceAuth);
 
   router.post(
-    "/conversations/:id/events",
+    '/conversations/:id/events',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       const body = parseBody(submitEventRequestSchema, req);
       res.status(200).json(await submitEvent(callerOf(req), id, body));
     }),
   );
 
   router.get(
-    "/conversations/:id/events",
+    '/conversations/:id/events',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       const query = parseQuery(listEventsQuerySchema, req);
       res.json(await listConversationEvents(callerOf(req), id, query));
     }),

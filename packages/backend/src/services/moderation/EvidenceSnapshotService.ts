@@ -1,10 +1,10 @@
-import { createHash } from "crypto";
-import type { ReportInput } from "@crowdsource.you/core";
-import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from "./reportTaxonomy";
-import { resolveModerationSubject } from "./subjectIdentity";
-import { subjectProviderFor } from "./subjects/registry";
-import type { ModerationSubjectSnapshot } from "./subjects/types";
-import type { ModerationReport } from "../../db/moderation/reportRepository";
+import { createHash } from 'crypto';
+import type { ReportInput } from '@crowdsource.you/core';
+import { REPORT_TAXONOMY_VERSION, allegationsForCategories } from './reportTaxonomy';
+import { resolveModerationSubject } from './subjectIdentity';
+import { subjectProviderFor } from './subjects/registry';
+import type { ModerationSubjectSnapshot } from './subjects/types';
+import type { ModerationReport } from '../../db/moderation/reportRepository';
 
 /**
  * Turning a stored report into the thing the SDK delivers.
@@ -52,7 +52,7 @@ export class ModerationSubjectUnsupportedError extends Error {
 
   constructor(reportedType: string) {
     super(`No moderation subject provider is registered for '${reportedType}'.`);
-    this.name = "ModerationSubjectUnsupportedError";
+    this.name = 'ModerationSubjectUnsupportedError';
   }
 }
 
@@ -80,9 +80,9 @@ export class ModerationSubjectNotAnOxyAccountError extends Error {
   constructor(externalReportId: string) {
     super(
       `Report '${externalReportId}' names a subject that is not an Oxy account, so it ` +
-        "cannot be described for review.",
+        'cannot be described for review.',
     );
-    this.name = "ModerationSubjectNotAnOxyAccountError";
+    this.name = 'ModerationSubjectNotAnOxyAccountError';
   }
 }
 
@@ -107,7 +107,7 @@ export function snapshotHash(snapshot: ModerationSubjectSnapshot): string {
     attachments: snapshot.attachments ?? [],
     context: snapshot.context ?? [],
   });
-  return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
+  return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
 }
 
 export interface ModerationReportInput {
@@ -126,14 +126,14 @@ export interface ModerationReportInput {
 export async function buildModerationReportInput(
   report: Pick<
     ModerationReport,
-    "id" | "reportedType" | "reportedId" | "reporter" | "categories" | "details" | "createdAt"
+    'id' | 'reportedType' | 'reportedId' | 'reporter' | 'categories' | 'details' | 'createdAt'
   >,
 ): Promise<ModerationReportInput | null> {
   const provider = subjectProviderFor(report.reportedType);
   if (!provider) throw new ModerationSubjectUnsupportedError(report.reportedType);
 
   const subject = resolveModerationSubject(report.reportedId);
-  if (subject.kind !== "oxy-account") {
+  if (subject.kind !== 'oxy-account') {
     throw new ModerationSubjectNotAnOxyAccountError(report.id);
   }
 
@@ -180,7 +180,7 @@ export async function buildModerationReportInput(
       metadata: {
         /** So a case can be read back against the mapping that produced it. */
         alloTaxonomyVersion: REPORT_TAXONOMY_VERSION,
-        alloCategories: [...report.categories].sort().join(","),
+        alloCategories: [...report.categories].sort().join(','),
         /**
          * Declared, and permanently false in Allo.
          *

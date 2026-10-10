@@ -33,11 +33,11 @@
  * Every CHECK is over column references only — nothing renders as `$1`.
  */
 
-import { index, jsonb, pgTable, text } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
-import { HISTORY_OFFER_STATUSES, type ArchiveManifest } from "@allo/shared-types";
-import { checkNonEmptyArray, checkOneOf } from "./columns";
-import { clientInstances } from "./instances";
+import { index, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import { createdAt, timestamptz, updatedAt } from '@oxy.so/db';
+import { HISTORY_OFFER_STATUSES, type ArchiveManifest } from '@allo/shared-types';
+import { checkNonEmptyArray, checkOneOf } from './columns';
+import { clientInstances } from './instances';
 
 export type HistoryOfferStatus = (typeof HISTORY_OFFER_STATUSES)[number];
 
@@ -48,17 +48,17 @@ export type HistoryOfferStatus = (typeof HISTORY_OFFER_STATUSES)[number];
  * protected column (`protectedColumns.ts`): the recipient is its one reader.
  */
 export const historyOffers = pgTable(
-  "history_offers",
+  'history_offers',
   {
     id: text().primaryKey(),
     /** The account both instances belong to. An Oxy id: no FK (CONVENTIONS.md). */
     accountId: text().notNull(),
     donorInstanceId: text()
       .notNull()
-      .references(() => clientInstances.id, { onDelete: "cascade" }),
+      .references(() => clientInstances.id, { onDelete: 'cascade' }),
     recipientInstanceId: text()
       .notNull()
-      .references(() => clientInstances.id, { onDelete: "cascade" }),
+      .references(() => clientInstances.id, { onDelete: 'cascade' }),
     manifest: jsonb().$type<ArchiveManifest>().notNull(),
     /** HPKE `enc || ct` of the 32-byte archive key, base64, sealed to the recipient's transfer key. */
     sealedKey: text().notNull(),
@@ -66,7 +66,7 @@ export const historyOffers = pgTable(
     manifestSignature: text().notNull(),
     /** `manifest.chunkBlobIds`, in order, for the retention queries. */
     chunkBlobIds: text().array().notNull(),
-    status: text({ enum: HISTORY_OFFER_STATUSES }).notNull().default("pending"),
+    status: text({ enum: HISTORY_OFFER_STATUSES }).notNull().default('pending'),
     createdAt: createdAt(),
     consumedAt: timestamptz(),
     /** Set at insert to `created_at + 7 days` (`HISTORY_OFFER_TTL_MS`). */
@@ -74,17 +74,17 @@ export const historyOffers = pgTable(
   },
   (t) => [
     /** The recipient's inbox: `where recipient_instance_id = ? and status = 'pending'`. */
-    index("history_offers_recipient_instance_id_status_idx").on(t.recipientInstanceId, t.status),
+    index('history_offers_recipient_instance_id_status_idx').on(t.recipientInstanceId, t.status),
     /** The replacement lookup: the pending offer from this donor to this recipient. */
-    index("history_offers_donor_recipient_status_idx").on(
+    index('history_offers_donor_recipient_status_idx').on(
       t.donorInstanceId,
       t.recipientInstanceId,
       t.status,
     ),
     /** The expiry sweep's leading btree. */
-    index("history_offers_expires_at_idx").on(t.expiresAt),
-    checkOneOf("history_offers_status_check", t.status, HISTORY_OFFER_STATUSES),
-    checkNonEmptyArray("history_offers_chunk_blob_ids_check", t.chunkBlobIds),
+    index('history_offers_expires_at_idx').on(t.expiresAt),
+    checkOneOf('history_offers_status_check', t.status, HISTORY_OFFER_STATUSES),
+    checkNonEmptyArray('history_offers_chunk_blob_ids_check', t.chunkBlobIds),
   ],
 );
 
@@ -94,14 +94,14 @@ export const historyOffers = pgTable(
  * reader, and it goes only to the account that wrote it.
  */
 export const accountBackups = pgTable(
-  "account_backups",
+  'account_backups',
   {
     /** An Oxy account id: no FK (CONVENTIONS.md). */
     accountId: text().primaryKey(),
     /** The instance that wrote it; its signing key verifies `manifest_signature`. */
     instanceId: text()
       .notNull()
-      .references(() => clientInstances.id, { onDelete: "cascade" }),
+      .references(() => clientInstances.id, { onDelete: 'cascade' }),
     manifest: jsonb().$type<ArchiveManifest>().notNull(),
     /** HMAC-SHA256 of `BACKUP_KEY_CHECK_MESSAGE` under the backup key, base64. */
     keyCheck: text().notNull(),
@@ -110,5 +110,5 @@ export const accountBackups = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [checkNonEmptyArray("account_backups_chunk_blob_ids_check", t.chunkBlobIds)],
+  (t) => [checkNonEmptyArray('account_backups_chunk_blob_ids_check', t.chunkBlobIds)],
 );

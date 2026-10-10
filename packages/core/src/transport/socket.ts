@@ -4,10 +4,10 @@
  * timestamp; socket.io-client accepts `auth` as a function for exactly that.
  * Tests inject a `SocketFactory` returning a fake.
  */
-import { EMPTY_BODY_SHA256_HEX, SOCKET_NAMESPACE, SOCKET_SIGNING_PATH } from "@allo/shared-types";
-import { io } from "socket.io-client";
-import type { SocketAuthPayload, SocketFactory, SocketLike } from "../types";
-import { signRequest, type SigningKeyPair } from "../crypto/signing";
+import { EMPTY_BODY_SHA256_HEX, SOCKET_NAMESPACE, SOCKET_SIGNING_PATH } from '@allo/shared-types';
+import { io } from 'socket.io-client';
+import type { SocketAuthPayload, SocketFactory, SocketLike } from '../types';
+import { signRequest, type SigningKeyPair } from '../crypto/signing';
 
 export const defaultSocketFactory: SocketFactory = (url, auth) => {
   const socket = io(url, {
@@ -18,7 +18,7 @@ export const defaultSocketFactory: SocketFactory = (url, auth) => {
     // next poll landing on the other task is answered 400 "Session ID
     // unknown" and the client loops. Measured on allo.you on 2026-09-18. A
     // single WebSocket connection stays on one task by construction.
-    transports: ["websocket"],
+    transports: ['websocket'],
     upgrade: false,
     reconnection: true,
     reconnectionDelay: 1000,
@@ -35,15 +35,25 @@ export const defaultSocketFactory: SocketFactory = (url, auth) => {
 };
 
 export function socketUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "") + SOCKET_NAMESPACE;
+  return baseUrl.replace(/\/+$/, '') + SOCKET_NAMESPACE;
 }
 
-export function buildSocketAuth(input: { token: string; instanceId: string; key: SigningKeyPair; now: number }): SocketAuthPayload {
+export function buildSocketAuth(input: {
+  token: string;
+  instanceId: string;
+  key: SigningKeyPair;
+  now: number;
+}): SocketAuthPayload {
   const timestamp = Math.floor(input.now);
   return {
     token: input.token,
     instanceId: input.instanceId,
     timestamp,
-    signature: signRequest(input.key, { method: "GET", pathWithQuery: SOCKET_SIGNING_PATH, timestampMs: timestamp, bodySha256Hex: EMPTY_BODY_SHA256_HEX }),
+    signature: signRequest(input.key, {
+      method: 'GET',
+      pathWithQuery: SOCKET_SIGNING_PATH,
+      timestampMs: timestamp,
+      bodySha256Hex: EMPTY_BODY_SHA256_HEX,
+    }),
   };
 }

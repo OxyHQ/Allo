@@ -15,10 +15,10 @@
  * behaviour change, not a cleanup.
  */
 
-import { and, desc, eq } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import type { AlloDatabase } from "../index";
-import { restricts } from "../schema/social";
+import { and, desc, eq } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import type { AlloDatabase } from '../index';
+import { restricts } from '../schema/social';
 
 /** The pair naming one direction of a restriction. An object because both are `string`. */
 export interface RestrictPair {
@@ -27,10 +27,7 @@ export interface RestrictPair {
 }
 
 /** The ids `userId` has restricted, newest first. See `listBlockedUserIds` for the ordering. */
-export async function listRestrictedUserIds(
-  db: AlloDatabase,
-  userId: string,
-): Promise<string[]> {
+export async function listRestrictedUserIds(db: AlloDatabase, userId: string): Promise<string[]> {
   const rows = await db
     .select({ restrictedId: restricts.restrictedId })
     .from(restricts)

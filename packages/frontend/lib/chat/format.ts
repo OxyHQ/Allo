@@ -38,9 +38,12 @@ export function formatDay(date: Date, now: Date, locale: string, t: Translate): 
   if (days === 1) return t('chat.day.yesterday');
   if (days > 1 && days < 7) return date.toLocaleDateString(locale, { weekday: 'long' });
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString(locale, sameYear
-    ? { day: 'numeric', month: 'long' }
-    : { day: 'numeric', month: 'long', year: 'numeric' });
+  return date.toLocaleDateString(
+    locale,
+    sameYear
+      ? { day: 'numeric', month: 'long' }
+      : { day: 'numeric', month: 'long', year: 'numeric' },
+  );
 }
 
 /**

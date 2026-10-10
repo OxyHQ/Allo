@@ -26,13 +26,13 @@ import {
   PRESENCE_LAST_SEEN_RESOLUTION_MS,
   type PresenceResponse,
   type PresenceState,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
-import { listSharedAccountsAmong } from "../../db/platform/conversationRepository";
-import { lastSeenOf, touchLastSeen } from "../../db/platform/presenceRepository";
-import { blockedEitherWay } from "../../db/social/blockRepository";
-import { showOnlineStatusOf } from "../../db/social/userSettingsRepository";
-import { getPresenceStore, type PresenceStore } from "../../runtime/presenceStore";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
+import { listSharedAccountsAmong } from '../../db/platform/conversationRepository';
+import { lastSeenOf, touchLastSeen } from '../../db/platform/presenceRepository';
+import { blockedEitherWay } from '../../db/social/blockRepository';
+import { showOnlineStatusOf } from '../../db/social/userSettingsRepository';
+import { getPresenceStore, type PresenceStore } from '../../runtime/presenceStore';
 
 export interface PresenceServiceDeps {
   db?: AlloDatabase;
@@ -49,7 +49,9 @@ export const hiddenPresence = (accountId: string): PresenceState => ({
 
 /** Truncated to the minute: a second-accurate last seen tracks better than the dot beside it. */
 function coarse(at: Date): string {
-  return new Date(Math.floor(at.getTime() / PRESENCE_LAST_SEEN_RESOLUTION_MS) * PRESENCE_LAST_SEEN_RESOLUTION_MS).toISOString();
+  return new Date(
+    Math.floor(at.getTime() / PRESENCE_LAST_SEEN_RESOLUTION_MS) * PRESENCE_LAST_SEEN_RESOLUTION_MS,
+  ).toISOString();
 }
 
 /**
@@ -81,7 +83,10 @@ export async function visibleTo(
 }
 
 /** Whether this account publishes its own presence, which is also what decides if it receives any. */
-export async function publishesPresence(accountId: string, deps: PresenceServiceDeps = {}): Promise<boolean> {
+export async function publishesPresence(
+  accountId: string,
+  deps: PresenceServiceDeps = {},
+): Promise<boolean> {
   const db = deps.db ?? getDb();
   return (await showOnlineStatusOf(db, [accountId])).has(accountId);
 }
@@ -105,7 +110,10 @@ export async function readPresence(
 
   const visible = await visibleTo(viewerAccountId, accountIds, deps);
   const subjects = [...visible];
-  const [online, seen] = await Promise.all([store.onlineOf(subjects, now), lastSeenOf(db, subjects)]);
+  const [online, seen] = await Promise.all([
+    store.onlineOf(subjects, now),
+    lastSeenOf(db, subjects),
+  ]);
 
   return {
     presence: accountIds.map((accountId) => {

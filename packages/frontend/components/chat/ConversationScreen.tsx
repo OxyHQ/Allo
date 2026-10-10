@@ -1,8 +1,19 @@
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
-import { useConversation, useConversationActions, usePresence, useSyncState, useTimeline } from '@allo/react';
+import {
+  useConversation,
+  useConversationActions,
+  usePresence,
+  useSyncState,
+  useTimeline,
+} from '@allo/react';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
 import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
-import { ChatBackground, ChatEmptyState, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
+import {
+  ChatBackground,
+  ChatEmptyState,
+  ChatHeader,
+  PinnedMessageBar,
+} from '@oxy.so/bloom/chat-screen';
 import { RiArrowGoBackLine } from '@oxy.so/bloom/icons/RiArrowGoBackLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
@@ -20,7 +31,11 @@ import { StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Composer, type ComposerTarget, type Mentionable } from '@/components/chat/composer/Composer';
+import {
+  Composer,
+  type ComposerTarget,
+  type Mentionable,
+} from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
 import { hasMessageMedia, MessageMedia } from '@/components/chat/media/MessageMedia';
 import { stickerDraftOf } from '@/lib/chat/stickerRef';
@@ -100,7 +115,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   // conversation opened; the read receipt below zeroes it straight after.
   const [unreadAnchor, setUnreadAnchor] = useState<string | undefined | null>(null);
   const { items, markRead } = timeline;
-  if (unreadAnchor === null && items.length > 0) setUnreadAnchor(firstUnreadId(items, view?.unreadCount ?? 0));
+  if (unreadAnchor === null && items.length > 0)
+    setUnreadAnchor(firstUnreadId(items, view?.unreadCount ?? 0));
 
   // Whatever is on screen has been read. The SDK sends one receipt per advance
   // and nothing when nothing is new, so this is safe on every change.
@@ -145,7 +161,12 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       .filter((id) => id !== ctx.me)
       .map((id) => {
         const person = ctx.person(id);
-        return { id, label: person?.displayName ?? '', handle: person?.handle, avatar: person?.avatar };
+        return {
+          id,
+          label: person?.displayName ?? '',
+          handle: person?.handle,
+          avatar: person?.avatar,
+        };
       })
       .filter((person) => person.label !== '');
   }, [ctx, isGroup, view?.memberAccountIds]);
@@ -176,7 +197,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       reply: (id) => {
         const source = latest.current.sources.get(id);
         if (!source) return;
-        const who = source.isOwn ? t('chat.you') : (latest.current.ctx.person(source.senderAccountId)?.displayName ?? '');
+        const who = source.isOwn
+          ? t('chat.you')
+          : (latest.current.ctx.person(source.senderAccountId)?.displayName ?? '');
         setTarget({ kind: 'reply', id, title: who, preview: previewText(source, t) });
       },
       edit: (id) => {
@@ -200,7 +223,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         });
       },
       react: (id, emoji) => {
-        react(id, emoji).catch((error: unknown) => logger.warn('[Conversation] reaction failed', error));
+        react(id, emoji).catch((error: unknown) =>
+          logger.warn('[Conversation] reaction failed', error),
+        );
       },
       pin: (id, pinned) => {
         setPinned(id, pinned).catch((error: unknown) => {
@@ -215,7 +240,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         });
       },
       openMedia: (id) => {
-        const item = collectViewerItems(latest.current.items).find((candidate) => candidate.key === id);
+        const item = collectViewerItems(latest.current.items).find(
+          (candidate) => candidate.key === id,
+        );
         if (item) viewer.current?.open(item);
       },
       messageAccount: (accountId) => router.push(`/c/${accountId}`),
@@ -234,7 +261,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       matches.map((row) => {
         const source = sources.get(row.id);
         const content = source?.content;
-        const settled = source !== undefined && source.sendState !== 'pending' && source.sendState !== 'failed';
+        const settled =
+          source !== undefined && source.sendState !== 'pending' && source.sendState !== 'failed';
         return {
           ...row,
           media:
@@ -258,7 +286,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
                 ? ('inset' as const)
                 : undefined,
           onLongPress: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
-          onContextMenu: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
+          onContextMenu:
+            content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
           onToggleReaction: settled ? (emoji: string) => actions.react(row.id, emoji) : undefined,
           onSwipeReply: settled ? () => actions.reply(row.id) : undefined,
         };
@@ -273,7 +302,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     const settled = menuSource.sendState !== 'pending' && menuSource.sendState !== 'failed';
     const entries = [];
     if (settled) entries.push({ id: 'reply', label: t('message.reply'), icon: RiArrowGoBackLine });
-    if (menuSource.content.kind === 'text') entries.push({ id: 'copy', label: t('message.copy'), icon: RiFileCopyLine });
+    if (menuSource.content.kind === 'text')
+      entries.push({ id: 'copy', label: t('message.copy'), icon: RiFileCopyLine });
     if (menuSource.isOwn && settled && menuSource.content.kind === 'text') {
       entries.push({ id: 'edit', label: t('message.edit'), icon: RiPencilLine });
     }
@@ -342,8 +372,14 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     },
     [t],
   );
-  const onSendPoll = useCallback((poll: PollDraft) => sendOne(() => sendPoll(poll)), [sendOne, sendPoll]);
-  const onSendPlace = useCallback((place: PlaceDraft) => sendOne(() => sendLocation(place)), [sendLocation, sendOne]);
+  const onSendPoll = useCallback(
+    (poll: PollDraft) => sendOne(() => sendPoll(poll)),
+    [sendOne, sendPoll],
+  );
+  const onSendPlace = useCallback(
+    (place: PlaceDraft) => sendOne(() => sendLocation(place)),
+    [sendLocation, sendOne],
+  );
   const onSendContact = useCallback(
     (contact: ContactDraft) => sendOne(() => sendContact(contact)),
     [sendContact, sendOne],
@@ -420,14 +456,17 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
               ? t('chat.members', { count: members })
               : // Presence when there is any, the handle when there is not: a
                 // header that says nothing is worse than one that says who.
-                (other ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now }) : undefined) ??
-                (handle ? `@${handle}` : undefined)
+                ((other
+                  ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now })
+                  : undefined) ?? (handle ? `@${handle}` : undefined))
           }
           presence={other ? presenceDot(presence.of(other)) : undefined}
           typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
           connecting={sync === 'offline'}
           connectingLabel={t('chat.connecting')}
-          onPressBack={split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))}
+          onPressBack={
+            split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))
+          }
           backLabel={t('common.back')}
           onPressCall={() => startCall('voice')}
           onPressVideoCall={() => startCall('video')}
@@ -517,7 +556,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             onSendPoll={onSendPoll}
             onSendPlace={onSendPlace}
             onSendContact={onSendContact}
-          onSendSticker={onSendSticker}
+            onSendSticker={onSendSticker}
             onTyping={onTyping}
           />
         </View>
@@ -532,7 +571,10 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         label={t('message.actions')}
         items={menuItems}
         reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
-        selectedReaction={menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))?.key}
+        selectedReaction={
+          menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))
+            ?.key
+        }
         onSelectReaction={(emoji) => {
           if (menuFor) actions.react(menuFor, emoji);
           setMenuFor(null);
@@ -548,7 +590,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           else if (action === 'copy') {
             const source = sources.get(id);
             if (source?.content.kind === 'text') {
-              void Clipboard.setStringAsync(source.content.body).then(() => toast.success(t('message.copied')));
+              void Clipboard.setStringAsync(source.content.body).then(() =>
+                toast.success(t('message.copied')),
+              );
             }
           }
         }}

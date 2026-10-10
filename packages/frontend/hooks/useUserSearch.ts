@@ -92,7 +92,8 @@ export function useUserSearch(): {
     queryFn: async (): Promise<readonly SearchedUser[]> => {
       const response = await oxyServices.users.search(settledTerm, { limit: MAX_RESULTS });
       return response.data.map((profile) => {
-        const handle = profile.username ?? (typeof profile.handle === 'string' ? profile.handle : '');
+        const handle =
+          profile.username ?? (typeof profile.handle === 'string' ? profile.handle : '');
         return {
           id: profile.id,
           displayName: profile.name?.displayName || handle,

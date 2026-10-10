@@ -1,5 +1,5 @@
-import { createPrivateKey } from "crypto";
-import * as z from "zod";
+import { createPrivateKey } from 'crypto';
+import * as z from 'zod';
 
 /**
  * Push notification configuration: the provider credentials, and nothing else.
@@ -25,31 +25,31 @@ import * as z from "zod";
  */
 
 /** Which provider carries a notification. */
-export type PushPlatform = "android" | "ios";
+export type PushPlatform = 'android' | 'ios';
 
-export const PUSH_PLATFORMS: readonly PushPlatform[] = ["android", "ios"];
+export const PUSH_PLATFORMS: readonly PushPlatform[] = ['android', 'ios'];
 
 /** Apple's two front doors. Which one is reached is `ALLO_APNS_ENVIRONMENT`. */
-const APNS_PRODUCTION_HOST = "https://api.push.apple.com";
-const APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com";
+const APNS_PRODUCTION_HOST = 'https://api.push.apple.com';
+const APNS_SANDBOX_HOST = 'https://api.sandbox.push.apple.com';
 
 const emptyAsUndefined = (value: unknown): unknown =>
-  typeof value === "string" && value.trim().length === 0 ? undefined : value;
+  typeof value === 'string' && value.trim().length === 0 ? undefined : value;
 
 const optionalString = (minimumLength = 1) =>
   z.preprocess(emptyAsUndefined, z.string().trim().min(minimumLength).optional());
 
 const apnsEnvironment = z.preprocess(
   emptyAsUndefined,
-  z.enum(["production", "sandbox"]).default("production"),
+  z.enum(['production', 'sandbox']).default('production'),
 );
 
-const FCM_VARIABLES = ["FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT_BASE64"] as const;
+const FCM_VARIABLES = ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT_BASE64'] as const;
 const APNS_VARIABLES = [
-  "ALLO_APNS_KEY_ID",
-  "ALLO_APNS_TEAM_ID",
-  "ALLO_APNS_PRIVATE_KEY_BASE64",
-  "ALLO_APNS_TOPIC",
+  'ALLO_APNS_KEY_ID',
+  'ALLO_APNS_TEAM_ID',
+  'ALLO_APNS_PRIVATE_KEY_BASE64',
+  'ALLO_APNS_TOPIC',
 ] as const;
 
 type ParsedPushEnvironment = Record<string, string | undefined>;
@@ -80,12 +80,12 @@ function buildPushEnvSchema() {
       if (fcmPresent.length > 0 && fcmPresent.length < FCM_VARIABLES.length) {
         const missing = FCM_VARIABLES.filter((key) => !fcmPresent.includes(key));
         context.addIssue({
-          code: "custom",
+          code: 'custom',
           path: [missing[0] ?? FCM_VARIABLES[0]],
           message:
-            `${FCM_VARIABLES.join(" and ")} are both required to enable Android push; ` +
-            `${missing.join(", ")} is missing. Half a configuration is a platform that ` +
-            "looks enabled and delivers nothing",
+            `${FCM_VARIABLES.join(' and ')} are both required to enable Android push; ` +
+            `${missing.join(', ')} is missing. Half a configuration is a platform that ` +
+            'looks enabled and delivers nothing',
         });
       }
 
@@ -93,12 +93,12 @@ function buildPushEnvSchema() {
       if (apnsPresent.length > 0 && apnsPresent.length < APNS_VARIABLES.length) {
         const missing = APNS_VARIABLES.filter((key) => !apnsPresent.includes(key));
         context.addIssue({
-          code: "custom",
+          code: 'custom',
           path: [missing[0] ?? APNS_VARIABLES[0]],
           message:
-            `${APNS_VARIABLES.join(", ")} are all required to enable iOS push; ` +
-            `${missing.join(", ")} is missing. Half a configuration is a platform that ` +
-            "looks enabled and delivers nothing",
+            `${APNS_VARIABLES.join(', ')} are all required to enable iOS push; ` +
+            `${missing.join(', ')} is missing. Half a configuration is a platform that ` +
+            'looks enabled and delivers nothing',
         });
       }
     });
@@ -145,7 +145,7 @@ export interface PushConfig {
 function readApnsPrivateKey(base64Key: string): string {
   let pem: string;
   try {
-    pem = Buffer.from(base64Key, "base64").toString("utf-8");
+    pem = Buffer.from(base64Key, 'base64').toString('utf-8');
   } catch (error) {
     throw new Error(
       `ALLO_APNS_PRIVATE_KEY_BASE64 is not valid base64: ${error instanceof Error ? error.message : String(error)}`,
@@ -157,15 +157,15 @@ function readApnsPrivateKey(base64Key: string): string {
     asymmetricKeyType = createPrivateKey(pem).asymmetricKeyType;
   } catch (error) {
     throw new Error(
-      "ALLO_APNS_PRIVATE_KEY_BASE64 does not decode to a private key PEM. It must be the base64 of " +
+      'ALLO_APNS_PRIVATE_KEY_BASE64 does not decode to a private key PEM. It must be the base64 of ' +
         `the whole .p8 file downloaded from Apple: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
-  if (asymmetricKeyType !== "ec") {
+  if (asymmetricKeyType !== 'ec') {
     throw new Error(
-      `ALLO_APNS_PRIVATE_KEY_BASE64 decodes to a ${asymmetricKeyType ?? "unknown"} key, but APNs ` +
-        "tokens are signed with ES256 and need the elliptic-curve key from the .p8 file",
+      `ALLO_APNS_PRIVATE_KEY_BASE64 decodes to a ${asymmetricKeyType ?? 'unknown'} key, but APNs ` +
+        'tokens are signed with ES256 and need the elliptic-curve key from the .p8 file',
     );
   }
 
@@ -181,8 +181,8 @@ export function loadPushConfig(environment: NodeJS.ProcessEnv = process.env): Pu
           projectId: parsed.FIREBASE_PROJECT_ID,
           serviceAccountJson: Buffer.from(
             parsed.FIREBASE_SERVICE_ACCOUNT_BASE64,
-            "base64",
-          ).toString("utf-8"),
+            'base64',
+          ).toString('utf-8'),
         })
       : undefined;
 
@@ -197,9 +197,7 @@ export function loadPushConfig(environment: NodeJS.ProcessEnv = process.env): Pu
           privateKeyPem: readApnsPrivateKey(parsed.ALLO_APNS_PRIVATE_KEY_BASE64),
           topic: parsed.ALLO_APNS_TOPIC,
           host:
-            parsed.ALLO_APNS_ENVIRONMENT === "sandbox"
-              ? APNS_SANDBOX_HOST
-              : APNS_PRODUCTION_HOST,
+            parsed.ALLO_APNS_ENVIRONMENT === 'sandbox' ? APNS_SANDBOX_HOST : APNS_PRODUCTION_HOST,
         })
       : undefined;
 

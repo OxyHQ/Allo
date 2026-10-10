@@ -4,8 +4,8 @@
  * the caller's batch, so the persisted state and the in-memory one never
  * disagree for longer than one batch commit.
  */
-import type { CryptoEngine, GroupState } from "../crypto/engine";
-import type { InstanceStore, StoreBatch } from "../storage/store";
+import type { CryptoEngine, GroupState } from '../crypto/engine';
+import type { InstanceStore, StoreBatch } from '../storage/store';
 
 export class GroupRegistry {
   private readonly states = new Map<string, GroupState>();
@@ -24,8 +24,8 @@ export class GroupRegistry {
    */
   async load(): Promise<string[]> {
     const undecodable: string[] = [];
-    for (const id of await this.store.listIds("groupState")) {
-      const bytes = await this.store.getBytes("groupState", id);
+    for (const id of await this.store.listIds('groupState')) {
+      const bytes = await this.store.getBytes('groupState', id);
       if (!bytes) continue;
       try {
         this.states.set(id, this.engine.deserializeGroup(bytes));
@@ -50,7 +50,7 @@ export class GroupRegistry {
 
   /** Stages the new state in `batch`; call {@link commitInMemory} once the batch is committed. */
   stage(batch: StoreBatch, conversationId: string, state: GroupState): void {
-    batch.putBytes("groupState", conversationId, this.engine.serializeGroup(state));
+    batch.putBytes('groupState', conversationId, this.engine.serializeGroup(state));
   }
 
   commitInMemory(conversationId: string, state: GroupState): void {
@@ -64,7 +64,7 @@ export class GroupRegistry {
   }
 
   drop(batch: StoreBatch, conversationId: string): void {
-    batch.delete("groupState", conversationId);
+    batch.delete('groupState', conversationId);
     this.states.delete(conversationId);
   }
 }

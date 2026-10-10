@@ -2,8 +2,8 @@
  * In-memory implementations of the host adapters, for tests. `MemoryStorage`
  * exposes its raw bytes so a test can prove what never reaches disk.
  */
-import type { OxySessionAdapter, SecretStore, StorageAdapter, StorageOp } from "../types";
-import { concatBytes } from "../util/bytes";
+import type { OxySessionAdapter, SecretStore, StorageAdapter, StorageOp } from '../types';
+import { concatBytes } from '../util/bytes';
 
 export class MemoryStorage implements StorageAdapter {
   readonly map = new Map<string, Uint8Array>();
@@ -25,7 +25,7 @@ export class MemoryStorage implements StorageAdapter {
   }
   async batch(ops: StorageOp[]): Promise<void> {
     for (const op of ops) {
-      if (op.type === "set") {
+      if (op.type === 'set') {
         this.writes++;
         this.map.set(op.key, new Uint8Array(op.value));
       } else this.map.delete(op.key);
@@ -72,7 +72,7 @@ export class FakeSession implements OxySessionAdapter {
     return `fake-token:${accountId}`;
   }
   static accountFromToken(token: string): string | null {
-    return token.startsWith("fake-token:") ? token.slice("fake-token:".length) : null;
+    return token.startsWith('fake-token:') ? token.slice('fake-token:'.length) : null;
   }
   async getAccessToken(): Promise<string | null> {
     return this.token;

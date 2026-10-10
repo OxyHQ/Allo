@@ -15,15 +15,15 @@ import {
   type SubmitEventRequest,
   type SubmitEventResponse,
   type SyncResponse,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
-import { findMember } from "../../db/platform/conversationRepository";
-import { ackDeliveries, readSyncStream } from "../../db/platform/deliveryRepository";
-import { appendClientEvent, listEvents } from "../../db/platform/eventRepository";
-import { getRealtime } from "../../runtime/realtime";
-import { notFound, validationFailed } from "../../utils/httpErrors";
-import { toConversationEvent } from "./wire";
-import type { Caller } from "./conversationService";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
+import { findMember } from '../../db/platform/conversationRepository';
+import { ackDeliveries, readSyncStream } from '../../db/platform/deliveryRepository';
+import { appendClientEvent, listEvents } from '../../db/platform/eventRepository';
+import { getRealtime } from '../../runtime/realtime';
+import { notFound, validationFailed } from '../../utils/httpErrors';
+import { toConversationEvent } from './wire';
+import type { Caller } from './conversationService';
 
 export async function submitEvent(
   caller: Caller,
@@ -33,10 +33,23 @@ export async function submitEvent(
 ): Promise<SubmitEventResponse> {
   const db = deps.db ?? getDb();
   const appended = await db.transaction((tx) =>
-    appendClientEvent({ conversationId, sender: { instanceId: caller.instanceId, accountId: caller.accountId }, request }, tx),
+    appendClientEvent(
+      {
+        conversationId,
+        sender: { instanceId: caller.instanceId, accountId: caller.accountId },
+        request,
+      },
+      tx,
+    ),
   );
   if (appended.recipients.length > 0) getRealtime().nudge(appended.recipients, { conversationId });
-  return { event: { id: appended.event.id, seq: appended.event.seq, createdAt: appended.event.createdAt.toISOString() } };
+  return {
+    event: {
+      id: appended.event.id,
+      seq: appended.event.seq,
+      createdAt: appended.event.createdAt.toISOString(),
+    },
+  };
 }
 
 export async function listConversationEvents(
@@ -47,7 +60,7 @@ export async function listConversationEvents(
 ): Promise<{ events: ConversationEvent[]; hasMore: boolean }> {
   const db = deps.db ?? getDb();
   const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound("Conversation not found");
+  if (!member) throw notFound('Conversation not found');
   const page = await listEvents(conversationId, query.after, query.limit, db);
   return { events: page.events.map(toConversationEvent), hasMore: page.hasMore };
 }
@@ -57,10 +70,10 @@ function positionOf(cursor: string | undefined): number {
   if (cursor === undefined) return 0;
   try {
     const n = decodeCursor(cursor);
-    if (n > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("cursor out of range");
+    if (n > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError('cursor out of range');
     return Number(n);
   } catch {
-    throw validationFailed("malformed cursor", { path: ["cursor"] });
+    throw validationFailed('malformed cursor', { path: ['cursor'] });
   }
 }
 
@@ -85,6 +98,10 @@ export async function readSync(
   };
 }
 
-export async function ackSync(caller: Caller, cursor: string, deps: { db?: AlloDatabase } = {}): Promise<void> {
+export async function ackSync(
+  caller: Caller,
+  cursor: string,
+  deps: { db?: AlloDatabase } = {},
+): Promise<void> {
   await ackDeliveries(caller.instanceId, positionOf(cursor), deps.db ?? getDb());
 }

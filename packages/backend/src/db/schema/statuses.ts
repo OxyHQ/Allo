@@ -21,15 +21,15 @@
  * `EXPIRY_SWEEP_TARGETS` with a leading index on the column the sweep reads.
  */
 
-import { index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { bytea, createdAt, timestamptz } from "@oxy.so/db";
-import { checkOneOf } from "./columns";
+import { index, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bytea, createdAt, timestamptz } from '@oxy.so/db';
+import { checkOneOf } from './columns';
 
-export const STATUS_STATES = ["live", "deleted"] as const;
+export const STATUS_STATES = ['live', 'deleted'] as const;
 export type StatusState = (typeof STATUS_STATES)[number];
 
 export const statuses = pgTable(
-  "statuses",
+  'statuses',
   {
     id: text().primaryKey(),
     authorAccountId: text().notNull(),
@@ -45,17 +45,20 @@ export const statuses = pgTable(
     signature: text().notNull(),
     /** The author's own idempotency key, so a retried post is the same status. */
     idempotencyKey: text().notNull(),
-    state: text({ enum: STATUS_STATES }).notNull().default("live"),
+    state: text({ enum: STATUS_STATES }).notNull().default('live'),
     createdAt: createdAt(),
     /** 24 hours after it was posted, or sooner if the author deleted it. */
     expiresAt: timestamptz().notNull(),
   },
   (t) => [
-    uniqueIndex("statuses_author_instance_idempotency_key").on(t.authorInstanceId, t.idempotencyKey),
+    uniqueIndex('statuses_author_instance_idempotency_key').on(
+      t.authorInstanceId,
+      t.idempotencyKey,
+    ),
     // The sweep reads this, and the listing filters on it.
-    index("statuses_expires_at_idx").on(t.expiresAt),
-    index("statuses_author_account_id_created_at_idx").on(t.authorAccountId, t.createdAt),
-    checkOneOf("statuses_state_check", t.state, STATUS_STATES),
+    index('statuses_expires_at_idx').on(t.expiresAt),
+    index('statuses_author_account_id_created_at_idx').on(t.authorAccountId, t.createdAt),
+    checkOneOf('statuses_state_check', t.state, STATUS_STATES),
   ],
 );
 
@@ -67,12 +70,12 @@ export const statuses = pgTable(
  * sweep deletes them with the status.
  */
 export const statusKeys = pgTable(
-  "status_keys",
+  'status_keys',
   {
     id: text().primaryKey(),
     statusId: text()
       .notNull()
-      .references(() => statuses.id, { onDelete: "cascade" }),
+      .references(() => statuses.id, { onDelete: 'cascade' }),
     /** The recipient device. */
     instanceId: text().notNull(),
     /** Its account, so an inbox read is one index probe rather than a join through instances. */
@@ -83,9 +86,9 @@ export const statusKeys = pgTable(
     expiresAt: timestamptz().notNull(),
   },
   (t) => [
-    uniqueIndex("status_keys_status_id_instance_id_key").on(t.statusId, t.instanceId),
-    index("status_keys_instance_id_expires_at_idx").on(t.instanceId, t.expiresAt),
-    index("status_keys_expires_at_idx").on(t.expiresAt),
+    uniqueIndex('status_keys_status_id_instance_id_key').on(t.statusId, t.instanceId),
+    index('status_keys_instance_id_expires_at_idx').on(t.instanceId, t.expiresAt),
+    index('status_keys_expires_at_idx').on(t.expiresAt),
   ],
 );
 
@@ -99,21 +102,23 @@ export const statusKeys = pgTable(
  * which of the two the fourth is.
  */
 export const statusViews = pgTable(
-  "status_views",
+  'status_views',
   {
     id: text().primaryKey(),
     statusId: text()
       .notNull()
-      .references(() => statuses.id, { onDelete: "cascade" }),
+      .references(() => statuses.id, { onDelete: 'cascade' }),
     accountId: text().notNull(),
     /** Whether this viewer publishes their name with the view. */
-    published: text({ enum: ["yes", "no"] }).notNull().default("yes"),
+    published: text({ enum: ['yes', 'no'] })
+      .notNull()
+      .default('yes'),
     viewedAt: timestamptz().notNull(),
     expiresAt: timestamptz().notNull(),
   },
   (t) => [
-    uniqueIndex("status_views_status_id_account_id_key").on(t.statusId, t.accountId),
-    index("status_views_expires_at_idx").on(t.expiresAt),
-    checkOneOf("status_views_published_check", t.published, ["yes", "no"] as const),
+    uniqueIndex('status_views_status_id_account_id_key').on(t.statusId, t.accountId),
+    index('status_views_expires_at_idx').on(t.expiresAt),
+    checkOneOf('status_views_published_check', t.published, ['yes', 'no'] as const),
   ],
 );

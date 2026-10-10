@@ -1,5 +1,5 @@
-import type { DirectoryUser } from "@allo/shared-types";
-import type { SearchProfilesResponse, User } from "@oxy.so/core";
+import type { DirectoryUser } from '@allo/shared-types';
+import type { SearchProfilesResponse, User } from '@oxy.so/core';
 
 /**
  * The five Oxy lookups the app makes today, moved behind this backend.
@@ -61,7 +61,7 @@ export interface OxyDirectoryClient {
  * `'thumb'`, and a directory that resolved a different variant than the app
  * asks for would silently double the bytes on every conversation row.
  */
-export const AVATAR_VARIANT = "thumb";
+export const AVATAR_VARIANT = 'thumb';
 
 export interface OxyDirectoryService {
   profileByUsername(username: string): Promise<DirectoryUser>;
@@ -92,14 +92,14 @@ function trimToUndefined(value: string | null | undefined): string | undefined {
 export function toDirectoryUser(user: User, client: OxyDirectoryClient): DirectoryUser {
   const avatar = trimToUndefined(user.avatar);
   const displayName =
-    trimToUndefined(user.name?.displayName) ?? trimToUndefined(user.username) ?? "Unknown";
+    trimToUndefined(user.name?.displayName) ?? trimToUndefined(user.username) ?? 'Unknown';
 
   return {
     id: user.id,
     username: user.username,
     displayName,
-    firstName: trimToUndefined(user.name?.first) ?? "",
-    lastName: trimToUndefined(user.name?.last) ?? "",
+    firstName: trimToUndefined(user.name?.first) ?? '',
+    lastName: trimToUndefined(user.name?.last) ?? '',
     ...(avatar === undefined
       ? {}
       : { avatar, avatarUrl: client.assets.publicUrl(avatar, AVATAR_VARIANT) }),

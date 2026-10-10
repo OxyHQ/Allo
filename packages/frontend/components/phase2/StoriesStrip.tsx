@@ -33,10 +33,16 @@ export function StoriesStrip({ ownAccountId, onStoryPress, onOwnPress }: Stories
   const { t } = useTranslation();
   const statuses = useStatuses();
   const authors = useMemo(() => statusAuthors(statuses.all), [statuses.all]);
-  const others = useMemo(() => authors.filter((author) => author.accountId !== ownAccountId), [authors, ownAccountId]);
+  const others = useMemo(
+    () => authors.filter((author) => author.accountId !== ownAccountId),
+    [authors, ownAccountId],
+  );
 
   const accountIds = useMemo(
-    () => (ownAccountId ? [...others.map((a) => a.accountId), ownAccountId] : others.map((a) => a.accountId)),
+    () =>
+      ownAccountId
+        ? [...others.map((a) => a.accountId), ownAccountId]
+        : others.map((a) => a.accountId),
     [others, ownAccountId],
   );
   const { person } = useChatContext(accountIds);

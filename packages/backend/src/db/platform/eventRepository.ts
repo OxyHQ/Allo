@@ -32,14 +32,14 @@
  * explicitly.
  */
 
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import { SERVER_SENDER_ID, type ControlEvent, type SubmitEventRequest } from "@allo/shared-types";
-import { AlloHttpError, forbidden, notFound, validationFailed } from "../../utils/httpErrors";
-import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
-import { conversationEvents, type EventKind } from "../schema/events";
-import { retainBlobs } from "./blobRepository";
+import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import { SERVER_SENDER_ID, type ControlEvent, type SubmitEventRequest } from '@allo/shared-types';
+import { AlloHttpError, forbidden, notFound, validationFailed } from '../../utils/httpErrors';
+import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
+import { conversationEvents, type EventKind } from '../schema/events';
+import { retainBlobs } from './blobRepository';
 import {
   findAddableInstances,
   findMember,
@@ -53,9 +53,9 @@ import {
   upsertLeaf,
   type ConversationRow,
   type LeafRow,
-} from "./conversationRepository";
-import { insertDeliveries } from "./deliveryRepository";
-import { upsertGroupInfo } from "./groupInfoRepository";
+} from './conversationRepository';
+import { insertDeliveries } from './deliveryRepository';
+import { upsertGroupInfo } from './groupInfoRepository';
 
 export type EventRow = typeof conversationEvents.$inferSelect;
 
@@ -107,7 +107,7 @@ async function insertEvent(input: InsertEventInput, tx: AlloTransaction): Promis
 }
 
 function activeLeaves(leaves: readonly LeafRow[]): LeafRow[] {
-  return leaves.filter((leaf) => leaf.state === "active");
+  return leaves.filter((leaf) => leaf.state === 'active');
 }
 
 /**
@@ -122,12 +122,12 @@ export async function appendClientEvent(
   const { conversationId, sender, request } = input;
 
   const conversation = await lockConversation(conversationId, tx);
-  if (!conversation) throw notFound("Conversation not found");
+  if (!conversation) throw notFound('Conversation not found');
 
   // Is the caller anybody here at all? A stranger learns nothing, not even
   // that the conversation exists.
   const member = await findMember(conversationId, sender.accountId, tx);
-  if (!member) throw notFound("Conversation not found");
+  if (!member) throw notFound('Conversation not found');
 
   // Replay: the same (instance, key) with the same body is the same event.
   const [existing] = await tx
@@ -141,46 +141,56 @@ export async function appendClientEvent(
     )
     .limit(1);
   if (existing) {
-    const payload = Buffer.from(request.payload, "base64");
+    const payload = Buffer.from(request.payload, 'base64');
     const same =
       existing.conversationId === conversationId &&
       existing.kind === request.kind &&
       existing.epoch === request.epoch &&
       Buffer.compare(existing.payload, payload) === 0;
     if (!same) {
-      throw new AlloHttpError("idempotency_conflict", "This idempotency key was used with a different body");
+      throw new AlloHttpError(
+        'idempotency_conflict',
+        'This idempotency key was used with a different body',
+      );
     }
-    return { event: { id: existing.id, seq: existing.seq, createdAt: existing.createdAt }, replayed: true, recipients: [] };
+    return {
+      event: { id: existing.id, seq: existing.seq, createdAt: existing.createdAt },
+      replayed: true,
+      recipients: [],
+    };
   }
 
   const leaves = await listLeaves(conversationId, tx);
   const senderLeaf = leaves.find((leaf) => leaf.instanceId === sender.instanceId);
   // Who may append depends on how a commit was authored (module comment);
   // everything that is not an external commit needs an active leaf.
-  const commitKind = request.kind === "mls_commit" ? (request.commit?.kind ?? "member") : "member";
-  if (commitKind === "external") {
+  const commitKind = request.kind === 'mls_commit' ? (request.commit?.kind ?? 'member') : 'member';
+  if (commitKind === 'external') {
     // The sender has no leaf yet; its account's `joined` row is the admission.
     // A `left` or `removed` account is not re-admitted by its own hand.
-    if (member.state !== "joined") throw forbidden("This account is no longer a member of the conversation");
-  } else if (commitKind === "resync") {
+    if (member.state !== 'joined')
+      throw forbidden('This account is no longer a member of the conversation');
+  } else if (commitKind === 'resync') {
     // A resync replaces the sender's own leaf, so it must hold one: active, or
     // `removed` with no epoch (a server-side removal no commit has confirmed).
-    if (member.state !== "joined") throw forbidden("This account is no longer a member of the conversation");
+    if (member.state !== 'joined')
+      throw forbidden('This account is no longer a member of the conversation');
     const holdsLeaf =
       senderLeaf !== undefined &&
-      (senderLeaf.state === "active" || (senderLeaf.state === "removed" && senderLeaf.removedEpoch === null));
-    if (!holdsLeaf) throw forbidden("This instance holds no leaf in the conversation to resync");
-  } else if (!senderLeaf || senderLeaf.state !== "active") {
-    throw forbidden("This instance holds no active leaf in the conversation");
+      (senderLeaf.state === 'active' ||
+        (senderLeaf.state === 'removed' && senderLeaf.removedEpoch === null));
+    if (!holdsLeaf) throw forbidden('This instance holds no leaf in the conversation to resync');
+  } else if (!senderLeaf || senderLeaf.state !== 'active') {
+    throw forbidden('This instance holds no active leaf in the conversation');
   }
 
   if (request.epoch !== conversation.currentEpoch) {
-    throw new AlloHttpError("epoch_conflict", "The event is at a stale epoch", {
+    throw new AlloHttpError('epoch_conflict', 'The event is at a stale epoch', {
       currentEpoch: conversation.currentEpoch,
     });
   }
 
-  const payload = Buffer.from(request.payload, "base64");
+  const payload = Buffer.from(request.payload, 'base64');
   const blobIds = request.blobIds ?? [];
   // Every leaf active at THIS epoch, minus the sender. For a commit that is
   // exactly who must learn the epoch moved — the leaves it removes included.
@@ -191,7 +201,7 @@ export async function appendClientEvent(
   let seq = conversation.lastSeq + 1;
   let epoch = conversation.currentEpoch;
 
-  if (request.kind !== "mls_commit") {
+  if (request.kind !== 'mls_commit') {
     const event = await insertEvent(
       {
         conversationId,
@@ -209,34 +219,48 @@ export async function appendClientEvent(
     await insertDeliveries({ eventId: event.id, conversationId, instanceIds: recipients }, tx);
     await retainBlobs(blobIds, tx);
     await updateConversationCounters(conversationId, { currentEpoch: epoch, lastSeq: seq }, tx);
-    return { event: { id: event.id, seq, createdAt: event.createdAt }, replayed: false, recipients };
+    return {
+      event: { id: event.id, seq, createdAt: event.createdAt },
+      replayed: false,
+      recipients,
+    };
   }
 
   // --- mls_commit ------------------------------------------------------------
   const commit = request.commit;
-  if (!commit) throw validationFailed("an mls_commit carries commit info"); // the schema already refuses this
+  if (!commit) throw validationFailed('an mls_commit carries commit info'); // the schema already refuses this
   const newEpoch = commit.newEpoch;
   const members = await listMembers(conversationId, tx);
-  const joined = new Set(members.filter((m) => m.state === "joined").map((m) => m.accountId));
+  const joined = new Set(members.filter((m) => m.state === 'joined').map((m) => m.accountId));
 
   // A self-join (external or resync) adds exactly the sender and, for a
   // resync, removes exactly the sender. The schema fixed the COUNTS; only the
   // server knows who signed the request, so WHO is checked here and is not
   // trusted to the schema either: a joiner naming any other instance — even
   // another of its own account — is refused.
-  const selfJoin = commit.kind === "external" || commit.kind === "resync";
+  const selfJoin = commit.kind === 'external' || commit.kind === 'resync';
   if (selfJoin) {
     const [added] = commit.addedLeaves;
-    if (commit.addedLeaves.length !== 1 || added.instanceId !== sender.instanceId || added.accountId !== sender.accountId) {
-      throw validationFailed(`a ${commit.kind} commit adds exactly the sender's own leaf`, { instanceId: sender.instanceId });
+    if (
+      commit.addedLeaves.length !== 1 ||
+      added.instanceId !== sender.instanceId ||
+      added.accountId !== sender.accountId
+    ) {
+      throw validationFailed(`a ${commit.kind} commit adds exactly the sender's own leaf`, {
+        instanceId: sender.instanceId,
+      });
     }
-    if (commit.welcome !== undefined) throw validationFailed(`a ${commit.kind} commit carries no welcome`);
-    const expectedRemoved = commit.kind === "resync" ? [sender.instanceId] : [];
-    if (commit.removedLeaves.length !== expectedRemoved.length || commit.removedLeaves.some((id, i) => id !== expectedRemoved[i])) {
+    if (commit.welcome !== undefined)
+      throw validationFailed(`a ${commit.kind} commit carries no welcome`);
+    const expectedRemoved = commit.kind === 'resync' ? [sender.instanceId] : [];
+    if (
+      commit.removedLeaves.length !== expectedRemoved.length ||
+      commit.removedLeaves.some((id, i) => id !== expectedRemoved[i])
+    ) {
       throw validationFailed(
-        commit.kind === "resync"
+        commit.kind === 'resync'
           ? "a resync commit removes exactly the sender's own former leaf"
-          : "an external commit removes no leaf",
+          : 'an external commit removes no leaf',
         { instanceId: sender.instanceId },
       );
     }
@@ -244,38 +268,48 @@ export async function appendClientEvent(
 
   // Added leaves: real, active instances of the account the commit names.
   const addedIds = commit.addedLeaves.map((leaf) => leaf.instanceId);
-  if (new Set(addedIds).size !== addedIds.length) throw validationFailed("an instance is added twice");
-  const addable = new Map((await findAddableInstances(addedIds, tx)).map((row) => [row.id, row.accountId]));
+  if (new Set(addedIds).size !== addedIds.length)
+    throw validationFailed('an instance is added twice');
+  const addable = new Map(
+    (await findAddableInstances(addedIds, tx)).map((row) => [row.id, row.accountId]),
+  );
   for (const added of commit.addedLeaves) {
     const accountId = addable.get(added.instanceId);
     if (accountId === undefined) {
-      throw validationFailed("an added instance does not exist or is not active", { instanceId: added.instanceId });
+      throw validationFailed('an added instance does not exist or is not active', {
+        instanceId: added.instanceId,
+      });
     }
     if (accountId !== added.accountId) {
-      throw validationFailed("an added instance belongs to another account", { instanceId: added.instanceId });
+      throw validationFailed('an added instance belongs to another account', {
+        instanceId: added.instanceId,
+      });
     }
     const current = leaves.find((leaf) => leaf.instanceId === added.instanceId);
     // A resync names the sender's own live leaf on both sides: a replace, not a
     // second leaf. Every other kind must not add a leaf that already exists.
-    if (current?.state === "active" && commit.kind !== "resync") {
-      throw validationFailed("an added instance already holds an active leaf", { instanceId: added.instanceId });
+    if (current?.state === 'active' && commit.kind !== 'resync') {
+      throw validationFailed('an added instance already holds an active leaf', {
+        instanceId: added.instanceId,
+      });
     }
     // A DM has exactly two accounts; a group may grow, and any member may grow it.
-    if (conversation.kind === "dm" && !joined.has(added.accountId)) {
-      throw forbidden("a dm cannot gain a third account");
+    if (conversation.kind === 'dm' && !joined.has(added.accountId)) {
+      throw forbidden('a dm cannot gain a third account');
     }
   }
 
   // Removed leaves: present, and either the sender's own account or removed by an owner/admin.
   // A resync's removed leaf is the sender's own, replaced by the upsert below
   // rather than marked removed after it; it is not a removal.
-  const mayRemoveOthers = member.role === "owner" || member.role === "admin";
+  const mayRemoveOthers = member.role === 'owner' || member.role === 'admin';
   const removedLeaves: LeafRow[] = [];
-  for (const instanceId of commit.kind === "resync" ? [] : commit.removedLeaves) {
+  for (const instanceId of commit.kind === 'resync' ? [] : commit.removedLeaves) {
     const leaf = leaves.find((l) => l.instanceId === instanceId);
-    const removable = leaf && (leaf.state === "active" || (leaf.state === "removed" && leaf.removedEpoch === null));
+    const removable =
+      leaf && (leaf.state === 'active' || (leaf.state === 'removed' && leaf.removedEpoch === null));
     if (!removable) {
-      throw validationFailed("a removed instance holds no leaf to remove", { instanceId });
+      throw validationFailed('a removed instance holds no leaf to remove', { instanceId });
     }
     if (leaf.accountId !== sender.accountId && !mayRemoveOthers) {
       throw forbidden("only an owner or admin may remove another account's instance");
@@ -289,7 +323,9 @@ export async function appendClientEvent(
     const added = new Set(addedIds);
     for (const recipient of welcome.recipients) {
       if (!added.has(recipient)) {
-        throw validationFailed("a welcome recipient is not an added leaf", { instanceId: recipient });
+        throw validationFailed('a welcome recipient is not an added leaf', {
+          instanceId: recipient,
+        });
       }
     }
   }
@@ -299,7 +335,7 @@ export async function appendClientEvent(
     {
       conversationId,
       seq,
-      kind: "mls_commit",
+      kind: 'mls_commit',
       epoch,
       senderAccountId: sender.accountId,
       senderInstanceId: sender.instanceId,
@@ -324,13 +360,18 @@ export async function appendClientEvent(
         // without welcoming it leaves it pending, which a later commit can fix.
         // A self-join has no welcome and needs none: the joiner holds the new
         // state already, so its leaf is active at `newEpoch` at once.
-        state: selfJoin || welcomed.has(added.instanceId) ? "active" : "pending_welcome",
+        state: selfJoin || welcomed.has(added.instanceId) ? 'active' : 'pending_welcome',
         addedEpoch: newEpoch,
       },
       tx,
     );
     await upsertJoinedMember(
-      { conversationId, accountId: added.accountId, role: "member", addedByAccountId: sender.accountId },
+      {
+        conversationId,
+        accountId: added.accountId,
+        role: 'member',
+        addedByAccountId: sender.accountId,
+      },
       tx,
     );
   }
@@ -350,7 +391,7 @@ export async function appendClientEvent(
     await setMemberState(
       conversationId,
       leaf.accountId,
-      leaf.accountId === sender.accountId ? "left" : "removed",
+      leaf.accountId === sender.accountId ? 'left' : 'removed',
       tx,
     );
   }
@@ -363,18 +404,21 @@ export async function appendClientEvent(
       {
         conversationId,
         seq,
-        kind: "mls_welcome",
+        kind: 'mls_welcome',
         epoch: newEpoch,
         senderAccountId: sender.accountId,
         senderInstanceId: sender.instanceId,
         idempotencyKey: null,
-        payload: Buffer.from(welcome.payload, "base64"),
+        payload: Buffer.from(welcome.payload, 'base64'),
         blobIds: [],
       },
       tx,
     );
     welcomeRecipients = [...welcomed];
-    await insertDeliveries({ eventId: welcomeEvent.id, conversationId, instanceIds: welcomeRecipients }, tx);
+    await insertDeliveries(
+      { eventId: welcomeEvent.id, conversationId, instanceIds: welcomeRecipients },
+      tx,
+    );
   }
 
   await updateConversationCounters(conversationId, { currentEpoch: epoch, lastSeq: seq }, tx);
@@ -382,7 +426,12 @@ export async function appendClientEvent(
   // state. Same transaction as the commit: accepted-but-unjoinable is not a
   // state the conversation can be in.
   await upsertGroupInfo(
-    { conversationId, epoch: newEpoch, signerInstanceId: sender.instanceId, data: Buffer.from(commit.groupInfo, "base64") },
+    {
+      conversationId,
+      epoch: newEpoch,
+      signerInstanceId: sender.instanceId,
+      data: Buffer.from(commit.groupInfo, 'base64'),
+    },
     tx,
   );
   return {
@@ -402,7 +451,7 @@ export async function appendControlEvent(
 ): Promise<AppendedEvent> {
   const tx = requireTransaction(db, `appendControlEvent(${input.conversationId})`);
   const conversation = await lockConversation(input.conversationId, tx);
-  if (!conversation) throw notFound("Conversation not found");
+  if (!conversation) throw notFound('Conversation not found');
   const excluded = new Set(input.excludeInstanceIds ?? []);
   const recipients = activeLeaves(await listLeaves(input.conversationId, tx))
     .map((leaf) => leaf.instanceId)
@@ -412,17 +461,20 @@ export async function appendControlEvent(
     {
       conversationId: input.conversationId,
       seq,
-      kind: "control",
+      kind: 'control',
       epoch: conversation.currentEpoch,
       senderAccountId: SERVER_SENDER_ID,
       senderInstanceId: null,
       idempotencyKey: null,
-      payload: Buffer.from(JSON.stringify(input.control), "utf8"),
+      payload: Buffer.from(JSON.stringify(input.control), 'utf8'),
       blobIds: [],
     },
     tx,
   );
-  await insertDeliveries({ eventId: event.id, conversationId: input.conversationId, instanceIds: recipients }, tx);
+  await insertDeliveries(
+    { eventId: event.id, conversationId: input.conversationId, instanceIds: recipients },
+    tx,
+  );
   await updateConversationCounters(
     input.conversationId,
     { currentEpoch: conversation.currentEpoch, lastSeq: seq },
@@ -445,7 +497,9 @@ export async function listEvents(
   const rows = await db
     .select(EVENT_COLUMNS)
     .from(conversationEvents)
-    .where(and(eq(conversationEvents.conversationId, conversationId), gt(conversationEvents.seq, after)))
+    .where(
+      and(eq(conversationEvents.conversationId, conversationId), gt(conversationEvents.seq, after)),
+    )
     .orderBy(asc(conversationEvents.seq))
     .limit(limit + 1);
   return { events: rows.slice(0, limit), hasMore: rows.length > limit };
@@ -456,7 +510,10 @@ export async function findEventsByIds(
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<EventReadRow[]> {
   if (ids.length === 0) return [];
-  return db.select(EVENT_COLUMNS).from(conversationEvents).where(inArray(conversationEvents.id, [...ids]));
+  return db
+    .select(EVENT_COLUMNS)
+    .from(conversationEvents)
+    .where(inArray(conversationEvents.id, [...ids]));
 }
 
 export type { ConversationRow };

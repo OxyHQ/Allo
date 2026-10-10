@@ -1,6 +1,13 @@
 import { useConversationActions, useSyncState } from '@allo/react';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
-import { ChatFolderTabs, ChatList, ChatSearchField, ChatSearchResults, NewChatButton, type ChatSummary } from '@oxy.so/bloom/chat-list';
+import {
+  ChatFolderTabs,
+  ChatList,
+  ChatSearchField,
+  ChatSearchResults,
+  NewChatButton,
+  type ChatSummary,
+} from '@oxy.so/bloom/chat-list';
 import { PageAction } from '@/components/shell/PageAction';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
@@ -59,14 +66,30 @@ export function ConversationList() {
   const chats = useMemo<ChatSummary[]>(
     () =>
       summaries
-        .filter((chat) => (folder === 'unread' ? (chat.unreadCount ?? 0) > 0 : folder === 'groups' ? chat.kind === 'group' : true))
+        .filter((chat) =>
+          folder === 'unread'
+            ? (chat.unreadCount ?? 0) > 0
+            : folder === 'groups'
+              ? chat.kind === 'group'
+              : true,
+        )
         .map((chat) => ({
           ...chat,
           swipeActions: {
             right: [
               chat.kind === 'group'
-                ? { key: LEAVE, label: t('chat.leave.action'), icon: RiLogoutBoxRLine, tone: 'negative' as const }
-                : { key: DELETE, label: t('chat.delete.action'), icon: RiDeleteBinLine, tone: 'negative' as const },
+                ? {
+                    key: LEAVE,
+                    label: t('chat.leave.action'),
+                    icon: RiLogoutBoxRLine,
+                    tone: 'negative' as const,
+                  }
+                : {
+                    key: DELETE,
+                    label: t('chat.delete.action'),
+                    icon: RiDeleteBinLine,
+                    tone: 'negative' as const,
+                  },
             ],
           },
         })),
@@ -75,7 +98,10 @@ export function ConversationList() {
 
   /** Only offered once there is something to filter: two rows need no folders. */
   const folders = useMemo(() => {
-    const unread = summaries.reduce((total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0), 0);
+    const unread = summaries.reduce(
+      (total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0),
+      0,
+    );
     const groups = summaries.filter((chat) => chat.kind === 'group').length;
     if (summaries.length < 5 && unread === 0) return [];
     return [
@@ -150,21 +176,47 @@ export function ConversationList() {
 
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
   const me = user?.id;
-  const openStory = useCallback((accountId: string) => router.push(`/updates?story=${accountId}`), [router]);
+  const openStory = useCallback(
+    (accountId: string) => router.push(`/updates?story=${accountId}`),
+    [router],
+  );
   const openUpdates = useCallback(() => router.push('/updates'), [router]);
 
   return (
     <View style={styles.root}>
-      <PageHeader title={t('chat.title')} safeArea={!split} leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />} />
+      <PageHeader
+        title={t('chat.title')}
+        safeArea={!split}
+        leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
+      />
       <View style={styles.search}>
-        <ChatSearchField value={query} onChangeText={setQuery} onClear={() => setQuery('')} placeholder={t('chat.search.placeholder')} />
+        <ChatSearchField
+          value={query}
+          onChangeText={setQuery}
+          onClear={() => setQuery('')}
+          placeholder={t('chat.search.placeholder')}
+        />
       </View>
       {folders.length > 0 && (
-        <ChatFolderTabs folders={folders} value={folder} onValueChange={setFolder} accessibilityLabel={t('chat.folder.label')} divider />
+        <ChatFolderTabs
+          folders={folders}
+          value={folder}
+          onValueChange={setFolder}
+          accessibilityLabel={t('chat.folder.label')}
+          divider
+        />
       )}
       <HistoryTransferBanner />
-      {sync === 'offline' && <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>{t('chat.sync.offline')}</Text>}
-      <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {sync === 'offline' && (
+        <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>
+          {t('chat.sync.offline')}
+        </Text>
+      )}
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         {searching ? (
           <ChatSearchResults
             query={query}
@@ -176,7 +228,9 @@ export function ConversationList() {
           <ChatList
             chats={chats}
             // Where Bloom's own list puts the stories row.
-            header={<StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />}
+            header={
+              <StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />
+            }
             selectedId={selectedId}
             loading={summaries.length === 0 && sync === 'syncing'}
             onChatPress={open}
@@ -184,12 +238,18 @@ export function ConversationList() {
               if (action === LEAVE) void confirmLeave(id);
               if (action === DELETE) void confirmDelete(id);
             }}
-            labels={{ emptyTitle: t('chat.empty.title'), emptyDescription: t('chat.empty.description') }}
+            labels={{
+              emptyTitle: t('chat.empty.title'),
+              emptyDescription: t('chat.empty.description'),
+            }}
           />
         )}
       </ScrollView>
       <PageAction>
-        <NewChatButton accessibilityLabel={t('chat.new.title')} onPress={() => router.push('/new')} />
+        <NewChatButton
+          accessibilityLabel={t('chat.new.title')}
+          onPress={() => router.push('/new')}
+        />
       </PageAction>
     </View>
   );

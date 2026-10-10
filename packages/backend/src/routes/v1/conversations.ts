@@ -1,12 +1,12 @@
-import { Router, type RequestHandler } from "express";
+import { Router, type RequestHandler } from 'express';
 import {
   conversationIdSchema,
   createConversationRequestSchema,
   putGroupInfoRequestSchema,
   resetConversationRequestSchema,
-} from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
-import { getRealtime } from "../../runtime/realtime";
+} from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
+import { getRealtime } from '../../runtime/realtime';
 import {
   createConversation,
   getConversation,
@@ -14,10 +14,10 @@ import {
   listConversations,
   resetConversation,
   type Caller,
-} from "../../services/platform/conversationService";
-import { getGroupInfo, putGroupInfo } from "../../services/platform/groupInfoService";
-import { asyncRoute } from "./asyncRoute";
-import { parseBody, parseParam } from "./validate";
+} from '../../services/platform/conversationService';
+import { getGroupInfo, putGroupInfo } from '../../services/platform/groupInfoService';
+import { asyncRoute } from './asyncRoute';
+import { parseBody, parseParam } from './validate';
 
 export function callerOf(req: Parameters<typeof getRequiredInstance>[0]): Caller {
   const me = getRequiredInstance(req);
@@ -26,29 +26,32 @@ export function callerOf(req: Parameters<typeof getRequiredInstance>[0]): Caller
 
 export function createConversationRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
-  router.use("/conversations", deps.instanceAuth);
+  router.use('/conversations', deps.instanceAuth);
 
   router.post(
-    "/conversations",
+    '/conversations',
     asyncRoute(async (req, res) => {
       const body = parseBody(createConversationRequestSchema, req);
       const result = await createConversation(callerOf(req), body);
-      if (result.nudges.length > 0) getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
-      res.status(result.created ? 201 : 200).json({ conversation: result.conversation, created: result.created });
+      if (result.nudges.length > 0)
+        getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
+      res
+        .status(result.created ? 201 : 200)
+        .json({ conversation: result.conversation, created: result.created });
     }),
   );
 
   router.get(
-    "/conversations",
+    '/conversations',
     asyncRoute(async (req, res) => {
       res.json({ conversations: await listConversations(callerOf(req)) });
     }),
   );
 
   router.get(
-    "/conversations/:id",
+    '/conversations/:id',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       res.json({ conversation: await getConversation(callerOf(req), id) });
     }),
   );
@@ -60,20 +63,21 @@ export function createConversationRoutes(deps: { instanceAuth: RequestHandler })
    * conversation.
    */
   router.post(
-    "/conversations/:id/reset",
+    '/conversations/:id/reset',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       const body = parseBody(resetConversationRequestSchema, req);
       const result = await resetConversation(callerOf(req), id, body);
-      if (result.nudges.length > 0) getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
+      if (result.nudges.length > 0)
+        getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
       res.json({ conversation: result.conversation });
     }),
   );
 
   router.post(
-    "/conversations/:id/leave",
+    '/conversations/:id/leave',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       await leaveConversation(callerOf(req), id);
       res.status(204).end();
     }),
@@ -85,17 +89,17 @@ export function createConversationRoutes(deps: { instanceAuth: RequestHandler })
    * material the server stores and never parses.
    */
   router.get(
-    "/conversations/:id/group-info",
+    '/conversations/:id/group-info',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       res.json(await getGroupInfo(callerOf(req), id));
     }),
   );
 
   router.put(
-    "/conversations/:id/group-info",
+    '/conversations/:id/group-info',
     asyncRoute(async (req, res) => {
-      const id = parseParam(conversationIdSchema, req.params.id, "id");
+      const id = parseParam(conversationIdSchema, req.params.id, 'id');
       const body = parseBody(putGroupInfoRequestSchema, req);
       res.json(await putGroupInfo(callerOf(req), id, body));
     }),

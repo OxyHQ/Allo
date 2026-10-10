@@ -47,7 +47,10 @@ export function alloPlatform(os: string = Platform.OS): AlloPlatform {
  * the platform otherwise: a browser has no name, and "Web" is what a person
  * approving it from their phone expects to read.
  */
-export function deviceDisplayName(os: string = Platform.OS, deviceName: string | null | undefined = Constants.deviceName): string {
+export function deviceDisplayName(
+  os: string = Platform.OS,
+  deviceName: string | null | undefined = Constants.deviceName,
+): string {
   const trimmed = deviceName?.trim();
   if (trimmed) return trimmed;
   switch (os) {

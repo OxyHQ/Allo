@@ -3,13 +3,13 @@
  * The server checks only size and digest; the key travels inside a `media`
  * app message the server cannot read.
  */
-import { z } from "zod";
-import { blobIdSchema, nonNegativeIntSchema } from "./common";
+import { z } from 'zod';
+import { blobIdSchema, nonNegativeIntSchema } from './common';
 
 /** Request header on `POST /v1/blobs`: lowercase hex SHA-256 of the body. */
-export const BLOB_SHA256_HEADER = "x-allo-blob-sha256";
+export const BLOB_SHA256_HEADER = 'x-allo-blob-sha256';
 
-export const BLOB_CONTENT_TYPE = "application/octet-stream";
+export const BLOB_CONTENT_TYPE = 'application/octet-stream';
 
 export const DEFAULT_MAX_BLOB_BYTES = 25 * 1024 * 1024;
 

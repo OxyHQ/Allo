@@ -6,12 +6,12 @@
  * cannot both decide a call was missed and both write a log for it.
  */
 
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import type { CallEndReason, CallMode } from "@allo/shared-types";
-import { requireTransaction } from "../moderation/transactionGuard";
-import type { AlloDatabaseOrTransaction } from "../index";
-import { callParticipants, calls, type CallParticipantState } from "../schema/calls";
+import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import type { CallEndReason, CallMode } from '@allo/shared-types';
+import { requireTransaction } from '../moderation/transactionGuard';
+import type { AlloDatabaseOrTransaction } from '../index';
+import { callParticipants, calls, type CallParticipantState } from '../schema/calls';
 
 export type CallRow = typeof calls.$inferSelect;
 export type CallParticipantRow = typeof callParticipants.$inferSelect;
@@ -29,8 +29,11 @@ export interface InsertCallInput {
   expiresAt: Date;
 }
 
-export async function insertCall(input: InsertCallInput, db: AlloDatabaseOrTransaction): Promise<CallRow> {
-  requireTransaction(db, "insertCall");
+export async function insertCall(
+  input: InsertCallInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<CallRow> {
+  requireTransaction(db, 'insertCall');
   const [row] = await db.insert(calls).values(input).returning();
   return row;
 }
@@ -42,8 +45,11 @@ export interface InsertParticipantInput {
   expiresAt: Date;
 }
 
-export async function insertParticipants(rows: readonly InsertParticipantInput[], db: AlloDatabaseOrTransaction): Promise<void> {
-  requireTransaction(db, "insertParticipants");
+export async function insertParticipants(
+  rows: readonly InsertParticipantInput[],
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  requireTransaction(db, 'insertParticipants');
   if (rows.length === 0) return;
   await db
     .insert(callParticipants)
@@ -51,7 +57,10 @@ export async function insertParticipants(rows: readonly InsertParticipantInput[]
     .onConflictDoNothing({ target: [callParticipants.callId, callParticipants.instanceId] });
 }
 
-export async function findCallById(id: string, db: AlloDatabaseOrTransaction): Promise<CallRow | null> {
+export async function findCallById(
+  id: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<CallRow | null> {
   const [row] = await db.select().from(calls).where(eq(calls.id, id)).limit(1);
   return row ?? null;
 }
@@ -64,12 +73,20 @@ export async function findCallByIdempotencyKey(
   const [row] = await db
     .select()
     .from(calls)
-    .where(and(eq(calls.initiatorInstanceId, initiatorInstanceId), eq(calls.idempotencyKey, idempotencyKey)))
+    .where(
+      and(
+        eq(calls.initiatorInstanceId, initiatorInstanceId),
+        eq(calls.idempotencyKey, idempotencyKey),
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
 
-export async function listParticipants(callId: string, db: AlloDatabaseOrTransaction): Promise<CallParticipantRow[]> {
+export async function listParticipants(
+  callId: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<CallParticipantRow[]> {
   return db.select().from(callParticipants).where(eq(callParticipants.callId, callId));
 }
 
@@ -97,8 +114,8 @@ export async function setParticipantState(
     .update(callParticipants)
     .set({
       state,
-      ...(state === "joined" ? { joinedAt: at } : {}),
-      ...(state === "left" || state === "declined" || state === "missed" ? { leftAt: at } : {}),
+      ...(state === 'joined' ? { joinedAt: at } : {}),
+      ...(state === 'left' || state === 'declined' || state === 'missed' ? { leftAt: at } : {}),
     })
     .where(and(eq(callParticipants.callId, callId), eq(callParticipants.instanceId, instanceId)));
 }
@@ -123,9 +140,13 @@ export async function settleRingingParticipants(
     .where(
       and(
         eq(callParticipants.callId, callId),
-        eq(callParticipants.state, "ringing"),
-        scope.exceptInstanceId === undefined ? undefined : sql`${callParticipants.instanceId} <> ${scope.exceptInstanceId}`,
-        scope.onlyAccountId === undefined ? undefined : eq(callParticipants.accountId, scope.onlyAccountId),
+        eq(callParticipants.state, 'ringing'),
+        scope.exceptInstanceId === undefined
+          ? undefined
+          : sql`${callParticipants.instanceId} <> ${scope.exceptInstanceId}`,
+        scope.onlyAccountId === undefined
+          ? undefined
+          : eq(callParticipants.accountId, scope.onlyAccountId),
       ),
     );
 }
@@ -135,11 +156,15 @@ export async function settleRingingParticipants(
  * the transition. A second device answering a hundred milliseconds later gets
  * `null` and is told who won.
  */
-export async function claimAnswer(callId: string, at: Date, db: AlloDatabaseOrTransaction): Promise<CallRow | null> {
+export async function claimAnswer(
+  callId: string,
+  at: Date,
+  db: AlloDatabaseOrTransaction,
+): Promise<CallRow | null> {
   const [row] = await db
     .update(calls)
-    .set({ state: "active", answeredAt: at, ringExpiresAt: null })
-    .where(and(eq(calls.id, callId), eq(calls.state, "ringing")))
+    .set({ state: 'active', answeredAt: at, ringExpiresAt: null })
+    .where(and(eq(calls.id, callId), eq(calls.state, 'ringing')))
     .returning();
   return row ?? null;
 }
@@ -153,7 +178,7 @@ export async function claimEnd(
 ): Promise<CallRow | null> {
   const [row] = await db
     .update(calls)
-    .set({ state: "ended", endedAt: at, endReason: reason, ringExpiresAt: null, expiresAt: at })
+    .set({ state: 'ended', endedAt: at, endReason: reason, ringExpiresAt: null, expiresAt: at })
     .where(and(eq(calls.id, callId), sql`${calls.state} <> 'ended'`))
     .returning();
   return row ?? null;
@@ -168,15 +193,19 @@ export async function claimEnd(
  * and writes. Finding first and updating second would have both of them ring
  * off the same call.
  */
-export async function claimExpiredRings(now: Date, limit: number, db: AlloDatabaseOrTransaction): Promise<CallRow[]> {
+export async function claimExpiredRings(
+  now: Date,
+  limit: number,
+  db: AlloDatabaseOrTransaction,
+): Promise<CallRow[]> {
   const due = db
     .select({ id: calls.id })
     .from(calls)
-    .where(and(eq(calls.state, "ringing"), lte(calls.ringExpiresAt, now)))
+    .where(and(eq(calls.state, 'ringing'), lte(calls.ringExpiresAt, now)))
     .limit(limit);
   return db
     .update(calls)
-    .set({ state: "ended", endedAt: now, endReason: "missed", ringExpiresAt: null, expiresAt: now })
+    .set({ state: 'ended', endedAt: now, endReason: 'missed', ringExpiresAt: null, expiresAt: now })
     .where(inArray(calls.id, due))
     .returning();
 }

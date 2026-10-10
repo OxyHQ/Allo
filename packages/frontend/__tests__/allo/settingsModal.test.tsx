@@ -16,7 +16,9 @@ jest.mock('@oxy.so/bloom/settings-modal', () => ({
     return null;
   },
 }));
-jest.mock('@oxy.so/bloom/toast', () => ({ toast: { error: (...args: unknown[]) => mockToast(...args) } }));
+jest.mock('@oxy.so/bloom/toast', () => ({
+  toast: { error: (...args: unknown[]) => mockToast(...args) },
+}));
 jest.mock('@/components/settings/GeneralSettings', () => ({ GeneralSettings: () => null }));
 jest.mock('@/components/settings/pages/appearance', () => () => null);
 jest.mock('@/components/settings/pages/language', () => () => null);
@@ -60,7 +62,9 @@ describe('Allo settings modal', () => {
 
   it('commits the compact destination before every open, including reopening the same page', () => {
     const observed: Array<[string | undefined, string | undefined]> = [];
-    mockControl.open.mockImplementation(() => observed.push([mockModal.page, mockModal.initialView]));
+    mockControl.open.mockImplementation(() =>
+      observed.push([mockModal.page, mockModal.initialView]),
+    );
     act(() => settings.open());
     act(() => settings.open('appearance'));
     act(() => settings.close());

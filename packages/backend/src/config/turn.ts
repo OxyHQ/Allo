@@ -26,7 +26,7 @@
  * development looks like.
  */
 
-import { createHmac } from "node:crypto";
+import { createHmac } from 'node:crypto';
 
 export interface TurnConfig {
   /** `turn:` and `turns:` URLs, in the order a client should try them. */
@@ -45,7 +45,7 @@ export interface IceConfig {
 export const DEFAULT_TURN_TTL_SECONDS = 3600;
 
 /** Google's public STUN, which is what every WebRTC example uses and costs nothing. */
-const DEFAULT_STUN = ["stun:stun.l.google.com:19302"] as const;
+const DEFAULT_STUN = ['stun:stun.l.google.com:19302'] as const;
 
 /**
  * Read once at boot, so a half-configured relay fails the boot rather than
@@ -53,26 +53,30 @@ const DEFAULT_STUN = ["stun:stun.l.google.com:19302"] as const;
  * somebody meant to finish.
  */
 export function readIceConfig(env: NodeJS.ProcessEnv = process.env): IceConfig {
-  const urls = (env.TURN_URLS ?? "")
-    .split(",")
+  const urls = (env.TURN_URLS ?? '')
+    .split(',')
     .map((url) => url.trim())
     .filter((url) => url.length > 0);
-  const secret = (env.TURN_SHARED_SECRET ?? "").trim();
-  const stunUrls = (env.STUN_URLS ?? "")
-    .split(",")
+  const secret = (env.TURN_SHARED_SECRET ?? '').trim();
+  const stunUrls = (env.STUN_URLS ?? '')
+    .split(',')
     .map((url) => url.trim())
     .filter((url) => url.length > 0);
 
   if (urls.length > 0 && secret.length === 0) {
-    throw new Error("TURN_URLS is set without TURN_SHARED_SECRET: the relay would refuse every credential");
+    throw new Error(
+      'TURN_URLS is set without TURN_SHARED_SECRET: the relay would refuse every credential',
+    );
   }
   if (urls.length === 0 && secret.length > 0) {
-    throw new Error("TURN_SHARED_SECRET is set without TURN_URLS: there is no relay to use it with");
+    throw new Error(
+      'TURN_SHARED_SECRET is set without TURN_URLS: there is no relay to use it with',
+    );
   }
 
   const ttl = Number(env.TURN_TTL_SECONDS ?? DEFAULT_TURN_TTL_SECONDS);
   if (!Number.isFinite(ttl) || ttl < 60 || ttl > 86_400) {
-    throw new Error("TURN_TTL_SECONDS must be between 60 and 86400");
+    throw new Error('TURN_TTL_SECONDS must be between 60 and 86400');
   }
 
   return {
@@ -88,9 +92,13 @@ export interface IceCredential {
 }
 
 /** One short-lived credential for one account. The relay verifies it with the shared secret alone. */
-export function mintTurnCredential(turn: TurnConfig, accountId: string, now = new Date()): IceCredential {
+export function mintTurnCredential(
+  turn: TurnConfig,
+  accountId: string,
+  now = new Date(),
+): IceCredential {
   const expiry = Math.floor(now.getTime() / 1000) + turn.ttlSeconds;
   const username = `${expiry}:${accountId}`;
-  const credential = createHmac("sha1", turn.secret).update(username).digest("base64");
+  const credential = createHmac('sha1', turn.secret).update(username).digest('base64');
   return { username, credential, expiresAt: new Date(expiry * 1000) };
 }

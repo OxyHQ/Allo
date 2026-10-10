@@ -1,7 +1,14 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import type { ContactCardView, MediaView, PlaceView, PollView, StickerView, TimelineContent } from '@allo/core';
+import type {
+  ContactCardView,
+  MediaView,
+  PlaceView,
+  PollView,
+  StickerView,
+  TimelineContent,
+} from '@allo/core';
 import {
   ContactMessage,
   FileMessage,
@@ -101,7 +108,9 @@ const STICKER_SIZE = 144;
 function StickerBubble({ sticker: ref, tone }: { sticker: StickerView; tone: MessageTone }) {
   const { t } = useTranslation();
   const { data: sticker, isLoading } = useSticker(ref.stickerId);
-  const label = ref.emoji ? `${ref.emoji} ${t('chat.attachment.sticker')}` : t('chat.attachment.sticker');
+  const label = ref.emoji
+    ? `${ref.emoji} ${t('chat.attachment.sticker')}`
+    : t('chat.attachment.sticker');
 
   if (isLoading) return <View style={{ width: STICKER_SIZE, height: STICKER_SIZE }} />;
   if (!isSentSticker(sticker, ref)) {
@@ -147,7 +156,15 @@ function Attachment({ media, tone, onOpen }: MediaProps) {
  * An ANONYMOUS poll still counts: the SDK folds the votes and withholds only
  * the names, so the bars are as true as any other poll's.
  */
-function Poll({ poll, tone, onVote }: { poll: PollView; tone: MessageTone; onVote?: (ids: string[]) => void }) {
+function Poll({
+  poll,
+  tone,
+  onVote,
+}: {
+  poll: PollView;
+  tone: MessageTone;
+  onVote?: (ids: string[]) => void;
+}) {
   const { t } = useTranslation();
   return (
     <PollMessage
@@ -269,7 +286,9 @@ function VisualMedia({ media, tone, onOpen }: MediaProps) {
   if (media.mime === 'image/gif') {
     return <GifMessage tone={tone} source={uri} aspectRatio={aspectRatio} onPress={onOpen} />;
   }
-  return <ImageMessage tone={tone} source={uri} aspectRatio={aspectRatio} onPress={() => onOpen()} />;
+  return (
+    <ImageMessage tone={tone} source={uri} aspectRatio={aspectRatio} onPress={() => onOpen()} />
+  );
 }
 
 /** A flat bar: the waveform is not part of the message, and inventing one would be decoration posing as data. */
@@ -306,7 +325,8 @@ function AudioMedia({ media, tone }: Omit<MediaProps, 'onOpen'>) {
     player.play();
   }, [player, status.playing, status.didJustFinish, uri]);
 
-  const duration = status.isLoaded && status.duration > 0 ? status.duration : (media.durationMs ?? 0) / 1000;
+  const duration =
+    status.isLoaded && status.duration > 0 ? status.duration : (media.durationMs ?? 0) / 1000;
 
   return (
     <VoiceMessage
@@ -334,7 +354,9 @@ function FileMedia({ media, tone }: Omit<MediaProps, 'onOpen'>) {
         .then((outcome) => {
           if (outcome === 'unavailable') toast.error(t('media.shareUnavailable'));
         })
-        .catch((shareError: unknown) => logger.warn('[media] a file could not be shared', shareError));
+        .catch((shareError: unknown) =>
+          logger.warn('[media] a file could not be shared', shareError),
+        );
     },
     [media.filename, media.mime, t],
   );

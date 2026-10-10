@@ -22,8 +22,8 @@
  * to scrape.
  */
 
-import type http from "node:http";
-import { Server as SocketIOServer, type Namespace, type Socket } from "socket.io";
+import type http from 'node:http';
+import { Server as SocketIOServer, type Namespace, type Socket } from 'socket.io';
 import {
   EMPTY_BODY_SHA256_HEX,
   SOCKET_NAMESPACE,
@@ -32,13 +32,17 @@ import {
   typingEventSchema,
   type ClientToServerEvents,
   type ServerToClientEvents,
-} from "@allo/shared-types";
-import { findActiveLeaf, listLeaves } from "../db/platform/conversationRepository";
-import { authenticateInstance, type AuthenticatedInstance, type InstanceAuthDeps } from "../middleware/instanceAuth";
-import { logger } from "../utils/logger";
-import { APP_ORIGINS } from "../app";
-import { PresenceHub } from "./presenceHub";
-import type { Realtime } from "./realtime";
+} from '@allo/shared-types';
+import { findActiveLeaf, listLeaves } from '../db/platform/conversationRepository';
+import {
+  authenticateInstance,
+  type AuthenticatedInstance,
+  type InstanceAuthDeps,
+} from '../middleware/instanceAuth';
+import { logger } from '../utils/logger';
+import { APP_ORIGINS } from '../app';
+import { PresenceHub } from './presenceHub';
+import type { Realtime } from './realtime';
 
 export interface SocketAuthProvider {
   readonly middleware: {
@@ -51,18 +55,28 @@ interface SocketData {
   instance?: AuthenticatedInstance;
 }
 
-type V1Socket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
-type V1Namespace = Namespace<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+type V1Socket = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  Record<string, never>,
+  SocketData
+>;
+type V1Namespace = Namespace<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  Record<string, never>,
+  SocketData
+>;
 
 export const instanceRoom = (instanceId: string) => `instance:${instanceId}`;
 export const accountRoom = (accountId: string) => `account:${accountId}`;
 
 /** Where `oxy.middleware.socket()` leaves the account id. */
 function oxyUserIdOf(socket: V1Socket): string | null {
-  const user = Reflect.get(socket, "user") as { id?: unknown } | undefined;
-  if (typeof user?.id === "string" && user.id) return user.id;
+  const user = Reflect.get(socket, 'user') as { id?: unknown } | undefined;
+  if (typeof user?.id === 'string' && user.id) return user.id;
   const fromData = socket.data.userId;
-  return typeof fromData === "string" && fromData ? fromData : null;
+  return typeof fromData === 'string' && fromData ? fromData : null;
 }
 
 export interface SocketServerDeps {
@@ -82,12 +96,15 @@ export interface SocketRuntime {
 export function createSocketServer(server: http.Server, deps: SocketServerDeps): SocketRuntime {
   const origins = new Set(deps.appOrigins ?? APP_ORIGINS);
   const io = new SocketIOServer(server, {
-    path: "/socket.io",
-    transports: ["websocket", "polling"],
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
     maxHttpBufferSize: 64 * 1024,
     cors: {
       origin: (origin, callback) => {
-        callback(null, !origin || origins.has(origin) || /^https:\/\/([a-z0-9-]+\.)*oxy\.so$/i.test(origin));
+        callback(
+          null,
+          !origin || origins.has(origin) || /^https:\/\/([a-z0-9-]+\.)*oxy\.so$/i.test(origin),
+        );
       },
       credentials: true,
     },
@@ -101,16 +118,16 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
   namespace.use((socket, next) => {
     void (async () => {
       const accountId = oxyUserIdOf(socket);
-      if (!accountId) throw new Error("unauthorized");
+      if (!accountId) throw new Error('unauthorized');
       const auth = socketAuthSchema.safeParse(socket.handshake.auth);
-      if (!auth.success) throw new Error("unauthorized");
+      if (!auth.success) throw new Error('unauthorized');
       socket.data.instance = await authenticateInstance(
         {
           accountId,
           instanceId: auth.data.instanceId,
           timestamp: auth.data.timestamp,
           signature: auth.data.signature,
-          method: "GET",
+          method: 'GET',
           pathWithQuery: SOCKET_SIGNING_PATH,
           bodySha256Hex: EMPTY_BODY_SHA256_HEX,
           // A pending instance is admitted so it can hear `instance.approved`;
@@ -124,7 +141,10 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
       () => next(),
       (error: unknown) => {
         // The code, never the reason: a handshake error reaches the client.
-        const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "unauthorized";
+        const code =
+          typeof error === 'object' && error !== null && 'code' in error
+            ? String(error.code)
+            : 'unauthorized';
         next(new Error(code));
       },
     );
@@ -132,31 +152,31 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
 
   const realtime: Realtime = {
     nudge(instanceIds, event) {
-      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("sync.nudge", event);
+      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit('sync.nudge', event);
     },
     instanceApproved(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("instance.approved", event);
+      namespace.to(instanceRoom(instanceId)).emit('instance.approved', event);
     },
     instanceRevoked(accountId, event) {
-      namespace.to(accountRoom(accountId)).emit("instance.revoked", event);
+      namespace.to(accountRoom(accountId)).emit('instance.revoked', event);
     },
     keyPackagesLow(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("keypackages.low", event);
+      namespace.to(instanceRoom(instanceId)).emit('keypackages.low', event);
     },
     historyOffer(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("history.offer", event);
+      namespace.to(instanceRoom(instanceId)).emit('history.offer', event);
     },
     statusPosted(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("status.posted", event);
+      namespace.to(instanceRoom(instanceId)).emit('status.posted', event);
     },
     callIncoming(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("call.incoming", event);
+      namespace.to(instanceRoom(instanceId)).emit('call.incoming', event);
     },
     callUpdated(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit("call.updated", event);
+      namespace.to(instanceRoom(instanceId)).emit('call.updated', event);
     },
     typing(instanceIds, event) {
-      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit("typing", event);
+      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit('typing', event);
     },
     async isInstanceConnected(instanceId) {
       const sockets = await namespace.in(instanceRoom(instanceId)).fetchSockets();
@@ -170,31 +190,39 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
   const presence = new PresenceHub();
   presence.start();
 
-  namespace.on("connection", (socket) => {
+  namespace.on('connection', (socket) => {
     const instance = socket.data.instance;
     if (!instance) {
       socket.disconnect(true);
       return;
     }
     void socket.join([instanceRoom(instance.id), accountRoom(instance.accountId)]);
-    void presence.attach(socket, instance).catch((error: unknown) => logger.debug("presence attach failed", error));
+    void presence
+      .attach(socket, instance)
+      .catch((error: unknown) => logger.debug('presence attach failed', error));
 
-    socket.on("typing", (payload) => {
+    socket.on('typing', (payload) => {
       void relayTyping(instance, payload, realtime).catch((error: unknown) => {
-        logger.debug("typing relay failed", error);
+        logger.debug('typing relay failed', error);
       });
     });
 
-    socket.on("presence.watch", (payload) => {
-      void presence.watch(socket, payload).catch((error: unknown) => logger.debug("presence watch failed", error));
+    socket.on('presence.watch', (payload) => {
+      void presence
+        .watch(socket, payload)
+        .catch((error: unknown) => logger.debug('presence watch failed', error));
     });
 
-    socket.on("presence.heartbeat", () => {
-      void presence.heartbeat(instance).catch((error: unknown) => logger.debug("presence heartbeat failed", error));
+    socket.on('presence.heartbeat', () => {
+      void presence
+        .heartbeat(instance)
+        .catch((error: unknown) => logger.debug('presence heartbeat failed', error));
     });
 
-    socket.on("disconnect", () => {
-      void presence.detach(socket, instance).catch((error: unknown) => logger.debug("presence detach failed", error));
+    socket.on('disconnect', () => {
+      void presence
+        .detach(socket, instance)
+        .catch((error: unknown) => logger.debug('presence detach failed', error));
     });
   });
 
@@ -202,13 +230,17 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
 }
 
 /** Verify the sender holds an active leaf, then re-emit to the other active leaves. Never stored. */
-export async function relayTyping(sender: AuthenticatedInstance, payload: unknown, realtime: Realtime): Promise<void> {
+export async function relayTyping(
+  sender: AuthenticatedInstance,
+  payload: unknown,
+  realtime: Realtime,
+): Promise<void> {
   const parsed = typingEventSchema.safeParse(payload);
   if (!parsed.success) return;
   const mine = await findActiveLeaf(parsed.data.conversationId, sender.id);
   if (!mine) return;
   const others = (await listLeaves(parsed.data.conversationId))
-    .filter((leaf) => leaf.state === "active" && leaf.instanceId !== sender.id)
+    .filter((leaf) => leaf.state === 'active' && leaf.instanceId !== sender.id)
     .map((leaf) => leaf.instanceId);
   realtime.typing(others, parsed.data);
 }

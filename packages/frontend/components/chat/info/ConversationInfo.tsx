@@ -67,7 +67,12 @@ interface ConversationInfoProps {
  * endpoint; and nothing here claims what the platform does not have — no calls,
  * no per-conversation mute, no disappearing messages.
  */
-export function ConversationInfo({ conversationId, variant, onClose, onSearch }: ConversationInfoProps) {
+export function ConversationInfo({
+  conversationId,
+  variant,
+  onClose,
+  onSearch,
+}: ConversationInfoProps) {
   const router = useRouter();
   const theme = useTheme();
   const { t } = useTranslation();
@@ -158,7 +163,9 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
     const answer = await askDeleteConversation({
       title: t('chat.delete.title'),
       description: t('chat.delete.confirm'),
-      alsoForThemLabel: t('chat.delete.alsoFor', { name: conversationTitle(view, ctx) || t('chat.someone') }),
+      alsoForThemLabel: t('chat.delete.alsoFor', {
+        name: conversationTitle(view, ctx) || t('chat.someone'),
+      }),
       confirmLabel: t('chat.delete.action'),
       cancelLabel: t('common.cancel'),
     });
@@ -220,9 +227,18 @@ export function ConversationInfo({ conversationId, variant, onClose, onSearch }:
 
   const actions: ChatInfoAction[] = [
     ...(other
-      ? [{ key: 'profile', label: t('chat.info.profile'), icon: RiUserLine, onPress: () => openProfile(other) }]
+      ? [
+          {
+            key: 'profile',
+            label: t('chat.info.profile'),
+            icon: RiUserLine,
+            onPress: () => openProfile(other),
+          },
+        ]
       : []),
-    ...(onSearch ? [{ key: 'search', label: t('chat.info.search'), icon: RiSearchLine, onPress: onSearch }] : []),
+    ...(onSearch
+      ? [{ key: 'search', label: t('chat.info.search'), icon: RiSearchLine, onPress: onSearch }]
+      : []),
     ...(canManage
       ? [
           {

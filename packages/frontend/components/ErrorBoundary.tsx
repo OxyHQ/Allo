@@ -1,6 +1,9 @@
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
-import { ErrorBoundary as BloomErrorBoundary, type ErrorBoundaryFallbackContext } from '@oxy.so/bloom/error-boundary';
+import {
+  ErrorBoundary as BloomErrorBoundary,
+  type ErrorBoundaryFallbackContext,
+} from '@oxy.so/bloom/error-boundary';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
 import { useTheme } from '@oxy.so/bloom/theme';
@@ -28,10 +31,19 @@ interface ErrorBoundaryProps {
 /** Retries after which the same failure is assumed to be persistent and a reload is offered. */
 const RELOAD_AFTER_RETRIES = 2;
 
-export default function ErrorBoundary({ children, fallback, onError, showDetails = false }: ErrorBoundaryProps) {
+export default function ErrorBoundary({
+  children,
+  fallback,
+  onError,
+  showDetails = false,
+}: ErrorBoundaryProps) {
   const handleError = useCallback(
     (error: Error, errorInfo: ErrorInfo) => {
-      logger.error('[ErrorBoundary] Caught error', { error: error.toString(), stack: error.stack, componentStack: errorInfo.componentStack });
+      logger.error('[ErrorBoundary] Caught error', {
+        error: error.toString(),
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+      });
       onError?.(error, errorInfo);
     },
     [onError],
@@ -39,7 +51,12 @@ export default function ErrorBoundary({ children, fallback, onError, showDetails
 
   return (
     <BloomErrorBoundary
-      fallback={fallback ?? ((context: ErrorBoundaryFallbackContext) => <AppCrashFallback {...context} showDetails={showDetails} />)}
+      fallback={
+        fallback ??
+        ((context: ErrorBoundaryFallbackContext) => (
+          <AppCrashFallback {...context} showDetails={showDetails} />
+        ))
+      }
       onError={handleError}
     >
       {children}
@@ -48,7 +65,13 @@ export default function ErrorBoundary({ children, fallback, onError, showDetails
 }
 
 /** A component rather than an inline render: the boundary is a class, and the fallback needs hooks. */
-function AppCrashFallback({ error, errorInfo, retry, retryCount, showDetails }: ErrorBoundaryFallbackContext & { showDetails: boolean }) {
+function AppCrashFallback({
+  error,
+  errorInfo,
+  retry,
+  retryCount,
+  showDetails,
+}: ErrorBoundaryFallbackContext & { showDetails: boolean }) {
   const { t } = useTranslation();
   const theme = useTheme();
   const canReload = Platform.OS === 'web' && retryCount >= RELOAD_AFTER_RETRIES;
@@ -60,21 +83,28 @@ function AppCrashFallback({ error, errorInfo, retry, retryCount, showDetails }: 
         <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
           {t('error.boundary.title')}
         </Text>
-        <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+        <Text
+          variant="body-regular"
+          style={[styles.centered, { color: theme.colors.textSecondary }]}
+        >
           {t('error.boundary.message')}
         </Text>
         <View style={styles.actions}>
           <Button onPress={retry}>{t('error.boundary.retry')}</Button>
           {canReload ? (
-            <Button  onPress={() => window.location.reload()} tone="neutral" appearance="outline">
+            <Button onPress={() => window.location.reload()} tone="neutral" appearance="outline">
               {t('error.boundary.reload')}
             </Button>
           ) : null}
         </View>
         {__DEV__ || showDetails ? (
-          <Card  style={styles.details} appearance="subtle">
+          <Card style={styles.details} appearance="subtle">
             <ScrollView>
-              <Text variant="caption-1-regular" selectable style={{ color: theme.colors.textSecondary }}>
+              <Text
+                variant="caption-1-regular"
+                selectable
+                style={{ color: theme.colors.textSecondary }}
+              >
                 {error.toString()}
                 {errorInfo?.componentStack ?? ''}
               </Text>
@@ -94,7 +124,13 @@ function AppCrashFallback({ error, errorInfo, retry, retryCount, showDetails }: 
  * navigation and every other panel down with it. `featureName` is what the
  * reader sees, so name the surface and not the module.
  */
-export function FeatureErrorBoundary({ children, featureName }: { children: ReactNode; featureName: string }) {
+export function FeatureErrorBoundary({
+  children,
+  featureName,
+}: {
+  children: ReactNode;
+  featureName: string;
+}) {
   const { t } = useTranslation();
   return (
     <BloomErrorBoundary

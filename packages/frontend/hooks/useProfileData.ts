@@ -57,8 +57,7 @@ const PROFILE_STALE_TIME_MS = 5 * 60 * 1000;
 function computeDesign(profile: User, appearance: UserAppearance | undefined): ProfileDesign {
   const customization = appearance?.profileCustomization;
   return {
-    displayName:
-      customization?.displayName || profile.name?.displayName || profile.username || '',
+    displayName: customization?.displayName || profile.name?.displayName || profile.username || '',
     coverImage: customization?.coverImage || appearance?.profileHeaderImage,
     avatar: profile.avatar ?? undefined,
     coverPhotoEnabled: customization?.coverPhotoEnabled ?? true,
@@ -89,9 +88,7 @@ export function useProfileData(username?: string): {
   const profile = query.data;
   const userId = profile?.id;
 
-  const appearance = useAppearanceStore((state) =>
-    userId ? state.byUserId[userId] : undefined,
-  );
+  const appearance = useAppearanceStore((state) => (userId ? state.byUserId[userId] : undefined));
   const loadForUser = useAppearanceStore((state) => state.loadForUser);
 
   /**

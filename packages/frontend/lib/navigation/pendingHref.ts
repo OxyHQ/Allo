@@ -59,7 +59,10 @@ export function hrefFromUrl(url: string | null | undefined): string | null {
   // The fragment never names a route.
   pathAndQuery = pathAndQuery.split('#')[0];
   const queryAt = pathAndQuery.indexOf('?');
-  const pathname = (queryAt === -1 ? pathAndQuery : pathAndQuery.slice(0, queryAt)).replace(/\/+$/, '');
+  const pathname = (queryAt === -1 ? pathAndQuery : pathAndQuery.slice(0, queryAt)).replace(
+    /\/+$/,
+    '',
+  );
   const search = queryAt === -1 ? '' : pathAndQuery.slice(queryAt);
 
   // `//host` would be read as another origin by anything that resolves it.

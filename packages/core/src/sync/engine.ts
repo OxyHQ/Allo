@@ -8,19 +8,23 @@
  * `/v1/conversations/:id/events?after=`. Queued (future-epoch) events are
  * replayed after every commit or join.
  */
-import { listEventsResponseSchema, syncResponseSchema, type ConversationEvent } from "@allo/shared-types";
-import type { Context } from "../context";
-import { InstanceNotActiveError, TransportError } from "../errors";
-import type { SyncState } from "../types";
-import { describeError } from "../util/logger";
-import { deferred } from "../util/async";
-import { Dispatcher } from "./dispatch";
+import {
+  listEventsResponseSchema,
+  syncResponseSchema,
+  type ConversationEvent,
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { InstanceNotActiveError, TransportError } from '../errors';
+import type { SyncState } from '../types';
+import { describeError } from '../util/logger';
+import { deferred } from '../util/async';
+import { Dispatcher } from './dispatch';
 
 const PAGE = 200;
 
 export class SyncEngine {
   private readonly dispatcher: Dispatcher;
-  private stateValue: SyncState = "idle";
+  private stateValue: SyncState = 'idle';
   private running: Promise<void> | null = null;
   private dirty = false;
   private waiters: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
@@ -85,8 +89,8 @@ export class SyncEngine {
       } while (this.dirty && !this.stopped);
     } catch (error) {
       failure = error;
-      this.setState(error instanceof TransportError && error.isNetwork ? "offline" : "error");
-      this.ctx.log.warn?.("sync failed", { error: describeError(error) });
+      this.setState(error instanceof TransportError && error.isNetwork ? 'offline' : 'error');
+      this.ctx.log.warn?.('sync failed', { error: describeError(error) });
       if (!(error instanceof InstanceNotActiveError)) this.ctx.emitter.emitError(error);
     } finally {
       this.running = null;
@@ -98,13 +102,13 @@ export class SyncEngine {
   private async runOnce(): Promise<void> {
     const { ctx } = this;
     if (!ctx.instance.isActive) {
-      this.setState("idle");
+      this.setState('idle');
       return;
     }
-    this.setState("syncing");
+    this.setState('syncing');
     for (;;) {
       const page = await ctx.http.request({
-        method: "GET",
+        method: 'GET',
         path: `/v1/sync?cursor=${encodeURIComponent(ctx.model.cursor)}&limit=${PAGE}`,
         schema: syncResponseSchema,
         signer: ctx.signer,
@@ -115,12 +119,17 @@ export class SyncEngine {
         if (outcome.epochAdvanced) await this.replayQueued(delivery.conversationId);
       }
       if (page.deliveries.length > 0) {
-        await ctx.http.request({ method: "POST", path: "/v1/sync/ack", body: { cursor: page.nextCursor }, signer: ctx.signer });
+        await ctx.http.request({
+          method: 'POST',
+          path: '/v1/sync/ack',
+          body: { cursor: page.nextCursor },
+          signer: ctx.signer,
+        });
       }
       if (!page.hasMore) break;
     }
     await this.afterSync();
-    this.setState(ctx.realtime?.connected ? "live" : "idle");
+    this.setState(ctx.realtime?.connected ? 'live' : 'idle');
   }
 
   private async afterSync(): Promise<void> {
@@ -132,7 +141,7 @@ export class SyncEngine {
         this.instancesStale = false;
         this.lastInstanceRefresh = ctx.now();
       } catch (error) {
-        ctx.log.debug?.("instance refresh failed", { error: describeError(error) });
+        ctx.log.debug?.('instance refresh failed', { error: describeError(error) });
       }
     }
     await ctx.conversations.reconcile();
@@ -151,14 +160,14 @@ export class SyncEngine {
     let after = conv.lastSeq;
     for (;;) {
       const page = await ctx.http.request({
-        method: "GET",
+        method: 'GET',
         path: `/v1/conversations/${event.conversationId}/events?after=${after}&limit=${PAGE}`,
         schema: listEventsResponseSchema,
         signer: ctx.signer,
       });
       for (const e of page.events) {
         if (e.seq >= event.seq) return;
-        if (e.kind === "mls_welcome") continue; // not addressed to us, or we are already in
+        if (e.kind === 'mls_welcome') continue; // not addressed to us, or we are already in
         const outcome = await this.dispatcher.dispatch(e, null);
         if (outcome.epochAdvanced) await this.replayQueued(e.conversationId);
         after = e.seq;
@@ -185,6 +194,6 @@ export class SyncEngine {
   setState(state: SyncState): void {
     if (this.stateValue === state) return;
     this.stateValue = state;
-    this.ctx.emitter.emit("sync");
+    this.ctx.emitter.emit('sync');
   }
 }

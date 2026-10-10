@@ -2,10 +2,10 @@ import {
   crowdSourceForOxyService,
   resetCrowdSourceForOxyService,
   type CrowdSource,
-} from "@crowdsource.you/core";
+} from '@crowdsource.you/core';
 
-import { crowdSourceConfig } from "../../config/crowdsource";
-import { logger } from "../../utils/logger";
+import { crowdSourceConfig } from '../../config/crowdsource';
+import { logger } from '../../utils/logger';
 
 /**
  * Allo's CrowdSource client, which is now one library call plus the base URL.

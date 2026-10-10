@@ -110,9 +110,7 @@ export function handleFromProfileSegment(
  */
 const PROFILE_PATHNAME = /^(?:\/\([^)/]*\))*\/@([^/?#]+)$/;
 
-export function profileHandleFromPathname(
-  pathname: string | null | undefined,
-): string | null {
+export function profileHandleFromPathname(pathname: string | null | undefined): string | null {
   if (typeof pathname !== 'string') return null;
   const match = PROFILE_PATHNAME.exec(pathname);
   if (match === null) return null;

@@ -17,16 +17,16 @@
  * `oxyUserId`), so the route emits the row's real `id` and invents no alias.
  */
 
-import express from "express";
-import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { connectPostgres, closePostgres, getDb } from "../../db";
-import * as schema from "../../db/schema";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import profileSettingsRouter from "../../routes/profileSettings";
+import express from 'express';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { connectPostgres, closePostgres, getDb } from '../../db';
+import * as schema from '../../db/schema';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
+import profileSettingsRouter from '../../routes/profileSettings';
 
-const USER = "oxy-user-settings-owner";
+const USER = 'oxy-user-settings-owner';
 
 let handle: TestDatabaseHandle;
 
@@ -35,12 +35,12 @@ function appWithAuth(): express.Express {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    const userId = req.get("x-test-user") ?? USER;
-    Reflect.set(req, "userId", userId);
-    Reflect.set(req, "user", { id: userId });
+    const userId = req.get('x-test-user') ?? USER;
+    Reflect.set(req, 'userId', userId);
+    Reflect.set(req, 'user', { id: userId });
     next();
   });
-  app.use("/api/profile", profileSettingsRouter);
+  app.use('/api/profile', profileSettingsRouter);
   return app;
 }
 
@@ -48,7 +48,7 @@ function appWithAuth(): express.Express {
 let counter = 0;
 function id(prefix: string): string {
   counter += 1;
-  return `${prefix}-${String(counter).padStart(4, "0")}`;
+  return `${prefix}-${String(counter).padStart(4, '0')}`;
 }
 
 beforeAll(async () => {
@@ -61,12 +61,12 @@ afterAll(async () => {
   await handle?.drop();
 });
 
-describe("GET /api/profile/settings/me", () => {
-  it("creates a row of pure defaults and serves it in the nested shape clients read", async () => {
-    const user = id("fresh-user");
+describe('GET /api/profile/settings/me', () => {
+  it('creates a row of pure defaults and serves it in the nested shape clients read', async () => {
+    const user = id('fresh-user');
     const response = await request(appWithAuth())
-      .get("/api/profile/settings/me")
-      .set("x-test-user", user);
+      .get('/api/profile/settings/me')
+      .set('x-test-user', user);
 
     expect(response.status).toBe(200);
     const doc = response.body.data;
@@ -75,10 +75,10 @@ describe("GET /api/profile/settings/me", () => {
     // pass while the other three were missing entirely, which is the failure
     // this file exists to catch.
     expect(doc.oxyUserId).toBe(user);
-    expect(typeof doc.id).toBe("string");
-    expect(doc.appearance).toEqual({ themeMode: "system" });
+    expect(typeof doc.id).toBe('string');
+    expect(doc.appearance).toEqual({ themeMode: 'system' });
     expect(doc.privacy).toEqual({
-      profileVisibility: "public",
+      profileVisibility: 'public',
       showContactInfo: true,
       allowTags: true,
       allowallos: true,
@@ -100,31 +100,31 @@ describe("GET /api/profile/settings/me", () => {
       encryptionEnabled: true,
       peerToPeerEnabled: true,
     });
-    expect(typeof doc.createdAt).toBe("string");
-    expect(typeof doc.updatedAt).toBe("string");
+    expect(typeof doc.createdAt).toBe('string');
+    expect(typeof doc.updatedAt).toBe('string');
   });
 
-  it("omits an unset optional rather than emitting null", async () => {
-    const user = id("omitting-user");
+  it('omits an unset optional rather than emitting null', async () => {
+    const user = id('omitting-user');
     const response = await request(appWithAuth())
-      .get("/api/profile/settings/me")
-      .set("x-test-user", user);
+      .get('/api/profile/settings/me')
+      .set('x-test-user', user);
 
     // `toEqual` treats an absent key and an explicit `undefined` alike, so the
     // assertion has to be about the KEY. It matters: the settings screen spreads
     // `profileCustomization` straight back into its next PUT, where an explicit
     // `null` means "clear this" and an absent key means "leave it alone".
-    expect(Object.keys(response.body.data)).not.toContain("profileHeaderImage");
-    expect(Object.keys(response.body.data.appearance)).not.toContain("primaryColor");
-    expect(Object.keys(response.body.data.profileCustomization)).not.toContain("coverImage");
+    expect(Object.keys(response.body.data)).not.toContain('profileHeaderImage');
+    expect(Object.keys(response.body.data.appearance)).not.toContain('primaryColor');
+    expect(Object.keys(response.body.data.profileCustomization)).not.toContain('coverImage');
   });
 
-  it("is idempotent — a second read does not create a second row", async () => {
-    const user = id("repeat-user");
+  it('is idempotent — a second read does not create a second row', async () => {
+    const user = id('repeat-user');
     const app = appWithAuth();
 
-    const first = await request(app).get("/api/profile/settings/me").set("x-test-user", user);
-    const second = await request(app).get("/api/profile/settings/me").set("x-test-user", user);
+    const first = await request(app).get('/api/profile/settings/me').set('x-test-user', user);
+    const second = await request(app).get('/api/profile/settings/me').set('x-test-user', user);
 
     expect(second.body.data.id).toBe(first.body.data.id);
     const rows = await getDb()
@@ -135,33 +135,33 @@ describe("GET /api/profile/settings/me", () => {
   });
 });
 
-describe("PUT /api/profile/settings", () => {
-  it("patches only the columns named, across all four groups", async () => {
-    const user = id("patch-user");
+describe('PUT /api/profile/settings', () => {
+  it('patches only the columns named, across all four groups', async () => {
+    const user = id('patch-user');
     const app = appWithAuth();
 
     const response = await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
       .send({
-        appearance: { themeMode: "dark", primaryColor: "  #ff0000  " },
-        profileHeaderImage: "file-header-1",
-        profileCustomization: { minimalistMode: true, displayName: "Ada" },
-        privacy: { profileVisibility: "private", hiddenWords: ["spoiler"] },
+        appearance: { themeMode: 'dark', primaryColor: '  #ff0000  ' },
+        profileHeaderImage: 'file-header-1',
+        profileCustomization: { minimalistMode: true, displayName: 'Ada' },
+        privacy: { profileVisibility: 'private', hiddenWords: ['spoiler'] },
         security: { peerToPeerEnabled: false },
       });
 
     expect(response.status).toBe(200);
     const doc = response.body.data;
-    expect(doc.appearance).toEqual({ themeMode: "dark", primaryColor: "#ff0000" });
-    expect(doc.profileHeaderImage).toBe("file-header-1");
+    expect(doc.appearance).toEqual({ themeMode: 'dark', primaryColor: '#ff0000' });
+    expect(doc.profileHeaderImage).toBe('file-header-1');
     expect(doc.profileCustomization).toEqual({
       coverPhotoEnabled: true,
       minimalistMode: true,
-      displayName: "Ada",
+      displayName: 'Ada',
     });
-    expect(doc.privacy.profileVisibility).toBe("private");
-    expect(doc.privacy.hiddenWords).toEqual(["spoiler"]);
+    expect(doc.privacy.profileVisibility).toBe('private');
+    expect(doc.privacy.hiddenWords).toEqual(['spoiler']);
     // Untouched neighbours in a group that WAS written keep their values.
     expect(doc.privacy.showOnlineStatus).toBe(true);
     expect(doc.security).toEqual({
@@ -178,55 +178,55 @@ describe("PUT /api/profile/settings", () => {
    * `stores/appearanceStore.ts` sends exactly that, one field at a time. Columns
    * are patched individually.
    */
-  it("leaves themeMode alone when only primaryColor is sent", async () => {
-    const user = id("appearance-user");
+  it('leaves themeMode alone when only primaryColor is sent', async () => {
+    const user = id('appearance-user');
     const app = appWithAuth();
 
     await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
-      .send({ appearance: { themeMode: "dark" } });
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
+      .send({ appearance: { themeMode: 'dark' } });
 
     const response = await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
-      .send({ appearance: { primaryColor: "#00ff00" } });
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
+      .send({ appearance: { primaryColor: '#00ff00' } });
 
     expect(response.body.data.appearance).toEqual({
-      themeMode: "dark",
-      primaryColor: "#00ff00",
+      themeMode: 'dark',
+      primaryColor: '#00ff00',
     });
   });
 
-  it("clears a nullable field on null, and on a string that is blank after trimming", async () => {
-    const user = id("clearing-user");
+  it('clears a nullable field on null, and on a string that is blank after trimming', async () => {
+    const user = id('clearing-user');
     const app = appWithAuth();
 
     await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
-      .send({ profileCustomization: { displayName: "Ada", coverImage: "file-cover-1" } });
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
+      .send({ profileCustomization: { displayName: 'Ada', coverImage: 'file-cover-1' } });
 
     const cleared = await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
-      .send({ profileCustomization: { displayName: null, coverImage: "   " } });
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
+      .send({ profileCustomization: { displayName: null, coverImage: '   ' } });
 
     const keys = Object.keys(cleared.body.data.profileCustomization);
-    expect(keys).not.toContain("displayName");
-    expect(keys).not.toContain("coverImage");
+    expect(keys).not.toContain('displayName');
+    expect(keys).not.toContain('coverImage');
   });
 
-  it("drops an unrecognised key and a wrongly-typed value instead of failing the save", async () => {
-    const user = id("lenient-user");
+  it('drops an unrecognised key and a wrongly-typed value instead of failing the save', async () => {
+    const user = id('lenient-user');
     const app = appWithAuth();
 
     const response = await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
       .send({
-        privacy: { profileVisibility: "not-a-visibility", showOnlineStatus: "yes" },
-        appearance: { themeMode: "neon" },
+        privacy: { profileVisibility: 'not-a-visibility', showOnlineStatus: 'yes' },
+        appearance: { themeMode: 'neon' },
         somethingFromANewerClient: { enabled: true },
         profileCustomization: { minimalistMode: true },
       });
@@ -235,18 +235,18 @@ describe("PUT /api/profile/settings", () => {
     // The recognised field still landed — the request was not refused wholesale.
     expect(response.body.data.profileCustomization.minimalistMode).toBe(true);
     // The rest fell back to stored values rather than reaching a CHECK.
-    expect(response.body.data.privacy.profileVisibility).toBe("public");
+    expect(response.body.data.privacy.profileVisibility).toBe('public');
     expect(response.body.data.privacy.showOnlineStatus).toBe(true);
-    expect(response.body.data.appearance.themeMode).toBe("system");
+    expect(response.body.data.appearance.themeMode).toBe('system');
   });
 
-  it("answers an unrecognised body with the current settings, as the upsert did", async () => {
-    const user = id("empty-patch-user");
+  it('answers an unrecognised body with the current settings, as the upsert did', async () => {
+    const user = id('empty-patch-user');
     const app = appWithAuth();
 
     const response = await request(app)
-      .put("/api/profile/settings")
-      .set("x-test-user", user)
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
       .send({});
 
     expect(response.status).toBe(200);
@@ -254,101 +254,106 @@ describe("PUT /api/profile/settings", () => {
   });
 });
 
-describe("blocks and restricts", () => {
-  it("tells creating a block from re-asserting one", async () => {
-    const user = id("blocker");
-    const target = id("blocked");
+describe('blocks and restricts', () => {
+  it('tells creating a block from re-asserting one', async () => {
+    const user = id('blocker');
+    const target = id('blocked');
     const app = appWithAuth();
 
     const created = await request(app)
-      .post("/api/profile/blocks")
-      .set("x-test-user", user)
+      .post('/api/profile/blocks')
+      .set('x-test-user', user)
       .send({ blockedId: target });
     expect(created.status).toBe(201);
 
     // The second call converges on `blocks_user_id_blocked_id_key` instead of
     // raising a duplicate-key error for a `catch` to reinterpret.
     const repeated = await request(app)
-      .post("/api/profile/blocks")
-      .set("x-test-user", user)
+      .post('/api/profile/blocks')
+      .set('x-test-user', user)
       .send({ blockedId: target });
     expect(repeated.status).toBe(200);
-    expect(repeated.body.message).toBe("User already blocked");
+    expect(repeated.body.message).toBe('User already blocked');
 
-    const listed = await request(app).get("/api/profile/blocks").set("x-test-user", user);
+    const listed = await request(app).get('/api/profile/blocks').set('x-test-user', user);
     expect(listed.body.data.blockedUsers).toEqual([target]);
   });
 
-  it("404s an unblock with nothing to remove, and 200s the one that removes a row", async () => {
-    const user = id("unblocker");
-    const target = id("unblocked");
+  it('404s an unblock with nothing to remove, and 200s the one that removes a row', async () => {
+    const user = id('unblocker');
+    const target = id('unblocked');
     const app = appWithAuth();
 
     const missing = await request(app)
       .delete(`/api/profile/blocks/${target}`)
-      .set("x-test-user", user);
+      .set('x-test-user', user);
     expect(missing.status).toBe(404);
 
-    await request(app).post("/api/profile/blocks").set("x-test-user", user).send({ blockedId: target });
+    await request(app)
+      .post('/api/profile/blocks')
+      .set('x-test-user', user)
+      .send({ blockedId: target });
     const removed = await request(app)
       .delete(`/api/profile/blocks/${target}`)
-      .set("x-test-user", user);
+      .set('x-test-user', user);
     expect(removed.status).toBe(200);
   });
 
-  it("refuses to block or restrict yourself", async () => {
+  it('refuses to block or restrict yourself', async () => {
     const app = appWithAuth();
-    const user = id("self");
+    const user = id('self');
 
     const block = await request(app)
-      .post("/api/profile/blocks")
-      .set("x-test-user", user)
+      .post('/api/profile/blocks')
+      .set('x-test-user', user)
       .send({ blockedId: user });
     expect(block.status).toBe(400);
 
     const restrict = await request(app)
-      .post("/api/profile/restricts")
-      .set("x-test-user", user)
+      .post('/api/profile/restricts')
+      .set('x-test-user', user)
       .send({ restrictedId: user });
     expect(restrict.status).toBe(400);
   });
 
-  it("keeps restricts separate from privacy.restrictedUsers", async () => {
-    const user = id("restricter");
-    const target = id("restricted");
+  it('keeps restricts separate from privacy.restrictedUsers', async () => {
+    const user = id('restricter');
+    const target = id('restricted');
     const app = appWithAuth();
 
     await request(app)
-      .post("/api/profile/restricts")
-      .set("x-test-user", user)
+      .post('/api/profile/restricts')
+      .set('x-test-user', user)
       .send({ restrictedId: target });
 
-    const listed = await request(app).get("/api/profile/restricts").set("x-test-user", user);
+    const listed = await request(app).get('/api/profile/restricts').set('x-test-user', user);
     expect(listed.body.data.restrictedUsers).toEqual([target]);
 
     // Two different facts kept side by side. Reconciling them
     // would be a behaviour change, so the settings column stays untouched.
-    const settings = await request(app).get("/api/profile/settings/me").set("x-test-user", user);
+    const settings = await request(app).get('/api/profile/settings/me').set('x-test-user', user);
     expect(settings.body.data.privacy.restrictedUsers).toEqual([]);
   });
 });
 
-describe("DELETE /api/profile/settings/behavior", () => {
-  it("distinguishes deleting a row from having nothing to delete", async () => {
-    const user = id("behaviour-user");
+describe('DELETE /api/profile/settings/behavior', () => {
+  it('distinguishes deleting a row from having nothing to delete', async () => {
+    const user = id('behaviour-user');
     const app = appWithAuth();
 
     const nothing = await request(app)
-      .delete("/api/profile/settings/behavior")
-      .set("x-test-user", user);
+      .delete('/api/profile/settings/behavior')
+      .set('x-test-user', user);
     expect(nothing.status).toBe(200);
-    expect(nothing.body.message).toBe("No personalization data to reset");
+    expect(nothing.body.message).toBe('No personalization data to reset');
 
-    await getDb().insert(schema.userBehaviors).values({ id: id("behaviour"), oxyUserId: user });
+    await getDb()
+      .insert(schema.userBehaviors)
+      .values({ id: id('behaviour'), oxyUserId: user });
 
     const reset = await request(app)
-      .delete("/api/profile/settings/behavior")
-      .set("x-test-user", user);
-    expect(reset.body.message).toBe("Personalization data reset successfully");
+      .delete('/api/profile/settings/behavior')
+      .set('x-test-user', user);
+    expect(reset.body.message).toBe('Personalization data reset successfully');
   });
 });

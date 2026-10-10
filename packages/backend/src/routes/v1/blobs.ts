@@ -5,23 +5,23 @@
  * (over the bytes) → handler. `createBlobUploadHandler` is that handler.
  */
 
-import express, { Router, type RequestHandler } from "express";
-import { BLOB_CONTENT_TYPE, BLOB_SHA256_HEADER, blobIdSchema } from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
-import { downloadBlob, uploadBlob } from "../../services/platform/blobService";
-import { asyncRoute } from "./asyncRoute";
-import { parseParam } from "./validate";
+import express, { Router, type RequestHandler } from 'express';
+import { BLOB_CONTENT_TYPE, BLOB_SHA256_HEADER, blobIdSchema } from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
+import { downloadBlob, uploadBlob } from '../../services/platform/blobService';
+import { asyncRoute } from './asyncRoute';
+import { parseParam } from './validate';
 
 export function createBlobReadRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
   router.get(
-    "/blobs/:id",
+    '/blobs/:id',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
-      const id = parseParam(blobIdSchema, req.params.id, "id");
+      const id = parseParam(blobIdSchema, req.params.id, 'id');
       const bytes = await downloadBlob(id);
-      res.setHeader("Content-Type", BLOB_CONTENT_TYPE);
-      res.setHeader("Content-Length", String(bytes.length));
+      res.setHeader('Content-Type', BLOB_CONTENT_TYPE);
+      res.setHeader('Content-Length', String(bytes.length));
       res.end(bytes);
     }),
   );
@@ -39,7 +39,7 @@ export function createBlobBodyParser(maxBytes: number): RequestHandler {
     type: BLOB_CONTENT_TYPE,
     limit: maxBytes,
     verify: (req, _res, buf) => {
-      Reflect.set(req, "rawBody", buf);
+      Reflect.set(req, 'rawBody', buf);
     },
   });
 }

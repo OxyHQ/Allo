@@ -13,18 +13,11 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@allo/shared-types": [
-        "../shared-types/src"
-      ],
-      "@allo/shared-types/*": [
-        "../shared-types/src/*"
-      ]
+      "@allo/shared-types": ["../shared-types/src"],
+      "@allo/shared-types/*": ["../shared-types/src/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "package.json"
-  ],
+  "include": ["**/*.ts", "package.json"],
   "references": [
     {
       "path": "../shared-types"

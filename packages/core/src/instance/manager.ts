@@ -18,21 +18,55 @@ import {
   type ClientInstance,
   type PendingEnrollment,
   type PublicInstance,
-} from "@allo/shared-types";
-import { CIPHERSUITE_ID, type CryptoEngine, type Identity, type KeyPackageBundle } from "../crypto/engine";
-import { generateSigningKey, publicKeyBase64, signEnrollmentApproval, signingKeyFromSecret, verifyInstanceChain, type SigningKeyPair } from "../crypto/signing";
-import { TRANSFER_KEY_BYTES, generateTransferKey, transferKeyFromSecret, transferKeyName, type TransferKeyPair } from "../crypto/transfer";
-import { InstanceNotActiveError, InvalidStateError, NotFoundError, TransportError } from "../errors";
-import type { Emitter } from "../events/emitter";
-import { keyPackageRecordSchema, type InstanceRecord, type KeyPackageRecord } from "../storage/records";
-import type { AlloStore, InstanceStore } from "../storage/store";
-import type { HttpClient, Signer } from "../transport/http";
-import type { InstanceState, InstanceView, PendingEnrollmentView, SecretStore } from "../types";
-import { base64Decode, base64Encode, bytesEqual, hexEncode, sha256Bytes, utf8Encode } from "../util/bytes";
-import { base64UrlEncode } from "@allo/shared-types";
-import type { Logger } from "../util/logger";
-import { describeError } from "../util/logger";
-import type { Model } from "../storage/model";
+} from '@allo/shared-types';
+import {
+  CIPHERSUITE_ID,
+  type CryptoEngine,
+  type Identity,
+  type KeyPackageBundle,
+} from '../crypto/engine';
+import {
+  generateSigningKey,
+  publicKeyBase64,
+  signEnrollmentApproval,
+  signingKeyFromSecret,
+  verifyInstanceChain,
+  type SigningKeyPair,
+} from '../crypto/signing';
+import {
+  TRANSFER_KEY_BYTES,
+  generateTransferKey,
+  transferKeyFromSecret,
+  transferKeyName,
+  type TransferKeyPair,
+} from '../crypto/transfer';
+import {
+  InstanceNotActiveError,
+  InvalidStateError,
+  NotFoundError,
+  TransportError,
+} from '../errors';
+import type { Emitter } from '../events/emitter';
+import {
+  keyPackageRecordSchema,
+  type InstanceRecord,
+  type KeyPackageRecord,
+} from '../storage/records';
+import type { AlloStore, InstanceStore } from '../storage/store';
+import type { HttpClient, Signer } from '../transport/http';
+import type { InstanceState, InstanceView, PendingEnrollmentView, SecretStore } from '../types';
+import {
+  base64Decode,
+  base64Encode,
+  bytesEqual,
+  hexEncode,
+  sha256Bytes,
+  utf8Encode,
+} from '../util/bytes';
+import { base64UrlEncode } from '@allo/shared-types';
+import type { Logger } from '../util/logger';
+import { describeError } from '../util/logger';
+import type { Model } from '../storage/model';
 
 export function instanceKeyName(accountId: string, appId: string): string {
   return `allo.instance-key.${accountId}.${appId}`;
@@ -41,7 +75,7 @@ export function instanceKeyName(accountId: string, appId: string): string {
 /** A short human-checkable digest of an enrollment challenge: `ab12 cd34 ef56 7890`. */
 export function challengeFingerprint(challenge: string): string {
   const hex = hexEncode(sha256Bytes(utf8Encode(challenge))).slice(0, 16);
-  return hex.match(/.{4}/g)!.join(" ");
+  return hex.match(/.{4}/g)!.join(' ');
 }
 
 export interface InstanceManagerDeps {
@@ -54,7 +88,7 @@ export interface InstanceManagerDeps {
   now: () => number;
   accountId: string;
   appId: string;
-  platform: InstanceRecord["platform"];
+  platform: InstanceRecord['platform'];
   displayName: string;
   keyPackageTarget: number;
   /** Called once when this instance turns out to be revoked, so the client can stop its loops. */
@@ -81,19 +115,19 @@ export class InstanceManager {
   // ---- state ---------------------------------------------------------------
 
   get state(): InstanceState {
-    if (!this.record) return "unregistered";
+    if (!this.record) return 'unregistered';
     switch (this.record.status) {
-      case "pending":
-        return "pending-approval";
-      case "active":
-        return "active";
-      case "revoked":
-        return "revoked";
+      case 'pending':
+        return 'pending-approval';
+      case 'active':
+        return 'active';
+      case 'revoked':
+        return 'revoked';
     }
   }
 
   get isActive(): boolean {
-    return this.state === "active";
+    return this.state === 'active';
   }
 
   get current(): InstanceRecord | undefined {
@@ -101,28 +135,32 @@ export class InstanceManager {
   }
 
   get signer(): Signer {
-    if (!this.record || !this.key) throw new InvalidStateError("instance is not registered");
+    if (!this.record || !this.key) throw new InvalidStateError('instance is not registered');
     return { instanceId: this.record.id, key: this.key };
   }
 
   get identity(): Identity {
     const { instanceId, key } = this.signer;
-    return this.deps.engine.createIdentity({ accountId: this.deps.accountId, instanceId, signingKey: key });
+    return this.deps.engine.createIdentity({
+      accountId: this.deps.accountId,
+      instanceId,
+      signingKey: key,
+    });
   }
 
   get instanceStore(): InstanceStore {
-    if (!this.store) throw new InvalidStateError("instance is not registered");
+    if (!this.store) throw new InvalidStateError('instance is not registered');
     return this.store;
   }
 
   /** The raw 32-byte X25519 private transfer key. Only the history service opens sealed keys with it. */
   get transferSecretKey(): Uint8Array {
-    if (!this.transferKey) throw new InvalidStateError("instance is not registered");
+    if (!this.transferKey) throw new InvalidStateError('instance is not registered');
     return this.transferKey.secretKey;
   }
 
   get transferPublicKeyBase64(): string {
-    if (!this.transferKey) throw new InvalidStateError("instance is not registered");
+    if (!this.transferKey) throw new InvalidStateError('instance is not registered');
     return base64Encode(this.transferKey.publicKey);
   }
 
@@ -171,14 +209,19 @@ export class InstanceManager {
      *               raced to enrol on this device
      */
     if (existing || secret) {
-      const reason = !existing ? "no-record" : !secret || secret.length !== 32 ? "no-key" : "mismatch";
-      this.deps.log.warn?.("enrolling a new instance rather than resuming", { reason });
+      const reason = !existing
+        ? 'no-record'
+        : !secret || secret.length !== 32
+          ? 'no-key'
+          : 'mismatch';
+      this.deps.log.warn?.('enrolling a new instance rather than resuming', { reason });
     }
     if (!secret || secret.length !== 32) {
       const fresh = generateSigningKey();
       await secrets.set(keyName, fresh.secretKey);
       const check = await secrets.get(keyName);
-      if (!check || !bytesEqual(check, fresh.secretKey)) throw new InvalidStateError("secret store did not persist the instance key");
+      if (!check || !bytesEqual(check, fresh.secretKey))
+        throw new InvalidStateError('secret store did not persist the instance key');
       secret = fresh.secretKey;
     }
     const key = signingKeyFromSecret(secret);
@@ -187,21 +230,43 @@ export class InstanceManager {
     let challenge: string | null = null;
     try {
       const res = await this.deps.http.request({
-        method: "POST",
-        path: "/v1/instances",
-        body: { appId, platform: this.deps.platform, displayName: this.deps.displayName, signingPublicKey: publicKey, transferPublicKey: this.transferPublicKeyBase64 },
+        method: 'POST',
+        path: '/v1/instances',
+        body: {
+          appId,
+          platform: this.deps.platform,
+          displayName: this.deps.displayName,
+          signingPublicKey: publicKey,
+          transferPublicKey: this.transferPublicKeyBase64,
+        },
         schema: registerInstanceResponseSchema,
       });
       instance = res.instance;
       challenge = res.challenge ?? null;
     } catch (error) {
       // The key is already enrolled on the account (storage wiped, secret kept): adopt that instance.
-      if (!(error instanceof TransportError && error.status === 409 && error.serverCode === "idempotency_conflict")) throw error;
-      const listed = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
-      const mine = listed.instances.find((i) => i.signingPublicKey === publicKey && i.status !== "revoked");
-      if (!mine) throw new InvalidStateError("the signing key is enrolled but no live instance carries it; clear the secret store and start again");
+      if (
+        !(
+          error instanceof TransportError &&
+          error.status === 409 &&
+          error.serverCode === 'idempotency_conflict'
+        )
+      )
+        throw error;
+      const listed = await this.deps.http.request({
+        method: 'GET',
+        path: '/v1/instances',
+        schema: listInstancesResponseSchema,
+      });
+      const mine = listed.instances.find(
+        (i) => i.signingPublicKey === publicKey && i.status !== 'revoked',
+      );
+      if (!mine)
+        throw new InvalidStateError(
+          'the signing key is enrolled but no live instance carries it; clear the secret store and start again',
+        );
       instance = mine;
-      this.deps.log.info?.("adopted an already-enrolled instance", { status: mine.status });
+      this.deps.log.info?.('adopted an already-enrolled instance', { status: mine.status });
     }
     const record: InstanceRecord = {
       id: instance.id,
@@ -229,11 +294,18 @@ export class InstanceManager {
   /** Re-reads the account's instances; picks up approval and revocation of this one. */
   async refresh(): Promise<void> {
     if (!this.record) return;
-    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+    const res = await this.deps.http.request({
+      method: 'GET',
+      path: '/v1/instances',
+      schema: listInstancesResponseSchema,
+    });
     this.own = res.instances;
     this.listView = null;
     const me = res.instances.find((i) => i.id === this.record?.id);
-    if (me && (me.status !== this.record.status || me.transferPublicKey !== this.record.transferPublicKey)) {
+    if (
+      me &&
+      (me.status !== this.record.status || me.transferPublicKey !== this.record.transferPublicKey)
+    ) {
       const statusChanged = me.status !== this.record.status;
       const next: InstanceRecord = {
         ...this.record,
@@ -245,12 +317,17 @@ export class InstanceManager {
       await this.deps.rootStore.setSelf(next);
       this.record = next;
       if (statusChanged) this.emitInstance();
-      if (next.status === "revoked") this.deps.onRevoked?.();
-    } else if (!me && this.record.status !== "revoked") {
-      this.deps.log.warn?.("this instance is no longer listed by the server");
+      if (next.status === 'revoked') this.deps.onRevoked?.();
+    } else if (!me && this.record.status !== 'revoked') {
+      this.deps.log.warn?.('this instance is no longer listed by the server');
     }
     // A Phase 2 instance (no transfer key on the server), or an adopted one whose key was minted anew: upload ours.
-    if (this.isActive && this.transferKey && this.record.transferPublicKey !== this.transferPublicKeyBase64) void this.ensureTransferKey();
+    if (
+      this.isActive &&
+      this.transferKey &&
+      this.record.transferPublicKey !== this.transferPublicKeyBase64
+    )
+      void this.ensureTransferKey();
     // The listing carries fields (enrolledAt, lastSeenAt…) the current view shows. The cached snapshot is
     // replaced ONLY when the view actually changed, and that replacement always comes with an emission.
     if (this.currentCache !== undefined) {
@@ -258,15 +335,15 @@ export class InstanceManager {
       if (JSON.stringify(next) !== JSON.stringify(this.currentCache)) {
         this.currentCache = next;
         this.listView = null;
-        this.deps.emitter.emit("instance");
+        this.deps.emitter.emit('instance');
       }
     }
-    this.deps.emitter.emit("instances");
+    this.deps.emitter.emit('instances');
   }
 
   markRevoked(): void {
-    if (!this.record || this.record.status === "revoked") return;
-    this.record = { ...this.record, status: "revoked" };
+    if (!this.record || this.record.status === 'revoked') return;
+    this.record = { ...this.record, status: 'revoked' };
     void this.deps.rootStore.setSelf(this.record).catch(() => undefined);
     this.emitInstance();
     this.deps.onRevoked?.();
@@ -280,7 +357,8 @@ export class InstanceManager {
     const fresh = generateTransferKey();
     await secrets.set(name, fresh.secretKey);
     const check = await secrets.get(name);
-    if (!check || !bytesEqual(check, fresh.secretKey)) throw new InvalidStateError("secret store did not persist the transfer key");
+    if (!check || !bytesEqual(check, fresh.secretKey))
+      throw new InvalidStateError('secret store did not persist the transfer key');
     return fresh;
   }
 
@@ -297,8 +375,8 @@ export class InstanceManager {
     this.transferKeyUpload = (async () => {
       try {
         const res = await this.deps.http.request({
-          method: "PUT",
-          path: "/v1/instances/me/transfer-key",
+          method: 'PUT',
+          path: '/v1/instances/me/transfer-key',
           body: { transferPublicKey: this.transferPublicKeyBase64 },
           schema: instanceResponseSchema,
           signer: this.signer,
@@ -309,14 +387,14 @@ export class InstanceManager {
         }
         this.own = this.own.map((i) => (i.id === res.instance.id ? res.instance : i));
         this.listView = null;
-        this.deps.log.info?.("transfer key uploaded");
+        this.deps.log.info?.('transfer key uploaded');
         // The own view carries the key too: drop the cached snapshot and tell
         // `instance` subscribers, or `current()` keeps answering `null` until
         // the next listing happens to change something else.
         this.emitInstance();
-        this.deps.emitter.emit("instances");
+        this.deps.emitter.emit('instances');
       } catch (error) {
-        this.deps.log.warn?.("transfer key upload failed", { error: describeError(error) });
+        this.deps.log.warn?.('transfer key upload failed', { error: describeError(error) });
       } finally {
         this.transferKeyUpload = null;
       }
@@ -326,10 +404,15 @@ export class InstanceManager {
 
   async refreshPending(): Promise<void> {
     if (!this.isActive) return;
-    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances/pending", schema: listPendingEnrollmentsResponseSchema, signer: this.signer });
+    const res = await this.deps.http.request({
+      method: 'GET',
+      path: '/v1/instances/pending',
+      schema: listPendingEnrollmentsResponseSchema,
+      signer: this.signer,
+    });
     this.pendingList = res.pending;
     this.pendingView = null;
-    this.deps.emitter.emit("instances");
+    this.deps.emitter.emit('instances');
   }
 
   /**
@@ -343,7 +426,7 @@ export class InstanceManager {
     const pending = this.pendingList.find((p) => p.instance.id === instanceId);
     if (!pending) throw new NotFoundError(`pending enrollment ${instanceId}`);
     if (expectedChallenge !== undefined && expectedChallenge !== pending.challenge) {
-      throw new InvalidStateError("the challenge shown is not the challenge on record");
+      throw new InvalidStateError('the challenge shown is not the challenge on record');
     }
     const { key } = this.signer;
     const approvalSignature = signEnrollmentApproval(key, {
@@ -353,7 +436,7 @@ export class InstanceManager {
       challenge: pending.challenge,
     });
     await this.deps.http.request({
-      method: "POST",
+      method: 'POST',
       path: `/v1/instances/${instanceId}/approve`,
       body: { approvalSignature },
       schema: instanceResponseSchema,
@@ -366,15 +449,25 @@ export class InstanceManager {
 
   async reject(instanceId: string): Promise<void> {
     this.assertActive();
-    await this.deps.http.request({ method: "POST", path: `/v1/instances/${instanceId}/reject`, schema: instanceResponseSchema, signer: this.signer });
+    await this.deps.http.request({
+      method: 'POST',
+      path: `/v1/instances/${instanceId}/reject`,
+      schema: instanceResponseSchema,
+      signer: this.signer,
+    });
     this.pendingList = this.pendingList.filter((p) => p.instance.id !== instanceId);
     this.pendingView = null;
-    this.deps.emitter.emit("instances");
+    this.deps.emitter.emit('instances');
   }
 
   async revoke(instanceId: string): Promise<void> {
     this.assertActive();
-    await this.deps.http.request({ method: "POST", path: `/v1/instances/${instanceId}/revoke`, schema: instanceResponseSchema, signer: this.signer });
+    await this.deps.http.request({
+      method: 'POST',
+      path: `/v1/instances/${instanceId}/revoke`,
+      schema: instanceResponseSchema,
+      signer: this.signer,
+    });
     if (instanceId === this.record?.id) this.markRevoked();
     else await this.refresh();
   }
@@ -391,25 +484,42 @@ export class InstanceManager {
    * `client.reclaimAccount()` is the whole move; this is its one request.
    */
   async revokeWithSession(instanceId: string): Promise<void> {
-    await this.deps.http.request({ method: "DELETE", path: `/v1/instances/${instanceId}`, schema: instanceResponseSchema });
+    await this.deps.http.request({
+      method: 'DELETE',
+      path: `/v1/instances/${instanceId}`,
+      schema: instanceResponseSchema,
+    });
   }
 
   /** Every instance the account has, read with the Oxy session rather than a device key. */
   async listWithSession(): Promise<ClientInstance[]> {
-    const res = await this.deps.http.request({ method: "GET", path: "/v1/instances", schema: listInstancesResponseSchema });
+    const res = await this.deps.http.request({
+      method: 'GET',
+      path: '/v1/instances',
+      schema: listInstancesResponseSchema,
+    });
     return res.instances;
   }
 
   // ---- push ----------------------------------------------------------------
 
-  async setPushToken(provider: "fcm" | "apns", token: string): Promise<void> {
+  async setPushToken(provider: 'fcm' | 'apns', token: string): Promise<void> {
     this.assertActive();
-    await this.deps.http.request({ method: "PUT", path: "/v1/instances/me/push", body: { provider, token }, signer: this.signer });
+    await this.deps.http.request({
+      method: 'PUT',
+      path: '/v1/instances/me/push',
+      body: { provider, token },
+      signer: this.signer,
+    });
   }
 
   async clearPushToken(): Promise<void> {
     this.assertActive();
-    await this.deps.http.request({ method: "DELETE", path: "/v1/instances/me/push", signer: this.signer });
+    await this.deps.http.request({
+      method: 'DELETE',
+      path: '/v1/instances/me/push',
+      signer: this.signer,
+    });
   }
 
   // ---- trust ---------------------------------------------------------------
@@ -427,7 +537,9 @@ export class InstanceManager {
    * instance: the account can still be a member, it just cannot be reached
    * until it installs Allo, and the elector rule adds its first device then.
    */
-  async trustedInstancesOf(accountId: string): Promise<{ trusted: PublicInstance[]; refused: Map<string, string> }> {
+  async trustedInstancesOf(
+    accountId: string,
+  ): Promise<{ trusted: PublicInstance[]; refused: Map<string, string> }> {
     if (accountId === this.deps.accountId) {
       await this.refresh();
       const own = this.trustedOwnInstances();
@@ -435,13 +547,21 @@ export class InstanceManager {
     }
     let res;
     try {
-      res = await this.deps.http.request({ method: "GET", path: `/v1/accounts/${accountId}/instances`, schema: listAccountInstancesResponseSchema });
+      res = await this.deps.http.request({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/instances`,
+        schema: listAccountInstancesResponseSchema,
+      });
     } catch (error) {
-      if (error instanceof TransportError && error.status === 404) return { trusted: [], refused: new Map() };
+      if (error instanceof TransportError && error.status === 404)
+        return { trusted: [], refused: new Map() };
       throw error;
     }
     const verdict = verifyInstanceChain(res.instances);
-    return { trusted: res.instances.filter((i) => verdict.trusted.has(i.id)), refused: verdict.refused };
+    return {
+      trusted: res.instances.filter((i) => verdict.trusted.has(i.id)),
+      refused: verdict.refused,
+    };
   }
 
   ownInstances(): ClientInstance[] {
@@ -457,7 +577,8 @@ export class InstanceManager {
 
   private async loadStock(): Promise<void> {
     this.stock.clear();
-    for (const { value } of await this.instanceStore.listJson("keyPackage", keyPackageRecordSchema)) this.stock.set(value.ref, value);
+    for (const { value } of await this.instanceStore.listJson('keyPackage', keyPackageRecordSchema))
+      this.stock.set(value.ref, value);
   }
 
   /**
@@ -476,7 +597,12 @@ export class InstanceManager {
     if (!this.isActive) return;
     if (available !== undefined) this.serverAvailable = available;
     if (this.serverAvailable === null) {
-      const stock = await this.deps.http.request({ method: "GET", path: "/v1/key-packages", schema: keyPackageStockResponseSchema, signer: this.signer });
+      const stock = await this.deps.http.request({
+        method: 'GET',
+        path: '/v1/key-packages',
+        schema: keyPackageStockResponseSchema,
+        signer: this.signer,
+      });
       this.serverAvailable = stock.available;
     }
     const have = this.serverAvailable;
@@ -494,13 +620,19 @@ export class InstanceManager {
       uploaded: true,
     }));
     // Private parts first: a package the server hands out before its private half is safe is useless.
-    for (const r of records) batch.putJson("keyPackage", base64UrlEncode(base64Decode(r.ref)), r);
+    for (const r of records) batch.putJson('keyPackage', base64UrlEncode(base64Decode(r.ref)), r);
     await this.instanceStore.commit(batch);
     for (const r of records) this.stock.set(r.ref, r);
     const res = await this.deps.http.request({
-      method: "PUT",
-      path: "/v1/key-packages",
-      body: { keyPackages: records.map((r) => ({ ciphersuite: CIPHERSUITE_ID, ref: r.ref, data: r.publicWire })) },
+      method: 'PUT',
+      path: '/v1/key-packages',
+      body: {
+        keyPackages: records.map((r) => ({
+          ciphersuite: CIPHERSUITE_ID,
+          ref: r.ref,
+          data: r.publicWire,
+        })),
+      },
       schema: uploadKeyPackagesResponseSchema,
       signer: this.signer,
     });
@@ -512,7 +644,7 @@ export class InstanceManager {
     const record = this.stock.get(base64Encode(ref));
     if (!record) return undefined;
     this.stock.delete(record.ref);
-    await this.instanceStore.delete("keyPackage", base64UrlEncode(ref));
+    await this.instanceStore.delete('keyPackage', base64UrlEncode(ref));
     const publicWire = base64Decode(record.publicWire);
     return {
       ref,
@@ -534,11 +666,13 @@ export class InstanceManager {
     return this.stock.size;
   }
 
-  async claimKeyPackages(instanceIds: string[]): Promise<{ keyPackages: ClaimedKeyPackage[]; missing: string[] }> {
+  async claimKeyPackages(
+    instanceIds: string[],
+  ): Promise<{ keyPackages: ClaimedKeyPackage[]; missing: string[] }> {
     if (instanceIds.length === 0) return { keyPackages: [], missing: [] };
     return this.deps.http.request({
-      method: "POST",
-      path: "/v1/key-packages/claim",
+      method: 'POST',
+      path: '/v1/key-packages/claim',
       body: { instanceIds },
       schema: claimKeyPackagesResponseSchema,
       signer: this.signer,
@@ -554,7 +688,11 @@ export class InstanceManager {
 
   pending(): PendingEnrollmentView[] {
     if (!this.pendingView) {
-      this.pendingView = this.pendingList.map((p) => ({ instance: this.toView(p.instance), challenge: p.challenge, fingerprint: challengeFingerprint(p.challenge) }));
+      this.pendingView = this.pendingList.map((p) => ({
+        instance: this.toView(p.instance),
+        challenge: p.challenge,
+        fingerprint: challengeFingerprint(p.challenge),
+      }));
     }
     return this.pendingView;
   }
@@ -570,11 +708,19 @@ export class InstanceManager {
     if (!this.record) return null;
     const listed = this.own.find((i) => i.id === this.record?.id);
     const enrollment =
-      this.record.status === "pending" && this.record.challenge
-        ? { challenge: this.record.challenge, fingerprint: challengeFingerprint(this.record.challenge) }
+      this.record.status === 'pending' && this.record.challenge
+        ? {
+            challenge: this.record.challenge,
+            fingerprint: challengeFingerprint(this.record.challenge),
+          }
         : undefined;
     // The record is updated first (approval, revocation); a listing fetched earlier must not outvote it.
-    if (listed) return { ...this.toView(listed), status: this.record.status, ...(enrollment ? { enrollment } : {}) };
+    if (listed)
+      return {
+        ...this.toView(listed),
+        status: this.record.status,
+        ...(enrollment ? { enrollment } : {}),
+      };
     return {
       ...(enrollment ? { enrollment } : {}),
       id: this.record.id,
@@ -616,7 +762,7 @@ export class InstanceManager {
   private emitInstance(): void {
     this.listView = null;
     this.currentCache = undefined;
-    this.deps.emitter.emit("instance");
+    this.deps.emitter.emit('instance');
   }
 
   describe(error: unknown): string {

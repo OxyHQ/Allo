@@ -6,13 +6,13 @@
  * {@link StoreBatch} so a delivery, its state change and the cursor land
  * together or not at all.
  */
-import type { z } from "zod";
-import { StorageError } from "../errors";
-import type { StorageAdapter, StorageOp } from "../types";
-import { utf8Decode, utf8Encode } from "../util/bytes";
-import type { AtRestCipher } from "../crypto/atRest";
-import { InstanceNamespace, Namespace, type RecordKind } from "./namespace";
-import { instanceRecordSchema, type InstanceRecord } from "./records";
+import type { z } from 'zod';
+import { StorageError } from '../errors';
+import type { StorageAdapter, StorageOp } from '../types';
+import { utf8Decode, utf8Encode } from '../util/bytes';
+import type { AtRestCipher } from '../crypto/atRest';
+import { InstanceNamespace, Namespace, type RecordKind } from './namespace';
+import { instanceRecordSchema, type InstanceRecord } from './records';
 
 export class StoreBatch {
   private readonly ops: StorageOp[] = [];
@@ -23,18 +23,22 @@ export class StoreBatch {
 
   putJson(kind: RecordKind, id: string, value: unknown): this {
     const key = this.ns.key(kind, id);
-    this.ops.push({ type: "set", key, value: this.cipher.encrypt(key, utf8Encode(JSON.stringify(value))) });
+    this.ops.push({
+      type: 'set',
+      key,
+      value: this.cipher.encrypt(key, utf8Encode(JSON.stringify(value))),
+    });
     return this;
   }
 
   putBytes(kind: RecordKind, id: string, value: Uint8Array): this {
     const key = this.ns.key(kind, id);
-    this.ops.push({ type: "set", key, value: this.cipher.encrypt(key, value) });
+    this.ops.push({ type: 'set', key, value: this.cipher.encrypt(key, value) });
     return this;
   }
 
   delete(kind: RecordKind, id: string): this {
-    this.ops.push({ type: "delete", key: this.ns.key(kind, id) });
+    this.ops.push({ type: 'delete', key: this.ns.key(kind, id) });
     return this;
   }
 
@@ -68,7 +72,7 @@ export class InstanceStore {
     try {
       await this.storage.batch(ops);
     } catch (cause) {
-      throw new StorageError("batch write failed", { cause });
+      throw new StorageError('batch write failed', { cause });
     }
   }
 
@@ -98,19 +102,26 @@ export class InstanceStore {
   }
 
   /** Every record of a kind, in key order (ids are sortable by construction). */
-  async listJson<T>(kind: RecordKind, schema: z.ZodType<T>, idPrefix = ""): Promise<Array<{ id: string; value: T }>> {
+  async listJson<T>(
+    kind: RecordKind,
+    schema: z.ZodType<T>,
+    idPrefix = '',
+  ): Promise<Array<{ id: string; value: T }>> {
     const prefix = this.ns.kindPrefix(kind) + idPrefix;
     const keys = (await this.storage.list(prefix)).sort();
     const out: Array<{ id: string; value: T }> = [];
     for (const key of keys) {
       const stored = await this.storage.get(key);
       if (stored === undefined) continue;
-      out.push({ id: key.slice(this.ns.kindPrefix(kind).length), value: this.parse(schema, this.cipher.decrypt(key, stored), key) });
+      out.push({
+        id: key.slice(this.ns.kindPrefix(kind).length),
+        value: this.parse(schema, this.cipher.decrypt(key, stored), key),
+      });
     }
     return out;
   }
 
-  async listIds(kind: RecordKind, idPrefix = ""): Promise<string[]> {
+  async listIds(kind: RecordKind, idPrefix = ''): Promise<string[]> {
     const keys = await this.storage.list(this.ns.kindPrefix(kind) + idPrefix);
     return keys.map((k) => k.slice(this.ns.kindPrefix(kind).length)).sort();
   }
@@ -118,7 +129,8 @@ export class InstanceStore {
   /** Deletes everything under this instance. */
   async wipe(): Promise<void> {
     const keys = await this.storage.list(this.ns.prefix);
-    if (keys.length) await this.storage.batch(keys.map((key) => ({ type: "delete", key }) as const));
+    if (keys.length)
+      await this.storage.batch(keys.map((key) => ({ type: 'delete', key }) as const));
   }
 
   private parse<T>(schema: z.ZodType<T>, bytes: Uint8Array, key: string): T {
@@ -129,7 +141,8 @@ export class InstanceStore {
       throw new StorageError(`record is not JSON: ${key}`, { cause });
     }
     const parsed = schema.safeParse(json);
-    if (!parsed.success) throw new StorageError(`record does not match its schema: ${key}`, { cause: parsed.error });
+    if (!parsed.success)
+      throw new StorageError(`record does not match its schema: ${key}`, { cause: parsed.error });
     return parsed.data;
   }
 }
@@ -146,12 +159,16 @@ export class AlloStore {
     if (stored === undefined) return undefined;
     const json: unknown = JSON.parse(utf8Decode(this.cipher.decrypt(this.ns.selfKey, stored)));
     const parsed = instanceRecordSchema.safeParse(json);
-    if (!parsed.success) throw new StorageError("instance record does not match its schema", { cause: parsed.error });
+    if (!parsed.success)
+      throw new StorageError('instance record does not match its schema', { cause: parsed.error });
     return parsed.data;
   }
 
   async setSelf(record: InstanceRecord): Promise<void> {
-    await this.storage.set(this.ns.selfKey, this.cipher.encrypt(this.ns.selfKey, utf8Encode(JSON.stringify(record))));
+    await this.storage.set(
+      this.ns.selfKey,
+      this.cipher.encrypt(this.ns.selfKey, utf8Encode(JSON.stringify(record))),
+    );
   }
 
   forInstance(instanceId: string): InstanceStore {
@@ -161,6 +178,7 @@ export class AlloStore {
   /** Wipes the whole account namespace: the instance record and every instance under it. */
   async wipeAccount(): Promise<void> {
     const keys = await this.storage.list(this.ns.accountPrefix);
-    if (keys.length) await this.storage.batch(keys.map((key) => ({ type: "delete", key }) as const));
+    if (keys.length)
+      await this.storage.batch(keys.map((key) => ({ type: 'delete', key }) as const));
   }
 }

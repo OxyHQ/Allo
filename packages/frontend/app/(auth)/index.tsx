@@ -17,12 +17,20 @@ export default function WelcomeScreen() {
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <SEO title={t('seo.home.title')} description={t('seo.home.description')} />
       <View style={styles.column}>
-        <Image source={require('@/assets/images/welcome.png')} style={styles.artwork} resizeMode="contain" accessibilityIgnoresInvertColors />
+        <Image
+          source={require('@/assets/images/welcome.png')}
+          style={styles.artwork}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
         <View style={styles.copy}>
           <Text variant="title-1-semibold" accessibilityRole="header" style={styles.centered}>
             {t('auth.welcome.title')}
           </Text>
-          <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+          <Text
+            variant="body-regular"
+            style={[styles.centered, { color: theme.colors.textSecondary }]}
+          >
             {t('auth.welcome.subtitle')}
           </Text>
         </View>

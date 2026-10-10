@@ -3,7 +3,7 @@
  * keeps. Every `payload` is opaque to the server except `control`, which the
  * server itself writes.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   accountIdSchema,
   base64Schema,
@@ -14,19 +14,25 @@ import {
   instanceIdSchema,
   isoDateSchema,
   nonNegativeIntSchema,
-} from "./common";
+} from './common';
 
-export const EVENT_KINDS = ["mls_commit", "mls_proposal", "mls_welcome", "app_message", "control"] as const;
+export const EVENT_KINDS = [
+  'mls_commit',
+  'mls_proposal',
+  'mls_welcome',
+  'app_message',
+  'control',
+] as const;
 export const eventKindSchema = z.enum(EVENT_KINDS);
 export type EventKind = z.infer<typeof eventKindSchema>;
 
 /** The kinds a client may submit. `mls_welcome` rides inside a commit; `control` is the server's. */
-export const SUBMITTABLE_EVENT_KINDS = ["mls_commit", "mls_proposal", "app_message"] as const;
+export const SUBMITTABLE_EVENT_KINDS = ['mls_commit', 'mls_proposal', 'app_message'] as const;
 export const submittableEventKindSchema = z.enum(SUBMITTABLE_EVENT_KINDS);
 export type SubmittableEventKind = z.infer<typeof submittableEventKindSchema>;
 
 /** `senderAccountId` of a `control` event. Not a real account id, on purpose. */
-export const SERVER_SENDER_ID = "allo:server";
+export const SERVER_SENDER_ID = 'allo:server';
 export const senderAccountIdSchema = z.union([accountIdSchema, z.literal(SERVER_SENDER_ID)]);
 
 /** Bound on the base64-ENCODED payload: 1 MiB of text. */
@@ -36,10 +42,14 @@ export const eventPayloadSchema = base64Schema(MAX_EVENT_PAYLOAD_BASE64_LENGTH);
 export const MAX_BLOB_REFS_PER_EVENT = 16;
 
 /** The JSON inside a `control` event's payload (base64 of the UTF-8 JSON). */
-export const controlEventSchema = z.discriminatedUnion("t", [
-  z.object({ t: z.literal("instance_revoked"), instanceId: instanceIdSchema, accountId: accountIdSchema }),
-  z.object({ t: z.literal("member_left"), accountId: accountIdSchema }),
-  z.object({ t: z.literal("conversation_created") }),
+export const controlEventSchema = z.discriminatedUnion('t', [
+  z.object({
+    t: z.literal('instance_revoked'),
+    instanceId: instanceIdSchema,
+    accountId: accountIdSchema,
+  }),
+  z.object({ t: z.literal('member_left'), accountId: accountIdSchema }),
+  z.object({ t: z.literal('conversation_created') }),
 ]);
 export type ControlEvent = z.infer<typeof controlEventSchema>;
 
@@ -92,7 +102,7 @@ export type Welcome = z.infer<typeof welcomeSchema>;
  * The schema enforces the shapes; that the leaves ARE the sender is checked
  * by the server, which alone knows who signed the request.
  */
-export const COMMIT_KINDS = ["member", "external", "resync"] as const;
+export const COMMIT_KINDS = ['member', 'external', 'resync'] as const;
 export const commitKindSchema = z.enum(COMMIT_KINDS);
 export type CommitKind = z.infer<typeof commitKindSchema>;
 
@@ -108,7 +118,7 @@ export const groupInfoDataSchema = base64Schema(GROUP_INFO_MAX_BASE64);
 /** What the server must know about a commit it cannot read. */
 export const commitInfoSchema = z.object({
   newEpoch: nonNegativeIntSchema,
-  kind: commitKindSchema.default("member"),
+  kind: commitKindSchema.default('member'),
   addedLeaves: z.array(addedLeafSchema),
   /** Instance ids. */
   removedLeaves: z.array(instanceIdSchema),
@@ -129,24 +139,32 @@ export type CommitInfoInput = z.input<typeof commitInfoSchema>;
  * and the initial commit of a new conversation. `member` imposes none.
  */
 function checkCommitKindShape(commit: CommitInfo, ctx: z.RefinementCtx): void {
-  if (commit.kind === "member") return;
+  if (commit.kind === 'member') return;
   if (commit.addedLeaves.length !== 1) {
     ctx.addIssue({
-      code: "custom",
-      path: ["commit", "addedLeaves"],
+      code: 'custom',
+      path: ['commit', 'addedLeaves'],
       message: `a ${commit.kind} commit adds exactly one leaf: the sender's`,
     });
   }
   if (commit.welcome !== undefined) {
-    ctx.addIssue({ code: "custom", path: ["commit", "welcome"], message: `a ${commit.kind} commit carries no welcome` });
-  }
-  if (commit.kind === "external" && commit.removedLeaves.length !== 0) {
-    ctx.addIssue({ code: "custom", path: ["commit", "removedLeaves"], message: "an external commit removes no leaf" });
-  }
-  if (commit.kind === "resync" && commit.removedLeaves.length !== 1) {
     ctx.addIssue({
-      code: "custom",
-      path: ["commit", "removedLeaves"],
+      code: 'custom',
+      path: ['commit', 'welcome'],
+      message: `a ${commit.kind} commit carries no welcome`,
+    });
+  }
+  if (commit.kind === 'external' && commit.removedLeaves.length !== 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['commit', 'removedLeaves'],
+      message: 'an external commit removes no leaf',
+    });
+  }
+  if (commit.kind === 'resync' && commit.removedLeaves.length !== 1) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['commit', 'removedLeaves'],
       message: "a resync commit removes exactly one leaf: the sender's former one",
     });
   }
@@ -165,17 +183,29 @@ export const submitEventRequestSchema = z
     blobIds: z.array(blobIdSchema).max(MAX_BLOB_REFS_PER_EVENT).optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.kind === "mls_commit") {
+    if (v.kind === 'mls_commit') {
       if (v.commit === undefined) {
-        ctx.addIssue({ code: "custom", path: ["commit"], message: "an mls_commit carries commit info" });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['commit'],
+          message: 'an mls_commit carries commit info',
+        });
       } else {
         if (v.commit.newEpoch !== v.epoch + 1) {
-          ctx.addIssue({ code: "custom", path: ["commit", "newEpoch"], message: "a commit advances the epoch by exactly one" });
+          ctx.addIssue({
+            code: 'custom',
+            path: ['commit', 'newEpoch'],
+            message: 'a commit advances the epoch by exactly one',
+          });
         }
         checkCommitKindShape(v.commit, ctx);
       }
     } else if (v.commit !== undefined) {
-      ctx.addIssue({ code: "custom", path: ["commit"], message: `a ${v.kind} carries no commit info` });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['commit'],
+        message: `a ${v.kind} carries no commit info`,
+      });
     }
   });
 export type SubmitEventRequest = z.infer<typeof submitEventRequestSchema>;

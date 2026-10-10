@@ -1,7 +1,7 @@
-import type { User } from "@oxy.so/core";
-import { oxy } from "../../../oxy";
-import { isOxyUserNotFound } from "../../../utils/oxyUserDisplay";
-import type { ModerationSubjectProvider, ModerationSubjectSnapshot } from "./types";
+import type { User } from '@oxy.so/core';
+import { oxy } from '../../../oxy';
+import { isOxyUserNotFound } from '../../../utils/oxyUserDisplay';
+import type { ModerationSubjectProvider, ModerationSubjectSnapshot } from './types';
 
 /**
  * A reported account, as universal material (§5.3 `profile`).
@@ -42,8 +42,8 @@ export function createUserSubjectProvider(
   },
 ): ModerationSubjectProvider {
   return {
-    reportedType: "user",
-    subjectType: "identity.profile",
+    reportedType: 'user',
+    subjectType: 'identity.profile',
 
     async snapshot(reportedId: string): Promise<ModerationSubjectSnapshot | null> {
       let user: User;
@@ -84,7 +84,7 @@ export function createUserSubjectProvider(
       return {
         subject: {
           externalId: reportedId,
-          type: "identity.profile",
+          type: 'identity.profile',
           /**
            * No `permalink`. Allo has no public profile page — `app/(chat)/u` is an
            * in-app route behind authentication, so any URL emitted here would be
@@ -94,7 +94,7 @@ export function createUserSubjectProvider(
           author: { oxyUserId: reportedId },
         },
         content: {
-          type: "profile",
+          type: 'profile',
           data: {
             ...(displayName === undefined ? {} : { displayName }),
             ...(bio === undefined ? {} : { bio }),
