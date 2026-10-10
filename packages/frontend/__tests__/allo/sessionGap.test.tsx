@@ -81,7 +81,6 @@ jest.mock('@oxy.so/services', () => ({
 }));
 
 // Imported after the mocks, the way jest requires.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { AlloRoot } = require('@/lib/allo/AlloRoot') as typeof import('@/lib/allo/AlloRoot');
 
 const settle = async () => {

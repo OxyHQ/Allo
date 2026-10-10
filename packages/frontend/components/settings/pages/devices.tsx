@@ -46,10 +46,9 @@ export default function DevicesScreen() {
     }
   }, [own, pending, t]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Once on mount: the lists then follow the SDK's `instances` topic.
   useEffect(() => {
     void refreshAll();
-    // Once on mount: the lists then follow the SDK's `instances` topic.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const run = useCallback(

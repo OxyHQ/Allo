@@ -5,7 +5,6 @@ import type { AlloClient } from '@allo/core';
 
 /* The SDK is required lazily: this module is evaluated while `@allo/core` is
    still initialising, so a static namespace import binds an empty object. */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const sdk = () => require('@allo/core') as typeof import('@allo/core');
 
 export const APP_ID = 'allo';

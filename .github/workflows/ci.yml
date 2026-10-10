@@ -6,9 +6,9 @@
 # up for review — executed nowhere. A privacy control that is not enforced is a
 # comment.
 #
-# Deliberately minimal: install, typecheck, test. No coverage thresholds, no
-# matrix, no lint gate. The point is that the guards RUN on every PR; anything
-# more is a second thing to keep green.
+# Deliberately minimal: install, lint, typecheck, test. No coverage thresholds,
+# no matrix. The point is that the guards RUN on every PR; anything more is a
+# second thing to keep green.
 #
 # Two jobs rather than two steps: the frontend needs no database and the backend
 # needs no expo tree, so neither should wait on the other's failure.
@@ -250,6 +250,30 @@ jobs:
       - name: Mutation-test performance gates
         run: bun run test:performance-gates
 
+  # Biome formats and lints the whole repository (`biome.jsonc`); the frontend's
+  # minimal ESLint config keeps only the eslint-plugin-expo rules Biome has no
+  # equivalent for. Cheap and repo-wide, so it runs on every PR regardless of
+  # which paths changed.
+  lint:
+    name: Lint (Biome + Expo ESLint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install
+        run: bun install
+
+      - name: Biome
+        run: bunx biome ci .
+
+      - name: Expo ESLint (frontend)
+        run: bun run --filter @allo/frontend lint
+
   # The one check branch protection should require. A job skipped because the
   # PR does not touch its paths reports `skipped`; one that failed or was
   # cancelled (including a timeout, which GitHub reports as cancelled) fails
@@ -257,7 +281,7 @@ jobs:
   ci-complete:
     name: CI complete
     if: always()
-    needs: [changes, deploy-script-test, backend, sdk, frontend]
+    needs: [changes, lint, deploy-script-test, backend, sdk, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -30,7 +30,6 @@ function loadAppConfig() {
   delete process.env.APP_VARIANT;
   try {
     jest.resetModules();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const factory = require(path.join(__dirname, '..', 'app.config.js')) as (config: unknown) => {
       expo: { android: { package: string }; ios: { bundleIdentifier: string } };
     };

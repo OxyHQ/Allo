@@ -34,6 +34,7 @@ export default function ConversationRoute() {
 
   const isSelf = Boolean(id) && id === user?.id;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `known` is read only to skip the work: once it exists there is nothing to resolve.
   useEffect(() => {
     if (!id || known || isSelf || resolving.current === id) return;
     resolving.current = id;
@@ -56,8 +57,6 @@ export default function ConversationRoute() {
     return () => {
       cancelled = true;
     };
-    // `known` is read only to skip the work: once it exists there is nothing to resolve.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, known?.id, isSelf, client, createDirect, refresh, router, t]);
 
   if (known) return <ConversationScreen key={known.id} conversationId={known.id} />;

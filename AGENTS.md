@@ -45,11 +45,19 @@ bun run test                # Test all
 bun run clean               # Clean everything
 ```
 
-**`bun run lint` is not usable as written.** Only the frontend has a working lint
-setup (`expo lint` plus `eslint.config.js`). The backend declares no `lint`
-script, and `shared-types` declares one but ships neither eslint nor a config, so
-it exits with "ESLint couldn't find an eslint.config.js". Lint the frontend
-directly rather than from the root.
+**Biome formats and lints the whole repository** (`biome.jsonc` at the root,
+single quotes, width 100). `bun run lint` is `biome check .` plus the frontend's
+`expo lint .`; `bun run lint:fix` applies Biome's safe fixes and `bun run format`
+formats. The frontend keeps a MINIMAL `eslint.config.js` holding only what Biome
+cannot do — `eslint-plugin-expo`'s `no-env-var-destructuring`,
+`no-dynamic-env-var` and `use-dom-exports` (Metro inlines `EXPO_PUBLIC_*` only
+from a literal `process.env.X` read; anything else is silently `undefined`). Do
+not grow it back into a second linter: a new guard goes in `biome.jsonc`, as the
+`expo-video` `VideoView` import restriction did (`noRestrictedImports`, scoped to
+`packages/frontend/**`). The rules set to `"warn"` in `biome.jsonc` are a baseline
+of pre-existing violations to tighten, not a statement that they are fine. CI
+runs `biome ci .` and the Expo ESLint in the `lint` job. `.git-blame-ignore-revs`
+lists the mass-format commit (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
 
 CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `vitest`
 against a real Postgres service container, and frontend typecheck plus `jest`.

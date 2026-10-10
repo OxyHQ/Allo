@@ -30,6 +30,7 @@ export function useVersionedClientSnapshot<T>(client: AlloClient, topic: Subscri
       }),
     [client, topic],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: getSnapshot is a fresh closure every render over the same getter; the version is what invalidates.
   const read = useCallback(() => {
     const c = cache.current!;
     if (c.read !== c.version) {
@@ -37,8 +38,6 @@ export function useVersionedClientSnapshot<T>(client: AlloClient, topic: Subscri
       c.read = c.version;
     }
     return c.value;
-    // getSnapshot is a fresh closure every render over the same getter; the version is what invalidates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, topic]);
   return useSyncExternalStore(subscribe, read, read);
 }

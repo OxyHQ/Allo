@@ -163,7 +163,8 @@ describe("the expiry sweep", () => {
     expect(source.length).toBeGreaterThan(3_000);
     expect(source).toContain("bootServer");
 
-    expect(source).toContain('from "./src/db/expiry"');
+    // Either quote style: the formatter, not this test, decides which one the source uses.
+    expect(source).toMatch(/from ["']\.\/src\/db\/expiry["']/);
     expect(source).toContain("startExpirySweep(");
   });
 
