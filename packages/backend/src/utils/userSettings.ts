@@ -2,9 +2,8 @@
  * The `user_settings` wire shape, both directions.
  *
  * The table is FLAT (`privacy_show_contact_info`, `security_encryption_enabled`,
- * …) because `schema/social.ts` refused to store four Mongoose sub-documents as
- * opaque `jsonb`. The API is NESTED, because that is what Mongo emitted and what
- * every client reads today — `stores/appearanceStore.ts` reads
+ * …) because `schema/social.ts` refuses to store four settings groups as opaque
+ * `jsonb`. The API is NESTED, because that is what every client reads — `stores/appearanceStore.ts` reads
  * `appearance.primaryColor` and `profileCustomization.coverImage`,
  * `lib/privacy/api.ts` reads `privacy.hiddenWords`.
  *
@@ -16,17 +15,15 @@
  *
  * ## `null` is OMITTED, not emitted
  *
- * Mongo stored an absent optional as a missing path, so the JSON simply had no
- * `primaryColor` key. Postgres stores it as `NULL`, and `null` is a value that
- * survives `JSON.stringify`. Emitting it would be a wire change: the settings
- * screen spreads `...mySettings.profileCustomization` straight back into its next
- * PUT, so a `coverImage: null` that was previously absent would start arriving as
- * an explicit "clear this" on every save. Omitting keeps the round trip identical.
+ * An unset optional is `NULL` in Postgres, and `null` is a value that survives
+ * `JSON.stringify`. The wire contract is that an unset optional is an ABSENT key:
+ * the settings screen spreads `...mySettings.profileCustomization` straight back
+ * into its next PUT, so an emitted `coverImage: null` would arrive as an explicit
+ * "clear this" on every save. Omitting keeps the round trip identical.
  *
  * ## What is deliberately NOT emitted
  *
- * `_id`. Mongo put one on every document and nothing in this repository reads it
- * — not the settings screen, not the appearance store, not the privacy or cloud
+ * `_id`. Nothing in this repository reads one — not the settings screen, not the appearance store, not the privacy or cloud
  * sync clients, which key everything on `oxyUserId`. The row's real primary key
  * is emitted as `id`; inventing an `_id` alias for a value no client asks for
  * would be a compatibility shim for a reader that does not exist.
@@ -138,10 +135,9 @@ function bool(source: Record<string, unknown>, key: string): boolean | undefined
  * A string field that a client may also CLEAR by sending `null`.
  *
  * Three outcomes, and the third is the one worth naming: `undefined` leaves the
- * column alone, `null` clears it, and an empty-after-trim string ALSO clears it —
- * which is what the Mongoose handler did (`value.trim() || undefined` inside a
- * `$set`), so a user who blanks the display-name field gets it cleared rather
- * than set to `""`.
+ * column alone, `null` clears it, and an empty-after-trim string ALSO clears it,
+ * so a user who blanks the display-name field gets it cleared rather than set
+ * to `""`.
  */
 function clearableString(source: Record<string, unknown>, key: string): string | null | undefined {
   const value = source[key];
@@ -169,10 +165,8 @@ function oneOf<T extends string>(
 /**
  * The recognised fields of a `PUT /api/profile/settings` body, as a column patch.
  *
- * Unrecognised keys and wrongly-typed values are DROPPED rather than refused,
- * which is what the Mongoose handler did — it built a `$set` from whichever
- * fields passed their `typeof` check and ignored the rest. Preserving that is
- * deliberate: several app versions are in the field at once and a newer one
+ * Unrecognised keys and wrongly-typed values are DROPPED rather than refused.
+ * That is deliberate: several app versions are in the field at once and a newer one
  * sending a field this server does not know must not have its whole save fail.
  *
  * The result can be empty; `updateUserSettings` answers that by returning the
@@ -192,8 +186,8 @@ export function readUserSettingsPatch(body: unknown): UserSettingsPatch {
   }
 
   if (typeof root.profileHeaderImage === "string") {
-    // Not `clearableString`: the Mongoose handler assigned this one verbatim,
-    // so `""` stored an empty string and only `""` could clear it.
+    // Not `clearableString`: this one is assigned verbatim, so `""` stores an
+    // empty string and only `""` can clear it.
     patch.profileHeaderImage = root.profileHeaderImage;
   }
 

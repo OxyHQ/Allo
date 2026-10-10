@@ -19,7 +19,7 @@ import {
  * name for one function and a place for the two to drift. Callers reach the
  * repository directly.
  *
- * The lease model itself is unchanged from Mongo: a worker claims a row for a
+ * The lease model: a worker claims a row for a
  * bounded time, and a lease that expires is reclaimable, so a process killed
  * mid-delivery strands nothing. The row IS the job — there is no second queue that
  * can drift out of sync with it.

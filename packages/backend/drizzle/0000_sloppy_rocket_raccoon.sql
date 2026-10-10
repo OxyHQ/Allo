@@ -370,10 +370,9 @@ CREATE INDEX "restricts_restricted_id_idx" ON "restricts" USING btree ("restrict
 -- than after the first statement. An immediate trigger would reject every
 -- conversation ever created.
 --
--- This closes a race the Mongoose hook never did. `pre('save')` ran in the
--- application against the document in memory, so two concurrent writes could
--- each remove a different participant from a two-person direct conversation and
--- both pass. Here the count is taken under the transaction's own visibility at
+-- This closes a race an application-side check cannot: against a row in memory,
+-- two concurrent writes could each remove a different participant from a
+-- two-person direct conversation and both pass. Here the count is taken under the transaction's own visibility at
 -- commit time, and one of the two is refused.
 --
 -- Deletion is deliberately silent: `ON DELETE CASCADE` removes a conversation's

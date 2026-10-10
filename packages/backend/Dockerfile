@@ -2,12 +2,7 @@
 #
 # Runs on AWS Graviton (linux/arm64) as well as x86_64; base node:22-alpine.
 #
-# Node 22 (LTS), and the pin outlives the reason it was written for. It was
-# originally justified entirely in terms of the MongoDB driver — mongoose 9 /
-# mongodb 7 / bson 6 declaring engines.node >= 20.19.0, and SCRAM auth reaching
-# for the Web Crypto global. Mongo is gone from the service, so that specific
-# crash is not reachable any more; the underlying hazard is NOT Mongo's and is
-# why this stays >= 20:
+# Node 22 (LTS). The hazard that keeps this >= 20:
 #
 # Node 18 (EOL 2025-04) does not expose globalThis.crypto when executing a
 # script file, so @oxy.so/core's crypto polyfill installs an RN-only

@@ -8,8 +8,7 @@
  * A mocked `insert` accepts all three, which is exactly why the foundation PR
  * booted this harness rather than mocking drizzle.
  *
- * Nothing here imports a route or a Mongoose model. The repositories land
- * unused; this file is the only thing that calls them.
+ * Nothing here imports a route; the repositories are exercised directly.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -148,9 +147,8 @@ describe("blocks converge on the unique index instead of reading first", () => {
     const pair = { userId: id("blocker"), blockedId: id("blocked") };
     await warmPool(pair.userId);
 
-    // The race the Mongoose version lost: `findOne` then `create` let every one
-    // of these see nothing and insert, and seven of the eight then failed on the
-    // index. See `warmPool` — without it these serialise and prove nothing.
+    // The race a read-then-insert loses: every one of these would see nothing and
+    // insert, and seven of the eight would then fail on the index. See `warmPool` — without it these serialise and prove nothing.
     const outcomes = await Promise.all(
       Array.from({ length: 8 }, () => blockUser(db, pair)),
     );
@@ -454,7 +452,7 @@ describe("a settings update is partial, and is an allow-list", () => {
     expect(row.profileDisplayName).toBe("Grace");
   });
 
-  it("treats an empty patch as Mongo's upsert-and-return, not an error", async () => {
+  it("treats an empty patch as ensure-and-return, not an error", async () => {
     const oxyUserId = id("settings-user");
 
     // Reachable in production: the route builds its patch from whichever request
@@ -661,8 +659,8 @@ describe("user_behaviors is deleted whole and never read into", () => {
       .select()
       .from(schema.userBehaviors)
       .where(eq(schema.userBehaviors.oxyUserId, oxyUserId));
-    // Mongo's `default: {}`, now the column's. A null here would make every
-    // future reader of this column need a guard the port could have avoided.
+    // The column's `default: {}`. A null here would make every future reader of
+    // this column need a guard.
     expect(rows[0].preferences).toEqual({});
   });
 

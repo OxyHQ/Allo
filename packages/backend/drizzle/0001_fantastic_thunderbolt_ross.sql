@@ -1,7 +1,7 @@
 -- oxy:deploy-phase=pre
 --
--- Additive only: three CHECK constraints for the Mongoose `maxlength` bounds
--- `reports` carried (`details` 500, `localStatusReason` 300,
+-- Additive only: three CHECK constraints for the length bounds
+-- `reports` carries (`details` 500, `localStatusReason` 300,
 -- `lastDeliveryError` 2000).
 --
 -- `pre` because no image can violate them. `db/moderation/reportRepository.ts`

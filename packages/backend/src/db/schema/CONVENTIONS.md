@@ -7,7 +7,7 @@ look like drift.
 
 ## Where the messaging schema is
 
-The messaging tables that came through the Mongo → Postgres port
+The original messaging tables
 (`conversations`, `conversation_participants`, `messages` and its per-recipient
 tables, `devices`, `device_pre_keys`, and every `bridge_*` table) were replaced
 on 2026-09-17 (issue #139) as part of the clean break to the new messaging
@@ -17,9 +17,8 @@ tables too.
 
 ## Ids
 
-`text` primary keys, supplied by the application. A row that predates the
-cutover keeps its 24-character Mongo ObjectId hex verbatim; a row created after
-it gets a uuid v7. There is no surrogate integer key except where a table's
+`text` primary keys, supplied by the application. An older row carries a
+24-character hex id; a new row gets a uuid v7. There is no surrogate integer key except where a table's
 design names one on purpose and documents why (a dense-ordered sync cursor is
 the one legitimate case).
 

@@ -12,10 +12,9 @@
  * router rather than the projection function — the projection being right is
  * worth nothing if a handler does not call it.
  *
- * The one thing deliberately NOT asserted is `_id`. Mongo emitted one; nothing
- * in this repository reads it (`stores/appearanceStore.ts` and
- * `lib/privacy/api.ts` key on `oxyUserId`), so the port emits the
- * row's real `id` and does not invent an alias.
+ * The one thing deliberately NOT asserted is `_id`. Nothing in this repository
+ * reads one (`stores/appearanceStore.ts` and `lib/privacy/api.ts` key on
+ * `oxyUserId`), so the route emits the row's real `id` and invents no alias.
  */
 
 import express from "express";
@@ -172,13 +171,12 @@ describe("PUT /api/profile/settings", () => {
   });
 
   /**
-   * The one deliberate divergence from Mongo, pinned so it cannot regress by
-   * accident in either direction.
+   * Pinned so it cannot regress by accident in either direction.
    *
-   * `$set: { appearance: … }` replaced the whole sub-document, so a request
-   * carrying only `primaryColor` reset `themeMode` to its default — and
+   * Replacing the whole `appearance` group would reset `themeMode` to its
+   * default on a request carrying only `primaryColor` — and
    * `stores/appearanceStore.ts` sends exactly that, one field at a time. Columns
-   * are patched individually now.
+   * are patched individually.
    */
   it("leaves themeMode alone when only primaryColor is sent", async () => {
     const user = id("appearance-user");
@@ -328,7 +326,7 @@ describe("blocks and restricts", () => {
     const listed = await request(app).get("/api/profile/restricts").set("x-test-user", user);
     expect(listed.body.data.restrictedUsers).toEqual([target]);
 
-    // Two different facts that Mongo also carried side by side. Reconciling them
+    // Two different facts kept side by side. Reconciling them
     // would be a behaviour change, so the settings column stays untouched.
     const settings = await request(app).get("/api/profile/settings/me").set("x-test-user", user);
     expect(settings.body.data.privacy.restrictedUsers).toEqual([]);

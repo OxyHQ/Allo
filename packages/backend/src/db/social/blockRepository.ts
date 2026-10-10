@@ -83,10 +83,9 @@ export async function blockedEitherWay(
 /**
  * Block `blockedId`. Returns whether this call is what created the block.
  *
- * ONE statement, converging on `blocks_user_id_blocked_id_key`. The Mongoose
- * version read first and inserted second, with a duplicate-key `catch` behind
- * it as a net; between that read and that write two concurrent requests could
- * both see nothing and both insert. The unique index is what makes the
+ * ONE statement, converging on `blocks_user_id_blocked_id_key`. A read followed
+ * by an insert would leave a window in which two concurrent requests both see
+ * nothing and both insert. The unique index is what makes the
  * duplicate impossible, and `ON CONFLICT DO NOTHING` is what turns losing that
  * race into the correct answer instead of an error to classify.
  *

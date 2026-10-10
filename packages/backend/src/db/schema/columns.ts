@@ -31,10 +31,9 @@ export function checkOneOf(name: string, column: PgColumn, values: readonly stri
  * closed set.
  *
  * Containment is trivially satisfied by an empty array, which is why
- * {@link checkNonEmptyArray} exists separately: Mongoose expressed "at least one
- * category" as a `validate` beside the `enum`, and those are two different
- * claims. Collapsing them into one constraint would silently drop the half that
- * a validator, unlike an enum, actually enforced.
+ * {@link checkNonEmptyArray} exists separately: "every element is in the set" and
+ * "there is at least one element" are two different claims. Collapsing them into
+ * one constraint would silently drop the second.
  */
 export function checkArrayWithin(name: string, column: PgColumn, values: readonly string[]) {
   return check(name, sql`${column} <@ ${sql.raw(textArrayLiteral(values))}`);

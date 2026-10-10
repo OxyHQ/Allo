@@ -8,8 +8,8 @@
  *
  * ## Absent optionals come back as `null`, not `undefined`
  *
- * Deliberately, and this is the one place in this domain where the Mongo shape is
- * NOT restored. `ModerationOutboxEvent` is a defined interface whose readers test
+ * Deliberately, and this is the one place in this domain where absence is NOT
+ * normalized to `undefined`. `ModerationOutboxEvent` is a defined interface whose readers test
  * `=== undefined`, so `moderationOutboxRepository` normalizes it; a report row has
  * no such interface — it is fifteen optional columns, and fifteen lines of
  * `x === null ? {} : { … }` whose only job would be to restore a distinction
@@ -18,12 +18,10 @@
  * must become a `string | undefined` (`details`, handed to the SDK's `ReportInput`)
  * says so at that call site.
  *
- * ## Three Mongoose `maxlength` bounds land here
+ * ## Three length bounds land here
  *
- * `details` (500), `localStatusReason` (300) and `lastDeliveryError` (2 000) were
- * bounded by the Mongoose schema; `db/schema/moderation.ts` carries no CHECK for
- * any of them, so the bound has nowhere else to live and is applied at every write
- * below. It TRUNCATES where Mongoose REJECTED, which is what every existing caller
+ * `details` (500), `localStatusReason` (300) and `lastDeliveryError` (2 000) are
+ * bounded at every write below. It TRUNCATES rather than rejecting, which is what every existing caller
  * already does to the same values before handing them over — the route slices
  * `details`, the delivery worker slices its error — so this makes the bound hold
  * for callers that do not, rather than turning a 201 into a 500 for a report whose
@@ -103,7 +101,7 @@ export async function findReportById(
  *
  * `crowd_source_case_id` is not unique — §7.3 lets CrowdSource MERGE reports into
  * one case, so several local reports can legitimately name it. This returns the
- * first, matching the Mongo `findOne` it replaces; nothing downstream is defined
+ * first; nothing downstream is defined
  * for the merged case yet, and inventing an ordering here would be a policy this
  * repository is not the place to decide.
  */
@@ -130,9 +128,8 @@ export async function findReportByCaseId(
  * the handle a decision the caller states rather than one it omits.
  *
  * The id is generated here. `reports.id` is a bare `text().primaryKey()` with no
- * database default, so a row inserted without one fails — this is where Mongo's
- * `_id` generation went, and the value is the uuid v7 CONVENTIONS.md specifies for
- * a row created after the cutover.
+ * database default, so a row inserted without one fails; the value is the uuid v7
+ * CONVENTIONS.md specifies for a new row.
  */
 export async function insertReport(
   input: {

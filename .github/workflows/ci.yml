@@ -10,8 +10,8 @@
 # matrix, no lint gate. The point is that the guards RUN on every PR; anything
 # more is a second thing to keep green.
 #
-# Two jobs rather than two steps: the frontend needs no MongoDB binary and the
-# backend needs no expo tree, so neither should wait on the other's failure.
+# Two jobs rather than two steps: the frontend needs no database and the backend
+# needs no expo tree, so neither should wait on the other's failure.
 name: CI
 
 on:
@@ -125,7 +125,7 @@ jobs:
     # memory-server equivalent, and a mocked insert accepts statements the
     # server rejects outright — deferred constraint triggers, unique indexes,
     # CHECKs, `FOR UPDATE SKIP LOCKED` — which is precisely the class of defect
-    # the Mongo→Postgres port introduces.
+    # a mocked suite cannot see.
     #
     # Plain `postgres:17-alpine`: this schema needs no PostGIS, no pgvector and
     # no pg_trgm, so nothing here requires a runner that can host one.

@@ -19,16 +19,15 @@ import {
  * copies run at once; recording it before and never releasing would make a
  * transient failure permanent and lose a decision silently.
  *
- * ## The duplicate-key `catch` is gone, and that is the point of the port here
+ * ## There is no duplicate-key `catch`, and that is the point
  *
- * Under Mongo the "already claimed" answer arrived as a duplicate-key ERROR that
- * this file recognised by inspecting `code === 11000` — so the one thing that
- * MUST propagate (a lost connection, a failover, an exhausted pool) was separated
- * from the one thing that must not, by a condition one mis-widened `catch` away
- * from answering 200 to a decision nobody ever handled. `claimModerationEvent`
- * returns the answer as a BOOLEAN, from `on conflict do nothing … returning`, so
- * a duplicate never throws and everything that does throw reaches the caller
- * untouched. There is no longer a catch here to widen.
+ * The one thing that MUST propagate (a lost connection, a failover, an exhausted
+ * pool) must never be confused with "already claimed" — a `catch` that
+ * recognised a duplicate-key error would be one mis-widening away from answering
+ * 200 to a decision nobody ever handled. `claimModerationEvent` returns the answer
+ * as a BOOLEAN, from `on conflict do nothing … returning`, so a duplicate never
+ * throws and everything that does throw reaches the caller untouched. There is no
+ * catch here to widen.
  */
 
 export function postgresProcessedEventStore(): ProcessedEventStore {

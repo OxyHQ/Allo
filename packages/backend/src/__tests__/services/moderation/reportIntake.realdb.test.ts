@@ -3,18 +3,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 /**
  * The intake path against a REAL Postgres server.
  *
- * This replaces two files — `reportIntakeMongo.test.ts`, which ran against a real
- * replica set, and `reportIntakeDurability.test.ts`, which mocked the models — and
- * it keeps every case from both. The merge is not tidying: after the port there is
- * no longer a mock-shaped version of these claims to write. `createReport` takes a
- * drizzle transaction handle rather than a `ClientSession`, and the assertions that
- * used to be about WHICH session each write received are the ones a real server
- * answers directly, by whether the rows are there.
+ * `createReport` takes a drizzle transaction handle, and which handle each write
+ * received is answered directly by a real server: by whether the rows are there.
  *
- * The reason the real server is not optional is the bug that put the Mongo file
- * here: a mocked `updateOne` accepted an update document Mongo rejected outright,
- * so `POST /reports` would have failed for every report ever submitted, in
- * production, with 62 green tests. A mock can be made to agree with any claim
+ * The real server is not optional: a mocked write accepts a statement the server
+ * rejects outright, so `POST /reports` could fail for every report ever submitted,
+ * in production, with a green suite. A mock can be made to agree with any claim
  * about the database, so the claims that MATTER — both rows commit together, the
  * unique index makes a retry idempotent, a failed second write takes the first
  * with it — must be tested against a real one.
@@ -214,9 +208,6 @@ describe("report intake durability", () => {
      * and the reporter would get a 500 telling them their report was not filed
      * when the winner's copy is on file. Moving the read outside the transaction is
      * what this case pins, and moving it back in is what makes it fail.
-     *
-     * Mongo needed none of this: a duplicate-key error there left the session
-     * usable, so the natural recovery shape ported straight across and was wrong.
      */
     const subject = { reporter: id("reporter"), reportedType: "user" as ReportedType, reportedId: id("user") };
 
@@ -476,10 +467,10 @@ describe("the bound on a reported identifier", () => {
 describe("what intake refuses before it writes anything", () => {
   it("refuses an identifier that is not a string, before building a query", async () => {
     /**
-     * A truthiness check would pass `{$ne: null}` straight into the lookup. That
-     * particular injection is a Mongo shape and drizzle would not build a query
-     * from it — but the guard is kept because what it really enforces is that a
-     * non-string identifier never reaches storage at all, and `createReport` is
+     * A truthiness check would pass `{$ne: null}` straight into the lookup. Drizzle
+     * would not build a query from that object — but the guard is kept because
+     * what it really enforces is that a non-string identifier never reaches
+     * storage at all, and `createReport` is
      * exported: a worker or a reconciliation script is under no obligation to have
      * passed the route's validation.
      */

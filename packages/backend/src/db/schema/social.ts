@@ -71,7 +71,7 @@ export const userBehaviors = pgTable("user_behaviors", {
 /**
  * The four embedded settings documents, FLATTENED into columns.
  *
- * Mongoose nested them for grouping, not because anything reads them whole, and
+ * The API nests them for grouping, not because anything reads them whole, and
  * every leaf is a scalar with a declared default. As `jsonb` those defaults
  * would live only in application code and the two closed value sets
  * (`themeMode`, `profileVisibility`) could hold anything at all. The prefix in

@@ -5,22 +5,20 @@
  * receives is unchanged; `utils/userSettings.ts` is where the flat row becomes
  * the nested document and where a request body becomes a column patch.
  *
- * ## Two things the port removes rather than reproduces
+ * ## Two deliberate properties
  *
- * - **The duplicate-key `catch`.** `POST /blocks` used to read, insert, and keep
- *   a `code === 11000` handler behind both as a net — three places deciding one
- *   answer, with a window between the read and the write where two concurrent
- *   requests both saw nothing. `blockUser` is one statement converging on
+ * - **No duplicate-key `catch`.** A read, an insert and a duplicate-key handler
+ *   would be three places deciding one answer, with a window between the read
+ *   and the write where two concurrent requests both see nothing. `blockUser` is
+ *   one statement converging on
  *   `blocks_user_id_blocked_id_key`, and the boolean it returns IS the 201-vs-200
  *   distinction. A real failure still throws instead of being read as a duplicate.
  *
- * - **`$set: { appearance: … }` replacing the whole sub-document.** Mongoose
- *   assigned an `appearance` object, so a request carrying only `primaryColor`
- *   silently reset `themeMode` to its default — and the app sends exactly that
- *   (`stores/appearanceStore.ts` PUTs `partial.appearance`, one field at a time).
- *   Columns are patched individually, so an unmentioned setting is now left
- *   alone. This is a deliberate divergence, not an oversight: the alternative is
- *   re-implementing a data-losing side effect of a document store on purpose.
+ * - **A partial `appearance` never replaces the whole group.** The app sends one
+ *   field at a time (`stores/appearanceStore.ts` PUTs `partial.appearance`), so
+ *   replacing the group would silently reset `themeMode` to its default on a
+ *   request carrying only `primaryColor`. Columns are patched individually, so an
+ *   unmentioned setting is left alone.
  */
 
 import { Router, Response } from 'express';

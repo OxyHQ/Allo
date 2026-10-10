@@ -11,16 +11,15 @@
  *
  * `id` is the CrowdSource event id and it is the primary key, so a conflict is not
  * an error condition to work around — it is the answer "somebody else has this
- * event". Under Mongo that answer arrived as a duplicate-key ERROR (`code 11000`)
- * which `moderationEventStore.ts` had to recognise by inspecting an exception and
- * separate from every other failure. `on conflict (id) do nothing … returning`
- * gives it as a value instead.
+ * event". `on conflict (id) do nothing … returning` gives that answer as a value,
+ * never as an exception a caller would have to recognise and separate from every
+ * other failure.
  *
- * That is the load-bearing difference, not a tidier spelling. A lost connection, a
+ * That is load-bearing, not a tidier spelling. A lost connection, a
  * failover or pool exhaustion is NOT "already processed": it has to propagate so
  * the middleware answers non-2xx and the event stays on CrowdSource's retry
  * schedule (§10.9). Swallowing it would answer 200 and retire a decision nobody
- * ever handled — and the Mongo shape made that one mis-widened `catch` away. Here
+ * ever handled — one mis-widened `catch` away if the duplicate were an error. Here
  * there is no catch to widen: the duplicate never throws, and everything that does
  * throw reaches the caller.
  *

@@ -1,21 +1,14 @@
 /**
- * `user_settings` — the four Mongoose sub-documents, FLATTENED into columns.
+ * `user_settings` — the four settings groups, FLATTENED into columns.
  *
- * Ported from `utils/userSettings.ts`'s `ensureUserSettings` and the
- * `PUT /api/profile/settings` handler. Both change shape here, and both change
- * because the flattening moved work out of application code:
+ * Backs `ensureUserSettings` and the `PUT /api/profile/settings` handler:
  *
- * - **`ensureUserSettings` loses a branch.** Mongoose's version had a second
- *   repair path — "the row exists but has no `profileCustomization`, so write
- *   the defaults into it" — because a sub-document with no value stored has no
- *   defaults either. `profile_cover_photo_enabled` and
- *   `profile_minimalist_mode` are `NOT NULL DEFAULT true/false` columns, so the
- *   state that branch repaired is now unrepresentable. Deleting it is the port
- *   working, not a behaviour the port dropped.
+ * - **`ensureUserSettings` has no repair branch.** `profile_cover_photo_enabled`
+ *   and `profile_minimalist_mode` are `NOT NULL DEFAULT true/false` columns, so
+ *   a row with a group missing its defaults is unrepresentable.
  *
- * - **An update is an explicit column list.** The Mongoose handler built a
- *   `$set` of dot-paths from request fields; the equivalent here is
- *   {@link UPDATABLE_USER_SETTINGS_COLUMNS}, an allow-list that omits `id`,
+ * - **An update is an explicit column list.**
+ *   {@link UPDATABLE_USER_SETTINGS_COLUMNS} is an allow-list that omits `id`,
  *   `oxyUserId` and `createdAt` — so no patch, however it was constructed, can
  *   move a settings row to another user or rewrite when it was created.
  *
@@ -227,11 +220,11 @@ export async function ensureUserSettings(
 
 /**
  * Apply a partial update, creating the row if there is none, and return the
- * result. The upsert is what preserves Mongoose's `{ upsert: true, new: true }`.
+ * result. It is an upsert that returns the new row.
  *
  * An empty patch is not a degenerate case to reject: the route builds its patch
  * from whichever request fields validated, so "nothing recognised" is reachable,
- * and Mongo answered it by upserting and returning the current document.
+ * and its answer is to ensure the row and return the current one.
  * {@link ensureUserSettings} is that answer, and it is also the only correct
  * one — `ON CONFLICT DO UPDATE SET` needs at least one assignment.
  *
