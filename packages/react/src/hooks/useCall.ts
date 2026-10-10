@@ -1,11 +1,11 @@
-import type { CallHistoryEntry, CallView } from "@allo/core";
-import { useCallback, useMemo } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot } from "../internal/useClientSnapshot";
+import type { CallHistoryEntry, CallView } from '@allo/core';
+import { useCallback, useMemo } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { useClientSnapshot } from '../internal/useClientSnapshot';
 
 export interface CallActions {
   /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
-  start(conversationId: string, mode?: "voice" | "video"): Promise<CallView>;
+  start(conversationId: string, mode?: 'voice' | 'video'): Promise<CallView>;
   answer(): Promise<void>;
   decline(): Promise<void>;
   end(): Promise<void>;
@@ -26,24 +26,29 @@ export interface CallActions {
  */
 export function useCall(): CallView | null {
   const { client } = useAlloContext();
-  return useClientSnapshot(client, "call", () => client.calls.current());
+  return useClientSnapshot(client, 'call', () => client.calls.current());
 }
 
 /** The things a call screen does. Stable across renders. */
 export function useCallActions(): CallActions {
   const { client } = useAlloContext();
-  const start = useCallback((conversationId: string, mode?: "voice" | "video") => client.calls.start(conversationId, mode), [client]);
+  const start = useCallback(
+    (conversationId: string, mode?: 'voice' | 'video') => client.calls.start(conversationId, mode),
+    [client],
+  );
   const answer = useCallback(() => client.calls.answer(), [client]);
   const decline = useCallback(() => client.calls.decline(), [client]);
   const end = useCallback(() => client.calls.end(), [client]);
   const setMuted = useCallback((muted: boolean) => client.calls.setMuted(muted), [client]);
-  const setCameraEnabled = useCallback((on: boolean) => client.calls.setCameraEnabled(on), [client]);
+  const setCameraEnabled = useCallback(
+    (on: boolean) => client.calls.setCameraEnabled(on),
+    [client],
+  );
   return useMemo(
     () => ({ start, answer, decline, end, setMuted, setCameraEnabled }),
     [start, answer, decline, end, setMuted, setCameraEnabled],
   );
 }
-
 
 /**
  * Every call this device knows about, newest first.
@@ -63,5 +68,5 @@ export function useCallActions(): CallActions {
  */
 export function useCallHistory(): CallHistoryEntry[] {
   const { client } = useAlloContext();
-  return useClientSnapshot(client, "conversations", () => client.calls.history());
+  return useClientSnapshot(client, 'conversations', () => client.calls.history());
 }

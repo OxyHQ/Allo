@@ -10,18 +10,18 @@
  * online. The rules deciding what comes back are in `presenceService.ts`.
  */
 
-import { Router, type RequestHandler } from "express";
-import { presenceQuerySchema } from "@allo/shared-types";
-import { readPresence } from "../../services/platform/presenceService";
-import { asyncRoute } from "./asyncRoute";
-import { callerOf } from "./conversations";
-import { parseQuery } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import { presenceQuerySchema } from '@allo/shared-types';
+import { readPresence } from '../../services/platform/presenceService';
+import { asyncRoute } from './asyncRoute';
+import { callerOf } from './conversations';
+import { parseQuery } from './validate';
 
 export function createPresenceRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   router.get(
-    "/presence",
+    '/presence',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const { accountIds } = parseQuery(presenceQuerySchema, req);

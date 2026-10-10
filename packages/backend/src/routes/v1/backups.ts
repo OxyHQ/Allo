@@ -6,28 +6,35 @@
  * does not collide.
  */
 
-import { Router, type RequestHandler } from "express";
-import { putBackupRequestSchema } from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
-import { deleteAccountBackup, getAccountBackup, putAccountBackup } from "../../services/platform/backupService";
-import { asyncRoute } from "./asyncRoute";
-import { parseBody } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import { putBackupRequestSchema } from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
+import {
+  deleteAccountBackup,
+  getAccountBackup,
+  putAccountBackup,
+} from '../../services/platform/backupService';
+import { asyncRoute } from './asyncRoute';
+import { parseBody } from './validate';
 
 export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   router.put(
-    "/accounts/me/backup",
+    '/accounts/me/backup',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const backup = await putAccountBackup({ id: me.id, accountId: me.accountId }, parseBody(putBackupRequestSchema, req));
+      const backup = await putAccountBackup(
+        { id: me.id, accountId: me.accountId },
+        parseBody(putBackupRequestSchema, req),
+      );
       res.json({ backup });
     }),
   );
 
   router.get(
-    "/accounts/me/backup",
+    '/accounts/me/backup',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -36,7 +43,7 @@ export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Rout
   );
 
   router.delete(
-    "/accounts/me/backup",
+    '/accounts/me/backup',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);

@@ -55,8 +55,14 @@ export default function CallRoute() {
   const answer = useCallback(() => void calls.answer().catch(reportCallError), [calls]);
   const decline = useCallback(() => void calls.decline().catch(reportCallError), [calls]);
   const end = useCallback(() => void calls.end().catch(reportCallError), [calls]);
-  const setMuted = useCallback((muted: boolean) => void calls.setMuted(muted).catch(reportCallError), [calls]);
-  const setVideo = useCallback((on: boolean) => void calls.setCameraEnabled(on).catch(reportCallError), [calls]);
+  const setMuted = useCallback(
+    (muted: boolean) => void calls.setMuted(muted).catch(reportCallError),
+    [calls],
+  );
+  const setVideo = useCallback(
+    (on: boolean) => void calls.setCameraEnabled(on).catch(reportCallError),
+    [calls],
+  );
   const setMinimised = useCallUi((state) => state.setMinimised);
   const movePip = useCallUi((state) => state.setPipCorner);
 
@@ -66,7 +72,8 @@ export default function CallRoute() {
    * `/c/:id` accepts) is a call with that one person.
    */
   const peerAccountIds = useMemo(() => {
-    if (session && session.conversationId === id) return session.peers.map((peer) => peer.accountId);
+    if (session && session.conversationId === id)
+      return session.peers.map((peer) => peer.accountId);
     if (conversation) return conversation.memberAccountIds.filter((member) => member !== user?.id);
     if (id && id !== user?.id) return [id];
     return [];
@@ -129,7 +136,7 @@ export default function CallRoute() {
       <Page title={t('calls.title')}>
         <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
         <Muted>{t('calls.noParticipants')}</Muted>
-        <Button  onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
+        <Button onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
           {t('calls.title')}
         </Button>
       </Page>
@@ -215,11 +222,15 @@ export default function CallRoute() {
       duration={duration === '' ? undefined : duration}
       minimised={session.minimised}
       remoteVideo={stageMode === 'video' ? stage : undefined}
-      localVideo={session.videoOn ? <StagePlaceholder compact label={t('calls.yourCamera')} /> : undefined}
+      localVideo={
+        session.videoOn ? <StagePlaceholder compact label={t('calls.yourCamera')} /> : undefined
+      }
       localVideoCorner={session.pipCorner}
       onMoveLocal={movePip}
       participantCount={group ? session.peers.length + 1 : undefined}
-      onOpenParticipants={group ? () => router.push(`/c/${session.conversationId}/members`) : undefined}
+      onOpenParticipants={
+        group ? () => router.push(`/c/${session.conversationId}/members`) : undefined
+      }
       onOpenChat={() => router.push(`/c/${session.conversationId}`)}
       onMinimise={() => {
         setMinimised(!session.minimised);

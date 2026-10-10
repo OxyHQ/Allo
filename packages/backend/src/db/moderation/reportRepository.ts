@@ -28,9 +28,9 @@
  * details ran one character long.
  */
 
-import { and, desc, eq, sql } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
 import {
   reports,
   type ModerationEnforcementAction,
@@ -38,7 +38,7 @@ import {
   type ReportCategory,
   type ReportStatus,
   type ReportedType,
-} from "../schema/moderation";
+} from '../schema/moderation';
 
 /** A stored report, exactly as the table holds it. */
 export type ModerationReport = typeof reports.$inferSelect;
@@ -153,12 +153,9 @@ export async function insertReport(
       reportedId: input.reportedId,
       categories: [...input.categories],
       details: bounded(input.details, MAX_DETAILS_LENGTH),
-      status: input.status ?? "pending",
+      status: input.status ?? 'pending',
       localStatus: input.localStatus,
-      localStatusReason: bounded(
-        input.localStatusReason,
-        MAX_LOCAL_STATUS_REASON_LENGTH,
-      ),
+      localStatusReason: bounded(input.localStatusReason, MAX_LOCAL_STATUS_REASON_LENGTH),
     })
     .returning();
   return row;
@@ -177,7 +174,7 @@ export async function listReportsByReporter(
 ): Promise<
   Pick<
     ModerationReport,
-    "id" | "reportedType" | "reportedId" | "categories" | "details" | "status" | "createdAt"
+    'id' | 'reportedType' | 'reportedId' | 'categories' | 'details' | 'status' | 'createdAt'
   >[]
 > {
   return await db
@@ -270,7 +267,7 @@ export async function markReportSubmitted(
   const updated = await db
     .update(reports)
     .set({
-      localStatus: "submitted",
+      localStatus: 'submitted',
       crowdSourceReportId: input.crowdSourceReportId,
       crowdSourceCaseId: input.crowdSourceCaseId,
       crowdSourceMerged: input.crowdSourceMerged,
@@ -300,7 +297,7 @@ export async function markReportDeliveryFailed(
   const updated = await db
     .update(reports)
     .set({
-      localStatus: "delivery_failed",
+      localStatus: 'delivery_failed',
       lastDeliveryError: error.slice(0, MAX_DELIVERY_ERROR_LENGTH),
     })
     .where(eq(reports.id, reportId))
@@ -324,7 +321,7 @@ export async function closeUndeliverableReport(
   const updated = await db
     .update(reports)
     .set({
-      localStatus: "closed",
+      localStatus: 'closed',
       localStatusReason: reason.slice(0, MAX_LOCAL_STATUS_REASON_LENGTH),
     })
     .where(eq(reports.id, reportId))

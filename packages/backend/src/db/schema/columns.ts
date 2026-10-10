@@ -6,9 +6,9 @@
  * This file holds only what that package does not own.
  */
 
-import { sql } from "drizzle-orm";
-import { check, type PgColumn } from "drizzle-orm/pg-core";
-import { inList, textArrayLiteral } from "@oxy.so/db";
+import { sql } from 'drizzle-orm';
+import { check, type PgColumn } from 'drizzle-orm/pg-core';
+import { inList, textArrayLiteral } from '@oxy.so/db';
 
 /**
  * `CHECK (<column> in (…))`, rendered from the SAME tuple that types the column.

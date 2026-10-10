@@ -9,12 +9,12 @@
  * expired is due again, so a worker that died mid-batch strands nothing.
  */
 
-import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
-import { instanceDeliveries, type DeliveryStatus } from "../schema/deliveries";
-import { conversationEvents } from "../schema/events";
-import { EVENT_COLUMNS, type EventReadRow } from "./eventRepository";
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
+import { instanceDeliveries, type DeliveryStatus } from '../schema/deliveries';
+import { conversationEvents } from '../schema/events';
+import { EVENT_COLUMNS, type EventReadRow } from './eventRepository';
 
 /** How long a delivery stays in the stream unacked before `db/expiry.ts` drops it. */
 export const DELIVERY_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -77,7 +77,7 @@ export async function ackDeliveries(
 ): Promise<number> {
   const rows = await db
     .update(instanceDeliveries)
-    .set({ status: "acked", ackedAt: new Date(), leaseOwner: null, leaseUntil: null })
+    .set({ status: 'acked', ackedAt: new Date(), leaseOwner: null, leaseUntil: null })
     .where(
       and(
         eq(instanceDeliveries.instanceId, instanceId),
@@ -103,14 +103,14 @@ export async function claimDueDeliveries(
     .from(instanceDeliveries)
     .where(
       and(
-        eq(instanceDeliveries.status, "pending"),
+        eq(instanceDeliveries.status, 'pending'),
         lte(instanceDeliveries.availableAt, now),
         or(isNull(instanceDeliveries.leaseUntil), lte(instanceDeliveries.leaseUntil, now)),
       ),
     )
     .orderBy(asc(instanceDeliveries.id))
     .limit(options.limit)
-    .for("update", { skipLocked: true });
+    .for('update', { skipLocked: true });
 
   return db
     .update(instanceDeliveries)
@@ -128,21 +128,21 @@ export async function claimDueDeliveries(
 export async function settleDelivery(
   id: number,
   leaseOwner: string,
-  status: Extract<DeliveryStatus, "notified" | "dead">,
+  status: Extract<DeliveryStatus, 'notified' | 'dead'>,
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<boolean> {
   const rows = await db
     .update(instanceDeliveries)
     .set({
       status,
-      notifiedAt: status === "notified" ? new Date() : undefined,
+      notifiedAt: status === 'notified' ? new Date() : undefined,
       leaseOwner: null,
       leaseUntil: null,
     })
     .where(
       and(
         eq(instanceDeliveries.id, id),
-        eq(instanceDeliveries.status, "pending"),
+        eq(instanceDeliveries.status, 'pending'),
         eq(instanceDeliveries.leaseOwner, leaseOwner),
         gt(instanceDeliveries.leaseUntil, new Date()),
       ),
@@ -169,7 +169,7 @@ export async function deferDelivery(
     .where(
       and(
         eq(instanceDeliveries.id, id),
-        eq(instanceDeliveries.status, "pending"),
+        eq(instanceDeliveries.status, 'pending'),
         eq(instanceDeliveries.leaseOwner, leaseOwner),
       ),
     )
@@ -181,7 +181,11 @@ export async function findDeliveryById(
   id: number,
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<DeliveryRow | null> {
-  const [row] = await db.select().from(instanceDeliveries).where(eq(instanceDeliveries.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(instanceDeliveries)
+    .where(eq(instanceDeliveries.id, id))
+    .limit(1);
   return row ?? null;
 }
 

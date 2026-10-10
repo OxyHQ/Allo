@@ -20,10 +20,10 @@
  * enforce, in a layer that cannot produce the 400 the caller needs.
  */
 
-import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import type { AlloDatabase } from "../index";
-import { blocks } from "../schema/social";
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import type { AlloDatabase } from '../index';
+import { blocks } from '../schema/social';
 
 /** The pair naming one direction of a block. An object because both are `string`. */
 export interface BlockPair {

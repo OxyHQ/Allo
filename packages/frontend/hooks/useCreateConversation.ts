@@ -1,7 +1,11 @@
 import { useCallback } from 'react';
 import { useConversationActions } from '@allo/react';
 
-import { planConversation, type ConversationCreator, type NewConversationRequest } from '@/lib/chat/newConversation';
+import {
+  planConversation,
+  type ConversationCreator,
+  type NewConversationRequest,
+} from '@/lib/chat/newConversation';
 
 /**
  * Starting a conversation.

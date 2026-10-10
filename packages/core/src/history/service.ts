@@ -28,20 +28,20 @@ import {
   type ArchiveManifest,
   type ClientInstance,
   type HistoryOffer,
-} from "@allo/shared-types";
-import type { Context } from "../context";
-import { decryptArchive, encryptArchive, generateArchiveKey } from "../crypto/archive";
-import { signUtf8, verifyEd25519 } from "../crypto/signing";
-import { openWith, sealTo } from "../crypto/transfer";
-import { DecryptError, InvalidStateError, NotFoundError, UntrustedInstanceError } from "../errors";
-import { historyOfferedRecordSchema, type HistoryOfferedRecord } from "../storage/records";
-import type { HistoryOfferView, HistoryProgress } from "../types";
-import { Mutex } from "../util/async";
-import { base64Decode, base64Encode, sha256Hex } from "../util/bytes";
-import { describeError } from "../util/logger";
-import { exportArchive, importArchive } from "./archive";
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { decryptArchive, encryptArchive, generateArchiveKey } from '../crypto/archive';
+import { signUtf8, verifyEd25519 } from '../crypto/signing';
+import { openWith, sealTo } from '../crypto/transfer';
+import { DecryptError, InvalidStateError, NotFoundError, UntrustedInstanceError } from '../errors';
+import { historyOfferedRecordSchema, type HistoryOfferedRecord } from '../storage/records';
+import type { HistoryOfferView, HistoryProgress } from '../types';
+import { Mutex } from '../util/async';
+import { base64Decode, base64Encode, sha256Hex } from '../util/bytes';
+import { describeError } from '../util/logger';
+import { exportArchive, importArchive } from './archive';
 
-const IDLE: HistoryProgress = { phase: "idle", done: 0, total: 0 };
+const IDLE: HistoryProgress = { phase: 'idle', done: 0, total: 0 };
 /** After a failed automatic offer, wait this long before the next reconcile tries again. */
 const AUTO_OFFER_RETRY_MS = 5 * 60_000;
 
@@ -62,7 +62,11 @@ export class HistoryService {
   constructor(private readonly ctx: Context) {}
 
   async load(): Promise<void> {
-    for (const { value } of await this.ctx.store.listJson("historyOffered", historyOfferedRecordSchema)) this.offered.set(value.instanceId, value);
+    for (const { value } of await this.ctx.store.listJson(
+      'historyOffered',
+      historyOfferedRecordSchema,
+    ))
+      this.offered.set(value.instanceId, value);
   }
 
   // ---- views ---------------------------------------------------------------
@@ -93,7 +97,7 @@ export class HistoryService {
 
   private setProgress(next: HistoryProgress): void {
     this.progressValue = next;
-    this.ctx.emitter.emit("history");
+    this.ctx.emitter.emit('history');
   }
 
   // ---- offers list ---------------------------------------------------------
@@ -101,12 +105,17 @@ export class HistoryService {
   async refreshOffers(): Promise<void> {
     const { ctx } = this;
     if (!ctx.instance.isActive) return;
-    const res = await ctx.http.request({ method: "GET", path: "/v1/instances/me/history-offers", schema: listHistoryOffersResponseSchema, signer: ctx.signer });
-    this.offers = res.offers.filter((o) => o.status === "pending");
+    const res = await ctx.http.request({
+      method: 'GET',
+      path: '/v1/instances/me/history-offers',
+      schema: listHistoryOffersResponseSchema,
+      signer: ctx.signer,
+    });
+    this.offers = res.offers.filter((o) => o.status === 'pending');
     this.offersView = null;
     this.lastOffersCheck = ctx.now();
     this.offersStale = false;
-    ctx.emitter.emit("history");
+    ctx.emitter.emit('history');
   }
 
   onOfferNudge(): void {
@@ -124,10 +133,11 @@ export class HistoryService {
       const { ctx } = this;
       try {
         if (!ctx.instance.isActive) return;
-        if (this.offersStale || ctx.now() - this.lastOffersCheck > ctx.options.syncIntervalMs) await this.refreshOffers();
+        if (this.offersStale || ctx.now() - this.lastOffersCheck > ctx.options.syncIntervalMs)
+          await this.refreshOffers();
         await this.autoAccept();
       } catch (error) {
-        ctx.log.debug?.("history offer check failed", { error: describeError(error) });
+        ctx.log.debug?.('history offer check failed', { error: describeError(error) });
       } finally {
         this.checking = null;
       }
@@ -146,14 +156,21 @@ export class HistoryService {
       }
       const why = this.donorVerdict(offer);
       if (why !== null) {
-        ctx.log.warn?.("history offer left alone: donor not verified", { offerId: offer.id, donorInstanceId: offer.donorInstanceId, reason: why });
+        ctx.log.warn?.('history offer left alone: donor not verified', {
+          offerId: offer.id,
+          donorInstanceId: offer.donorInstanceId,
+          reason: why,
+        });
         this.autoRefused.add(offer.id);
         continue;
       }
       try {
         await this.accept(offer.id);
       } catch (error) {
-        ctx.log.warn?.("automatic history accept failed", { offerId: offer.id, error: describeError(error) });
+        ctx.log.warn?.('automatic history accept failed', {
+          offerId: offer.id,
+          error: describeError(error),
+        });
         this.autoRefused.add(offer.id);
       }
     }
@@ -167,17 +184,25 @@ export class HistoryService {
    */
   private donorVerdict(offer: HistoryOffer): string | null {
     const { ctx } = this;
-    if (offer.accountId !== ctx.accountId) return "offer is for another account";
-    if (offer.recipientInstanceId !== ctx.instanceId) return "offer is for another instance";
-    if (offer.donorInstanceId === ctx.instanceId) return "offer from this instance";
-    if (offer.manifest.kind !== "transfer") return "manifest is not a transfer manifest";
+    if (offer.accountId !== ctx.accountId) return 'offer is for another account';
+    if (offer.recipientInstanceId !== ctx.instanceId) return 'offer is for another instance';
+    if (offer.donorInstanceId === ctx.instanceId) return 'offer from this instance';
+    if (offer.manifest.kind !== 'transfer') return 'manifest is not a transfer manifest';
     const donor = ctx.instance.ownInstance(offer.donorInstanceId);
-    if (!donor) return "donor is not an instance of this account";
-    if (donor.accountId !== ctx.accountId) return "donor belongs to another account";
-    if (donor.status !== "active") return `donor is ${donor.status}`;
+    if (!donor) return 'donor is not an instance of this account';
+    if (donor.accountId !== ctx.accountId) return 'donor belongs to another account';
+    if (donor.status !== 'active') return `donor is ${donor.status}`;
     const { trusted, refused } = ctx.instance.trustedOwnInstances();
-    if (!trusted.some((i) => i.id === donor.id)) return refused.get(donor.id) ?? "donor does not pass the approval chain";
-    if (!verifyEd25519(donor.signingPublicKey, archiveManifestMessage(offer.manifest), offer.manifestSignature)) return "manifest signature does not verify";
+    if (!trusted.some((i) => i.id === donor.id))
+      return refused.get(donor.id) ?? 'donor does not pass the approval chain';
+    if (
+      !verifyEd25519(
+        donor.signingPublicKey,
+        archiveManifestMessage(offer.manifest),
+        offer.manifestSignature,
+      )
+    )
+      return 'manifest signature does not verify';
     return null;
   }
 
@@ -197,27 +222,37 @@ export class HistoryService {
   async offerTo(instanceId: string): Promise<HistoryOffer> {
     const { ctx } = this;
     ctx.instance.assertActive();
-    if (instanceId === ctx.instanceId) throw new InvalidStateError("an instance cannot offer history to itself");
+    if (instanceId === ctx.instanceId)
+      throw new InvalidStateError('an instance cannot offer history to itself');
     if (!ctx.instance.ownInstance(instanceId)) await ctx.instance.refresh();
     const recipient = ctx.instance.ownInstance(instanceId);
-    if (!recipient || recipient.accountId !== ctx.accountId) throw new UntrustedInstanceError(instanceId, "not an instance of this account");
+    if (!recipient || recipient.accountId !== ctx.accountId)
+      throw new UntrustedInstanceError(instanceId, 'not an instance of this account');
     const { trusted, refused } = ctx.instance.trustedOwnInstances();
-    if (recipient.status !== "active" || !trusted.some((i) => i.id === recipient.id)) {
-      throw new UntrustedInstanceError(instanceId, refused.get(instanceId) ?? `recipient is ${recipient.status}`);
+    if (recipient.status !== 'active' || !trusted.some((i) => i.id === recipient.id)) {
+      throw new UntrustedInstanceError(
+        instanceId,
+        refused.get(instanceId) ?? `recipient is ${recipient.status}`,
+      );
     }
-    if (!recipient.transferPublicKey) throw new InvalidStateError("the recipient has no transfer key yet; it cannot receive history");
+    if (!recipient.transferPublicKey)
+      throw new InvalidStateError(
+        'the recipient has no transfer key yet; it cannot receive history',
+      );
     const recipientKey = base64Decode(recipient.transferPublicKey);
     return this.jobs.run(async () => {
       try {
-        this.setProgress({ phase: "exporting", done: 0, total: 0, toInstanceId: instanceId });
+        this.setProgress({ phase: 'exporting', done: 0, total: 0, toInstanceId: instanceId });
         const archive = exportArchive(ctx);
         const plaintext = encodeArchive(archive);
         const key = generateArchiveKey();
         const chunks = encryptArchive(key, plaintext);
-        const chunkBlobIds = await this.uploadChunks(chunks, (done, total) => this.setProgress({ phase: "uploading", done, total, toInstanceId: instanceId }));
+        const chunkBlobIds = await this.uploadChunks(chunks, (done, total) =>
+          this.setProgress({ phase: 'uploading', done, total, toInstanceId: instanceId }),
+        );
         const manifest: ArchiveManifest = {
           v: 1,
-          kind: "transfer",
+          kind: 'transfer',
           createdAt: ctx.nowIso(),
           conversationCount: archive.conversations.length,
           eventCount: archive.events.length,
@@ -227,13 +262,18 @@ export class HistoryService {
         const sealedKey = base64Encode(await sealTo(recipientKey, key, HISTORY_KEY_SEAL_INFO));
         const manifestSignature = signUtf8(ctx.signer.key, archiveManifestMessage(manifest));
         const res = await ctx.http.request({
-          method: "POST",
+          method: 'POST',
           path: `/v1/instances/${instanceId}/history-offers`,
           body: { recipientInstanceId: instanceId, manifest, sealedKey, manifestSignature },
           schema: historyOfferResponseSchema,
           signer: ctx.signer,
         });
-        ctx.log.info?.("history offered", { recipientInstanceId: instanceId, conversations: manifest.conversationCount, events: manifest.eventCount, chunks: chunkBlobIds.length });
+        ctx.log.info?.('history offered', {
+          recipientInstanceId: instanceId,
+          conversations: manifest.conversationCount,
+          events: manifest.eventCount,
+          chunks: chunkBlobIds.length,
+        });
         return res.offer;
       } finally {
         this.setProgress(IDLE);
@@ -241,14 +281,17 @@ export class HistoryService {
     });
   }
 
-  async uploadChunks(chunks: Uint8Array[], onProgress: (done: number, total: number) => void): Promise<string[]> {
+  async uploadChunks(
+    chunks: Uint8Array[],
+    onProgress: (done: number, total: number) => void,
+  ): Promise<string[]> {
     const { ctx } = this;
     const ids: string[] = [];
     onProgress(0, chunks.length);
     for (const chunk of chunks) {
       const res = await ctx.http.request({
-        method: "POST",
-        path: "/v1/blobs",
+        method: 'POST',
+        path: '/v1/blobs',
         rawBody: chunk,
         headers: { [BLOB_SHA256_HEADER]: sha256Hex(chunk) },
         schema: uploadBlobResponseSchema,
@@ -260,12 +303,22 @@ export class HistoryService {
     return ids;
   }
 
-  async downloadChunks(blobIds: string[], onProgress: (done: number, total: number) => void): Promise<Uint8Array[]> {
+  async downloadChunks(
+    blobIds: string[],
+    onProgress: (done: number, total: number) => void,
+  ): Promise<Uint8Array[]> {
     const { ctx } = this;
     const chunks: Uint8Array[] = [];
     onProgress(0, blobIds.length);
     for (const id of blobIds) {
-      chunks.push(await ctx.http.request<Uint8Array>({ method: "GET", path: `/v1/blobs/${id}`, binary: true, signer: ctx.signer }));
+      chunks.push(
+        await ctx.http.request<Uint8Array>({
+          method: 'GET',
+          path: `/v1/blobs/${id}`,
+          binary: true,
+          signer: ctx.signer,
+        }),
+      );
       onProgress(chunks.length, blobIds.length);
     }
     return chunks;
@@ -285,13 +338,20 @@ export class HistoryService {
       this.offering.add(id);
       try {
         const offer = await this.offerTo(id);
-        const record: HistoryOfferedRecord = { instanceId: id, offerId: offer.id, offeredAt: ctx.nowIso() };
-        await ctx.store.putJson("historyOffered", id, record);
+        const record: HistoryOfferedRecord = {
+          instanceId: id,
+          offerId: offer.id,
+          offeredAt: ctx.nowIso(),
+        };
+        await ctx.store.putJson('historyOffered', id, record);
         this.offered.set(id, record);
         this.offerFailedAt.delete(id);
       } catch (error) {
         this.offerFailedAt.set(id, ctx.now());
-        ctx.log.warn?.("automatic history offer failed", { recipientInstanceId: id, error: describeError(error) });
+        ctx.log.warn?.('automatic history offer failed', {
+          recipientInstanceId: id,
+          error: describeError(error),
+        });
       } finally {
         this.offering.delete(id);
       }
@@ -318,29 +378,48 @@ export class HistoryService {
     if (!ctx.instance.ownInstance(offer.donorInstanceId)) await ctx.instance.refresh();
     const donor = this.requireTrustedDonor(offer);
     // Everything above is decided before a single byte of the archive is fetched.
-    const key = await openWith(ctx.instance.transferSecretKey, base64Decode(offer.sealedKey), HISTORY_KEY_SEAL_INFO);
-    if (key.length !== 32) throw new DecryptError("sealed key did not open to a 32-byte archive key");
+    const key = await openWith(
+      ctx.instance.transferSecretKey,
+      base64Decode(offer.sealedKey),
+      HISTORY_KEY_SEAL_INFO,
+    );
+    if (key.length !== 32)
+      throw new DecryptError('sealed key did not open to a 32-byte archive key');
     const from = donor.id;
     await this.jobs.run(async () => {
       try {
-        const chunks = await this.downloadChunks(offer!.manifest.chunkBlobIds, (done, total) => this.setProgress({ phase: "downloading", done, total, fromInstanceId: from }));
+        const chunks = await this.downloadChunks(offer!.manifest.chunkBlobIds, (done, total) =>
+          this.setProgress({ phase: 'downloading', done, total, fromInstanceId: from }),
+        );
         const plaintext = decryptArchive(key, chunks);
-        if (sha256Hex(plaintext) !== offer!.manifest.plaintextSha256) throw new DecryptError("archive digest does not match the signed manifest");
+        if (sha256Hex(plaintext) !== offer!.manifest.plaintextSha256)
+          throw new DecryptError('archive digest does not match the signed manifest');
         const archive = decodeArchive(plaintext);
-        const result = await importArchive(ctx, archive, (done, total) => this.setProgress({ phase: "importing", done, total, fromInstanceId: from }));
-        ctx.log.info?.("history imported", { donorInstanceId: from, conversations: result.conversations, events: result.events });
+        const result = await importArchive(ctx, archive, (done, total) =>
+          this.setProgress({ phase: 'importing', done, total, fromInstanceId: from }),
+        );
+        ctx.log.info?.('history imported', {
+          donorInstanceId: from,
+          conversations: result.conversations,
+          events: result.events,
+        });
       } finally {
         this.setProgress(IDLE);
       }
     });
     try {
-      await ctx.http.request({ method: "POST", path: `/v1/instances/me/history-offers/${offerId}/consume`, schema: historyOfferResponseSchema, signer: ctx.signer });
+      await ctx.http.request({
+        method: 'POST',
+        path: `/v1/instances/me/history-offers/${offerId}/consume`,
+        schema: historyOfferResponseSchema,
+        signer: ctx.signer,
+      });
     } catch (error) {
-      ctx.log.debug?.("history offer consume failed", { offerId, error: describeError(error) });
+      ctx.log.debug?.('history offer consume failed', { offerId, error: describeError(error) });
     }
     this.offers = this.offers.filter((o) => o.id !== offerId);
     this.offersView = null;
-    ctx.emitter.emit("history");
+    ctx.emitter.emit('history');
   }
 
   stop(): void {

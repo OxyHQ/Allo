@@ -26,11 +26,13 @@ function sourceFiles(directory) {
 
 const violations = [];
 for (const file of sourceFiles(ROOT)) {
-  readFileSync(file, 'utf8').split('\n').forEach((line, index) => {
-    if (ROOT_VECTOR_ICON_IMPORT.test(line)) {
-      violations.push(`${relative(ROOT, file)}:${index + 1}: ${line.trim()}`);
-    }
-  });
+  readFileSync(file, 'utf8')
+    .split('\n')
+    .forEach((line, index) => {
+      if (ROOT_VECTOR_ICON_IMPORT.test(line)) {
+        violations.push(`${relative(ROOT, file)}:${index + 1}: ${line.trim()}`);
+      }
+    });
 }
 
 if (violations.length > 0) {

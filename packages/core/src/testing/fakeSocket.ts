@@ -4,10 +4,12 @@
  * and reconnects on its own after a server-side drop, so an "offline" test
  * exercises the client's reconnect path.
  */
-import type { SocketAuthPayload, SocketLike } from "../types";
+import type { SocketAuthPayload, SocketLike } from '../types';
 
 export interface SocketHost {
-  acceptSocket(auth: SocketAuthPayload): { instanceId: string; accountId: string } | { error: string };
+  acceptSocket(
+    auth: SocketAuthPayload,
+  ): { instanceId: string; accountId: string } | { error: string };
   attach(socket: FakeSocket, instanceId: string, accountId: string): void;
   detach(socket: FakeSocket): void;
   onClientEvent(socket: FakeSocket, event: string, payload: unknown): void;
@@ -40,8 +42,8 @@ export class FakeSocket implements SocketLike {
     try {
       const payload = await this.auth();
       const verdict = this.host.acceptSocket(payload);
-      if ("error" in verdict) {
-        this.fire("connect_error", new Error(verdict.error));
+      if ('error' in verdict) {
+        this.fire('connect_error', new Error(verdict.error));
         this.scheduleRetry();
         return;
       }
@@ -49,7 +51,7 @@ export class FakeSocket implements SocketLike {
       this.accountId = verdict.accountId;
       this.connected = true;
       this.host.attach(this, verdict.instanceId, verdict.accountId);
-      this.fire("connect");
+      this.fire('connect');
     } finally {
       this.connecting = false;
     }
@@ -70,7 +72,7 @@ export class FakeSocket implements SocketLike {
     if (this.connected) {
       this.connected = false;
       this.host.detach(this);
-      this.fire("disconnect", "io client disconnect");
+      this.fire('disconnect', 'io client disconnect');
     }
   }
 
@@ -79,7 +81,7 @@ export class FakeSocket implements SocketLike {
     if (!this.connected) return;
     this.connected = false;
     this.host.detach(this);
-    this.fire("disconnect", "io server disconnect");
+    this.fire('disconnect', 'io server disconnect');
     this.scheduleRetry();
   }
 

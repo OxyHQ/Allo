@@ -48,7 +48,9 @@ jest.mock('react-i18next', () => {
   return {
     useTranslation: () => ({
       t: (key: string, options?: Record<string, unknown>) =>
-        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+          String(options?.[name] ?? ''),
+        ),
     }),
   };
 });
@@ -61,13 +63,22 @@ jest.mock('@oxy.so/bloom/typography', () => {
 jest.mock('@oxy.so/bloom/settings-modal', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
-  const text = (value?: string) => value ? ReactModule.createElement(ReactNative.Text, null, value) : null;
+  const text = (value?: string) =>
+    value ? ReactModule.createElement(ReactNative.Text, null, value) : null;
   return {
     SettingsSection: ({ label, children }: { label?: string; children: React.ReactNode }) =>
       ReactModule.createElement(ReactNative.View, null, text(label), children),
     SettingsCard: ReactNative.View,
     SettingsValueField: ReactNative.Text,
-    SettingsRow: ({ label, description, children }: { label: string; description?: string; children?: React.ReactNode }) =>
+    SettingsRow: ({
+      label,
+      description,
+      children,
+    }: {
+      label: string;
+      description?: string;
+      children?: React.ReactNode;
+    }) =>
       ReactModule.createElement(ReactNative.View, null, text(label), text(description), children),
   };
 });
@@ -76,23 +87,52 @@ jest.mock('@oxy.so/bloom/button', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
   return {
-    Button: ({ children, onPress, disabled }: { children?: React.ReactNode; onPress?: () => void; disabled?: boolean }) =>
-      ReactModule.createElement(ReactNative.Pressable, { onPress, disabled }, ReactModule.createElement(ReactNative.Text, null, children)),
+    Button: ({
+      children,
+      onPress,
+      disabled,
+    }: {
+      children?: React.ReactNode;
+      onPress?: () => void;
+      disabled?: boolean;
+    }) =>
+      ReactModule.createElement(
+        ReactNative.Pressable,
+        { onPress, disabled },
+        ReactModule.createElement(ReactNative.Text, null, children),
+      ),
   };
 });
 
 jest.mock('@oxy.so/bloom/checkbox', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
-  return { Checkbox: ({ checked, onCheckedChange, label, testID }: { checked: boolean; onCheckedChange: (checked: boolean) => void; label: string; testID: string }) =>
-    ReactModule.createElement(ReactNative.Pressable, { testID, onPress: () => onCheckedChange(!checked) }, ReactModule.createElement(ReactNative.Text, null, label)) };
+  return {
+    Checkbox: ({
+      checked,
+      onCheckedChange,
+      label,
+      testID,
+    }: {
+      checked: boolean;
+      onCheckedChange: (checked: boolean) => void;
+      label: string;
+      testID: string;
+    }) =>
+      ReactModule.createElement(
+        ReactNative.Pressable,
+        { testID, onPress: () => onCheckedChange(!checked) },
+        ReactModule.createElement(ReactNative.Text, null, label),
+      ),
+  };
 });
 
 jest.mock('@oxy.so/bloom/textarea', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
   const ReactModule = jest.requireActual<typeof import('react')>('react');
   return {
-    Textarea: (props: import('react-native').TextInputProps) => ReactModule.createElement(ReactNative.TextInput, props),
+    Textarea: (props: import('react-native').TextInputProps) =>
+      ReactModule.createElement(ReactNative.TextInput, props),
   };
 });
 
@@ -122,7 +162,12 @@ interface TestClient {
   storage: InstanceType<typeof MemoryStorage>;
 }
 
-async function makeClient(server: FakeServer, accountId: string, name: string, platform: 'ios' | 'web' = 'ios'): Promise<TestClient> {
+async function makeClient(
+  server: FakeServer,
+  accountId: string,
+  name: string,
+  platform: 'ios' | 'web' = 'ios',
+): Promise<TestClient> {
   const storage = new MemoryStorage();
   const client = createAlloClient({
     baseUrl: server.baseUrl,
@@ -154,11 +199,18 @@ function mount(client: AlloClient, onPhrasePending?: (pending: boolean) => void)
 }
 
 function texts(renderer: TestRenderer.ReactTestRenderer): string[] {
-  return renderer.root.findAllByType(Text).map((node) => String(React.Children.toArray(node.props.children).join('')));
+  return renderer.root
+    .findAllByType(Text)
+    .map((node) => String(React.Children.toArray(node.props.children).join('')));
 }
 
-function byTestId(renderer: TestRenderer.ReactTestRenderer, testID: string): TestRenderer.ReactTestInstance | undefined {
-  return renderer.root.findAll((node) => node.props.testID === testID && typeof node.type !== 'string')[0];
+function byTestId(
+  renderer: TestRenderer.ReactTestRenderer,
+  testID: string,
+): TestRenderer.ReactTestInstance | undefined {
+  return renderer.root.findAll(
+    (node) => node.props.testID === testID && typeof node.type !== 'string',
+  )[0];
 }
 
 async function press(renderer: TestRenderer.ReactTestRenderer, testID: string): Promise<void> {
@@ -171,7 +223,11 @@ async function press(renderer: TestRenderer.ReactTestRenderer, testID: string): 
   });
 }
 
-async function type(renderer: TestRenderer.ReactTestRenderer, testID: string, value: string): Promise<void> {
+async function type(
+  renderer: TestRenderer.ReactTestRenderer,
+  testID: string,
+  value: string,
+): Promise<void> {
   const input = renderer.root.findAllByType(TextInput).find((node) => node.props.testID === testID);
   if (!input) throw new Error(`no input with testID ${testID}`);
   await act(async () => {
@@ -180,7 +236,9 @@ async function type(renderer: TestRenderer.ReactTestRenderer, testID: string, va
 }
 
 function timelineTexts(items: TimelineItemView[]): string[] {
-  return items.filter((i) => i.content.kind === 'text').map((i) => (i.content as { body: string }).body);
+  return items
+    .filter((i) => i.content.kind === 'text')
+    .map((i) => (i.content as { body: string }).body);
 }
 
 /** Polls OUTSIDE `act`, then flushes React inside one (see `enrollmentGate.test.tsx`). */
@@ -213,7 +271,11 @@ describe('BackupPanel', () => {
     await until(() => bob.client.conversations.get(conv.id)?.joined === true, 20_000, 15);
     await alice.client.messages.send(conv.id, 'one');
     await bob.client.messages.send(conv.id, 'two');
-    await until(() => timelineTexts(alice.client.messages.timeline(conv.id)).length === 2, 20_000, 15);
+    await until(
+      () => timelineTexts(alice.client.messages.timeline(conv.id)).length === 2,
+      20_000,
+      15,
+    );
     await alice.client.conversations.rename(conv.id, 'A and B');
 
     // --- the first device: off, nothing on the server, "Turn on" ---
@@ -230,7 +292,9 @@ describe('BackupPanel', () => {
 
     // The twelve words, numbered, and the SDK's own phrase.
     const words = Array.from({ length: 12 }, (_, i) => {
-      const cell = first.root.findAll((node) => node.props.testID === `backup-word-${i + 1}` && node.type === Text)[0];
+      const cell = first.root.findAll(
+        (node) => node.props.testID === `backup-word-${i + 1}` && node.type === Text,
+      )[0];
       return String(React.Children.toArray(cell.props.children).join(''));
     });
     const phrase = words.join(' ');
@@ -280,12 +344,15 @@ describe('BackupPanel', () => {
 
     // A wrong phrase: the friendly message, nothing downloaded, nothing restored.
     server.requestLog.length = 0;
-    const wrong = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    const wrong =
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
     await type(second, 'backup-restore-input', wrong);
     expect(texts(second)).toContain('12 of 12 words');
     await press(second, 'backup-restore');
     await waitUntil(() => byTestId(second, 'backup-restore-error') !== undefined);
-    expect(texts(second)).toContain('That is not the recovery phrase for this backup. Check the words and their order.');
+    expect(texts(second)).toContain(
+      'That is not the recovery phrase for this backup. Check the words and their order.',
+    );
     expect(server.requestLog.some((r) => r.path.startsWith('/v1/blobs/'))).toBe(false);
     expect(fresh.client.messages.timeline(conv.id)).toEqual([]);
 
@@ -293,7 +360,10 @@ describe('BackupPanel', () => {
     await type(second, 'backup-restore-input', `  ${phrase.toUpperCase().replace(/ /g, '\n  ')}  `);
     expect(byTestId(second, 'backup-restore-error')).toBeUndefined();
     await press(second, 'backup-restore');
-    await waitUntil(() => timelineTexts(fresh.client.messages.timeline(conv.id)).length === 2, 30_000);
+    await waitUntil(
+      () => timelineTexts(fresh.client.messages.timeline(conv.id)).length === 2,
+      30_000,
+    );
     expect(timelineTexts(fresh.client.messages.timeline(conv.id))).toEqual(['one', 'two']);
     expect(fresh.client.conversations.get(conv.id)?.title).toBe('A and B');
     await waitUntil(() => fresh.client.backup.status().enabled);

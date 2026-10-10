@@ -17,49 +17,52 @@
  *                     just lost. That is the dead end `reclaimAccount()`
  *                     exists for.
  */
-import { describe, expect, it } from "vitest";
-import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from "./e2eHelpers";
-import { storageKeyName } from "../crypto/atRest";
-import { instanceKeyName } from "../instance/manager";
+import { describe, expect, it } from 'vitest';
+import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from './e2eHelpers';
+import { storageKeyName } from '../crypto/atRest';
+import { instanceKeyName } from '../instance/manager';
 
-const ACCOUNT = "acc-recovery-0001";
+const ACCOUNT = 'acc-recovery-0001';
 
-describe("a device that lost a secret", () => {
-  it("drops the rows it can no longer read and keeps its instance when only the STORAGE key is gone", async () => {
+describe('a device that lost a secret', () => {
+  it('drops the rows it can no longer read and keeps its instance when only the STORAGE key is gone', async () => {
     const server = fakeServer();
-    const first = await makeClient(server, ACCOUNT, "Chrome");
-    const conversation = await first.client.conversations.createDirect("acc-recovery-0002");
-    await first.client.messages.send(conversation.id, "before");
+    const first = await makeClient(server, ACCOUNT, 'Chrome');
+    const conversation = await first.client.conversations.createDirect('acc-recovery-0002');
+    await first.client.messages.send(conversation.id, 'before');
     await first.client.sync.flush();
     const instanceId = first.client.instanceId;
     await first.client.stop();
 
     // The storage key alone goes. The rows it wrote are still on disk and
     // nothing will ever decrypt them again.
-    await first.secrets.delete(storageKeyName(ACCOUNT, "allo"));
+    await first.secrets.delete(storageKeyName(ACCOUNT, 'allo'));
     expect((await first.storage.list(`allo/allo/${ACCOUNT}/`)).length).toBeGreaterThan(0);
 
-    const again = await makeClient(server, ACCOUNT, "Chrome", "web", { storage: first.storage, secrets: first.secrets });
+    const again = await makeClient(server, ACCOUNT, 'Chrome', 'web', {
+      storage: first.storage,
+      secrets: first.secrets,
+    });
 
     // Adopted, not re-enrolled: the same instance, still active, and the
     // server was asked to register a second time only to be told the key it
     // presented is already enrolled.
-    expect(again.client.instance.state()).toBe("active");
+    expect(again.client.instance.state()).toBe('active');
     expect(again.client.instanceId).toBe(instanceId);
     await stopAll(again);
   }, 30_000);
 
-  it("gets the account back from a device that can no longer approve, when the SIGNING key is gone", async () => {
+  it('gets the account back from a device that can no longer approve, when the SIGNING key is gone', async () => {
     const server = fakeServer();
-    const lost = await makeClient(server, ACCOUNT, "Chrome");
+    const lost = await makeClient(server, ACCOUNT, 'Chrome');
     const ghostId = lost.client.instanceId;
-    expect(lost.client.instance.state()).toBe("active");
+    expect(lost.client.instance.state()).toBe('active');
     await lost.client.stop();
 
     // Site data cleared: this device keeps nothing, and the server still calls
     // that instance active.
-    const fresh = await makeClient(server, ACCOUNT, "Chrome again");
-    expect(fresh.client.instance.state()).toBe("pending-approval");
+    const fresh = await makeClient(server, ACCOUNT, 'Chrome again');
+    expect(fresh.client.instance.state()).toBe('pending-approval');
     expect(fresh.client.instanceId).not.toBe(ghostId);
     // And there is nobody to approve it: the one active instance is the ghost.
     expect(fresh.client.instance.pending()).toEqual([]);
@@ -67,29 +70,32 @@ describe("a device that lost a secret", () => {
     await fresh.client.reclaimAccount();
 
     // This device is the account's device now, and the ghost is revoked.
-    expect(fresh.client.instance.state()).toBe("active");
+    expect(fresh.client.instance.state()).toBe('active');
     const listed = server.instancesOf(ACCOUNT);
-    expect(listed.find((i) => i.id === ghostId)?.status).toBe("revoked");
-    expect(listed.filter((i) => i.status === "active")).toHaveLength(1);
+    expect(listed.find((i) => i.id === ghostId)?.status).toBe('revoked');
+    expect(listed.filter((i) => i.status === 'active')).toHaveLength(1);
     await stopAll(fresh);
   }, 30_000);
 
-  it("leaves the signing key unusable for its own sake: a wiped device cannot revoke what it no longer holds", async () => {
+  it('leaves the signing key unusable for its own sake: a wiped device cannot revoke what it no longer holds', async () => {
     const server = fakeServer();
-    const device = await makeClient(server, ACCOUNT, "Chrome");
+    const device = await makeClient(server, ACCOUNT, 'Chrome');
     const instanceId = device.client.instanceId;
 
     // What a sign-out does while the session is alive, which is the only time
     // the revoke can land.
     const outcome = await device.client.reset();
-    expect(outcome).toEqual({ revoked: "done" });
-    expect(await device.secrets.get(instanceKeyName(ACCOUNT, "allo"))).toBeUndefined();
-    expect(server.instancesOf(ACCOUNT).find((i) => i.id === instanceId)?.status).toBe("revoked");
+    expect(outcome).toEqual({ revoked: 'done' });
+    expect(await device.secrets.get(instanceKeyName(ACCOUNT, 'allo'))).toBeUndefined();
+    expect(server.instancesOf(ACCOUNT).find((i) => i.id === instanceId)?.status).toBe('revoked');
 
     // The account has no active instance, so the next device to arrive is the
     // bootstrap one and comes back active rather than waiting.
-    const next = await makeClient(server, ACCOUNT, "Phone", "ios", { storage: device.storage, secrets: device.secrets });
-    expect(next.client.instance.state()).toBe("active");
+    const next = await makeClient(server, ACCOUNT, 'Phone', 'ios', {
+      storage: device.storage,
+      secrets: device.secrets,
+    });
+    expect(next.client.instance.state()).toBe('active');
     await stopAll(next);
   }, 30_000);
 });
@@ -103,10 +109,10 @@ describe("a device that lost a secret", () => {
  * Measured in a browser before `GET /v1/key-packages` existed: five reloads
  * turned 21 local rows into 125.
  */
-describe("the key package stock", () => {
-  it("is topped up to the target rather than added to on every start", async () => {
+describe('the key package stock', () => {
+  it('is topped up to the target rather than added to on every start', async () => {
     const server = fakeServer();
-    const first = await makeClient(server, "acc-stock-0001", "Chrome");
+    const first = await makeClient(server, 'acc-stock-0001', 'Chrome');
     const afterFirst = server.keyPackages.get(first.client.instanceId!)?.length ?? 0;
     expect(afterFirst).toBeGreaterThan(0);
     await first.client.stop();
@@ -114,13 +120,18 @@ describe("the key package stock", () => {
     // Three more starts on the same device: nothing was consumed, so nothing
     // needs uploading.
     for (let i = 0; i < 3; i += 1) {
-      const again = await makeClient(server, "acc-stock-0001", "Chrome", "web", { storage: first.storage, secrets: first.secrets });
+      const again = await makeClient(server, 'acc-stock-0001', 'Chrome', 'web', {
+        storage: first.storage,
+        secrets: first.secrets,
+      });
       expect(server.keyPackages.get(again.client.instanceId!)?.length ?? 0).toBe(afterFirst);
       await again.client.stop();
     }
 
     // And the private halves on disk did not multiply either.
-    const rows = (await first.storage.list(`allo/allo/acc-stock-0001/`)).filter((key) => key.includes("keyPackage"));
+    const rows = (await first.storage.list(`allo/allo/acc-stock-0001/`)).filter((key) =>
+      key.includes('keyPackage'),
+    );
     expect(rows).toHaveLength(afterFirst);
   }, 30_000);
 });
@@ -135,25 +146,25 @@ describe("the key package stock", () => {
  * on its `dm_key` — so "start a new conversation with that person" hands back
  * the same dead row. Two people could never speak again.
  */
-describe("a conversation with no live device", () => {
-  it("is revived on the next refresh, and messages flow again", async () => {
+describe('a conversation with no live device', () => {
+  it('is revived on the next refresh, and messages flow again', async () => {
     const server = fakeServer();
-    const mine = await makeClient(server, "acc-revive-0001", "Chrome");
-    const conversation = await mine.client.conversations.createDirect("acc-revive-0002");
-    await mine.client.messages.send(conversation.id, "before the lights went out");
+    const mine = await makeClient(server, 'acc-revive-0001', 'Chrome');
+    const conversation = await mine.client.conversations.createDirect('acc-revive-0002');
+    await mine.client.messages.send(conversation.id, 'before the lights went out');
     await mine.client.sync.flush();
     await mine.client.stop();
 
     // Every device in the group goes: this is what a sign-out, or the reclaim
     // of an account whose devices were lost, leaves behind.
-    server.instancesOf("acc-revive-0001").forEach((i) => (i.status = "revoked"));
+    server.instancesOf('acc-revive-0001').forEach((i) => (i.status = 'revoked'));
     const group = server.conversations.get(conversation.id)!;
     const deadGroupId = group.mlsGroupId; // a string, not a live reference to the row
-    for (const [id, leaf] of group.leaves) group.leaves.set(id, { ...leaf, state: "removed" });
+    for (const [id, leaf] of group.leaves) group.leaves.set(id, { ...leaf, state: 'removed' });
 
     // The account comes back on a new device, with nothing of its own.
-    const fresh = await makeClient(server, "acc-revive-0001", "Chrome again");
-    expect(fresh.client.instance.state()).toBe("active");
+    const fresh = await makeClient(server, 'acc-revive-0001', 'Chrome again');
+    expect(fresh.client.instance.state()).toBe('active');
 
     const view = fresh.client.conversations.get(conversation.id);
     expect(view).toBeDefined();
@@ -161,16 +172,16 @@ describe("a conversation with no live device", () => {
     expect(view!.joined).toBe(true);
     expect(server.conversations.get(conversation.id)!.mlsGroupId).not.toBe(deadGroupId);
 
-    await fresh.client.messages.send(conversation.id, "still here");
+    await fresh.client.messages.send(conversation.id, 'still here');
     await fresh.client.sync.flush();
-    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain("still here");
+    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain('still here');
     await stopAll(fresh);
   }, 30_000);
 
-  it("leaves a conversation that still has a live device alone", async () => {
+  it('leaves a conversation that still has a live device alone', async () => {
     const server = fakeServer();
-    const alice = await makeClient(server, "acc-revive-0101", "Alice");
-    const bob = await makeClient(server, "acc-revive-0102", "Bob");
+    const alice = await makeClient(server, 'acc-revive-0101', 'Alice');
+    const bob = await makeClient(server, 'acc-revive-0102', 'Bob');
     const conversation = await alice.client.conversations.createDirect(bob.accountId);
     await alice.client.sync.flush();
     await bob.client.sync.now();
@@ -197,62 +208,65 @@ describe("a conversation with no live device", () => {
  * may give, so the DM is re-keyed instead. It costs nothing that was not
  * already gone: a device with no leaf could read none of it anyway.
  */
-describe("a direct conversation with nobody able to let this device in", () => {
-  it("re-keys itself and lets the person write, with the other side offline", async () => {
+describe('a direct conversation with nobody able to let this device in', () => {
+  it('re-keys itself and lets the person write, with the other side offline', async () => {
     const server = fakeServer();
     // Conversations made before GroupInfos existed publish none.
     server.keepGroupInfo = false;
 
-    const alice = await makeClient(server, "acc-rekey-a", "Alice phone");
-    const bob = await makeClient(server, "acc-rekey-b", "Bob");
+    const alice = await makeClient(server, 'acc-rekey-a', 'Alice phone');
+    const bob = await makeClient(server, 'acc-rekey-b', 'Bob');
     const conversation = await alice.client.conversations.createDirect(bob.accountId);
-    await alice.client.messages.send(conversation.id, "from before");
+    await alice.client.messages.send(conversation.id, 'from before');
     await alice.client.sync.flush();
-    await waitForText(bob, conversation.id, "from before");
+    await waitForText(bob, conversation.id, 'from before');
     await bob.client.stop();
 
     // Alice re-enrols: her old device is revoked, the new one has no leaf, and
     // Bob — the only device that could add her — is not running.
     await alice.client.stop();
-    server.instancesOf("acc-rekey-a").forEach((i) => (i.status = "revoked"));
+    server.instancesOf('acc-rekey-a').forEach((i) => (i.status = 'revoked'));
     const group = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of group.leaves) {
-      if (leaf.accountId === "acc-rekey-a") group.leaves.set(id, { ...leaf, state: "removed" });
+      if (leaf.accountId === 'acc-rekey-a') group.leaves.set(id, { ...leaf, state: 'removed' });
     }
-    expect([...group.leaves.values()].some((leaf) => leaf.state === "active")).toBe(true); // Bob's is still live
+    expect([...group.leaves.values()].some((leaf) => leaf.state === 'active')).toBe(true); // Bob's is still live
 
-    const fresh = await makeClient(server, "acc-rekey-a", "Alice laptop");
+    const fresh = await makeClient(server, 'acc-rekey-a', 'Alice laptop');
     await waitFor(() => fresh.client.conversations.get(conversation.id)?.joined === true, 10_000);
 
     const view = fresh.client.conversations.get(conversation.id)!;
     expect(view.joined).toBe(true);
-    expect(view.joinState).toBe("joined");
+    expect(view.joinState).toBe('joined');
 
     // And she can actually speak in it.
-    await fresh.client.messages.send(conversation.id, "I can write again");
+    await fresh.client.messages.send(conversation.id, 'I can write again');
     await fresh.client.sync.flush();
-    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain("I can write again");
+    expect(texts(fresh.client.messages.timeline(conversation.id))).toContain('I can write again');
     await stopAll(fresh);
   }, 30_000);
 
-  it("never re-keys a GROUP out from under the people in it", async () => {
+  it('never re-keys a GROUP out from under the people in it', async () => {
     const server = fakeServer();
     server.keepGroupInfo = false;
-    const alice = await makeClient(server, "acc-rekey-c", "Alice");
-    const bob = await makeClient(server, "acc-rekey-d", "Bob");
-    const carol = await makeClient(server, "acc-rekey-e", "Carol");
-    const conversation = await alice.client.conversations.createGroup([bob.accountId, carol.accountId]);
+    const alice = await makeClient(server, 'acc-rekey-c', 'Alice');
+    const bob = await makeClient(server, 'acc-rekey-d', 'Bob');
+    const carol = await makeClient(server, 'acc-rekey-e', 'Carol');
+    const conversation = await alice.client.conversations.createGroup([
+      bob.accountId,
+      carol.accountId,
+    ]);
     await alice.client.sync.flush();
 
     const groupIdBefore = server.conversations.get(conversation.id)!.mlsGroupId;
     await alice.client.stop();
-    server.instancesOf("acc-rekey-c").forEach((i) => (i.status = "revoked"));
+    server.instancesOf('acc-rekey-c').forEach((i) => (i.status = 'revoked'));
     const g = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of g.leaves) {
-      if (leaf.accountId === "acc-rekey-c") g.leaves.set(id, { ...leaf, state: "removed" });
+      if (leaf.accountId === 'acc-rekey-c') g.leaves.set(id, { ...leaf, state: 'removed' });
     }
 
-    const fresh = await makeClient(server, "acc-rekey-c", "Alice laptop");
+    const fresh = await makeClient(server, 'acc-rekey-c', 'Alice laptop');
     await new Promise((resolve) => setTimeout(resolve, 500));
     // The group is untouched, and this device waits for a member, as it must.
     expect(server.conversations.get(conversation.id)!.mlsGroupId).toBe(groupIdBefore);

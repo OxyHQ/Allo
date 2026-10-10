@@ -57,12 +57,17 @@ export function ProfileScreen({ handle }: { handle: string }) {
             verified={profile.verified}
           />
           {isViewer ? null : (
-            <Button size="lg" leadingIcon={RiMessage2Line} onPress={() => router.push(`/c/${profile.id}`)} style={styles.message}>
+            <Button
+              size="lg"
+              leadingIcon={RiMessage2Line}
+              onPress={() => router.push(`/c/${profile.id}`)}
+              style={styles.message}
+            >
               {t('profile.message')}
             </Button>
           )}
           {profile.bio ? (
-            <Card  radius="radius-16" style={styles.about} appearance="outline">
+            <Card radius="radius-16" style={styles.about} appearance="outline">
               <Text variant="body-semibold" style={{ color: theme.colors.textSecondary }}>
                 {t('profile.about')}
               </Text>

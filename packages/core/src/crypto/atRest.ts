@@ -4,10 +4,10 @@
  * fresh 12-byte nonce per write (prefixed to the ciphertext), and the storage
  * key path as additional data so a row cannot be moved under another key.
  */
-import { gcm } from "@noble/ciphers/aes.js";
-import { StorageError } from "../errors";
-import { bytesEqual, concatBytes, randomBytes, utf8Encode } from "../util/bytes";
-import type { SecretStore } from "../types";
+import { gcm } from '@noble/ciphers/aes.js';
+import { StorageError } from '../errors';
+import { bytesEqual, concatBytes, randomBytes, utf8Encode } from '../util/bytes';
+import type { SecretStore } from '../types';
 
 export const STORAGE_KEY_BYTES = 32;
 const NONCE_BYTES = 12;
@@ -40,12 +40,13 @@ export class AtRestCipher {
     const fresh = randomBytes(STORAGE_KEY_BYTES);
     await secrets.set(name, fresh);
     const check = await secrets.get(name);
-    if (!check || !bytesEqual(check, fresh)) throw new StorageError("secret store did not persist the storage key");
+    if (!check || !bytesEqual(check, fresh))
+      throw new StorageError('secret store did not persist the storage key');
     return new AtRestCipher(fresh, true);
   }
 
   static fromKey(key: Uint8Array): AtRestCipher {
-    if (key.length !== STORAGE_KEY_BYTES) throw new StorageError("storage key must be 32 bytes");
+    if (key.length !== STORAGE_KEY_BYTES) throw new StorageError('storage key must be 32 bytes');
     return new AtRestCipher(key, false);
   }
 
@@ -56,13 +57,14 @@ export class AtRestCipher {
   }
 
   decrypt(storageKey: string, stored: Uint8Array): Uint8Array {
-    if (stored.length < 1 + NONCE_BYTES + 16 || stored[0] !== VERSION) throw new StorageError("stored value is not in the at-rest format");
+    if (stored.length < 1 + NONCE_BYTES + 16 || stored[0] !== VERSION)
+      throw new StorageError('stored value is not in the at-rest format');
     const nonce = stored.subarray(1, 1 + NONCE_BYTES);
     const ct = stored.subarray(1 + NONCE_BYTES);
     try {
       return gcm(this.key, nonce, utf8Encode(storageKey)).decrypt(ct);
     } catch (cause) {
-      throw new StorageError("stored value failed authentication", { cause });
+      throw new StorageError('stored value failed authentication', { cause });
     }
   }
 }

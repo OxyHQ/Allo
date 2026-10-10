@@ -56,7 +56,7 @@ function breakerFor(endpoint: string): CircuitBreaker {
     CIRCUIT_FAILURE_THRESHOLD,
     CIRCUIT_FAILURE_WINDOW_MS,
     CIRCUIT_RESET_MS,
-    key
+    key,
   );
   circuitBreakers.set(key, breaker);
   return breaker;
@@ -66,14 +66,15 @@ function breakerFor(endpoint: string): CircuitBreaker {
 // WhatsApp/Telegram pattern: if same request is in flight, return same promise
 const pendingRequests = new Map<string, Promise<unknown>>();
 
-function createRequestKey(method: string, endpoint: string, params?: Record<string, unknown>): string {
+function createRequestKey(
+  method: string,
+  endpoint: string,
+  params?: Record<string, unknown>,
+): string {
   return `${method}:${endpoint}:${JSON.stringify(params || {})}`;
 }
 
-async function deduplicateRequest<T>(
-  key: string,
-  requestFn: () => Promise<T>
-): Promise<T> {
+async function deduplicateRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
   // Check if this exact request is already in flight
   const pending = pendingRequests.get(key) as Promise<T> | undefined;
   if (pending) {
@@ -99,48 +100,42 @@ export const api = {
   async get<T = unknown>(endpoint: string, params?: Record<string, unknown>): Promise<{ data: T }> {
     const key = createRequestKey('GET', endpoint, params);
     const data = await deduplicateRequest(key, () =>
-      breakerFor(endpoint).execute(() =>
-        backendClient.get<T>(endpoint, { params })
-      )
+      breakerFor(endpoint).execute(() => backendClient.get<T>(endpoint, { params })),
     );
     return { data };
   },
 
   async post<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate POST requests as they may have side effects
-    const data = await breakerFor(endpoint).execute(() =>
-      backendClient.post<T>(endpoint, body)
-    );
+    const data = await breakerFor(endpoint).execute(() => backendClient.post<T>(endpoint, body));
     return { data };
   },
 
   async put<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PUT requests as they may have side effects
-    const data = await breakerFor(endpoint).execute(() =>
-      backendClient.put<T>(endpoint, body)
-    );
+    const data = await breakerFor(endpoint).execute(() => backendClient.put<T>(endpoint, body));
     return { data };
   },
 
   async delete<T = unknown>(endpoint: string): Promise<{ data: T }> {
     // Don't deduplicate DELETE requests as they may have side effects
-    const data = await breakerFor(endpoint).execute(() =>
-      backendClient.delete<T>(endpoint)
-    );
+    const data = await breakerFor(endpoint).execute(() => backendClient.delete<T>(endpoint));
     return { data };
   },
 
   async patch<T = unknown>(endpoint: string, body?: unknown): Promise<{ data: T }> {
     // Don't deduplicate PATCH requests as they may have side effects
-    const data = await breakerFor(endpoint).execute(() =>
-      backendClient.patch<T>(endpoint, body)
-    );
+    const data = await breakerFor(endpoint).execute(() => backendClient.patch<T>(endpoint, body));
     return { data };
   },
 };
 
 export class ApiError extends Error {
-  constructor(message: string, public status?: number, public response?: unknown) {
+  constructor(
+    message: string,
+    public status?: number,
+    public response?: unknown,
+  ) {
     super(message);
     this.name = 'ApiError';
   }

@@ -1,12 +1,12 @@
-import { Router, type NextFunction, type Request, type Response } from "express";
-import { crowdsourceWebhooks } from "@crowdsource.you/core/express";
-import { crowdSourceConfig } from "../config/crowdsource";
+import { Router, type NextFunction, type Request, type Response } from 'express';
+import { crowdsourceWebhooks } from '@crowdsource.you/core/express';
+import { crowdSourceConfig } from '../config/crowdsource';
 import {
   recordDecisionEvent,
   recordIgnoredEvent,
-} from "../services/moderation/ModerationInboundService";
-import { postgresProcessedEventStore } from "../services/moderation/moderationEventStore";
-import { logger } from "../utils/logger";
+} from '../services/moderation/ModerationInboundService';
+import { postgresProcessedEventStore } from '../services/moderation/moderationEventStore';
+import { logger } from '../utils/logger';
 
 /**
  * `POST /webhooks/crowdsource` — where decisions come back.
@@ -48,9 +48,9 @@ import { logger } from "../utils/logger";
  * reading of a field this deployment has never seen.
  */
 function stringField(source: unknown, key: string): string | undefined {
-  if (typeof source !== "object" || source === null) return undefined;
+  if (typeof source !== 'object' || source === null) return undefined;
   const value: unknown = Reflect.get(source, key);
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 }
 
 /**
@@ -91,14 +91,14 @@ function stringField(source: unknown, key: string): string | undefined {
  * is fixed.
  */
 function assertRawBody(req: Request, res: Response, next: NextFunction): void {
-  if (typeof req.body !== "undefined") {
+  if (typeof req.body !== 'undefined') {
     logger.error(
-      "[CrowdSource] webhook received a parsed body: this router is mounted after a body parser. " +
-        "The signature covers the bytes that arrived and they are now gone. Mount it before express.json().",
+      '[CrowdSource] webhook received a parsed body: this router is mounted after a body parser. ' +
+        'The signature covers the bytes that arrived and they are now gone. Mount it before express.json().',
     );
     res.status(500).json({
-      error: "Internal Server Error",
-      message: "Webhook receiver is misconfigured",
+      error: 'Internal Server Error',
+      message: 'Webhook receiver is misconfigured',
     });
     return;
   }
@@ -119,12 +119,12 @@ export function createCrowdSourceWebhookRoutes(): Router {
      * deployment 404s here, which is indistinguishable from not having the feature
      * — which is exactly what it is.
      */
-    logger.info("[CrowdSource] webhook route not mounted: no CROWDSOURCE_WEBHOOK_SECRET");
+    logger.info('[CrowdSource] webhook route not mounted: no CROWDSOURCE_WEBHOOK_SECRET');
     return router;
   }
 
   router.post(
-    "/crowdsource",
+    '/crowdsource',
     assertRawBody,
     crowdsourceWebhooks({
       secret,
@@ -140,7 +140,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
          * is real (§9.6) and Allo records it; what it may ACT on is decided by the
          * enforcement mode, not by discarding the event here.
          */
-        "case.decided": async (event) => {
+        'case.decided': async (event) => {
           await recordDecisionEvent({
             eventId: event.id,
             type: event.type,
@@ -155,7 +155,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
          * is an ordinary decision that supersedes another, and giving it a separate
          * path is how a restore ends up not being idempotent.
          */
-        "decision.corrected": async (event) => {
+        'decision.corrected': async (event) => {
           await recordDecisionEvent({
             eventId: event.id,
             type: event.type,
@@ -167,7 +167,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
          * An appeal's outcome carries a decision too, and it is the current answer
          * for the case, so it takes the same path.
          */
-        "appeal.decided": async (event) => {
+        'appeal.decided': async (event) => {
           await recordDecisionEvent({
             eventId: event.id,
             type: event.type,
@@ -189,7 +189,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
         await recordIgnoredEvent({
           eventId: event.id,
           type: event.type,
-          caseId: stringField(event.data, "caseId"),
+          caseId: stringField(event.data, 'caseId'),
         });
       },
       /**
@@ -197,7 +197,7 @@ export function createCrowdSourceWebhookRoutes(): Router {
        * (§10.8's last line). It is a bounded label from the SDK's own union.
        */
       onRejected: (rejection) => {
-        logger.warn("[CrowdSource] webhook delivery refused", { rejection });
+        logger.warn('[CrowdSource] webhook delivery refused', { rejection });
       },
     }),
   );

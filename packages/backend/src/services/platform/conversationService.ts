@@ -2,9 +2,19 @@
  * Conversations (`docs/platform/api-v1.md`, Conversations).
  */
 
-import { isUniqueViolation } from "@oxy.so/db";
-import { dmKeyFor, type ConversationSummary, type CreateConversationRequest, type ResetConversationRequest } from "@allo/shared-types";
-import { getDb, type AlloDatabase, type AlloDatabaseOrTransaction, type AlloTransaction } from "../../db";
+import { isUniqueViolation } from '@oxy.so/db';
+import {
+  dmKeyFor,
+  type ConversationSummary,
+  type CreateConversationRequest,
+  type ResetConversationRequest,
+} from '@allo/shared-types';
+import {
+  getDb,
+  type AlloDatabase,
+  type AlloDatabaseOrTransaction,
+  type AlloTransaction,
+} from '../../db';
 import {
   findConversationByDmKey,
   findConversationById,
@@ -22,12 +32,12 @@ import {
   setMemberState,
   upsertJoinedMember,
   upsertLeaf,
-} from "../../db/platform/conversationRepository";
-import { appendClientEvent, appendControlEvent } from "../../db/platform/eventRepository";
-import { findGroupInfo } from "../../db/platform/groupInfoRepository";
-import { getRealtime } from "../../runtime/realtime";
-import { AlloHttpError, notFound, validationFailed } from "../../utils/httpErrors";
-import { toConversationSummary } from "./wire";
+} from '../../db/platform/conversationRepository';
+import { appendClientEvent, appendControlEvent } from '../../db/platform/eventRepository';
+import { findGroupInfo } from '../../db/platform/groupInfoRepository';
+import { getRealtime } from '../../runtime/realtime';
+import { AlloHttpError, notFound, validationFailed } from '../../utils/httpErrors';
+import { toConversationSummary } from './wire';
 
 export interface Caller {
   instanceId: string;
@@ -59,7 +69,10 @@ async function summariesFor(
     );
 }
 
-export async function listConversations(caller: Caller, deps: { db?: AlloDatabase } = {}): Promise<ConversationSummary[]> {
+export async function listConversations(
+  caller: Caller,
+  deps: { db?: AlloDatabase } = {},
+): Promise<ConversationSummary[]> {
   const db = deps.db ?? getDb();
   const ids = await listConversationIdsForAccount(caller.accountId, db);
   return summariesFor(ids, caller.instanceId, db);
@@ -72,9 +85,9 @@ export async function getConversation(
 ): Promise<ConversationSummary> {
   const db = deps.db ?? getDb();
   const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound("Conversation not found");
+  if (!member) throw notFound('Conversation not found');
   const [summary] = await summariesFor([conversationId], caller.instanceId, db);
-  if (!summary) throw notFound("Conversation not found");
+  if (!summary) throw notFound('Conversation not found');
   return summary;
 }
 
@@ -98,14 +111,22 @@ export async function createConversation(
 ): Promise<CreateConversationResult> {
   const db = deps.db ?? getDb();
   if (request.memberAccountIds.includes(caller.accountId)) {
-    throw validationFailed("the creator is implied and must not be listed", { path: ["memberAccountIds"] });
+    throw validationFailed('the creator is implied and must not be listed', {
+      path: ['memberAccountIds'],
+    });
   }
-  const dmKey = request.kind === "dm" ? dmKeyFor(caller.appId, caller.accountId, request.memberAccountIds[0]) : null;
+  const dmKey =
+    request.kind === 'dm'
+      ? dmKeyFor(caller.appId, caller.accountId, request.memberAccountIds[0])
+      : null;
 
   const existingByGroup = await findConversationByMlsGroupId(request.mlsGroupId, db);
   if (existingByGroup) {
     if (existingByGroup.createdByInstanceId !== caller.instanceId) {
-      throw new AlloHttpError("idempotency_conflict", "This mlsGroupId belongs to another conversation");
+      throw new AlloHttpError(
+        'idempotency_conflict',
+        'This mlsGroupId belongs to another conversation',
+      );
     }
     const [conversation] = await summariesFor([existingByGroup.id], caller.instanceId, db);
     return { conversation, created: false, nudges: [] };
@@ -126,17 +147,38 @@ export async function createConversation(
         },
         tx,
       );
-      await upsertJoinedMember({ conversationId: row.id, accountId: caller.accountId, role: "owner", addedByAccountId: null }, tx);
+      await upsertJoinedMember(
+        {
+          conversationId: row.id,
+          accountId: caller.accountId,
+          role: 'owner',
+          addedByAccountId: null,
+        },
+        tx,
+      );
       for (const accountId of request.memberAccountIds) {
-        await upsertJoinedMember({ conversationId: row.id, accountId, role: "member", addedByAccountId: caller.accountId }, tx);
+        await upsertJoinedMember(
+          { conversationId: row.id, accountId, role: 'member', addedByAccountId: caller.accountId },
+          tx,
+        );
       }
       await upsertLeaf(
-        { conversationId: row.id, instanceId: caller.instanceId, accountId: caller.accountId, state: "active", addedEpoch: 0 },
+        {
+          conversationId: row.id,
+          instanceId: caller.instanceId,
+          accountId: caller.accountId,
+          state: 'active',
+          addedEpoch: 0,
+        },
         tx,
       );
       if (request.initialCommit) {
         const appended = await appendClientEvent(
-          { conversationId: row.id, sender: { instanceId: caller.instanceId, accountId: caller.accountId }, request: request.initialCommit },
+          {
+            conversationId: row.id,
+            sender: { instanceId: caller.instanceId, accountId: caller.accountId },
+            request: request.initialCommit,
+          },
           tx,
         );
         nudges = appended.recipients;
@@ -144,14 +186,17 @@ export async function createConversation(
       return row.id;
     });
   } catch (error: unknown) {
-    if (dmKey !== null && isUniqueViolation(error, "conversations_dm_key_key")) {
+    if (dmKey !== null && isUniqueViolation(error, 'conversations_dm_key_key')) {
       const existing = await findConversationByDmKey(dmKey, db);
       if (!existing) throw error;
       const [conversation] = await summariesFor([existing.id], caller.instanceId, db);
       return { conversation, created: false, nudges: [] };
     }
-    if (isUniqueViolation(error, "conversations_mls_group_id_key")) {
-      throw new AlloHttpError("idempotency_conflict", "This mlsGroupId belongs to another conversation");
+    if (isUniqueViolation(error, 'conversations_mls_group_id_key')) {
+      throw new AlloHttpError(
+        'idempotency_conflict',
+        'This mlsGroupId belongs to another conversation',
+      );
     }
     throw error;
   }
@@ -189,17 +234,20 @@ export async function resetConversation(
 ): Promise<{ conversation: ConversationSummary; nudges: string[] }> {
   const db = deps.db ?? getDb();
   const member = await findMember(conversationId, caller.accountId, db);
-  if (!member || member.state !== "joined") throw notFound("Conversation not found");
+  if (!member || member.state !== 'joined') throw notFound('Conversation not found');
 
   const claimed = await findConversationByMlsGroupId(request.mlsGroupId, db);
   if (claimed && claimed.id !== conversationId) {
-    throw new AlloHttpError("idempotency_conflict", "This mlsGroupId belongs to another conversation");
+    throw new AlloHttpError(
+      'idempotency_conflict',
+      'This mlsGroupId belongs to another conversation',
+    );
   }
 
   let nudges: string[] = [];
   await db.transaction(async (tx) => {
     const conversation = await lockConversation(conversationId, tx);
-    if (!conversation) throw notFound("Conversation not found");
+    if (!conversation) throw notFound('Conversation not found');
     const leaves = await listLeaves(conversationId, tx);
     /**
      * A replay of the caller's own reset. Once it lands the group is ALIVE —
@@ -209,28 +257,43 @@ export async function resetConversation(
      * already in the conversation.
      */
     const mine = leaves.find((leaf) => leaf.instanceId === caller.instanceId);
-    if (conversation.mlsGroupId === request.mlsGroupId && mine?.state === "active") return;
+    if (conversation.mlsGroupId === request.mlsGroupId && mine?.state === 'active') return;
 
-    const alive = leaves.filter((leaf) => leaf.state === "active");
+    const alive = leaves.filter((leaf) => leaf.state === 'active');
     if (alive.length > 0 && !(await mayRekeyDirect(conversation, caller, leaves, tx))) {
-      throw new AlloHttpError("idempotency_conflict", "The conversation still has an active device and cannot be reset", {
-        activeLeaves: alive.length,
-      });
+      throw new AlloHttpError(
+        'idempotency_conflict',
+        'The conversation still has an active device and cannot be reset',
+        {
+          activeLeaves: alive.length,
+        },
+      );
     }
     // Idempotent: the same group posted twice resets once.
     if (conversation.mlsGroupId !== request.mlsGroupId) {
       await replaceConversationGroup(conversationId, request.mlsGroupId, tx);
     }
     for (const leaf of leaves) {
-      if (leaf.state !== "removed") await markLeafRemoved(conversationId, leaf.instanceId, null, tx);
+      if (leaf.state !== 'removed')
+        await markLeafRemoved(conversationId, leaf.instanceId, null, tx);
     }
     await upsertLeaf(
-      { conversationId, instanceId: caller.instanceId, accountId: caller.accountId, state: "active", addedEpoch: 0 },
+      {
+        conversationId,
+        instanceId: caller.instanceId,
+        accountId: caller.accountId,
+        state: 'active',
+        addedEpoch: 0,
+      },
       tx,
     );
     if (request.initialCommit) {
       const appended = await appendClientEvent(
-        { conversationId, sender: { instanceId: caller.instanceId, accountId: caller.accountId }, request: request.initialCommit },
+        {
+          conversationId,
+          sender: { instanceId: caller.instanceId, accountId: caller.accountId },
+          request: request.initialCommit,
+        },
         tx,
       );
       nudges = appended.recipients;
@@ -283,10 +346,10 @@ async function mayRekeyDirect(
   leaves: readonly { instanceId: string; accountId: string; state: string }[],
   tx: AlloTransaction,
 ): Promise<boolean> {
-  if (conversation.kind !== "dm") return false;
+  if (conversation.kind !== 'dm') return false;
   const ours = leaves.filter((leaf) => leaf.accountId === caller.accountId);
-  if (ours.some((leaf) => leaf.state === "active")) return false;
-  if (!ours.some((leaf) => leaf.state === "removed")) return false;
+  if (ours.some((leaf) => leaf.state === 'active')) return false;
+  if (!ours.some((leaf) => leaf.state === 'removed')) return false;
   return (await findGroupInfo(conversation.id, tx)) === null;
 }
 
@@ -295,21 +358,31 @@ async function mayRekeyDirect(
  * `removed` pending a commit, and a `member_left` control event tells the
  * others. Deletes nothing.
  */
-export async function leaveConversation(caller: Caller, conversationId: string, deps: { db?: AlloDatabase } = {}): Promise<void> {
+export async function leaveConversation(
+  caller: Caller,
+  conversationId: string,
+  deps: { db?: AlloDatabase } = {},
+): Promise<void> {
   const db = deps.db ?? getDb();
   const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound("Conversation not found");
-  if (member.state !== "joined") return;
+  if (!member) throw notFound('Conversation not found');
+  if (member.state !== 'joined') return;
 
   const recipients = await db.transaction(async (tx) => {
     const conversation = await lockConversation(conversationId, tx);
-    if (!conversation) throw notFound("Conversation not found");
+    if (!conversation) throw notFound('Conversation not found');
     const leaves = await listLeaves(conversationId, tx);
-    const mine = leaves.filter((leaf) => leaf.accountId === caller.accountId && leaf.state !== "removed");
+    const mine = leaves.filter(
+      (leaf) => leaf.accountId === caller.accountId && leaf.state !== 'removed',
+    );
     for (const leaf of mine) await markLeafRemoved(conversationId, leaf.instanceId, null, tx);
-    await setMemberState(conversationId, caller.accountId, "left", tx);
+    await setMemberState(conversationId, caller.accountId, 'left', tx);
     const appended = await appendControlEvent(
-      { conversationId, control: { t: "member_left", accountId: caller.accountId }, excludeInstanceIds: mine.map((l) => l.instanceId) },
+      {
+        conversationId,
+        control: { t: 'member_left', accountId: caller.accountId },
+        excludeInstanceIds: mine.map((l) => l.instanceId),
+      },
       tx,
     );
     return appended.recipients;

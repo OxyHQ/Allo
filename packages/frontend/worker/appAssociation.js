@@ -145,7 +145,9 @@ export function handleWellKnown(request, env = {}) {
   }
   if (pathname === AASA_PATH) {
     const aasa = buildAppleAppSiteAssociation(env);
-    return aasa ? json(aasa, 200, CACHE_CONTROL, method) : json({ error: 'Not found' }, 404, 'no-store', method);
+    return aasa
+      ? json(aasa, 200, CACHE_CONTROL, method)
+      : json({ error: 'Not found' }, 404, 'no-store', method);
   }
   return json({ error: 'Not found' }, 404, 'no-store', method);
 }

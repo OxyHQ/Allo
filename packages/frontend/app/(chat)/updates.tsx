@@ -131,7 +131,9 @@ export default function UpdatesScreen() {
           ) : (
             authors.map((author) => {
               const who = person(author.accountId);
-              const name = author.mine ? t('stories.own') : (who?.displayName ?? t('stories.someone'));
+              const name = author.mine
+                ? t('stories.own')
+                : (who?.displayName ?? t('stories.someone'));
               return (
                 <Item
                   key={author.accountId}

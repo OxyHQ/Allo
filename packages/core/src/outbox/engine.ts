@@ -30,15 +30,32 @@
  * the local epoch advances. The count is in memory: a restart starts over,
  * which costs at most {@link EPOCH_STALL_LIMIT} more POSTs.
  */
-import { encodeAppMessage, submitEventResponseSchema, type AppMessage, type EventRef, type SubmitEventRequest } from "@allo/shared-types";
-import type { Context } from "../context";
-import { EpochConflictError, InstanceNotActiveError, InvalidStateError, TransportError } from "../errors";
-import { Model } from "../storage/model";
-import { pendingCommitRecordSchema, type EventRecord, type OutboxCommitIntent, type OutboxItemRecord, type PendingCommitRecord } from "../storage/records";
-import { base64Decode, base64Encode } from "../util/bytes";
-import { uuidV7 } from "../util/ids";
-import { backoffMs, sleep } from "../util/async";
-import { describeError } from "../util/logger";
+import {
+  encodeAppMessage,
+  submitEventResponseSchema,
+  type AppMessage,
+  type EventRef,
+  type SubmitEventRequest,
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import {
+  EpochConflictError,
+  InstanceNotActiveError,
+  InvalidStateError,
+  TransportError,
+} from '../errors';
+import { Model } from '../storage/model';
+import {
+  pendingCommitRecordSchema,
+  type EventRecord,
+  type OutboxCommitIntent,
+  type OutboxItemRecord,
+  type PendingCommitRecord,
+} from '../storage/records';
+import { base64Decode, base64Encode } from '../util/bytes';
+import { uuidV7 } from '../util/ids';
+import { backoffMs, sleep } from '../util/async';
+import { describeError } from '../util/logger';
 
 const MAX_ATTEMPTS = 50;
 /** Consecutive `epoch_conflict`s without local progress before an item is held. */
@@ -66,7 +83,11 @@ export class OutboxEngine {
   constructor(private readonly ctx: Context) {}
 
   /** Queues an application message; returns the item (its id is the local key). */
-  async enqueueMessage(conversationId: string, message: AppMessage, blobIds: string[] = []): Promise<OutboxItemRecord> {
+  async enqueueMessage(
+    conversationId: string,
+    message: AppMessage,
+    blobIds: string[] = [],
+  ): Promise<OutboxItemRecord> {
     const { ctx } = this;
     ctx.instance.assertActive();
     const conv = ctx.model.conversations.get(conversationId);
@@ -74,16 +95,16 @@ export class OutboxEngine {
     const item: OutboxItemRecord = {
       id: uuidV7(ctx.now()),
       conversationId,
-      kind: "app_message",
+      kind: 'app_message',
       createdAt: ctx.nowIso(),
       attempts: 0,
-      state: "pending",
+      state: 'pending',
       failure: null,
       message,
       commit: null,
       blobIds,
     };
-    await ctx.store.putJson("outbox", item.id, item);
+    await ctx.store.putJson('outbox', item.id, item);
     ctx.model.outbox.set(item.id, item);
     ctx.messages.invalidate(conversationId);
     ctx.conversations.invalidate(conversationId);
@@ -95,24 +116,29 @@ export class OutboxEngine {
   async enqueueCommit(conversationId: string, intent: OutboxCommitIntent): Promise<void> {
     const { ctx } = this;
     if (!ctx.instance.isActive) return;
-    const pending = ctx.model.outboxItems(conversationId).filter((i) => i.kind === "commit" && i.state === "pending");
-    const covered = (id: string) => pending.some((p) => p.commit?.adds.some((a) => a.instanceId === id) || p.commit?.removes.includes(id));
+    const pending = ctx.model
+      .outboxItems(conversationId)
+      .filter((i) => i.kind === 'commit' && i.state === 'pending');
+    const covered = (id: string) =>
+      pending.some(
+        (p) => p.commit?.adds.some((a) => a.instanceId === id) || p.commit?.removes.includes(id),
+      );
     const adds = intent.adds.filter((a) => !covered(a.instanceId));
     const removes = intent.removes.filter((r) => !covered(r));
     if (adds.length === 0 && removes.length === 0) return;
     const item: OutboxItemRecord = {
       id: uuidV7(ctx.now()),
       conversationId,
-      kind: "commit",
+      kind: 'commit',
       createdAt: ctx.nowIso(),
       attempts: 0,
-      state: "pending",
+      state: 'pending',
       failure: null,
       message: null,
       commit: { adds, removes, reason: intent.reason },
       blobIds: [],
     };
-    await ctx.store.putJson("outbox", item.id, item);
+    await ctx.store.putJson('outbox', item.id, item);
     ctx.model.outbox.set(item.id, item);
     this.kick();
   }
@@ -171,7 +197,8 @@ export class OutboxEngine {
   private scheduleStallWake(): void {
     if (this.stopped) return;
     let earliest = Infinity;
-    for (const s of this.stalls.values()) if (s.count >= EPOCH_STALL_LIMIT) earliest = Math.min(earliest, s.nextAt);
+    for (const s of this.stalls.values())
+      if (s.count >= EPOCH_STALL_LIMIT) earliest = Math.min(earliest, s.nextAt);
     if (earliest === Infinity) return;
     if (this.stallTimer) clearTimeout(this.stallTimer);
     this.stallTimer = setTimeout(
@@ -195,15 +222,19 @@ export class OutboxEngine {
   private async loop(): Promise<void> {
     const { ctx } = this;
     while (!this.stopped) {
-      const item = ctx.model.outboxItems().find((i) => i.state === "pending" && !this.isHeld(i));
+      const item = ctx.model.outboxItems().find((i) => i.state === 'pending' && !this.isHeld(i));
       if (!item) return;
       if (!ctx.instance.isActive) return;
       try {
-        const done = item.kind === "commit" ? await this.sendCommit(item) : await this.sendMessage(item);
+        const done =
+          item.kind === 'commit' ? await this.sendCommit(item) : await this.sendMessage(item);
         if (!done) return;
       } catch (error) {
         if (error instanceof InstanceNotActiveError) return;
-        ctx.log.warn?.("outbox item failed unexpectedly", { itemId: item.id, error: describeError(error) });
+        ctx.log.warn?.('outbox item failed unexpectedly', {
+          itemId: item.id,
+          error: describeError(error),
+        });
         await this.markFailed(item, describeError(error));
       }
     }
@@ -212,19 +243,22 @@ export class OutboxEngine {
   /** Held items stay `pending` untouched; `TimelineItemView.holdReason` tells the UI why. */
   private isHeld(item: OutboxItemRecord): boolean {
     if (this.isStalled(item)) return true;
-    return item.kind === "app_message" && this.ctx.conversations.hasNoReachableMember(item.conversationId);
+    return (
+      item.kind === 'app_message' &&
+      this.ctx.conversations.hasNoReachableMember(item.conversationId)
+    );
   }
 
   private async bump(item: OutboxItemRecord): Promise<OutboxItemRecord> {
     const next = { ...item, attempts: item.attempts + 1 };
-    await this.ctx.store.putJson("outbox", next.id, next);
+    await this.ctx.store.putJson('outbox', next.id, next);
     this.ctx.model.outbox.set(next.id, next);
     return next;
   }
 
   private async markFailed(item: OutboxItemRecord, failure: string): Promise<void> {
-    const next: OutboxItemRecord = { ...item, state: "failed", failure };
-    await this.ctx.store.putJson("outbox", next.id, next);
+    const next: OutboxItemRecord = { ...item, state: 'failed', failure };
+    await this.ctx.store.putJson('outbox', next.id, next);
     this.ctx.model.outbox.set(next.id, next);
     this.ctx.messages.invalidate(item.conversationId);
   }
@@ -242,46 +276,67 @@ export class OutboxEngine {
   }
 
   /** Returns false when the loop should stop (offline backoff exhausted for now). */
-  private async handleTransportError(item: OutboxItemRecord, error: unknown): Promise<"retry" | "stop" | "failed"> {
+  private async handleTransportError(
+    item: OutboxItemRecord,
+    error: unknown,
+  ): Promise<'retry' | 'stop' | 'failed'> {
     const { ctx } = this;
     if (error instanceof EpochConflictError) {
       const before = this.localEpoch(item.conversationId);
       try {
         await ctx.sync.now();
       } catch (e) {
-        ctx.log.debug?.("sync after epoch conflict failed", { error: describeError(e) });
+        ctx.log.debug?.('sync after epoch conflict failed', { error: describeError(e) });
         await this.delay(item);
-        return "retry";
+        return 'retry';
       }
       const after = this.localEpoch(item.conversationId);
       if (after !== before) {
         this.stalls.delete(item.id); // the sync brought the winning commit: an ordinary race
-        return "retry";
+        return 'retry';
       }
       // No progress: the server is ahead of a state this device will not move. Count, then hold.
-      const stall = this.stalls.get(item.id) ?? { conversationId: item.conversationId, epoch: after ?? -1, count: 0, nextAt: 0 };
+      const stall = this.stalls.get(item.id) ?? {
+        conversationId: item.conversationId,
+        epoch: after ?? -1,
+        count: 0,
+        nextAt: 0,
+      };
       stall.count++;
       this.stalls.set(item.id, stall);
       if (stall.count >= EPOCH_STALL_LIMIT) {
-        const backoff = Math.min(EPOCH_STALL_BACKOFF_CAP_MS, EPOCH_STALL_BACKOFF_BASE_MS * 2 ** (stall.count - EPOCH_STALL_LIMIT));
+        const backoff = Math.min(
+          EPOCH_STALL_BACKOFF_CAP_MS,
+          EPOCH_STALL_BACKOFF_BASE_MS * 2 ** (stall.count - EPOCH_STALL_LIMIT),
+        );
         stall.nextAt = ctx.now() + backoff;
-        ctx.log.warn?.("epoch conflict without local progress; item held", { itemId: item.id, conversationId: item.conversationId, conflicts: stall.count, backoffMs: backoff });
+        ctx.log.warn?.('epoch conflict without local progress; item held', {
+          itemId: item.id,
+          conversationId: item.conversationId,
+          conflicts: stall.count,
+          backoffMs: backoff,
+        });
         ctx.messages.invalidate(item.conversationId); // `holdReason: 'epoch_stalled'` appears
         this.scheduleStallWake();
       }
-      return "retry";
+      return 'retry';
     }
     if (error instanceof TransportError && error.isRetryable) {
       if (item.attempts >= MAX_ATTEMPTS) {
-        await this.markFailed(item, "gave up after repeated transport failures");
-        return "failed";
+        await this.markFailed(item, 'gave up after repeated transport failures');
+        return 'failed';
       }
-      ctx.sync.setState("offline");
+      ctx.sync.setState('offline');
       await this.delay(item);
-      return this.stopped ? "stop" : "retry";
+      return this.stopped ? 'stop' : 'retry';
     }
-    await this.markFailed(item, error instanceof TransportError ? `${error.serverCode}: ${error.message}` : describeError(error));
-    return "failed";
+    await this.markFailed(
+      item,
+      error instanceof TransportError
+        ? `${error.serverCode}: ${error.message}`
+        : describeError(error),
+    );
+    return 'failed';
   }
 
   // ---- application messages ----------------------------------------------
@@ -290,19 +345,26 @@ export class OutboxEngine {
     const { ctx } = this;
     const item = await this.bump(item0);
     if (!item.message) {
-      await this.markFailed(item, "empty item");
+      await this.markFailed(item, 'empty item');
       return true;
     }
     const state = ctx.groups.get(item.conversationId);
-    if (!state || !ctx.engine.isActive(state) || ctx.model.conversations.get(item.conversationId)?.removed) {
-      await this.markFailed(item, "not a member of this conversation");
+    if (
+      !state ||
+      !ctx.engine.isActive(state) ||
+      ctx.model.conversations.get(item.conversationId)?.removed
+    ) {
+      await this.markFailed(item, 'not a member of this conversation');
       return true;
     }
     // Encrypt under the mutex and persist the advanced ratchet BEFORE the send.
     const encrypted = await ctx.mutex.run(async () => {
       const live = ctx.groups.get(item.conversationId)!;
       const message = this.resolveLocalRefs(item.conversationId, item.message!);
-      const { ciphertext, next } = await ctx.engine.encryptApplication(live, encodeAppMessage(message));
+      const { ciphertext, next } = await ctx.engine.encryptApplication(
+        live,
+        encodeAppMessage(message),
+      );
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, item.conversationId, next);
       await ctx.store.commit(batch);
@@ -311,14 +373,14 @@ export class OutboxEngine {
     });
     const request: SubmitEventRequest = {
       idempotencyKey: item.id,
-      kind: "app_message",
+      kind: 'app_message',
       epoch: encrypted.epoch,
       payload: base64Encode(encrypted.ciphertext),
       ...(item.blobIds.length ? { blobIds: item.blobIds } : {}),
     };
     try {
       const res = await ctx.http.request({
-        method: "POST",
+        method: 'POST',
         path: `/v1/conversations/${item.conversationId}/events`,
         body: request,
         schema: submitEventResponseSchema,
@@ -328,35 +390,40 @@ export class OutboxEngine {
       return true;
     } catch (error) {
       const verdict = await this.handleTransportError(item, error);
-      return verdict !== "stop";
+      return verdict !== 'stop';
     }
   }
 
   /** A `local` ref to one of our own messages becomes an `event` ref once that message has an id. */
   private resolveLocalRefs(conversationId: string, message: AppMessage): AppMessage {
     const fix = (ref: EventRef): EventRef => {
-      if (ref.kind !== "local") return ref;
+      if (ref.kind !== 'local') return ref;
       const e = this.ctx.model.findEventByLocalKey(conversationId, ref.idempotencyKey);
-      return e ? { kind: "event", conversationId, eventId: e.id } : ref;
+      return e ? { kind: 'event', conversationId, eventId: e.id } : ref;
     };
     switch (message.t) {
-      case "text":
+      case 'text':
         return message.replyTo ? { ...message, replyTo: fix(message.replyTo) } : message;
-      case "edit":
-      case "delete":
-      case "reaction":
-      case "poll_vote":
-      case "pin":
+      case 'edit':
+      case 'delete':
+      case 'reaction':
+      case 'poll_vote':
+      case 'pin':
         return { ...message, target: fix(message.target) };
-      case "read":
-      case "delivered":
+      case 'read':
+      case 'delivered':
         return { ...message, upTo: fix(message.upTo) };
       default:
         return message;
     }
   }
 
-  private async recordAccepted(item: OutboxItemRecord, accepted: { id: string; seq: number; createdAt: string }, epoch: number, message: AppMessage | null): Promise<void> {
+  private async recordAccepted(
+    item: OutboxItemRecord,
+    accepted: { id: string; seq: number; createdAt: string },
+    epoch: number,
+    message: AppMessage | null,
+  ): Promise<void> {
     const { ctx } = this;
     await ctx.mutex.run(async () => {
       const batch = ctx.store.batch();
@@ -364,7 +431,7 @@ export class OutboxEngine {
         id: accepted.id,
         conversationId: item.conversationId,
         seq: accepted.seq,
-        kind: item.kind === "commit" ? "mls_commit" : "app_message",
+        kind: item.kind === 'commit' ? 'mls_commit' : 'app_message',
         epoch,
         senderAccountId: ctx.accountId,
         senderInstanceId: ctx.instanceId,
@@ -374,25 +441,43 @@ export class OutboxEngine {
         failure: null,
         system: null,
       };
-      batch.putJson("event", Model.eventId(record), record);
-      batch.delete("outbox", item.id);
+      batch.putJson('event', Model.eventId(record), record);
+      batch.delete('outbox', item.id);
       const conv = ctx.model.conversations.get(item.conversationId);
       let nextConv = conv;
       if (conv) {
         nextConv = { ...conv, lastSeq: Math.max(conv.lastSeq, accepted.seq) };
-        if (message?.t === "text" || message?.t === "media") nextConv = { ...nextConv, lastActivityAt: accepted.createdAt };
-        if (message?.t === "conversation" && message.name !== undefined) nextConv = { ...nextConv, name: message.name };
-        batch.putJson("conversation", nextConv.id, nextConv);
+        if (message?.t === 'text' || message?.t === 'media')
+          nextConv = { ...nextConv, lastActivityAt: accepted.createdAt };
+        if (message?.t === 'conversation' && message.name !== undefined)
+          nextConv = { ...nextConv, name: message.name };
+        batch.putJson('conversation', nextConv.id, nextConv);
       }
-      if (message?.t === "media") {
-        const key = { blobId: message.blobId, conversationId: item.conversationId, key: message.key, nonce: message.nonce, sha256: message.sha256, mime: message.mime, size: message.size };
-        batch.putJson("mediaKey", key.blobId, key);
+      if (message?.t === 'media') {
+        const key = {
+          blobId: message.blobId,
+          conversationId: item.conversationId,
+          key: message.key,
+          nonce: message.nonce,
+          sha256: message.sha256,
+          mime: message.mime,
+          size: message.size,
+        };
+        batch.putJson('mediaKey', key.blobId, key);
         ctx.model.mediaKeys.set(key.blobId, key);
         if (message.thumbnail) {
           const t = message.thumbnail;
           const known = ctx.model.mediaKeys.get(t.blobId);
-          const tk = { blobId: t.blobId, conversationId: item.conversationId, key: t.key, nonce: t.nonce, sha256: t.sha256, mime: known?.mime ?? "image/*", size: known?.size ?? 0 };
-          batch.putJson("mediaKey", tk.blobId, tk);
+          const tk = {
+            blobId: t.blobId,
+            conversationId: item.conversationId,
+            key: t.key,
+            nonce: t.nonce,
+            sha256: t.sha256,
+            mime: known?.mime ?? 'image/*',
+            size: known?.size ?? 0,
+          };
+          batch.putJson('mediaKey', tk.blobId, tk);
           ctx.model.mediaKeys.set(tk.blobId, tk);
         }
       }
@@ -412,16 +497,23 @@ export class OutboxEngine {
     const item = await this.bump(item0);
     const intent = item.commit;
     if (!intent) {
-      await this.markFailed(item, "empty commit");
+      await this.markFailed(item, 'empty commit');
       return true;
     }
     // A pending state from an earlier attempt (crash or lost answer): resend the identical request. One whose
     // stored request no longer parses (written before `commit.groupInfo` was required) is rebuilt instead.
     let pending: PendingCommitRecord | undefined;
     try {
-      pending = await ctx.store.getJson("pendingCommit", item.conversationId, pendingCommitRecordSchema);
+      pending = await ctx.store.getJson(
+        'pendingCommit',
+        item.conversationId,
+        pendingCommitRecordSchema,
+      );
     } catch (error) {
-      ctx.log.warn?.("pending commit record unreadable; rebuilding the commit", { conversationId: item.conversationId, error: describeError(error) });
+      ctx.log.warn?.('pending commit record unreadable; rebuilding the commit', {
+        conversationId: item.conversationId,
+        error: describeError(error),
+      });
     }
     let request: SubmitEventRequest;
     let nextBytes: Uint8Array;
@@ -445,7 +537,7 @@ export class OutboxEngine {
     }
     try {
       const res = await ctx.http.request({
-        method: "POST",
+        method: 'POST',
         path: `/v1/conversations/${item.conversationId}/events`,
         body: request,
         schema: submitEventResponseSchema,
@@ -457,11 +549,19 @@ export class OutboxEngine {
     } catch (error) {
       if (error instanceof EpochConflictError) await this.discardPending(item.conversationId);
       const verdict = await this.handleTransportError(item, error);
-      return verdict !== "stop";
+      return verdict !== 'stop';
     }
   }
 
-  private async buildCommit(item: OutboxItemRecord, intent: OutboxCommitIntent): Promise<{ request: SubmitEventRequest; nextBytes: Uint8Array; added: Array<{ instanceId: string; accountId: string }>; removed: string[] } | null> {
+  private async buildCommit(
+    item: OutboxItemRecord,
+    intent: OutboxCommitIntent,
+  ): Promise<{
+    request: SubmitEventRequest;
+    nextBytes: Uint8Array;
+    added: Array<{ instanceId: string; accountId: string }>;
+    removed: string[];
+  } | null> {
     const { ctx } = this;
     const state = ctx.groups.get(item.conversationId);
     const conv = ctx.model.conversations.get(item.conversationId);
@@ -472,46 +572,71 @@ export class OutboxEngine {
     const removes = intent.removes.filter((r) => present.has(r));
     if (adds.length === 0 && removes.length === 0) return null;
     const leafIndexes = removes.map((r) => members.find((m) => m.instanceId === r)!.leafIndex);
-    const result = await ctx.engine.commit(state, { addKeyPackages: adds.map((a) => base64Decode(a.keyPackage)), removeLeafIndexes: leafIndexes });
+    const result = await ctx.engine.commit(state, {
+      addKeyPackages: adds.map((a) => base64Decode(a.keyPackage)),
+      removeLeafIndexes: leafIndexes,
+    });
     const epoch = ctx.engine.epochOf(state);
     const request: SubmitEventRequest = {
       idempotencyKey: item.id,
-      kind: "mls_commit",
+      kind: 'mls_commit',
       epoch,
       payload: base64Encode(result.commit),
       commit: {
         newEpoch: epoch + 1,
-        kind: "member",
+        kind: 'member',
         addedLeaves: result.added,
         removedLeaves: removes,
-        ...(result.welcome && adds.length ? { welcome: { payload: base64Encode(result.welcome), recipients: adds.map((a) => a.instanceId) } } : {}),
+        ...(result.welcome && adds.length
+          ? {
+              welcome: {
+                payload: base64Encode(result.welcome),
+                recipients: adds.map((a) => a.instanceId),
+              },
+            }
+          : {}),
         // The GroupInfo of the new epoch travels with the commit, so a member's device with no leaf can join by itself.
         groupInfo: base64Encode(result.groupInfo),
       },
     };
     const nextBytes = ctx.engine.serializeGroup(result.next);
-    await ctx.store.putJson("pendingCommit", item.conversationId, { outboxItemId: item.id, conversationId: item.conversationId, epoch, nextState: base64Encode(nextBytes), request });
+    await ctx.store.putJson('pendingCommit', item.conversationId, {
+      outboxItemId: item.id,
+      conversationId: item.conversationId,
+      epoch,
+      nextState: base64Encode(nextBytes),
+      request,
+    });
     return { request, nextBytes, added: result.added, removed: removes };
   }
 
-  private async applyCommit(item: OutboxItemRecord, epoch: number, nextBytes: Uint8Array, added: Array<{ instanceId: string; accountId: string }>, removed: string[], accepted: { id: string; seq: number; createdAt: string }): Promise<void> {
+  private async applyCommit(
+    item: OutboxItemRecord,
+    epoch: number,
+    nextBytes: Uint8Array,
+    added: Array<{ instanceId: string; accountId: string }>,
+    removed: string[],
+    accepted: { id: string; seq: number; createdAt: string },
+  ): Promise<void> {
     const { ctx } = this;
     await ctx.mutex.run(async () => {
       const live = ctx.groups.get(item.conversationId);
       if (live && ctx.engine.epochOf(live) !== epoch) {
         // The server accepted our commit at `epoch`, so nothing else can have advanced the state; this is a bug guard.
-        ctx.log.error?.("state advanced while a commit was pending", { conversationId: item.conversationId });
+        ctx.log.error?.('state advanced while a commit was pending', {
+          conversationId: item.conversationId,
+        });
       }
       const next = ctx.engine.deserializeGroup(nextBytes);
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, item.conversationId, next);
-      batch.delete("pendingCommit", item.conversationId);
-      batch.delete("outbox", item.id);
+      batch.delete('pendingCommit', item.conversationId);
+      batch.delete('outbox', item.id);
       const record: EventRecord = {
         id: accepted.id,
         conversationId: item.conversationId,
         seq: accepted.seq,
-        kind: "mls_commit",
+        kind: 'mls_commit',
         epoch,
         senderAccountId: ctx.accountId,
         senderInstanceId: ctx.instanceId,
@@ -521,15 +646,19 @@ export class OutboxEngine {
         failure: null,
         system: null,
       };
-      batch.putJson("event", Model.eventId(record), record);
+      batch.putJson('event', Model.eventId(record), record);
       const conv = ctx.model.conversations.get(item.conversationId);
       let nextConv = conv;
       if (conv) {
         const accounts = new Set(ctx.engine.membersOf(next).map((m) => m.accountId));
-        const members = conv.members.map((m) => (accounts.has(m.accountId) ? { ...m, state: "joined" as const } : m));
-        for (const a of accounts) if (!members.some((m) => m.accountId === a)) members.push({ accountId: a, role: "member", state: "joined" });
+        const members = conv.members.map((m) =>
+          accounts.has(m.accountId) ? { ...m, state: 'joined' as const } : m,
+        );
+        for (const a of accounts)
+          if (!members.some((m) => m.accountId === a))
+            members.push({ accountId: a, role: 'member', state: 'joined' });
         nextConv = { ...conv, members, lastSeq: Math.max(conv.lastSeq, accepted.seq) };
-        batch.putJson("conversation", nextConv.id, nextConv);
+        batch.putJson('conversation', nextConv.id, nextConv);
       }
       await ctx.store.commit(batch);
       ctx.groups.commitInMemory(item.conversationId, next);
@@ -538,16 +667,24 @@ export class OutboxEngine {
       if (nextConv) ctx.model.conversations.set(nextConv.id, nextConv);
       ctx.messages.invalidate(item.conversationId); // leaves changed: pending echoes may have lost their hold reason
       ctx.conversations.invalidate(item.conversationId);
-      ctx.log.info?.("commit applied", { conversationId: item.conversationId, epoch: epoch + 1, added: added.length, removed: removed.length });
+      ctx.log.info?.('commit applied', {
+        conversationId: item.conversationId,
+        epoch: epoch + 1,
+        added: added.length,
+        removed: removed.length,
+      });
     });
   }
 
   private async discardPending(conversationId: string): Promise<void> {
-    await this.ctx.store.delete("pendingCommit", conversationId);
+    await this.ctx.store.delete('pendingCommit', conversationId);
   }
 
   private async drop(item: OutboxItemRecord): Promise<void> {
-    const batch = this.ctx.store.batch().delete("outbox", item.id).delete("pendingCommit", item.conversationId);
+    const batch = this.ctx.store
+      .batch()
+      .delete('outbox', item.id)
+      .delete('pendingCommit', item.conversationId);
     await this.ctx.store.commit(batch);
     this.ctx.model.outbox.delete(item.id);
   }

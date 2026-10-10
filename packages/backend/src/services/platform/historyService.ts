@@ -32,8 +32,8 @@ import {
   archiveManifestMessage,
   type CreateHistoryOfferRequest,
   type HistoryOffer,
-} from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
 import {
   consumeHistoryOffer,
   expireDueOffers,
@@ -43,12 +43,12 @@ import {
   insertHistoryOffer,
   listPendingOffersForRecipient,
   retainChunkBlobs,
-} from "../../db/platform/historyRepository";
-import { findInstanceById, type InstanceRow } from "../../db/platform/instanceRepository";
-import { verifyEd25519 } from "../../middleware/instanceAuth";
-import { getRealtime } from "../../runtime/realtime";
-import { AlloHttpError, notFound, unauthorized, validationFailed } from "../../utils/httpErrors";
-import { toHistoryOffer } from "./wire";
+} from '../../db/platform/historyRepository';
+import { findInstanceById, type InstanceRow } from '../../db/platform/instanceRepository';
+import { verifyEd25519 } from '../../middleware/instanceAuth';
+import { getRealtime } from '../../runtime/realtime';
+import { AlloHttpError, notFound, unauthorized, validationFailed } from '../../utils/httpErrors';
+import { toHistoryOffer } from './wire';
 
 export interface HistoryServiceDeps {
   db?: AlloDatabase;
@@ -65,21 +65,28 @@ export interface Caller {
  * Every chunk blob exists, belongs to `accountId`, and no id repeats.
  * Shared by offers and backups: both name chunks the same way.
  */
-export async function requireOwnChunkBlobs(accountId: string, chunkBlobIds: readonly string[], db: AlloDatabase): Promise<void> {
+export async function requireOwnChunkBlobs(
+  accountId: string,
+  chunkBlobIds: readonly string[],
+  db: AlloDatabase,
+): Promise<void> {
   if (new Set(chunkBlobIds).size !== chunkBlobIds.length) {
-    throw validationFailed("manifest.chunkBlobIds names the same blob twice");
+    throw validationFailed('manifest.chunkBlobIds names the same blob twice');
   }
   const owners = await findChunkBlobOwners(chunkBlobIds, db);
-  const owned = new Set(owners.filter((blob) => blob.uploaderAccountId === accountId).map((blob) => blob.id));
+  const owned = new Set(
+    owners.filter((blob) => blob.uploaderAccountId === accountId).map((blob) => blob.id),
+  );
   const missing = chunkBlobIds.filter((id) => !owned.has(id));
-  if (missing.length > 0) throw new AlloHttpError("not_found", "A chunk blob was not found", { chunkBlobIds: missing });
+  if (missing.length > 0)
+    throw new AlloHttpError('not_found', 'A chunk blob was not found', { chunkBlobIds: missing });
 }
 
 /** The manifest signature verifies against `signer`'s key, or `unauthorized`. */
 export function requireManifestSignature(
-  manifest: CreateHistoryOfferRequest["manifest"],
+  manifest: CreateHistoryOfferRequest['manifest'],
   signature: string,
-  signer: Pick<InstanceRow, "signingPublicKey">,
+  signer: Pick<InstanceRow, 'signingPublicKey'>,
 ): void {
   if (!verifyEd25519(archiveManifestMessage(manifest), signature, signer.signingPublicKey)) {
     throw unauthorized("The manifest signature does not verify against the signing instance's key");
@@ -95,15 +102,23 @@ export async function createHistoryOffer(
   const now = (deps.now ?? (() => new Date()))();
 
   const donorRow = await findInstanceById(donor.id, db);
-  if (!donorRow || donorRow.status !== "active") throw new AlloHttpError("instance_not_active", "Only an active instance may offer history");
+  if (!donorRow || donorRow.status !== 'active')
+    throw new AlloHttpError('instance_not_active', 'Only an active instance may offer history');
 
   const recipient = await findInstanceById(request.recipientInstanceId, db);
-  if (!recipient || recipient.accountId !== donor.accountId) throw notFound("Recipient instance not found");
-  if (recipient.id === donor.id) throw validationFailed("An instance cannot offer history to itself");
-  if (recipient.status === "revoked") throw new AlloHttpError("instance_revoked", "The recipient instance was revoked");
-  if (recipient.status !== "active") throw new AlloHttpError("instance_not_active", "The recipient instance is awaiting approval");
+  if (!recipient || recipient.accountId !== donor.accountId)
+    throw notFound('Recipient instance not found');
+  if (recipient.id === donor.id)
+    throw validationFailed('An instance cannot offer history to itself');
+  if (recipient.status === 'revoked')
+    throw new AlloHttpError('instance_revoked', 'The recipient instance was revoked');
+  if (recipient.status !== 'active')
+    throw new AlloHttpError('instance_not_active', 'The recipient instance is awaiting approval');
   if (recipient.transferPublicKey === null) {
-    throw new AlloHttpError("transfer_key_missing", "The recipient instance has not published a transfer key");
+    throw new AlloHttpError(
+      'transfer_key_missing',
+      'The recipient instance has not published a transfer key',
+    );
   }
 
   await requireOwnChunkBlobs(donor.accountId, request.manifest.chunkBlobIds, db);
@@ -136,7 +151,10 @@ export async function createHistoryOffer(
  * `expired` and its chunks released FIRST, so what is returned is what can
  * still be consumed, and an inbox nobody reads still releases on the sweep.
  */
-export async function listPendingHistoryOffers(recipient: Caller, deps: HistoryServiceDeps = {}): Promise<HistoryOffer[]> {
+export async function listPendingHistoryOffers(
+  recipient: Caller,
+  deps: HistoryServiceDeps = {},
+): Promise<HistoryOffer[]> {
   const db = deps.db ?? getDb();
   const now = (deps.now ?? (() => new Date()))();
   await db.transaction((tx) => expireDueOffers(now, recipient.id, tx));
@@ -150,11 +168,16 @@ export async function listPendingHistoryOffers(recipient: Caller, deps: HistoryS
  * including the donor); an offer that is not pending — consumed already, or
  * past its deadline — is `idempotency_conflict`.
  */
-export async function consumeOffer(recipient: Caller, offerId: string, deps: HistoryServiceDeps = {}): Promise<HistoryOffer> {
+export async function consumeOffer(
+  recipient: Caller,
+  offerId: string,
+  deps: HistoryServiceDeps = {},
+): Promise<HistoryOffer> {
   const db = deps.db ?? getDb();
   const now = (deps.now ?? (() => new Date()))();
   const offer = await findHistoryOfferById(offerId, db);
-  if (!offer || offer.recipientInstanceId !== recipient.id) throw notFound("History offer not found");
+  if (!offer || offer.recipientInstanceId !== recipient.id)
+    throw notFound('History offer not found');
   const row = await db.transaction(async (tx) => {
     if (offer.expiresAt.getTime() <= now.getTime()) {
       await expireDueOffers(now, recipient.id, tx);
@@ -162,6 +185,6 @@ export async function consumeOffer(recipient: Caller, offerId: string, deps: His
     }
     return consumeHistoryOffer(offer.id, now, tx);
   });
-  if (!row) throw new AlloHttpError("idempotency_conflict", "The offer is not pending");
+  if (!row) throw new AlloHttpError('idempotency_conflict', 'The offer is not pending');
   return toHistoryOffer(row);
 }

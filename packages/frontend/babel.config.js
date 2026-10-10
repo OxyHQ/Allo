@@ -1,26 +1,29 @@
 // packages/frontend/babel.config.js
 module.exports = function (api) {
-    api.cache(true);
-    return {
-      presets: [
-        [
-          'babel-preset-expo',
-          {
-            unstable_transformImportMeta: true,
-          },
-        ],
+  api.cache(true);
+  return {
+    presets: [
+      [
+        'babel-preset-expo',
+        {
+          unstable_transformImportMeta: true,
+        },
       ],
-      plugins: [
-        // resolver must come first for proper module resolution
-        ['module-resolver', {
+    ],
+    plugins: [
+      // resolver must come first for proper module resolution
+      [
+        'module-resolver',
+        {
           root: ['.'],
           alias: { '@': './' },
           extensions: ['.ts', '.tsx', '.js', '.jsx', '.json', '.svg'],
-        }],
-        '@babel/plugin-syntax-dynamic-import',
-        '@babel/plugin-transform-export-namespace-from',
-        // must be LAST
-        'react-native-worklets/plugin',
+        },
       ],
-    };
+      '@babel/plugin-syntax-dynamic-import',
+      '@babel/plugin-transform-export-namespace-from',
+      // must be LAST
+      'react-native-worklets/plugin',
+    ],
   };
+};

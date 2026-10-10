@@ -22,7 +22,10 @@
  */
 
 import { Router, Response } from 'express';
-import { requireOxyAuth as requireAuth, type OxyAuthRequest as AuthRequest } from '@oxy.so/core/server';
+import {
+  requireOxyAuth as requireAuth,
+  type OxyAuthRequest as AuthRequest,
+} from '@oxy.so/core/server';
 import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxy.so/core/server';
 import { getDb } from '../db';
 import { blockUser, listBlockedUserIds, unblockUser } from '../db/social/blockRepository';
@@ -110,11 +113,16 @@ router.delete('/settings/behavior', async (req: AuthRequest, res: Response) => {
       res,
       200,
       { success: true },
-      deleted ? 'Personalization data reset successfully' : 'No personalization data to reset'
+      deleted ? 'Personalization data reset successfully' : 'No personalization data to reset',
     );
   } catch (err) {
     console.error('[ProfileSettings] Error resetting user behavior:', err);
-    return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to reset personalization data');
+    return sendErrorResponse(
+      res,
+      500,
+      'Internal Server Error',
+      'Failed to reset personalization data',
+    );
   }
 });
 

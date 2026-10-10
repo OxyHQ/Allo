@@ -23,7 +23,9 @@ describe('formatCoordinates', () => {
   });
 
   it('keeps the sign of a southern, western place', () => {
-    expect(formatCoordinates({ latitude: -33.86882, longitude: -151.20929 })).toBe('-33.86882, -151.20929');
+    expect(formatCoordinates({ latitude: -33.86882, longitude: -151.20929 })).toBe(
+      '-33.86882, -151.20929',
+    );
   });
 
   it('pads a whole number rather than dropping to one digit', () => {

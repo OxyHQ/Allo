@@ -62,7 +62,8 @@ export interface KvIdbStore {
 /** Builds the key range the platform understands. Overridable so a fake store can accept a plain object. */
 export type RangeFactory = (lower: string, upper: string) => unknown;
 
-const defaultRangeFactory: RangeFactory = (lower, upper) => IDBKeyRange.bound(lower, upper, false, true);
+const defaultRangeFactory: RangeFactory = (lower, upper) =>
+  IDBKeyRange.bound(lower, upper, false, true);
 
 function awaitRequest<T>(request: KvIdbRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -102,7 +103,9 @@ export class IndexedDbStorage implements StorageAdapter {
   async list(prefix: string): Promise<string[]> {
     const { lower, upper } = prefixRange(prefix);
     const tx = this.db.transaction(STORE_NAME, 'readonly');
-    const keys = await awaitRequest(tx.objectStore(STORE_NAME).getAllKeys(this.range(lower, upper)));
+    const keys = await awaitRequest(
+      tx.objectStore(STORE_NAME).getAllKeys(this.range(lower, upper)),
+    );
     return keys.map(String).sort();
   }
 

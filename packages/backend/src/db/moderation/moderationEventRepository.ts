@@ -27,10 +27,10 @@
  * {@link releaseModerationEvent}.
  */
 
-import { eq } from "drizzle-orm";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
-import { moderationEvents } from "../schema/moderation";
-import { requireTransaction } from "./transactionGuard";
+import { eq } from 'drizzle-orm';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
+import { moderationEvents } from '../schema/moderation';
+import { requireTransaction } from './transactionGuard';
 
 /**
  * Retention.
@@ -63,7 +63,7 @@ export async function claimModerationEvent(
     .insert(moderationEvents)
     .values({
       id: eventId,
-      state: "claimed",
+      state: 'claimed',
       receivedAt: now,
       expiresAt: new Date(now.getTime() + MODERATION_EVENT_RETENTION_SECONDS * 1_000),
     })
@@ -128,7 +128,7 @@ export async function markModerationEventQueued(
       type: input.type,
       caseId: input.caseId,
       payload: input.payload,
-      state: "queued",
+      state: 'queued',
       queuedAt: input.queuedAt ?? new Date(),
     })
     .where(eq(moderationEvents.id, input.eventId))
@@ -159,7 +159,7 @@ export async function markModerationEventIgnored(
     .set({
       type: input.type,
       ...(input.caseId === undefined ? {} : { caseId: input.caseId }),
-      state: "ignored",
+      state: 'ignored',
     })
     .where(eq(moderationEvents.id, input.eventId))
     .returning({ id: moderationEvents.id });

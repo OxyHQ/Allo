@@ -26,28 +26,28 @@
  * stays in `conversation_events` and is reachable through `GET …/events`.
  */
 
-import { sql } from "drizzle-orm";
-import { bigserial, check, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz } from "@oxy.so/db";
-import { checkOneOf } from "./columns";
-import { conversationEvents } from "./events";
-import { clientInstances } from "./instances";
+import { sql } from 'drizzle-orm';
+import { bigserial, check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { createdAt, timestamptz } from '@oxy.so/db';
+import { checkOneOf } from './columns';
+import { conversationEvents } from './events';
+import { clientInstances } from './instances';
 
-export const DELIVERY_STATUSES = ["pending", "notified", "acked", "dead"] as const;
+export const DELIVERY_STATUSES = ['pending', 'notified', 'acked', 'dead'] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 export const instanceDeliveries = pgTable(
-  "instance_deliveries",
+  'instance_deliveries',
   {
-    id: bigserial({ mode: "number" }).primaryKey(),
+    id: bigserial({ mode: 'number' }).primaryKey(),
     eventId: text()
       .notNull()
-      .references(() => conversationEvents.id, { onDelete: "cascade" }),
+      .references(() => conversationEvents.id, { onDelete: 'cascade' }),
     conversationId: text().notNull(),
     instanceId: text()
       .notNull()
-      .references(() => clientInstances.id, { onDelete: "cascade" }),
-    status: text({ enum: DELIVERY_STATUSES }).notNull().default("pending"),
+      .references(() => clientInstances.id, { onDelete: 'cascade' }),
+    status: text({ enum: DELIVERY_STATUSES }).notNull().default('pending'),
     attempts: integer().notNull().default(0),
     availableAt: timestamptz().notNull().defaultNow(),
     leaseOwner: text(),
@@ -59,16 +59,16 @@ export const instanceDeliveries = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("instance_deliveries_event_id_instance_id_key").on(t.eventId, t.instanceId),
+    uniqueIndex('instance_deliveries_event_id_instance_id_key').on(t.eventId, t.instanceId),
     /** The sync stream: `where instance_id = ? and id > ? order by id`. */
-    index("instance_deliveries_instance_id_id_idx").on(t.instanceId, t.id),
+    index('instance_deliveries_instance_id_id_idx').on(t.instanceId, t.id),
     /** Due work for the worker. */
-    index("instance_deliveries_status_available_at_id_idx").on(t.status, t.availableAt, t.id),
+    index('instance_deliveries_status_available_at_id_idx').on(t.status, t.availableAt, t.id),
     /** Expired leases, reclaimable. */
-    index("instance_deliveries_status_lease_until_id_idx").on(t.status, t.leaseUntil, t.id),
+    index('instance_deliveries_status_lease_until_id_idx').on(t.status, t.leaseUntil, t.id),
     /** The expiry sweep's leading btree. */
-    index("instance_deliveries_expires_at_idx").on(t.expiresAt),
-    checkOneOf("instance_deliveries_status_check", t.status, DELIVERY_STATUSES),
-    check("instance_deliveries_attempts_check", sql`${t.attempts} >= 0`),
+    index('instance_deliveries_expires_at_idx').on(t.expiresAt),
+    checkOneOf('instance_deliveries_status_check', t.status, DELIVERY_STATUSES),
+    check('instance_deliveries_attempts_check', sql`${t.attempts} >= 0`),
   ],
 );

@@ -11,35 +11,35 @@
  * Nothing here imports a route; the repositories are exercised directly.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, getTableColumns } from "drizzle-orm";
-import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from "@oxy.so/db";
-import type postgres from "postgres";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import * as schema from "../../db/schema";
-import { blockUser, listBlockedUserIds, unblockUser } from "../../db/social/blockRepository";
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq, getTableColumns } from 'drizzle-orm';
+import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from '@oxy.so/db';
+import type postgres from 'postgres';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
+import * as schema from '../../db/schema';
+import { blockUser, listBlockedUserIds, unblockUser } from '../../db/social/blockRepository';
 import {
   listRestrictedUserIds,
   restrictUser,
   unrestrictUser,
-} from "../../db/social/restrictRepository";
-import { deleteUserBehavior } from "../../db/social/userBehaviorRepository";
+} from '../../db/social/restrictRepository';
+import { deleteUserBehavior } from '../../db/social/userBehaviorRepository';
 import {
   ensureUserSettings,
   updateUserSettings,
   UPDATABLE_USER_SETTINGS_COLUMNS,
   type UserSettingsPatch,
-} from "../../db/social/userSettingsRepository";
+} from '../../db/social/userSettingsRepository';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>["db"];
+let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
 let client: postgres.Sql;
 
 /** Unique per call so cases cannot collide inside the one shared database. */
 let counter = 0;
 function id(prefix: string): string {
   counter += 1;
-  return `${prefix}-${String(counter).padStart(4, "0")}`;
+  return `${prefix}-${String(counter).padStart(4, '0')}`;
 }
 
 /**
@@ -81,9 +81,9 @@ afterAll(async () => {
   await handle?.drop();
 });
 
-describe("blocks converge on the unique index instead of reading first", () => {
-  it("reports whether the call is what created the block", async () => {
-    const pair = { userId: id("blocker"), blockedId: id("blocked") };
+describe('blocks converge on the unique index instead of reading first', () => {
+  it('reports whether the call is what created the block', async () => {
+    const pair = { userId: id('blocker'), blockedId: id('blocked') };
 
     expect(await blockUser(db, pair)).toBe(true);
     expect(await blockUser(db, pair)).toBe(false);
@@ -94,7 +94,7 @@ describe("blocks converge on the unique index instead of reading first", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("blocks in ONE statement, so there is no window between a read and a write", async () => {
+  it('blocks in ONE statement, so there is no window between a read and a write', async () => {
     const statements: string[] = [];
     const observed = createDatabase({
       databaseUrl: handle.databaseUrl,
@@ -107,7 +107,7 @@ describe("blocks converge on the unique index instead of reading first", () => {
     });
 
     try {
-      const pair = { userId: id("blocker"), blockedId: id("blocked") };
+      const pair = { userId: id('blocker'), blockedId: id('blocked') };
       // Open the socket first: postgres.js emits its own setup chatter on a new
       // connection and none of it belongs to the measurement.
       await listBlockedUserIds(observed.db, pair.userId);
@@ -129,8 +129,8 @@ describe("blocks converge on the unique index instead of reading first", () => {
       expect(firstCall).toHaveLength(1);
       expect(secondCall).toHaveLength(1);
       expect(firstCall[0]).toContain('insert into "blocks"');
-      expect(firstCall[0]).toContain("on conflict");
-      expect(firstCall[0]).not.toContain("select");
+      expect(firstCall[0]).toContain('on conflict');
+      expect(firstCall[0]).not.toContain('select');
 
       // Anti-vacuity: the hook really does count each statement, so `1` above is
       // a measurement rather than a callback that never fired.
@@ -143,15 +143,13 @@ describe("blocks converge on the unique index instead of reading first", () => {
     }
   });
 
-  it("survives eight concurrent blocks of the same person", async () => {
-    const pair = { userId: id("blocker"), blockedId: id("blocked") };
+  it('survives eight concurrent blocks of the same person', async () => {
+    const pair = { userId: id('blocker'), blockedId: id('blocked') };
     await warmPool(pair.userId);
 
     // The race a read-then-insert loses: every one of these would see nothing and
     // insert, and seven of the eight would then fail on the index. See `warmPool` — without it these serialise and prove nothing.
-    const outcomes = await Promise.all(
-      Array.from({ length: 8 }, () => blockUser(db, pair)),
-    );
+    const outcomes = await Promise.all(Array.from({ length: 8 }, () => blockUser(db, pair)));
 
     // Not "at least one": exactly one, and none of the eight rejected. A
     // repository that let the duplicate-key error escape fails here, not only
@@ -161,24 +159,21 @@ describe("blocks converge on the unique index instead of reading first", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("scopes the unique index to the PAIR, so two people may block one person", async () => {
-    const target = id("blocked");
-    const first = id("blocker");
-    const second = id("blocker");
+  it('scopes the unique index to the PAIR, so two people may block one person', async () => {
+    const target = id('blocked');
+    const first = id('blocker');
+    const second = id('blocker');
 
     expect(await blockUser(db, { userId: first, blockedId: target })).toBe(true);
     // A conflict target of `blockedId` alone would swallow this and report false.
     expect(await blockUser(db, { userId: second, blockedId: target })).toBe(true);
 
-    const rows = await db
-      .select()
-      .from(schema.blocks)
-      .where(eq(schema.blocks.blockedId, target));
+    const rows = await db.select().from(schema.blocks).where(eq(schema.blocks.blockedId, target));
     expect(rows).toHaveLength(2);
   });
 
   it("names the index the repository's conflict target relies on", async () => {
-    const pair = { userId: id("blocker"), blockedId: id("blocked") };
+    const pair = { userId: id('blocker'), blockedId: id('blocked') };
     await blockUser(db, pair);
 
     // Written raw, bypassing `ON CONFLICT`, so the constraint itself answers —
@@ -186,7 +181,7 @@ describe("blocks converge on the unique index instead of reading first", () => {
     // the name the schema declares.
     const error = await db
       .insert(schema.blocks)
-      .values({ id: id("blk"), userId: pair.userId, blockedId: pair.blockedId })
+      .values({ id: id('blk'), userId: pair.userId, blockedId: pair.blockedId })
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -197,15 +192,15 @@ describe("blocks converge on the unique index instead of reading first", () => {
     // Named, not matched on a message: drizzle wraps the driver error, so the
     // constraint name lives on `cause` and a regex over the text would pass for
     // the wrong index.
-    expect(constraintNameOf(error)).toBe("blocks_user_id_blocked_id_key");
+    expect(constraintNameOf(error)).toBe('blocks_user_id_blocked_id_key');
   });
 
   it("lists only the owner's blocks, newest first", async () => {
-    const owner = id("blocker");
-    const other = id("blocker");
-    const first = id("blocked");
-    const second = id("blocked");
-    const third = id("blocked");
+    const owner = id('blocker');
+    const other = id('blocker');
+    const first = id('blocked');
+    const second = id('blocked');
+    const third = id('blocked');
 
     /**
      * Spaced across milliseconds, and that is load-bearing rather than
@@ -236,12 +231,12 @@ describe("blocks converge on the unique index instead of reading first", () => {
     expect(await listBlockedUserIds(db, other)).toEqual([first]);
   });
 
-  it("returns an empty list for someone who has blocked nobody", async () => {
-    expect(await listBlockedUserIds(db, id("stranger"))).toEqual([]);
+  it('returns an empty list for someone who has blocked nobody', async () => {
+    expect(await listBlockedUserIds(db, id('stranger'))).toEqual([]);
   });
 
-  it("reports whether unblocking removed anything", async () => {
-    const pair = { userId: id("blocker"), blockedId: id("blocked") };
+  it('reports whether unblocking removed anything', async () => {
+    const pair = { userId: id('blocker'), blockedId: id('blocked') };
     await blockUser(db, pair);
 
     // `DELETE /blocks/:blockedId` answers 404 on the second call, so the two
@@ -251,10 +246,10 @@ describe("blocks converge on the unique index instead of reading first", () => {
     expect(await listBlockedUserIds(db, pair.userId)).toEqual([]);
   });
 
-  it("unblocks only the named pair", async () => {
-    const owner = id("blocker");
-    const kept = id("blocked");
-    const removed = id("blocked");
+  it('unblocks only the named pair', async () => {
+    const owner = id('blocker');
+    const kept = id('blocked');
+    const removed = id('blocked');
     await blockUser(db, { userId: owner, blockedId: kept });
     await blockUser(db, { userId: owner, blockedId: removed });
 
@@ -263,9 +258,9 @@ describe("blocks converge on the unique index instead of reading first", () => {
   });
 });
 
-describe("restricts are the same shape and a separate table", () => {
-  it("converges, lists and removes exactly as blocks do", async () => {
-    const pair = { userId: id("restricter"), restrictedId: id("restricted") };
+describe('restricts are the same shape and a separate table', () => {
+  it('converges, lists and removes exactly as blocks do', async () => {
+    const pair = { userId: id('restricter'), restrictedId: id('restricted') };
 
     expect(await restrictUser(db, pair)).toBe(true);
     expect(await restrictUser(db, pair)).toBe(false);
@@ -274,18 +269,16 @@ describe("restricts are the same shape and a separate table", () => {
     expect(await unrestrictUser(db, pair)).toBe(false);
   });
 
-  it("survives eight concurrent restrictions of the same person", async () => {
-    const pair = { userId: id("restricter"), restrictedId: id("restricted") };
+  it('survives eight concurrent restrictions of the same person', async () => {
+    const pair = { userId: id('restricter'), restrictedId: id('restricted') };
     await warmPool(pair.userId);
-    const outcomes = await Promise.all(
-      Array.from({ length: 8 }, () => restrictUser(db, pair)),
-    );
+    const outcomes = await Promise.all(Array.from({ length: 8 }, () => restrictUser(db, pair)));
     expect(outcomes.filter(Boolean)).toHaveLength(1);
   });
 
-  it("does not touch blocks — the two tables are not one table with a kind", async () => {
-    const userId = id("blocker");
-    const target = id("target");
+  it('does not touch blocks — the two tables are not one table with a kind', async () => {
+    const userId = id('blocker');
+    const target = id('target');
 
     await blockUser(db, { userId, blockedId: target });
 
@@ -302,18 +295,18 @@ describe("restricts are the same shape and a separate table", () => {
   });
 });
 
-describe("user_settings defaults come from the schema, not from the repository", () => {
-  it("creates a row with every field ABSENT and lets the server fill it", async () => {
-    const oxyUserId = id("settings-user");
+describe('user_settings defaults come from the schema, not from the repository', () => {
+  it('creates a row with every field ABSENT and lets the server fill it', async () => {
+    const oxyUserId = id('settings-user');
     const row = await ensureUserSettings(db, oxyUserId);
 
     // The fixture shape that matters: NOTHING was supplied but the id and the
     // owner, so each value below is the column's own DEFAULT. A row written with
     // these fields set explicitly could not tell a correct repository from one
     // that hardcodes its own literals.
-    expect(row.appearanceThemeMode).toBe("system");
+    expect(row.appearanceThemeMode).toBe('system');
     expect(row.appearancePrimaryColor).toBeNull();
-    expect(row.privacyProfileVisibility).toBe("public");
+    expect(row.privacyProfileVisibility).toBe('public');
     expect(row.privacyShowContactInfo).toBe(true);
     expect(row.privacyHideLikeCounts).toBe(false);
     expect(row.privacyHiddenWords).toEqual([]);
@@ -322,14 +315,14 @@ describe("user_settings defaults come from the schema, not from the repository",
     expect(row.profileMinimalistMode).toBe(false);
   });
 
-  it("keeps encryption and P2P opt-OUT", async () => {
-    const row = await ensureUserSettings(db, id("settings-user"));
+  it('keeps encryption and P2P opt-OUT', async () => {
+    const row = await ensureUserSettings(db, id('settings-user'));
 
     expect(row.securityEncryptionEnabled).toBe(true);
     expect(row.securityPeerToPeerEnabled).toBe(true);
   });
 
-  it("takes the security values from the column DEFAULT, not from a literal it writes", async () => {
+  it('takes the security values from the column DEFAULT, not from a literal it writes', async () => {
     // The case above cannot distinguish "the repository omitted the column" from
     // "the repository wrote `false` itself" — both produce a `false`. Moving the
     // DEFAULT out from under it can: only a repository that genuinely omits the
@@ -338,21 +331,21 @@ describe("user_settings defaults come from the schema, not from the repository",
     // most likely to be made, because it looks like defensive coding.
     await client`alter table user_settings alter column security_encryption_enabled set default false`;
     try {
-      const row = await ensureUserSettings(db, id("settings-user"));
+      const row = await ensureUserSettings(db, id('settings-user'));
       expect(row.securityEncryptionEnabled).toBe(false);
     } finally {
       await client`alter table user_settings alter column security_encryption_enabled set default true`;
     }
 
     // And the restore worked, so no later case inherits a poisoned default.
-    const after = await ensureUserSettings(db, id("settings-user"));
+    const after = await ensureUserSettings(db, id('settings-user'));
     expect(after.securityEncryptionEnabled).toBe(true);
   });
 });
 
-describe("ensuring settings is idempotent and does not rewrite the row", () => {
-  it("returns the same row twice without touching it", async () => {
-    const oxyUserId = id("settings-user");
+describe('ensuring settings is idempotent and does not rewrite the row', () => {
+  it('returns the same row twice without touching it', async () => {
+    const oxyUserId = id('settings-user');
     const first = await ensureUserSettings(db, oxyUserId);
 
     const probe = async () =>
@@ -374,7 +367,7 @@ describe("ensuring settings is idempotent and does not rewrite the row", () => {
   });
 
   it("gives every racer the same row on a user's first request", async () => {
-    const oxyUserId = id("settings-user");
+    const oxyUserId = id('settings-user');
     await warmPool(oxyUserId);
 
     // Eight concurrent first requests: seven lose the unique constraint and take
@@ -393,31 +386,31 @@ describe("ensuring settings is idempotent and does not rewrite the row", () => {
   });
 });
 
-describe("a settings update is partial, and is an allow-list", () => {
-  it("upserts when there is no row yet, applying the patch over the defaults", async () => {
-    const oxyUserId = id("settings-user");
+describe('a settings update is partial, and is an allow-list', () => {
+  it('upserts when there is no row yet, applying the patch over the defaults', async () => {
+    const oxyUserId = id('settings-user');
     const row = await updateUserSettings(db, oxyUserId, {
-      appearanceThemeMode: "dark",
+      appearanceThemeMode: 'dark',
       securityPeerToPeerEnabled: false,
     });
 
-    expect(row.appearanceThemeMode).toBe("dark");
+    expect(row.appearanceThemeMode).toBe('dark');
     expect(row.securityPeerToPeerEnabled).toBe(false);
     // Untouched columns still get their defaults — this is the `{ upsert: true }`
     // half, and it must not produce a row of nulls.
     expect(row.securityEncryptionEnabled).toBe(true);
-    expect(row.privacyProfileVisibility).toBe("public");
+    expect(row.privacyProfileVisibility).toBe('public');
   });
 
-  it("leaves every column the patch did not name alone", async () => {
-    const oxyUserId = id("settings-user");
+  it('leaves every column the patch did not name alone', async () => {
+    const oxyUserId = id('settings-user');
     await updateUserSettings(db, oxyUserId, {
-      appearanceThemeMode: "dark",
-      appearancePrimaryColor: "#ff0000",
-      privacyProfileVisibility: "private",
+      appearanceThemeMode: 'dark',
+      appearancePrimaryColor: '#ff0000',
+      privacyProfileVisibility: 'private',
       privacyShowContactInfo: false,
-      privacyHiddenWords: ["one", "two"],
-      profileDisplayName: "Ada",
+      privacyHiddenWords: ['one', 'two'],
+      profileDisplayName: 'Ada',
       securityPeerToPeerEnabled: false,
     });
 
@@ -426,20 +419,20 @@ describe("a settings update is partial, and is an allow-list", () => {
     expect(row.privacyAllowTags).toBe(false);
     // A read-modify-write, or an update built from a reconstructed nested
     // object, would reset these to their defaults here.
-    expect(row.appearanceThemeMode).toBe("dark");
-    expect(row.appearancePrimaryColor).toBe("#ff0000");
-    expect(row.privacyProfileVisibility).toBe("private");
+    expect(row.appearanceThemeMode).toBe('dark');
+    expect(row.appearancePrimaryColor).toBe('#ff0000');
+    expect(row.privacyProfileVisibility).toBe('private');
     expect(row.privacyShowContactInfo).toBe(false);
-    expect(row.privacyHiddenWords).toEqual(["one", "two"]);
-    expect(row.profileDisplayName).toBe("Ada");
+    expect(row.privacyHiddenWords).toEqual(['one', 'two']);
+    expect(row.profileDisplayName).toBe('Ada');
     expect(row.securityPeerToPeerEnabled).toBe(false);
   });
 
-  it("tells `null` (clear it) from absent (leave it)", async () => {
-    const oxyUserId = id("settings-user");
+  it('tells `null` (clear it) from absent (leave it)', async () => {
+    const oxyUserId = id('settings-user');
     await updateUserSettings(db, oxyUserId, {
-      appearancePrimaryColor: "#00ff00",
-      profileDisplayName: "Grace",
+      appearancePrimaryColor: '#00ff00',
+      profileDisplayName: 'Grace',
     });
 
     // The distinction the `!== undefined` test exists to make. A fixture set
@@ -449,11 +442,11 @@ describe("a settings update is partial, and is an allow-list", () => {
     const row = await updateUserSettings(db, oxyUserId, { appearancePrimaryColor: null });
 
     expect(row.appearancePrimaryColor).toBeNull();
-    expect(row.profileDisplayName).toBe("Grace");
+    expect(row.profileDisplayName).toBe('Grace');
   });
 
-  it("treats an empty patch as ensure-and-return, not an error", async () => {
-    const oxyUserId = id("settings-user");
+  it('treats an empty patch as ensure-and-return, not an error', async () => {
+    const oxyUserId = id('settings-user');
 
     // Reachable in production: the route builds its patch from whichever request
     // fields validated, so a body with nothing recognisable lands here.
@@ -470,9 +463,9 @@ describe("a settings update is partial, and is an allow-list", () => {
     expect(stored).toHaveLength(1);
   });
 
-  it("drops keys outside the allow-list instead of assigning them", async () => {
-    const oxyUserId = id("settings-user");
-    const victim = id("settings-user");
+  it('drops keys outside the allow-list instead of assigning them', async () => {
+    const oxyUserId = id('settings-user');
+    const victim = id('settings-user');
     const created = await ensureUserSettings(db, oxyUserId);
 
     // A subtype of the patch, which is how this reaches a repository in
@@ -487,7 +480,7 @@ describe("a settings update is partial, and is an allow-list", () => {
     }
     const hostile: HostilePatch = {
       privacyAllowTags: false,
-      id: id("forged"),
+      id: id('forged'),
       oxyUserId: victim,
       createdAt: new Date(0),
     };
@@ -507,8 +500,8 @@ describe("a settings update is partial, and is an allow-list", () => {
     expect(stolen).toHaveLength(0);
   });
 
-  it("moves updated_at when it changes something, and never created_at", async () => {
-    const oxyUserId = id("settings-user");
+  it('moves updated_at when it changes something, and never created_at', async () => {
+    const oxyUserId = id('settings-user');
     const created = await ensureUserSettings(db, oxyUserId);
     await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -519,9 +512,9 @@ describe("a settings update is partial, and is an allow-list", () => {
   });
 });
 
-describe("the allow-list is checked against the real table", () => {
-  it("names every settings column except identity and timestamps", async () => {
-    const IDENTITY_AND_TIMESTAMPS = ["id", "oxyUserId", "createdAt", "updatedAt"];
+describe('the allow-list is checked against the real table', () => {
+  it('names every settings column except identity and timestamps', async () => {
+    const IDENTITY_AND_TIMESTAMPS = ['id', 'oxyUserId', 'createdAt', 'updatedAt'];
     const schemaColumns = Object.keys(getTableColumns(schema.userSettings))
       .filter((name) => !IDENTITY_AND_TIMESTAMPS.includes(name))
       .sort();
@@ -534,19 +527,19 @@ describe("the allow-list is checked against the real table", () => {
     expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(22);
   });
 
-  it("excludes identity and timestamp columns", async () => {
+  it('excludes identity and timestamp columns', async () => {
     // Stated separately from the equality: that assertion is symmetric, so it
     // would also be satisfied if `getTableColumns` and the tuple BOTH contained
     // `oxyUserId`. These four are the ones whose presence would be a bug.
-    for (const forbidden of ["id", "oxyUserId", "createdAt", "updatedAt"]) {
+    for (const forbidden of ['id', 'oxyUserId', 'createdAt', 'updatedAt']) {
       expect(UPDATABLE_USER_SETTINGS_COLUMNS).not.toContain(forbidden);
     }
   });
 });
 
-describe("the closed value sets are enforced by the database", () => {
-  it("refuses a theme mode outside the tuple", async () => {
-    const oxyUserId = id("settings-user");
+describe('the closed value sets are enforced by the database', () => {
+  it('refuses a theme mode outside the tuple', async () => {
+    const oxyUserId = id('settings-user');
     await ensureUserSettings(db, oxyUserId);
 
     // `text({ enum })` emits no DDL, so the repository's type is a narrowing
@@ -561,16 +554,16 @@ describe("the closed value sets are enforced by the database", () => {
 
     expect(error).not.toBeNull();
     expect(isCheckViolation(error)).toBe(true);
-    expect(constraintNameOf(error)).toBe("user_settings_appearance_theme_mode_check");
+    expect(constraintNameOf(error)).toBe('user_settings_appearance_theme_mode_check');
   });
 
-  it("refuses a profile visibility outside the tuple", async () => {
+  it('refuses a profile visibility outside the tuple', async () => {
     // Positive control first: the same raw statement with a value the tuple
     // allows must SUCCEED, so the refusal below is the CHECK answering and not a
     // misspelled column or a missing default.
     const accepted = await client`
       insert into user_settings (id, oxy_user_id, privacy_profile_visibility)
-      values (${id("settings")}, ${id("settings-user")}, 'followers_only')
+      values (${id('settings')}, ${id('settings-user')}, 'followers_only')
     `.then(
       () => null,
       (caught: unknown) => caught,
@@ -579,23 +572,23 @@ describe("the closed value sets are enforced by the database", () => {
 
     const error = await client`
       insert into user_settings (id, oxy_user_id, privacy_profile_visibility)
-      values (${id("settings")}, ${id("settings-user")}, 'everyone')
+      values (${id('settings')}, ${id('settings-user')}, 'everyone')
     `.then(
       () => null,
       (caught: unknown) => caught,
     );
     expect(error).not.toBeNull();
     expect(isCheckViolation(error)).toBe(true);
-    expect(constraintNameOf(error)).toBe("user_settings_privacy_profile_visibility_check");
+    expect(constraintNameOf(error)).toBe('user_settings_privacy_profile_visibility_check');
   });
 
-  it("refuses a second settings row for the same user", async () => {
-    const oxyUserId = id("settings-user");
+  it('refuses a second settings row for the same user', async () => {
+    const oxyUserId = id('settings-user');
     await ensureUserSettings(db, oxyUserId);
 
     const error = await db
       .insert(schema.userSettings)
-      .values({ id: id("settings"), oxyUserId })
+      .values({ id: id('settings'), oxyUserId })
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -604,14 +597,14 @@ describe("the closed value sets are enforced by the database", () => {
     expect(error).not.toBeNull();
     expect(isUniqueViolation(error)).toBe(true);
     // The constraint `ensureUserSettings`'s conflict target infers.
-    expect(constraintNameOf(error)).toBe("user_settings_oxy_user_id_key");
+    expect(constraintNameOf(error)).toBe('user_settings_oxy_user_id_key');
   });
 });
 
-describe("user_behaviors is deleted whole and never read into", () => {
-  it("reports whether a row existed to reset", async () => {
-    const oxyUserId = id("behavior-user");
-    await db.insert(schema.userBehaviors).values({ id: id("behavior"), oxyUserId });
+describe('user_behaviors is deleted whole and never read into', () => {
+  it('reports whether a row existed to reset', async () => {
+    const oxyUserId = id('behavior-user');
+    await db.insert(schema.userBehaviors).values({ id: id('behavior'), oxyUserId });
 
     // The route says "reset successfully" or "nothing to reset" from exactly
     // this, so a `DELETE` that reported success either way would be wrong.
@@ -620,11 +613,11 @@ describe("user_behaviors is deleted whole and never read into", () => {
   });
 
   it("deletes only the named user's row", async () => {
-    const oxyUserId = id("behavior-user");
-    const other = id("behavior-user");
+    const oxyUserId = id('behavior-user');
+    const other = id('behavior-user');
     await db.insert(schema.userBehaviors).values([
-      { id: id("behavior"), oxyUserId },
-      { id: id("behavior"), oxyUserId: other },
+      { id: id('behavior'), oxyUserId },
+      { id: id('behavior'), oxyUserId: other },
     ]);
 
     await deleteUserBehavior(db, oxyUserId);
@@ -636,24 +629,24 @@ describe("user_behaviors is deleted whole and never read into", () => {
     expect(survivors).toHaveLength(1);
   });
 
-  it("does not care what shape `preferences` has", async () => {
-    const oxyUserId = id("behavior-user");
+  it('does not care what shape `preferences` has', async () => {
+    const oxyUserId = id('behavior-user');
     // `Schema.Types.Mixed` with no reader: an arbitrary, deeply nested value is
     // exactly what a live row may hold, and nothing on the delete path may parse
     // it. If this ever needs a fixture shaped a particular way, something
     // started reading inside the column.
     await db.insert(schema.userBehaviors).values({
-      id: id("behavior"),
+      id: id('behavior'),
       oxyUserId,
-      preferences: { a: [1, { b: null }], "weird key": "…", nested: { deep: { deeper: true } } },
+      preferences: { a: [1, { b: null }], 'weird key': '…', nested: { deep: { deeper: true } } },
     });
 
     expect(await deleteUserBehavior(db, oxyUserId)).toBe(true);
   });
 
-  it("defaults `preferences` to an empty object rather than null", async () => {
-    const oxyUserId = id("behavior-user");
-    await db.insert(schema.userBehaviors).values({ id: id("behavior"), oxyUserId });
+  it('defaults `preferences` to an empty object rather than null', async () => {
+    const oxyUserId = id('behavior-user');
+    await db.insert(schema.userBehaviors).values({ id: id('behavior'), oxyUserId });
 
     const rows = await db
       .select()
@@ -664,13 +657,13 @@ describe("user_behaviors is deleted whole and never read into", () => {
     expect(rows[0].preferences).toEqual({});
   });
 
-  it("refuses a second behaviour row for the same user", async () => {
-    const oxyUserId = id("behavior-user");
-    await db.insert(schema.userBehaviors).values({ id: id("behavior"), oxyUserId });
+  it('refuses a second behaviour row for the same user', async () => {
+    const oxyUserId = id('behavior-user');
+    await db.insert(schema.userBehaviors).values({ id: id('behavior'), oxyUserId });
 
     const error = await db
       .insert(schema.userBehaviors)
-      .values({ id: id("behavior"), oxyUserId })
+      .values({ id: id('behavior'), oxyUserId })
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -678,15 +671,15 @@ describe("user_behaviors is deleted whole and never read into", () => {
 
     expect(error).not.toBeNull();
     expect(isUniqueViolation(error)).toBe(true);
-    expect(constraintNameOf(error)).toBe("user_behaviors_oxy_user_id_key");
+    expect(constraintNameOf(error)).toBe('user_behaviors_oxy_user_id_key');
   });
 });
 
-describe("the driver-error helpers tell the two failure kinds apart", () => {
-  it("does not read a CHECK violation as a unique violation", async () => {
+describe('the driver-error helpers tell the two failure kinds apart', () => {
+  it('does not read a CHECK violation as a unique violation', async () => {
     const error = await client`
       insert into user_settings (id, oxy_user_id, appearance_theme_mode)
-      values (${id("settings")}, ${id("settings-user")}, 'neon')
+      values (${id('settings')}, ${id('settings-user')}, 'neon')
     `.then(
       () => null,
       (caught: unknown) => caught,

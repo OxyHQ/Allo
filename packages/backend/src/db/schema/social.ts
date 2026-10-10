@@ -6,14 +6,14 @@
  * `CONVENTIONS.md`.
  */
 
-import { boolean, index, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, updatedAt } from "@oxy.so/db";
-import { checkOneOf } from "./columns";
+import { boolean, index, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { createdAt, updatedAt } from '@oxy.so/db';
+import { checkOneOf } from './columns';
 
-export const THEME_MODES = ["light", "dark", "system"] as const;
+export const THEME_MODES = ['light', 'dark', 'system'] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 
-export const PROFILE_VISIBILITIES = ["public", "private", "followers_only"] as const;
+export const PROFILE_VISIBILITIES = ['public', 'private', 'followers_only'] as const;
 export type ProfileVisibility = (typeof PROFILE_VISIBILITIES)[number];
 
 /**
@@ -24,7 +24,7 @@ export type ProfileVisibility = (typeof PROFILE_VISIBILITIES)[number];
  * can answer whether a person exists, which it cannot.
  */
 export const blocks = pgTable(
-  "blocks",
+  'blocks',
   {
     id: text().primaryKey(),
     userId: text().notNull(),
@@ -33,14 +33,14 @@ export const blocks = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("blocks_user_id_blocked_id_key").on(t.userId, t.blockedId),
-    index("blocks_blocked_id_idx").on(t.blockedId),
+    uniqueIndex('blocks_user_id_blocked_id_key').on(t.userId, t.blockedId),
+    index('blocks_blocked_id_idx').on(t.blockedId),
   ],
 );
 
 /** The same shape as {@link blocks}, and deliberately its own table. */
 export const restricts = pgTable(
-  "restricts",
+  'restricts',
   {
     id: text().primaryKey(),
     userId: text().notNull(),
@@ -49,8 +49,8 @@ export const restricts = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("restricts_user_id_restricted_id_key").on(t.userId, t.restrictedId),
-    index("restricts_restricted_id_idx").on(t.restrictedId),
+    uniqueIndex('restricts_user_id_restricted_id_key').on(t.userId, t.restrictedId),
+    index('restricts_restricted_id_idx').on(t.restrictedId),
   ],
 );
 
@@ -60,9 +60,9 @@ export const restricts = pgTable(
  * into columns during a port. `jsonb` here records that the shape is genuinely
  * unknown; guessing one would produce columns no writer fills.
  */
-export const userBehaviors = pgTable("user_behaviors", {
+export const userBehaviors = pgTable('user_behaviors', {
   id: text().primaryKey(),
-  oxyUserId: text().notNull().unique("user_behaviors_oxy_user_id_key"),
+  oxyUserId: text().notNull().unique('user_behaviors_oxy_user_id_key'),
   preferences: jsonb().notNull().default({}),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -82,17 +82,17 @@ export const userBehaviors = pgTable("user_behaviors", {
  * and a sequence for nothing.
  */
 export const userSettings = pgTable(
-  "user_settings",
+  'user_settings',
   {
     id: text().primaryKey(),
-    oxyUserId: text().notNull().unique("user_settings_oxy_user_id_key"),
+    oxyUserId: text().notNull().unique('user_settings_oxy_user_id_key'),
 
-    appearanceThemeMode: text({ enum: THEME_MODES }).notNull().default("system"),
+    appearanceThemeMode: text({ enum: THEME_MODES }).notNull().default('system'),
     appearancePrimaryColor: text(),
 
     profileHeaderImage: text(),
 
-    privacyProfileVisibility: text({ enum: PROFILE_VISIBILITIES }).notNull().default("public"),
+    privacyProfileVisibility: text({ enum: PROFILE_VISIBILITIES }).notNull().default('public'),
     privacyShowContactInfo: boolean().notNull().default(true),
     privacyAllowTags: boolean().notNull().default(true),
     privacyAllowAllos: boolean().notNull().default(true),
@@ -130,9 +130,9 @@ export const userSettings = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    checkOneOf("user_settings_appearance_theme_mode_check", t.appearanceThemeMode, THEME_MODES),
+    checkOneOf('user_settings_appearance_theme_mode_check', t.appearanceThemeMode, THEME_MODES),
     checkOneOf(
-      "user_settings_privacy_profile_visibility_check",
+      'user_settings_privacy_profile_visibility_check',
       t.privacyProfileVisibility,
       PROFILE_VISIBILITIES,
     ),

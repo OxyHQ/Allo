@@ -20,4 +20,3 @@ export const QUERY_CLIENT_CONFIG = {
     },
   },
 } as const;
-

@@ -15,12 +15,16 @@
  * is atomic, so more tasks sweeping is more throughput rather than more risk.
  */
 
-import { CALL_RING_TIMEOUT_MS } from "@allo/shared-types";
-import type { AlloDatabase } from "../db";
-import { getDb } from "../db";
-import { claimExpiredRings, listParticipants, settleRingingParticipants } from "../db/platform/callRepository";
-import { getRealtime } from "../runtime/realtime";
-import { logger } from "../utils/logger";
+import { CALL_RING_TIMEOUT_MS } from '@allo/shared-types';
+import type { AlloDatabase } from '../db';
+import { getDb } from '../db';
+import {
+  claimExpiredRings,
+  listParticipants,
+  settleRingingParticipants,
+} from '../db/platform/callRepository';
+import { getRealtime } from '../runtime/realtime';
+import { logger } from '../utils/logger';
 
 /** How often the sweep runs. A quarter of the ring, so a missed call is noticed within about ten seconds of its deadline. */
 export const CALL_RING_TICK_MS = Math.round(CALL_RING_TIMEOUT_MS / 4);
@@ -31,7 +35,9 @@ export interface CallRingTickResult {
   missed: number;
 }
 
-export async function runCallRingTick(deps: { db?: AlloDatabase; now?: () => Date } = {}): Promise<CallRingTickResult> {
+export async function runCallRingTick(
+  deps: { db?: AlloDatabase; now?: () => Date } = {},
+): Promise<CallRingTickResult> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
   const expired = await claimExpiredRings(now, BATCH, db);
@@ -40,19 +46,22 @@ export async function runCallRingTick(deps: { db?: AlloDatabase; now?: () => Dat
   const realtime = getRealtime();
   for (const call of expired) {
     try {
-      await settleRingingParticipants(call.id, "missed", now, db);
-      const audience = [call.initiatorInstanceId, ...(await listParticipants(call.id, db)).map((one) => one.instanceId)];
+      await settleRingingParticipants(call.id, 'missed', now, db);
+      const audience = [
+        call.initiatorInstanceId,
+        ...(await listParticipants(call.id, db)).map((one) => one.instanceId),
+      ];
       for (const instanceId of new Set(audience)) {
         realtime.callUpdated(instanceId, {
           callId: call.id,
-          state: "ended",
+          state: 'ended',
           answeredByInstanceId: null,
-          endReason: "missed",
+          endReason: 'missed',
         });
       }
     } catch (error: unknown) {
       // One call that cannot be settled must not stop the rest of the batch.
-      logger.debug("ring expiry failed for a call", error);
+      logger.debug('ring expiry failed for a call', error);
     }
   }
   logger.info(`call rings expired: count=${expired.length}`);
@@ -68,13 +77,13 @@ export function startCallRingWorker(deps: { db?: AlloDatabase } = {}): void {
     if (inFlight) return;
     inFlight = true;
     void runCallRingTick(deps)
-      .catch((error: unknown) => logger.warn("call ring sweep failed", error))
+      .catch((error: unknown) => logger.warn('call ring sweep failed', error))
       .finally(() => {
         inFlight = false;
       });
   }, CALL_RING_TICK_MS);
   timer.unref?.();
-  logger.info("call ring worker started");
+  logger.info('call ring worker started');
 }
 
 export async function stopCallRingWorker(): Promise<void> {

@@ -11,7 +11,7 @@
  * task that serves 500s on every request that touches a new column.
  */
 
-export type RuntimePhase = "starting" | "ready" | "shutting_down";
+export type RuntimePhase = 'starting' | 'ready' | 'shutting_down';
 
 interface RuntimeHealthState {
   phase: RuntimePhase;
@@ -20,7 +20,7 @@ interface RuntimeHealthState {
 }
 
 const state: RuntimeHealthState = {
-  phase: "starting",
+  phase: 'starting',
   migrationsComplete: false,
 };
 
@@ -30,20 +30,20 @@ export function markMigrationsComplete(): void {
 
 export function markRuntimeReady(): void {
   if (!state.migrationsComplete) {
-    throw new Error("Cannot mark runtime ready before migrations complete");
+    throw new Error('Cannot mark runtime ready before migrations complete');
   }
-  state.phase = "ready";
+  state.phase = 'ready';
   state.reason = undefined;
 }
 
 export function markRuntimeNotReady(reason: string): void {
-  state.phase = "starting";
+  state.phase = 'starting';
   state.reason = reason;
 }
 
 export function markRuntimeShuttingDown(): void {
-  state.phase = "shutting_down";
-  state.reason = "shutdown";
+  state.phase = 'shutting_down';
+  state.reason = 'shutdown';
 }
 
 export function getRuntimeHealthState(): Readonly<RuntimeHealthState> {
@@ -52,7 +52,7 @@ export function getRuntimeHealthState(): Readonly<RuntimeHealthState> {
 
 /** Tests only: readiness is module state, and a test that flips it must put it back. */
 export function resetRuntimeHealthState(): void {
-  state.phase = "starting";
+  state.phase = 'starting';
   state.migrationsComplete = false;
   state.reason = undefined;
 }

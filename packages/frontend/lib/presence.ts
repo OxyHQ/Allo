@@ -45,7 +45,10 @@ export function presenceDot(presence: PresenceView): PresenceStatus | undefined 
  * been seen — the platform makes those indistinguishable on purpose, and a
  * screen that invented a difference would undo it.
  */
-export function presenceLine(presence: PresenceView, copy: { t: Translate; locale: string; now: Date }): string | undefined {
+export function presenceLine(
+  presence: PresenceView,
+  copy: { t: Translate; locale: string; now: Date },
+): string | undefined {
   if (!presence.known) return undefined;
   if (presence.online) return copy.t('presence.online');
   if (!presence.lastSeenAt) return undefined;
@@ -55,8 +58,10 @@ export function presenceLine(presence: PresenceView, copy: { t: Translate; local
   if (Number.isNaN(at.getTime()) || elapsed < 0) return undefined;
 
   if (elapsed < 2 * MINUTE) return copy.t('presence.lastSeen.justNow');
-  if (elapsed < HOUR) return copy.t('presence.lastSeen.minutes', { count: Math.round(elapsed / MINUTE) });
-  if (elapsed < DAY) return copy.t('presence.lastSeen.hours', { count: Math.floor(elapsed / HOUR) });
+  if (elapsed < HOUR)
+    return copy.t('presence.lastSeen.minutes', { count: Math.round(elapsed / MINUTE) });
+  if (elapsed < DAY)
+    return copy.t('presence.lastSeen.hours', { count: Math.floor(elapsed / HOUR) });
   if (elapsed < 2 * DAY) return copy.t('presence.lastSeen.yesterday');
   return copy.t('presence.lastSeen.on', {
     date: new Intl.DateTimeFormat(copy.locale, { day: 'numeric', month: 'short' }).format(at),

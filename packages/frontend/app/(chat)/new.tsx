@@ -27,7 +27,12 @@ import { logger } from '@/utils/logger';
 const GROUP_NAME_MAX = 64;
 
 function summaryOf(user: SearchedUser): PersonSummary {
-  return { id: user.id, name: user.displayName, avatar: user.avatar, subtitle: user.handle ? `@${user.handle}` : undefined };
+  return {
+    id: user.id,
+    name: user.displayName,
+    avatar: user.avatar,
+    subtitle: user.handle ? `@${user.handle}` : undefined,
+  };
 }
 
 /**
@@ -148,7 +153,11 @@ export default function NewConversationRoute() {
       }),
   );
 
-  const submitLabel = adding ? t('chat.group.addMember') : count > 1 ? t('chat.new.createGroup') : t('chat.new.start');
+  const submitLabel = adding
+    ? t('chat.group.addMember')
+    : count > 1
+      ? t('chat.new.createGroup')
+      : t('chat.new.start');
 
   return (
     <Page
@@ -156,7 +165,14 @@ export default function NewConversationRoute() {
       back="always"
       scroll={false}
       actions={
-        <Button  size="sm" disabled={count === 0} loading={busy} onPress={() => void submit()} tone="accent" appearance="solid">
+        <Button
+          size="sm"
+          disabled={count === 0}
+          loading={busy}
+          onPress={() => void submit()}
+          tone="accent"
+          appearance="solid"
+        >
           {submitLabel}
         </Button>
       }
@@ -194,13 +210,24 @@ export default function NewConversationRoute() {
               }}
             />
           ) : count > 0 ? (
-            <SelectedChipsRow style={styles.chips} people={picked} onRemove={remove} formatRemoveLabel={removeLabel} />
+            <SelectedChipsRow
+              style={styles.chips}
+              people={picked}
+              onRemove={remove}
+              formatRemoveLabel={removeLabel}
+            />
           ) : undefined
         }
         emptyState={
           search.searching ? undefined : (
             <ChatEmptyState
-              title={search.tooShort ? t('chat.new.tooShort') : search.term ? t('chat.new.noResults') : t('chat.new.hint')}
+              title={
+                search.tooShort
+                  ? t('chat.new.tooShort')
+                  : search.term
+                    ? t('chat.new.noResults')
+                    : t('chat.new.hint')
+              }
             />
           )
         }

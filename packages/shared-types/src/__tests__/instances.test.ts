@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import {
   approveInstanceRequestSchema,
   clientInstanceSchema,
@@ -13,18 +13,18 @@ import {
   setTransferKeyRequestSchema,
   type ClientInstance,
   type PublicInstance,
-} from "../instances";
-import { CHALLENGE, ISO, OBJECT_ID, PUBKEY, SIGNATURE, UUID_V7, XPUBKEY } from "./fixtures";
+} from '../instances';
+import { CHALLENGE, ISO, OBJECT_ID, PUBKEY, SIGNATURE, UUID_V7, XPUBKEY } from './fixtures';
 
 const instance: ClientInstance = {
   id: UUID_V7,
   accountId: OBJECT_ID,
-  appId: "allo",
-  platform: "ios",
+  appId: 'allo',
+  platform: 'ios',
   displayName: "Nate's phone",
   signingPublicKey: PUBKEY,
   transferPublicKey: XPUBKEY,
-  status: "active",
+  status: 'active',
   enrolledAt: ISO,
   revokedAt: null,
   lastSeenAt: null,
@@ -34,134 +34,195 @@ const instance: ClientInstance = {
   createdAt: ISO,
 };
 
-describe("clientInstanceSchema", () => {
-  it("accepts a bootstrap instance and one approved by another", () => {
+describe('clientInstanceSchema', () => {
+  it('accepts a bootstrap instance and one approved by another', () => {
     expect(clientInstanceSchema.safeParse(instance).success).toBe(true);
     expect(
       clientInstanceSchema.safeParse({
         ...instance,
         approvedByInstanceId: UUID_V7,
         approvalSignature: SIGNATURE,
-        enrollmentChallenge: "Q".repeat(43),
+        enrollmentChallenge: 'Q'.repeat(43),
       }).success,
     ).toBe(true);
   });
-  it("publishes the challenge an approval was signed over, so any client can verify the chain", () => {
-    expect(clientInstanceSchema.safeParse({ ...instance, enrollmentChallenge: "not base64url!" }).success).toBe(false);
-    expect(publicInstanceSchema.parse({ ...instance, enrollmentChallenge: "Q".repeat(43) }).enrollmentChallenge).toBe(
-      "Q".repeat(43),
-    );
+  it('publishes the challenge an approval was signed over, so any client can verify the chain', () => {
+    expect(
+      clientInstanceSchema.safeParse({ ...instance, enrollmentChallenge: 'not base64url!' })
+        .success,
+    ).toBe(false);
+    expect(
+      publicInstanceSchema.parse({ ...instance, enrollmentChallenge: 'Q'.repeat(43) })
+        .enrollmentChallenge,
+    ).toBe('Q'.repeat(43));
   });
-  it("rejects a missing nullable field, a bad status and a short key", () => {
+  it('rejects a missing nullable field, a bad status and a short key', () => {
     const { revokedAt: _omit, ...missing } = instance;
     expect(clientInstanceSchema.safeParse(missing).success).toBe(false);
-    expect(clientInstanceSchema.safeParse({ ...instance, status: "enabled" }).success).toBe(false);
-    expect(clientInstanceSchema.safeParse({ ...instance, signingPublicKey: "AAAA" }).success).toBe(false);
+    expect(clientInstanceSchema.safeParse({ ...instance, status: 'enabled' }).success).toBe(false);
+    expect(clientInstanceSchema.safeParse({ ...instance, signingPublicKey: 'AAAA' }).success).toBe(
+      false,
+    );
   });
-  it("transferPublicKey is nullable (a Phase 2 row) but never absent, and is 44 base64 chars", () => {
-    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: null }).success).toBe(true);
+  it('transferPublicKey is nullable (a Phase 2 row) but never absent, and is 44 base64 chars', () => {
+    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: null }).success).toBe(
+      true,
+    );
     const { transferPublicKey: _omit, ...missing } = instance;
     expect(clientInstanceSchema.safeParse(missing).success).toBe(false);
-    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: "AAAA" }).success).toBe(false);
-    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: SIGNATURE }).success).toBe(false);
+    expect(clientInstanceSchema.safeParse({ ...instance, transferPublicKey: 'AAAA' }).success).toBe(
+      false,
+    );
+    expect(
+      clientInstanceSchema.safeParse({ ...instance, transferPublicKey: SIGNATURE }).success,
+    ).toBe(false);
   });
 });
 
-describe("publicInstanceSchema", () => {
-  it("strips displayName and timestamps from a full instance", () => {
+describe('publicInstanceSchema', () => {
+  it('strips displayName and timestamps from a full instance', () => {
     const parsed = publicInstanceSchema.parse(instance);
     expect(Object.keys(parsed).sort()).toEqual(
       [
-        "accountId",
-        "appId",
-        "approvalSignature",
-        "approvedByInstanceId",
-        "enrollmentChallenge",
-        "id",
-        "platform",
-        "signingPublicKey",
-        "status",
-        "transferPublicKey",
+        'accountId',
+        'appId',
+        'approvalSignature',
+        'approvedByInstanceId',
+        'enrollmentChallenge',
+        'id',
+        'platform',
+        'signingPublicKey',
+        'status',
+        'transferPublicKey',
       ].sort(),
     );
     const _typed: PublicInstance = parsed;
-    expect("displayName" in parsed).toBe(false);
+    expect('displayName' in parsed).toBe(false);
     expect(parsed.transferPublicKey).toBe(XPUBKEY);
   });
-  it("rejects when the key is missing", () => {
+  it('rejects when the key is missing', () => {
     const { signingPublicKey: _omit, ...rest } = instance;
     expect(publicInstanceSchema.safeParse(rest).success).toBe(false);
   });
 });
 
-describe("registerInstanceRequestSchema", () => {
-  const body = { appId: "allo", platform: "web", displayName: "Firefox", signingPublicKey: PUBKEY, transferPublicKey: XPUBKEY };
-  it("accepts a well-formed registration", () => {
+describe('registerInstanceRequestSchema', () => {
+  const body = {
+    appId: 'allo',
+    platform: 'web',
+    displayName: 'Firefox',
+    signingPublicKey: PUBKEY,
+    transferPublicKey: XPUBKEY,
+  };
+  it('accepts a well-formed registration', () => {
     expect(registerInstanceRequestSchema.safeParse(body).success).toBe(true);
   });
-  it("requires the transfer key: null and absent are both refused", () => {
+  it('requires the transfer key: null and absent are both refused', () => {
     const { transferPublicKey: _omit, ...without } = body;
     expect(registerInstanceRequestSchema.safeParse(without).success).toBe(false);
-    expect(registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: null }).success).toBe(false);
-    expect(registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: "AAAA" }).success).toBe(false);
+    expect(
+      registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: null }).success,
+    ).toBe(false);
+    expect(
+      registerInstanceRequestSchema.safeParse({ ...body, transferPublicKey: 'AAAA' }).success,
+    ).toBe(false);
   });
-  it("rejects an empty or 81-char display name and an unknown platform", () => {
-    expect(registerInstanceRequestSchema.safeParse({ ...body, displayName: "" }).success).toBe(false);
-    expect(registerInstanceRequestSchema.safeParse({ ...body, displayName: "x".repeat(81) }).success).toBe(false);
-    expect(registerInstanceRequestSchema.safeParse({ ...body, platform: "watch" }).success).toBe(false);
+  it('rejects an empty or 81-char display name and an unknown platform', () => {
+    expect(registerInstanceRequestSchema.safeParse({ ...body, displayName: '' }).success).toBe(
+      false,
+    );
+    expect(
+      registerInstanceRequestSchema.safeParse({ ...body, displayName: 'x'.repeat(81) }).success,
+    ).toBe(false);
+    expect(registerInstanceRequestSchema.safeParse({ ...body, platform: 'watch' }).success).toBe(
+      false,
+    );
   });
 });
 
-describe("registerInstanceResponseSchema", () => {
-  it("pending carries a challenge, active does not", () => {
-    expect(registerInstanceResponseSchema.safeParse({ instance, enrollment: "active" }).success).toBe(true);
+describe('registerInstanceResponseSchema', () => {
+  it('pending carries a challenge, active does not', () => {
     expect(
-      registerInstanceResponseSchema.safeParse({ instance: { ...instance, status: "pending" }, enrollment: "pending", challenge: CHALLENGE })
-        .success,
+      registerInstanceResponseSchema.safeParse({ instance, enrollment: 'active' }).success,
+    ).toBe(true);
+    expect(
+      registerInstanceResponseSchema.safeParse({
+        instance: { ...instance, status: 'pending' },
+        enrollment: 'pending',
+        challenge: CHALLENGE,
+      }).success,
     ).toBe(true);
   });
-  it("rejects pending without a challenge and active with one", () => {
-    expect(registerInstanceResponseSchema.safeParse({ instance, enrollment: "pending" }).success).toBe(false);
-    expect(registerInstanceResponseSchema.safeParse({ instance, enrollment: "active", challenge: CHALLENGE }).success).toBe(false);
+  it('rejects pending without a challenge and active with one', () => {
+    expect(
+      registerInstanceResponseSchema.safeParse({ instance, enrollment: 'pending' }).success,
+    ).toBe(false);
+    expect(
+      registerInstanceResponseSchema.safeParse({
+        instance,
+        enrollment: 'active',
+        challenge: CHALLENGE,
+      }).success,
+    ).toBe(false);
   });
 });
 
-describe("approve / list / pending / push", () => {
-  it("approve needs an 88-char signature", () => {
-    expect(approveInstanceRequestSchema.safeParse({ approvalSignature: SIGNATURE }).success).toBe(true);
-    expect(approveInstanceRequestSchema.safeParse({ approvalSignature: PUBKEY }).success).toBe(false);
+describe('approve / list / pending / push', () => {
+  it('approve needs an 88-char signature', () => {
+    expect(approveInstanceRequestSchema.safeParse({ approvalSignature: SIGNATURE }).success).toBe(
+      true,
+    );
+    expect(approveInstanceRequestSchema.safeParse({ approvalSignature: PUBKEY }).success).toBe(
+      false,
+    );
   });
-  it("list wraps instances; pending wraps instance+challenge", () => {
+  it('list wraps instances; pending wraps instance+challenge', () => {
     expect(listInstancesResponseSchema.safeParse({ instances: [instance] }).success).toBe(true);
     expect(listInstancesResponseSchema.safeParse([instance]).success).toBe(false);
-    expect(listPendingEnrollmentsResponseSchema.safeParse({ pending: [{ instance, challenge: CHALLENGE }] }).success).toBe(true);
-    expect(listPendingEnrollmentsResponseSchema.safeParse({ pending: [{ instance }] }).success).toBe(false);
+    expect(
+      listPendingEnrollmentsResponseSchema.safeParse({
+        pending: [{ instance, challenge: CHALLENGE }],
+      }).success,
+    ).toBe(true);
+    expect(
+      listPendingEnrollmentsResponseSchema.safeParse({ pending: [{ instance }] }).success,
+    ).toBe(false);
   });
-  it("transfer key takes exactly a 44-char base64 key", () => {
-    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: XPUBKEY }).success).toBe(true);
+  it('transfer key takes exactly a 44-char base64 key', () => {
+    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: XPUBKEY }).success).toBe(
+      true,
+    );
     expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: null }).success).toBe(false);
-    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: SIGNATURE }).success).toBe(false);
+    expect(setTransferKeyRequestSchema.safeParse({ transferPublicKey: SIGNATURE }).success).toBe(
+      false,
+    );
     expect(setTransferKeyRequestSchema.safeParse({}).success).toBe(false);
   });
-  it("push token takes fcm|apns and 1..1024 chars", () => {
-    expect(setPushTokenRequestSchema.safeParse({ provider: "fcm", token: "t" }).success).toBe(true);
-    expect(setPushTokenRequestSchema.safeParse({ provider: "apns", token: "t".repeat(1024) }).success).toBe(true);
-    expect(setPushTokenRequestSchema.safeParse({ provider: "expo", token: "t" }).success).toBe(false);
-    expect(setPushTokenRequestSchema.safeParse({ provider: "fcm", token: "" }).success).toBe(false);
-    expect(setPushTokenRequestSchema.safeParse({ provider: "fcm", token: "t".repeat(1025) }).success).toBe(false);
+  it('push token takes fcm|apns and 1..1024 chars', () => {
+    expect(setPushTokenRequestSchema.safeParse({ provider: 'fcm', token: 't' }).success).toBe(true);
+    expect(
+      setPushTokenRequestSchema.safeParse({ provider: 'apns', token: 't'.repeat(1024) }).success,
+    ).toBe(true);
+    expect(setPushTokenRequestSchema.safeParse({ provider: 'expo', token: 't' }).success).toBe(
+      false,
+    );
+    expect(setPushTokenRequestSchema.safeParse({ provider: 'fcm', token: '' }).success).toBe(false);
+    expect(
+      setPushTokenRequestSchema.safeParse({ provider: 'fcm', token: 't'.repeat(1025) }).success,
+    ).toBe(false);
   });
 });
 
-describe("enrollmentApprovalMessage", () => {
-  it("is byte-exact: context, accountId, newInstanceId, key, challenge joined by LF", () => {
-    expect(ENROLLMENT_SIGNING_CONTEXT).toBe("allo-enroll-v1");
+describe('enrollmentApprovalMessage', () => {
+  it('is byte-exact: context, accountId, newInstanceId, key, challenge joined by LF', () => {
+    expect(ENROLLMENT_SIGNING_CONTEXT).toBe('allo-enroll-v1');
     const message = enrollmentApprovalMessage({
-      accountId: "acc",
-      newInstanceId: "inst",
-      newSigningPublicKey: "KEY=",
-      challenge: "chal",
+      accountId: 'acc',
+      newInstanceId: 'inst',
+      newSigningPublicKey: 'KEY=',
+      challenge: 'chal',
     });
-    expect(message).toBe("allo-enroll-v1\nacc\ninst\nKEY=\nchal");
-    expect(message.split("\n")).toHaveLength(5);
+    expect(message).toBe('allo-enroll-v1\nacc\ninst\nKEY=\nchal');
+    expect(message.split('\n')).toHaveLength(5);
   });
 });

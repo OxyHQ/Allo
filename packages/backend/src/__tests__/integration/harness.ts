@@ -13,32 +13,45 @@
  * module-global.
  */
 
-import http from "node:http";
-import type { AddressInfo } from "node:net";
-import express, { type RequestHandler } from "express";
-import { eq } from "drizzle-orm";
-import { createAlloClient, testing, type AlloClient, type OxySessionAdapter, type TimelineItemView, type TransportOptions } from "@allo/core";
-import type { Platform } from "@allo/shared-types";
-import { createApp } from "../../app";
-import { checkPostgresHealth, closePostgres, connectPostgres, getDb, type AlloDatabase } from "../../db";
-import * as schema from "../../db/schema";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import { requireInstance } from "../../middleware/instanceAuth";
-import { requireOxySession } from "../../middleware/oxySession";
-import { clearRealtime, setRealtime } from "../../runtime/realtime";
-import { createSocketServer, type SocketRuntime } from "../../runtime/socket";
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import express, { type RequestHandler } from 'express';
+import { eq } from 'drizzle-orm';
+import {
+  createAlloClient,
+  testing,
+  type AlloClient,
+  type OxySessionAdapter,
+  type TimelineItemView,
+  type TransportOptions,
+} from '@allo/core';
+import type { Platform } from '@allo/shared-types';
+import { createApp } from '../../app';
+import {
+  checkPostgresHealth,
+  closePostgres,
+  connectPostgres,
+  getDb,
+  type AlloDatabase,
+} from '../../db';
+import * as schema from '../../db/schema';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
+import { requireInstance } from '../../middleware/instanceAuth';
+import { requireOxySession } from '../../middleware/oxySession';
+import { clearRealtime, setRealtime } from '../../runtime/realtime';
+import { createSocketServer, type SocketRuntime } from '../../runtime/socket';
 
 const { MemorySecrets, MemoryStorage } = testing;
 
-export const TOKEN_PREFIX = "test:";
+export const TOKEN_PREFIX = 'test:';
 
 /** Oxy's HTTP half: `Authorization: Bearer test:<accountId>` → `req.userId`. */
 export const bearerAuth: RequestHandler = (req, _res, next) => {
-  const header = req.get("authorization") ?? "";
+  const header = req.get('authorization') ?? '';
   if (header.startsWith(`Bearer ${TOKEN_PREFIX}`)) {
     const accountId = header.slice(`Bearer ${TOKEN_PREFIX}`.length);
-    Reflect.set(req, "userId", accountId);
-    Reflect.set(req, "user", { id: accountId });
+    Reflect.set(req, 'userId', accountId);
+    Reflect.set(req, 'user', { id: accountId });
   }
   next();
 };
@@ -47,11 +60,15 @@ export const bearerAuth: RequestHandler = (req, _res, next) => {
 export const socketOxy = {
   middleware: {
     socket: () => async (socket: unknown, next: (err?: Error) => void) => {
-      const s = socket as { handshake: { auth: Record<string, unknown> }; data: Record<string, unknown> };
+      const s = socket as {
+        handshake: { auth: Record<string, unknown> };
+        data: Record<string, unknown>;
+      };
       const token = s.handshake.auth.token;
-      if (typeof token !== "string" || !token.startsWith(TOKEN_PREFIX)) return next(new Error("Authentication required"));
+      if (typeof token !== 'string' || !token.startsWith(TOKEN_PREFIX))
+        return next(new Error('Authentication required'));
       s.data.userId = token.slice(TOKEN_PREFIX.length);
-      Reflect.set(s, "user", { id: s.data.userId });
+      Reflect.set(s, 'user', { id: s.data.userId });
       next();
     },
   },
@@ -85,21 +102,32 @@ export interface MakeClientOptions {
 }
 
 export const texts = (items: TimelineItemView[]): string[] =>
-  items.filter((i) => i.content.kind === "text").map((i) => (i.content as { body: string }).body);
+  items.filter((i) => i.content.kind === 'text').map((i) => (i.content as { body: string }).body);
 
 /** Poll a sync or async predicate; throws with the name of what never came true. */
-export async function waitFor(fn: () => boolean | Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+export async function waitFor(
+  fn: () => boolean | Promise<boolean>,
+  timeoutMs = 15_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     if (await fn()) return;
-    if (Date.now() > deadline) throw new Error(`condition not met within ${timeoutMs} ms: ${fn.toString().slice(0, 160)}`);
+    if (Date.now() > deadline)
+      throw new Error(`condition not met within ${timeoutMs} ms: ${fn.toString().slice(0, 160)}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
-export async function waitForText(c: TestClient, conversationId: string, text: string, timeoutMs = 15_000): Promise<TimelineItemView> {
+export async function waitForText(
+  c: TestClient,
+  conversationId: string,
+  text: string,
+  timeoutMs = 15_000,
+): Promise<TimelineItemView> {
   await waitFor(() => texts(c.client.messages.timeline(conversationId)).includes(text), timeoutMs);
-  return c.client.messages.timeline(conversationId).find((i) => i.content.kind === "text" && i.content.body === text)!;
+  return c.client.messages
+    .timeline(conversationId)
+    .find((i) => i.content.kind === 'text' && i.content.body === text)!;
 }
 
 export const waitJoined = (c: TestClient, conversationId: string, timeoutMs = 20_000) =>
@@ -114,7 +142,7 @@ export class Harness {
   db!: AlloDatabase;
   server!: http.Server;
   sockets!: SocketRuntime;
-  baseUrl = "";
+  baseUrl = '';
   /** Every text sent through `unique()`, for the end-of-suite plaintext search. */
   readonly sent: string[] = [];
   private sequence = 0;
@@ -138,7 +166,7 @@ export class Harness {
     this.server = http.createServer(app);
     this.sockets = createSocketServer(this.server, { oxy: socketOxy, instanceAuth: { getDb } });
     setRealtime(this.sockets.realtime);
-    await new Promise<void>((resolve) => this.server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve));
     this.baseUrl = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
   }
 
@@ -152,13 +180,18 @@ export class Harness {
     await this.handle?.drop();
   }
 
-  async makeClient(accountId: string, name: string, platform: Platform, options: MakeClientOptions = {}): Promise<TestClient> {
+  async makeClient(
+    accountId: string,
+    name: string,
+    platform: Platform,
+    options: MakeClientOptions = {},
+  ): Promise<TestClient> {
     this.sequence += 1;
     const storage = options.storage ?? new MemoryStorage();
     const secrets = options.secrets ?? new MemorySecrets();
     const client = createAlloClient({
       baseUrl: this.baseUrl,
-      appId: "allo",
+      appId: 'allo',
       platform,
       displayName: `${name} #${this.sequence}`,
       session: sessionFor(accountId),
@@ -170,10 +203,10 @@ export class Harness {
       backupDebounceMs: options.backupDebounceMs,
       logger: process.env.ALLO_DEBUG
         ? {
-            debug: (m, meta) => console.log(`[${name}] ${m}`, meta ?? ""),
-            info: (m, meta) => console.log(`[${name}] ${m}`, meta ?? ""),
-            warn: (m, meta) => console.log(`[${name}] WARN ${m}`, meta ?? ""),
-            error: (m, meta) => console.log(`[${name}] ERROR ${m}`, meta ?? ""),
+            debug: (m, meta) => console.log(`[${name}] ${m}`, meta ?? ''),
+            info: (m, meta) => console.log(`[${name}] ${m}`, meta ?? ''),
+            warn: (m, meta) => console.log(`[${name}] WARN ${m}`, meta ?? ''),
+            error: (m, meta) => console.log(`[${name}] ERROR ${m}`, meta ?? ''),
           }
         : undefined,
     });
@@ -182,13 +215,18 @@ export class Harness {
   }
 
   async keyPackagesOf(instanceId: string): Promise<number> {
-    const rows = await this.db.select().from(schema.keyPackages).where(eq(schema.keyPackages.instanceId, instanceId));
+    const rows = await this.db
+      .select()
+      .from(schema.keyPackages)
+      .where(eq(schema.keyPackages.instanceId, instanceId));
     return rows.length;
   }
 
   /** Every stored event payload, decoded, so a plaintext search covers the whole log. */
   async allPayloads(): Promise<Buffer[]> {
-    const rows = await this.db.select({ payload: schema.conversationEvents.payload }).from(schema.conversationEvents);
+    const rows = await this.db
+      .select({ payload: schema.conversationEvents.payload })
+      .from(schema.conversationEvents);
     return rows.map((row) => Buffer.from(row.payload));
   }
 
@@ -206,6 +244,6 @@ export class Harness {
   }
 
   account(name: string): string {
-    return `acc-${name}-${String(++this.uniqueAccount).padStart(4, "0")}`;
+    return `acc-${name}-${String(++this.uniqueAccount).padStart(4, '0')}`;
   }
 }

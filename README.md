@@ -117,13 +117,13 @@ bun run typecheck && bun run test
 | `bun run clean` | Remove build artifacts and `node_modules` |
 
 **`@allo/frontend`**: `start`, `dev`, `android`, `ios`, `web`, `build`, `build-web`,
-`test` (Jest), `lint` (`expo lint`), `clean`, plus `clear-cache` and `reset-project`.
+`test` (Jest), `lint` (`expo lint .`, the minimal Expo-only ESLint config), `clean`, plus `clear-cache` and `reset-project`.
 
 **`@allo/backend`**: `dev`, `start`, `build`, `test` (Vitest, which needs a real Postgres
 server — each `*.realdb.test.ts` suite creates its own throwaway, fully-migrated
 database on it), `clean`, plus `db:generate` and `db:migrate`.
 
-**`@allo/shared-types`**: `build`, `dev` (watch), `lint`, `clean`.
+**`@allo/shared-types`**: `build`, `dev` (watch), `typecheck`, `test`, `clean`.
 
 **Postgres migrations ARE applied by the deploy, in two phases.** `packages/backend/drizzle/`
 holds them and `bun run db:migrate -- --target-database=<name> --phase=<pre|post|all>` is the
@@ -135,10 +135,9 @@ the rollout it lands on.
 </details>
 
 > [!NOTE]
-> The root `lint` script does not work end to end. The backend declares no `lint` script,
-> and `shared-types` declares one without shipping ESLint or a config, so it fails with
-> "ESLint couldn't find an eslint.config.js". Only the frontend is lintable today, via
-> `bun run --filter @allo/frontend lint`.
+> Formatting and linting are Biome (`biome.jsonc`): `bun run lint` runs `biome check .`
+> plus the frontend's minimal Expo ESLint (`expo lint .`), `bun run lint:fix` applies safe
+> fixes and `bun run format` formats. CI runs the same in its `lint` job.
 
 ## The Allo platform
 

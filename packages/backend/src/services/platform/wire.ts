@@ -15,13 +15,13 @@ import type {
   Call,
   PublicInstance,
   Status,
-} from "@allo/shared-types";
-import type { ConversationRow, LeafRow, MemberRow } from "../../db/platform/conversationRepository";
-import type { EventReadRow } from "../../db/platform/eventRepository";
-import type { AccountBackupRow, HistoryOfferRow } from "../../db/platform/historyRepository";
-import type { InstanceRow } from "../../db/platform/instanceRepository";
-import type { CallParticipantRow, CallRow } from "../../db/platform/callRepository";
-import type { StatusRow } from "../../db/platform/statusRepository";
+} from '@allo/shared-types';
+import type { ConversationRow, LeafRow, MemberRow } from '../../db/platform/conversationRepository';
+import type { EventReadRow } from '../../db/platform/eventRepository';
+import type { AccountBackupRow, HistoryOfferRow } from '../../db/platform/historyRepository';
+import type { InstanceRow } from '../../db/platform/instanceRepository';
+import type { CallParticipantRow, CallRow } from '../../db/platform/callRepository';
+import type { StatusRow } from '../../db/platform/statusRepository';
 
 const iso = (date: Date): string => date.toISOString();
 const isoOrNull = (date: Date | null): string | null => (date ? date.toISOString() : null);
@@ -53,8 +53,10 @@ export function toClientInstance(row: InstanceRow): ClientInstance {
  * to the owner only, through `GET /v1/instances/pending` and the registration
  * answer, never through this projection.
  */
-export function publishedChallenge(row: Pick<InstanceRow, "status" | "enrollmentChallenge" | "approvalSignature">): string | null {
-  if (row.status === "pending" || row.approvalSignature === null) return null;
+export function publishedChallenge(
+  row: Pick<InstanceRow, 'status' | 'enrollmentChallenge' | 'approvalSignature'>,
+): string | null {
+  if (row.status === 'pending' || row.approvalSignature === null) return null;
   return row.enrollmentChallenge;
 }
 
@@ -141,8 +143,8 @@ export function toStatus(row: StatusRow, sealedKey: string | null): Status {
     id: row.id,
     authorAccountId: row.authorAccountId,
     authorInstanceId: row.authorInstanceId,
-    payload: row.payload.toString("base64"),
-    nonce: row.nonce.toString("base64"),
+    payload: row.payload.toString('base64'),
+    nonce: row.nonce.toString('base64'),
     sha256: row.sha256,
     blobIds: row.blobIds,
     sealedKey,
@@ -161,7 +163,7 @@ export function toConversationEvent(row: EventReadRow): ConversationEvent {
     epoch: row.epoch,
     senderAccountId: row.senderAccountId,
     senderInstanceId: row.senderInstanceId,
-    payload: Buffer.from(row.payload).toString("base64"),
+    payload: Buffer.from(row.payload).toString('base64'),
     blobIds: row.blobIds,
     createdAt: iso(row.createdAt),
   };

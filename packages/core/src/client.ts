@@ -15,32 +15,32 @@
  *            the way back when the account's only active devices are gone:
  *            revoke them with the Oxy session and register this one afresh.
  */
-import { AtRestCipher } from "./crypto/atRest";
-import { CryptoEngine } from "./crypto/engine";
-import { Context, type ResolvedOptions } from "./context";
-import { ConversationsService } from "./conversations/service";
-import { GroupRegistry } from "./conversations/groups";
-import { InvalidStateError } from "./errors";
-import { Emitter } from "./events/emitter";
-import { HistoryService } from "./history/service";
-import { BackupService } from "./backup/service";
-import { transferKeyName } from "./crypto/transfer";
-import { backupKeyName } from "./crypto/backupKey";
-import { InstanceManager, instanceKeyName } from "./instance/manager";
-import { MediaService } from "./media/service";
-import { MessagesService } from "./messages/service";
-import { OutboxEngine } from "./outbox/engine";
-import { AlloStore } from "./storage/store";
-import { Model } from "./storage/model";
-import { Namespace } from "./storage/namespace";
-import { storageKeyName } from "./crypto/atRest";
-import { SyncEngine } from "./sync/engine";
-import { CallsService, type CallHistoryEntry, type CallView } from "./calls/service";
-import { PresenceService, PRESENCE_UNKNOWN } from "./presence/service";
-import { StatusService } from "./statuses/service";
-import { Realtime } from "./sync/realtime";
-import { HttpClient } from "./transport/http";
-import { PRESENCE_HEARTBEAT_MS } from "@allo/shared-types";
+import { AtRestCipher } from './crypto/atRest';
+import { CryptoEngine } from './crypto/engine';
+import { Context, type ResolvedOptions } from './context';
+import { ConversationsService } from './conversations/service';
+import { GroupRegistry } from './conversations/groups';
+import { InvalidStateError } from './errors';
+import { Emitter } from './events/emitter';
+import { HistoryService } from './history/service';
+import { BackupService } from './backup/service';
+import { transferKeyName } from './crypto/transfer';
+import { backupKeyName } from './crypto/backupKey';
+import { InstanceManager, instanceKeyName } from './instance/manager';
+import { MediaService } from './media/service';
+import { MessagesService } from './messages/service';
+import { OutboxEngine } from './outbox/engine';
+import { AlloStore } from './storage/store';
+import { Model } from './storage/model';
+import { Namespace } from './storage/namespace';
+import { storageKeyName } from './crypto/atRest';
+import { SyncEngine } from './sync/engine';
+import { CallsService, type CallHistoryEntry, type CallView } from './calls/service';
+import { PresenceService, PRESENCE_UNKNOWN } from './presence/service';
+import { StatusService } from './statuses/service';
+import { Realtime } from './sync/realtime';
+import { HttpClient } from './transport/http';
+import { PRESENCE_HEARTBEAT_MS } from '@allo/shared-types';
 import type {
   AlloClientOptions,
   BackupStatus,
@@ -65,9 +65,9 @@ import type {
   SyncState,
   TimelineItemView,
   UploadMediaMeta,
-} from "./types";
-import { Mutex } from "./util/async";
-import { describeError, silentLogger } from "./util/logger";
+} from './types';
+import { Mutex } from './util/async';
+import { describeError, silentLogger } from './util/logger';
 
 /**
  * What `reset()` managed to tell the server before it wiped this device.
@@ -81,11 +81,11 @@ import { describeError, silentLogger } from "./util/logger";
  * device has to be able to say what is still listed.
  */
 export type ResetOutcome =
-  | { revoked: "done" }
+  | { revoked: 'done' }
   /** Nothing was active to revoke: never registered, still pending, or already revoked. */
-  | { revoked: "not-needed" }
+  | { revoked: 'not-needed' }
   /** The wipe happened and the server still lists this instance as active. */
-  | { revoked: "failed"; instanceId: string; reason: string };
+  | { revoked: 'failed'; instanceId: string; reason: string };
 
 export interface AlloClient {
   readonly accountId: string;
@@ -127,7 +127,7 @@ export interface AlloClient {
     /** Every call this device knows about, newest first. Read out of the conversations, which is where the log lives. */
     history(): CallHistoryEntry[];
     /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
-    start(conversationId: string, mode?: "voice" | "video"): Promise<CallView>;
+    start(conversationId: string, mode?: 'voice' | 'video'): Promise<CallView>;
     answer(): Promise<void>;
     decline(): Promise<void>;
     end(): Promise<void>;
@@ -147,7 +147,7 @@ export interface AlloClient {
     approve(instanceId: string, expectedChallenge?: string): Promise<void>;
     reject(instanceId: string): Promise<void>;
     revoke(instanceId: string): Promise<void>;
-    setPushToken(provider: "fcm" | "apns", token: string): Promise<void>;
+    setPushToken(provider: 'fcm' | 'apns', token: string): Promise<void>;
     clearPushToken(): Promise<void>;
   };
   conversations: {
@@ -286,14 +286,24 @@ const NO_PENDING: PendingEnrollmentView[] = EMPTY_LIST;
 const NO_CONVERSATIONS: ConversationView[] = EMPTY_LIST;
 const NO_CALLS: CallHistoryEntry[] = EMPTY_LIST;
 const NO_TIMELINE: TimelineItemView[] = EMPTY_LIST;
-const IDLE_PROGRESS: HistoryProgress = { phase: "idle", done: 0, total: 0 };
+const IDLE_PROGRESS: HistoryProgress = { phase: 'idle', done: 0, total: 0 };
 const NO_OFFERS: HistoryOfferView[] = EMPTY_LIST;
-const NO_BACKUP: BackupStatus = { enabled: false, lastBackupAt: null, eventCount: 0, remote: null, busy: false };
+const NO_BACKUP: BackupStatus = {
+  enabled: false,
+  lastBackupAt: null,
+  eventCount: 0,
+  remote: null,
+  busy: false,
+};
 
 export function createAlloClient(options: AlloClientOptions): AlloClient {
   const log = options.logger ?? silentLogger;
   const now = options.now ?? (() => Date.now());
-  const resolved: ResolvedOptions = { ...options, keyPackageTarget: options.keyPackageTarget ?? 20, syncIntervalMs: options.syncIntervalMs ?? 30_000 };
+  const resolved: ResolvedOptions = {
+    ...options,
+    keyPackageTarget: options.keyPackageTarget ?? 20,
+    syncIntervalMs: options.syncIntervalMs ?? 30_000,
+  };
   const emitter = new Emitter();
   let ctx: Context | null = null;
   let started = false;
@@ -301,7 +311,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
   let activated = false;
 
   const requireCtx = (): Context => {
-    if (!ctx) throw new InvalidStateError("client is not started");
+    if (!ctx) throw new InvalidStateError('client is not started');
     return ctx;
   };
 
@@ -315,12 +325,12 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     try {
       await c.instance.topUpKeyPackages();
     } catch (error) {
-      log.warn?.("key package upload failed", { error: describeError(error) });
+      log.warn?.('key package upload failed', { error: describeError(error) });
     }
     try {
       await c.conversations.refreshFromServer();
     } catch (error) {
-      log.warn?.("conversation list refresh failed", { error: describeError(error) });
+      log.warn?.('conversation list refresh failed', { error: describeError(error) });
     }
     c.sync.start();
     c.outbox.start();
@@ -336,9 +346,13 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
   const start = async (): Promise<void> => {
     if (started) return;
     const accountId = options.session.getAccountId();
-    if (!accountId) throw new InvalidStateError("no Oxy account in session");
+    if (!accountId) throw new InvalidStateError('no Oxy account in session');
     const cipher = await AtRestCipher.open(options.secrets, accountId, options.appId);
-    const rootStore = new AlloStore(options.storage, cipher, new Namespace(options.appId, accountId));
+    const rootStore = new AlloStore(
+      options.storage,
+      cipher,
+      new Namespace(options.appId, accountId),
+    );
     /**
      * The storage key was minted just now and this account already has rows.
      * Those rows were written under a key that no longer exists, so nothing
@@ -356,13 +370,15 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     if (cipher.mintedFresh) {
       const orphaned = await options.storage.list(rootStore.ns.accountPrefix);
       if (orphaned.length > 0) {
-        log.error?.("the storage key is gone; dropping the rows it encrypted", { rows: orphaned.length });
+        log.error?.('the storage key is gone; dropping the rows it encrypted', {
+          rows: orphaned.length,
+        });
         await rootStore.wipeAccount();
       }
     }
     const engine = await CryptoEngine.create(options.crypto);
     const http = new HttpClient({
-      baseUrl: options.baseUrl.replace(/\/+$/, ""),
+      baseUrl: options.baseUrl.replace(/\/+$/, ''),
       fetch: options.transport?.fetch ?? globalThis.fetch.bind(globalThis),
       getAccessToken: () => options.session.getAccessToken(),
       now,
@@ -401,7 +417,10 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     c.instance.bindModel(c.model);
     c.groups = new GroupRegistry(engine, c.store);
     const undecodable = await c.groups.load();
-    if (undecodable.length) log.warn?.("group state could not be decoded; a resync will replace it", { count: undecodable.length });
+    if (undecodable.length)
+      log.warn?.('group state could not be decoded; a resync will replace it', {
+        count: undecodable.length,
+      });
     c.messages = new MessagesService(c);
     c.conversations = new ConversationsService(c);
     c.outbox = new OutboxEngine(c);
@@ -419,7 +438,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     started = true;
     c.realtime.connect();
     if (c.instance.isActive) await activate();
-    else if (c.instance.state === "pending-approval") {
+    else if (c.instance.state === 'pending-approval') {
       pendingPoll = setInterval(() => {
         void c.instance
           .refresh()
@@ -427,7 +446,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
           .catch(() => undefined);
       }, 5000);
     }
-    emitter.emit("instance");
+    emitter.emit('instance');
   };
 
   const stop = async (): Promise<void> => {
@@ -456,42 +475,51 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     const c = ctx;
     await stop();
     const accountId = c?.accountId ?? options.session.getAccountId();
-    let outcome: ResetOutcome = { revoked: "not-needed" };
+    let outcome: ResetOutcome = { revoked: 'not-needed' };
     if (c && c.instance.isActive) {
       const instanceId = c.instanceId;
       try {
         await c.instance.revoke(instanceId);
-        outcome = { revoked: "done" };
+        outcome = { revoked: 'done' };
       } catch (error) {
         // Not "best effort" any more: what is left behind is an instance this
         // device can no longer prove it owns, and the caller is the only one
         // in a position to say so.
         const reason = describeError(error);
-        log.error?.("self-revoke on reset failed; this instance is still listed", { instanceId, reason });
-        outcome = { revoked: "failed", instanceId, reason };
+        log.error?.('self-revoke on reset failed; this instance is still listed', {
+          instanceId,
+          reason,
+        });
+        outcome = { revoked: 'failed', instanceId, reason };
       }
     }
     if (accountId) {
       const cipher = await AtRestCipher.open(options.secrets, accountId, options.appId);
-      await new AlloStore(options.storage, cipher, new Namespace(options.appId, accountId)).wipeAccount();
+      await new AlloStore(
+        options.storage,
+        cipher,
+        new Namespace(options.appId, accountId),
+      ).wipeAccount();
       await options.secrets.delete(instanceKeyName(accountId, options.appId));
       await options.secrets.delete(storageKeyName(accountId, options.appId));
       await options.secrets.delete(transferKeyName(accountId, options.appId));
       await options.secrets.delete(backupKeyName(accountId, options.appId));
     }
     ctx = null;
-    emitter.emit("instance");
-    emitter.emit("conversations");
+    emitter.emit('instance');
+    emitter.emit('conversations');
     return outcome;
   };
 
   const reclaimAccount = async (): Promise<void> => {
     const c = ctx;
-    if (!c) throw new InvalidStateError("client is not started");
+    if (!c) throw new InvalidStateError('client is not started');
     const mine = c.instance.current?.id ?? null;
     const listed = await c.instance.listWithSession();
-    const active = listed.filter((i) => i.status === "active");
-    log.warn?.("reclaiming the account from devices that cannot approve", { revoking: active.length });
+    const active = listed.filter((i) => i.status === 'active');
+    log.warn?.('reclaiming the account from devices that cannot approve', {
+      revoking: active.length,
+    });
     for (const instance of active) {
       // `mine` is pending in the case this exists for, so it is not in here;
       // skipping it is belt and braces for the case where it somehow is.
@@ -506,7 +534,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
 
   return {
     get accountId() {
-      return ctx?.accountId ?? options.session.getAccountId() ?? "";
+      return ctx?.accountId ?? options.session.getAccountId() ?? '';
     },
     get instanceId() {
       return ctx?.instance.current?.id ?? null;
@@ -518,7 +546,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     calls: {
       current: () => ctx?.calls.current() ?? null,
       history: () => ctx?.calls.history() ?? NO_CALLS,
-      start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? "voice"),
+      start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? 'voice'),
       answer: () => requireCtx().calls.answer(),
       decline: () => requireCtx().calls.decline(),
       end: () => requireCtx().calls.end(),
@@ -528,11 +556,14 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     subscribe: (topic, listener) => emitter.subscribe(topic, listener),
     onError: (listener) => emitter.onError(listener),
     instance: {
-      state: () => ctx?.instance.state ?? "unregistered",
+      state: () => ctx?.instance.state ?? 'unregistered',
       current: () => ctx?.instance.currentView() ?? null,
       list: () => ctx?.instance.list() ?? NO_INSTANCES,
       pending: () => ctx?.instance.pending() ?? NO_PENDING,
-      refresh: () => requireCtx().instance.refresh().then(() => activate()),
+      refresh: () =>
+        requireCtx()
+          .instance.refresh()
+          .then(() => activate()),
       refreshPending: () => requireCtx().instance.refreshPending(),
       approve: async (id, challenge) => {
         const c = requireCtx();
@@ -595,7 +626,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       version: () => ctx?.presence.version ?? 0,
     },
     sync: {
-      state: () => ctx?.sync.state ?? "idle",
+      state: () => ctx?.sync.state ?? 'idle',
       now: () => requireCtx().sync.now(),
       flush: () => requireCtx().outbox.idle(),
     },
@@ -604,7 +635,10 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       pendingOffers: () => ctx?.history.pendingOffers() ?? NO_OFFERS,
       refreshOffers: () => requireCtx().history.refreshOffers(),
       accept: (id) => requireCtx().history.accept(id),
-      offerTo: (id) => requireCtx().history.offerTo(id).then(() => undefined),
+      offerTo: (id) =>
+        requireCtx()
+          .history.offerTo(id)
+          .then(() => undefined),
     },
     backup: {
       status: () => ctx?.backup.status() ?? NO_BACKUP,

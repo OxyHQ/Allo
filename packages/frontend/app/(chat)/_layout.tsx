@@ -64,7 +64,13 @@ function SplitShell({ split }: { split: boolean }) {
 
   const ownProfile = profileHref(user?.username);
   const onProfile = Boolean(ownProfile) && pathname === ownProfile;
-  const selected = onProfile ? 'profile' : pathname.startsWith('/calls') ? 'calls' : pathname.startsWith('/updates') ? 'updates' : 'chats';
+  const selected = onProfile
+    ? 'profile'
+    : pathname.startsWith('/calls')
+      ? 'calls'
+      : pathname.startsWith('/updates')
+        ? 'updates'
+        : 'chats';
 
   // The rail carries navigation only (an account block belongs to the panel
   // variant), so the person's own profile is a foot item rather than a card.

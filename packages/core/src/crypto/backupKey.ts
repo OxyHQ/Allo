@@ -11,14 +11,19 @@
  * before a single chunk is downloaded. The phrase is never persisted and
  * never logged; only the derived key is kept, in the host's `SecretStore`.
  */
-import { entropyToMnemonic, generateMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english";
-import { expand as hkdfExpand, extract as hkdfExtract } from "@noble/hashes/hkdf.js";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { BACKUP_KDF_SALT, BACKUP_KEY_CHECK_MESSAGE } from "@allo/shared-types";
-import { RecoveryPhraseError } from "../errors";
-import { base64Decode, base64Encode, bytesEqual, utf8Encode } from "../util/bytes";
+import {
+  entropyToMnemonic,
+  generateMnemonic,
+  mnemonicToEntropy,
+  validateMnemonic,
+} from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english';
+import { expand as hkdfExpand, extract as hkdfExtract } from '@noble/hashes/hkdf.js';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { BACKUP_KDF_SALT, BACKUP_KEY_CHECK_MESSAGE } from '@allo/shared-types';
+import { RecoveryPhraseError } from '../errors';
+import { base64Decode, base64Encode, bytesEqual, utf8Encode } from '../util/bytes';
 
 export const BACKUP_KEY_BYTES = 32;
 export const RECOVERY_PHRASE_WORDS = 12;
@@ -35,12 +40,12 @@ export function generateRecoveryPhrase(): string {
 
 /** Lower-cases and collapses whitespace so what the user typed compares as the words alone. */
 export function normalizeRecoveryPhrase(phrase: string): string {
-  return phrase.trim().toLowerCase().split(/\s+/).join(" ");
+  return phrase.trim().toLowerCase().split(/\s+/).join(' ');
 }
 
 export function validateRecoveryPhrase(phrase: string): boolean {
   const normalized = normalizeRecoveryPhrase(phrase);
-  if (normalized.split(" ").length !== RECOVERY_PHRASE_WORDS) return false;
+  if (normalized.split(' ').length !== RECOVERY_PHRASE_WORDS) return false;
   return validateMnemonic(normalized, wordlist);
 }
 
@@ -51,7 +56,8 @@ export function canonicalRecoveryPhrase(phrase: string): string {
 
 function phraseEntropy(phrase: string): Uint8Array {
   const normalized = normalizeRecoveryPhrase(phrase);
-  if (!validateRecoveryPhrase(normalized)) throw new RecoveryPhraseError("not a valid 12-word recovery phrase");
+  if (!validateRecoveryPhrase(normalized))
+    throw new RecoveryPhraseError('not a valid 12-word recovery phrase');
   return mnemonicToEntropy(normalized, wordlist);
 }
 

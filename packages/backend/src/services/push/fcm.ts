@@ -1,9 +1,9 @@
-import { cert, getApp, initializeApp, type ServiceAccount } from "firebase-admin/app";
-import { getMessaging, type Message } from "firebase-admin/messaging";
+import { cert, getApp, initializeApp, type ServiceAccount } from 'firebase-admin/app';
+import { getMessaging, type Message } from 'firebase-admin/messaging';
 
-import type { FcmCredentials } from "../../config/push";
-import { logger } from "../../utils/logger";
-import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from "./delivery";
+import type { FcmCredentials } from '../../config/push';
+import { logger } from '../../utils/logger';
+import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from './delivery';
 
 /**
  * Android delivery, through Firebase Cloud Messaging.
@@ -31,7 +31,7 @@ import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } fr
  * the process has initialised Firebase. A name of our own means the two cannot
  * collide.
  */
-const FIREBASE_APP_NAME = "allo-push";
+const FIREBASE_APP_NAME = 'allo-push';
 
 /**
  * The FCM error codes that mean the token is permanently gone.
@@ -55,15 +55,13 @@ const FIREBASE_APP_NAME = "allo-push";
  * screen to say so.
  */
 const PERMANENTLY_INVALID_CODES: ReadonlySet<string> = new Set([
-  "messaging/registration-token-not-registered",
-  "messaging/invalid-registration-token",
-  "messaging/invalid-recipient",
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-recipient',
 ]);
 
 /** What the sender needs of FCM, so a test can supply it without a project. */
-export type FcmTransport = (
-  messages: readonly Message[],
-) => Promise<readonly FcmTransportResult[]>;
+export type FcmTransport = (messages: readonly Message[]) => Promise<readonly FcmTransportResult[]>;
 
 /** One message's outcome, in the same order as the messages sent. */
 export interface FcmTransportResult {
@@ -75,7 +73,7 @@ export interface FcmTransportResult {
 
 export function createFcmSender(transport: FcmTransport): PushSender {
   return {
-    platform: "android",
+    platform: 'android',
     async send(devices, notification) {
       const messages = devices.map((device) => buildMessage(device, notification));
 
@@ -88,9 +86,9 @@ export function createFcmSender(transport: FcmTransport): PushSender {
          * says anything about any individual token, so every device is a
          * transient failure and every token survives.
          */
-        logger.error("[Push] FCM refused the whole batch", error);
+        logger.error('[Push] FCM refused the whole batch', error);
         const reason = error instanceof Error ? error.message : String(error);
-        return devices.map(() => ({ kind: "failed", reason }) as const);
+        return devices.map(() => ({ kind: 'failed', reason }) as const);
       }
 
       if (results.length !== devices.length) {
@@ -100,12 +98,12 @@ export function createFcmSender(transport: FcmTransport): PushSender {
          * all of them is the only safe reading: the alternative is attributing
          * somebody else's rejection to a live device.
          */
-        logger.error("[Push] FCM returned a result count that does not match the batch", {
+        logger.error('[Push] FCM returned a result count that does not match the batch', {
           sent: devices.length,
           received: results.length,
         });
         return devices.map(
-          () => ({ kind: "failed", reason: "mismatched FCM result count" }) as const,
+          () => ({ kind: 'failed', reason: 'mismatched FCM result count' }) as const,
         );
       }
 
@@ -116,17 +114,17 @@ export function createFcmSender(transport: FcmTransport): PushSender {
 
 function outcomeFor(result: FcmTransportResult): PushDeliveryOutcome {
   if (result.success) {
-    return { kind: "delivered" };
+    return { kind: 'delivered' };
   }
-  const code = result.code ?? "unknown";
+  const code = result.code ?? 'unknown';
   if (PERMANENTLY_INVALID_CODES.has(code)) {
-    return { kind: "rejected", reason: code };
+    return { kind: 'rejected', reason: code };
   }
-  logger.warn("[Push] FCM did not deliver, and the token is being kept", {
+  logger.warn('[Push] FCM did not deliver, and the token is being kept', {
     code,
     message: result.message,
   });
-  return { kind: "failed", reason: code };
+  return { kind: 'failed', reason: code };
 }
 
 function buildMessage(device: PushDevice, notification: PushNotification): Message {
@@ -136,8 +134,8 @@ function buildMessage(device: PushDevice, notification: PushNotification): Messa
     notification: { title: notification.title, body: notification.body },
     android: {
       /** A message is worth waking the device for. */
-      priority: "high",
-      notification: { channelId: "default" },
+      priority: 'high',
+      notification: { channelId: 'default' },
     },
   };
 }
@@ -165,7 +163,7 @@ export function createFirebaseTransport(credentials: FcmCredentials): FcmTranspo
         { credential: cert(serviceAccount), projectId: credentials.projectId },
         FIREBASE_APP_NAME,
       );
-      logger.info("[Push] Firebase Admin initialised for FCM");
+      logger.info('[Push] Firebase Admin initialised for FCM');
     }
     initialized = true;
   };

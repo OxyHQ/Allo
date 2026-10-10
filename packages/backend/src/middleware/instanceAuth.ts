@@ -25,9 +25,9 @@
  * dependency, and no key ever has to be re-encoded at rest.
  */
 
-import { createHash, verify as verifySignature } from "node:crypto";
-import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { getRequiredOxyUserId } from "@oxy.so/core/server";
+import { createHash, verify as verifySignature } from 'node:crypto';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
   INSTANCE_HEADER,
   MAX_CLOCK_SKEW_MS,
@@ -36,11 +36,15 @@ import {
   ed25519SignatureSchema,
   instanceIdSchema,
   signedRequestMessage,
-} from "@allo/shared-types";
-import { findInstanceById, touchLastSeen, type InstanceRow } from "../db/platform/instanceRepository";
-import { getDb, type AlloDatabase } from "../db";
-import { logger } from "../utils/logger";
-import { AlloHttpError, forbidden, unauthorized } from "../utils/httpErrors";
+} from '@allo/shared-types';
+import {
+  findInstanceById,
+  touchLastSeen,
+  type InstanceRow,
+} from '../db/platform/instanceRepository';
+import { getDb, type AlloDatabase } from '../db';
+import { logger } from '../utils/logger';
+import { AlloHttpError, forbidden, unauthorized } from '../utils/httpErrors';
 
 /** What a route learns about the caller once the signature has verified. */
 export interface AuthenticatedInstance {
@@ -48,34 +52,43 @@ export interface AuthenticatedInstance {
   accountId: string;
   appId: string;
   /** `active`, or `pending` on the one path that admits it (the socket handshake). */
-  status: "active" | "pending";
+  status: 'active' | 'pending';
 }
 
-const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const RAW_KEY_LENGTH = 32;
 
 /** Wrap a raw 32-byte Ed25519 public key as SPKI DER. Returns null on any other length. */
 export function spkiFromRawEd25519(rawBase64: string): Buffer | null {
-  const raw = Buffer.from(rawBase64, "base64");
+  const raw = Buffer.from(rawBase64, 'base64');
   if (raw.length !== RAW_KEY_LENGTH) return null;
   return Buffer.concat([ED25519_SPKI_PREFIX, raw]);
 }
 
 /** Ed25519 over the UTF-8 bytes of `message`; false on any malformed input rather than a throw. */
-export function verifyEd25519(message: string, signatureBase64: string, publicKeyBase64: string): boolean {
+export function verifyEd25519(
+  message: string,
+  signatureBase64: string,
+  publicKeyBase64: string,
+): boolean {
   const spki = spkiFromRawEd25519(publicKeyBase64);
   if (!spki) return false;
-  const signature = Buffer.from(signatureBase64, "base64");
+  const signature = Buffer.from(signatureBase64, 'base64');
   if (signature.length !== 64) return false;
   try {
-    return verifySignature(null, Buffer.from(message, "utf8"), { key: spki, format: "der", type: "spki" }, signature);
+    return verifySignature(
+      null,
+      Buffer.from(message, 'utf8'),
+      { key: spki, format: 'der', type: 'spki' },
+      signature,
+    );
   } catch {
     return false;
   }
 }
 
 export function sha256Hex(bytes: Buffer | string): string {
-  return createHash("sha256").update(bytes).digest("hex");
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 /** The body bytes a signature covers: what the parser stashed, or nothing. */
@@ -120,26 +133,35 @@ export async function authenticateInstance(
   deps: InstanceAuthDeps = {},
 ): Promise<AuthenticatedInstance> {
   const now = deps.now ?? Date.now;
-  const findInstance = deps.findInstance ?? ((id: string) => findInstanceById(id, (deps.getDb ?? getDb)()));
+  const findInstance =
+    deps.findInstance ?? ((id: string) => findInstanceById(id, (deps.getDb ?? getDb)()));
 
   const instanceId = instanceIdSchema.safeParse(input.instanceId);
   const signature = ed25519SignatureSchema.safeParse(input.signature);
-  const timestampText = typeof input.timestamp === "number" ? String(input.timestamp) : input.timestamp;
-  if (!instanceId.success || !signature.success || typeof timestampText !== "string" || !TIMESTAMP_PATTERN.test(timestampText)) {
-    throw unauthorized("Instance signature headers are missing or malformed");
+  const timestampText =
+    typeof input.timestamp === 'number' ? String(input.timestamp) : input.timestamp;
+  if (
+    !instanceId.success ||
+    !signature.success ||
+    typeof timestampText !== 'string' ||
+    !TIMESTAMP_PATTERN.test(timestampText)
+  ) {
+    throw unauthorized('Instance signature headers are missing or malformed');
   }
   const timestampMs = Number(timestampText);
   if (!Number.isSafeInteger(timestampMs) || Math.abs(now() - timestampMs) > MAX_CLOCK_SKEW_MS) {
-    throw unauthorized("Instance signature timestamp is outside the accepted window");
+    throw unauthorized('Instance signature timestamp is outside the accepted window');
   }
 
   const instance = await findInstance(instanceId.data);
-  if (!instance) throw unauthorized("Unknown instance");
-  if (instance.accountId !== input.accountId) throw forbidden("The instance belongs to another account");
-  if (instance.status === "pending" && !input.allowPending) {
-    throw new AlloHttpError("instance_not_active", "The instance is awaiting approval");
+  if (!instance) throw unauthorized('Unknown instance');
+  if (instance.accountId !== input.accountId)
+    throw forbidden('The instance belongs to another account');
+  if (instance.status === 'pending' && !input.allowPending) {
+    throw new AlloHttpError('instance_not_active', 'The instance is awaiting approval');
   }
-  if (instance.status === "revoked") throw new AlloHttpError("instance_revoked", "The instance was revoked");
+  if (instance.status === 'revoked')
+    throw new AlloHttpError('instance_revoked', 'The instance was revoked');
 
   const message = signedRequestMessage({
     method: input.method,
@@ -148,9 +170,14 @@ export async function authenticateInstance(
     bodySha256Hex: input.bodySha256Hex,
   });
   if (!verifyEd25519(message, signature.data, instance.signingPublicKey)) {
-    throw unauthorized("Instance signature does not verify");
+    throw unauthorized('Instance signature does not verify');
   }
-  return { id: instance.id, accountId: instance.accountId, appId: instance.appId, status: instance.status };
+  return {
+    id: instance.id,
+    accountId: instance.accountId,
+    appId: instance.appId,
+    status: instance.status,
+  };
 }
 
 /** The HTTP middleware. Sets `req.instance` and touches `last_seen_at` (best effort). */
@@ -172,7 +199,7 @@ export function requireInstance(deps: InstanceAuthDeps = {}): RequestHandler {
       );
       req.instance = instance;
       touchLastSeen(instance.id, (deps.getDb ?? getDb)()).catch((error: unknown) => {
-        logger.debug("last_seen_at update failed", error);
+        logger.debug('last_seen_at update failed', error);
       });
     })().then(() => next(), next);
   };
@@ -181,7 +208,7 @@ export function requireInstance(deps: InstanceAuthDeps = {}): RequestHandler {
 /** For a route behind {@link requireInstance}: the instance, or a 500 if the mount order is wrong. */
 export function getRequiredInstance(req: Request): AuthenticatedInstance {
   if (!req.instance) {
-    throw new Error("requireInstance() did not run ahead of this route");
+    throw new Error('requireInstance() did not run ahead of this route');
   }
   return req.instance;
 }

@@ -2,7 +2,11 @@ import { observeEdgeRequest } from '@oxy.so/telemetry/edge';
 
 import { handleWellKnown } from './appAssociation.js';
 
-const assetWorker = { fetch(request, env) { return env.ASSETS.fetch(request); } };
+const assetWorker = {
+  fetch(request, env) {
+    return env.ASSETS.fetch(request);
+  },
+};
 
 /**
  * `/.well-known/*` is answered here (App Links and Universal Links documents, a
@@ -15,6 +19,12 @@ function route(request, env, ctx) {
 
 export default {
   fetch(request, env, ctx) {
-    return observeEdgeRequest({ service: 'allo', request, env, ctx, next: () => route(request, env, ctx) });
+    return observeEdgeRequest({
+      service: 'allo',
+      request,
+      env,
+      ctx,
+      next: () => route(request, env, ctx),
+    });
   },
 };

@@ -1,10 +1,10 @@
-import { getDb } from "../../db";
+import { getDb } from '../../db';
 import {
   markModerationEventIgnored,
   markModerationEventQueued,
-} from "../../db/moderation/moderationEventRepository";
-import { enqueueModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
-import { decisionApplyEventId } from "./ModerationOutboxService";
+} from '../../db/moderation/moderationEventRepository';
+import { enqueueModerationOutboxEvent } from '../../db/moderation/moderationOutboxRepository';
+import { decisionApplyEventId } from './ModerationOutboxService';
 
 /**
  * What happens between "a signed decision arrived" and "2xx".
@@ -58,7 +58,7 @@ export async function recordDecisionEvent(input: RecordDecisionEventInput): Prom
     await enqueueModerationOutboxEvent(
       {
         eventId: decisionApplyEventId(input.eventId),
-        kind: "decision.apply",
+        kind: 'decision.apply',
         payload: {
           eventId: input.eventId,
           caseId: input.caseId,

@@ -35,18 +35,20 @@ export interface LiveKitConfig {
 export const DEFAULT_SFU_TTL_SECONDS = 3600;
 
 export function readLiveKitConfig(env: NodeJS.ProcessEnv = process.env): LiveKitConfig | null {
-  const url = (env.LIVEKIT_URL ?? "").trim();
-  const apiKey = (env.LIVEKIT_API_KEY ?? "").trim();
-  const apiSecret = (env.LIVEKIT_API_SECRET ?? "").trim();
+  const url = (env.LIVEKIT_URL ?? '').trim();
+  const apiKey = (env.LIVEKIT_API_KEY ?? '').trim();
+  const apiSecret = (env.LIVEKIT_API_SECRET ?? '').trim();
   const present = [url, apiKey, apiSecret].filter((value) => value.length > 0).length;
   if (present === 0) return null;
   if (present < 3) {
-    throw new Error("LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set together or not at all");
+    throw new Error(
+      'LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be set together or not at all',
+    );
   }
 
   const ttl = Number(env.LIVEKIT_TTL_SECONDS ?? DEFAULT_SFU_TTL_SECONDS);
   if (!Number.isFinite(ttl) || ttl < 60 || ttl > 86_400) {
-    throw new Error("LIVEKIT_TTL_SECONDS must be between 60 and 86400");
+    throw new Error('LIVEKIT_TTL_SECONDS must be between 60 and 86400');
   }
   return { url, apiKey, apiSecret, ttlSeconds: ttl };
 }

@@ -8,11 +8,27 @@
  * network, a store or React. People arrive through `ChatContext.person`, which
  * the screens back with the people layer (`lib/allo/people.ts`).
  */
-import type { CallLogView, ConversationView, MediaView, SendState, TimelineContent, TimelineItemView } from '@allo/core';
+import type {
+  CallLogView,
+  ConversationView,
+  MediaView,
+  SendState,
+  TimelineContent,
+  TimelineItemView,
+} from '@allo/core';
 import type { MessageDeliveryStatus } from '@oxy.so/bloom/chat-indicators';
 import type { ChatPinnedMessage } from '@oxy.so/bloom/chat-screen';
-import type { ChatAttachmentKind, ChatFace, ChatPreview, ChatSummary } from '@oxy.so/bloom/chat-list';
-import type { MessageListItem, MessageReaction, MessageReplyPreview } from '@oxy.so/bloom/message-bubble';
+import type {
+  ChatAttachmentKind,
+  ChatFace,
+  ChatPreview,
+  ChatSummary,
+} from '@oxy.so/bloom/chat-list';
+import type {
+  MessageListItem,
+  MessageReaction,
+  MessageReplyPreview,
+} from '@oxy.so/bloom/message-bubble';
 
 import type { Person } from '@/lib/allo/people';
 import { dayKey, formatDay, formatListTime, formatTime, type Translate } from './format';
@@ -84,7 +100,9 @@ export function previewText(item: TimelineItemView, t: Translate): string {
     case 'contact':
       return content.contact.name;
     case 'sticker':
-      return content.sticker.emoji ? `${content.sticker.emoji} ${t('chat.attachment.sticker')}` : t('chat.attachment.sticker');
+      return content.sticker.emoji
+        ? `${content.sticker.emoji} ${t('chat.attachment.sticker')}`
+        : t('chat.attachment.sticker');
     case 'call':
       return callSummary(content.call, t);
     case 'deleted':
@@ -120,11 +138,15 @@ export function conversationTitle(view: ConversationView, ctx: ChatContext): str
   const members = others(view, ctx.me);
   if (view.kind === 'dm') return members[0] ? nameOf(members[0], ctx) : '';
   if (view.title) return view.title;
-  const named = members.map((id) => ctx.person(id)?.displayName).filter((name): name is string => Boolean(name));
+  const named = members
+    .map((id) => ctx.person(id)?.displayName)
+    .filter((name): name is string => Boolean(name));
   if (named.length === 0) return '';
   const shown = named.slice(0, GROUP_TITLE_NAMES);
   const rest = members.length - shown.length;
-  return rest > 0 ? ctx.t('chat.group.titleMore', { names: shown.join(', '), count: rest }) : shown.join(', ');
+  return rest > 0
+    ? ctx.t('chat.group.titleMore', { names: shown.join(', '), count: rest })
+    : shown.join(', ');
 }
 
 /** A DM's avatar: the other person's Oxy file id or URL, which Bloom's image resolver loads. */
@@ -135,7 +157,10 @@ export function conversationAvatar(view: ConversationView, ctx: ChatContext): st
 }
 
 /** A group's avatar: up to four of its other members. */
-export function conversationFaces(view: ConversationView, ctx: ChatContext): ChatFace[] | undefined {
+export function conversationFaces(
+  view: ConversationView,
+  ctx: ChatContext,
+): ChatFace[] | undefined {
   if (view.kind !== 'group') return undefined;
   return others(view, ctx.me)
     .slice(0, 4)
@@ -233,7 +258,8 @@ export interface ComposerNotice extends JoinNotice {
 }
 
 export function composerNotice(view: ConversationView, t: Translate): ComposerNotice | null {
-  if (view.integrity === 'refused_commit') return { text: t('chat.integrity.refused'), busy: false, error: true };
+  if (view.integrity === 'refused_commit')
+    return { text: t('chat.integrity.refused'), busy: false, error: true };
   const join = joinNotice(view, t);
   return join ? { ...join, error: false } : null;
 }
@@ -291,7 +317,10 @@ export function chatSummary(view: ConversationView, ctx: ChatContext): ChatSumma
  * Bloom's `PinnedMessageBar` draws. A pin is an encrypted control message the
  * SDK folds onto its target, so this is only a reading of the timeline.
  */
-export function pinnedMessages(items: readonly TimelineItemView[], ctx: ChatContext): ChatPinnedMessage[] {
+export function pinnedMessages(
+  items: readonly TimelineItemView[],
+  ctx: ChatContext,
+): ChatPinnedMessage[] {
   return items
     .filter((item) => item.pinned)
     .map((item) => ({
@@ -325,7 +354,10 @@ export interface TranscriptOptions {
   stalledLabel?: string | null;
 }
 
-function reactionsOf(item: TimelineItemView, me: string | undefined): MessageReaction[] | undefined {
+function reactionsOf(
+  item: TimelineItemView,
+  me: string | undefined,
+): MessageReaction[] | undefined {
   if (item.reactions.length === 0) return undefined;
   return item.reactions.map(({ key, accountIds }) => ({
     emoji: key,
@@ -359,13 +391,20 @@ export function transcriptItems(
   const byId = new Map(items.map((item) => [item.id, item]));
   return items.map((item) => {
     const sentAt = new Date(item.sentAt);
-    const holdLabel = !item.isOwn || !item.holdReason ? undefined : item.holdReason === 'epoch_stalled' ? options.stalledLabel : options.holdLabel;
+    const holdLabel =
+      !item.isOwn || !item.holdReason
+        ? undefined
+        : item.holdReason === 'epoch_stalled'
+          ? options.stalledLabel
+          : options.holdLabel;
     const base: MessageListItem = {
       id: item.id,
       direction: item.isOwn ? 'outgoing' : 'incoming',
       senderId: item.senderAccountId,
-      senderName: options.isGroup && !item.isOwn ? ctx.person(item.senderAccountId)?.displayName : undefined,
-      avatarSource: options.isGroup && !item.isOwn ? ctx.person(item.senderAccountId)?.avatar : undefined,
+      senderName:
+        options.isGroup && !item.isOwn ? ctx.person(item.senderAccountId)?.displayName : undefined,
+      avatarSource:
+        options.isGroup && !item.isOwn ? ctx.person(item.senderAccountId)?.avatar : undefined,
       dateKey: dayKey(sentAt),
       dateLabel: formatDay(sentAt, ctx.now, ctx.locale, ctx.t),
       unreadBefore: item.id === options.firstUnreadId,
@@ -381,7 +420,11 @@ export function transcriptItems(
     const content = item.content;
     switch (content.kind) {
       case 'text':
-        return { ...base, text: content.body, editedLabel: content.isEdited ? ctx.t('message.edited') : undefined };
+        return {
+          ...base,
+          text: content.body,
+          editedLabel: content.isEdited ? ctx.t('message.edited') : undefined,
+        };
       case 'media':
         return { ...base, text: content.media.caption || undefined };
       // A poll, a place, a card and a sticker are drawn by the media slot the
@@ -411,7 +454,10 @@ export function transcriptItems(
  * reports only a count, so it is the `unreadCount`-th incoming message from
  * the end.
  */
-export function firstUnreadId(items: readonly TimelineItemView[], unreadCount: number): string | undefined {
+export function firstUnreadId(
+  items: readonly TimelineItemView[],
+  unreadCount: number,
+): string | undefined {
   if (unreadCount <= 0) return undefined;
   let seen = 0;
   for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -421,7 +467,6 @@ export function firstUnreadId(items: readonly TimelineItemView[], unreadCount: n
   }
   return undefined;
 }
-
 
 /**
  * A finished call, in one line.
@@ -440,7 +485,9 @@ export function callSummary(call: CallLogView, t: Translate): string {
     case 'not_answered':
       return call.incoming ? t('calls.log.missed', { kind }) : t('calls.log.noAnswer', { kind });
     case 'declined':
-      return call.incoming ? t('calls.log.declined', { kind }) : t('calls.log.declinedByThem', { kind });
+      return call.incoming
+        ? t('calls.log.declined', { kind })
+        : t('calls.log.declinedByThem', { kind });
     case 'cancelled':
       return call.incoming ? t('calls.log.missed', { kind }) : t('calls.log.cancelled', { kind });
     case 'failed':

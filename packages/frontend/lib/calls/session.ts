@@ -133,7 +133,10 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 
 function subscribeToTick(listener: () => void): () => void {
   tickListeners.add(listener);
-  if (!tickTimer) tickTimer = setInterval(() => { for (const l of [...tickListeners]) l(); }, 1000);
+  if (!tickTimer)
+    tickTimer = setInterval(() => {
+      for (const l of [...tickListeners]) l();
+    }, 1000);
   return () => {
     tickListeners.delete(listener);
     if (tickListeners.size === 0 && tickTimer) {
@@ -152,7 +155,11 @@ const secondNow = () => Math.floor(Date.now() / 1000);
 export function useCallDuration(session: CallSession | null): string {
   const connectedAt = session?.connectedAt;
   // No call, no clock: the pill calls this on every screen of the app.
-  const second = useSyncExternalStore(connectedAt === undefined ? noTick : subscribeToTick, secondNow, secondNow);
+  const second = useSyncExternalStore(
+    connectedAt === undefined ? noTick : subscribeToTick,
+    secondNow,
+    secondNow,
+  );
   if (connectedAt === undefined) return '';
   return formatCallDuration(second * 1000 - connectedAt);
 }

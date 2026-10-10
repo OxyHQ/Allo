@@ -104,7 +104,11 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
         { label: t('common.cancel'), color: 'cancel' },
       ]}
     >
-      <ScrollView style={styles.body} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <TextFieldInput
           label={t('poll.compose.question')}
           placeholder={t('poll.compose.questionPlaceholder')}
@@ -141,7 +145,7 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
         ))}
 
         {options.length < POLL_MAX_OPTIONS ? (
-          <Button  icon={RiAddLine} onPress={addOption} tone="accent" appearance="plain">
+          <Button icon={RiAddLine} onPress={addOption} tone="accent" appearance="plain">
             {t('poll.compose.addOption')}
           </Button>
         ) : null}

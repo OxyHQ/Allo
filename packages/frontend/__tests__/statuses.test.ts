@@ -3,7 +3,13 @@
  */
 import type { StatusView } from '@allo/react';
 
-import { firstUnseenIndex, ringState, statusAgeLabel, statusAuthors, statusRemainingLabel } from '@/lib/statuses';
+import {
+  firstUnseenIndex,
+  ringState,
+  statusAgeLabel,
+  statusAuthors,
+  statusRemainingLabel,
+} from '@/lib/statuses';
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 const t = (key: string, options?: Record<string, unknown>) =>
@@ -30,7 +36,13 @@ describe('statusAuthors', () => {
     const authors = statusAuthors([
       status({ id: 'a1', authorAccountId: 'acc-ana', createdAt: ago(60_000) }),
       status({ id: 'a2', authorAccountId: 'acc-ana', createdAt: ago(3_600_000) }),
-      status({ id: 'm1', authorAccountId: 'acc-me', mine: true, seen: true, createdAt: ago(7_200_000) }),
+      status({
+        id: 'm1',
+        authorAccountId: 'acc-me',
+        mine: true,
+        seen: true,
+        createdAt: ago(7_200_000),
+      }),
       status({ id: 'b1', authorAccountId: 'acc-bo', createdAt: ago(120_000) }),
     ]);
 

@@ -29,7 +29,9 @@ export default function LanguageSettingsScreen() {
           >
             <Button
               onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
-              accessibilityLabel={t('settings.preferences.language')} tone="neutral" appearance="outline"
+              accessibilityLabel={t('settings.preferences.language')}
+              tone="neutral"
+              appearance="outline"
             >
               {t('common.open')}
             </Button>

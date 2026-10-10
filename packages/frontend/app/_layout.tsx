@@ -101,7 +101,9 @@ export default function RootLayout() {
   useHideNativeSplashWhenReady(ready);
 
   useEffect(() => {
-    AppInitializer.initializeI18n().catch((error) => console.error('Failed to initialize i18n:', error));
+    AppInitializer.initializeI18n().catch((error) =>
+      console.error('Failed to initialize i18n:', error),
+    );
     AppInitializer.initializeApp().finally(() => setInitialized(true));
   }, []);
 
@@ -118,7 +120,9 @@ export default function RootLayout() {
               gates the app on this device's enrollment. */}
           <AlloRoot>
             {!IS_WEB && <NotificationPermissionGate />}
-            <NavigationTheme><RootStack /></NavigationTheme>
+            <NavigationTheme>
+              <RootStack />
+            </NavigationTheme>
           </AlloRoot>
         </AppProviders>
       ) : IS_WEB ? (

@@ -1,8 +1,8 @@
-import type { ProcessedEventStore } from "@crowdsource.you/core/express";
+import type { ProcessedEventStore } from '@crowdsource.you/core/express';
 import {
   claimModerationEvent,
   releaseModerationEvent,
-} from "../../db/moderation/moderationEventRepository";
+} from '../../db/moderation/moderationEventRepository';
 
 /**
  * The webhook dedupe store, in Postgres.

@@ -47,8 +47,16 @@ jest.mock('expo-router', () => ({
 }));
 
 // The people layer asks Oxy through this singleton; the answer is a fixture.
-const mockDirectory: Record<string, { id: string; username: string; name: { displayName: string }; avatar?: string }> = {
-  'acc-tree-alice': { id: 'acc-tree-alice', username: 'alice', name: { displayName: 'Alice' }, avatar: 'file-alice' },
+const mockDirectory: Record<
+  string,
+  { id: string; username: string; name: { displayName: string }; avatar?: string }
+> = {
+  'acc-tree-alice': {
+    id: 'acc-tree-alice',
+    username: 'alice',
+    name: { displayName: 'Alice' },
+    avatar: 'file-alice',
+  },
   'acc-tree-bob': { id: 'acc-tree-bob', username: 'bob', name: { displayName: 'Bob' } },
 };
 jest.mock('@/lib/oxy', () => ({
@@ -60,14 +68,22 @@ jest.mock('@/lib/oxy', () => ({
 jest.mock('@oxy.so/services', () => ({
   useOxy: () => ({
     user: { id: 'acc-tree-alice', username: 'alice', name: { displayName: 'Alice' } },
-    oxyServices: { assets: { publicUrl: (fileId: string, variant?: string) => `https://files.test/${fileId}/${variant ?? 'full'}` } },
+    oxyServices: {
+      assets: {
+        publicUrl: (fileId: string, variant?: string) =>
+          `https://files.test/${fileId}/${variant ?? 'full'}`,
+      },
+    },
     isLoading: false,
     logout: jest.fn(),
   }),
 }));
 
 jest.mock('@/lib/allo/mediaSink', () => ({
-  createMediaUri: (bytes: Uint8Array, mime: string, blobId: string) => ({ uri: `mem://${blobId}?${mime}&${bytes.length}`, release: () => undefined }),
+  createMediaUri: (bytes: Uint8Array, mime: string, blobId: string) => ({
+    uri: `mem://${blobId}?${mime}&${bytes.length}`,
+    release: () => undefined,
+  }),
 }));
 
 const { createFakeAlloServer, FakeSession, MemorySecrets, MemoryStorage, until } = testing;
@@ -99,7 +115,9 @@ function ConversationList() {
       {summaries.map((chat) => (
         <View key={chat.id} testID={`row-${chat.id}`}>
           <Text testID={`row-name-${chat.id}`}>{chat.name}</Text>
-          <Text testID={`row-preview-${chat.id}`}>{chat.preview?.text ?? chat.preview?.attachment?.label ?? ''}</Text>
+          <Text testID={`row-preview-${chat.id}`}>
+            {chat.preview?.text ?? chat.preview?.attachment?.label ?? ''}
+          </Text>
         </View>
       ))}
     </View>
@@ -118,14 +136,24 @@ function ConversationScreen({ conversationId }: { conversationId: string }) {
       <Text>{typing ? 'typing' : ''}</Text>
       {rows.map((row) => {
         const content = sources.get(row.id)?.content;
-        return <MessageRow key={row.id} row={row} media={content?.kind === 'media' ? content.media : undefined} />;
+        return (
+          <MessageRow
+            key={row.id}
+            row={row}
+            media={content?.kind === 'media' ? content.media : undefined}
+          />
+        );
       })}
     </View>
   );
 }
 
 function MessageRow({ row, media }: { row: MessageListItem; media?: MediaView }) {
-  const thumb = useMediaUri(media?.thumbnail?.ref ?? media?.ref, media?.mime ?? 'application/octet-stream', media !== undefined);
+  const thumb = useMediaUri(
+    media?.thumbnail?.ref ?? media?.ref,
+    media?.mime ?? 'application/octet-stream',
+    media !== undefined,
+  );
   return (
     <View testID={`message-${row.id}`}>
       <Text testID={`sender-${row.id}`}>{row.senderId ?? ''}</Text>
@@ -149,8 +177,13 @@ function App({ client, openConversationId }: { client: AlloClient; openConversat
   );
 }
 
-const LOOP_SIGNATURES = [/Maximum update depth/i, /getSnapshot should be cached/i, /infinite loop/i];
-const isLoopReport = (value: unknown): boolean => LOOP_SIGNATURES.some((re) => re.test(String(value instanceof Error ? value.message : value)));
+const LOOP_SIGNATURES = [
+  /Maximum update depth/i,
+  /getSnapshot should be cached/i,
+  /infinite loop/i,
+];
+const isLoopReport = (value: unknown): boolean =>
+  LOOP_SIGNATURES.some((re) => re.test(String(value instanceof Error ? value.message : value)));
 
 function text(renderer: TestRenderer.ReactTestRenderer, testID: string): string {
   const node = renderer.root.findAll((n) => n.props.testID === testID && n.type === Text)[0];
@@ -200,7 +233,10 @@ describe('the post-login tree', () => {
     } catch (error) {
       thrown = error;
     }
-    expect({ thrown: thrown instanceof Error ? thrown.message : thrown, logged: reported.filter(isLoopReport) }).toEqual({ thrown: undefined, logged: [] });
+    expect({
+      thrown: thrown instanceof Error ? thrown.message : thrown,
+      logged: reported.filter(isLoopReport),
+    }).toEqual({ thrown: undefined, logged: [] });
     if (!renderer) throw new Error('did not mount');
 
     // 2. The client starts underneath the mounted tree.
@@ -221,7 +257,12 @@ describe('the post-login tree', () => {
       conversationId = conversation.id;
     });
     await waitUntil(() => bob.conversations.get(conversationId)?.joined === true);
-    await waitUntil(() => renderer!.root.findAll((n) => n.props.testID === `row-name-${conversationId}` && n.type === Text).length > 0);
+    await waitUntil(
+      () =>
+        renderer!.root.findAll(
+          (n) => n.props.testID === `row-name-${conversationId}` && n.type === Text,
+        ).length > 0,
+    );
     await waitUntil(() => text(renderer!, `row-name-${conversationId}`) === 'Bob', 10_000);
     expect(reported.filter(isLoopReport)).toEqual([]);
 
@@ -248,11 +289,24 @@ describe('the post-login tree', () => {
       await alice.sync.now();
     });
     await waitUntil(() => alice.messages.timeline(conversationId).length >= 2, 20_000);
-    await waitUntil(() => renderer!.root.findAll((n) => n.props.testID?.startsWith('media-') && n.type === Text && String(React.Children.toArray(n.props.children).join('')).startsWith('mem://')).length > 0, 20_000);
+    await waitUntil(
+      () =>
+        renderer!.root.findAll(
+          (n) =>
+            n.props.testID?.startsWith('media-') &&
+            n.type === Text &&
+            String(React.Children.toArray(n.props.children).join('')).startsWith('mem://'),
+        ).length > 0,
+      20_000,
+    );
 
-    const messageTexts = renderer.root.findAll((n) => n.props.testID?.startsWith('text-') && n.type === Text).map((n) => String(React.Children.toArray(n.props.children).join('')));
+    const messageTexts = renderer.root
+      .findAll((n) => n.props.testID?.startsWith('text-') && n.type === Text)
+      .map((n) => String(React.Children.toArray(n.props.children).join('')));
     expect(messageTexts).toContain('hello from bob');
-    const senders = renderer.root.findAll((n) => n.props.testID?.startsWith('sender-') && n.type === Text).map((n) => String(React.Children.toArray(n.props.children).join('')));
+    const senders = renderer.root
+      .findAll((n) => n.props.testID?.startsWith('sender-') && n.type === Text)
+      .map((n) => String(React.Children.toArray(n.props.children).join('')));
     expect(senders).toContain('acc-tree-bob');
     expect(text(renderer, `row-preview-${conversationId}`)).not.toBe('');
     expect(reported.filter(isLoopReport)).toEqual([]);

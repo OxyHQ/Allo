@@ -1,6 +1,6 @@
-import { REPORTED_TYPES } from "../../../db/schema/moderation";
-import { createUserSubjectProvider } from "./userSubject";
-import type { AccountReportedType, ModerationSubjectProvider } from "./types";
+import { REPORTED_TYPES } from '../../../db/schema/moderation';
+import { createUserSubjectProvider } from './userSubject';
+import type { AccountReportedType, ModerationSubjectProvider } from './types';
 
 /**
  * Every noun Allo can send for review, and the §5.4 type it is.
@@ -91,10 +91,9 @@ import type { AccountReportedType, ModerationSubjectProvider } from "./types";
  * registry cannot silently become empty either, which is the failure the vacuity
  * assertion in `subjectProviders.test.ts` was written to catch.
  */
-const PROVIDERS: Readonly<Record<AccountReportedType, ModerationSubjectProvider>> =
-  Object.freeze({
-    user: createUserSubjectProvider(),
-  });
+const PROVIDERS: Readonly<Record<AccountReportedType, ModerationSubjectProvider>> = Object.freeze({
+  user: createUserSubjectProvider(),
+});
 
 const BY_REPORTED_TYPE: ReadonlyMap<string, ModerationSubjectProvider> = new Map(
   Object.values(PROVIDERS).map((provider) => [provider.reportedType, provider]),
@@ -108,9 +107,7 @@ const BY_REPORTED_TYPE: ReadonlyMap<string, ModerationSubjectProvider> = new Map
  * `EvidenceSnapshotService` asks again when it builds one; a type this returns
  * `undefined` for is stored and never enqueued.
  */
-export function subjectProviderFor(
-  reportedType: string,
-): ModerationSubjectProvider | undefined {
+export function subjectProviderFor(reportedType: string): ModerationSubjectProvider | undefined {
   return BY_REPORTED_TYPE.get(reportedType);
 }
 

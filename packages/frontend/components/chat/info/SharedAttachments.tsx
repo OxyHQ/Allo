@@ -18,7 +18,10 @@ interface Attachment {
 }
 
 /** The newest attachments of these kinds, newest first. */
-function attachmentsOf(items: readonly TimelineItemView[], kinds: readonly MediaView['kind'][]): Attachment[] {
+function attachmentsOf(
+  items: readonly TimelineItemView[],
+  kinds: readonly MediaView['kind'][],
+): Attachment[] {
   const found: Attachment[] = [];
   for (let index = items.length - 1; index >= 0 && found.length < LIMIT; index -= 1) {
     const content = items[index].content;
@@ -30,9 +33,13 @@ function attachmentsOf(items: readonly TimelineItemView[], kinds: readonly Media
 }
 
 /** What a tab's count says: what the LOADED history holds, which is all this device can know. */
-export function countOf(items: readonly TimelineItemView[], kinds: readonly MediaView['kind'][]): number | undefined {
+export function countOf(
+  items: readonly TimelineItemView[],
+  kinds: readonly MediaView['kind'][],
+): number | undefined {
   const count = items.reduce(
-    (total, item) => (item.content.kind === 'media' && kinds.includes(item.content.media.kind) ? total + 1 : total),
+    (total, item) =>
+      item.content.kind === 'media' && kinds.includes(item.content.media.kind) ? total + 1 : total,
     0,
   );
   return count > 0 ? count : undefined;
@@ -52,7 +59,10 @@ export function countLinks(items: readonly TimelineItemView[]): number | undefin
 export function useLatestPicture(items: readonly TimelineItemView[]): string {
   const latest = useMemo(() => attachmentsOf(items, ['image'])[0], [items]);
   const ref = latest?.media.thumbnail?.ref ?? latest?.media.ref;
-  const { uri } = useMediaUri(ref, latest?.media.thumbnail ? 'image/jpeg' : (latest?.media.mime ?? 'image/jpeg'));
+  const { uri } = useMediaUri(
+    ref,
+    latest?.media.thumbnail ? 'image/jpeg' : (latest?.media.mime ?? 'image/jpeg'),
+  );
   return uri;
 }
 
@@ -60,7 +70,13 @@ export function useLatestPicture(items: readonly TimelineItemView[]): string {
  * Decrypts one tile's thumbnail and hands the URI up. A component rather than a
  * loop, because a hook cannot run per item of a list that changes length.
  */
-function TileSource({ attachment, onReady }: { attachment: Attachment; onReady: (id: string, uri: string) => void }) {
+function TileSource({
+  attachment,
+  onReady,
+}: {
+  attachment: Attachment;
+  onReady: (id: string, uri: string) => void;
+}) {
   const ref = attachment.media.thumbnail?.ref ?? attachment.media.ref;
   const mime = attachment.media.thumbnail ? 'image/jpeg' : attachment.media.mime;
   const { uri } = useMediaUri(ref, mime);
@@ -153,7 +169,8 @@ export function SharedLinks({ items }: { items: readonly TimelineItemView[] }) {
       const item = items[index];
       if (item.content.kind !== 'text') continue;
       for (const entity of messageEntities(item.content.body)) {
-        if (entity.type === 'link') found.push({ id: `${item.id}:${entity.start}`, url: entity.text });
+        if (entity.type === 'link')
+          found.push({ id: `${item.id}:${entity.start}`, url: entity.text });
       }
     }
     return found;

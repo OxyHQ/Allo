@@ -6,7 +6,7 @@
  * their own doc comments make.
  */
 
-import { sql } from "drizzle-orm";
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
@@ -16,9 +16,9 @@ import {
   pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
-import { checkArrayWithin, checkNonEmptyArray, checkOneOf } from "./columns";
+} from 'drizzle-orm/pg-core';
+import { createdAt, timestamptz, updatedAt } from '@oxy.so/db';
+import { checkArrayWithin, checkNonEmptyArray, checkOneOf } from './columns';
 
 /**
  * The objects Allo accepts reports about.
@@ -28,7 +28,7 @@ import { checkArrayWithin, checkNonEmptyArray, checkOneOf } from "./columns";
  * with a recorded reason, which is a different claim from "delivery failed" and
  * is kept distinguishable on purpose.
  */
-export const REPORTED_TYPES = ["user", "message", "conversation"] as const;
+export const REPORTED_TYPES = ['user', 'message', 'conversation'] as const;
 export type ReportedType = (typeof REPORTED_TYPES)[number];
 
 /**
@@ -50,46 +50,41 @@ export function isReportedType(value: string): value is ReportedType {
 }
 
 export const REPORT_CATEGORIES = [
-  "spam",
-  "hate_speech",
-  "harassment",
-  "misinformation",
-  "explicit_content",
-  "other",
+  'spam',
+  'hate_speech',
+  'harassment',
+  'misinformation',
+  'explicit_content',
+  'other',
 ] as const;
 export type ReportCategory = (typeof REPORT_CATEGORIES)[number];
 
-export const REPORT_STATUSES = ["pending", "reviewed", "resolved", "dismissed"] as const;
+export const REPORT_STATUSES = ['pending', 'reviewed', 'resolved', 'dismissed'] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 export const REPORT_LOCAL_STATUSES = [
-  "received",
-  "queued",
-  "submitted",
-  "delivery_failed",
-  "closed",
+  'received',
+  'queued',
+  'submitted',
+  'delivery_failed',
+  'closed',
 ] as const;
 export type ModerationLocalStatus = (typeof REPORT_LOCAL_STATUSES)[number];
 
-export const REPORT_ENFORCEMENT_ACTIONS = [
-  "none",
-  "restrict",
-  "restore",
-  "manual_review",
-] as const;
+export const REPORT_ENFORCEMENT_ACTIONS = ['none', 'restrict', 'restore', 'manual_review'] as const;
 export type ModerationEnforcementAction = (typeof REPORT_ENFORCEMENT_ACTIONS)[number];
 
-export const MODERATION_EVENT_STATES = ["claimed", "queued", "ignored"] as const;
+export const MODERATION_EVENT_STATES = ['claimed', 'queued', 'ignored'] as const;
 export type ModerationEventState = (typeof MODERATION_EVENT_STATES)[number];
 
-export const MODERATION_OUTBOX_KINDS = ["report.submit", "decision.apply"] as const;
+export const MODERATION_OUTBOX_KINDS = ['report.submit', 'decision.apply'] as const;
 export type ModerationOutboxKind = (typeof MODERATION_OUTBOX_KINDS)[number];
 
 export const MODERATION_OUTBOX_STATUSES = [
-  "pending",
-  "processing",
-  "processed",
-  "dead_letter",
+  'pending',
+  'processing',
+  'processed',
+  'dead_letter',
 ] as const;
 export type ModerationOutboxStatus = (typeof MODERATION_OUTBOX_STATUSES)[number];
 
@@ -126,7 +121,7 @@ export const MAX_REPORT_DELIVERY_ERROR_LENGTH = 2_000;
  * exists for the writer that does not exist yet, and for `psql`.
  */
 export const reports = pgTable(
-  "reports",
+  'reports',
   {
     id: text().primaryKey(),
     reportedType: text({ enum: REPORTED_TYPES }).notNull(),
@@ -142,8 +137,8 @@ export const reports = pgTable(
      */
     categories: text({ enum: REPORT_CATEGORIES }).array().notNull(),
     details: text(),
-    status: text({ enum: REPORT_STATUSES }).notNull().default("pending"),
-    localStatus: text({ enum: REPORT_LOCAL_STATUSES }).notNull().default("received"),
+    status: text({ enum: REPORT_STATUSES }).notNull().default('pending'),
+    localStatus: text({ enum: REPORT_LOCAL_STATUSES }).notNull().default('received'),
     localStatusReason: text(),
 
     crowdSourceReportId: text(),
@@ -169,21 +164,21 @@ export const reports = pgTable(
   },
   (t) => [
     /** One report per (reporter, subject) — a second submission is idempotent. */
-    uniqueIndex("reports_reporter_reported_id_reported_type_key").on(
+    uniqueIndex('reports_reporter_reported_id_reported_type_key').on(
       t.reporter,
       t.reportedId,
       t.reportedType,
     ),
-    index("reports_local_status_created_at_idx").on(t.localStatus, t.createdAt),
-    index("reports_crowd_source_case_id_idx").on(t.crowdSourceCaseId),
-    index("reports_reported_id_idx").on(t.reportedId),
-    checkOneOf("reports_reported_type_check", t.reportedType, REPORTED_TYPES),
-    checkOneOf("reports_status_check", t.status, REPORT_STATUSES),
-    checkOneOf("reports_local_status_check", t.localStatus, REPORT_LOCAL_STATUSES),
-    checkOneOf("reports_enforced_action_check", t.enforcedAction, REPORT_ENFORCEMENT_ACTIONS),
-    checkArrayWithin("reports_categories_within_check", t.categories, REPORT_CATEGORIES),
-    checkNonEmptyArray("reports_categories_non_empty_check", t.categories),
-    check("reports_decision_revision_check", sql`${t.decisionRevision} >= 1`),
+    index('reports_local_status_created_at_idx').on(t.localStatus, t.createdAt),
+    index('reports_crowd_source_case_id_idx').on(t.crowdSourceCaseId),
+    index('reports_reported_id_idx').on(t.reportedId),
+    checkOneOf('reports_reported_type_check', t.reportedType, REPORTED_TYPES),
+    checkOneOf('reports_status_check', t.status, REPORT_STATUSES),
+    checkOneOf('reports_local_status_check', t.localStatus, REPORT_LOCAL_STATUSES),
+    checkOneOf('reports_enforced_action_check', t.enforcedAction, REPORT_ENFORCEMENT_ACTIONS),
+    checkArrayWithin('reports_categories_within_check', t.categories, REPORT_CATEGORIES),
+    checkNonEmptyArray('reports_categories_non_empty_check', t.categories),
+    check('reports_decision_revision_check', sql`${t.decisionRevision} >= 1`),
     /**
      * `sql.raw` for the bound, so the constant is rendered as migration TEXT.
      * Interpolating it normally writes a bound-parameter placeholder (`$1`) into
@@ -191,15 +186,15 @@ export const reports = pgTable(
      * cannot carry a parameter.
      */
     check(
-      "reports_details_length_check",
+      'reports_details_length_check',
       sql.raw(`length(details) <= ${MAX_REPORT_DETAILS_LENGTH}`),
     ),
     check(
-      "reports_local_status_reason_length_check",
+      'reports_local_status_reason_length_check',
       sql.raw(`length(local_status_reason) <= ${MAX_REPORT_LOCAL_STATUS_REASON_LENGTH}`),
     ),
     check(
-      "reports_last_delivery_error_length_check",
+      'reports_last_delivery_error_length_check',
       sql.raw(`length(last_delivery_error) <= ${MAX_REPORT_DELIVERY_ERROR_LENGTH}`),
     ),
   ],
@@ -216,7 +211,7 @@ export const reports = pgTable(
  * Expired by {@link import('../expiry').EXPIRY_SWEEP_TARGETS}.
  */
 export const moderationEvents = pgTable(
-  "moderation_events",
+  'moderation_events',
   {
     id: text().primaryKey(),
     type: text(),
@@ -227,7 +222,7 @@ export const moderationEvents = pgTable(
      * CrowdSource added.
      */
     payload: jsonb(),
-    state: text({ enum: MODERATION_EVENT_STATES }).notNull().default("claimed"),
+    state: text({ enum: MODERATION_EVENT_STATES }).notNull().default('claimed'),
     receivedAt: timestamptz().notNull().defaultNow(),
     queuedAt: timestamptz(),
     expiresAt: timestamptz().notNull(),
@@ -235,11 +230,11 @@ export const moderationEvents = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("moderation_events_case_id_idx").on(t.caseId),
-    index("moderation_events_state_received_at_idx").on(t.state, t.receivedAt),
+    index('moderation_events_case_id_idx').on(t.caseId),
+    index('moderation_events_state_received_at_idx').on(t.state, t.receivedAt),
     /** Leading btree on the swept column — without it the sweep is a table scan. */
-    index("moderation_events_expires_at_idx").on(t.expiresAt),
-    checkOneOf("moderation_events_state_check", t.state, MODERATION_EVENT_STATES),
+    index('moderation_events_expires_at_idx').on(t.expiresAt),
+    checkOneOf('moderation_events_state_check', t.state, MODERATION_EVENT_STATES),
   ],
 );
 
@@ -254,7 +249,7 @@ export const moderationEvents = pgTable(
  * outright rather than leaving to be discovered.
  */
 export const moderationOutbox = pgTable(
-  "moderation_outbox",
+  'moderation_outbox',
   {
     id: text().primaryKey(),
     kind: text({ enum: MODERATION_OUTBOX_KINDS }).notNull(),
@@ -263,7 +258,7 @@ export const moderationOutbox = pgTable(
     payloadCaseId: text(),
     /** The decision document, whole and opaque — validated on READ, not on store. */
     payloadDecision: jsonb(),
-    status: text({ enum: MODERATION_OUTBOX_STATUSES }).notNull().default("pending"),
+    status: text({ enum: MODERATION_OUTBOX_STATUSES }).notNull().default('pending'),
     attempts: integer().notNull().default(0),
     availableAt: timestamptz().notNull().defaultNow(),
     leaseOwner: text(),
@@ -276,19 +271,19 @@ export const moderationOutbox = pgTable(
   },
   (t) => [
     /** Due work and expired claims stay separate bounded scans. */
-    index("moderation_outbox_status_available_at_created_at_idx").on(
+    index('moderation_outbox_status_available_at_created_at_idx').on(
       t.status,
       t.availableAt,
       t.createdAt,
     ),
-    index("moderation_outbox_status_lease_until_created_at_idx").on(
+    index('moderation_outbox_status_lease_until_created_at_idx').on(
       t.status,
       t.leaseUntil,
       t.createdAt,
     ),
-    index("moderation_outbox_expires_at_idx").on(t.expiresAt),
-    checkOneOf("moderation_outbox_kind_check", t.kind, MODERATION_OUTBOX_KINDS),
-    checkOneOf("moderation_outbox_status_check", t.status, MODERATION_OUTBOX_STATUSES),
-    check("moderation_outbox_attempts_check", sql`${t.attempts} >= 0`),
+    index('moderation_outbox_expires_at_idx').on(t.expiresAt),
+    checkOneOf('moderation_outbox_kind_check', t.kind, MODERATION_OUTBOX_KINDS),
+    checkOneOf('moderation_outbox_status_check', t.status, MODERATION_OUTBOX_STATUSES),
+    check('moderation_outbox_attempts_check', sql`${t.attempts} >= 0`),
   ],
 );

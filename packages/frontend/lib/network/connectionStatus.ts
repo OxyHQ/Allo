@@ -29,51 +29,50 @@ interface ConnectionStatusState {
 }
 
 export const useConnectionStatusStore = create<ConnectionStatusState>((set, get) => ({
-    status: 'online',
-    isConnected: true,
-    connectionType: null,
-    lastOnlineTime: Date.now(),
-    lastOfflineTime: 0,
-    reconnectAttempts: 0,
+  status: 'online',
+  isConnected: true,
+  connectionType: null,
+  lastOnlineTime: Date.now(),
+  lastOfflineTime: 0,
+  reconnectAttempts: 0,
 
-    setStatus: (status) => {
-      const prev = get().status;
-      set({ status });
+  setStatus: (status) => {
+    const prev = get().status;
+    set({ status });
 
-      // Track time
-      if (status === 'online' && prev !== 'online') {
-        set({ lastOnlineTime: Date.now(), reconnectAttempts: 0 });
-      } else if (status === 'offline' && prev !== 'offline') {
-        set({ lastOfflineTime: Date.now() });
-      }
-    },
+    // Track time
+    if (status === 'online' && prev !== 'online') {
+      set({ lastOnlineTime: Date.now(), reconnectAttempts: 0 });
+    } else if (status === 'offline' && prev !== 'offline') {
+      set({ lastOfflineTime: Date.now() });
+    }
+  },
 
-    setConnectionInfo: (info) => {
-      const isConnected = info.isConnected ?? true;
-      const connectionType = info.type ?? null;
+  setConnectionInfo: (info) => {
+    const isConnected = info.isConnected ?? true;
+    const connectionType = info.type ?? null;
 
-      set({
-        isConnected,
-        connectionType,
-      });
+    set({
+      isConnected,
+      connectionType,
+    });
 
-      // Update status based on connection
-      if (isConnected && get().status !== 'online') {
-        get().setStatus('online');
-      } else if (!isConnected && get().status !== 'offline') {
-        get().setStatus('offline');
-      }
-    },
+    // Update status based on connection
+    if (isConnected && get().status !== 'online') {
+      get().setStatus('online');
+    } else if (!isConnected && get().status !== 'offline') {
+      get().setStatus('offline');
+    }
+  },
 
-    incrementReconnectAttempts: () => {
-      set((state) => ({ reconnectAttempts: state.reconnectAttempts + 1 }));
-    },
+  incrementReconnectAttempts: () => {
+    set((state) => ({ reconnectAttempts: state.reconnectAttempts + 1 }));
+  },
 
-    resetReconnectAttempts: () => {
-      set({ reconnectAttempts: 0 });
-    },
-  })
-);
+  resetReconnectAttempts: () => {
+    set({ reconnectAttempts: 0 });
+  },
+}));
 
 /**
  * Connection Event Listener
@@ -134,9 +133,7 @@ export function stopConnectionMonitoring(): void {
  * Connection Quality Detection
  * Detects slow connections (2G, 3G) vs fast (4G, 5G, WiFi)
  */
-export function getConnectionQuality(
-  connectionType: string | null
-): 'fast' | 'slow' | 'offline' {
+export function getConnectionQuality(connectionType: string | null): 'fast' | 'slow' | 'offline' {
   if (!connectionType || connectionType === 'none' || connectionType === 'unknown') {
     return 'offline';
   }

@@ -45,7 +45,9 @@ export function statusAuthors(statuses: readonly StatusView[]): StatusAuthor[] {
 
   const authors: StatusAuthor[] = [];
   for (const [accountId, own] of byAuthor) {
-    const sorted = [...own].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    const sorted = [...own].sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+    );
     authors.push({
       accountId,
       statuses: sorted,
@@ -93,6 +95,7 @@ export function statusAgeLabel(createdAt: string, now: Date, t: Translate): stri
 export function statusRemainingLabel(expiresAt: string, now: Date, t: Translate): string {
   const left = new Date(expiresAt).getTime() - now.getTime();
   if (Number.isNaN(left) || left <= 0) return t('stories.remaining.gone');
-  if (left < HOUR) return t('stories.remaining.minutes', { count: Math.max(1, Math.round(left / MINUTE)) });
+  if (left < HOUR)
+    return t('stories.remaining.minutes', { count: Math.max(1, Math.round(left / MINUTE)) });
   return t('stories.remaining.hours', { count: Math.floor(left / HOUR) });
 }

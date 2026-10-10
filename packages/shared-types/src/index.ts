@@ -7,54 +7,54 @@
  */
 
 // Primitives, error shape, base64url codec
-export * from "./common";
+export * from './common';
 
 // Client instances and enrollment
-export * from "./instances";
+export * from './instances';
 
 // Request signing headers and message
-export * from "./requestSigning";
+export * from './requestSigning';
 
 // MLS key packages
-export * from "./keyPackages";
+export * from './keyPackages';
 
 // Conversations, members, leaves
-export * from "./conversations";
+export * from './conversations';
 
 // The event log and event submission
-export * from "./events";
+export * from './events';
 
 // The stored GroupInfo a leafless member joins from (external commit)
-export * from "./groupInfo";
+export * from './groupInfo';
 
 // The delivery stream, cursors and socket events
 // Calls: the state machine the server runs, and nothing about the media.
-export * from "./calls";
+export * from './calls';
 
 // Status updates: one ciphertext, a key sealed per device, 24 hours.
-export * from "./statuses";
+export * from './statuses';
 
 // Presence: who has a device connected, and the rules about who may ask.
-export * from "./presence";
-export * from "./sync";
+export * from './presence';
+export * from './sync';
 
 // Encrypted blobs
-export * from "./blobs";
+export * from './blobs';
 
 // The E2EE application-message envelope (plaintext before MLS)
-export * from "./appMessage";
+export * from './appMessage';
 
 // The E2EE history archive: payload, chunking, manifest and sealing constants
-export * from "./archive";
+export * from './archive';
 
 // History offers between instances of one account
-export * from "./historyOffers";
+export * from './historyOffers';
 
 // Encrypted account backups unlocked by a recovery phrase
-export * from "./backups";
+export * from './backups';
 
 // Legacy transport envelope + pagination, still used by the directory routes
-export * from "./api";
+export * from './api';
 
 // People directory DTOs (the Oxy lookups, projected)
-export * from "./directory";
+export * from './directory';

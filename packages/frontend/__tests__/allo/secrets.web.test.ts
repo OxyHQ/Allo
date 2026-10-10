@@ -54,7 +54,8 @@ class FakeTransaction implements SecretsIdbTransaction {
       return request;
     };
     return {
-      get: (key) => settle(new FakeRequest<unknown>(), () => db.rows.find((row) => row.key === key)?.value),
+      get: (key) =>
+        settle(new FakeRequest<unknown>(), () => db.rows.find((row) => row.key === key)?.value),
       put: (value, key) =>
         settle(new FakeRequest<unknown>(), () => {
           const bytes = value as Uint8Array;

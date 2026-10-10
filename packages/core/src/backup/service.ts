@@ -13,17 +13,39 @@
  *              wrong; then download, decrypt, verify, import, and keep the
  *              key so refreshes continue from this instance.
  */
-import { BLOB_SHA256_HEADER, archiveManifestMessage, backupResponseSchema, decodeArchive, encodeArchive, uploadBlobResponseSchema, type ArchiveManifest } from "@allo/shared-types";
-import type { Context } from "../context";
-import { decryptArchive, encryptArchive } from "../crypto/archive";
-import { BACKUP_KEY_BYTES, backupKeyCheck, backupKeyMatches, backupKeyName, deriveBackupKey, generateRecoveryPhrase } from "../crypto/backupKey";
-import { signUtf8, verifyEd25519 } from "../crypto/signing";
-import { DecryptError, InvalidStateError, NotFoundError, RecoveryPhraseError, TransportError, UntrustedInstanceError } from "../errors";
-import { backupStateRecordSchema, type BackupStateRecord } from "../storage/records";
-import type { BackupStatus } from "../types";
-import { sha256Hex } from "../util/bytes";
-import { describeError } from "../util/logger";
-import { exportArchive, importArchive } from "../history/archive";
+import {
+  BLOB_SHA256_HEADER,
+  archiveManifestMessage,
+  backupResponseSchema,
+  decodeArchive,
+  encodeArchive,
+  uploadBlobResponseSchema,
+  type ArchiveManifest,
+} from '@allo/shared-types';
+import type { Context } from '../context';
+import { decryptArchive, encryptArchive } from '../crypto/archive';
+import {
+  BACKUP_KEY_BYTES,
+  backupKeyCheck,
+  backupKeyMatches,
+  backupKeyName,
+  deriveBackupKey,
+  generateRecoveryPhrase,
+} from '../crypto/backupKey';
+import { signUtf8, verifyEd25519 } from '../crypto/signing';
+import {
+  DecryptError,
+  InvalidStateError,
+  NotFoundError,
+  RecoveryPhraseError,
+  TransportError,
+  UntrustedInstanceError,
+} from '../errors';
+import { backupStateRecordSchema, type BackupStateRecord } from '../storage/records';
+import type { BackupStatus } from '../types';
+import { sha256Hex } from '../util/bytes';
+import { describeError } from '../util/logger';
+import { exportArchive, importArchive } from '../history/archive';
 
 export const BACKUP_AUTO_REFRESH_EVENTS = 20;
 export const BACKUP_AUTO_REFRESH_AGE_MS = 24 * 60 * 60 * 1000;
@@ -53,7 +75,7 @@ export class BackupService {
   ) {}
 
   async load(): Promise<void> {
-    const stored = await this.ctx.store.getJson("backupState", "state", backupStateRecordSchema);
+    const stored = await this.ctx.store.getJson('backupState', 'state', backupStateRecordSchema);
     if (stored) this.state = stored;
   }
 
@@ -62,14 +84,20 @@ export class BackupService {
   /** Referentially stable until the `backup` topic emits. */
   status(): BackupStatus {
     if (!this.statusValue) {
-      this.statusValue = { enabled: this.state.enabled, lastBackupAt: this.state.lastBackupAt, eventCount: this.state.eventCountAtBackup, remote: this.remote, busy: this.busy };
+      this.statusValue = {
+        enabled: this.state.enabled,
+        lastBackupAt: this.state.lastBackupAt,
+        eventCount: this.state.eventCountAtBackup,
+        remote: this.remote,
+        busy: this.busy,
+      };
     }
     return this.statusValue;
   }
 
   private changed(): void {
     this.statusValue = null;
-    this.ctx.emitter.emit("backup");
+    this.ctx.emitter.emit('backup');
   }
 
   private setBusy(busy: boolean): void {
@@ -79,7 +107,7 @@ export class BackupService {
   }
 
   private async setState(next: BackupStateRecord): Promise<void> {
-    await this.ctx.store.putJson("backupState", "state", next);
+    await this.ctx.store.putJson('backupState', 'state', next);
     this.state = next;
     this.changed();
   }
@@ -88,13 +116,20 @@ export class BackupService {
   async refreshStatus(): Promise<void> {
     const { ctx } = this;
     ctx.instance.assertActive();
-    const res = await ctx.http.request({ method: "GET", path: "/v1/accounts/me/backup", schema: backupResponseSchema, signer: ctx.signer });
+    const res = await ctx.http.request({
+      method: 'GET',
+      path: '/v1/accounts/me/backup',
+      schema: backupResponseSchema,
+      signer: ctx.signer,
+    });
     this.remote = { exists: res.backup !== null, updatedAt: res.backup?.updatedAt ?? null };
     this.changed();
   }
 
   private async key(): Promise<Uint8Array | undefined> {
-    const k = await this.ctx.options.secrets.get(backupKeyName(this.ctx.accountId, this.ctx.options.appId));
+    const k = await this.ctx.options.secrets.get(
+      backupKeyName(this.ctx.accountId, this.ctx.options.appId),
+    );
     return k && k.length === BACKUP_KEY_BYTES ? k : undefined;
   }
 
@@ -110,7 +145,8 @@ export class BackupService {
   async enable(): Promise<string> {
     const { ctx } = this;
     ctx.instance.assertActive();
-    if (this.state.enabled) throw new InvalidStateError("backup is already enabled; disable it to get a new phrase");
+    if (this.state.enabled)
+      throw new InvalidStateError('backup is already enabled; disable it to get a new phrase');
     const phrase = generateRecoveryPhrase();
     const key = deriveBackupKey(phrase, ctx.accountId);
     const name = backupKeyName(ctx.accountId, ctx.options.appId);
@@ -131,9 +167,12 @@ export class BackupService {
   async refresh(): Promise<void> {
     const { ctx } = this;
     ctx.instance.assertActive();
-    if (!this.state.enabled) throw new InvalidStateError("backup is not enabled");
+    if (!this.state.enabled) throw new InvalidStateError('backup is not enabled');
     const key = await this.key();
-    if (!key) throw new InvalidStateError("the backup key is missing from the secret store; disable and enable again");
+    if (!key)
+      throw new InvalidStateError(
+        'the backup key is missing from the secret store; disable and enable again',
+      );
     await ctx.history.jobs.run(async () => {
       this.setBusy(true);
       try {
@@ -143,8 +182,8 @@ export class BackupService {
         const chunkBlobIds: string[] = [];
         for (const chunk of chunks) {
           const res = await ctx.http.request({
-            method: "POST",
-            path: "/v1/blobs",
+            method: 'POST',
+            path: '/v1/blobs',
             rawBody: chunk,
             headers: { [BLOB_SHA256_HEADER]: sha256Hex(chunk) },
             schema: uploadBlobResponseSchema,
@@ -154,7 +193,7 @@ export class BackupService {
         }
         const manifest: ArchiveManifest = {
           v: 1,
-          kind: "backup",
+          kind: 'backup',
           createdAt: ctx.nowIso(),
           conversationCount: archive.conversations.length,
           eventCount: archive.events.length,
@@ -162,15 +201,27 @@ export class BackupService {
           plaintextSha256: sha256Hex(plaintext),
         };
         const res = await ctx.http.request({
-          method: "PUT",
-          path: "/v1/accounts/me/backup",
-          body: { manifest, keyCheck: backupKeyCheck(key), manifestSignature: signUtf8(ctx.signer.key, archiveManifestMessage(manifest)) },
+          method: 'PUT',
+          path: '/v1/accounts/me/backup',
+          body: {
+            manifest,
+            keyCheck: backupKeyCheck(key),
+            manifestSignature: signUtf8(ctx.signer.key, archiveManifestMessage(manifest)),
+          },
           schema: backupResponseSchema,
           signer: ctx.signer,
         });
         this.remote = { exists: true, updatedAt: res.backup?.updatedAt ?? manifest.createdAt };
-        await this.setState({ enabled: true, lastBackupAt: res.backup?.updatedAt ?? manifest.createdAt, eventCountAtBackup: this.totalEvents() });
-        ctx.log.info?.("backup refreshed", { conversations: manifest.conversationCount, events: manifest.eventCount, chunks: chunkBlobIds.length });
+        await this.setState({
+          enabled: true,
+          lastBackupAt: res.backup?.updatedAt ?? manifest.createdAt,
+          eventCountAtBackup: this.totalEvents(),
+        });
+        ctx.log.info?.('backup refreshed', {
+          conversations: manifest.conversationCount,
+          events: manifest.eventCount,
+          chunks: chunkBlobIds.length,
+        });
       } finally {
         this.setBusy(false);
       }
@@ -182,7 +233,11 @@ export class BackupService {
     const { ctx } = this;
     ctx.instance.assertActive();
     try {
-      await ctx.http.request({ method: "DELETE", path: "/v1/accounts/me/backup", signer: ctx.signer });
+      await ctx.http.request({
+        method: 'DELETE',
+        path: '/v1/accounts/me/backup',
+        signer: ctx.signer,
+      });
     } catch (error) {
       if (!(error instanceof TransportError && error.status === 404)) throw error;
     }
@@ -198,31 +253,60 @@ export class BackupService {
     const { ctx } = this;
     ctx.instance.assertActive();
     const key = deriveBackupKey(phrase, ctx.accountId); // RecoveryPhraseError on a malformed phrase
-    const res = await ctx.http.request({ method: "GET", path: "/v1/accounts/me/backup", schema: backupResponseSchema, signer: ctx.signer });
+    const res = await ctx.http.request({
+      method: 'GET',
+      path: '/v1/accounts/me/backup',
+      schema: backupResponseSchema,
+      signer: ctx.signer,
+    });
     const backup = res.backup;
     this.remote = { exists: backup !== null, updatedAt: backup?.updatedAt ?? null };
     this.changed();
-    if (!backup) throw new NotFoundError("account backup");
-    if (!backupKeyMatches(key, backup.keyCheck)) throw new RecoveryPhraseError("the phrase does not unlock this account's backup");
-    if (backup.accountId !== ctx.accountId) throw new InvalidStateError("the backup belongs to another account");
-    if (backup.manifest.kind !== "backup") throw new InvalidStateError("the backup carries a manifest that is not a backup manifest");
+    if (!backup) throw new NotFoundError('account backup');
+    if (!backupKeyMatches(key, backup.keyCheck))
+      throw new RecoveryPhraseError("the phrase does not unlock this account's backup");
+    if (backup.accountId !== ctx.accountId)
+      throw new InvalidStateError('the backup belongs to another account');
+    if (backup.manifest.kind !== 'backup')
+      throw new InvalidStateError('the backup carries a manifest that is not a backup manifest');
     if (!ctx.instance.ownInstance(backup.instanceId)) await ctx.instance.refresh();
     const writer = ctx.instance.ownInstance(backup.instanceId);
-    if (!writer || writer.accountId !== ctx.accountId) throw new UntrustedInstanceError(backup.instanceId, "the writing instance is not an instance of this account");
-    if (!verifyEd25519(writer.signingPublicKey, archiveManifestMessage(backup.manifest), backup.manifestSignature)) {
-      throw new UntrustedInstanceError(backup.instanceId, "manifest signature does not verify");
+    if (!writer || writer.accountId !== ctx.accountId)
+      throw new UntrustedInstanceError(
+        backup.instanceId,
+        'the writing instance is not an instance of this account',
+      );
+    if (
+      !verifyEd25519(
+        writer.signingPublicKey,
+        archiveManifestMessage(backup.manifest),
+        backup.manifestSignature,
+      )
+    ) {
+      throw new UntrustedInstanceError(backup.instanceId, 'manifest signature does not verify');
     }
     await ctx.history.jobs.run(async () => {
       this.setBusy(true);
       try {
-        const chunks = await ctx.history.downloadChunks(backup.manifest.chunkBlobIds, () => undefined);
+        const chunks = await ctx.history.downloadChunks(
+          backup.manifest.chunkBlobIds,
+          () => undefined,
+        );
         const plaintext = decryptArchive(key, chunks);
-        if (sha256Hex(plaintext) !== backup.manifest.plaintextSha256) throw new DecryptError("backup digest does not match the signed manifest");
+        if (sha256Hex(plaintext) !== backup.manifest.plaintextSha256)
+          throw new DecryptError('backup digest does not match the signed manifest');
         const archive = decodeArchive(plaintext);
         const result = await importArchive(ctx, archive);
         await ctx.options.secrets.set(backupKeyName(ctx.accountId, ctx.options.appId), key);
-        await this.setState({ enabled: true, lastBackupAt: backup.updatedAt, eventCountAtBackup: this.totalEvents() });
-        ctx.log.info?.("backup restored", { conversations: result.conversations, events: result.events });
+        await this.setState({
+          enabled: true,
+          lastBackupAt: backup.updatedAt,
+          eventCountAtBackup: this.totalEvents(),
+        });
+        ctx.log.info?.('backup restored', {
+          conversations: result.conversations,
+          events: result.events,
+        });
       } finally {
         this.setBusy(false);
       }
@@ -240,7 +324,9 @@ export class BackupService {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.stopped || !backupDue(this.state, this.totalEvents(), ctx.now())) return;
-      void this.refresh().catch((error) => ctx.log.warn?.("automatic backup refresh failed", { error: describeError(error) }));
+      void this.refresh().catch((error) =>
+        ctx.log.warn?.('automatic backup refresh failed', { error: describeError(error) }),
+      );
     }, this.debounceMs);
   }
 

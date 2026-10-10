@@ -57,9 +57,7 @@ function MediaResolverProvider({ children }: { children: React.ReactNode }) {
     },
     [oxyServices],
   );
-  return (
-    <ImageResolverProvider value={resolver}>{children}</ImageResolverProvider>
-  );
+  return <ImageResolverProvider value={resolver}>{children}</ImageResolverProvider>;
 }
 
 /**
@@ -75,34 +73,33 @@ export const AppProviders = memo(function AppProviders({
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <KeyboardProvider>
-        <QueryClientProvider client={queryClient}>
-          <OxyProvider
-            oxyServices={oxyServices}
-            clientId={OXY_CLIENT_ID}
-            language={{
-              supportedLocales: SUPPORTED_LANGUAGES,
-              fallbackLocale: DEFAULT_LANGUAGE,
-              onChange: setLanguage,
-              onError: (error, locale) =>
-                logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
-            }}
-          >
-            <StickersProvider client={stickersClient}>
-            <MediaResolverProvider>
-              <I18nextProvider i18n={i18n}>
-                <ErrorBoundary>
-                  {children}
-                  <ConnectionStatusToasts />
-                  <StatusBar style="auto" />
-                </ErrorBoundary>
-              </I18nextProvider>
-            </MediaResolverProvider>
-            </StickersProvider>
-          </OxyProvider>
-        </QueryClientProvider>
+          <QueryClientProvider client={queryClient}>
+            <OxyProvider
+              oxyServices={oxyServices}
+              clientId={OXY_CLIENT_ID}
+              language={{
+                supportedLocales: SUPPORTED_LANGUAGES,
+                fallbackLocale: DEFAULT_LANGUAGE,
+                onChange: setLanguage,
+                onError: (error, locale) =>
+                  logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
+              }}
+            >
+              <StickersProvider client={stickersClient}>
+                <MediaResolverProvider>
+                  <I18nextProvider i18n={i18n}>
+                    <ErrorBoundary>
+                      {children}
+                      <ConnectionStatusToasts />
+                      <StatusBar style="auto" />
+                    </ErrorBoundary>
+                  </I18nextProvider>
+                </MediaResolverProvider>
+              </StickersProvider>
+            </OxyProvider>
+          </QueryClientProvider>
         </KeyboardProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 });
-

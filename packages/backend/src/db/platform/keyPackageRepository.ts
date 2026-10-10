@@ -6,13 +6,13 @@
  * package to somebody, and it hands it to exactly one somebody.
  */
 
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { uuidv7 } from "@oxy.so/db";
-import type { KeyPackageUpload } from "@allo/shared-types";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
-import { clientInstances } from "../schema/instances";
-import { keyPackages } from "../schema/instances";
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { uuidv7 } from '@oxy.so/db';
+import type { KeyPackageUpload } from '@allo/shared-types';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
+import { clientInstances } from '../schema/instances';
+import { keyPackages } from '../schema/instances';
 
 export interface InsertKeyPackagesResult {
   inserted: number;
@@ -101,12 +101,12 @@ export async function claimKeyPackage(
       and(
         eq(keyPackages.instanceId, instanceId),
         isNull(keyPackages.consumedAt),
-        eq(clientInstances.status, "active"),
+        eq(clientInstances.status, 'active'),
       ),
     )
     .orderBy(asc(keyPackages.createdAt), asc(keyPackages.id))
     .limit(1)
-    .for("update", { skipLocked: true, of: keyPackages });
+    .for('update', { skipLocked: true, of: keyPackages });
 
   const [claimed] = await tx
     .update(keyPackages)

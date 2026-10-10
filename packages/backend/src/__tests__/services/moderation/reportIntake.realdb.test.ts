@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The intake path against a REAL Postgres server.
@@ -26,10 +26,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
  * `subjectProviders.test.ts` — asserting it here too would couple this file to
  * Allo's own nouns, and the property under test is about any application's.
  */
-vi.mock("../../../services/moderation/subjects/registry", async () => {
+vi.mock('../../../services/moderation/subjects/registry', async () => {
   const actual = await vi.importActual<
-    typeof import("../../../services/moderation/subjects/registry")
-  >("../../../services/moderation/subjects/registry");
+    typeof import('../../../services/moderation/subjects/registry')
+  >('../../../services/moderation/subjects/registry');
   return { ...actual, subjectProviderFor: vi.fn() };
 });
 
@@ -41,30 +41,30 @@ vi.mock("../../../services/moderation/subjects/registry", async () => {
  * the duration, because a durable second write that fails on demand has no
  * natural trigger: the enqueue converges on conflict by design.
  */
-vi.mock("../../../db/moderation/moderationOutboxRepository", async () => {
+vi.mock('../../../db/moderation/moderationOutboxRepository', async () => {
   const actual = await vi.importActual<
-    typeof import("../../../db/moderation/moderationOutboxRepository")
-  >("../../../db/moderation/moderationOutboxRepository");
+    typeof import('../../../db/moderation/moderationOutboxRepository')
+  >('../../../db/moderation/moderationOutboxRepository');
   return { ...actual, enqueueModerationOutboxEvent: vi.fn(actual.enqueueModerationOutboxEvent) };
 });
 
-import { enqueueModerationOutboxEvent } from "../../../db/moderation/moderationOutboxRepository";
-import { closePostgres, connectPostgres, getDb } from "../../../db";
-import * as schema from "../../../db/schema";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../../db/testDatabase";
-import type { ReportedType } from "../../../db/schema/moderation";
-import { reportSubmitEventId } from "../../../services/moderation/ModerationOutboxService";
+import { enqueueModerationOutboxEvent } from '../../../db/moderation/moderationOutboxRepository';
+import { closePostgres, connectPostgres, getDb } from '../../../db';
+import * as schema from '../../../db/schema';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../../db/testDatabase';
+import type { ReportedType } from '../../../db/schema/moderation';
+import { reportSubmitEventId } from '../../../services/moderation/ModerationOutboxService';
 import {
   DuplicateReportError,
   createReport,
-} from "../../../services/moderation/ReportIntakeService";
-import { MAX_REPORTED_IDENTIFIER_BYTES } from "../../../services/moderation/subjectIdentity";
-import { subjectProviderFor } from "../../../services/moderation/subjects/registry";
-import type { ModerationSubjectProvider } from "../../../services/moderation/subjects/types";
+} from '../../../services/moderation/ReportIntakeService';
+import { MAX_REPORTED_IDENTIFIER_BYTES } from '../../../services/moderation/subjectIdentity';
+import { subjectProviderFor } from '../../../services/moderation/subjects/registry';
+import type { ModerationSubjectProvider } from '../../../services/moderation/subjects/types';
 
 const userProvider: ModerationSubjectProvider = {
-  reportedType: "user",
-  subjectType: "identity.profile",
+  reportedType: 'user',
+  subjectType: 'identity.profile',
   snapshot: async () => null,
 };
 
@@ -74,7 +74,7 @@ let handle: TestDatabaseHandle;
 let counter = 0;
 function id(prefix: string): string {
   counter += 1;
-  return `${prefix}-${String(counter).padStart(4, "0")}`;
+  return `${prefix}-${String(counter).padStart(4, '0')}`;
 }
 
 async function storedReports() {
@@ -105,14 +105,14 @@ afterEach(async () => {
   await getDb().delete(schema.reports);
 });
 
-describe("report intake durability", () => {
-  it("commits the report AND its outbox event", async () => {
-    const reporter = id("reporter");
+describe('report intake durability', () => {
+  it('commits the report AND its outbox event', async () => {
+    const reporter = id('reporter');
     const { report, outboxEventId } = await createReport({
       reporter,
-      reportedType: "user",
-      reportedId: id("user"),
-      categories: ["harassment"],
+      reportedType: 'user',
+      reportedId: id('user'),
+      categories: ['harassment'],
     });
 
     expect(outboxEventId).toBe(reportSubmitEventId(report.id));
@@ -121,14 +121,14 @@ describe("report intake durability", () => {
     const outbox = await storedOutbox();
     expect(reports).toHaveLength(1);
     expect(outbox).toHaveLength(1);
-    expect(reports[0]?.localStatus).toBe("queued");
+    expect(reports[0]?.localStatus).toBe('queued');
     expect(reports[0]?.localStatusReason).toBeNull();
     expect(outbox[0]?.id).toBe(outboxEventId);
     expect(outbox[0]?.payloadReportId).toBe(report.id);
-    expect(outbox[0]?.status).toBe("pending");
+    expect(outbox[0]?.status).toBe('pending');
   });
 
-  it("stores a type with no provider and enqueues NOTHING", async () => {
+  it('stores a type with no provider and enqueues NOTHING', async () => {
     /**
      * Allo's central behaviour, asserted against persisted state: a reported
      * message is durably recorded and there is nothing anywhere that will ever
@@ -137,23 +137,23 @@ describe("report intake durability", () => {
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
 
     const { outboxEventId } = await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
-      reportedId: id("message"),
-      categories: ["harassment"],
+      reporter: id('reporter'),
+      reportedType: 'message',
+      reportedId: id('message'),
+      categories: ['harassment'],
     });
 
     expect(outboxEventId).toBeUndefined();
     expect(await storedOutbox()).toHaveLength(0);
 
     const reports = await storedReports();
-    expect(reports[0]?.localStatus).toBe("received");
+    expect(reports[0]?.localStatus).toBe('received');
     // The reason is RECORDED, not inferred from the missing row: a missing row is
     // also what a lost write looks like.
-    expect(reports[0]?.localStatusReason).toContain("end-to-end encrypted");
+    expect(reports[0]?.localStatusReason).toContain('end-to-end encrypted');
   });
 
-  it("rolls the report back when the outbox write fails", async () => {
+  it('rolls the report back when the outbox write fails', async () => {
     /**
      * Atomicity as observable state. The failure is INJECTED — a durable second
      * write that fails on demand has no natural trigger here, since
@@ -165,27 +165,31 @@ describe("report intake durability", () => {
      * is a report nothing will ever send, and nobody finds out until somebody asks
      * why a case never opened.
      */
-    vi.mocked(enqueueModerationOutboxEvent).mockRejectedValueOnce(new Error("outbox down"));
+    vi.mocked(enqueueModerationOutboxEvent).mockRejectedValueOnce(new Error('outbox down'));
 
     await expect(
       createReport({
-        reporter: id("reporter"),
-        reportedType: "user",
-        reportedId: id("user"),
-        categories: ["spam"],
+        reporter: id('reporter'),
+        reportedType: 'user',
+        reportedId: id('user'),
+        categories: ['spam'],
       }),
-    ).rejects.toThrow("outbox down");
+    ).rejects.toThrow('outbox down');
 
     expect(await storedReports()).toHaveLength(0);
     expect(await storedOutbox()).toHaveLength(0);
   });
 
-  it("enforces the unique index: the same reporter cannot report twice", async () => {
-    const subject = { reporter: id("reporter"), reportedType: "user" as ReportedType, reportedId: id("user") };
+  it('enforces the unique index: the same reporter cannot report twice', async () => {
+    const subject = {
+      reporter: id('reporter'),
+      reportedType: 'user' as ReportedType,
+      reportedId: id('user'),
+    };
 
-    await createReport({ ...subject, categories: ["spam"] });
+    await createReport({ ...subject, categories: ['spam'] });
 
-    await expect(createReport({ ...subject, categories: ["spam"] })).rejects.toBeInstanceOf(
+    await expect(createReport({ ...subject, categories: ['spam'] })).rejects.toBeInstanceOf(
       DuplicateReportError,
     );
 
@@ -193,7 +197,7 @@ describe("report intake durability", () => {
     expect(await storedOutbox()).toHaveLength(1);
   });
 
-  it("answers a CONCURRENT duplicate from outside the aborted transaction", async () => {
+  it('answers a CONCURRENT duplicate from outside the aborted transaction', async () => {
     /**
      * The case the pre-read cannot close, and the one that would have been a 500.
      *
@@ -209,7 +213,11 @@ describe("report intake durability", () => {
      * when the winner's copy is on file. Moving the read outside the transaction is
      * what this case pins, and moving it back in is what makes it fail.
      */
-    const subject = { reporter: id("reporter"), reportedType: "user" as ReportedType, reportedId: id("user") };
+    const subject = {
+      reporter: id('reporter'),
+      reportedType: 'user' as ReportedType,
+      reportedId: id('user'),
+    };
 
     /**
      * postgres.js opens connections on demand, so the FIRST concurrent burst after
@@ -219,32 +227,36 @@ describe("report intake durability", () => {
     await Promise.all(Array.from({ length: 8 }, () => storedReports()));
 
     const outcomes = await Promise.allSettled([
-      createReport({ ...subject, categories: ["spam"] }),
-      createReport({ ...subject, categories: ["spam"] }),
+      createReport({ ...subject, categories: ['spam'] }),
+      createReport({ ...subject, categories: ['spam'] }),
     ]);
 
-    const fulfilled = outcomes.filter((outcome) => outcome.status === "fulfilled");
-    const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
+    const fulfilled = outcomes.filter((outcome) => outcome.status === 'fulfilled');
+    const rejected = outcomes.filter((outcome) => outcome.status === 'rejected');
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
 
     const failure = rejected[0];
     // Named explicitly: a `25P02` would also be a rejection, and reading "one of
     // them failed" as a pass is exactly how the aborted-transaction bug survives.
-    expect(failure?.status === "rejected" && failure.reason).toBeInstanceOf(DuplicateReportError);
+    expect(failure?.status === 'rejected' && failure.reason).toBeInstanceOf(DuplicateReportError);
 
     const reports = await storedReports();
     expect(reports).toHaveLength(1);
     // The loser is told about the row that IS on file, not about its own.
-    const duplicate = failure?.status === "rejected" ? failure.reason : null;
+    const duplicate = failure?.status === 'rejected' ? failure.reason : null;
     expect(duplicate instanceof DuplicateReportError && duplicate.existing.id).toBe(reports[0]?.id);
   });
 
-  it("raises DuplicateReportError with the existing row", async () => {
-    const subject = { reporter: id("reporter"), reportedType: "user" as ReportedType, reportedId: id("user") };
-    const first = await createReport({ ...subject, categories: ["spam"] });
+  it('raises DuplicateReportError with the existing row', async () => {
+    const subject = {
+      reporter: id('reporter'),
+      reportedType: 'user' as ReportedType,
+      reportedId: id('user'),
+    };
+    const first = await createReport({ ...subject, categories: ['spam'] });
 
-    const error = await createReport({ ...subject, categories: ["spam"] }).then(
+    const error = await createReport({ ...subject, categories: ['spam'] }).then(
       () => null,
       (caught: unknown) => caught,
     );
@@ -266,25 +278,25 @@ describe("report intake durability", () => {
  * The registry returns a provider throughout, because that is the whole point:
  * this branch must fire even when everything about the TYPE is fine.
  */
-describe("a subject that is not an Oxy account", () => {
-  it("stores a handle with a reason and enqueues NOTHING", async () => {
+describe('a subject that is not an Oxy account', () => {
+  it('stores a handle with a reason and enqueues NOTHING', async () => {
     const { outboxEventId } = await createReport({
-      reporter: id("reporter"),
-      reportedType: "user",
-      reportedId: "@someone",
-      categories: ["harassment"],
+      reporter: id('reporter'),
+      reportedType: 'user',
+      reportedId: '@someone',
+      categories: ['harassment'],
     });
 
     expect(outboxEventId).toBeUndefined();
     expect(await storedOutbox()).toHaveLength(0);
 
     const reports = await storedReports();
-    expect(reports[0]?.localStatus).toBe("received");
-    expect(reports[0]?.reportedId).toBe("@someone");
-    expect(reports[0]?.localStatusReason).toContain("handle");
+    expect(reports[0]?.localStatus).toBe('received');
+    expect(reports[0]?.reportedId).toBe('@someone');
+    expect(reports[0]?.localStatusReason).toContain('handle');
   });
 
-  it("gives the non-Oxy subject its OWN reason, not the encryption one", async () => {
+  it('gives the non-Oxy subject its OWN reason, not the encryption one', async () => {
     /**
      * The two reasons must stay distinguishable months later. "Allo cannot read
      * messages" and "this subject is not an account id" are different claims with
@@ -293,39 +305,39 @@ describe("a subject that is not an Oxy account", () => {
      * Allo it is where most reports live.
      */
     await createReport({
-      reporter: id("reporter"),
-      reportedType: "user",
-      reportedId: "@someone",
-      categories: ["spam"],
+      reporter: id('reporter'),
+      reportedType: 'user',
+      reportedId: '@someone',
+      categories: ['spam'],
     });
 
     const reason = (await storedReports())[0]?.localStatusReason;
-    expect(reason).toContain("handle");
-    expect(reason).not.toContain("end-to-end encrypted");
+    expect(reason).toContain('handle');
+    expect(reason).not.toContain('end-to-end encrypted');
   });
 
-  it("stores a trimmed account id, so one subject has one dedup key", async () => {
+  it('stores a trimmed account id, so one subject has one dedup key', async () => {
     /**
      * The stored key is what the unique index sees. If surrounding whitespace
      * survived, one reporter could file twice about one person.
      */
-    const oxyId = "507f1f77bcf86cd799439011";
-    const reporter = id("reporter");
+    const oxyId = '507f1f77bcf86cd799439011';
+    const reporter = id('reporter');
 
     const { report, outboxEventId } = await createReport({
       reporter,
-      reportedType: "user",
+      reportedType: 'user',
       reportedId: `  ${oxyId}  `,
-      categories: ["spam"],
+      categories: ['spam'],
     });
 
     const reports = await storedReports();
     expect(reports[0]?.reportedId).toBe(oxyId);
-    expect(reports[0]?.localStatus).toBe("queued");
+    expect(reports[0]?.localStatus).toBe('queued');
     expect(outboxEventId).toBe(reportSubmitEventId(report.id));
 
     await expect(
-      createReport({ reporter, reportedType: "user", reportedId: oxyId, categories: ["spam"] }),
+      createReport({ reporter, reportedType: 'user', reportedId: oxyId, categories: ['spam'] }),
     ).rejects.toBeInstanceOf(DuplicateReportError);
     expect(await storedReports()).toHaveLength(1);
   });
@@ -339,19 +351,19 @@ describe("a subject that is not an Oxy account", () => {
  * comes back: a `message` report whose id happens to begin with `@` is a message
  * id, and the subject rule means nothing whatsoever about it.
  */
-describe("a type with no provider is decided before the subject is resolved", () => {
+describe('a type with no provider is decided before the subject is resolved', () => {
   beforeEach(() => {
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
   });
 
-  it("stores a handle-shaped message id verbatim", async () => {
-    const messageId = "@not-a-handle";
+  it('stores a handle-shaped message id verbatim', async () => {
+    const messageId = '@not-a-handle';
 
     await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
+      reporter: id('reporter'),
+      reportedType: 'message',
       reportedId: messageId,
-      categories: ["harassment"],
+      categories: ['harassment'],
     });
 
     expect((await storedReports())[0]?.reportedId).toBe(messageId);
@@ -359,15 +371,15 @@ describe("a type with no provider is decided before the subject is resolved", ()
 
   it("still records the type's own reason, not a subject one", async () => {
     await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
-      reportedId: "@someone",
-      categories: ["harassment"],
+      reporter: id('reporter'),
+      reportedType: 'message',
+      reportedId: '@someone',
+      categories: ['harassment'],
     });
 
     const reason = (await storedReports())[0]?.localStatusReason;
-    expect(reason).toContain("end-to-end encrypted");
-    expect(reason).not.toContain("handle");
+    expect(reason).toContain('end-to-end encrypted');
+    expect(reason).not.toContain('handle');
   });
 });
 
@@ -380,34 +392,34 @@ describe("a type with no provider is decided before the subject is resolved", ()
  * and fails with something `isOxyUserNotFound` does not recognise, so the outbox
  * retries it as an outage for ever.
  */
-describe("the bound on a reported identifier", () => {
-  it("refuses an identifier longer than the ceiling", async () => {
+describe('the bound on a reported identifier', () => {
+  it('refuses an identifier longer than the ceiling', async () => {
     await expect(
       createReport({
-        reporter: id("reporter"),
-        reportedType: "user",
-        reportedId: "a".repeat(MAX_REPORTED_IDENTIFIER_BYTES + 1),
-        categories: ["spam"],
+        reporter: id('reporter'),
+        reportedType: 'user',
+        reportedId: 'a'.repeat(MAX_REPORTED_IDENTIFIER_BYTES + 1),
+        categories: ['spam'],
       }),
     ).rejects.toThrow(TypeError);
 
     expect(await storedReports()).toHaveLength(0);
   });
 
-  it("accepts one of exactly the ceiling, so the bound is not off by one", async () => {
+  it('accepts one of exactly the ceiling, so the bound is not off by one', async () => {
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
 
     await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
-      reportedId: "a".repeat(MAX_REPORTED_IDENTIFIER_BYTES),
-      categories: ["spam"],
+      reporter: id('reporter'),
+      reportedType: 'message',
+      reportedId: 'a'.repeat(MAX_REPORTED_IDENTIFIER_BYTES),
+      categories: ['spam'],
     });
 
     expect(await storedReports()).toHaveLength(1);
   });
 
-  it("counts BYTES, not characters", async () => {
+  it('counts BYTES, not characters', async () => {
     /**
      * The limits that eventually bite — a URL, a header, an index key — are byte
      * limits. 200 characters of Cyrillic is 400 bytes, and a character-counted
@@ -415,22 +427,22 @@ describe("the bound on a reported identifier", () => {
      */
     await expect(
       createReport({
-        reporter: id("reporter"),
-        reportedType: "user",
-        reportedId: "д".repeat(200),
-        categories: ["spam"],
+        reporter: id('reporter'),
+        reportedType: 'user',
+        reportedId: 'д'.repeat(200),
+        categories: ['spam'],
       }),
     ).rejects.toThrow(/at most 255 bytes/);
   });
 
   it.each([
-    ["a newline", "user\n-1"],
-    ["a null byte", "user\u0000-1"],
-    ["an interior space", "user -1"],
-    ["a tab", "user\t-1"],
-    ["a zero-width space", "user\u200B-1"],
-    ["a bidi override", "user\u202E-1"],
-  ])("refuses %s", async (_label, reportedId) => {
+    ['a newline', 'user\n-1'],
+    ['a null byte', 'user\u0000-1'],
+    ['an interior space', 'user -1'],
+    ['a tab', 'user\t-1'],
+    ['a zero-width space', 'user\u200B-1'],
+    ['a bidi override', 'user\u202E-1'],
+  ])('refuses %s', async (_label, reportedId) => {
     /**
      * None of these appears in an Oxy account id or a handle, so nothing real is
      * refused. What is refused is an identifier that
@@ -440,32 +452,32 @@ describe("the bound on a reported identifier", () => {
      */
     await expect(
       createReport({
-        reporter: id("reporter"),
-        reportedType: "user",
+        reporter: id('reporter'),
+        reportedType: 'user',
         reportedId,
-        categories: ["spam"],
+        categories: ['spam'],
       }),
     ).rejects.toThrow(/whitespace or control characters/);
 
     expect(await storedReports()).toHaveLength(0);
   });
 
-  it("still forgives surrounding whitespace, which is trimmed", async () => {
+  it('still forgives surrounding whitespace, which is trimmed', async () => {
     vi.mocked(subjectProviderFor).mockReturnValue(undefined);
 
     await createReport({
-      reporter: id("reporter"),
-      reportedType: "message",
-      reportedId: "  message-1  ",
-      categories: ["spam"],
+      reporter: id('reporter'),
+      reportedType: 'message',
+      reportedId: '  message-1  ',
+      categories: ['spam'],
     });
 
-    expect((await storedReports())[0]?.reportedId).toBe("message-1");
+    expect((await storedReports())[0]?.reportedId).toBe('message-1');
   });
 });
 
-describe("what intake refuses before it writes anything", () => {
-  it("refuses an identifier that is not a string, before building a query", async () => {
+describe('what intake refuses before it writes anything', () => {
+  it('refuses an identifier that is not a string, before building a query', async () => {
     /**
      * A truthiness check would pass `{$ne: null}` straight into the lookup. Drizzle
      * would not build a query from that object — but the guard is kept because
@@ -479,33 +491,33 @@ describe("what intake refuses before it writes anything", () => {
     await expect(
       createReport({
         reporter: injected,
-        reportedType: "user",
-        reportedId: id("user"),
-        categories: ["spam"],
+        reportedType: 'user',
+        reportedId: id('user'),
+        categories: ['spam'],
       }),
     ).rejects.toThrow(TypeError);
 
     expect(await storedReports()).toHaveLength(0);
   });
 
-  it("refuses an empty identifier", async () => {
+  it('refuses an empty identifier', async () => {
     await expect(
       createReport({
-        reporter: "   ",
-        reportedType: "user",
-        reportedId: id("user"),
-        categories: ["spam"],
+        reporter: '   ',
+        reportedType: 'user',
+        reportedId: id('user'),
+        categories: ['spam'],
       }),
     ).rejects.toThrow(/must not be empty/);
   });
 
-  it("refuses a reportedType that is not a reportable type", async () => {
+  it('refuses a reportedType that is not a reportable type', async () => {
     await expect(
       createReport({
-        reporter: id("reporter"),
-        reportedType: "device_key" as ReportedType,
-        reportedId: id("device"),
-        categories: ["spam"],
+        reporter: id('reporter'),
+        reportedType: 'device_key' as ReportedType,
+        reportedId: id('device'),
+        categories: ['spam'],
       }),
     ).rejects.toThrow(/is not a reportable type/);
 

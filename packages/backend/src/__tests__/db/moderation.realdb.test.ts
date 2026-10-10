@@ -25,16 +25,13 @@
  * that fails.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import { createDatabase, constraintNameOf, isUniqueViolation } from "@oxy.so/db";
-import type postgres from "postgres";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../db/testDatabase";
-import * as schema from "../../db/schema";
-import {
-  MissingTransactionError,
-  requireTransaction,
-} from "../../db/moderation/transactionGuard";
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { createDatabase, constraintNameOf, isUniqueViolation } from '@oxy.so/db';
+import type postgres from 'postgres';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
+import * as schema from '../../db/schema';
+import { MissingTransactionError, requireTransaction } from '../../db/moderation/transactionGuard';
 import {
   claimModerationOutboxEvent,
   completeModerationOutboxEvent,
@@ -42,13 +39,13 @@ import {
   MODERATION_OUTBOX_RETENTION_SECONDS,
   releaseModerationOutboxEvent,
   renewModerationOutboxEvent,
-} from "../../db/moderation/moderationOutboxRepository";
+} from '../../db/moderation/moderationOutboxRepository';
 import {
   claimModerationEvent,
   markModerationEventIgnored,
   markModerationEventQueued,
   releaseModerationEvent,
-} from "../../db/moderation/moderationEventRepository";
+} from '../../db/moderation/moderationEventRepository';
 import {
   applyReportDecision,
   closeUndeliverableReport,
@@ -59,17 +56,17 @@ import {
   listReportsByReporter,
   markReportDeliveryFailed,
   markReportSubmitted,
-} from "../../db/moderation/reportRepository";
+} from '../../db/moderation/reportRepository';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>["db"];
+let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
 let client: postgres.Sql;
 
 /** Unique per call so cases cannot collide inside the one shared database. */
 let counter = 0;
 function id(prefix: string): string {
   counter += 1;
-  return `${prefix}-${String(counter).padStart(4, "0")}`;
+  return `${prefix}-${String(counter).padStart(4, '0')}`;
 }
 
 const MINUTE_MS = 60_000;
@@ -90,7 +87,7 @@ async function outboxTuple(eventId: string): Promise<{ xmin: string; updated_at:
 async function insertDueOutboxEvent(eventId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await enqueueModerationOutboxEvent(
-      { eventId, kind: "report.submit", payload: { reportId: id("report") } },
+      { eventId, kind: 'report.submit', payload: { reportId: id('report') } },
       tx,
     );
   });
@@ -109,7 +106,7 @@ async function parkPendingOutboxWork(): Promise<void> {
   await db
     .update(schema.moderationOutbox)
     .set({ availableAt: future() })
-    .where(eq(schema.moderationOutbox.status, "pending"));
+    .where(eq(schema.moderationOutbox.status, 'pending'));
 }
 
 beforeAll(async () => {
@@ -124,12 +121,12 @@ afterAll(async () => {
   await handle?.drop();
 });
 
-describe("the transaction guard", () => {
-  it("refuses the ROOT connection, naming the call that was misrouted", async () => {
-    const eventId = id("outbox");
+describe('the transaction guard', () => {
+  it('refuses the ROOT connection, naming the call that was misrouted', async () => {
+    const eventId = id('outbox');
 
     const error = await enqueueModerationOutboxEvent(
-      { eventId, kind: "report.submit", payload: { reportId: id("report") } },
+      { eventId, kind: 'report.submit', payload: { reportId: id('report') } },
       db,
     ).then(
       () => null,
@@ -151,11 +148,11 @@ describe("the transaction guard", () => {
   });
 
   it("refuses the root connection for the inbound event's audit write too", async () => {
-    const eventId = id("evt");
+    const eventId = id('evt');
     await claimModerationEvent(eventId, db);
 
     const error = await markModerationEventQueued(
-      { eventId, type: "case.decided", caseId: id("case"), payload: { decision: {} } },
+      { eventId, type: 'case.decided', caseId: id('case'), payload: { decision: {} } },
       db,
     ).then(
       () => null,
@@ -172,39 +169,39 @@ describe("the transaction guard", () => {
       .select()
       .from(schema.moderationEvents)
       .where(eq(schema.moderationEvents.id, eventId));
-    expect(row.state).toBe("claimed");
+    expect(row.state).toBe('claimed');
   });
 
-  it("accepts a transaction handle, and a SAVEPOINT inside one", async () => {
+  it('accepts a transaction handle, and a SAVEPOINT inside one', async () => {
     // A nested transaction is a savepoint and has `rollback` for the same reason
     // the outer one does, which is what makes the discriminator safe inside a
     // caller that already opened a transaction.
     await db.transaction(async (tx) => {
-      expect(requireTransaction(tx, "outer")).toBe(tx);
+      expect(requireTransaction(tx, 'outer')).toBe(tx);
       await tx.transaction(async (nested) => {
-        expect(requireTransaction(nested, "nested")).toBe(nested);
+        expect(requireTransaction(nested, 'nested')).toBe(nested);
       });
     });
   });
 });
 
-describe("intake: the report and its delivery event commit together, or neither", () => {
-  it("commits both", async () => {
+describe('intake: the report and its delivery event commit together, or neither', () => {
+  it('commits both', async () => {
     const eventIds = await db.transaction(async (tx) => {
       const report = await insertReport(
         {
-          reporter: id("reporter"),
-          reportedType: "user",
-          reportedId: id("subject"),
-          categories: ["harassment", "spam"],
-          localStatus: "queued",
+          reporter: id('reporter'),
+          reportedType: 'user',
+          reportedId: id('subject'),
+          categories: ['harassment', 'spam'],
+          localStatus: 'queued',
         },
         tx,
       );
       const eventId = await enqueueModerationOutboxEvent(
         {
           eventId: `moderation:report.submit:${report.id}`,
-          kind: "report.submit",
+          kind: 'report.submit',
           payload: { reportId: report.id },
         },
         tx,
@@ -213,7 +210,7 @@ describe("intake: the report and its delivery event commit together, or neither"
     });
 
     const stored = await findReportById(eventIds.reportId, db);
-    expect(stored?.localStatus).toBe("queued");
+    expect(stored?.localStatus).toBe('queued');
     // The id is generated by the repository — `reports.id` has no database
     // default, so a row inserted without one would not exist at all.
     expect(stored?.id).toBe(eventIds.reportId);
@@ -223,39 +220,39 @@ describe("intake: the report and its delivery event commit together, or neither"
       .from(schema.moderationOutbox)
       .where(eq(schema.moderationOutbox.id, eventIds.eventId));
     expect(event.payloadReportId).toBe(eventIds.reportId);
-    expect(event.status).toBe("pending");
+    expect(event.status).toBe('pending');
 
     // The writer owns the deadline the expiry sweep reaps against.
     const expectedExpiry = event.createdAt.getTime() + MODERATION_OUTBOX_RETENTION_SECONDS * 1_000;
     expect(Math.abs(event.expiresAt.getTime() - expectedExpiry)).toBeLessThan(60_000);
   });
 
-  it("commits NEITHER when the transaction fails after both writes", async () => {
-    const reporter = id("reporter");
-    const reportedId = id("subject");
-    let eventId = "";
+  it('commits NEITHER when the transaction fails after both writes', async () => {
+    const reporter = id('reporter');
+    const reportedId = id('subject');
+    let eventId = '';
 
     const error = await db
       .transaction(async (tx) => {
         const report = await insertReport(
           {
             reporter,
-            reportedType: "user",
+            reportedType: 'user',
             reportedId,
-            categories: ["spam"],
-            localStatus: "queued",
+            categories: ['spam'],
+            localStatus: 'queued',
           },
           tx,
         );
         eventId = await enqueueModerationOutboxEvent(
           {
             eventId: `moderation:report.submit:${report.id}`,
-            kind: "report.submit",
+            kind: 'report.submit',
             payload: { reportId: report.id },
           },
           tx,
         );
-        throw new Error("deliberate rollback");
+        throw new Error('deliberate rollback');
       })
       .then(
         () => null,
@@ -265,7 +262,9 @@ describe("intake: the report and its delivery event commit together, or neither"
     expect(error).not.toBeNull();
     // This is the property `POST /reports`'s 201 rests on: never a report with no
     // delivery event, and never a delivery event naming a report that rolled back.
-    expect(await findReportBySubject({ reporter, reportedId, reportedType: "user" }, db)).toBeUndefined();
+    expect(
+      await findReportBySubject({ reporter, reportedId, reportedType: 'user' }, db),
+    ).toBeUndefined();
     const events = await db
       .select()
       .from(schema.moderationOutbox)
@@ -273,13 +272,19 @@ describe("intake: the report and its delivery event commit together, or neither"
     expect(events).toHaveLength(0);
   });
 
-  it("refuses a second report of the same subject by the same reporter", async () => {
-    const reporter = id("reporter");
-    const reportedId = id("subject");
+  it('refuses a second report of the same subject by the same reporter', async () => {
+    const reporter = id('reporter');
+    const reportedId = id('subject');
     const insert = () =>
       db.transaction(async (tx) =>
         insertReport(
-          { reporter, reportedType: "user", reportedId, categories: ["spam"], localStatus: "queued" },
+          {
+            reporter,
+            reportedType: 'user',
+            reportedId,
+            categories: ['spam'],
+            localStatus: 'queued',
+          },
           tx,
         ),
       );
@@ -295,44 +300,44 @@ describe("intake: the report and its delivery event commit together, or neither"
     // constraint name lives on `cause` and a regex over the text would pass for
     // the wrong index.
     expect(isUniqueViolation(error)).toBe(true);
-    expect(constraintNameOf(error)).toBe("reports_reporter_reported_id_reported_type_key");
+    expect(constraintNameOf(error)).toBe('reports_reporter_reported_id_reported_type_key');
   });
 
-  it("stores a locally-recorded report with its reason and no delivery event", async () => {
+  it('stores a locally-recorded report with its reason and no delivery event', async () => {
     // The common case in Allo: a reported message never leaves, because the
     // server cannot read one.
     const report = await db.transaction(async (tx) =>
       insertReport(
         {
-          reporter: id("reporter"),
-          reportedType: "message",
-          reportedId: id("msg"),
-          categories: ["explicit_content"],
-          localStatus: "received",
+          reporter: id('reporter'),
+          reportedType: 'message',
+          reportedId: id('msg'),
+          categories: ['explicit_content'],
+          localStatus: 'received',
           localStatusReason: "Allo has no moderation subject provider for 'message'.",
         },
         tx,
       ),
     );
 
-    expect(report.localStatus).toBe("received");
-    expect(report.localStatusReason).toContain("no moderation subject provider");
-    expect(report.status).toBe("pending");
+    expect(report.localStatus).toBe('received');
+    expect(report.localStatusReason).toContain('no moderation subject provider');
+    expect(report.status).toBe('pending');
   });
 });
 
-describe("the enqueue is idempotent, structurally", () => {
-  it("treats a repeated enqueue of the same id as a genuine no-op", async () => {
-    const eventId = id("outbox");
-    const payload = { reportId: id("report") };
+describe('the enqueue is idempotent, structurally', () => {
+  it('treats a repeated enqueue of the same id as a genuine no-op', async () => {
+    const eventId = id('outbox');
+    const payload = { reportId: id('report') };
     await db.transaction(async (tx) =>
-      enqueueModerationOutboxEvent({ eventId, kind: "report.submit", payload }, tx),
+      enqueueModerationOutboxEvent({ eventId, kind: 'report.submit', payload }, tx),
     );
 
     const before = await outboxTuple(eventId);
     await new Promise((resolve) => setTimeout(resolve, 25));
     await db.transaction(async (tx) =>
-      enqueueModerationOutboxEvent({ eventId, kind: "report.submit", payload }, tx),
+      enqueueModerationOutboxEvent({ eventId, kind: 'report.submit', payload }, tx),
     );
     const after = await outboxTuple(eventId);
 
@@ -344,18 +349,18 @@ describe("the enqueue is idempotent, structurally", () => {
     expect(after.updated_at).toBe(before.updated_at);
   });
 
-  it("does not let a repeat rewrite the payload of the row already queued", async () => {
-    const eventId = id("outbox");
-    const original = id("report");
+  it('does not let a repeat rewrite the payload of the row already queued', async () => {
+    const eventId = id('outbox');
+    const original = id('report');
     await db.transaction(async (tx) =>
       enqueueModerationOutboxEvent(
-        { eventId, kind: "report.submit", payload: { reportId: original } },
+        { eventId, kind: 'report.submit', payload: { reportId: original } },
         tx,
       ),
     );
     await db.transaction(async (tx) =>
       enqueueModerationOutboxEvent(
-        { eventId, kind: "report.submit", payload: { reportId: id("other") } },
+        { eventId, kind: 'report.submit', payload: { reportId: id('other') } },
         tx,
       ),
     );
@@ -368,13 +373,13 @@ describe("the enqueue is idempotent, structurally", () => {
   });
 });
 
-describe("the claim is a lease, and leases are held under concurrency", () => {
-  it("hands N concurrent dispatchers N DIFFERENT rows", async () => {
+describe('the claim is a lease, and leases are held under concurrency', () => {
+  it('hands N concurrent dispatchers N DIFFERENT rows', async () => {
     await parkPendingOutboxWork();
-    const owners = ["a", "b", "c", "d", "e", "f"].map((suffix) => id(`owner-${suffix}`));
+    const owners = ['a', 'b', 'c', 'd', 'e', 'f'].map((suffix) => id(`owner-${suffix}`));
     const eventIds: string[] = [];
     for (let index = 0; index < owners.length; index += 1) {
-      const eventId = id("outbox-race");
+      const eventId = id('outbox-race');
       await insertDueOutboxEvent(eventId);
       eventIds.push(eventId);
     }
@@ -393,32 +398,35 @@ describe("the claim is a lease, and leases are held under concurrency", () => {
     expect(ids.every((value) => eventIds.includes(String(value)))).toBe(true);
   });
 
-  it("SKIPS a row another transaction is holding, rather than waiting for it", async () => {
+  it('SKIPS a row another transaction is holding, rather than waiting for it', async () => {
     await parkPendingOutboxWork();
-    const held = id("outbox-held");
-    const free = id("outbox-free");
+    const held = id('outbox-held');
+    const free = id('outbox-free');
     await insertDueOutboxEvent(held);
     await insertDueOutboxEvent(free);
 
     let concurrent: Awaited<ReturnType<typeof claimModerationOutboxEvent>> = null;
     await db.transaction(async (tx) => {
       // Claimed and still uncommitted, so its row lock is live for the whole body.
-      const first = await claimModerationOutboxEvent({ leaseOwner: id("owner"), eventId: held }, tx);
+      const first = await claimModerationOutboxEvent(
+        { leaseOwner: id('owner'), eventId: held },
+        tx,
+      );
       expect(first?.id).toBe(held);
 
       // Without `skip locked` this second claim blocks on that lock until the
       // outer transaction commits — which it cannot, because it is awaiting this.
-      concurrent = await claimModerationOutboxEvent({ leaseOwner: id("owner") }, db);
+      concurrent = await claimModerationOutboxEvent({ leaseOwner: id('owner') }, db);
     });
 
     expect(concurrent).not.toBeNull();
     expect(concurrent?.id).toBe(free);
   });
 
-  it("counts attempts and clears the previous error on every claim", async () => {
-    const eventId = id("outbox");
+  it('counts attempts and clears the previous error on every claim', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
-    const owner = id("owner");
+    const owner = id('owner');
 
     const first = await claimModerationOutboxEvent({ leaseOwner: owner, eventId }, db);
     expect(first?.attempts).toBe(1);
@@ -433,7 +441,7 @@ describe("the claim is a lease, and leases are held under concurrency", () => {
         leaseOwner: owner,
         deadLettered: false,
         availableAt: new Date(Date.now() - 1_000),
-        error: "a transient failure",
+        error: 'a transient failure',
       },
       db,
     );
@@ -447,71 +455,75 @@ describe("the claim is a lease, and leases are held under concurrency", () => {
     expect(row.lastError).toBeNull();
   });
 
-  it("reclaims an EXPIRED lease and leaves a live one alone", async () => {
-    const eventId = id("outbox");
+  it('reclaims an EXPIRED lease and leaves a live one alone', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
 
     const claimed = await claimModerationOutboxEvent(
-      { leaseOwner: id("owner-dead"), eventId, leaseMs: MINUTE_MS },
+      { leaseOwner: id('owner-dead'), eventId, leaseMs: MINUTE_MS },
       db,
     );
     expect(claimed?.id).toBe(eventId);
 
     // Nobody else may take it while the lease is live.
-    expect(await claimModerationOutboxEvent({ leaseOwner: id("owner-early"), eventId }, db)).toBeNull();
+    expect(
+      await claimModerationOutboxEvent({ leaseOwner: id('owner-early'), eventId }, db),
+    ).toBeNull();
 
     // The clock moves rather than the lease shortening, because that is the real
     // failure: a task that died holding this row, and a survivor that has to be
     // able to pick the work back up.
     const afterLapse = new Date(Date.now() + 2 * MINUTE_MS);
     const reclaimed = await claimModerationOutboxEvent(
-      { leaseOwner: id("owner-live"), eventId, now: afterLapse },
+      { leaseOwner: id('owner-live'), eventId, now: afterLapse },
       db,
     );
     expect(reclaimed?.id).toBe(eventId);
     expect(reclaimed?.attempts).toBe(2);
   });
 
-  it("never claims a row that has never been leased through the reclaim branch", async () => {
+  it('never claims a row that has never been leased through the reclaim branch', async () => {
     // `lease_until` is NULL for a fresh row and `NULL <= now` is NULL, so the
     // reclaim branch excludes it by the comparison itself.
-    const eventId = id("outbox");
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
     await db
       .update(schema.moderationOutbox)
-      .set({ status: "processing" })
+      .set({ status: 'processing' })
       .where(eq(schema.moderationOutbox.id, eventId));
 
-    expect(await claimModerationOutboxEvent({ leaseOwner: id("owner"), eventId }, db)).toBeNull();
+    expect(await claimModerationOutboxEvent({ leaseOwner: id('owner'), eventId }, db)).toBeNull();
   });
 
-  it("does not claim work that is not due yet", async () => {
-    const eventId = id("outbox");
+  it('does not claim work that is not due yet', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
     await db
       .update(schema.moderationOutbox)
       .set({ availableAt: future() })
       .where(eq(schema.moderationOutbox.id, eventId));
 
-    expect(await claimModerationOutboxEvent({ leaseOwner: id("owner"), eventId }, db)).toBeNull();
+    expect(await claimModerationOutboxEvent({ leaseOwner: id('owner'), eventId }, db)).toBeNull();
   });
 });
 
-describe("only the owner of a live lease may finish the work", () => {
-  it("completes for the owner and refuses everyone else", async () => {
-    const eventId = id("outbox");
+describe('only the owner of a live lease may finish the work', () => {
+  it('completes for the owner and refuses everyone else', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
-    const owner = id("owner");
+    const owner = id('owner');
     await claimModerationOutboxEvent({ leaseOwner: owner, eventId }, db);
 
-    expect(await completeModerationOutboxEvent(eventId, id("stranger"), new Date(), db)).toBe(false);
+    expect(await completeModerationOutboxEvent(eventId, id('stranger'), new Date(), db)).toBe(
+      false,
+    );
     expect(await completeModerationOutboxEvent(eventId, owner, new Date(), db)).toBe(true);
 
     const [row] = await db
       .select()
       .from(schema.moderationOutbox)
       .where(eq(schema.moderationOutbox.id, eventId));
-    expect(row.status).toBe("processed");
+    expect(row.status).toBe('processed');
     expect(row.leaseOwner).toBeNull();
     expect(row.processedAt).not.toBeNull();
 
@@ -519,10 +531,10 @@ describe("only the owner of a live lease may finish the work", () => {
     expect(await completeModerationOutboxEvent(eventId, owner, new Date(), db)).toBe(false);
   });
 
-  it("refuses to complete or renew an EXPIRED lease", async () => {
-    const eventId = id("outbox");
+  it('refuses to complete or renew an EXPIRED lease', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
-    const owner = id("owner");
+    const owner = id('owner');
     const claimed = await claimModerationOutboxEvent(
       { leaseOwner: owner, eventId, leaseMs: MINUTE_MS },
       db,
@@ -540,14 +552,19 @@ describe("only the owner of a live lease may finish the work", () => {
     expect(await completeModerationOutboxEvent(eventId, owner, new Date(), db)).toBe(true);
   });
 
-  it("extends a live lease for its owner", async () => {
-    const eventId = id("outbox");
+  it('extends a live lease for its owner', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
-    const owner = id("owner");
-    const claimed = await claimModerationOutboxEvent({ leaseOwner: owner, eventId, leaseMs: 5_000 }, db);
+    const owner = id('owner');
+    const claimed = await claimModerationOutboxEvent(
+      { leaseOwner: owner, eventId, leaseMs: 5_000 },
+      db,
+    );
     expect(claimed?.id).toBe(eventId);
 
-    expect(await renewModerationOutboxEvent(eventId, owner, 2 * MINUTE_MS, new Date(), db)).toBe(true);
+    expect(await renewModerationOutboxEvent(eventId, owner, 2 * MINUTE_MS, new Date(), db)).toBe(
+      true,
+    );
     const [row] = await db
       .select()
       .from(schema.moderationOutbox)
@@ -555,10 +572,10 @@ describe("only the owner of a live lease may finish the work", () => {
     expect(row.leaseUntil.getTime()).toBeGreaterThan(claimed.leaseUntil.getTime());
   });
 
-  it("dead-letters with its error, and bounds it", async () => {
-    const eventId = id("outbox");
+  it('dead-letters with its error, and bounds it', async () => {
+    const eventId = id('outbox');
     await insertDueOutboxEvent(eventId);
-    const owner = id("owner");
+    const owner = id('owner');
     await claimModerationOutboxEvent({ leaseOwner: owner, eventId }, db);
 
     const released = await releaseModerationOutboxEvent(
@@ -567,7 +584,7 @@ describe("only the owner of a live lease may finish the work", () => {
         leaseOwner: owner,
         deadLettered: true,
         availableAt: new Date(),
-        error: "x".repeat(5_000),
+        error: 'x'.repeat(5_000),
       },
       db,
     );
@@ -577,16 +594,16 @@ describe("only the owner of a live lease may finish the work", () => {
       .select()
       .from(schema.moderationOutbox)
       .where(eq(schema.moderationOutbox.id, eventId));
-    expect(row.status).toBe("dead_letter");
+    expect(row.status).toBe('dead_letter');
     // The bound lives at the repository so it holds for every caller.
     expect(row.lastError).toHaveLength(2_000);
     expect(row.leaseOwner).toBeNull();
   });
 });
 
-describe("the inbound webhook dedupe claim", () => {
+describe('the inbound webhook dedupe claim', () => {
   it("answers 'already seen' as a VALUE, not as a thrown duplicate key", async () => {
-    const eventId = id("evt");
+    const eventId = id('evt');
     expect(await claimModerationEvent(eventId, db)).toBe(true);
     // A second delivery, on another ECS task, gets `false` — not an exception a
     // `catch` has to classify apart from a lost connection.
@@ -596,11 +613,11 @@ describe("the inbound webhook dedupe claim", () => {
       .select()
       .from(schema.moderationEvents)
       .where(eq(schema.moderationEvents.id, eventId));
-    expect(row.state).toBe("claimed");
+    expect(row.state).toBe('claimed');
   });
 
-  it("releases a claim by deleting it, so a redelivery can be processed", async () => {
-    const eventId = id("evt");
+  it('releases a claim by deleting it, so a redelivery can be processed', async () => {
+    const eventId = id('evt');
     await claimModerationEvent(eventId, db);
     await releaseModerationEvent(eventId, db);
 
@@ -612,20 +629,20 @@ describe("the inbound webhook dedupe claim", () => {
     expect(await claimModerationEvent(eventId, db)).toBe(true);
   });
 
-  it("records a decision event and queues its work in ONE transaction", async () => {
-    const eventId = id("evt");
-    const caseId = id("case");
+  it('records a decision event and queues its work in ONE transaction', async () => {
+    const eventId = id('evt');
+    const caseId = id('case');
     await claimModerationEvent(eventId, db);
 
     await db.transaction(async (tx) => {
       await markModerationEventQueued(
-        { eventId, type: "case.decided", caseId, payload: { caseId, decision: { revision: 1 } } },
+        { eventId, type: 'case.decided', caseId, payload: { caseId, decision: { revision: 1 } } },
         tx,
       );
       await enqueueModerationOutboxEvent(
         {
           eventId: `moderation:decision.apply:${eventId}`,
-          kind: "decision.apply",
+          kind: 'decision.apply',
           payload: { eventId, caseId, decision: { revision: 1 } },
         },
         tx,
@@ -636,7 +653,7 @@ describe("the inbound webhook dedupe claim", () => {
       .select()
       .from(schema.moderationEvents)
       .where(eq(schema.moderationEvents.id, eventId));
-    expect(event.state).toBe("queued");
+    expect(event.state).toBe('queued');
     expect(event.caseId).toBe(caseId);
     expect(event.queuedAt).not.toBeNull();
 
@@ -644,29 +661,33 @@ describe("the inbound webhook dedupe claim", () => {
       .select()
       .from(schema.moderationOutbox)
       .where(eq(schema.moderationOutbox.id, `moderation:decision.apply:${eventId}`));
-    expect(work.kind).toBe("decision.apply");
+    expect(work.kind).toBe('decision.apply');
     expect(work.payloadCaseId).toBe(caseId);
     // The decision rides whole in `jsonb`: §10.11 makes it loose, and projecting
     // it into columns would drop whatever a newer CrowdSource added.
     expect(work.payloadDecision).toEqual({ revision: 1 });
   });
 
-  it("leaves the claim held and nothing queued when that transaction fails", async () => {
-    const eventId = id("evt");
-    const caseId = id("case");
+  it('leaves the claim held and nothing queued when that transaction fails', async () => {
+    const eventId = id('evt');
+    const caseId = id('case');
     await claimModerationEvent(eventId, db);
 
     const error = await db
       .transaction(async (tx) => {
         await markModerationEventQueued(
-          { eventId, type: "case.decided", caseId, payload: { caseId } },
+          { eventId, type: 'case.decided', caseId, payload: { caseId } },
           tx,
         );
         await enqueueModerationOutboxEvent(
-          { eventId: `moderation:decision.apply:${eventId}`, kind: "decision.apply", payload: { eventId, caseId } },
+          {
+            eventId: `moderation:decision.apply:${eventId}`,
+            kind: 'decision.apply',
+            payload: { eventId, caseId },
+          },
           tx,
         );
-        throw new Error("deliberate rollback");
+        throw new Error('deliberate rollback');
       })
       .then(
         () => null,
@@ -681,7 +702,7 @@ describe("the inbound webhook dedupe claim", () => {
     // Still `claimed`: the only two outcomes are "recorded and queued" or
     // "neither", and "neither" is what the middleware releases and CrowdSource
     // redelivers.
-    expect(event.state).toBe("claimed");
+    expect(event.state).toBe('claimed');
     const work = await db
       .select()
       .from(schema.moderationOutbox)
@@ -689,10 +710,13 @@ describe("the inbound webhook dedupe claim", () => {
     expect(work).toHaveLength(0);
   });
 
-  it("never manufactures an audit row for an event nothing claimed", async () => {
-    const eventId = id("evt-unclaimed");
+  it('never manufactures an audit row for an event nothing claimed', async () => {
+    const eventId = id('evt-unclaimed');
     const queued = await db.transaction(async (tx) =>
-      markModerationEventQueued({ eventId, type: "case.decided", caseId: id("case"), payload: {} }, tx),
+      markModerationEventQueued(
+        { eventId, type: 'case.decided', caseId: id('case'), payload: {} },
+        tx,
+      ),
     );
 
     expect(queued).toBe(false);
@@ -703,33 +727,33 @@ describe("the inbound webhook dedupe claim", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("records an ignored event without erasing a case id it already had", async () => {
-    const eventId = id("evt");
-    const caseId = id("case");
+  it('records an ignored event without erasing a case id it already had', async () => {
+    const eventId = id('evt');
+    const caseId = id('case');
     await claimModerationEvent(eventId, db);
-    await markModerationEventIgnored({ eventId, type: "case.created", caseId }, db);
-    await markModerationEventIgnored({ eventId, type: "case.escalated" }, db);
+    await markModerationEventIgnored({ eventId, type: 'case.created', caseId }, db);
+    await markModerationEventIgnored({ eventId, type: 'case.escalated' }, db);
 
     const [row] = await db
       .select()
       .from(schema.moderationEvents)
       .where(eq(schema.moderationEvents.id, eventId));
-    expect(row.state).toBe("ignored");
-    expect(row.type).toBe("case.escalated");
+    expect(row.state).toBe('ignored');
+    expect(row.type).toBe('case.escalated');
     expect(row.caseId).toBe(caseId);
   });
 });
 
-describe("recording a decision on the report it belongs to", () => {
+describe('recording a decision on the report it belongs to', () => {
   async function queuedReport(): Promise<string> {
     const report = await db.transaction(async (tx) =>
       insertReport(
         {
-          reporter: id("reporter"),
-          reportedType: "user",
-          reportedId: id("subject"),
-          categories: ["hate_speech"],
-          localStatus: "queued",
+          reporter: id('reporter'),
+          reportedType: 'user',
+          reportedId: id('subject'),
+          categories: ['hate_speech'],
+          localStatus: 'queued',
         },
         tx,
       ),
@@ -737,21 +761,21 @@ describe("recording a decision on the report it belongs to", () => {
     return report.id;
   }
 
-  it("applies the FIRST decision, whose expected revision is NULL", async () => {
+  it('applies the FIRST decision, whose expected revision is NULL', async () => {
     const reportId = await queuedReport();
 
     const applied = await applyReportDecision(
       {
         reportId,
         expectedRevision: null,
-        status: "resolved",
-        localStatus: "submitted",
-        decisionId: id("decision"),
+        status: 'resolved',
+        localStatus: 'submitted',
+        decisionId: id('decision'),
         decisionRevision: 1,
-        decisionOutcome: "violation",
-        decisionStatus: "final",
+        decisionOutcome: 'violation',
+        decisionStatus: 'final',
         decidedAt: new Date(),
-        enforcedAction: "restrict",
+        enforcedAction: 'restrict',
       },
       db,
     );
@@ -762,26 +786,26 @@ describe("recording a decision on the report it belongs to", () => {
     expect(applied).toBe(true);
     const stored = await findReportById(reportId, db);
     expect(stored?.decisionRevision).toBe(1);
-    expect(stored?.enforcedAction).toBe("restrict");
+    expect(stored?.enforcedAction).toBe('restrict');
     // Nothing acted, so nothing claims it did.
     expect(stored?.enforcedAt).toBeNull();
   });
 
-  it("refuses a write whose expected revision is stale", async () => {
+  it('refuses a write whose expected revision is stale', async () => {
     const reportId = await queuedReport();
     const decision = (revision: number, expectedRevision: number | null) =>
       applyReportDecision(
         {
           reportId,
           expectedRevision,
-          status: "resolved",
-          localStatus: "submitted",
-          decisionId: id("decision"),
+          status: 'resolved',
+          localStatus: 'submitted',
+          decisionId: id('decision'),
           decisionRevision: revision,
-          decisionOutcome: "no_violation",
-          decisionStatus: "final",
+          decisionOutcome: 'no_violation',
+          decisionStatus: 'final',
           decidedAt: new Date(),
-          enforcedAction: "restore",
+          enforcedAction: 'restore',
         },
         db,
       );
@@ -793,38 +817,38 @@ describe("recording a decision on the report it belongs to", () => {
     expect((await findReportById(reportId, db))?.decisionRevision).toBe(3);
   });
 
-  it("finds the report a decision names by its case id", async () => {
+  it('finds the report a decision names by its case id', async () => {
     const reportId = await queuedReport();
-    const caseId = id("case");
+    const caseId = id('case');
     await markReportSubmitted(
       {
         reportId,
-        crowdSourceReportId: id("cs-report"),
+        crowdSourceReportId: id('cs-report'),
         crowdSourceCaseId: caseId,
         crowdSourceMerged: false,
-        contentSnapshotHash: "sha256:deadbeef",
+        contentSnapshotHash: 'sha256:deadbeef',
       },
       db,
     );
 
     const found = await findReportByCaseId(caseId, db);
     expect(found?.id).toBe(reportId);
-    expect(found?.localStatus).toBe("submitted");
+    expect(found?.localStatus).toBe('submitted');
     expect(found?.submittedAt).not.toBeNull();
   });
 });
 
-describe("what delivery writes back onto the report", () => {
+describe('what delivery writes back onto the report', () => {
   async function deliverableReport(): Promise<string> {
     const report = await db.transaction(async (tx) =>
       insertReport(
         {
-          reporter: id("reporter"),
-          reportedType: "user",
-          reportedId: id("subject"),
-          categories: ["misinformation"],
-          localStatus: "queued",
-          localStatusReason: "a reason from an earlier attempt",
+          reporter: id('reporter'),
+          reportedType: 'user',
+          reportedId: id('subject'),
+          categories: ['misinformation'],
+          localStatus: 'queued',
+          localStatusReason: 'a reason from an earlier attempt',
         },
         tx,
       ),
@@ -832,70 +856,70 @@ describe("what delivery writes back onto the report", () => {
     return report.id;
   }
 
-  it("clears the previous failure and reason when the report is submitted", async () => {
+  it('clears the previous failure and reason when the report is submitted', async () => {
     const reportId = await deliverableReport();
-    await markReportDeliveryFailed(reportId, "the gateway timed out", db);
-    expect((await findReportById(reportId, db))?.localStatus).toBe("delivery_failed");
+    await markReportDeliveryFailed(reportId, 'the gateway timed out', db);
+    expect((await findReportById(reportId, db))?.localStatus).toBe('delivery_failed');
 
     await markReportSubmitted(
       {
         reportId,
-        crowdSourceReportId: id("cs-report"),
-        crowdSourceCaseId: id("case"),
+        crowdSourceReportId: id('cs-report'),
+        crowdSourceCaseId: id('case'),
         crowdSourceMerged: true,
-        contentSnapshotHash: "sha256:cafe",
+        contentSnapshotHash: 'sha256:cafe',
       },
       db,
     );
 
     const stored = await findReportById(reportId, db);
-    expect(stored?.localStatus).toBe("submitted");
+    expect(stored?.localStatus).toBe('submitted');
     // A stale reason is worse than none: both describe a state the row has left.
     expect(stored?.lastDeliveryError).toBeNull();
     expect(stored?.localStatusReason).toBeNull();
     expect(stored?.crowdSourceMerged).toBe(true);
   });
 
-  it("bounds a delivery error at its declared length", async () => {
+  it('bounds a delivery error at its declared length', async () => {
     const reportId = await deliverableReport();
-    await markReportDeliveryFailed(reportId, "y".repeat(9_000), db);
+    await markReportDeliveryFailed(reportId, 'y'.repeat(9_000), db);
     expect((await findReportById(reportId, db))?.lastDeliveryError).toHaveLength(2_000);
   });
 
-  it("closes a report whose subject no longer exists, with the reason stored", async () => {
+  it('closes a report whose subject no longer exists, with the reason stored', async () => {
     const reportId = await deliverableReport();
     await closeUndeliverableReport(
       reportId,
-      "The reported account no longer exists, so there is nothing to review.",
+      'The reported account no longer exists, so there is nothing to review.',
       db,
     );
 
     const stored = await findReportById(reportId, db);
-    expect(stored?.localStatus).toBe("closed");
-    expect(stored?.localStatusReason).toContain("no longer exists");
+    expect(stored?.localStatus).toBe('closed');
+    expect(stored?.localStatusReason).toContain('no longer exists');
   });
 
-  it("reports `false` rather than throwing when the report is already gone", async () => {
+  it('reports `false` rather than throwing when the report is already gone', async () => {
     // The delivery event can outlive its report; a worker looking for one that
     // was deleted has nothing to do and nothing to retry.
-    expect(await markReportDeliveryFailed(id("missing"), "anything", db)).toBe(false);
-    expect(await closeUndeliverableReport(id("missing"), "anything", db)).toBe(false);
+    expect(await markReportDeliveryFailed(id('missing'), 'anything', db)).toBe(false);
+    expect(await closeUndeliverableReport(id('missing'), 'anything', db)).toBe(false);
   });
 });
 
 describe("the reporter's own list", () => {
   it("returns only this reporter's reports, newest first, and no operational state", async () => {
-    const reporter = id("reporter");
+    const reporter = id('reporter');
     for (let index = 0; index < 3; index += 1) {
       await db.transaction(async (tx) =>
         insertReport(
           {
             reporter,
-            reportedType: "user",
-            reportedId: id("subject"),
-            categories: ["spam"],
-            localStatus: "queued",
-            localStatusReason: "operational state that must not be returned",
+            reportedType: 'user',
+            reportedId: id('subject'),
+            categories: ['spam'],
+            localStatus: 'queued',
+            localStatusReason: 'operational state that must not be returned',
           },
           tx,
         ),
@@ -904,11 +928,11 @@ describe("the reporter's own list", () => {
     await db.transaction(async (tx) =>
       insertReport(
         {
-          reporter: id("someone-else"),
-          reportedType: "user",
-          reportedId: id("subject"),
-          categories: ["spam"],
-          localStatus: "queued",
+          reporter: id('someone-else'),
+          reportedType: 'user',
+          reportedId: id('subject'),
+          categories: ['spam'],
+          localStatus: 'queued',
         },
         tx,
       ),
@@ -919,13 +943,13 @@ describe("the reporter's own list", () => {
     // The projection is the security boundary: a reporter learning which of their
     // reports left the deployment learns which can be made to disappear.
     expect(Object.keys(rows[0]).sort()).toEqual([
-      "categories",
-      "createdAt",
-      "details",
-      "id",
-      "reportedId",
-      "reportedType",
-      "status",
+      'categories',
+      'createdAt',
+      'details',
+      'id',
+      'reportedId',
+      'reportedType',
+      'status',
     ]);
     for (let index = 1; index < rows.length; index += 1) {
       expect(rows[index - 1].createdAt.getTime()).toBeGreaterThanOrEqual(
@@ -938,12 +962,12 @@ describe("the reporter's own list", () => {
     const report = await db.transaction(async (tx) =>
       insertReport(
         {
-          reporter: id("reporter"),
-          reportedType: "user",
-          reportedId: id("subject"),
-          categories: ["other"],
-          details: "z".repeat(900),
-          localStatus: "queued",
+          reporter: id('reporter'),
+          reportedType: 'user',
+          reportedId: id('subject'),
+          categories: ['other'],
+          details: 'z'.repeat(900),
+          localStatus: 'queued',
         },
         tx,
       ),
@@ -952,8 +976,8 @@ describe("the reporter's own list", () => {
   });
 });
 
-describe("sanity", () => {
-  it("wrote through the schema helpers, so the casing matches the migration", async () => {
+describe('sanity', () => {
+  it('wrote through the schema helpers, so the casing matches the migration', async () => {
     const [row] = await client<{ total: number }[]>`
       select count(*)::int as total from moderation_outbox
     `;

@@ -1,20 +1,20 @@
-import { isUniqueViolation } from "@oxy.so/db";
-import { getDb } from "../../db";
+import { isUniqueViolation } from '@oxy.so/db';
+import { getDb } from '../../db';
 import {
   findReportBySubject,
   insertReport,
   type ModerationReport,
-} from "../../db/moderation/reportRepository";
+} from '../../db/moderation/reportRepository';
 import {
   isReportedType,
   type ModerationLocalStatus,
   type ReportCategory,
   type ReportedType,
-} from "../../db/schema/moderation";
-import { enqueueModerationOutboxEvent } from "../../db/moderation/moderationOutboxRepository";
-import { reportSubmitEventId } from "./ModerationOutboxService";
-import { reportedIdentifierProblem, resolveModerationSubject } from "./subjectIdentity";
-import { subjectProviderFor } from "./subjects/registry";
+} from '../../db/schema/moderation';
+import { enqueueModerationOutboxEvent } from '../../db/moderation/moderationOutboxRepository';
+import { reportSubmitEventId } from './ModerationOutboxService';
+import { reportedIdentifierProblem, resolveModerationSubject } from './subjectIdentity';
+import { subjectProviderFor } from './subjects/registry';
 
 /**
  * Storing a report and, when there is somewhere to send it, the promise to deliver
@@ -59,8 +59,8 @@ export class DuplicateReportError extends Error {
   readonly existing: ModerationReport;
 
   constructor(existing: ModerationReport) {
-    super("This item has already been reported by this reporter.");
-    this.name = "DuplicateReportError";
+    super('This item has already been reported by this reporter.');
+    this.name = 'DuplicateReportError';
     this.existing = existing;
   }
 }
@@ -81,9 +81,9 @@ export class DuplicateReportError extends Error {
  * at one caller is a guard that holds until the second one arrives.
  */
 function requireIdentifier(value: unknown, field: string): string {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     throw new TypeError(
-      `createReport: '${field}' must be a string, received ${value === null ? "null" : typeof value}.`,
+      `createReport: '${field}' must be a string, received ${value === null ? 'null' : typeof value}.`,
     );
   }
   const trimmed = value.trim();
@@ -123,8 +123,8 @@ export interface CreateReportResult {
 function localOnlyReason(reportedType: string): string {
   return (
     `Allo has no moderation subject provider for '${reportedType}', so this report is ` +
-    "recorded locally and is not sent for community review. Message content is " +
-    "end-to-end encrypted and cannot be disclosed to reviewers."
+    'recorded locally and is not sent for community review. Message content is ' +
+    'end-to-end encrypted and cannot be disclosed to reviewers.'
   );
 }
 
@@ -160,7 +160,7 @@ function routeReport(reportedType: ReportedType, reportedId: string): ReportRout
   }
 
   const subject = resolveModerationSubject(reportedId);
-  if (subject.kind === "not-an-oxy-account") {
+  if (subject.kind === 'not-an-oxy-account') {
     return {
       reportedId: subject.reportedId,
       deliverable: false,
@@ -195,8 +195,8 @@ function routeReport(reportedType: ReportedType, reportedId: string): ReportRout
  * whether this application can describe the object at all.
  */
 export async function createReport(input: CreateReportInput): Promise<CreateReportResult> {
-  const reporter = requireIdentifier(input.reporter, "reporter");
-  const rawReportedId = requireIdentifier(input.reportedId, "reportedId");
+  const reporter = requireIdentifier(input.reporter, 'reporter');
+  const rawReportedId = requireIdentifier(input.reportedId, 'reportedId');
 
   /**
    * Bounded HERE as well as at the route, and for the same reason `requireIdentifier`
@@ -214,7 +214,7 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
     throw new TypeError(`createReport: ${identifierProblem}.`);
   }
 
-  const rawReportedType = requireIdentifier(input.reportedType, "reportedType");
+  const rawReportedType = requireIdentifier(input.reportedType, 'reportedType');
   if (!isReportedType(rawReportedType)) {
     throw new TypeError(
       `createReport: reportedType '${rawReportedType}' is not a reportable type.`,
@@ -234,11 +234,8 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
    * The DELIVERY pipeline never does this: the resolution is at the edge, and
    * intake is the edge. Everything past this line sees an Oxy user id.
    */
-  const { reportedId, deliverable, localStatusReason } = routeReport(
-    reportedType,
-    rawReportedId,
-  );
-  const localStatus: ModerationLocalStatus = deliverable ? "queued" : "received";
+  const { reportedId, deliverable, localStatusReason } = routeReport(reportedType, rawReportedId);
+  const localStatus: ModerationLocalStatus = deliverable ? 'queued' : 'received';
 
   const db = getDb();
   try {
@@ -253,7 +250,7 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
           reporter,
           categories: input.categories,
           ...(input.details === undefined ? {} : { details: input.details }),
-          status: "pending",
+          status: 'pending',
           localStatus,
           ...(localStatusReason === undefined ? {} : { localStatusReason }),
         },
@@ -265,7 +262,7 @@ export async function createReport(input: CreateReportInput): Promise<CreateRepo
       const outboxEventId = await enqueueModerationOutboxEvent(
         {
           eventId: reportSubmitEventId(report.id),
-          kind: "report.submit",
+          kind: 'report.submit',
           payload: { reportId: report.id },
         },
         tx,

@@ -67,7 +67,7 @@ function isRetryableError(error: unknown, config: Required<RetryConfig>): boolea
  * Sleep for specified milliseconds
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -81,7 +81,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  config: RetryConfig = {}
+  config: RetryConfig = {},
 ): Promise<T> {
   const fullConfig = { ...DEFAULT_CONFIG, ...config };
   let lastError: unknown;
@@ -115,7 +115,7 @@ export async function retryWithBackoff<T>(
         {
           error: getErrorMessage(error) ?? error,
           status: getHttpStatus(error),
-        }
+        },
       );
 
       // Wait before retry
@@ -124,10 +124,7 @@ export async function retryWithBackoff<T>(
   }
 
   // All retries exhausted
-  console.error(
-    `[Retry] All ${fullConfig.maxRetries} retry attempts failed`,
-    lastError
-  );
+  console.error(`[Retry] All ${fullConfig.maxRetries} retry attempts failed`, lastError);
   throw lastError;
 }
 
@@ -142,7 +139,7 @@ export async function retryWithBackoff<T>(
  */
 export function withRetry<TArgs extends unknown[], TReturn>(
   fn: (...args: TArgs) => Promise<TReturn>,
-  config: RetryConfig = {}
+  config: RetryConfig = {},
 ): (...args: TArgs) => Promise<TReturn> {
   return (...args: TArgs) => retryWithBackoff(() => fn(...args), config);
 }
@@ -160,7 +157,7 @@ export function withRetry<TArgs extends unknown[], TReturn>(
  */
 export async function batchRetry<T>(
   requests: (() => Promise<T>)[],
-  config: RetryConfig = {}
+  config: RetryConfig = {},
 ): Promise<Array<{ success: true; data: T } | { success: false; error: unknown }>> {
   return Promise.all(
     requests.map(async (request) => {
@@ -170,7 +167,7 @@ export async function batchRetry<T>(
       } catch (error) {
         return { success: false as const, error };
       }
-    })
+    }),
   );
 }
 
@@ -188,7 +185,7 @@ export class CircuitBreaker {
     private timeout: number = 60000, // 1 minute
     private resetTimeout: number = 30000, // 30 seconds
     /** Identifies this breaker in errors and logs, so an open circuit is diagnosable. */
-    private name: string = 'api'
+    private name: string = 'api',
   ) {}
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
@@ -199,7 +196,7 @@ export class CircuitBreaker {
         const retryInSeconds = Math.ceil((this.resetTimeout - timeSinceLastFailure) / 1000);
         throw new Error(
           `Circuit breaker is open for ${this.name} after ${this.failures} failures. ` +
-            `Retrying in ${retryInSeconds}s.`
+            `Retrying in ${retryInSeconds}s.`,
         );
       }
       // Try to transition to half-open
@@ -249,7 +246,7 @@ export class CircuitBreaker {
         this.state = 'open';
         console.error(
           `[Circuit Breaker] Opened for ${this.name} after ${this.failures} failures. ` +
-            `Last error: ${getErrorMessage(error)}`
+            `Last error: ${getErrorMessage(error)}`,
         );
       }
 

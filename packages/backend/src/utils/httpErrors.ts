@@ -13,7 +13,7 @@
  * cannot be written against.
  */
 
-import type { AlloErrorCode } from "@allo/shared-types";
+import type { AlloErrorCode } from '@allo/shared-types';
 
 export const STATUS_BY_CODE: Readonly<Record<AlloErrorCode, number>> = {
   unauthorized: 401,
@@ -41,7 +41,7 @@ export class AlloHttpError extends Error {
 
   constructor(code: AlloErrorCode, message: string, details?: unknown) {
     super(message);
-    this.name = "AlloHttpError";
+    this.name = 'AlloHttpError';
     this.code = code;
     this.status = STATUS_BY_CODE[code];
     this.details = details;
@@ -53,8 +53,9 @@ export function isAlloHttpError(error: unknown): error is AlloHttpError {
 }
 
 /** Shorthands for the codes routes raise most. */
-export const unauthorized = (message = "Unauthorized") => new AlloHttpError("unauthorized", message);
-export const forbidden = (message = "Forbidden") => new AlloHttpError("forbidden", message);
-export const notFound = (message = "Not found") => new AlloHttpError("not_found", message);
+export const unauthorized = (message = 'Unauthorized') =>
+  new AlloHttpError('unauthorized', message);
+export const forbidden = (message = 'Forbidden') => new AlloHttpError('forbidden', message);
+export const notFound = (message = 'Not found') => new AlloHttpError('not_found', message);
 export const validationFailed = (message: string, details?: unknown) =>
-  new AlloHttpError("validation_failed", message, details);
+  new AlloHttpError('validation_failed', message, details);

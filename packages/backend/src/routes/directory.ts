@@ -1,12 +1,12 @@
-import { Router, type Response } from "express";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
-import * as z from "zod";
+import { Router, type Response } from 'express';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
+import * as z from 'zod';
 
-import type { OxyDirectoryService } from "../services/oxy/OxyDirectoryService";
-import { sendErrorResponse, sendSuccessResponse } from "../utils/apiHelpers";
-import { getErrorMessage, isOxyUserNotFound } from "../utils/oxyUserDisplay";
-import { isOxyUserId } from "../utils/oxyUserId";
-import { logger } from "../utils/logger";
+import type { OxyDirectoryService } from '../services/oxy/OxyDirectoryService';
+import { sendErrorResponse, sendSuccessResponse } from '../utils/apiHelpers';
+import { getErrorMessage, isOxyUserNotFound } from '../utils/oxyUserDisplay';
+import { isOxyUserId } from '../utils/oxyUserId';
+import { logger } from '../utils/logger';
 
 /**
  * `GET /api/directory/*` — who somebody is, answered by this backend instead of
@@ -42,13 +42,13 @@ const usernameSchema = z
   .max(64)
   .regex(
     /^[A-Za-z0-9._-]+$/,
-    "must be a bare handle: letters, digits, dot, underscore and hyphen, and no leading @",
+    'must be a bare handle: letters, digits, dot, underscore and hyphen, and no leading @',
   );
 
 const oxyUserIdSchema = z
   .string()
   .trim()
-  .refine(isOxyUserId, "must be a 24-character hexadecimal Oxy account id");
+  .refine(isOxyUserId, 'must be a 24-character hexadecimal Oxy account id');
 
 /**
  * The same ceiling `@oxy.so/core` chunks at, so one request here is one request
@@ -83,14 +83,14 @@ const fileIdSchema = z
   .trim()
   .min(1)
   .max(128)
-  .regex(/^[A-Za-z0-9_-]+$/, "must be an Oxy asset id");
+  .regex(/^[A-Za-z0-9_-]+$/, 'must be an Oxy asset id');
 
 const variantSchema = z
   .string()
   .trim()
   .min(1)
   .max(32)
-  .regex(/^[a-z0-9_-]+$/, "must be an asset variant name")
+  .regex(/^[a-z0-9_-]+$/, 'must be an asset variant name')
   .optional();
 
 export interface DirectoryRoutesOptions {
@@ -100,8 +100,8 @@ export interface DirectoryRoutesOptions {
 /** The first zod issue, as a message. Field paths only, never values. */
 function firstIssue(error: z.ZodError): string {
   const issue = error.issues[0];
-  if (issue === undefined) return "invalid request";
-  const path = issue.path.join(".");
+  if (issue === undefined) return 'invalid request';
+  const path = issue.path.join('.');
   return path.length > 0 ? `${path}: ${issue.message}` : issue.message;
 }
 
@@ -114,12 +114,12 @@ function firstIssue(error: z.ZodError): string {
  */
 function respondToUpstreamFailure(res: Response, operation: string, error: unknown): Response {
   if (isOxyUserNotFound(error)) {
-    return sendErrorResponse(res, 404, "Not Found", "No such account");
+    return sendErrorResponse(res, 404, 'Not Found', 'No such account');
   }
   logger.error(`[Directory] ${operation} failed`, {
-    reason: getErrorMessage(error) ?? "unknown",
+    reason: getErrorMessage(error) ?? 'unknown',
   });
-  return sendErrorResponse(res, 502, "Bad Gateway", "The directory is temporarily unavailable");
+  return sendErrorResponse(res, 502, 'Bad Gateway', 'The directory is temporarily unavailable');
 }
 
 export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
@@ -127,16 +127,16 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
   const { service } = options;
 
   /** `GET /api/directory/profiles/username/:username` — a profile by handle. */
-  router.get("/profiles/username/:username", async (req: OxyAuthRequest, res: Response) => {
+  router.get('/profiles/username/:username', async (req: OxyAuthRequest, res: Response) => {
     const parsed = usernameSchema.safeParse(req.params.username);
     if (!parsed.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(parsed.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(parsed.error));
     }
 
     try {
       return sendSuccessResponse(res, 200, await service.profileByUsername(parsed.data));
     } catch (error) {
-      return respondToUpstreamFailure(res, "profileByUsername", error);
+      return respondToUpstreamFailure(res, 'profileByUsername', error);
     }
   });
 
@@ -147,10 +147,10 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
    * overlap — but it IS declared before the by-ids route below, which shares
    * the `/users` prefix and would otherwise be shadowed by `:userId`.
    */
-  router.get("/profiles/search", async (req: OxyAuthRequest, res: Response) => {
+  router.get('/profiles/search', async (req: OxyAuthRequest, res: Response) => {
     const parsed = searchSchema.safeParse(req.query);
     if (!parsed.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(parsed.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(parsed.error));
     }
 
     try {
@@ -158,7 +158,7 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
       const result = await service.searchProfiles(query, { limit, offset });
       return sendSuccessResponse(res, 200, result);
     } catch (error) {
-      return respondToUpstreamFailure(res, "searchProfiles", error);
+      return respondToUpstreamFailure(res, 'searchProfiles', error);
     }
   });
 
@@ -173,10 +173,10 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
    * It would be refused as a malformed id rather than mis-served, but the 400
    * would name the wrong problem.
    */
-  router.post("/users/by-ids", async (req: OxyAuthRequest, res: Response) => {
+  router.post('/users/by-ids', async (req: OxyAuthRequest, res: Response) => {
     const parsed = usersByIdsSchema.safeParse(req.body);
     if (!parsed.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(parsed.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(parsed.error));
     }
 
     try {
@@ -188,21 +188,21 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
        */
       return sendSuccessResponse(res, 200, { users });
     } catch (error) {
-      return respondToUpstreamFailure(res, "usersByIds", error);
+      return respondToUpstreamFailure(res, 'usersByIds', error);
     }
   });
 
   /** `GET /api/directory/users/:userId` — one account by id. */
-  router.get("/users/:userId", async (req: OxyAuthRequest, res: Response) => {
+  router.get('/users/:userId', async (req: OxyAuthRequest, res: Response) => {
     const parsed = oxyUserIdSchema.safeParse(req.params.userId);
     if (!parsed.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(parsed.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(parsed.error));
     }
 
     try {
       return sendSuccessResponse(res, 200, await service.userById(parsed.data));
     } catch (error) {
-      return respondToUpstreamFailure(res, "userById", error);
+      return respondToUpstreamFailure(res, 'userById', error);
     }
   });
 
@@ -216,15 +216,15 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
    * returns already carries `avatarUrl` — and it is here for the id that
    * arrives from somewhere other than a directory lookup.
    */
-  router.get("/assets/:fileId/url", (req: OxyAuthRequest, res: Response) => {
+  router.get('/assets/:fileId/url', (req: OxyAuthRequest, res: Response) => {
     const fileId = fileIdSchema.safeParse(req.params.fileId);
     if (!fileId.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(fileId.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(fileId.error));
     }
 
     const variant = variantSchema.safeParse(req.query.variant);
     if (!variant.success) {
-      return sendErrorResponse(res, 400, "Bad Request", firstIssue(variant.error));
+      return sendErrorResponse(res, 400, 'Bad Request', firstIssue(variant.error));
     }
 
     return sendSuccessResponse(res, 200, { url: service.assetUrl(fileId.data, variant.data) });

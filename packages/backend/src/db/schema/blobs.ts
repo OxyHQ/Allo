@@ -15,18 +15,18 @@
  * reader that returns it is `GET /v1/blobs/:id`.
  */
 
-import { sql } from "drizzle-orm";
-import { bigint, check, index, pgTable, text } from "drizzle-orm/pg-core";
-import { bytea, createdAt, timestamptz } from "@oxy.so/db";
+import { sql } from 'drizzle-orm';
+import { bigint, check, index, pgTable, text } from 'drizzle-orm/pg-core';
+import { bytea, createdAt, timestamptz } from '@oxy.so/db';
 
 export const blobs = pgTable(
-  "blobs",
+  'blobs',
   {
     /** 32 random bytes, hex: unguessable, which is what makes an authenticated read by id safe. */
     id: text().primaryKey(),
     uploaderInstanceId: text().notNull(),
     uploaderAccountId: text().notNull(),
-    size: bigint({ mode: "number" }).notNull(),
+    size: bigint({ mode: 'number' }).notNull(),
     sha256: text().notNull(),
     /** Which store holds the bytes; `postgres` names `blob_bytes`. */
     storageKey: text().notNull(),
@@ -34,15 +34,15 @@ export const blobs = pgTable(
     expiresAt: timestamptz(),
   },
   (t) => [
-    index("blobs_expires_at_idx").on(t.expiresAt),
-    index("blobs_uploader_instance_id_idx").on(t.uploaderInstanceId),
-    check("blobs_size_check", sql`${t.size} >= 0`),
+    index('blobs_expires_at_idx').on(t.expiresAt),
+    index('blobs_uploader_instance_id_idx').on(t.uploaderInstanceId),
+    check('blobs_size_check', sql`${t.size} >= 0`),
   ],
 );
 
-export const blobBytes = pgTable("blob_bytes", {
+export const blobBytes = pgTable('blob_bytes', {
   blobId: text()
     .primaryKey()
-    .references(() => blobs.id, { onDelete: "cascade" }),
+    .references(() => blobs.id, { onDelete: 'cascade' }),
   data: bytea().notNull(),
 });

@@ -30,12 +30,12 @@
  * operator ever uses.
  */
 
-import { spawn } from "node:child_process";
-import { join } from "node:path";
-import { createTestDatabase, dropTestDatabase } from "@oxy.so/db/testing";
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+import { createTestDatabase, dropTestDatabase } from '@oxy.so/db/testing';
 
-const PACKAGE_ROOT = join(__dirname, "..", "..");
-const MIGRATE_SCRIPT = join(PACKAGE_ROOT, "src", "db", "migrate.ts");
+const PACKAGE_ROOT = join(__dirname, '..', '..');
+const MIGRATE_SCRIPT = join(PACKAGE_ROOT, 'src', 'db', 'migrate.ts');
 
 /**
  * The server the throwaway database is created ON. `TEST_DATABASE_URL` first so
@@ -46,8 +46,8 @@ function adminUrl(): string {
   const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "TEST_DATABASE_URL (or DATABASE_URL) must point at a Postgres server for the test suite. " +
-        "Run `docker compose -f docker-compose.postgres.yml up -d` and use the URL in that file.",
+      'TEST_DATABASE_URL (or DATABASE_URL) must point at a Postgres server for the test suite. ' +
+        'Run `docker compose -f docker-compose.postgres.yml up -d` and use the URL in that file.',
     );
   }
   return url;
@@ -65,7 +65,7 @@ function adminUrl(): string {
  * deriving it from the URL would check the URL against itself.
  */
 function databaseNameOf(databaseUrl: string): string {
-  const name = new URL(databaseUrl).pathname.replace(/^\//, "");
+  const name = new URL(databaseUrl).pathname.replace(/^\//, '');
   if (!name) throw new Error(`No database name in test connection string: ${databaseUrl}`);
   return name;
 }
@@ -75,26 +75,26 @@ function migrate(databaseUrl: string): Promise<void> {
   const databaseName = databaseNameOf(databaseUrl);
   return new Promise((resolve, reject) => {
     const child = spawn(
-      "npx",
+      'npx',
       [
-        "ts-node",
-        "--transpile-only",
+        'ts-node',
+        '--transpile-only',
         MIGRATE_SCRIPT,
         `--target-database=${databaseName}`,
-        "--phase=all",
+        '--phase=all',
       ],
       {
         cwd: PACKAGE_ROOT,
         env: { ...process.env, DATABASE_URL: databaseUrl },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
 
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    child.on("error", reject);
-    child.on("close", (code) => {
+    let output = '';
+    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.on('error', reject);
+    child.on('close', (code) => {
       if (code === 0) return resolve();
       reject(new Error(`Migration failed (exit ${String(code)}):\n${output}`));
     });

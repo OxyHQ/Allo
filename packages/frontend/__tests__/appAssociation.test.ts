@@ -19,7 +19,8 @@ import {
  */
 
 const ORIGIN = 'https://allo.you';
-const PLAY_KEY = '12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0';
+const PLAY_KEY =
+  '12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0:12:34:56:78:9A:BC:DE:F0';
 
 function get(pathname: string, env: Record<string, string> = {}, method = 'GET'): Response | null {
   return handleWellKnown(new Request(`${ORIGIN}${pathname}`, { method }), env);
@@ -30,7 +31,6 @@ function loadAppConfig() {
   delete process.env.APP_VARIANT;
   try {
     jest.resetModules();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const factory = require(path.join(__dirname, '..', 'app.config.js')) as (config: unknown) => {
       expo: { android: { package: string }; ios: { bundleIdentifier: string } };
     };
@@ -67,7 +67,9 @@ describe('assetlinks.json', () => {
   });
 
   it('never publishes the public React Native debug key, even when configured', async () => {
-    const response = get(ASSET_LINKS_PATH, { ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS: PUBLIC_DEBUG_CERT_SHA256 })!;
+    const response = get(ASSET_LINKS_PATH, {
+      ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS: PUBLIC_DEBUG_CERT_SHA256,
+    })!;
     const body = JSON.stringify(await response.json());
     expect(body).not.toContain('FA:C6:17:45');
   });
@@ -82,7 +84,10 @@ describe('assetlinks.json', () => {
 
 describe('apple-app-site-association', () => {
   it('is a JSON 404 while no Team ID is configured, never the SPA', async () => {
-    for (const env of [{}, { APPLE_TEAM_ID: '' }, { APPLE_TEAM_ID: 'TEAM' }] as Record<string, string>[]) {
+    for (const env of [{}, { APPLE_TEAM_ID: '' }, { APPLE_TEAM_ID: 'TEAM' }] as Record<
+      string,
+      string
+    >[]) {
       const response = get(AASA_PATH, env)!;
       expect(response.status).toBe(404);
       expect(response.headers.get('content-type')).toBe('application/json');
@@ -102,7 +107,12 @@ describe('apple-app-site-association', () => {
 
 describe('other paths', () => {
   it('ends every other /.well-known path in a JSON 404', async () => {
-    for (const pathname of ['/.well-known', '/.well-known/', '/.well-known/security.txt', '/.well-known/assetlinks']) {
+    for (const pathname of [
+      '/.well-known',
+      '/.well-known/',
+      '/.well-known/security.txt',
+      '/.well-known/assetlinks',
+    ]) {
       const response = get(pathname)!;
       expect(response.status).toBe(404);
       expect(response.headers.get('content-type')).toBe('application/json');

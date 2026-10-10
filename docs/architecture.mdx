@@ -51,7 +51,8 @@ bun run typecheck          # backend then frontend, no emit
 bun run test               # every workspace
 ```
 
-A root `lint` script exists but only the frontend has a working lint setup.
+`bun run lint` runs Biome over the whole repository (`biome.jsonc`) plus the frontend's
+minimal Expo ESLint config (`expo lint .`); `bun run format` formats with Biome.
 
 External shared dependencies: `@oxy.so/core` (auth client and types; its
 `/server` entry supplies the backend's auth, CORS and rate-limit middleware),

@@ -45,7 +45,9 @@ export function RestoreHistoryPrompt() {
   const { status, refreshStatus } = useBackup();
   const conversations = useConversations();
   const instanceId = state === 'active' ? client.instanceId : null;
-  const answered = useRestorePromptStore((store) => (instanceId ? store.answeredInstanceIds[instanceId] === true : true));
+  const answered = useRestorePromptStore((store) =>
+    instanceId ? store.answeredInstanceIds[instanceId] === true : true,
+  );
   const markAnswered = useRestorePromptStore((store) => store.markAnswered);
   // Which instance the server has been asked about, so it is asked once per client.
   const askedFor = useRef<string | null>(null);
@@ -59,11 +61,17 @@ export function RestoreHistoryPrompt() {
   }, [answered, instanceId, refreshStatus]);
 
   const hasHistory = useMemo(
-    () => conversations.some((conversation) => client.messages.timeline(conversation.id).length > 0),
+    () =>
+      conversations.some((conversation) => client.messages.timeline(conversation.id).length > 0),
     [client, conversations],
   );
 
-  const visible = instanceId !== null && !answered && status.remote?.exists === true && !status.enabled && !hasHistory;
+  const visible =
+    instanceId !== null &&
+    !answered &&
+    status.remote?.exists === true &&
+    !status.enabled &&
+    !hasHistory;
 
   const answer = useCallback(
     (restore: boolean) => {
@@ -88,18 +96,28 @@ export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardPr
   return (
     <View style={styles.host} pointerEvents="box-none">
       <View style={styles.frame} accessibilityRole="alert" testID="restore-prompt">
-        <Card  elevation="m" radius="radius-20" style={styles.card} appearance="solid">
+        <Card elevation="m" radius="radius-20" style={styles.card} appearance="solid">
           <View style={styles.heading}>
             <IconCircle icon={RiHistoryLine} size="lg" />
             <View style={styles.copy}>
-              <Text variant="headline-semibold">{t('restorePrompt.title', 'Restore your history?')}</Text>
+              <Text variant="headline-semibold">
+                {t('restorePrompt.title', 'Restore your history?')}
+              </Text>
               <Text variant="body-regular" style={{ color: theme.colors.textSecondary }}>
-                {t('restorePrompt.body', 'This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.')}
+                {t(
+                  'restorePrompt.body',
+                  'This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.',
+                )}
               </Text>
             </View>
           </View>
           <View style={styles.actions}>
-            <Button  onPress={onNotNow} testID="restore-prompt-not-now" tone="neutral" appearance="outline">
+            <Button
+              onPress={onNotNow}
+              testID="restore-prompt-not-now"
+              tone="neutral"
+              appearance="outline"
+            >
               {t('restorePrompt.notNow', 'Not now')}
             </Button>
             <Button onPress={onRestore} testID="restore-prompt-restore">
@@ -113,7 +131,15 @@ export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardPr
 }
 
 const styles = StyleSheet.create({
-  host: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: 96, alignItems: 'center' },
+  host: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 16,
+    paddingBottom: 96,
+    alignItems: 'center',
+  },
   frame: { width: '100%', maxWidth: 480 },
   card: { padding: 16, gap: 16 },
   heading: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },

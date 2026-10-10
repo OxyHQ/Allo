@@ -10,7 +10,12 @@
  * the ONE live call, this one is every call that has finished.
  */
 import { useMemo } from 'react';
-import type { CallDirection, CallHistoryItem, CallHistorySection, CallMode } from '@oxy.so/bloom/call-ui';
+import type {
+  CallDirection,
+  CallHistoryItem,
+  CallHistorySection,
+  CallMode,
+} from '@oxy.so/bloom/call-ui';
 import { useCallHistory } from '@allo/react';
 
 import { formatCallDuration, formatDay, formatTime, type Translate } from '@/lib/chat/format';

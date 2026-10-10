@@ -6,9 +6,9 @@
  * re-publish it for a conversation whose last commit predates the field.
  * The server never reads it.
  */
-import { z } from "zod";
-import { base64Schema, instanceIdSchema, isoDateSchema, nonNegativeIntSchema } from "./common";
-import { GROUP_INFO_MAX_BASE64 } from "./events";
+import { z } from 'zod';
+import { base64Schema, instanceIdSchema, isoDateSchema, nonNegativeIntSchema } from './common';
+import { GROUP_INFO_MAX_BASE64 } from './events';
 
 export const storedGroupInfoSchema = z.object({
   /** The epoch the GroupInfo describes — the conversation's current epoch when it is served. */

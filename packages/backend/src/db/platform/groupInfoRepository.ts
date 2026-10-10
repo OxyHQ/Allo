@@ -8,10 +8,10 @@
  * legitimately leaves the process, to a joined member of the conversation.
  */
 
-import { eq } from "drizzle-orm";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
-import { requireTransaction } from "../moderation/transactionGuard";
-import { conversationGroupInfo } from "../schema/conversations";
+import { eq } from 'drizzle-orm';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
+import { requireTransaction } from '../moderation/transactionGuard';
+import { conversationGroupInfo } from '../schema/conversations';
 
 export type GroupInfoRow = typeof conversationGroupInfo.$inferSelect;
 
@@ -29,7 +29,10 @@ export interface UpsertGroupInfoInput {
  * epoch for a re-publish), so there is no monotonicity check here: under the
  * lock the epoch only moves forward, and a re-publish is for the current one.
  */
-export async function upsertGroupInfo(input: UpsertGroupInfoInput, db: AlloDatabaseOrTransaction): Promise<void> {
+export async function upsertGroupInfo(
+  input: UpsertGroupInfoInput,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
   const tx = requireTransaction(db, `upsertGroupInfo(${input.conversationId})`);
   const now = new Date();
   await tx
@@ -42,7 +45,12 @@ export async function upsertGroupInfo(input: UpsertGroupInfoInput, db: AlloDatab
     })
     .onConflictDoUpdate({
       target: conversationGroupInfo.conversationId,
-      set: { epoch: input.epoch, signerInstanceId: input.signerInstanceId, data: input.data, updatedAt: now },
+      set: {
+        epoch: input.epoch,
+        signerInstanceId: input.signerInstanceId,
+        data: input.data,
+        updatedAt: now,
+      },
     });
 }
 

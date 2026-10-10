@@ -1,9 +1,9 @@
-import type { MediaRef } from "@allo/core";
-import { useEffect, useMemo, useState } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { mediaKey, type MediaCache } from "../mediaCache";
+import type { MediaRef } from '@allo/core';
+import { useEffect, useMemo, useState } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { mediaKey, type MediaCache } from '../mediaCache';
 
-export type MediaFileStatus = "idle" | "loading" | "ready" | "error";
+export type MediaFileStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface MediaFile {
   status: MediaFileStatus;
@@ -12,13 +12,13 @@ export interface MediaFile {
   error?: unknown;
 }
 
-const IDLE: MediaFile = { status: "idle" };
-const LOADING: MediaFile = { status: "loading" };
+const IDLE: MediaFile = { status: 'idle' };
+const LOADING: MediaFile = { status: 'loading' };
 
 function fromCache(cache: MediaCache, key: string | null): MediaFile {
   if (key === null) return IDLE;
   const bytes = cache.get(key);
-  return bytes ? { status: "ready", bytes } : LOADING;
+  return bytes ? { status: 'ready', bytes } : LOADING;
 }
 
 /**
@@ -33,7 +33,10 @@ export function useMediaFile(ref: MediaRef | undefined): MediaFile {
   const conversationId = ref?.conversationId;
   const blobId = ref?.blobId;
 
-  const [snapshot, setSnapshot] = useState<{ key: string | null; file: MediaFile }>(() => ({ key, file: fromCache(mediaCache, key) }));
+  const [snapshot, setSnapshot] = useState<{ key: string | null; file: MediaFile }>(() => ({
+    key,
+    file: fromCache(mediaCache, key),
+  }));
 
   useEffect(() => {
     if (key === null || conversationId === undefined || blobId === undefined) {
@@ -43,18 +46,20 @@ export function useMediaFile(ref: MediaRef | undefined): MediaFile {
     let cancelled = false;
     const cached = mediaCache.get(key);
     if (cached) {
-      setSnapshot({ key, file: { status: "ready", bytes: cached } });
+      setSnapshot({ key, file: { status: 'ready', bytes: cached } });
       return;
     }
     setSnapshot({ key, file: LOADING });
-    mediaCache.load(key, () => client.media.download({ conversationId, blobId })).then(
-      (bytes) => {
-        if (!cancelled) setSnapshot({ key, file: { status: "ready", bytes } });
-      },
-      (error: unknown) => {
-        if (!cancelled) setSnapshot({ key, file: { status: "error", error } });
-      },
-    );
+    mediaCache
+      .load(key, () => client.media.download({ conversationId, blobId }))
+      .then(
+        (bytes) => {
+          if (!cancelled) setSnapshot({ key, file: { status: 'ready', bytes } });
+        },
+        (error: unknown) => {
+          if (!cancelled) setSnapshot({ key, file: { status: 'error', error } });
+        },
+      );
     return () => {
       cancelled = true;
     };
@@ -62,5 +67,8 @@ export function useMediaFile(ref: MediaRef | undefined): MediaFile {
 
   // Between a ref change and the effect that follows it, answer from the cache rather than with the previous ref's state.
   const stale = snapshot.key !== key;
-  return useMemo(() => (stale ? fromCache(mediaCache, key) : snapshot.file), [stale, mediaCache, key, snapshot.file]);
+  return useMemo(
+    () => (stale ? fromCache(mediaCache, key) : snapshot.file),
+    [stale, mediaCache, key, snapshot.file],
+  );
 }

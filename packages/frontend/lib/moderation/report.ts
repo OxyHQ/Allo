@@ -11,6 +11,10 @@ export type ReportedType = 'user' | 'message';
  * deliberately does not say which is which (`backend/src/routes/reports.ts`),
  * and neither does this.
  */
-export async function report(reportedType: ReportedType, reportedId: string, reason?: string): Promise<void> {
+export async function report(
+  reportedType: ReportedType,
+  reportedId: string,
+  reason?: string,
+): Promise<void> {
   await authenticatedClient.post('reports', { reportedType, reportedId, reason });
 }

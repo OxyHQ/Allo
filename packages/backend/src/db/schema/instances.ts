@@ -7,11 +7,11 @@
  * are in `CONVENTIONS.md`.
  */
 
-import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { createdAt, timestamptz, updatedAt } from "@oxy.so/db";
-import { INSTANCE_STATUSES, PLATFORMS, PUSH_PROVIDERS } from "@allo/shared-types";
-import { checkOneOf } from "./columns";
+import { sql } from 'drizzle-orm';
+import { check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { createdAt, timestamptz, updatedAt } from '@oxy.so/db';
+import { INSTANCE_STATUSES, PLATFORMS, PUSH_PROVIDERS } from '@allo/shared-types';
+import { checkOneOf } from './columns';
 
 export type InstanceStatus = (typeof INSTANCE_STATUSES)[number];
 export type InstancePlatform = (typeof PLATFORMS)[number];
@@ -40,7 +40,7 @@ export type InstancePushProvider = (typeof PUSH_PROVIDERS)[number];
  * generated migration.
  */
 export const clientInstances = pgTable(
-  "client_instances",
+  'client_instances',
   {
     id: text().primaryKey(),
     accountId: text().notNull(),
@@ -49,7 +49,7 @@ export const clientInstances = pgTable(
     displayName: text().notNull(),
     signingPublicKey: text().notNull(),
     transferPublicKey: text(),
-    status: text({ enum: INSTANCE_STATUSES }).notNull().default("pending"),
+    status: text({ enum: INSTANCE_STATUSES }).notNull().default('pending'),
     /**
      * base64url. Null for the bootstrap instance; issued at a non-first
      * registration and KEPT after approval, because the approval signature is
@@ -68,16 +68,16 @@ export const clientInstances = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    uniqueIndex("client_instances_account_id_signing_public_key_key").on(
+    uniqueIndex('client_instances_account_id_signing_public_key_key').on(
       t.accountId,
       t.signingPublicKey,
     ),
-    index("client_instances_account_id_status_idx").on(t.accountId, t.status),
-    checkOneOf("client_instances_platform_check", t.platform, PLATFORMS),
-    checkOneOf("client_instances_status_check", t.status, INSTANCE_STATUSES),
-    checkOneOf("client_instances_push_provider_check", t.pushProvider, PUSH_PROVIDERS),
+    index('client_instances_account_id_status_idx').on(t.accountId, t.status),
+    checkOneOf('client_instances_platform_check', t.platform, PLATFORMS),
+    checkOneOf('client_instances_status_check', t.status, INSTANCE_STATUSES),
+    checkOneOf('client_instances_push_provider_check', t.pushProvider, PUSH_PROVIDERS),
     check(
-      "client_instances_push_pair_check",
+      'client_instances_push_pair_check',
       sql`(${t.pushProvider} is null) = (${t.pushToken} is null)`,
     ),
   ],
@@ -93,21 +93,21 @@ export const clientInstances = pgTable(
  * material only a claimer should receive, never a listing.
  */
 export const keyPackages = pgTable(
-  "key_packages",
+  'key_packages',
   {
     id: text().primaryKey(),
     instanceId: text()
       .notNull()
-      .references(() => clientInstances.id, { onDelete: "cascade" }),
+      .references(() => clientInstances.id, { onDelete: 'cascade' }),
     ciphersuite: integer().notNull(),
-    ref: text().notNull().unique("key_packages_ref_key"),
+    ref: text().notNull().unique('key_packages_ref_key'),
     data: text().notNull(),
     consumedAt: timestamptz(),
     consumedByInstanceId: text(),
     createdAt: createdAt(),
   },
   (t) => [
-    index("key_packages_instance_id_consumed_at_idx").on(t.instanceId, t.consumedAt),
-    check("key_packages_ciphersuite_check", sql`${t.ciphersuite} between 1 and 65535`),
+    index('key_packages_instance_id_consumed_at_idx').on(t.instanceId, t.consumedAt),
+    check('key_packages_ciphersuite_check', sql`${t.ciphersuite} between 1 and 65535`),
   ],
 );

@@ -21,8 +21,7 @@ export const ALLO_PLATFORM_URL =
 // Oxy is ALWAYS the production identity provider — deliberately no dev branch.
 // Oxy owns the account, and a build pointing identity at a local port nothing is
 // listening on does not fail loudly: it renders a signed-out app.
-export const OXY_BASE_URL =
-  process.env.EXPO_PUBLIC_OXY_BASE_URL || 'https://api.oxy.so';
+export const OXY_BASE_URL = process.env.EXPO_PUBLIC_OXY_BASE_URL || 'https://api.oxy.so';
 
 export const OXY_CLIENT_ID =
   process.env.EXPO_PUBLIC_OXY_CLIENT_ID ||

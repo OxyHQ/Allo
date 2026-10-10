@@ -19,16 +19,20 @@
  * real catalogue in the schema suite.
  */
 
-import { sweepAllExpiredRows, type ExpirySweepResult, type ExpirySweepTarget } from "@oxy.so/db/expiry";
-import type { AlloDatabase } from "./index";
-import { expireDueOffers } from "./platform/historyRepository";
-import { blobs } from "./schema/blobs";
-import { instanceDeliveries } from "./schema/deliveries";
-import { historyOffers } from "./schema/history";
-import { moderationEvents, moderationOutbox } from "./schema/moderation";
-import { callParticipants, calls } from "./schema/calls";
-import { statuses, statusKeys, statusViews } from "./schema/statuses";
-import { releaseDueStatusBlobs } from "./platform/statusRepository";
+import {
+  sweepAllExpiredRows,
+  type ExpirySweepResult,
+  type ExpirySweepTarget,
+} from '@oxy.so/db/expiry';
+import type { AlloDatabase } from './index';
+import { expireDueOffers } from './platform/historyRepository';
+import { blobs } from './schema/blobs';
+import { instanceDeliveries } from './schema/deliveries';
+import { historyOffers } from './schema/history';
+import { moderationEvents, moderationOutbox } from './schema/moderation';
+import { callParticipants, calls } from './schema/calls';
+import { statuses, statusKeys, statusViews } from './schema/statuses';
+import { releaseDueStatusBlobs } from './platform/statusRepository';
 
 export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
   {
@@ -36,21 +40,21 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
     column: moderationEvents.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Inbound CrowdSource webhook dedupe entries, kept 90 days by the writer. " +
-      "Deleting one lets a redelivery of that same event be processed a second " +
-      "time — which is why the deadline is 90 days and not 90 minutes; a case " +
-      "can legitimately sit open for weeks.",
+      'Inbound CrowdSource webhook dedupe entries, kept 90 days by the writer. ' +
+      'Deleting one lets a redelivery of that same event be processed a second ' +
+      'time — which is why the deadline is 90 days and not 90 minutes; a case ' +
+      'can legitimately sit open for weeks.',
   },
   {
     table: moderationOutbox,
     column: moderationOutbox.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Outbound moderation work, kept 90 days by the writer. THIS TABLE CAN " +
-      "HOLD UNPROCESSED WORK: a `pending` or `dead_letter` row that reaches its " +
-      "deadline is destroyed by this sweep, so a dispatcher stalled for 90 days " +
-      "silently loses the reports it never delivered. The ceiling exists to stop " +
-      "the table growing without bound; alerting on outbox age is what has to " +
+      'Outbound moderation work, kept 90 days by the writer. THIS TABLE CAN ' +
+      'HOLD UNPROCESSED WORK: a `pending` or `dead_letter` row that reaches its ' +
+      'deadline is destroyed by this sweep, so a dispatcher stalled for 90 days ' +
+      'silently loses the reports it never delivered. The ceiling exists to stop ' +
+      'the table growing without bound; alerting on outbox age is what has to ' +
       "fire long before it, and that alerting is not this sweep's job.",
   },
   {
@@ -58,50 +62,50 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
     column: instanceDeliveries.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Per-instance delivery stream entries, dated 30 days out at insert. A " +
-      "delivery still unacked at its deadline is dropped from the STREAM " +
-      "(`GET /v1/sync` will not return it again); the event itself stays in " +
-      "`conversation_events` and a client that was away that long refetches " +
-      "through `GET /v1/conversations/:id/events`. The row is what makes the " +
-      "cursor dense, so the deadline is the bound on how far behind a device " +
-      "may fall before it has to resync rather than catch up.",
+      'Per-instance delivery stream entries, dated 30 days out at insert. A ' +
+      'delivery still unacked at its deadline is dropped from the STREAM ' +
+      '(`GET /v1/sync` will not return it again); the event itself stays in ' +
+      '`conversation_events` and a client that was away that long refetches ' +
+      'through `GET /v1/conversations/:id/events`. The row is what makes the ' +
+      'cursor dense, so the deadline is the bound on how far behind a device ' +
+      'may fall before it has to resync rather than catch up.',
   },
   {
     table: blobs,
     column: blobs.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Uploaded blobs nobody referenced within seven days. `expires_at` is " +
-      "cleared to NULL the moment an event names the blob in its `blobIds`, so " +
-      "a dated row is by definition one no message points at. Deleting it " +
-      "cascades to `blob_bytes`. The blob collector (`workers/blobGc.ts`) " +
-      "covers the case this sweep cannot see: an unreferenced blob whose " +
-      "uploader instance was revoked before the seven days ran out.",
+      'Uploaded blobs nobody referenced within seven days. `expires_at` is ' +
+      'cleared to NULL the moment an event names the blob in its `blobIds`, so ' +
+      'a dated row is by definition one no message points at. Deleting it ' +
+      'cascades to `blob_bytes`. The blob collector (`workers/blobGc.ts`) ' +
+      'covers the case this sweep cannot see: an unreferenced blob whose ' +
+      'uploader instance was revoked before the seven days ran out.',
   },
   {
     table: historyOffers,
     column: historyOffers.expiresAt,
     retentionSeconds: 0,
     reason:
-      "History offers, dated seven days out at insert (`HISTORY_OFFER_TTL_MS`). " +
-      "A pending offer the recipient never consumed is gone at its deadline, " +
-      "along with the consumed and expired rows, which are only a record. The " +
+      'History offers, dated seven days out at insert (`HISTORY_OFFER_TTL_MS`). ' +
+      'A pending offer the recipient never consumed is gone at its deadline, ' +
+      'along with the consumed and expired rows, which are only a record. The ' +
       "row's chunk blobs are NOT deleted here: `releaseDueHistoryOffers` runs " +
-      "ahead of this sweep in `runExpirySweep` and dates them a day out, so " +
-      "the blob sweep above reaps them on its own schedule.",
+      'ahead of this sweep in `runExpirySweep` and dates them a day out, so ' +
+      'the blob sweep above reaps them on its own schedule.',
   },
   {
     table: calls,
     column: calls.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Call state machines, dated a day out at insert and re-dated to NOW the " +
-      "moment the call ends. Deleting one loses the operational record that a " +
-      "ring happened — who was rung, who answered, how long it lasted — which " +
+      'Call state machines, dated a day out at insert and re-dated to NOW the ' +
+      'moment the call ends. Deleting one loses the operational record that a ' +
+      'ring happened — who was rung, who answered, how long it lasted — which ' +
       "is metadata and not the user's call log: what a person sees is an " +
-      "encrypted `call_log` message in their conversation, written when the " +
-      "call ended, and that is not touched by this. A row still `ringing` at " +
-      "its deadline cannot reach here: the ring worker settles it long before.",
+      'encrypted `call_log` message in their conversation, written when the ' +
+      'call ended, and that is not touched by this. A row still `ringing` at ' +
+      'its deadline cannot reach here: the ring worker settles it long before.',
   },
   {
     table: callParticipants,
@@ -109,23 +113,23 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
     retentionSeconds: 0,
     reason:
       "One rung device per row, carrying its call's deadline so a sweep needs " +
-      "no join. The cascade from `calls` normally gets there first; this " +
-      "target covers a participant whose call was re-dated when it ended.",
+      'no join. The cascade from `calls` normally gets there first; this ' +
+      'target covers a participant whose call was re-dated when it ended.',
   },
   {
     table: statuses,
     column: statuses.expiresAt,
     retentionSeconds: 0,
     reason:
-      "Status updates, dated 24 hours out at insert (`STATUS_LIFETIME_MS`) or " +
-      "at the moment the author took one down. Deleting the row cascades to " +
-      "`status_keys` and `status_views`, so the sealed keys go with the body " +
-      "they open and nobody is left holding a key to nothing. The media blobs " +
-      "are NOT deleted here: `releaseDueStatusBlobs` runs ahead of this sweep " +
-      "and dates them, so the blob sweep above reaps them on its own schedule. " +
-      "A device that already decrypted a status keeps what it has — the server " +
-      "cannot reach into a phone, and the screens say so rather than implying " +
-      "it can.",
+      'Status updates, dated 24 hours out at insert (`STATUS_LIFETIME_MS`) or ' +
+      'at the moment the author took one down. Deleting the row cascades to ' +
+      '`status_keys` and `status_views`, so the sealed keys go with the body ' +
+      'they open and nobody is left holding a key to nothing. The media blobs ' +
+      'are NOT deleted here: `releaseDueStatusBlobs` runs ahead of this sweep ' +
+      'and dates them, so the blob sweep above reaps them on its own schedule. ' +
+      'A device that already decrypted a status keeps what it has — the server ' +
+      'cannot reach into a phone, and the screens say so rather than implying ' +
+      'it can.',
   },
   {
     table: statusKeys,
@@ -133,9 +137,9 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
     retentionSeconds: 0,
     reason:
       "The per-status key sealed to one device, carrying its status's own " +
-      "deadline so a key can be reaped without a join. The cascade from " +
-      "`statuses` normally gets there first; this target is what covers a key " +
-      "whose status was deleted early and re-dated, and what makes the sweep " +
+      'deadline so a key can be reaped without a join. The cascade from ' +
+      '`statuses` normally gets there first; this target is what covers a key ' +
+      'whose status was deleted early and re-dated, and what makes the sweep ' +
       "independent of the cascade's ordering.",
   },
   {
@@ -144,9 +148,9 @@ export const EXPIRY_SWEEP_TARGETS: readonly ExpirySweepTarget[] = [
     retentionSeconds: 0,
     reason:
       "Who saw a status, carrying that status's deadline. The record of a view " +
-      "must not outlive the thing viewed: an expired status leaving its " +
-      "viewers behind would be a durable record of who looked at what, which " +
-      "is precisely what a 24-hour feature is not.",
+      'must not outlive the thing viewed: an expired status leaving its ' +
+      'viewers behind would be a durable record of who looked at what, which ' +
+      'is precisely what a 24-hour feature is not.',
   },
 ];
 
@@ -220,13 +224,17 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null;
  */
 export function startExpirySweep(
   db: AlloDatabase,
-  log: { info: (message: string) => void; debug: (message: string) => void; error: (message: string, error: unknown) => void },
+  log: {
+    info: (message: string) => void;
+    debug: (message: string) => void;
+    error: (message: string, error: unknown) => void;
+  },
 ): void {
   if (sweepTimer) return;
 
   const sweep = (): void => {
     void runExpirySweep(db, log).catch((error: unknown) => {
-      log.error("expiry sweep failed", error);
+      log.error('expiry sweep failed', error);
     });
   };
 

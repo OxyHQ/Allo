@@ -1,7 +1,7 @@
-import type { PushPlatform } from "../../config/push";
-import { logger } from "../../utils/logger";
-import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from "./delivery";
-import { pushSenders } from "./senders";
+import type { PushPlatform } from '../../config/push';
+import { logger } from '../../utils/logger';
+import type { PushDeliveryOutcome, PushDevice, PushNotification, PushSender } from './delivery';
+import { pushSenders } from './senders';
 
 /**
  * Sending one notification to every device it names, and summarising what the
@@ -65,10 +65,10 @@ export async function sendPush(
          * fine; this process cannot reach them. Transient, so a deployment that
          * gains the credentials later delivers to the same devices.
          */
-        logger.warn("[Push] no sender is configured for a platform a device named", {
+        logger.warn('[Push] no sender is configured for a platform a device named', {
           platform,
         });
-        const failure: PushDeliveryOutcome = { kind: "failed", reason: "no sender for platform" };
+        const failure: PushDeliveryOutcome = { kind: 'failed', reason: 'no sender for platform' };
         return { devices: batch, outcomes: batch.map(() => failure) };
       }
       return { devices: batch, outcomes: await sender.send(batch, notification) };
@@ -78,12 +78,12 @@ export async function sendPush(
   for (const batch of settled) {
     batch.devices.forEach((device, index) => {
       const outcome: PushDeliveryOutcome = batch.outcomes[index] ?? {
-        kind: "failed",
-        reason: "the sender returned no outcome for this device",
+        kind: 'failed',
+        reason: 'the sender returned no outcome for this device',
       };
-      if (outcome.kind === "rejected") {
+      if (outcome.kind === 'rejected') {
         rejected.push(device.token);
-      } else if (outcome.kind === "failed") {
+      } else if (outcome.kind === 'failed') {
         hasTransientFailure = true;
       }
     });

@@ -35,7 +35,7 @@ export interface SessionDescription {
 }
 
 export interface CallMediaPlan {
-  mode: "voice" | "video";
+  mode: 'voice' | 'video';
   /** What the server handed out; the adapter uses them and asks nothing about them. */
   iceServers: Array<{ urls: string[]; username?: string; credential?: string }>;
   /** `true` maps to WebRTC's `iceTransportPolicy: "relay"`: no host and no server-reflexive candidate is offered. */

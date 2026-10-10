@@ -4,14 +4,28 @@
  * delivery receipts (each at most one every 5 s per conversation), typing
  * over the socket (encrypted, never stored), and unread counts.
  */
-import { decodeAppMessage, encodeAppMessage, type AppMessage, type EventRef } from "@allo/shared-types";
-import { Model } from "../storage/model";
-import type { Context } from "../context";
-import { InvalidStateError, NotFoundError } from "../errors";
-import type { ContactDraft, LoadOlderResult, PlaceDraft, PollDraft, SendOptions, StickerDraft, TimelineContent, TimelineItemView } from "../types";
-import { base64Decode, base64Encode } from "../util/bytes";
-import { describeError } from "../util/logger";
-import { project } from "./projection";
+import {
+  decodeAppMessage,
+  encodeAppMessage,
+  type AppMessage,
+  type EventRef,
+} from '@allo/shared-types';
+import { Model } from '../storage/model';
+import type { Context } from '../context';
+import { InvalidStateError, NotFoundError } from '../errors';
+import type {
+  ContactDraft,
+  LoadOlderResult,
+  PlaceDraft,
+  PollDraft,
+  SendOptions,
+  StickerDraft,
+  TimelineContent,
+  TimelineItemView,
+} from '../types';
+import { base64Decode, base64Encode } from '../util/bytes';
+import { describeError } from '../util/logger';
+import { project } from './projection';
 
 const READ_THROTTLE_MS = 5000;
 const DELIVERED_THROTTLE_MS = 5000;
@@ -21,7 +35,7 @@ const TYPING_TTL_MS = 6000;
  * What counts toward unread and moves the read receipt: what somebody wrote or
  * sent to be looked at. A sticker is a message on its own, like a photo.
  */
-const COUNTED_KINDS = new Set<TimelineContent["kind"]>(["text", "media", "sticker"]);
+const COUNTED_KINDS = new Set<TimelineContent['kind']>(['text', 'media', 'sticker']);
 
 export class MessagesService {
   private timelines = new Map<string, TimelineItemView[]>();
@@ -57,7 +71,9 @@ export class MessagesService {
       outbox: ctx.model.outboxItems(conversationId),
       accountId: ctx.accountId,
       instanceId: ctx.instanceId,
-      ...(ctx.conversations.hasNoReachableMember(conversationId) ? { holdReason: "no_reachable_member" as const } : {}),
+      ...(ctx.conversations.hasNoReachableMember(conversationId)
+        ? { holdReason: 'no_reachable_member' as const }
+        : {}),
       stalledItemIds: ctx.outbox.stalledItemIds(conversationId),
     });
     this.timelines.set(conversationId, items);
@@ -68,26 +84,44 @@ export class MessagesService {
     const record = this.ctx.model.conversations.get(conversationId);
     if (!record) return 0;
     return this.timeline(conversationId).filter(
-      (i) => !i.isOwn && i.seq !== null && i.seq > record.lastReadSeq && COUNTED_KINDS.has(i.content.kind),
+      (i) =>
+        !i.isOwn &&
+        i.seq !== null &&
+        i.seq > record.lastReadSeq &&
+        COUNTED_KINDS.has(i.content.kind),
     ).length;
   }
 
   async send(conversationId: string, text: string, options: SendOptions = {}): Promise<string> {
-    const message: AppMessage = { v: 1, t: "text", body: text, ...(options.replyTo ? { replyTo: this.refFor(conversationId, options.replyTo) } : {}) };
+    const message: AppMessage = {
+      v: 1,
+      t: 'text',
+      body: text,
+      ...(options.replyTo ? { replyTo: this.refFor(conversationId, options.replyTo) } : {}),
+    };
     const item = await this.ctx.outbox.enqueueMessage(conversationId, message);
     return item.id;
   }
 
   async edit(conversationId: string, targetId: string, body: string): Promise<void> {
     const target = this.find(conversationId, targetId);
-    if (!target.isOwn) throw new InvalidStateError("only own messages can be edited");
-    await this.ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "edit", target: this.refFor(conversationId, targetId), body });
+    if (!target.isOwn) throw new InvalidStateError('only own messages can be edited');
+    await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: 'edit',
+      target: this.refFor(conversationId, targetId),
+      body,
+    });
   }
 
   async remove(conversationId: string, targetId: string): Promise<void> {
     const target = this.find(conversationId, targetId);
-    if (!target.isOwn) throw new InvalidStateError("only own messages can be deleted");
-    await this.ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "delete", target: this.refFor(conversationId, targetId) });
+    if (!target.isOwn) throw new InvalidStateError('only own messages can be deleted');
+    await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: 'delete',
+      target: this.refFor(conversationId, targetId),
+    });
   }
 
   /**
@@ -99,7 +133,7 @@ export class MessagesService {
     const options = poll.options.map((label, index) => ({ id: `o${index + 1}`, label }));
     const message: AppMessage = {
       v: 1,
-      t: "poll",
+      t: 'poll',
       question: poll.question,
       options,
       multiple: poll.multiple ?? false,
@@ -114,16 +148,21 @@ export class MessagesService {
    * empty list retracts. Anything that is not an option of that poll is
    * refused here rather than dropped silently by every receiver.
    */
-  async vote(conversationId: string, targetId: string, optionIds: readonly string[]): Promise<void> {
+  async vote(
+    conversationId: string,
+    targetId: string,
+    optionIds: readonly string[],
+  ): Promise<void> {
     const target = this.find(conversationId, targetId);
-    if (target.content.kind !== "poll") throw new InvalidStateError("not a poll");
+    if (target.content.kind !== 'poll') throw new InvalidStateError('not a poll');
     const chosen = [...new Set(optionIds)];
     const known = new Set(target.content.poll.options.map((o) => o.id));
-    if (chosen.some((id) => !known.has(id))) throw new InvalidStateError("unknown poll option");
-    if (chosen.length > 1 && !target.content.poll.multiple) throw new InvalidStateError("this poll takes one answer");
+    if (chosen.some((id) => !known.has(id))) throw new InvalidStateError('unknown poll option');
+    if (chosen.length > 1 && !target.content.poll.multiple)
+      throw new InvalidStateError('this poll takes one answer');
     await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "poll_vote",
+      t: 'poll_vote',
       target: this.refFor(conversationId, targetId),
       optionIds: chosen,
     });
@@ -133,7 +172,7 @@ export class MessagesService {
   async sendLocation(conversationId: string, place: PlaceDraft): Promise<string> {
     const item = await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "location",
+      t: 'location',
       latitude: place.latitude,
       longitude: place.longitude,
       ...(place.label ? { label: place.label } : {}),
@@ -150,7 +189,7 @@ export class MessagesService {
   async sendSticker(conversationId: string, sticker: StickerDraft): Promise<string> {
     const item = await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "sticker",
+      t: 'sticker',
       stickerId: sticker.stickerId,
       packId: sticker.packId,
       sha256: sticker.sha256,
@@ -163,7 +202,7 @@ export class MessagesService {
   async sendContact(conversationId: string, contact: ContactDraft): Promise<string> {
     const item = await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "contact",
+      t: 'contact',
       name: contact.name,
       ...(contact.accountId ? { accountId: contact.accountId } : {}),
       ...(contact.handle ? { handle: contact.handle } : {}),
@@ -180,17 +219,24 @@ export class MessagesService {
     this.find(conversationId, targetId);
     await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
-      t: "pin",
+      t: 'pin',
       target: this.refFor(conversationId, targetId),
-      op: pinned ? "pin" : "unpin",
+      op: pinned ? 'pin' : 'unpin',
     });
   }
 
   /** Toggles this account's reaction `key` on the target. */
   async react(conversationId: string, targetId: string, key: string): Promise<void> {
     const target = this.find(conversationId, targetId);
-    const mine = target.reactions.find((r) => r.key === key)?.accountIds.includes(this.ctx.accountId) ?? false;
-    await this.ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "reaction", target: this.refFor(conversationId, targetId), key, op: mine ? "remove" : "add" });
+    const mine =
+      target.reactions.find((r) => r.key === key)?.accountIds.includes(this.ctx.accountId) ?? false;
+    await this.ctx.outbox.enqueueMessage(conversationId, {
+      v: 1,
+      t: 'reaction',
+      target: this.refFor(conversationId, targetId),
+      key,
+      op: mine ? 'remove' : 'add',
+    });
   }
 
   /**
@@ -206,13 +252,17 @@ export class MessagesService {
    * device under keys only they hold; `clear_history` asks their app, and
    * their app obeys. Nothing here can reach in and make it true.
    */
-  async clearHistory(conversationId: string, options: { forEveryone?: boolean } = {}): Promise<void> {
+  async clearHistory(
+    conversationId: string,
+    options: { forEveryone?: boolean } = {},
+  ): Promise<void> {
     const { ctx } = this;
     const record = ctx.model.conversations.get(conversationId);
     if (!record) throw new NotFoundError(`conversation ${conversationId}`);
     // Sent BEFORE the local wipe: the outbox item is one more event in this
     // conversation, and it must not be caught by the line it is asking for.
-    if (options.forEveryone) await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "clear_history", ctl: true });
+    if (options.forEveryone)
+      await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: 'clear_history', ctl: true });
     await this.applyClear(conversationId, record.lastSeq);
   }
 
@@ -232,13 +282,16 @@ export class MessagesService {
     const dropped = ctx.model.dropEventsUpTo(conversationId, seq);
     const next = { ...record, clearedUpToSeq: seq };
     const batch = ctx.store.batch();
-    for (const event of dropped) batch.delete("event", Model.eventId(event));
-    batch.putJson("conversation", next.id, next);
+    for (const event of dropped) batch.delete('event', Model.eventId(event));
+    batch.putJson('conversation', next.id, next);
     await ctx.store.commit(batch);
     ctx.model.conversations.set(next.id, next);
     this.invalidate(conversationId);
     ctx.conversations.invalidate(conversationId);
-    ctx.log.info?.("conversation history deleted on this device", { conversationId, events: dropped.length });
+    ctx.log.info?.('conversation history deleted on this device', {
+      conversationId,
+      events: dropped.length,
+    });
   }
 
   /** Marks everything read locally now; sends a `read` receipt at most once per 5 s per conversation. */
@@ -246,21 +299,29 @@ export class MessagesService {
     const { ctx } = this;
     const record = ctx.model.conversations.get(conversationId);
     if (!record) throw new NotFoundError(`conversation ${conversationId}`);
-    const last = [...this.timeline(conversationId)].reverse().find((i) => !i.isOwn && i.seq !== null && COUNTED_KINDS.has(i.content.kind));
+    const last = [...this.timeline(conversationId)]
+      .reverse()
+      .find((i) => !i.isOwn && i.seq !== null && COUNTED_KINDS.has(i.content.kind));
     if (!last || last.seq === null || last.seq <= record.lastReadSeq) return;
     const next = { ...record, lastReadSeq: last.seq };
-    await ctx.store.putJson("conversation", next.id, next);
+    await ctx.store.putJson('conversation', next.id, next);
     ctx.model.conversations.set(next.id, next);
     ctx.conversations.invalidate(conversationId);
     const sendReceipt = async () => {
       this.readSentAt.set(conversationId, ctx.now());
       const latest = ctx.model.conversations.get(conversationId);
-      const target = [...this.timeline(conversationId)].reverse().find((i) => !i.isOwn && i.seq !== null && i.seq <= (latest?.lastReadSeq ?? 0));
+      const target = [...this.timeline(conversationId)]
+        .reverse()
+        .find((i) => !i.isOwn && i.seq !== null && i.seq <= (latest?.lastReadSeq ?? 0));
       if (!target) return;
       try {
-        await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "read", upTo: { kind: "event", conversationId, eventId: target.id } });
+        await ctx.outbox.enqueueMessage(conversationId, {
+          v: 1,
+          t: 'read',
+          upTo: { kind: 'event', conversationId, eventId: target.id },
+        });
       } catch (error) {
-        ctx.log.debug?.("read receipt not sent", { error: describeError(error) });
+        ctx.log.debug?.('read receipt not sent', { error: describeError(error) });
       }
     };
     const since = ctx.now() - (this.readSentAt.get(conversationId) ?? -Infinity);
@@ -291,12 +352,21 @@ export class MessagesService {
       // Read the model, not the projection: this runs from the dispatcher's after-hooks, before the timeline cache is invalidated.
       const target = [...ctx.model.eventsOf(conversationId)]
         .reverse()
-        .find((e) => e.senderAccountId !== ctx.accountId && e.message !== null && (e.message.t === "text" || e.message.t === "media"));
+        .find(
+          (e) =>
+            e.senderAccountId !== ctx.accountId &&
+            e.message !== null &&
+            (e.message.t === 'text' || e.message.t === 'media'),
+        );
       if (!target) return;
       try {
-        await ctx.outbox.enqueueMessage(conversationId, { v: 1, t: "delivered", upTo: { kind: "event", conversationId, eventId: target.id } });
+        await ctx.outbox.enqueueMessage(conversationId, {
+          v: 1,
+          t: 'delivered',
+          upTo: { kind: 'event', conversationId, eventId: target.id },
+        });
       } catch (error) {
-        ctx.log.debug?.("delivery receipt not sent", { error: describeError(error) });
+        ctx.log.debug?.('delivery receipt not sent', { error: describeError(error) });
       }
     };
     const since = ctx.now() - (this.deliveredSentAt.get(conversationId) ?? -Infinity);
@@ -323,7 +393,10 @@ export class MessagesService {
     if (!state || !ctx.engine.isActive(state) || record?.removed) return;
     const ciphertext = await ctx.mutex.run(async () => {
       const live = ctx.groups.get(conversationId)!;
-      const { ciphertext, next } = await ctx.engine.encryptApplication(live, encodeAppMessage({ v: 1, t: "typing", on }));
+      const { ciphertext, next } = await ctx.engine.encryptApplication(
+        live,
+        encodeAppMessage({ v: 1, t: 'typing', on }),
+      );
       const batch = ctx.store.batch();
       ctx.groups.stage(batch, conversationId, next);
       await ctx.store.commit(batch);
@@ -348,16 +421,17 @@ export class MessagesService {
         ctx.groups.stage(batch, conversationId, result.next);
         await ctx.store.commit(batch);
         ctx.groups.commitInMemory(conversationId, result.next);
-        if (result.kind === "application" && result.plaintext) message = decodeAppMessage(result.plaintext);
+        if (result.kind === 'application' && result.plaintext)
+          message = decodeAppMessage(result.plaintext);
       });
     } catch (error) {
-      ctx.log.debug?.("typing message rejected", { error: describeError(error) });
+      ctx.log.debug?.('typing message rejected', { error: describeError(error) });
       return;
     }
-    if (!message || message.t !== "typing") return;
+    if (!message || message.t !== 'typing') return;
     // The sender is not in the plaintext; the socket relay does not name it either. The leaf that signed it is
     // known to MLS but not surfaced by the port, so typing is attributed to "someone" per conversation.
-    sender = "*";
+    sender = '*';
     let m = this.typing.get(conversationId);
     if (!m) {
       m = new Map();
@@ -385,7 +459,9 @@ export class MessagesService {
   /** Older items come from the local store only: ciphertext before this leaf's join epoch is not decryptable. */
   async loadOlder(conversationId: string, before?: string, limit = 50): Promise<LoadOlderResult> {
     const all = this.timeline(conversationId);
-    const idx = before ? all.findIndex((i) => i.id === before || i.localKey === before) : all.length;
+    const idx = before
+      ? all.findIndex((i) => i.id === before || i.localKey === before)
+      : all.length;
     const end = idx < 0 ? all.length : idx;
     const start = Math.max(0, end - limit);
     return { items: all.slice(start, end), reachedStart: start === 0 };
@@ -399,7 +475,7 @@ export class MessagesService {
 
   private refFor(conversationId: string, id: string): EventRef {
     const item = this.find(conversationId, id);
-    if (item.seq !== null) return { kind: "event", conversationId, eventId: item.id };
-    return { kind: "local", conversationId, idempotencyKey: item.localKey ?? item.id };
+    if (item.seq !== null) return { kind: 'event', conversationId, eventId: item.id };
+    return { kind: 'local', conversationId, idempotencyKey: item.localKey ?? item.id };
   }
 }

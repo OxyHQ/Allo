@@ -39,7 +39,6 @@ function loadAppConfig(env: Env): ExpoConfig {
   try {
     jest.resetModules();
     // app.config.js is CommonJS and reads the env when CALLED, so it is loaded here.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const factory = require(path.join(__dirname, '..', 'app.config.js')) as (config: unknown) => {
       expo: ExpoConfig;
     };

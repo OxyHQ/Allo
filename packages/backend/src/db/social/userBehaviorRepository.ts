@@ -16,9 +16,9 @@
  * surface nobody calls, written against a shape nobody has declared.
  */
 
-import { eq } from "drizzle-orm";
-import type { AlloDatabase } from "../index";
-import { userBehaviors } from "../schema/social";
+import { eq } from 'drizzle-orm';
+import type { AlloDatabase } from '../index';
+import { userBehaviors } from '../schema/social';
 
 /**
  * Delete a user's personalization row. Returns whether one existed.
@@ -27,10 +27,7 @@ import { userBehaviors } from "../schema/social";
  * the distinction is the caller's, not a detail: `DELETE` alone would report
  * success for a user who never had a row.
  */
-export async function deleteUserBehavior(
-  db: AlloDatabase,
-  oxyUserId: string,
-): Promise<boolean> {
+export async function deleteUserBehavior(db: AlloDatabase, oxyUserId: string): Promise<boolean> {
   const deleted = await db
     .delete(userBehaviors)
     .where(eq(userBehaviors.oxyUserId, oxyUserId))

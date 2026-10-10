@@ -44,7 +44,9 @@ jest.mock('react-i18next', () => {
   return {
     useTranslation: () => ({
       t: (key: string, options?: Record<string, unknown>) =>
-        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? '')),
+        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+          String(options?.[name] ?? ''),
+        ),
       i18n: { language: 'en-US' },
     }),
   };
@@ -53,7 +55,10 @@ jest.mock('react-i18next', () => {
 const ALICE = 'acc-join-alice';
 const BOB = 'acc-join-bob';
 
-const mockDirectory: Record<string, { id: string; username: string; name: { displayName: string } }> = {
+const mockDirectory: Record<
+  string,
+  { id: string; username: string; name: { displayName: string } }
+> = {
   [ALICE]: { id: ALICE, username: 'alice', name: { displayName: 'Alice' } },
   [BOB]: { id: BOB, username: 'bob', name: { displayName: 'Bob Example' } },
 };
@@ -66,7 +71,12 @@ jest.mock('@/lib/oxy', () => ({
 jest.mock('@oxy.so/services', () => ({
   useOxy: () => ({
     user: { id: 'acc-join-bob', username: 'bob', name: { displayName: 'Bob Example' } },
-    oxyServices: { assets: { publicUrl: (fileId: string, variant?: string) => `https://files.test/${fileId}/${variant ?? 'full'}` } },
+    oxyServices: {
+      assets: {
+        publicUrl: (fileId: string, variant?: string) =>
+          `https://files.test/${fileId}/${variant ?? 'full'}`,
+      },
+    },
     isLoading: false,
     logout: jest.fn(),
   }),
@@ -74,7 +84,10 @@ jest.mock('@oxy.so/services', () => ({
 
 const { createFakeAlloServer, FakeSession, MemorySecrets, MemoryStorage, until } = testing;
 type FakeServer = ReturnType<typeof createFakeAlloServer>;
-type Persisted = { storage: InstanceType<typeof MemoryStorage>; secrets: InstanceType<typeof MemorySecrets> };
+type Persisted = {
+  storage: InstanceType<typeof MemoryStorage>;
+  secrets: InstanceType<typeof MemorySecrets>;
+};
 
 /** A promise somebody else resolves. */
 function gate(): { open: () => void; wait: Promise<void> } {
@@ -129,11 +142,17 @@ function Screen({ conversationId }: { conversationId: string }) {
       {rows.map((row) => (
         <View key={row.id}>
           <Text>{row.text ?? ''}</Text>
-          {row.labels?.pending ? <View testID="message-status-held" accessibilityLabel={row.labels.pending} /> : null}
+          {row.labels?.pending ? (
+            <View testID="message-status-held" accessibilityLabel={row.labels.pending} />
+          ) : null}
         </View>
       ))}
       {notice ? (
-        <View testID="composer-notice" accessibilityState={{ busy: notice.busy }} accessibilityRole={notice.error ? 'alert' : undefined}>
+        <View
+          testID="composer-notice"
+          accessibilityState={{ busy: notice.busy }}
+          accessibilityRole={notice.error ? 'alert' : undefined}
+        >
           <Text>{notice.text}</Text>
         </View>
       ) : null}
@@ -156,18 +175,27 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     .join(' | ');
 }
 
-function notice(renderer: TestRenderer.ReactTestRenderer): { text: string; busy: boolean; error: boolean } | null {
-  const node = renderer.root.findAll((n) => n.props.testID === 'composer-notice' && n.type === View)[0];
+function notice(
+  renderer: TestRenderer.ReactTestRenderer,
+): { text: string; busy: boolean; error: boolean } | null {
+  const node = renderer.root.findAll(
+    (n) => n.props.testID === 'composer-notice' && n.type === View,
+  )[0];
   if (!node) return null;
   return {
-    text: node.findAllByType(Text).map((n) => String(React.Children.toArray(n.props.children).join(''))).join(''),
+    text: node
+      .findAllByType(Text)
+      .map((n) => String(React.Children.toArray(n.props.children).join('')))
+      .join(''),
     busy: node.props.accessibilityState?.busy === true,
     error: node.props.accessibilityRole === 'alert',
   };
 }
 
 function heldLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
-  return renderer.root.findAll((n) => n.props.testID === 'message-status-held' && n.type === View).map((n) => String(n.props.accessibilityLabel));
+  return renderer.root
+    .findAll((n) => n.props.testID === 'message-status-held' && n.type === View)
+    .map((n) => String(n.props.accessibilityLabel));
 }
 
 function mount(client: AlloClient, conversationId: string): TestRenderer.ReactTestRenderer {
@@ -186,20 +214,33 @@ async function waitUntil(fn: () => boolean, timeoutMs = 30_000): Promise<void> {
   });
 }
 
-const commitsBy = (server: FakeServer, conversationId: string, instanceId: string | null | undefined) =>
-  server.eventsOf(conversationId).filter((e) => e.kind === 'mls_commit' && e.senderInstanceId === instanceId);
+const commitsBy = (
+  server: FakeServer,
+  conversationId: string,
+  instanceId: string | null | undefined,
+) =>
+  server
+    .eventsOf(conversationId)
+    .filter((e) => e.kind === 'mls_commit' && e.senderInstanceId === instanceId);
 
 const JOINING = 'Joining the conversation…';
-const WAITING = 'This device is still being added to the conversation. Another device in the conversation has to be online.';
-const REFUSED = 'This conversation cannot continue securely: a device that could not be verified was added.';
+const WAITING =
+  'This device is still being added to the conversation. Another device in the conversation has to be online.';
+const REFUSED =
+  'This conversation cannot continue securely: a device that could not be verified was added.';
 const STALLED = 'Waiting for the conversation to catch up';
 
 // MLS group operations through the fake server take seconds under Babel-transformed jest.
 jest.setTimeout(180_000);
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
-const LOOP_SIGNATURES = [/Maximum update depth/i, /getSnapshot should be cached/i, /infinite loop/i];
-const isLoopReport = (value: unknown): boolean => LOOP_SIGNATURES.some((re) => re.test(String(value instanceof Error ? value.message : value)));
+const LOOP_SIGNATURES = [
+  /Maximum update depth/i,
+  /getSnapshot should be cached/i,
+  /infinite loop/i,
+];
+const isLoopReport = (value: unknown): boolean =>
+  LOOP_SIGNATURES.some((re) => re.test(String(value instanceof Error ? value.message : value)));
 
 describe('a device that holds no leaf in the conversation yet', () => {
   const started: AlloClient[] = [];
@@ -224,15 +265,25 @@ describe('a device that holds no leaf in the conversation yet', () => {
     started.push(alice.client, bobIos.client);
     await alice.client.start();
     await bobIos.client.start();
-    await waitUntil(() => alice.client.instance.state() === 'active' && bobIos.client.instance.state() === 'active');
+    await waitUntil(
+      () =>
+        alice.client.instance.state() === 'active' && bobIos.client.instance.state() === 'active',
+    );
     const conversation = await alice.client.conversations.createDirect(BOB);
     await waitUntil(() => bobIos.client.conversations.get(conversation.id)?.joined === true);
 
     // Bob's desktop is approved by his phone; then the phone and Alice both go away.
     const groupInfoGate = gate();
-    const bobDesktop = makeClient(server, BOB, 'Bob desktop', 'desktop', undefined, async (method, url) => {
-      if (method === 'GET' && url.endsWith('/group-info')) await groupInfoGate.wait;
-    });
+    const bobDesktop = makeClient(
+      server,
+      BOB,
+      'Bob desktop',
+      'desktop',
+      undefined,
+      async (method, url) => {
+        if (method === 'GET' && url.endsWith('/group-info')) await groupInfoGate.wait;
+      },
+    );
     started.push(bobDesktop.client);
     await bobDesktop.client.start();
     expect(bobDesktop.client.instance.state()).toBe('pending-approval');
@@ -255,7 +306,10 @@ describe('a device that holds no leaf in the conversation yet', () => {
 
     groupInfoGate.open();
     await refreshed;
-    await waitUntil(() => bobDesktop.client.conversations.get(conversation.id)?.joined === true, 60_000);
+    await waitUntil(
+      () => bobDesktop.client.conversations.get(conversation.id)?.joined === true,
+      60_000,
+    );
     await waitUntil(() => notice(renderer) === null, 10_000);
     expect(bobDesktop.client.conversations.get(conversation.id)?.joinState).toBe('joined');
     // one external commit by the desktop itself; the phone, being off, added nothing
@@ -263,10 +317,18 @@ describe('a device that holds no leaf in the conversation yet', () => {
     expect(commitsBy(server, conversation.id, bobIos.client.instanceId)).toHaveLength(0);
 
     // Alice comes back, processes the desktop's commit, and the two read each other.
-    const alice2 = makeClient(server, ALICE, 'Alice web', 'web', { storage: alice.storage, secrets: alice.secrets });
+    const alice2 = makeClient(server, ALICE, 'Alice web', 'web', {
+      storage: alice.storage,
+      secrets: alice.secrets,
+    });
     started.push(alice2.client);
     await alice2.client.start();
-    await waitUntil(() => alice2.client.conversations.get(conversation.id)?.epoch === bobDesktop.client.conversations.get(conversation.id)?.epoch, 30_000);
+    await waitUntil(
+      () =>
+        alice2.client.conversations.get(conversation.id)?.epoch ===
+        bobDesktop.client.conversations.get(conversation.id)?.epoch,
+      30_000,
+    );
     await act(async () => {
       await alice2.client.messages.send(conversation.id, 'hello desktop');
       await alice2.client.sync.flush();
@@ -278,7 +340,10 @@ describe('a device that holds no leaf in the conversation yet', () => {
     });
     await waitUntil(() => allText(renderer).includes('hello from the desktop'), 30_000);
     await waitUntil(
-      () => alice2.client.messages.timeline(conversation.id).some((i) => i.content.kind === 'text' && i.content.body === 'hello from the desktop'),
+      () =>
+        alice2.client.messages
+          .timeline(conversation.id)
+          .some((i) => i.content.kind === 'text' && i.content.body === 'hello from the desktop'),
       30_000,
     );
     expect(notice(renderer)).toBeNull();
@@ -326,7 +391,9 @@ describe('a device that holds no leaf in the conversation yet', () => {
     started.push(alice.client, bob.client);
     await alice.client.start();
     await bob.client.start();
-    await waitUntil(() => alice.client.instance.state() === 'active' && bob.client.instance.state() === 'active');
+    await waitUntil(
+      () => alice.client.instance.state() === 'active' && bob.client.instance.state() === 'active',
+    );
     const conversation = await alice.client.conversations.createDirect(BOB);
     await waitUntil(() => bob.client.conversations.get(conversation.id)?.joined === true);
     const renderer = mount(alice.client, conversation.id);
@@ -351,11 +418,17 @@ describe('a device that holds no leaf in the conversation yet', () => {
     // The server admits its self-join: a joined member row is all it can check.
     await rogue.client.instance.refresh();
     await waitUntil(() => rogue.client.instance.state() === 'active');
-    await waitUntil(() => commitsBy(server, conversation.id, rogue.client.instanceId).length === 1, 60_000);
+    await waitUntil(
+      () => commitsBy(server, conversation.id, rogue.client.instanceId).length === 1,
+      60_000,
+    );
     expect(server.conversations.get(conversation.id)!.epoch).toBe(epochBefore + 1);
 
     // Alice's device refuses it, and says so in place of the composer: a failure, not a wait.
-    await waitUntil(() => alice.client.conversations.get(conversation.id)?.integrity === 'refused_commit', 30_000);
+    await waitUntil(
+      () => alice.client.conversations.get(conversation.id)?.integrity === 'refused_commit',
+      30_000,
+    );
     await waitUntil(() => notice(renderer)?.text === REFUSED, 10_000);
     expect(notice(renderer)).toEqual({ text: REFUSED, busy: false, error: true });
     const view = alice.client.conversations.get(conversation.id)!;
@@ -365,7 +438,13 @@ describe('a device that holds no leaf in the conversation yet', () => {
     expect(allText(renderer)).toContain('before the forgery');
 
     // What she sends now is held as stalled after the epoch conflicts stop moving her epoch, and never lands.
-    const posts = () => server.requestLog.filter((r) => r.method === 'POST' && r.path === `/v1/conversations/${conversation.id}/events` && r.instanceId === alice.client.instanceId);
+    const posts = () =>
+      server.requestLog.filter(
+        (r) =>
+          r.method === 'POST' &&
+          r.path === `/v1/conversations/${conversation.id}/events` &&
+          r.instanceId === alice.client.instanceId,
+      );
     const before = posts().length;
     await act(async () => {
       await alice.client.messages.send(conversation.id, 'after the forgery');
@@ -373,8 +452,16 @@ describe('a device that holds no leaf in the conversation yet', () => {
     await waitUntil(() => heldLabels(renderer).includes(STALLED), 60_000);
     expect(heldLabels(renderer)).toEqual([STALLED]);
     expect(allText(renderer)).toContain('after the forgery');
-    expect(posts().slice(before).every((r) => r.status === 409)).toBe(true);
-    expect(server.eventsOf(conversation.id).filter((e) => e.kind === 'app_message' && e.senderInstanceId === alice.client.instanceId)).toHaveLength(1); // the first one only
+    expect(
+      posts()
+        .slice(before)
+        .every((r) => r.status === 409),
+    ).toBe(true);
+    expect(
+      server
+        .eventsOf(conversation.id)
+        .filter((e) => e.kind === 'app_message' && e.senderInstanceId === alice.client.instanceId),
+    ).toHaveLength(1); // the first one only
     expect(notice(renderer)).toEqual({ text: REFUSED, busy: false, error: true });
     expect(reported.filter(isLoopReport)).toEqual([]);
   });

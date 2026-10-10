@@ -6,9 +6,9 @@
  * `delivered` when another account's `delivered` does; a receipt from an own
  * instance moves nothing, and `read` is never downgraded.
  */
-import type { AppMessage, EventRef } from "@allo/shared-types";
-import type { EventRecord, OutboxItemRecord } from "../storage/records";
-import type { CallLogView, MediaView, PollView, TimelineItemView } from "../types";
+import type { AppMessage, EventRef } from '@allo/shared-types';
+import type { EventRecord, OutboxItemRecord } from '../storage/records';
+import type { CallLogView, MediaView, PollView, TimelineItemView } from '../types';
 
 export interface ProjectionInput {
   conversationId: string;
@@ -17,7 +17,7 @@ export interface ProjectionInput {
   accountId: string;
   instanceId: string;
   /** Why pending echoes are not being sent, when the outbox holds this conversation. */
-  holdReason?: TimelineItemView["holdReason"];
+  holdReason?: TimelineItemView['holdReason'];
   /** Outbox item ids the outbox holds as `epoch_stalled`; wins over `holdReason` for those items. */
   stalledItemIds?: ReadonlySet<string>;
 }
@@ -39,9 +39,10 @@ export function project(input: ProjectionInput): TimelineItemView[] {
 
   const resolve = (ref: EventRef): Working | undefined => {
     if (ref.conversationId !== conversationId) return undefined;
-    return ref.kind === "event" ? byId.get(ref.eventId) : byLocalKey.get(ref.idempotencyKey);
+    return ref.kind === 'event' ? byId.get(ref.eventId) : byLocalKey.get(ref.idempotencyKey);
   };
-  const refId = (ref: EventRef): string => (ref.kind === "event" ? ref.eventId : ref.idempotencyKey);
+  const refId = (ref: EventRef): string =>
+    ref.kind === 'event' ? ref.eventId : ref.idempotencyKey;
 
   /**
    * The item a message is ON ITS OWN, or `null` when it is not one — a
@@ -55,27 +56,35 @@ export function project(input: ProjectionInput): TimelineItemView[] {
   const standalone = (
     m: AppMessage,
     isOwn: boolean,
-  ): { content: TimelineItemView["content"]; replyTo?: string; votes?: boolean } | null => {
+  ): { content: TimelineItemView['content']; replyTo?: string; votes?: boolean } | null => {
     switch (m.t) {
-      case "text":
-        return { content: { kind: "text", body: m.body, isEdited: false }, replyTo: m.replyTo ? refId(m.replyTo) : undefined };
-      case "media":
-        return { content: { kind: "media", media: mediaView(conversationId, m) } };
-      case "poll":
-        return { content: { kind: "poll", poll: pollView(m) }, votes: true };
-      case "location":
-        return { content: { kind: "location", place: placeView(m) } };
-      case "contact":
-        return { content: { kind: "contact", contact: contactView(m) } };
-      case "sticker":
+      case 'text':
+        return {
+          content: { kind: 'text', body: m.body, isEdited: false },
+          replyTo: m.replyTo ? refId(m.replyTo) : undefined,
+        };
+      case 'media':
+        return { content: { kind: 'media', media: mediaView(conversationId, m) } };
+      case 'poll':
+        return { content: { kind: 'poll', poll: pollView(m) }, votes: true };
+      case 'location':
+        return { content: { kind: 'location', place: placeView(m) } };
+      case 'contact':
+        return { content: { kind: 'contact', contact: contactView(m) } };
+      case 'sticker':
         return {
           content: {
-            kind: "sticker",
-            sticker: { stickerId: m.stickerId, packId: m.packId, sha256: m.sha256, ...(m.emoji ? { emoji: m.emoji } : {}) },
+            kind: 'sticker',
+            sticker: {
+              stickerId: m.stickerId,
+              packId: m.packId,
+              sha256: m.sha256,
+              ...(m.emoji ? { emoji: m.emoji } : {}),
+            },
           },
         };
-      case "call_log":
-        return { content: { kind: "call", call: callLogView(m, isOwn) } };
+      case 'call_log':
+        return { content: { kind: 'call', call: callLogView(m, isOwn) } };
       default:
         return null;
     }
@@ -87,19 +96,25 @@ export function project(input: ProjectionInput): TimelineItemView[] {
     if (w.item.localKey) byLocalKey.set(w.item.localKey, w);
   };
 
-  const apply = (message: AppMessage, sender: string, ownItem: boolean, seq: number | null): void => {
+  const apply = (
+    message: AppMessage,
+    sender: string,
+    ownItem: boolean,
+    seq: number | null,
+  ): void => {
     switch (message.t) {
-      case "edit": {
+      case 'edit': {
         const t = resolve(message.target);
-        if (t && t.item.senderAccountId === sender && t.item.content.kind === "text") t.item.content = { kind: "text", body: message.body, isEdited: true };
+        if (t && t.item.senderAccountId === sender && t.item.content.kind === 'text')
+          t.item.content = { kind: 'text', body: message.body, isEdited: true };
         break;
       }
-      case "delete": {
+      case 'delete': {
         const t = resolve(message.target);
-        if (t && t.item.senderAccountId === sender) t.item.content = { kind: "deleted" };
+        if (t && t.item.senderAccountId === sender) t.item.content = { kind: 'deleted' };
         break;
       }
-      case "reaction": {
+      case 'reaction': {
         const t = resolve(message.target);
         if (!t) break;
         let set = t.reactions.get(message.key);
@@ -107,33 +122,33 @@ export function project(input: ProjectionInput): TimelineItemView[] {
           set = new Set();
           t.reactions.set(message.key, set);
         }
-        if (message.op === "add") set.add(sender);
+        if (message.op === 'add') set.add(sender);
         else set.delete(sender);
         break;
       }
-      case "poll_vote": {
+      case 'poll_vote': {
         const t = resolve(message.target);
-        if (!t || t.item.content.kind !== "poll" || !t.votes) break;
+        if (!t || t.item.content.kind !== 'poll' || !t.votes) break;
         // A vote is the voter's CURRENT answer, not an increment: the last one
         // replaces the one before it, and an empty list retracts.
         if (message.optionIds.length === 0) t.votes.delete(sender);
         else t.votes.set(sender, [...new Set(message.optionIds)]);
         break;
       }
-      case "pin": {
+      case 'pin': {
         const t = resolve(message.target);
         if (!t) break;
-        t.item.pinned = message.op === "pin" ? true : undefined;
+        t.item.pinned = message.op === 'pin' ? true : undefined;
         break;
       }
-      case "read": {
+      case 'read': {
         if (sender === accountId) break;
         const t = resolve(message.upTo);
         const s = t?.item.seq ?? null;
         if (s !== null) readUpTo.set(sender, Math.max(readUpTo.get(sender) ?? 0, s));
         break;
       }
-      case "delivered": {
+      case 'delivered': {
         if (sender === accountId) break;
         const t = resolve(message.upTo);
         const s = t?.item.seq ?? null;
@@ -149,7 +164,7 @@ export function project(input: ProjectionInput): TimelineItemView[] {
 
   for (const e of input.events) {
     const isOwn = e.senderAccountId === accountId;
-    const base: Omit<TimelineItemView, "content"> = {
+    const base: Omit<TimelineItemView, 'content'> = {
       id: e.id,
       localKey: e.localKey ?? undefined,
       conversationId,
@@ -158,31 +173,38 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       senderInstanceId: e.senderInstanceId,
       sentAt: e.createdAt,
       isOwn,
-      sendState: "accepted",
+      sendState: 'accepted',
       reactions: [],
     };
     if (e.system) {
-      add({ item: { ...base, content: { kind: "system", text: e.system } }, reactions: new Map() });
+      add({ item: { ...base, content: { kind: 'system', text: e.system } }, reactions: new Map() });
       continue;
     }
-    if (e.failure && e.kind === "app_message") {
-      add({ item: { ...base, content: { kind: "undecryptable", reason: e.failure } }, reactions: new Map() });
+    if (e.failure && e.kind === 'app_message') {
+      add({
+        item: { ...base, content: { kind: 'undecryptable', reason: e.failure } },
+        reactions: new Map(),
+      });
       continue;
     }
     if (!e.message) continue;
     const m = e.message;
     const entry = standalone(m, isOwn);
     if (entry) {
-      add({ item: { ...base, content: entry.content, replyTo: entry.replyTo }, reactions: new Map(), ...(entry.votes ? { votes: new Map() } : {}) });
+      add({
+        item: { ...base, content: entry.content, replyTo: entry.replyTo },
+        reactions: new Map(),
+        ...(entry.votes ? { votes: new Map() } : {}),
+      });
     } else {
       apply(m, e.senderAccountId, isOwn, e.seq);
     }
   }
 
   for (const o of input.outbox) {
-    if (o.kind !== "app_message" || !o.message) continue;
+    if (o.kind !== 'app_message' || !o.message) continue;
     const m = o.message;
-    const base: Omit<TimelineItemView, "content"> = {
+    const base: Omit<TimelineItemView, 'content'> = {
       id: o.id,
       localKey: o.id,
       conversationId,
@@ -191,14 +213,22 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       senderInstanceId: input.instanceId,
       sentAt: o.createdAt,
       isOwn: true,
-      sendState: o.state === "failed" ? "failed" : "pending",
+      sendState: o.state === 'failed' ? 'failed' : 'pending',
       reactions: [],
-      ...(o.state !== "failed" && input.stalledItemIds?.has(o.id) ? { holdReason: "epoch_stalled" as const } : o.state !== "failed" && input.holdReason ? { holdReason: input.holdReason } : {}),
+      ...(o.state !== 'failed' && input.stalledItemIds?.has(o.id)
+        ? { holdReason: 'epoch_stalled' as const }
+        : o.state !== 'failed' && input.holdReason
+          ? { holdReason: input.holdReason }
+          : {}),
     };
     const entry = standalone(m, true);
     if (entry) {
-      add({ item: { ...base, content: entry.content, replyTo: entry.replyTo }, reactions: new Map(), ...(entry.votes ? { votes: new Map() } : {}) });
-    } else if (o.state !== "failed") {
+      add({
+        item: { ...base, content: entry.content, replyTo: entry.replyTo },
+        reactions: new Map(),
+        ...(entry.votes ? { votes: new Map() } : {}),
+      });
+    } else if (o.state !== 'failed') {
       apply(m, accountId, true, null);
     }
   }
@@ -207,20 +237,28 @@ export function project(input: ProjectionInput): TimelineItemView[] {
   const maxDelivered = Math.max(0, ...deliveredUpTo.values());
   return order.map((w) => {
     const item = w.item;
-    if (item.isOwn && item.seq !== null && item.sendState === "accepted") {
-      if (item.seq <= maxRead) item.sendState = "read";
-      else if (item.seq <= maxDelivered) item.sendState = "delivered";
+    if (item.isOwn && item.seq !== null && item.sendState === 'accepted') {
+      if (item.seq <= maxRead) item.sendState = 'read';
+      else if (item.seq <= maxDelivered) item.sendState = 'delivered';
     }
-    item.reactions = [...w.reactions.entries()].filter(([, set]) => set.size > 0).map(([key, set]) => ({ key, accountIds: [...set] }));
-    if (item.content.kind === "poll" && w.votes) foldVotes(item.content.poll, w.votes, accountId);
+    item.reactions = [...w.reactions.entries()]
+      .filter(([, set]) => set.size > 0)
+      .map(([key, set]) => ({ key, accountIds: [...set] }));
+    if (item.content.kind === 'poll' && w.votes) foldVotes(item.content.poll, w.votes, accountId);
     return item;
   });
 }
 
-function pollView(m: Extract<AppMessage, { t: "poll" }>): PollView {
+function pollView(m: Extract<AppMessage, { t: 'poll' }>): PollView {
   return {
     question: m.question,
-    options: m.options.map((o) => ({ id: o.id, label: o.label, votes: 0, mine: false, accountIds: [] })),
+    options: m.options.map((o) => ({
+      id: o.id,
+      label: o.label,
+      votes: 0,
+      mine: false,
+      accountIds: [],
+    })),
     totalVotes: 0,
     multiple: m.multiple,
     anonymous: m.anonymous,
@@ -244,15 +282,15 @@ function foldVotes(poll: PollView, votes: Map<string, string[]>, viewer: string)
   poll.voted = votes.has(viewer);
 }
 
-function placeView(m: Extract<AppMessage, { t: "location" }>) {
+function placeView(m: Extract<AppMessage, { t: 'location' }>) {
   return { latitude: m.latitude, longitude: m.longitude, label: m.label, address: m.address };
 }
 
-function contactView(m: Extract<AppMessage, { t: "contact" }>) {
+function contactView(m: Extract<AppMessage, { t: 'contact' }>) {
   return { name: m.name, accountId: m.accountId, handle: m.handle, phone: m.phone };
 }
 
-function mediaView(conversationId: string, m: Extract<AppMessage, { t: "media" }>): MediaView {
+function mediaView(conversationId: string, m: Extract<AppMessage, { t: 'media' }>): MediaView {
   return {
     kind: m.kind,
     filename: m.filename,
@@ -263,10 +301,15 @@ function mediaView(conversationId: string, m: Extract<AppMessage, { t: "media" }
     durationMs: m.durationMs,
     caption: m.caption,
     ref: { conversationId, blobId: m.blobId },
-    thumbnail: m.thumbnail ? { ref: { conversationId, blobId: m.thumbnail.blobId }, width: m.thumbnail.width, height: m.thumbnail.height } : undefined,
+    thumbnail: m.thumbnail
+      ? {
+          ref: { conversationId, blobId: m.thumbnail.blobId },
+          width: m.thumbnail.width,
+          height: m.thumbnail.height,
+        }
+      : undefined,
   };
 }
-
 
 /**
  * A finished call, for the conversation.
@@ -276,7 +319,7 @@ function mediaView(conversationId: string, m: Extract<AppMessage, { t: "media" }
  * reads its own direction out of the sender. That is why "missed" can be a
  * receiver's word without the sender ever claiming it.
  */
-function callLogView(m: Extract<AppMessage, { t: "call_log" }>, isOwn: boolean): CallLogView {
+function callLogView(m: Extract<AppMessage, { t: 'call_log' }>, isOwn: boolean): CallLogView {
   return {
     callId: m.callId,
     mode: m.mode,

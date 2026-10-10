@@ -11,13 +11,17 @@
  * one error handler. An expired, malformed or absent token all land here.
  */
 
-import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { getOxyUserId } from "@oxy.so/core/server";
-import { unauthorized } from "../utils/httpErrors";
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { getOxyUserId } from '@oxy.so/core/server';
+import { unauthorized } from '../utils/httpErrors';
 
-export const requireOxySession: RequestHandler = (req: Request, _res: Response, next: NextFunction) => {
+export const requireOxySession: RequestHandler = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
   if (getOxyUserId(req) === null) {
-    next(unauthorized("An Oxy session is required"));
+    next(unauthorized('An Oxy session is required'));
     return;
   }
   next();

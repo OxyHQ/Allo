@@ -1,5 +1,5 @@
-import { Router, type RequestHandler } from "express";
-import { getRequiredOxyUserId } from "@oxy.so/core/server";
+import { Router, type RequestHandler } from 'express';
+import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
   accountIdSchema,
   approveInstanceRequestSchema,
@@ -7,8 +7,8 @@ import {
   registerInstanceRequestSchema,
   setPushTokenRequestSchema,
   setTransferKeyRequestSchema,
-} from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
+} from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
 import {
   approveInstance,
   clearInstancePushToken,
@@ -20,9 +20,9 @@ import {
   revokeInstance,
   setInstancePushToken,
   setInstanceTransferKey,
-} from "../../services/platform/instanceService";
-import { asyncRoute } from "./asyncRoute";
-import { parseBody, parseParam } from "./validate";
+} from '../../services/platform/instanceService';
+import { asyncRoute } from './asyncRoute';
+import { parseBody, parseParam } from './validate';
 
 export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
@@ -30,7 +30,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   // --- Oxy-only: the routes that create or list instances themselves. --------
 
   router.post(
-    "/instances",
+    '/instances',
     asyncRoute(async (req, res) => {
       const body = parseBody(registerInstanceRequestSchema, req);
       const response = await registerInstance(getRequiredOxyUserId(req), body);
@@ -39,16 +39,16 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   );
 
   router.get(
-    "/instances",
+    '/instances',
     asyncRoute(async (req, res) => {
       res.json({ instances: await listOwnInstances(getRequiredOxyUserId(req)) });
     }),
   );
 
   router.get(
-    "/accounts/:accountId/instances",
+    '/accounts/:accountId/instances',
     asyncRoute(async (req, res) => {
-      const accountId = parseParam(accountIdSchema, req.params.accountId, "accountId");
+      const accountId = parseParam(accountIdSchema, req.params.accountId, 'accountId');
       res.json({ instances: await listPublicInstances(accountId) });
     }),
   );
@@ -75,9 +75,9 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
    * removes learns it was revoked.
    */
   router.delete(
-    "/instances/:id",
+    '/instances/:id',
     asyncRoute(async (req, res) => {
-      const id = parseParam(instanceIdSchema, req.params.id, "id");
+      const id = parseParam(instanceIdSchema, req.params.id, 'id');
       res.json({ instance: await revokeInstance(getRequiredOxyUserId(req), id) });
     }),
   );
@@ -85,7 +85,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   // --- Instance-signed. `pending` is declared before `:id` so it is not an id. --
 
   router.get(
-    "/instances/pending",
+    '/instances/pending',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -94,7 +94,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   );
 
   router.put(
-    "/instances/me/push",
+    '/instances/me/push',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -104,7 +104,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   );
 
   router.delete(
-    "/instances/me/push",
+    '/instances/me/push',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -114,43 +114,50 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
   );
 
   router.put(
-    "/instances/me/transfer-key",
+    '/instances/me/transfer-key',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const instance = await setInstanceTransferKey(me.id, parseBody(setTransferKeyRequestSchema, req));
+      const instance = await setInstanceTransferKey(
+        me.id,
+        parseBody(setTransferKeyRequestSchema, req),
+      );
       res.json({ instance });
     }),
   );
 
   router.post(
-    "/instances/:id/approve",
+    '/instances/:id/approve',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const id = parseParam(instanceIdSchema, req.params.id, "id");
+      const id = parseParam(instanceIdSchema, req.params.id, 'id');
       const body = parseBody(approveInstanceRequestSchema, req);
-      const instance = await approveInstance({ id: me.id, accountId: me.accountId }, id, body.approvalSignature);
+      const instance = await approveInstance(
+        { id: me.id, accountId: me.accountId },
+        id,
+        body.approvalSignature,
+      );
       res.json({ instance });
     }),
   );
 
   router.post(
-    "/instances/:id/reject",
+    '/instances/:id/reject',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const id = parseParam(instanceIdSchema, req.params.id, "id");
+      const id = parseParam(instanceIdSchema, req.params.id, 'id');
       res.json({ instance: await rejectInstance({ id: me.id, accountId: me.accountId }, id) });
     }),
   );
 
   router.post(
-    "/instances/:id/revoke",
+    '/instances/:id/revoke',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
-      const id = parseParam(instanceIdSchema, req.params.id, "id");
+      const id = parseParam(instanceIdSchema, req.params.id, 'id');
       res.json({ instance: await revokeInstance(me.accountId, id) });
     }),
   );

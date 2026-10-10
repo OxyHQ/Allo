@@ -30,24 +30,34 @@ export default function PrivacySettingsScreen() {
 
   const onToggleOnlineStatus = useCallback(
     (showOnlineStatus: boolean) => {
-      updateSettings.mutate({ showOnlineStatus }, { onError: () => toast.error(t('settings.privacy.updateError')) });
+      updateSettings.mutate(
+        { showOnlineStatus },
+        { onError: () => toast.error(t('settings.privacy.updateError')) },
+      );
     },
     [t, updateSettings],
   );
 
   return (
     <>
-      <SettingsSection description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}>
+      <SettingsSection
+        description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}
+      >
         <SettingsCard>
           <SettingsRow label={t('settings.privacy.privateProfile')}>
             <Button
               onPress={() => settingsModal.open('privacy-profile-visibility')}
-              accessibilityLabel={t('settings.privacy.privateProfile')} tone="neutral" appearance="outline"
+              accessibilityLabel={t('settings.privacy.privateProfile')}
+              tone="neutral"
+              appearance="outline"
             >
               {t(profileVisibilityLabelKey(settings.profileVisibility))}
             </Button>
           </SettingsRow>
-          <SettingsRow label={t('settings.privacy.showOnlineStatus')} description={t('settings.privacy.showOnlineStatusDesc')}>
+          <SettingsRow
+            label={t('settings.privacy.showOnlineStatus')}
+            description={t('settings.privacy.showOnlineStatusDesc')}
+          >
             {
               <Switch
                 checked={settings.showOnlineStatus}
@@ -63,7 +73,9 @@ export default function PrivacySettingsScreen() {
           <SettingsRow label={t('settings.privacy.restrictedProfiles')}>
             <Button
               onPress={() => settingsModal.open('privacy-restricted')}
-              accessibilityLabel={t('settings.privacy.restrictedProfiles')} tone="neutral" appearance="outline"
+              accessibilityLabel={t('settings.privacy.restrictedProfiles')}
+              tone="neutral"
+              appearance="outline"
             >
               {t('common.open')}
             </Button>
@@ -71,7 +83,9 @@ export default function PrivacySettingsScreen() {
           <SettingsRow label={t('settings.privacy.blockedProfiles')}>
             <Button
               onPress={() => settingsModal.open('privacy-blocked')}
-              accessibilityLabel={t('settings.privacy.blockedProfiles')} tone="neutral" appearance="outline"
+              accessibilityLabel={t('settings.privacy.blockedProfiles')}
+              tone="neutral"
+              appearance="outline"
             >
               {t('common.open')}
             </Button>
@@ -79,7 +93,9 @@ export default function PrivacySettingsScreen() {
           <SettingsRow label={t('settings.privacy.hiddenWords')}>
             <Button
               onPress={() => settingsModal.open('privacy-hidden-words')}
-              accessibilityLabel={t('settings.privacy.hiddenWords')} tone="neutral" appearance="outline"
+              accessibilityLabel={t('settings.privacy.hiddenWords')}
+              tone="neutral"
+              appearance="outline"
             >
               {t('common.open')}
             </Button>

@@ -20,7 +20,12 @@ let mockProgress: HistoryProgress = { phase: 'idle', done: 0, total: 0 };
 let mockInstances: InstanceView[] = [];
 
 jest.mock('@allo/react', () => ({
-  useHistoryTransfer: () => ({ progress: mockProgress, pendingOffers: [], accept: jest.fn(), refresh: jest.fn() }),
+  useHistoryTransfer: () => ({
+    progress: mockProgress,
+    pendingOffers: [],
+    accept: jest.fn(),
+    refresh: jest.fn(),
+  }),
   useOwnInstances: () => ({ instances: mockInstances, revoke: jest.fn(), refresh: jest.fn() }),
 }));
 
@@ -62,11 +67,16 @@ function render(): TestRenderer.ReactTestRenderer {
 
 /** Whether the banner is on screen at all; the theme provider around it always is. */
 function drawn(renderer: TestRenderer.ReactTestRenderer): boolean {
-  return renderer.root.findAll((node) => node.props.testID === 'history-transfer-banner').length > 0;
+  return (
+    renderer.root.findAll((node) => node.props.testID === 'history-transfer-banner').length > 0
+  );
 }
 
 function text(renderer: TestRenderer.ReactTestRenderer): string {
-  return renderer.root.findAllByType(Text).map((node) => String(React.Children.toArray(node.props.children).join(''))).join(' ');
+  return renderer.root
+    .findAllByType(Text)
+    .map((node) => String(React.Children.toArray(node.props.children).join('')))
+    .join(' ');
 }
 
 describe('HistoryTransferBanner', () => {

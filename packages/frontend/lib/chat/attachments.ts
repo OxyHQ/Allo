@@ -167,9 +167,7 @@ async function describeAll(
   return described;
 }
 
-async function describe(
-  asset: ImagePicker.ImagePickerAsset,
-): Promise<AlloOutgoingAttachment> {
+async function describe(asset: ImagePicker.ImagePickerAsset): Promise<AlloOutgoingAttachment> {
   const isVideo = asset.type === 'video';
   const filename = asset.fileName ?? fallbackFilename(asset.uri, isVideo);
   return {
@@ -317,9 +315,14 @@ export async function pickPlace(): Promise<PickedPlace> {
     return { ok: false, reason: 'denied' };
   }
   try {
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const position = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
     const { latitude, longitude } = position.coords;
-    return { ok: true, place: { latitude, longitude, ...(await describePosition(latitude, longitude)) } };
+    return {
+      ok: true,
+      place: { latitude, longitude, ...(await describePosition(latitude, longitude)) },
+    };
   } catch (error) {
     logger.warn('[chat] the current position could not be read', error);
     return { ok: false, reason: 'unavailable' };
@@ -327,7 +330,9 @@ export async function pickPlace(): Promise<PickedPlace> {
 }
 
 /** Why {@link pickPlace} came back with nothing, when it did. */
-export type PickedPlace = { ok: true; place: PlaceDraft } | { ok: false; reason: 'denied' | 'unavailable' };
+export type PickedPlace =
+  | { ok: true; place: PlaceDraft }
+  | { ok: false; reason: 'denied' | 'unavailable' };
 
 /** A name and a street for a coordinate, and `{}` wherever that cannot be had. */
 async function describePosition(
@@ -340,7 +345,9 @@ async function describePosition(
       return {};
     }
     const street = [place.street, place.streetNumber].filter(Boolean).join(' ');
-    const address = [street, place.postalCode, place.city, place.country].filter(Boolean).join(', ');
+    const address = [street, place.postalCode, place.city, place.country]
+      .filter(Boolean)
+      .join(', ');
     return {
       label: place.name ?? undefined,
       address: address.length > 0 ? address : undefined,
@@ -441,8 +448,7 @@ function fallbackFilename(uri: string, isVideo: boolean, prefix = 'attachment'):
   const withoutQuery = uri.split(/[?#]/)[0];
   const lastSegment = withoutQuery.slice(withoutQuery.lastIndexOf('/') + 1);
   const dot = lastSegment.lastIndexOf('.');
-  const extension =
-    dot > 0 ? lastSegment.slice(dot + 1).toLowerCase() : isVideo ? 'mp4' : 'jpg';
+  const extension = dot > 0 ? lastSegment.slice(dot + 1).toLowerCase() : isVideo ? 'mp4' : 'jpg';
   return `${prefix}-${Date.now().toString(36)}.${extension}`;
 }
 

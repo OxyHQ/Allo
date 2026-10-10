@@ -23,8 +23,8 @@
  * it says so rather than failing.
  */
 
-import { PRESENCE_TTL_MS } from "@allo/shared-types";
-import { logger } from "../utils/logger";
+import { PRESENCE_TTL_MS } from '@allo/shared-types';
+import { logger } from '../utils/logger';
 
 export interface PresenceStore {
   /** This instance of this account is here now; the deadline moves forward. */
@@ -63,7 +63,8 @@ export class MemoryPresenceStore implements PresenceStore {
     for (const accountId of accountIds) {
       const forAccount = this.deadlines.get(accountId);
       if (!forAccount) continue;
-      for (const [instanceId, deadline] of forAccount) if (deadline <= at) forAccount.delete(instanceId);
+      for (const [instanceId, deadline] of forAccount)
+        if (deadline <= at) forAccount.delete(instanceId);
       if (forAccount.size > 0) online.add(accountId);
       else this.deadlines.delete(accountId);
     }
@@ -130,7 +131,7 @@ export class RedisPresenceStore implements PresenceStore {
     const online = new Set<string>();
     accountIds.forEach((accountId, index) => {
       const count = results[index * 2 + 1];
-      if (typeof count === "number" && count > 0) online.add(accountId);
+      if (typeof count === 'number' && count > 0) online.add(accountId);
     });
     return online;
   }
@@ -146,24 +147,30 @@ let store: PresenceStore | null = null;
  * The store this process uses. Redis when it can be reached in five seconds,
  * this process's memory otherwise — and it says which, once, at boot.
  */
-export async function createPresenceStore(redisUrl = process.env.REDIS_URL): Promise<PresenceStore> {
+export async function createPresenceStore(
+  redisUrl = process.env.REDIS_URL,
+): Promise<PresenceStore> {
   if (!redisUrl?.trim()) {
-    logger.info("REDIS_URL not set - presence is per-task");
+    logger.info('REDIS_URL not set - presence is per-task');
     return new MemoryPresenceStore();
   }
   try {
-    const { createClient } = (await import("redis")) as unknown as { createClient: (o: { url: string }) => RedisLike };
+    const { createClient } = (await import('redis')) as unknown as {
+      createClient: (o: { url: string }) => RedisLike;
+    };
     const client = createClient({ url: redisUrl });
-    client.on("error", (error) => logger.warn("Redis presence client error", error));
+    client.on('error', (error) => logger.warn('Redis presence client error', error));
     await Promise.race([
       client.connect(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Redis connection timeout")), 5_000).unref()),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Redis connection timeout')), 5_000).unref(),
+      ),
     ]);
-    if (!client.isReady) throw new Error("Redis connected but not ready");
-    logger.info("Presence store on Redis");
+    if (!client.isReady) throw new Error('Redis connected but not ready');
+    logger.info('Presence store on Redis');
     return new RedisPresenceStore(client);
   } catch (error: unknown) {
-    logger.warn("Redis unavailable - presence is per-task", error);
+    logger.warn('Redis unavailable - presence is per-task', error);
     return new MemoryPresenceStore();
   }
 }

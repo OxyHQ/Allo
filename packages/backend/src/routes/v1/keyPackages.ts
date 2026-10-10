@@ -1,15 +1,19 @@
-import { Router, type RequestHandler } from "express";
-import { claimKeyPackagesRequestSchema, uploadKeyPackagesRequestSchema } from "@allo/shared-types";
-import { getRequiredInstance } from "../../middleware/instanceAuth";
-import { claimKeyPackages, countKeyPackageStock, uploadKeyPackages } from "../../services/platform/keyPackageService";
-import { asyncRoute } from "./asyncRoute";
-import { parseBody } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import { claimKeyPackagesRequestSchema, uploadKeyPackagesRequestSchema } from '@allo/shared-types';
+import { getRequiredInstance } from '../../middleware/instanceAuth';
+import {
+  claimKeyPackages,
+  countKeyPackageStock,
+  uploadKeyPackages,
+} from '../../services/platform/keyPackageService';
+import { asyncRoute } from './asyncRoute';
+import { parseBody } from './validate';
 
 export function createKeyPackageRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   router.get(
-    "/key-packages",
+    '/key-packages',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       res.json(await countKeyPackageStock(getRequiredInstance(req).id));
@@ -17,7 +21,7 @@ export function createKeyPackageRoutes(deps: { instanceAuth: RequestHandler }): 
   );
 
   router.put(
-    "/key-packages",
+    '/key-packages',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -26,7 +30,7 @@ export function createKeyPackageRoutes(deps: { instanceAuth: RequestHandler }): 
   );
 
   router.post(
-    "/key-packages/claim",
+    '/key-packages/claim',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);

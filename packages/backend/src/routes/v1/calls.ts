@@ -9,18 +9,26 @@
  * is not proof that a call exists, and a 403 would make it one.
  */
 
-import { Router, type RequestHandler } from "express";
-import { createCallRequestSchema, endCallRequestSchema, idSchema } from "@allo/shared-types";
-import { answerCall, callIceServers, callSfuToken, createCall, declineCall, endCall, readCall } from "../../services/platform/callService";
-import { asyncRoute } from "./asyncRoute";
-import { callerOf } from "./conversations";
-import { parseBody, parseParam } from "./validate";
+import { Router, type RequestHandler } from 'express';
+import { createCallRequestSchema, endCallRequestSchema, idSchema } from '@allo/shared-types';
+import {
+  answerCall,
+  callIceServers,
+  callSfuToken,
+  createCall,
+  declineCall,
+  endCall,
+  readCall,
+} from '../../services/platform/callService';
+import { asyncRoute } from './asyncRoute';
+import { callerOf } from './conversations';
+import { parseBody, parseParam } from './validate';
 
 export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
 
   router.post(
-    "/calls",
+    '/calls',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
@@ -33,12 +41,15 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
   );
 
   router.get(
-    "/calls/:id",
+    '/calls/:id',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       res.json(
-        await readCall({ instanceId: me.instanceId, accountId: me.accountId }, parseParam(idSchema, req.params.id, "id")),
+        await readCall(
+          { instanceId: me.instanceId, accountId: me.accountId },
+          parseParam(idSchema, req.params.id, 'id'),
+        ),
       );
     }),
   );
@@ -49,14 +60,14 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
    * the CALL: either side hiding makes it true for both.
    */
   router.get(
-    "/calls/:id/ice",
+    '/calls/:id/ice',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       res.json(
         await callIceServers(
           { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, "id"),
+          parseParam(idSchema, req.params.id, 'id'),
         ),
       );
     }),
@@ -68,40 +79,49 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
    * TURN relay that `/ice` hands out.
    */
   router.get(
-    "/calls/:id/token",
+    '/calls/:id/token',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       res.json(
-        await callSfuToken({ instanceId: me.instanceId, accountId: me.accountId }, parseParam(idSchema, req.params.id, "id")),
+        await callSfuToken(
+          { instanceId: me.instanceId, accountId: me.accountId },
+          parseParam(idSchema, req.params.id, 'id'),
+        ),
       );
     }),
   );
 
   router.post(
-    "/calls/:id/answer",
+    '/calls/:id/answer',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       res.json(
-        await answerCall({ instanceId: me.instanceId, accountId: me.accountId }, parseParam(idSchema, req.params.id, "id")),
+        await answerCall(
+          { instanceId: me.instanceId, accountId: me.accountId },
+          parseParam(idSchema, req.params.id, 'id'),
+        ),
       );
     }),
   );
 
   router.post(
-    "/calls/:id/decline",
+    '/calls/:id/decline',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       res.json(
-        await declineCall({ instanceId: me.instanceId, accountId: me.accountId }, parseParam(idSchema, req.params.id, "id")),
+        await declineCall(
+          { instanceId: me.instanceId, accountId: me.accountId },
+          parseParam(idSchema, req.params.id, 'id'),
+        ),
       );
     }),
   );
 
   router.post(
-    "/calls/:id/end",
+    '/calls/:id/end',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
@@ -109,7 +129,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
       res.json(
         await endCall(
           { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, "id"),
+          parseParam(idSchema, req.params.id, 'id'),
           body.reason,
         ),
       );

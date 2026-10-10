@@ -11,9 +11,9 @@
  * lock for.
  */
 
-import { inArray, sql } from "drizzle-orm";
-import type { AlloDatabaseOrTransaction } from "../index";
-import { accountPresence } from "../schema/presence";
+import { inArray, sql } from 'drizzle-orm';
+import type { AlloDatabaseOrTransaction } from '../index';
+import { accountPresence } from '../schema/presence';
 
 /**
  * Record that `accountId` was connected at `at`, keeping whichever is later.
@@ -22,7 +22,11 @@ import { accountPresence } from "../schema/presence";
  * `PRESENCE_LAST_SEEN_RESOLUTION_MS`; a heartbeat every thirty seconds does
  * not need a row write every thirty seconds.
  */
-export async function touchLastSeen(db: AlloDatabaseOrTransaction, accountId: string, at: Date): Promise<void> {
+export async function touchLastSeen(
+  db: AlloDatabaseOrTransaction,
+  accountId: string,
+  at: Date,
+): Promise<void> {
   await db
     .insert(accountPresence)
     .values({ accountId, lastSeenAt: at, updatedAt: at })

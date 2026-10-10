@@ -1,7 +1,7 @@
 import {
   releaseModerationOutboxEvent,
   type ModerationOutboxEvent,
-} from "../../db/moderation/moderationOutboxRepository";
+} from '../../db/moderation/moderationOutboxRepository';
 
 /**
  * The POLICY around durable moderation work: which event id a piece of work has,
@@ -73,9 +73,9 @@ function nextAttemptAt(attempts: number, now: Date): Date {
  * is how a recoverable outage becomes lost moderation work.
  */
 export function isRetryableDeliveryError(error: unknown): boolean {
-  if (typeof error === "object" && error !== null && "retryable" in error) {
+  if (typeof error === 'object' && error !== null && 'retryable' in error) {
     const retryable: unknown = (error as { retryable: unknown }).retryable;
-    if (typeof retryable === "boolean") return retryable;
+    if (typeof retryable === 'boolean') return retryable;
   }
   return true;
 }
@@ -101,7 +101,7 @@ export interface ModerationOutboxFailure {
  * there is no message, key or ciphertext for an error echo to contain.
  */
 export async function failModerationOutboxEvent(
-  event: Pick<ModerationOutboxEvent, "id" | "attempts">,
+  event: Pick<ModerationOutboxEvent, 'id' | 'attempts'>,
   leaseOwner: string,
   error: unknown,
   now: Date = new Date(),

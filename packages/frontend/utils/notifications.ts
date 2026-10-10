@@ -1,6 +1,6 @@
-import { Platform } from "react-native";
+import { Platform } from 'react-native';
 
-import { getData } from "@/utils/storage";
+import { getData } from '@/utils/storage';
 
 // Do not statically import 'expo-notifications' to avoid bundling it on web.
 // Use a cached dynamic import so the package is only loaded on native platforms.
@@ -17,7 +17,7 @@ export async function requestNotificationPermissions() {
   const Notifications = await getNotifications();
   if (!Notifications) return false;
   const { status } = await Notifications.requestPermissionsAsync();
-  return status === "granted";
+  return status === 'granted';
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {
@@ -35,7 +35,7 @@ export async function hasNotificationPermission(): Promise<boolean> {
 export async function createNotification(
   title: string,
   body: string,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
 ) {
   const Notifications = await getNotifications();
   if (!Notifications) return;

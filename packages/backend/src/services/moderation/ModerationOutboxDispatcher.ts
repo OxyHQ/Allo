@@ -1,14 +1,14 @@
-import { randomUUID } from "crypto";
-import { crowdSourceConfig } from "../../config/crowdsource";
-import { logger } from "../../utils/logger";
-import { applyDecisionOutboxEvent } from "./ModerationDecisionWorker";
-import { deliverReportOutboxEvent } from "./ModerationDeliveryWorker";
+import { randomUUID } from 'crypto';
+import { crowdSourceConfig } from '../../config/crowdsource';
+import { logger } from '../../utils/logger';
+import { applyDecisionOutboxEvent } from './ModerationDecisionWorker';
+import { deliverReportOutboxEvent } from './ModerationDeliveryWorker';
 import {
   claimModerationOutboxEvent,
   completeModerationOutboxEvent,
   type ModerationOutboxEvent,
-} from "../../db/moderation/moderationOutboxRepository";
-import { failModerationOutboxEvent } from "./ModerationOutboxService";
+} from '../../db/moderation/moderationOutboxRepository';
+import { failModerationOutboxEvent } from './ModerationOutboxService';
 
 /**
  * The loop that drains the outbox.
@@ -27,10 +27,10 @@ const LEASE_MS = 60_000;
 
 async function handle(event: ModerationOutboxEvent): Promise<void> {
   switch (event.kind) {
-    case "report.submit":
+    case 'report.submit':
       await deliverReportOutboxEvent(event);
       return;
-    case "decision.apply":
+    case 'decision.apply':
       await applyDecisionOutboxEvent(event);
       return;
     default: {
@@ -85,7 +85,7 @@ export async function dispatchModerationOutbox(options?: {
        * The event id and kind, never the payload. A payload can carry a decision
        * about an account, and an operational log is not where that belongs.
        */
-      logger.warn("[CrowdSource] outbox event failed", {
+      logger.warn('[CrowdSource] outbox event failed', {
         eventId: event.id,
         kind: event.kind,
         attempts: event.attempts,
@@ -119,7 +119,7 @@ export function startModerationOutboxDispatcher(): void {
     running = true;
     void dispatchModerationOutbox()
       .catch((error: unknown) => {
-        logger.error("[CrowdSource] outbox dispatch failed", error);
+        logger.error('[CrowdSource] outbox dispatch failed', error);
       })
       .finally(() => {
         running = false;
@@ -127,7 +127,7 @@ export function startModerationOutboxDispatcher(): void {
   }, config.outboxPollIntervalMs);
   timer.unref?.();
 
-  logger.info("[CrowdSource] outbox dispatcher started", {
+  logger.info('[CrowdSource] outbox dispatcher started', {
     intervalMs: config.outboxPollIntervalMs,
   });
 }

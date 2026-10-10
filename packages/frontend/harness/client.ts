@@ -5,7 +5,6 @@ import type { AlloClient } from '@allo/core';
 
 /* The SDK is required lazily: this module is evaluated while `@allo/core` is
    still initialising, so a static namespace import binds an empty object. */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const sdk = () => require('@allo/core') as typeof import('@allo/core');
 
 export const APP_ID = 'allo';
@@ -54,7 +53,8 @@ function silence(seconds: number): Uint8Array {
   const samples = rate * seconds;
   const bytes = new Uint8Array(44 + samples);
   const view = new DataView(bytes.buffer);
-  const ascii = (offset: number, text: string) => [...text].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  const ascii = (offset: number, text: string) =>
+    [...text].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
   ascii(0, 'RIFF');
   view.setUint32(4, 36 + samples, true);
   ascii(8, 'WAVEfmt ');
@@ -103,7 +103,10 @@ async function buildMine(): Promise<AlloClient> {
     await me.messages.send(dm.id, "It is — eight o'clock, the place by the canal.");
     await ana.messages.send(dm.id, "Perfect. I'll bring the floorplan Teodor sent over.");
     await ana.sync.flush();
-    await me.messages.send(dm.id, 'Bring the measuring tape too, the balcony looked smaller than the photos.');
+    await me.messages.send(
+      dm.id,
+      'Bring the measuring tape too, the balcony looked smaller than the photos.',
+    );
     await ana.messages.send(dm.id, 'Already in the bag.');
     await ana.messages.send(dm.id, 'The listing is here: https://canal-lofts.example/viewing');
     await ana.sync.flush();
@@ -152,10 +155,16 @@ async function buildMine(): Promise<AlloClient> {
     await ana.sync.flush();
     await me.sync.now();
 
-    const group = await me.conversations.createGroup(['6700000000000000000000a2', '6700000000000000000000a3']);
+    const group = await me.conversations.createGroup([
+      '6700000000000000000000a2',
+      '6700000000000000000000a3',
+    ]);
     await me.conversations.rename(group.id, 'Canal Loft Crew');
     await until(() => teodor.conversations.get(group.id)?.joined === true, 30_000, 25);
-    await teodor.messages.send(group.id, 'Floorplan for the loft — the balcony is on the south side.');
+    await teodor.messages.send(
+      group.id,
+      'Floorplan for the loft — the balcony is on the south side.',
+    );
     await teodor.sync.flush();
     await ana.messages.send(group.id, 'Thanks! I will print it tonight.');
     await ana.sync.flush();

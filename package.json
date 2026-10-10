@@ -50,7 +50,9 @@
     "check:bundle-imports": "bun ./scripts/check-frontend-bundle-imports.mjs && bun ./scripts/test-check-frontend-bundle-imports.mjs",
     "check:web-bundle-budget": "bun ./scripts/check-web-export-budget.mjs",
     "test:performance-gates": "bun ./scripts/test-check-frontend-bundle-imports.mjs && bun ./scripts/test-check-web-export-budget.mjs",
-    "lint": "bun run --filter '*' lint",
+    "lint": "biome check . && bun run --filter @allo/frontend lint",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
     "clean": "bun run --filter '*' clean && rm -rf node_modules",
     "install:all": "bun install",
     "start:frontend": "bun run --filter @allo/frontend start",
@@ -63,6 +65,7 @@
     "typecheck:react": "bun run --filter @allo/react typecheck"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/node": "^24.9.2",
     "react-native-worklets": "0.10.0",
     "typescript": "~5.9.2"

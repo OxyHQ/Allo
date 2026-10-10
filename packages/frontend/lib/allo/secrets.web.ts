@@ -108,7 +108,9 @@ export class IndexedDbSecrets implements SecretStore {
 
   async get(name: string): Promise<Uint8Array | undefined> {
     const db = await this.open();
-    const value = await awaitRequest(db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(name));
+    const value = await awaitRequest(
+      db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(name),
+    );
     if (value === undefined) return undefined;
     if (value instanceof Uint8Array) return value;
     if (value instanceof ArrayBuffer) return new Uint8Array(value);

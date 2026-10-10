@@ -50,7 +50,9 @@ describe('presenceLine', () => {
   });
 
   it('is silent about a last seen in the future or a broken one, rather than saying "in -3 minutes"', () => {
-    expect(line(view({ lastSeenAt: new Date(NOW.getTime() + 60_000).toISOString() }))).toBeUndefined();
+    expect(
+      line(view({ lastSeenAt: new Date(NOW.getTime() + 60_000).toISOString() })),
+    ).toBeUndefined();
     expect(line(view({ lastSeenAt: 'not a date' }))).toBeUndefined();
   });
 

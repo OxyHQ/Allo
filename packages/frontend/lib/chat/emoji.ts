@@ -26,7 +26,11 @@ export const EMOJI_GROUPS: readonly EmojiGroup[] = [
     emojis: [
       { char: '😀', name: 'grinning face', keywords: ['smile', 'happy', 'grin'] },
       { char: '😃', name: 'grinning face with big eyes', keywords: ['smile', 'happy', 'joy'] },
-      { char: '😄', name: 'grinning face with smiling eyes', keywords: ['smile', 'happy', 'joy', 'laugh'] },
+      {
+        char: '😄',
+        name: 'grinning face with smiling eyes',
+        keywords: ['smile', 'happy', 'joy', 'laugh'],
+      },
       { char: '😁', name: 'beaming face with smiling eyes', keywords: ['grin', 'smile'] },
       { char: '😆', name: 'grinning squinting face', keywords: ['laugh', 'haha', 'satisfied'] },
       { char: '😅', name: 'grinning face with sweat', keywords: ['laugh', 'relief', 'nervous'] },
@@ -893,9 +897,9 @@ export const EMOJI_GROUPS: readonly EmojiGroup[] = [
       { char: '🔳', name: 'white square button' },
       { char: '🔲', name: 'black square button' },
       { char: '💠', name: 'diamond with a dot' },
-      { char: '🕐', name: 'one o\'clock', keywords: ['time'] },
-      { char: '🕑', name: 'two o\'clock', keywords: ['time'] },
-      { char: '🕒', name: 'three o\'clock', keywords: ['time'] },
+      { char: '🕐', name: "one o'clock", keywords: ['time'] },
+      { char: '🕑', name: "two o'clock", keywords: ['time'] },
+      { char: '🕒', name: "three o'clock", keywords: ['time'] },
     ],
   },
   {

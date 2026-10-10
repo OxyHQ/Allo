@@ -1,8 +1,19 @@
 import React, { memo, useCallback, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ScrollToBottomButton } from '@oxy.so/bloom/chat-screen';
-import { MessageList, TypingBubble, type MessageBubbleLabels, type MessageListItem } from '@oxy.so/bloom/message-bubble';
+import {
+  MessageList,
+  TypingBubble,
+  type MessageBubbleLabels,
+  type MessageListItem,
+} from '@oxy.so/bloom/message-bubble';
 
 /** How far from the newest message the "scroll to latest" button appears. */
 const SCROLLED_UP_PX = 320;

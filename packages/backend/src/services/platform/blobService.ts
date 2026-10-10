@@ -2,18 +2,18 @@
  * Blobs (`docs/platform/api-v1.md`, Blobs).
  */
 
-import { randomBytes } from "node:crypto";
-import { DEFAULT_MAX_BLOB_BYTES, type UploadBlobResponse } from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
+import { randomBytes } from 'node:crypto';
+import { DEFAULT_MAX_BLOB_BYTES, type UploadBlobResponse } from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
 import {
   BLOB_UNREFERENCED_TTL_MS,
   findBlobById,
   insertBlob,
   postgresBlobStore,
   type BlobStore,
-} from "../../db/platform/blobRepository";
-import { sha256Hex } from "../../middleware/instanceAuth";
-import { AlloHttpError, notFound, validationFailed } from "../../utils/httpErrors";
+} from '../../db/platform/blobRepository';
+import { sha256Hex } from '../../middleware/instanceAuth';
+import { AlloHttpError, notFound, validationFailed } from '../../utils/httpErrors';
 
 export interface BlobServiceDeps {
   db?: AlloDatabase;
@@ -27,7 +27,7 @@ export function blobMaxBytes(env: NodeJS.ProcessEnv = process.env): number {
   if (!raw) return DEFAULT_MAX_BLOB_BYTES;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error("ALLO_BLOB_MAX_BYTES must be a positive integer number of bytes");
+    throw new Error('ALLO_BLOB_MAX_BYTES must be a positive integer number of bytes');
   }
   return parsed;
 }
@@ -40,14 +40,15 @@ export async function uploadBlob(
   const db = deps.db ?? getDb();
   const store = deps.store ?? postgresBlobStore();
   const max = deps.maxBytes ?? blobMaxBytes();
-  if (input.bytes.length > max) throw new AlloHttpError("payload_too_large", `A blob is at most ${max} bytes`);
-  if (input.bytes.length === 0) throw validationFailed("an empty blob is not a blob");
-  if (input.declaredSha256 === undefined) throw validationFailed("X-Allo-Blob-Sha256 is required");
+  if (input.bytes.length > max)
+    throw new AlloHttpError('payload_too_large', `A blob is at most ${max} bytes`);
+  if (input.bytes.length === 0) throw validationFailed('an empty blob is not a blob');
+  if (input.declaredSha256 === undefined) throw validationFailed('X-Allo-Blob-Sha256 is required');
   const actual = sha256Hex(input.bytes);
   if (actual !== input.declaredSha256.toLowerCase()) {
-    throw validationFailed("X-Allo-Blob-Sha256 does not match the body");
+    throw validationFailed('X-Allo-Blob-Sha256 does not match the body');
   }
-  const id = randomBytes(32).toString("hex");
+  const id = randomBytes(32).toString('hex');
   await db.transaction(async (tx) => {
     await insertBlob(
       {
@@ -70,8 +71,8 @@ export async function downloadBlob(id: string, deps: BlobServiceDeps = {}): Prom
   const db = deps.db ?? getDb();
   const store = deps.store ?? postgresBlobStore();
   const row = await findBlobById(id, db);
-  if (!row) throw notFound("Blob not found");
+  if (!row) throw notFound('Blob not found');
   const bytes = await store.get(id, db);
-  if (!bytes) throw notFound("Blob not found");
+  if (!bytes) throw notFound('Blob not found');
   return bytes;
 }

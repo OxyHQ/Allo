@@ -5,10 +5,14 @@
  * the client never sees as a number: the cursor is base64url of its decimal
  * form, and a client stores it, hands it back, and compares nothing.
  */
-import { z } from "zod";
-import { presenceHeartbeatEventSchema, presenceStateSchema, presenceWatchEventSchema } from "./presence";
-import { callIncomingEventSchema, callUpdatedEventSchema } from "./calls";
-import { statusPostedEventSchema } from "./statuses";
+import { z } from 'zod';
+import {
+  presenceHeartbeatEventSchema,
+  presenceStateSchema,
+  presenceWatchEventSchema,
+} from './presence';
+import { callIncomingEventSchema, callUpdatedEventSchema } from './calls';
+import { statusPostedEventSchema } from './statuses';
 import {
   accountIdSchema,
   base64Schema,
@@ -18,16 +22,16 @@ import {
   idSchema,
   instanceIdSchema,
   nonNegativeIntSchema,
-} from "./common";
-import { conversationEventSchema } from "./events";
+} from './common';
+import { conversationEventSchema } from './events';
 
-export const SOCKET_NAMESPACE = "/v1";
+export const SOCKET_NAMESPACE = '/v1';
 
 export const cursorSchema = z.base64url().min(1).max(64);
 export type Cursor = z.infer<typeof cursorSchema>;
 
 /** The cursor of the empty stream: `encodeCursor(0)`. */
-export const INITIAL_CURSOR = "MA";
+export const INITIAL_CURSOR = 'MA';
 
 const ASCII = {
   encode(text: string): Uint8Array {
@@ -36,7 +40,7 @@ const ASCII = {
     return out;
   },
   decode(bytes: Uint8Array): string {
-    let s = "";
+    let s = '';
     for (const b of bytes) s += String.fromCharCode(b);
     return s;
   },
@@ -44,17 +48,18 @@ const ASCII = {
 
 /** base64url of the decimal form of a non-negative integer. */
 export function encodeCursor(n: bigint | number): string {
-  if (typeof n === "number" && (!Number.isInteger(n) || n < 0)) {
-    throw new RangeError("cursor must be a non-negative integer");
+  if (typeof n === 'number' && (!Number.isInteger(n) || n < 0)) {
+    throw new RangeError('cursor must be a non-negative integer');
   }
-  if (typeof n === "bigint" && n < 0n) throw new RangeError("cursor must be a non-negative integer");
+  if (typeof n === 'bigint' && n < 0n)
+    throw new RangeError('cursor must be a non-negative integer');
   return base64UrlEncode(ASCII.encode(String(n)));
 }
 
 /** The inverse of {@link encodeCursor}. Throws `RangeError` on anything it did not produce. */
 export function decodeCursor(cursor: string): bigint {
   const text = ASCII.decode(base64UrlDecode(cursor));
-  if (!/^(0|[1-9][0-9]*)$/.test(text)) throw new RangeError("malformed cursor");
+  if (!/^(0|[1-9][0-9]*)$/.test(text)) throw new RangeError('malformed cursor');
   return BigInt(text);
 }
 
@@ -148,22 +153,22 @@ export const historyOfferEventSchema = z.object({
 export type HistoryOfferEvent = z.infer<typeof historyOfferEventSchema>;
 
 export const SERVER_TO_CLIENT_EVENTS = {
-  "sync.nudge": syncNudgeEventSchema,
-  "instance.approved": instanceApprovedEventSchema,
-  "instance.revoked": instanceRevokedEventSchema,
-  "keypackages.low": keyPackagesLowEventSchema,
+  'sync.nudge': syncNudgeEventSchema,
+  'instance.approved': instanceApprovedEventSchema,
+  'instance.revoked': instanceRevokedEventSchema,
+  'keypackages.low': keyPackagesLowEventSchema,
   typing: typingEventSchema,
   presence: presenceEventSchema,
-  "history.offer": historyOfferEventSchema,
-  "status.posted": statusPostedEventSchema,
-  "call.incoming": callIncomingEventSchema,
-  "call.updated": callUpdatedEventSchema,
+  'history.offer': historyOfferEventSchema,
+  'status.posted': statusPostedEventSchema,
+  'call.incoming': callIncomingEventSchema,
+  'call.updated': callUpdatedEventSchema,
 } as const;
 
 export const CLIENT_TO_SERVER_EVENTS = {
   typing: typingEventSchema,
-  "presence.watch": presenceWatchEventSchema,
-  "presence.heartbeat": presenceHeartbeatEventSchema,
+  'presence.watch': presenceWatchEventSchema,
+  'presence.heartbeat': presenceHeartbeatEventSchema,
 } as const;
 
 export type ServerToClientEventName = keyof typeof SERVER_TO_CLIENT_EVENTS;

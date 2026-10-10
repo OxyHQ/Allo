@@ -7,7 +7,7 @@
  * anything.
  */
 
-import { readIceConfig, type IceConfig } from "./turn";
+import { readIceConfig, type IceConfig } from './turn';
 
 let current: IceConfig | null = null;
 

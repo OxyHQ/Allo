@@ -3,7 +3,7 @@
  * in-flight de-duplication so two components asking for the same blob at
  * once cause one download. Owned by `AlloProvider`; `useMediaFile` reads it.
  */
-import type { MediaRef } from "@allo/core";
+import type { MediaRef } from '@allo/core';
 
 export const DEFAULT_MEDIA_CACHE_SIZE = 50;
 
@@ -16,7 +16,8 @@ export class MediaCache {
   private readonly inFlight = new Map<string, Promise<Uint8Array>>();
 
   constructor(readonly capacity: number = DEFAULT_MEDIA_CACHE_SIZE) {
-    if (!Number.isInteger(capacity) || capacity < 1) throw new Error(`MediaCache capacity must be a positive integer, got ${capacity}`);
+    if (!Number.isInteger(capacity) || capacity < 1)
+      throw new Error(`MediaCache capacity must be a positive integer, got ${capacity}`);
   }
 
   get size(): number {

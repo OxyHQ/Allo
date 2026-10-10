@@ -39,14 +39,14 @@
  * the enqueue, so the workers keep consuming the one object shape they always did.
  */
 
-import { and, asc, eq, gt, lte, or, sql } from "drizzle-orm";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
+import { and, asc, eq, gt, lte, or, sql } from 'drizzle-orm';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
 import {
   moderationOutbox,
   type ModerationOutboxKind,
   type ModerationOutboxStatus,
-} from "../schema/moderation";
-import { requireTransaction } from "./transactionGuard";
+} from '../schema/moderation';
+import { requireTransaction } from './transactionGuard';
 
 /**
  * Retention ceiling, so a stalled dispatcher cannot turn the outbox into an
@@ -179,7 +179,7 @@ export async function enqueueModerationOutboxEvent(
       payloadEventId: input.payload.eventId,
       payloadCaseId: input.payload.caseId,
       payloadDecision: input.payload.decision,
-      status: "pending",
+      status: 'pending',
       attempts: 0,
       availableAt: now,
       expiresAt: new Date(now.getTime() + MODERATION_OUTBOX_RETENTION_SECONDS * 1_000),
@@ -217,15 +217,15 @@ export async function claimModerationOutboxEvent(
   const due = and(
     options.eventId ? eq(moderationOutbox.id, options.eventId) : undefined,
     or(
-      and(eq(moderationOutbox.status, "pending"), lte(moderationOutbox.availableAt, now)),
-      and(eq(moderationOutbox.status, "processing"), lte(moderationOutbox.leaseUntil, now)),
+      and(eq(moderationOutbox.status, 'pending'), lte(moderationOutbox.availableAt, now)),
+      and(eq(moderationOutbox.status, 'processing'), lte(moderationOutbox.leaseUntil, now)),
     ),
   );
 
   const claimed = await db
     .update(moderationOutbox)
     .set({
-      status: "processing",
+      status: 'processing',
       leaseOwner: options.leaseOwner,
       leaseUntil: new Date(now.getTime() + leaseMs),
       attempts: sql`${moderationOutbox.attempts} + 1`,
@@ -261,7 +261,7 @@ export async function claimModerationOutboxEvent(
 function ownedLease(eventId: string, leaseOwner: string, now: Date) {
   return and(
     eq(moderationOutbox.id, eventId),
-    eq(moderationOutbox.status, "processing"),
+    eq(moderationOutbox.status, 'processing'),
     eq(moderationOutbox.leaseOwner, leaseOwner),
     gt(moderationOutbox.leaseUntil, now),
   );
@@ -277,7 +277,7 @@ export async function completeModerationOutboxEvent(
   const completed = await db
     .update(moderationOutbox)
     .set({
-      status: "processed",
+      status: 'processed',
       processedAt: now,
       leaseOwner: null,
       leaseUntil: null,
@@ -328,7 +328,7 @@ export async function releaseModerationOutboxEvent(
   const released = await db
     .update(moderationOutbox)
     .set({
-      status: options.deadLettered ? "dead_letter" : "pending",
+      status: options.deadLettered ? 'dead_letter' : 'pending',
       availableAt: options.availableAt,
       lastError: options.error.slice(0, MAX_LAST_ERROR_LENGTH),
       leaseOwner: null,

@@ -3,8 +3,8 @@
  * add it to a group without it being online. The server stores them opaque
  * and hands each out at most once.
  */
-import { z } from "zod";
-import { base64Schema, instanceIdSchema, nonNegativeIntSchema } from "./common";
+import { z } from 'zod';
+import { base64Schema, instanceIdSchema, nonNegativeIntSchema } from './common';
 
 /** An MLS ciphersuite id (RFC 9420 §17.1), a uint16 excluding 0. */
 export const ciphersuiteSchema = z.number().int().min(1).max(65535);

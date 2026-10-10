@@ -22,7 +22,6 @@ export function registerWebrtcGlobals(): void {
   registered = true;
   // Required lazily: pulling the native module into the web bundle would take
   // a Node-only path with it, and this file is only reached on a device.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { registerGlobals } = require('@livekit/react-native') as { registerGlobals: () => void };
   registerGlobals();
 }

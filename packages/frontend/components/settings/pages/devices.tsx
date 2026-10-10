@@ -1,4 +1,9 @@
-import { useOwnInstances, usePendingEnrollments, type InstanceView, type PendingEnrollmentView } from '@allo/react';
+import {
+  useOwnInstances,
+  usePendingEnrollments,
+  type InstanceView,
+  type PendingEnrollmentView,
+} from '@allo/react';
 import { Button, GlyphButton } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiRefreshLine } from '@oxy.so/bloom/icons/RiRefreshLine';
@@ -46,10 +51,9 @@ export default function DevicesScreen() {
     }
   }, [own, pending, t]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Once on mount: the lists then follow the SDK's `instances` topic.
   useEffect(() => {
     void refreshAll();
-    // Once on mount: the lists then follow the SDK's `instances` topic.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const run = useCallback(
@@ -126,13 +130,21 @@ export default function DevicesScreen() {
   );
 
   const enrolled = useMemo(
-    () => [...own.instances].sort((a, b) => Number(b.isThis) - Number(a.isThis) || a.displayName.localeCompare(b.displayName)),
+    () =>
+      [...own.instances].sort(
+        (a, b) => Number(b.isThis) - Number(a.isThis) || a.displayName.localeCompare(b.displayName),
+      ),
     [own.instances],
   );
 
   return (
     <>
-      <Button  leadingIcon={RiRefreshLine} onPress={() => void refreshAll()} tone="neutral" appearance="outline">
+      <Button
+        leadingIcon={RiRefreshLine}
+        onPress={() => void refreshAll()}
+        tone="neutral"
+        appearance="outline"
+      >
         {t('devices.refresh')}
       </Button>
       {pending.pending.length > 0 ? (
@@ -142,7 +154,9 @@ export default function DevicesScreen() {
               const busy = busyId === enrollment.instance.id;
               return (
                 <View key={enrollment.instance.id} style={styles.pending}>
-                  <Text style={[styles.pendingTitle, { color: theme.colors.text }]}>{enrollment.instance.displayName}</Text>
+                  <Text style={[styles.pendingTitle, { color: theme.colors.text }]}>
+                    {enrollment.instance.displayName}
+                  </Text>
                   <Muted>
                     {`${platformLabel(enrollment.instance.platform)} · ${t('devices.requestedAt', { when: formatWhen(enrollment.instance.createdAt) })}`}
                   </Muted>
@@ -161,14 +175,22 @@ export default function DevicesScreen() {
                     {enrollment.fingerprint}
                   </Text>
                   <View style={styles.actions}>
-                    <Button  style={styles.action} disabled={busyId !== null} onPress={() => void reject(enrollment)} tone="neutral" appearance="outline">
+                    <Button
+                      style={styles.action}
+                      disabled={busyId !== null}
+                      onPress={() => void reject(enrollment)}
+                      tone="neutral"
+                      appearance="outline"
+                    >
                       {t('devices.reject')}
                     </Button>
                     <Button
                       style={styles.action}
                       loading={busy}
                       disabled={busyId !== null && !busy}
-                      onPress={() => void approve(enrollment)} tone="accent" appearance="solid"
+                      onPress={() => void approve(enrollment)}
+                      tone="accent"
+                      appearance="solid"
                     >
                       {t('devices.approve')}
                     </Button>
@@ -196,7 +218,11 @@ export default function DevicesScreen() {
               return (
                 <SettingsRow
                   key={instance.id}
-                  label={instance.isThis ? t('devices.thisDevice', { name: instance.displayName }) : instance.displayName}
+                  label={
+                    instance.isThis
+                      ? t('devices.thisDevice', { name: instance.displayName })
+                      : instance.displayName
+                  }
                   description={describeInstance(instance, t)}
                 >
                   {!removable ? undefined : busyId === instance.id ? (
@@ -242,7 +268,9 @@ function describeInstance(instance: InstanceView, t: Translate): string {
       : instance.status === 'pending'
         ? t('devices.status.pending')
         : t('devices.status.revoked');
-  const seen = instance.lastSeenAt ? t('devices.lastSeen', { when: formatWhen(instance.lastSeenAt) }) : t('devices.neverSeen');
+  const seen = instance.lastSeenAt
+    ? t('devices.lastSeen', { when: formatWhen(instance.lastSeenAt) })
+    : t('devices.neverSeen');
   return `${platformLabel(instance.platform)} · ${status} · ${seen}`;
 }
 

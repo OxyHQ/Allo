@@ -5,7 +5,8 @@
  * Intl.DateTimeFormat on every call (significant perf win in lists).
  */
 
-export const addMinutes = (date: Date, minutes: number) => new Date(date.getTime() + minutes * 60000);
+export const addMinutes = (date: Date, minutes: number) =>
+  new Date(date.getTime() + minutes * 60000);
 
 export const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -15,7 +16,10 @@ export const formatTimeInput = (date: Date) => date.toTimeString().slice(0, 5);
 let _scheduledFormatter: Intl.DateTimeFormat | null = null;
 function getScheduledFormatter(): Intl.DateTimeFormat {
   if (!_scheduledFormatter) {
-    _scheduledFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    _scheduledFormatter = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
   }
   return _scheduledFormatter;
 }
@@ -48,7 +52,11 @@ function getWeekdayFormatter(): Intl.DateTimeFormat {
 let _shortDateFormatter: Intl.DateTimeFormat | null = null;
 function getShortDateFormatter(): Intl.DateTimeFormat {
   if (!_shortDateFormatter) {
-    _shortDateFormatter = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'numeric', year: '2-digit' });
+    _shortDateFormatter = new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'numeric',
+      year: '2-digit',
+    });
   }
   return _shortDateFormatter;
 }

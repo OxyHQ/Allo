@@ -1,7 +1,7 @@
-import { PRESENCE_UNKNOWN, type PresenceView } from "@allo/core";
-import { useEffect, useMemo } from "react";
-import { useAlloContext } from "../AlloProvider";
-import { useClientSnapshot } from "../internal/useClientSnapshot";
+import { PRESENCE_UNKNOWN, type PresenceView } from '@allo/core';
+import { useEffect, useMemo } from 'react';
+import { useAlloContext } from '../AlloProvider';
+import { useClientSnapshot } from '../internal/useClientSnapshot';
 
 export interface Presence {
   /** One account's presence. Stable between changes; `known` is false until the server has answered. */
@@ -29,8 +29,8 @@ export interface Presence {
  */
 export function usePresence(accountIds: readonly string[]): Presence {
   const { client } = useAlloContext();
-  const key = accountIds.join(",");
-  const watched = useMemo(() => (key ? key.split(",") : []), [key]);
+  const key = accountIds.join(',');
+  const watched = useMemo(() => (key ? key.split(',') : []), [key]);
 
   useEffect(() => {
     void client.presence.watch(watched);
@@ -39,14 +39,15 @@ export function usePresence(accountIds: readonly string[]): Presence {
     return () => void client.presence.watch([]);
   }, [client, watched]);
 
-  const version = useClientSnapshot(client, "presence", () => client.presence.version());
-  const publishing = useClientSnapshot(client, "presence", () => client.presence.publishing());
+  const version = useClientSnapshot(client, 'presence', () => client.presence.version());
+  const publishing = useClientSnapshot(client, 'presence', () => client.presence.publishing());
 
   return useMemo(
     () => ({
       // `version` is in the dependency list, not the body: it is what makes a
       // change re-render, while `of` stays the same function.
-      of: (accountId: string) => (watched.includes(accountId) ? client.presence.of(accountId) : PRESENCE_UNKNOWN),
+      of: (accountId: string) =>
+        watched.includes(accountId) ? client.presence.of(accountId) : PRESENCE_UNKNOWN,
       publishing,
     }),
     [client, publishing, version, watched],

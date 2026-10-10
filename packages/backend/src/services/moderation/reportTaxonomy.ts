@@ -1,5 +1,5 @@
-import type { TaxonomyCode } from "@crowdsource.you/contracts";
-import type { ReportCategory } from "../../db/schema/moderation";
+import type { TaxonomyCode } from '@crowdsource.you/contracts';
+import type { ReportCategory } from '../../db/schema/moderation';
 
 /**
  * Allo's report categories, translated into CrowdSource's universal taxonomy.
@@ -30,12 +30,12 @@ import type { ReportCategory } from "../../db/schema/moderation";
  * integration. That honesty is the point: the alternative is disclosing the
  * conversation.
  */
-export const REPORT_TAXONOMY_VERSION = "2026.07";
+export const REPORT_TAXONOMY_VERSION = '2026.07';
 
 const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = Object.freeze({
-  spam: "integrity.spam",
-  hate_speech: "hate.protected_targeting",
-  harassment: "harassment.targeted_abuse",
+  spam: 'integrity.spam',
+  hate_speech: 'hate.protected_targeting',
+  harassment: 'harassment.targeted_abuse',
   /**
    * `misinformation` has no home in §6.3's eleven families — the closest are
    * `integrity.coordinated_manipulation` (a claim about organised behaviour) and
@@ -45,7 +45,7 @@ const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = O
    * taxonomy has no name for it". Forcing it into `integrity.*` would tell a jury
    * the reporter alleged something they did not.
    */
-  misinformation: "other.policy_specific",
+  misinformation: 'other.policy_specific',
   /**
    * The activity code, not the nudity code. They are different claims and Allo
    * offers one category for both; the stronger code is the honest reading of what
@@ -53,8 +53,8 @@ const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = O
    * Alleging nudity when explicit activity was reported would understate the report
    * and could route it to a lighter review.
    */
-  explicit_content: "sexual_content.explicit_activity",
-  other: "other.unclassifiable",
+  explicit_content: 'sexual_content.explicit_activity',
+  other: 'other.unclassifiable',
 });
 
 /**
@@ -66,15 +66,13 @@ const CATEGORY_TO_ALLEGATION: Readonly<Record<ReportCategory, TaxonomyCode>> = O
  * a permanent 409 — days later, as a report silently stuck in a queue. Sorting
  * makes the same report produce the same bytes every time.
  */
-export function allegationsForCategories(
-  categories: readonly ReportCategory[],
-): TaxonomyCode[] {
+export function allegationsForCategories(categories: readonly ReportCategory[]): TaxonomyCode[] {
   const codes = new Set<TaxonomyCode>();
   for (const category of categories) {
     const code = CATEGORY_TO_ALLEGATION[category];
     // A category the map does not cover cannot silently become nothing: a report
     // with no allegation is not a report.
-    codes.add(code ?? "other.unclassifiable");
+    codes.add(code ?? 'other.unclassifiable');
   }
   return Array.from(codes).sort();
 }

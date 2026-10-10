@@ -49,12 +49,17 @@ export class SqliteStorage implements StorageAdapter {
 
   /** Opens (or creates) the table and answers an adapter over it. */
   static async open(db: KvDatabase): Promise<SqliteStorage> {
-    await db.execAsync('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY NOT NULL, value BLOB NOT NULL)');
+    await db.execAsync(
+      'CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY NOT NULL, value BLOB NOT NULL)',
+    );
     return new SqliteStorage(db);
   }
 
   async get(key: string): Promise<Uint8Array | undefined> {
-    const row = await this.db.getFirstAsync<{ value: Uint8Array | ArrayBuffer }>('SELECT value FROM kv WHERE key = ?', [key]);
+    const row = await this.db.getFirstAsync<{ value: Uint8Array | ArrayBuffer }>(
+      'SELECT value FROM kv WHERE key = ?',
+      [key],
+    );
     return row ? toBytes(row.value) : undefined;
   }
 
@@ -79,7 +84,10 @@ export class SqliteStorage implements StorageAdapter {
     await this.db.withTransactionAsync(async () => {
       for (const op of ops) {
         if (op.type === 'set') {
-          await this.db.runAsync('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [op.key, op.value]);
+          await this.db.runAsync('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [
+            op.key,
+            op.value,
+          ]);
         } else {
           await this.db.runAsync('DELETE FROM kv WHERE key = ?', [op.key]);
         }

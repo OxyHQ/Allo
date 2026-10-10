@@ -5,24 +5,29 @@
  * result; `server.ts` listens.
  */
 
-import { createOptionalOxyAuth, createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
-import { APP_ORIGINS, createApp } from "./app";
-import { setIceConfig } from "./config/iceRuntime";
-import { readLiveKitConfig } from "./config/livekit";
-import { configureOxyServiceAuth } from "./config/oxyService";
-import { setLiveKitConfig } from "./config/sfuRuntime";
-import { readIceConfig } from "./config/turn";
-import { checkPostgresHealth } from "./db";
-import { ecosystemActivityMiddleware } from "./ecosystemActivity";
-import { requireInstance } from "./middleware/instanceAuth";
-import { requireOxySession } from "./middleware/oxySession";
-import { oxy } from "./oxy";
-import { createCrowdSourceWebhookRoutes } from "./routes/crowdSourceWebhook";
-import { createDirectoryRoutes } from "./routes/directory";
-import profileSettingsRoutes from "./routes/profileSettings";
-import reportsRoutes from "./routes/reports";
-import { createOxyDirectoryService } from "./services/oxy/OxyDirectoryService";
-import { blobMaxBytes } from "./services/platform/blobService";
+import {
+  createOptionalOxyAuth,
+  createOxyAuthMiddleware,
+  createOxyCors,
+  createOxyRateLimit,
+} from '@oxy.so/core/server';
+import { APP_ORIGINS, createApp } from './app';
+import { setIceConfig } from './config/iceRuntime';
+import { readLiveKitConfig } from './config/livekit';
+import { configureOxyServiceAuth } from './config/oxyService';
+import { setLiveKitConfig } from './config/sfuRuntime';
+import { readIceConfig } from './config/turn';
+import { checkPostgresHealth } from './db';
+import { ecosystemActivityMiddleware } from './ecosystemActivity';
+import { requireInstance } from './middleware/instanceAuth';
+import { requireOxySession } from './middleware/oxySession';
+import { oxy } from './oxy';
+import { createCrowdSourceWebhookRoutes } from './routes/crowdSourceWebhook';
+import { createDirectoryRoutes } from './routes/directory';
+import profileSettingsRoutes from './routes/profileSettings';
+import reportsRoutes from './routes/reports';
+import { createOxyDirectoryService } from './services/oxy/OxyDirectoryService';
+import { blobMaxBytes } from './services/platform/blobService';
 
 export function createRuntimeApp() {
   configureOxyServiceAuth(oxy);

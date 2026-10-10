@@ -24,9 +24,14 @@
  *    active instances only, so from outside, an instance whose approver was
  *    revoked cannot be verified and is refused (contract gap, reported).
  */
-import { ed25519 } from "@noble/curves/ed25519.js";
-import { enrollmentApprovalMessage, signedRequestMessage, type PublicInstance, type SignedRequestInput } from "@allo/shared-types";
-import { base64Decode, base64Encode, utf8Encode } from "../util/bytes";
+import { ed25519 } from '@noble/curves/ed25519.js';
+import {
+  enrollmentApprovalMessage,
+  signedRequestMessage,
+  type PublicInstance,
+  type SignedRequestInput,
+} from '@allo/shared-types';
+import { base64Decode, base64Encode, utf8Encode } from '../util/bytes';
 
 export interface SigningKeyPair {
   /** 32-byte raw Ed25519 secret. */
@@ -56,7 +61,12 @@ export function signRequest(key: SigningKeyPair, input: SignedRequestInput): str
 /** base64 Ed25519 signature over {@link enrollmentApprovalMessage}. */
 export function signEnrollmentApproval(
   key: SigningKeyPair,
-  input: { accountId: string; newInstanceId: string; newSigningPublicKey: string; challenge: string },
+  input: {
+    accountId: string;
+    newInstanceId: string;
+    newSigningPublicKey: string;
+    challenge: string;
+  },
 ): string {
   return base64Encode(ed25519.sign(utf8Encode(enrollmentApprovalMessage(input)), key.secretKey));
 }
@@ -66,9 +76,17 @@ export function signUtf8(key: SigningKeyPair, message: string): string {
   return base64Encode(ed25519.sign(utf8Encode(message), key.secretKey));
 }
 
-export function verifyEd25519(publicKeyB64: string, message: string, signatureB64: string): boolean {
+export function verifyEd25519(
+  publicKeyB64: string,
+  message: string,
+  signatureB64: string,
+): boolean {
   try {
-    return ed25519.verify(base64Decode(signatureB64), utf8Encode(message), base64Decode(publicKeyB64));
+    return ed25519.verify(
+      base64Decode(signatureB64),
+      utf8Encode(message),
+      base64Decode(publicKeyB64),
+    );
   } catch {
     return false;
   }
@@ -77,7 +95,13 @@ export function verifyEd25519(publicKeyB64: string, message: string, signatureB6
 /** The subset of an instance listing the chain check reads; both `ClientInstance` and `PublicInstance` satisfy it. */
 export type ChainInstance = Pick<
   PublicInstance,
-  "id" | "accountId" | "signingPublicKey" | "status" | "approvedByInstanceId" | "approvalSignature" | "enrollmentChallenge"
+  | 'id'
+  | 'accountId'
+  | 'signingPublicKey'
+  | 'status'
+  | 'approvedByInstanceId'
+  | 'approvalSignature'
+  | 'enrollmentChallenge'
 > & {
   createdAt?: string;
 };
@@ -99,13 +123,14 @@ export interface ChainVerdict {
 export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
   const trusted = new Set<string>();
   const refused = new Map<string, string>();
-  const active = instances.filter((i) => i.status === "active");
-  for (const i of instances) if (i.status !== "active") refused.set(i.id, `status is ${i.status}`);
+  const active = instances.filter((i) => i.status === 'active');
+  for (const i of instances) if (i.status !== 'active') refused.set(i.id, `status is ${i.status}`);
   if (active.length === 0) return { trusted, refused };
 
   const accountId = active[0].accountId;
   const ordered = [...active].sort((a, b) => {
-    if (a.createdAt && b.createdAt && a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+    if (a.createdAt && b.createdAt && a.createdAt !== b.createdAt)
+      return a.createdAt < b.createdAt ? -1 : 1;
     return 0;
   });
   // Approvers may be revoked and still in an own-account listing: their keys count, their status does not.
@@ -114,11 +139,11 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
   let rootSeen = false;
   for (const i of ordered) {
     if (i.accountId !== accountId) {
-      refused.set(i.id, "belongs to another account");
+      refused.set(i.id, 'belongs to another account');
       continue;
     }
     if (i.approvedByInstanceId === null) {
-      if (rootSeen) refused.set(i.id, "a second unapproved instance");
+      if (rootSeen) refused.set(i.id, 'a second unapproved instance');
       else {
         rootSeen = true;
         trusted.add(i.id);
@@ -139,11 +164,11 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
         chainRefused.add(i.id);
       };
       if (i.approvedByInstanceId === i.id) {
-        refuse("approved by itself");
+        refuse('approved by itself');
         continue;
       }
       if (i.approvalSignature === null || i.enrollmentChallenge === null) {
-        refuse("approved without a signature or a challenge");
+        refuse('approved without a signature or a challenge');
         continue;
       }
       const approver = byId.get(i.approvedByInstanceId);
@@ -162,11 +187,16 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
       if (!verified.has(approver.id)) continue; // approver not decided yet
       const ok = verifyEd25519(
         approver.signingPublicKey,
-        enrollmentApprovalMessage({ accountId, newInstanceId: i.id, newSigningPublicKey: i.signingPublicKey, challenge: i.enrollmentChallenge }),
+        enrollmentApprovalMessage({
+          accountId,
+          newInstanceId: i.id,
+          newSigningPublicKey: i.signingPublicKey,
+          challenge: i.enrollmentChallenge,
+        }),
         i.approvalSignature,
       );
       if (!ok) {
-        refuse("approval signature does not verify");
+        refuse('approval signature does not verify');
         continue;
       }
       verified.add(i.id);
@@ -175,12 +205,29 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
     }
     // A revoked approver with a verified chain lets its approvals through: verify revoked ones too, without trusting them.
     for (const i of instances) {
-      if (i.status === "active" || verified.has(i.id) || i.approvedByInstanceId === null || i.accountId !== accountId) continue;
+      if (
+        i.status === 'active' ||
+        verified.has(i.id) ||
+        i.approvedByInstanceId === null ||
+        i.accountId !== accountId
+      )
+        continue;
       const approver = byId.get(i.approvedByInstanceId);
-      if (!approver || !verified.has(approver.id) || i.approvalSignature === null || i.enrollmentChallenge === null) continue;
+      if (
+        !approver ||
+        !verified.has(approver.id) ||
+        i.approvalSignature === null ||
+        i.enrollmentChallenge === null
+      )
+        continue;
       const ok = verifyEd25519(
         approver.signingPublicKey,
-        enrollmentApprovalMessage({ accountId, newInstanceId: i.id, newSigningPublicKey: i.signingPublicKey, challenge: i.enrollmentChallenge }),
+        enrollmentApprovalMessage({
+          accountId,
+          newInstanceId: i.id,
+          newSigningPublicKey: i.signingPublicKey,
+          challenge: i.enrollmentChallenge,
+        }),
         i.approvalSignature,
       );
       if (ok) {
@@ -190,7 +237,13 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
     }
     for (const i of instances) {
       // a revoked bootstrap root is verified (not trusted) so what it approved can still chain to it
-      if (i.status !== "active" && i.approvedByInstanceId === null && i.accountId === accountId && !verified.has(i.id) && !rootSeen) {
+      if (
+        i.status !== 'active' &&
+        i.approvedByInstanceId === null &&
+        i.accountId === accountId &&
+        !verified.has(i.id) &&
+        !rootSeen
+      ) {
         verified.add(i.id);
         rootSeen = true;
         progressed = true;
@@ -200,7 +253,12 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
   for (const i of ordered) {
     if (!trusted.has(i.id) && !refused.has(i.id)) {
       const approver = i.approvedByInstanceId ? byId.get(i.approvedByInstanceId) : undefined;
-      refused.set(i.id, approver && chainRefused.has(approver.id) ? `approver ${approver.id} is refused` : "approval chain does not reach a verified root");
+      refused.set(
+        i.id,
+        approver && chainRefused.has(approver.id)
+          ? `approver ${approver.id} is refused`
+          : 'approval chain does not reach a verified root',
+      );
     }
   }
   return { trusted, refused };

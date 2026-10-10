@@ -1,0 +1,107 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "defaultBranch": "main" },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      // Root-relative on purpose: `!**/.worktrees` also matches the ABSOLUTE path
+      // of an agent worktree (`<repo>/.worktrees/<name>`), so Biome run inside
+      // one would ignore every file and fail with "No files were processed".
+      "!.worktrees",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.expo",
+      "!**/.next",
+      "!**/drizzle/meta",
+      "!**/*.generated.*",
+      // Recorded audit evidence (captured package.json/bun.lock snapshots, logs,
+      // JSON receipts). It documents what was measured and must stay byte-identical.
+      "!docs/audits",
+      // Wrangler's local Miniflare state, committed by accident; tool-written.
+      "!packages/frontend/.wrangler"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true
+    }
+  },
+  "json": { "formatter": { "trailingCommas": "none" } },
+  "css": { "parser": { "tailwindDirectives": true } },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Baseline: recommended rules that fire at error severity on existing code and were
+      // not ESLint errors before. Each is a tightening follow-up (counts in the PR body).
+      "correctness": {
+        "noConstructorReturn": "warn",
+        "noUnsafeOptionalChaining": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "warn",
+        "noAssignInExpressions": "warn",
+        "noControlCharactersInRegex": "warn",
+        "noExportsInTest": "warn",
+        "noImplicitAnyLet": "warn",
+        "useGetterReturn": "warn",
+        "useIterableCallbackReturn": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // EAS reads eas.json as JSON5; it carries a comment and a trailing comma.
+      "includes": ["packages/frontend/eas.json"],
+      "json": { "parser": { "allowComments": true, "allowTrailingCommas": true } }
+    },
+    {
+      "includes": ["packages/frontend/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            // Was `react-hooks/rules-of-hooks` (error) under eslint-config-expo.
+            "useHookAtTopLevel": "error"
+          },
+          "style": {
+            // Ported from packages/frontend/eslint.config.js `no-restricted-imports`.
+            //
+            // iPhone Safari plays a web `<video>` inline only when it carries
+            // `playsinline`, and expo-video writes that only when the prop is
+            // passed — without it a video shows its poster and never starts on
+            // iPhones. Bloom's VideoView (and the media gallery, which renders
+            // through it) defaults it on; the player itself (`useVideoPlayer`,
+            // `createVideoPlayer`) still comes from expo-video.
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "expo-video": {
+                    "importNames": ["VideoView"],
+                    "message": "Render VideoView from '@oxy.so/bloom/video-view' (VideoViewHandle for its ref type): it plays inline on iPhone Safari, where expo-video's own view shows only the poster."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

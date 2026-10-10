@@ -19,6 +19,5 @@ export function configureLottieWeb(): void {
   configured = true;
   // An asset is required, not imported: Metro turns this into the hashed
   // `/assets/…wasm` URL. There is no ES import form for a binary asset.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   setWasmUrl(Asset.fromModule(require('@lottiefiles/dotlottie-web/dotlottie-player.wasm')).uri);
 }

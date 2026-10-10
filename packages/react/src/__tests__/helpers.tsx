@@ -2,11 +2,11 @@
  * Test harness: real `@allo/core` clients against the in-memory fake server,
  * and `renderHook` wrapped in `AlloProvider`.
  */
-import { createAlloClient, testing, type AlloClient, type TimelineItemView } from "@allo/core";
-import type { Platform } from "@allo/shared-types";
-import { renderHook, type RenderHookOptions, type RenderHookResult } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { AlloProvider } from "../AlloProvider";
+import { createAlloClient, testing, type AlloClient, type TimelineItemView } from '@allo/core';
+import type { Platform } from '@allo/shared-types';
+import { renderHook, type RenderHookOptions, type RenderHookResult } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { AlloProvider } from '../AlloProvider';
 
 const { createFakeAlloServer, FakeSession, MemorySecrets, MemoryStorage, until } = testing;
 type FakeAlloServer = ReturnType<typeof createFakeAlloServer>;
@@ -22,12 +22,18 @@ export function fakeServer(): FakeAlloServer {
   return createFakeAlloServer();
 }
 
-export async function makeClient(server: FakeAlloServer, accountId: string, name: string, platform: Platform = "web", start = true): Promise<TestClient> {
+export async function makeClient(
+  server: FakeAlloServer,
+  accountId: string,
+  name: string,
+  platform: Platform = 'web',
+  start = true,
+): Promise<TestClient> {
   const storage = new MemoryStorage();
   const secrets = new MemorySecrets();
   const client = createAlloClient({
     baseUrl: server.baseUrl,
-    appId: "allo",
+    appId: 'allo',
     platform,
     displayName: name,
     session: FakeSession.for(accountId),
@@ -50,10 +56,16 @@ export async function waitFor(fn: () => boolean, timeoutMs = 8000): Promise<void
 }
 
 export function texts(items: TimelineItemView[]): string[] {
-  return items.filter((i) => i.content.kind === "text").map((i) => (i.content as { body: string }).body);
+  return items
+    .filter((i) => i.content.kind === 'text')
+    .map((i) => (i.content as { body: string }).body);
 }
 
-export async function waitJoined(c: TestClient, conversationId: string, timeoutMs = 8000): Promise<void> {
+export async function waitJoined(
+  c: TestClient,
+  conversationId: string,
+  timeoutMs = 8000,
+): Promise<void> {
   await waitFor(() => c.client.conversations.get(conversationId)?.joined === true, timeoutMs);
 }
 
@@ -61,8 +73,10 @@ export async function waitJoined(c: TestClient, conversationId: string, timeoutM
 export function renderAlloHook<Result, Props>(
   client: AlloClient,
   hook: (props: Props) => Result,
-  options?: Omit<RenderHookOptions<Props>, "wrapper">,
+  options?: Omit<RenderHookOptions<Props>, 'wrapper'>,
 ): RenderHookResult<Result, Props> {
-  const wrapper = ({ children }: { children: ReactNode }) => <AlloProvider client={client}>{children}</AlloProvider>;
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <AlloProvider client={client}>{children}</AlloProvider>
+  );
   return renderHook(hook, { ...options, wrapper });
 }

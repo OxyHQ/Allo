@@ -4,8 +4,13 @@
  * ts-mls encoding, also encrypted. The zod schemas are the migration gate:
  * a row that does not parse is a bug, not a silent default.
  */
-import { appMessageSchema, conversationEventSchema, submitEventRequestSchema, type AppMessage } from "@allo/shared-types";
-import { z } from "zod";
+import {
+  appMessageSchema,
+  conversationEventSchema,
+  submitEventRequestSchema,
+  type AppMessage,
+} from '@allo/shared-types';
+import { z } from 'zod';
 
 const b64 = z.string();
 
@@ -13,12 +18,12 @@ export const instanceRecordSchema = z.object({
   id: z.string(),
   accountId: z.string(),
   appId: z.string(),
-  platform: z.enum(["ios", "android", "web", "desktop", "node"]),
+  platform: z.enum(['ios', 'android', 'web', 'desktop', 'node']),
   displayName: z.string(),
   signingPublicKey: b64,
   /** The X25519 transfer key the SERVER holds for this instance; compared with the local one and re-uploaded when they differ. Absent on a Phase 2 record. */
   transferPublicKey: b64.nullable().default(null),
-  status: z.enum(["pending", "active", "revoked"]),
+  status: z.enum(['pending', 'active', 'revoked']),
   /** The challenge issued at registration; kept so this instance can verify its own approval later. */
   challenge: z.string().nullable(),
   approvedByInstanceId: z.string().nullable(),
@@ -29,14 +34,20 @@ export type InstanceRecord = z.infer<typeof instanceRecordSchema>;
 
 export const conversationRecordSchema = z.object({
   id: z.string(),
-  kind: z.enum(["dm", "group"]),
+  kind: z.enum(['dm', 'group']),
   appId: z.string(),
   mlsGroupId: b64,
   createdByAccountId: z.string(),
   createdAt: z.string(),
   /** From the E2EE `conversation` message. */
   name: z.string().nullable(),
-  members: z.array(z.object({ accountId: z.string(), role: z.enum(["owner", "admin", "member"]), state: z.enum(["joined", "left", "removed"]) })),
+  members: z.array(
+    z.object({
+      accountId: z.string(),
+      role: z.enum(['owner', 'admin', 'member']),
+      state: z.enum(['joined', 'left', 'removed']),
+    }),
+  ),
   /** Highest server seq seen (delivered, fetched or own). Gap detection compares against it. */
   lastSeq: z.number().int().min(0),
   /** The epoch this leaf joined at; nothing older is decryptable here. */
@@ -57,7 +68,10 @@ export const conversationRecordSchema = z.object({
   clearedUpToSeq: z.number().int().min(0).optional(),
   lastActivityAt: z.string(),
   /** The first commit this device refused for admission reasons after the server accepted it (`ConversationView.integrity`). */
-  refusedCommit: z.object({ epoch: z.number().int().min(0), reason: z.string() }).nullable().default(null),
+  refusedCommit: z
+    .object({ epoch: z.number().int().min(0), reason: z.string() })
+    .nullable()
+    .default(null),
 });
 export type ConversationRecord = z.infer<typeof conversationRecordSchema>;
 
@@ -104,10 +118,10 @@ export type OutboxCommitIntent = z.infer<typeof outboxCommitIntentSchema>;
 export const outboxItemRecordSchema = z.object({
   id: z.string(),
   conversationId: z.string(),
-  kind: z.enum(["app_message", "commit"]),
+  kind: z.enum(['app_message', 'commit']),
   createdAt: z.string(),
   attempts: z.number().int().min(0),
-  state: z.enum(["pending", "failed"]),
+  state: z.enum(['pending', 'failed']),
   failure: z.string().nullable(),
   message: appMessageSchema.nullable(),
   commit: outboxCommitIntentSchema.nullable(),

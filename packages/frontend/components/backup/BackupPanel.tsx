@@ -2,7 +2,12 @@ import { Checkbox } from '@oxy.so/bloom/checkbox';
 import { RecoveryPhraseError, useBackup } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
-import { SettingsCard, SettingsRow, SettingsSection, SettingsValueField } from '@oxy.so/bloom/settings-modal';
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+  SettingsValueField,
+} from '@oxy.so/bloom/settings-modal';
 import { Textarea } from '@oxy.so/bloom/textarea';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -11,7 +16,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
-import { normalizeRecoveryPhrase, RECOVERY_PHRASE_WORDS, recoveryPhraseWordCount } from '@/lib/allo/recoveryPhrase';
+import {
+  normalizeRecoveryPhrase,
+  RECOVERY_PHRASE_WORDS,
+  recoveryPhraseWordCount,
+} from '@/lib/allo/recoveryPhrase';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
@@ -172,7 +181,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 : t('backup.status.never')
             }
           >
-            <SettingsValueField>{status.enabled ? t('backup.status.events', { count: status.eventCount }) : undefined}</SettingsValueField>
+            <SettingsValueField>
+              {status.enabled ? t('backup.status.events', { count: status.eventCount }) : undefined}
+            </SettingsValueField>
           </SettingsRow>
           <SettingsRow
             label={
@@ -194,7 +205,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
               style={styles.action}
               loading={action === 'refresh' || (action === null && status.busy)}
               disabled={busy}
-              onPress={() => void backUpNow()} tone="accent" appearance="solid"
+              onPress={() => void backUpNow()}
+              tone="accent"
+              appearance="solid"
             >
               {t('backup.backUpNow')}
             </Button>
@@ -203,7 +216,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
               style={styles.action}
               loading={action === 'disable'}
               disabled={busy}
-              onPress={() => void turnOff()} tone="neutral" appearance="outline"
+              onPress={() => void turnOff()}
+              tone="neutral"
+              appearance="outline"
             >
               {t('backup.turnOff')}
             </Button>
@@ -214,7 +229,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
             style={styles.action}
             loading={action === 'enable'}
             disabled={busy || phrasePending}
-            onPress={() => void turnOn()} tone="accent" appearance="solid"
+            onPress={() => void turnOn()}
+            tone="accent"
+            appearance="solid"
           >
             {t('backup.turnOn')}
           </Button>
@@ -225,23 +242,48 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
         <SettingsSection label={t('backup.phrase.title')}>
           <SettingsCard>
             <View style={styles.card} testID="backup-phrase">
-              <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.phrase.body')}</Text>
+              <Text style={[styles.body, { color: theme.colors.text }]}>
+                {t('backup.phrase.body')}
+              </Text>
               <View style={styles.grid} accessibilityLabel={t('backup.phrase.title')}>
                 {words.map((word, index) => (
                   <View key={`${index}-${word}`} style={styles.cell}>
-                    <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>{index + 1}</Text>
-                    <Text style={[styles.cellWord, { color: theme.colors.text }]} testID={`backup-word-${index + 1}`} selectable>
+                    <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>
+                      {index + 1}
+                    </Text>
+                    <Text
+                      style={[styles.cellWord, { color: theme.colors.text }]}
+                      testID={`backup-word-${index + 1}`}
+                      selectable
+                    >
                       {word}
                     </Text>
                   </View>
                 ))}
               </View>
-              <Button testID="backup-copy"  leadingIcon={RiFileCopyLine} onPress={() => void copyPhrase()} tone="neutral" appearance="outline">
+              <Button
+                testID="backup-copy"
+                leadingIcon={RiFileCopyLine}
+                onPress={() => void copyPhrase()}
+                tone="neutral"
+                appearance="outline"
+              >
                 {t('backup.phrase.copy')}
               </Button>
-              <Checkbox testID="backup-confirm" checked={wroteDown} onCheckedChange={setWroteDown} label={t('backup.phrase.confirm')} />
+              <Checkbox
+                testID="backup-confirm"
+                checked={wroteDown}
+                onCheckedChange={setWroteDown}
+                label={t('backup.phrase.confirm')}
+              />
               {!wroteDown ? <Muted>{t('backup.phrase.mustConfirm')}</Muted> : null}
-              <Button testID="backup-done"  disabled={!wroteDown} onPress={dismissPhrase} tone="accent" appearance="solid">
+              <Button
+                testID="backup-done"
+                disabled={!wroteDown}
+                onPress={dismissPhrase}
+                tone="accent"
+                appearance="solid"
+              >
                 {t('common.done')}
               </Button>
             </View>
@@ -253,7 +295,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
         <SettingsSection label={t('backup.restore.title')}>
           <SettingsCard>
             <View style={styles.card} testID="backup-restore-section">
-              <Text style={[styles.body, { color: theme.colors.text }]}>{t('backup.restore.body')}</Text>
+              <Text style={[styles.body, { color: theme.colors.text }]}>
+                {t('backup.restore.body')}
+              </Text>
               <Textarea
                 testID="backup-restore-input"
                 accessibilityLabel={t('backup.restore.title')}
@@ -279,7 +323,11 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 })}
               </Muted>
               {restoreError !== null ? (
-                <Text style={[styles.error, { color: theme.colors.error }]} testID="backup-restore-error" accessibilityLiveRegion="polite">
+                <Text
+                  style={[styles.error, { color: theme.colors.error }]}
+                  testID="backup-restore-error"
+                  accessibilityLiveRegion="polite"
+                >
                   {restoreError}
                 </Text>
               ) : null}
@@ -287,7 +335,9 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 testID="backup-restore"
                 loading={action === 'restore'}
                 disabled={busy || typedWords !== RECOVERY_PHRASE_WORDS}
-                onPress={() => void runRestore()} tone="accent" appearance="solid"
+                onPress={() => void runRestore()}
+                tone="accent"
+                appearance="solid"
               >
                 {t('backup.restore.button')}
               </Button>

@@ -82,7 +82,9 @@ export class PeopleResolver implements PeopleDirectory {
   async load(ids: readonly string[]): Promise<void> {
     this.ensure(ids);
     if (this.queued.size > 0) await this.flush();
-    await Promise.all(ids.map((id) => this.inFlight.get(id)).filter((p): p is Promise<void> => p !== undefined));
+    await Promise.all(
+      ids.map((id) => this.inFlight.get(id)).filter((p): p is Promise<void> => p !== undefined),
+    );
   }
 
   private isKnown(id: string): boolean {

@@ -20,7 +20,7 @@ import type {
   StatusPostedEvent,
   SyncNudgeEvent,
   TypingEvent,
-} from "@allo/shared-types";
+} from '@allo/shared-types';
 
 export interface Realtime {
   /** `sync.nudge` to each instance's room: something is waiting in its stream. */

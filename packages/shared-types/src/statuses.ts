@@ -22,7 +22,7 @@
  * but a status already on somebody's device is theirs, and the screens say
  * that instead of implying the server can reach into a phone.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   accountIdSchema,
   base64Schema,
@@ -33,7 +33,7 @@ import {
   instanceIdSchema,
   isoDateSchema,
   sha256HexSchema,
-} from "./common";
+} from './common';
 
 /** How long a status lives. Not configurable: an audience that cannot predict it cannot consent to it. */
 export const STATUS_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -54,7 +54,7 @@ export const MAX_STATUS_PAGE = 200;
  * a key sealed to this device", and the two uses stay cryptographically
  * separate because their `info` strings do.
  */
-export const STATUS_KEY_SEAL_INFO = "allo-status-key-v1";
+export const STATUS_KEY_SEAL_INFO = 'allo-status-key-v1';
 
 /** The 32-byte per-status key, HPKE-sealed to one instance's transfer key. */
 export const sealedStatusKeySchema = base64Schema(512);
@@ -119,7 +119,13 @@ export function statusSignatureMessage(input: {
   sha256: string;
   expiresAt: string;
 }): string {
-  return ["allo-status-v1", input.statusId, input.authorAccountId, input.sha256, input.expiresAt].join("\n");
+  return [
+    'allo-status-v1',
+    input.statusId,
+    input.authorAccountId,
+    input.sha256,
+    input.expiresAt,
+  ].join('\n');
 }
 
 /** One status as a recipient receives it: the body, the key sealed to THIS instance, and who wrote it. */
@@ -203,7 +209,7 @@ export type StatusMedia = z.infer<typeof statusMediaSchema>;
 
 export const statusPayloadSchema = z.object({
   v: z.literal(STATUS_PAYLOAD_VERSION),
-  kind: z.enum(["text", "image", "video"]),
+  kind: z.enum(['text', 'image', 'video']),
   /** The words, if there are any. A text status is only words. */
   caption: z.string().min(1).max(MAX_STATUS_CAPTION_LENGTH).optional(),
   media: statusMediaSchema.optional(),

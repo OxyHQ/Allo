@@ -7,37 +7,37 @@
  * minted otherwise; it is echoed back so a client can quote it.
  */
 
-import { randomUUID } from "node:crypto";
-import type { NextFunction, Request, Response } from "express";
-import { logger } from "../utils/logger";
+import { randomUUID } from 'node:crypto';
+import type { NextFunction, Request, Response } from 'express';
+import { logger } from '../utils/logger';
 
 const SAFE_REQUEST_ID = /^[a-zA-Z0-9_.:-]{8,128}$/;
 
 function requestId(req: Request): string {
-  const incoming = req.header("x-request-id")?.trim();
+  const incoming = req.header('x-request-id')?.trim();
   return incoming && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
 }
 
 /** `baseUrl + route.path`, or `/unmatched` — never `req.path`, which carries ids. */
 export function routeTemplate(req: Request): string {
   const route = req.route as { path?: unknown } | undefined;
-  if (typeof route?.path !== "string") return "/unmatched";
-  const joined = `${req.baseUrl ?? ""}${route.path}`;
-  return joined.startsWith("/") ? joined : `/${joined}`;
+  if (typeof route?.path !== 'string') return '/unmatched';
+  const joined = `${req.baseUrl ?? ''}${route.path}`;
+  return joined.startsWith('/') ? joined : `/${joined}`;
 }
 
 export function requestObservability(req: Request, res: Response, next: NextFunction): void {
   const id = requestId(req);
   const startedAt = process.hrtime.bigint();
-  res.setHeader("X-Request-ID", id);
+  res.setHeader('X-Request-ID', id);
   // The template is captured the moment Express assigns `req.route`, while
   // `req.baseUrl` is still the mounted router's path. Reading it any later is
   // wrong on the error path: a thrown `AlloHttpError` unwinds every router,
   // each restoring `baseUrl`, before the error handler ends the response — so
   // `/v1/conversations/:id/events` would log as `/conversations/:id/events`.
-  let route = "/unmatched";
-  let current: unknown = Reflect.get(req, "route");
-  Object.defineProperty(req, "route", {
+  let route = '/unmatched';
+  let current: unknown = Reflect.get(req, 'route');
+  Object.defineProperty(req, 'route', {
     configurable: true,
     enumerable: true,
     get: () => current,
@@ -46,9 +46,9 @@ export function requestObservability(req: Request, res: Response, next: NextFunc
       route = routeTemplate(req);
     },
   });
-  res.once("finish", () => {
+  res.once('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-    logger.info("HTTP request completed", {
+    logger.info('HTTP request completed', {
       requestId: id,
       method: req.method.toUpperCase(),
       route,

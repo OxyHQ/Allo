@@ -4,8 +4,8 @@
  * write the batch first, then the map). Reads are synchronous so the view
  * getters React polls can be, too.
  */
-import { INITIAL_CURSOR } from "@allo/shared-types";
-import type { InstanceStore } from "./store";
+import { INITIAL_CURSOR } from '@allo/shared-types';
+import type { InstanceStore } from './store';
 import {
   conversationRecordSchema,
   cursorRecordSchema,
@@ -18,8 +18,8 @@ import {
   type MediaKeyRecord,
   type OutboxItemRecord,
   type QueuedEventRecord,
-} from "./records";
-import { seqKey } from "./namespace";
+} from './records';
+import { seqKey } from './namespace';
 
 export class Model {
   readonly conversations = new Map<string, ConversationRecord>();
@@ -32,12 +32,16 @@ export class Model {
   cursor: string = INITIAL_CURSOR;
 
   async load(store: InstanceStore): Promise<void> {
-    for (const { value } of await store.listJson("conversation", conversationRecordSchema)) this.conversations.set(value.id, value);
-    for (const { value } of await store.listJson("event", eventRecordSchema)) this.putEvent(value);
-    for (const { value } of await store.listJson("outbox", outboxItemRecordSchema)) this.outbox.set(value.id, value);
-    for (const { value } of await store.listJson("queued", queuedEventRecordSchema)) this.pushQueued(value);
-    for (const { value } of await store.listJson("mediaKey", mediaKeyRecordSchema)) this.mediaKeys.set(value.blobId, value);
-    const cursor = await store.getJson("cursor", "sync", cursorRecordSchema);
+    for (const { value } of await store.listJson('conversation', conversationRecordSchema))
+      this.conversations.set(value.id, value);
+    for (const { value } of await store.listJson('event', eventRecordSchema)) this.putEvent(value);
+    for (const { value } of await store.listJson('outbox', outboxItemRecordSchema))
+      this.outbox.set(value.id, value);
+    for (const { value } of await store.listJson('queued', queuedEventRecordSchema))
+      this.pushQueued(value);
+    for (const { value } of await store.listJson('mediaKey', mediaKeyRecordSchema))
+      this.mediaKeys.set(value.blobId, value);
+    const cursor = await store.getJson('cursor', 'sync', cursorRecordSchema);
     if (cursor) this.cursor = cursor.cursor;
   }
 
@@ -76,7 +80,8 @@ export class Model {
   }
 
   findEventByLocalKey(conversationId: string, localKey: string): EventRecord | undefined {
-    for (const e of this.events.get(conversationId)?.values() ?? []) if (e.localKey === localKey) return e;
+    for (const e of this.events.get(conversationId)?.values() ?? [])
+      if (e.localKey === localKey) return e;
     return undefined;
   }
 

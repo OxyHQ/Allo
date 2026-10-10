@@ -1,5 +1,5 @@
-import { OXY_API_URL, OXY_CLOUD_URL } from "@oxy.so/core";
-import { OxyServer } from "@oxy.so/core/server";
+import { OXY_API_URL, OXY_CLOUD_URL } from '@oxy.so/core';
+import { OxyServer } from '@oxy.so/core/server';
 
 /**
  * Allo's one Oxy client: the backend half (`OxyServer`), so the service-token

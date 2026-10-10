@@ -115,7 +115,10 @@ describe('chatSummary', () => {
   });
 
   it('shows my own last message with its delivery status and a "you" sender', () => {
-    const summary = chatSummary(view({ lastMessage: item({ isOwn: true, senderAccountId: 'acc-me', sendState: 'read' }) }), ctx);
+    const summary = chatSummary(
+      view({ lastMessage: item({ isOwn: true, senderAccountId: 'acc-me', sendState: 'read' }) }),
+      ctx,
+    );
     expect(summary.outgoingStatus).toBe('read');
     expect(summary.preview?.sender).toBe('chat.you');
   });
@@ -124,7 +127,13 @@ describe('chatSummary', () => {
     const photo = item({
       content: {
         kind: 'media',
-        media: { kind: 'image', filename: 'a.jpg', mime: 'image/jpeg', size: 1, ref: { conversationId: 'c', blobId: 'b' } },
+        media: {
+          kind: 'image',
+          filename: 'a.jpg',
+          mime: 'image/jpeg',
+          size: 1,
+          ref: { conversationId: 'c', blobId: 'b' },
+        },
       },
     });
     expect(chatSummary(view({ lastMessage: photo }), ctx).preview?.attachment).toEqual({
@@ -134,7 +143,11 @@ describe('chatSummary', () => {
   });
 
   it('draws group faces and the sender of the last message', () => {
-    const group = view({ kind: 'group', memberAccountIds: ['acc-me', 'acc-alice', 'acc-bob'], lastMessage: item() });
+    const group = view({
+      kind: 'group',
+      memberAccountIds: ['acc-me', 'acc-alice', 'acc-bob'],
+      lastMessage: item(),
+    });
     const summary = chatSummary(group, ctx);
     expect(summary.kind).toBe('group');
     expect(summary.faces?.map((face) => face.name)).toEqual(['Alice', 'Bob']);
@@ -144,7 +157,12 @@ describe('chatSummary', () => {
   it('says who a held last message is waiting for, instead of the preview', () => {
     const held = view({
       unreachableMemberAccountIds: ['acc-alice'],
-      lastMessage: item({ isOwn: true, senderAccountId: 'acc-me', sendState: 'pending', holdReason: 'no_reachable_member' }),
+      lastMessage: item({
+        isOwn: true,
+        senderAccountId: 'acc-me',
+        sendState: 'pending',
+        holdReason: 'no_reachable_member',
+      }),
     });
     expect(chatSummary(held, ctx).preview).toEqual({ text: 'chat.waiting.dm {"name":"Alice"}' });
   });
@@ -159,7 +177,10 @@ describe('unreachableCopy', () => {
     expect(unreachableCopy(view({ unreachableMemberAccountIds: ['acc-alice'] }), ctx).banner).toBe(
       'chat.unreachable.dm {"name":"Alice"}',
     );
-    const unknown = view({ memberAccountIds: ['acc-me', 'acc-x'], unreachableMemberAccountIds: ['acc-x'] });
+    const unknown = view({
+      memberAccountIds: ['acc-me', 'acc-x'],
+      unreachableMemberAccountIds: ['acc-x'],
+    });
     expect(unreachableCopy(unknown, ctx)).toEqual({
       banner: 'chat.unreachable.dmUnnamed',
       hold: 'chat.hold.dmUnnamed',
@@ -178,7 +199,10 @@ describe('joinNotice', () => {
     expect(joinNotice(view(), t)).toBeNull();
   });
   it('spins while the device joins by itself', () => {
-    expect(joinNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({ text: 'chat.joining', busy: true });
+    expect(joinNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({
+      text: 'chat.joining',
+      busy: true,
+    });
   });
   it('explains the wait when only another device can add this one', () => {
     expect(joinNotice(view({ joined: false, joinState: 'waiting_for_member' }), t)).toEqual({
@@ -191,12 +215,28 @@ describe('joinNotice', () => {
 describe('composerNotice', () => {
   it('is the join notice while the conversation is sound', () => {
     expect(composerNotice(view(), t)).toBeNull();
-    expect(composerNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({ text: 'chat.joining', busy: true, error: false });
+    expect(composerNotice(view({ joined: false, joinState: 'joining' }), t)).toEqual({
+      text: 'chat.joining',
+      busy: true,
+      error: false,
+    });
   });
   it('is the integrity failure, and only that, once a commit was refused — even while joined', () => {
-    const refused = view({ integrity: 'refused_commit', refusedEpoch: 3, refusalReason: 'not in the verified chain' });
-    expect(composerNotice(refused, t)).toEqual({ text: 'chat.integrity.refused', busy: false, error: true });
-    expect(composerNotice({ ...refused, joined: false, joinState: 'joining' }, t)).toEqual({ text: 'chat.integrity.refused', busy: false, error: true });
+    const refused = view({
+      integrity: 'refused_commit',
+      refusedEpoch: 3,
+      refusalReason: 'not in the verified chain',
+    });
+    expect(composerNotice(refused, t)).toEqual({
+      text: 'chat.integrity.refused',
+      busy: false,
+      error: true,
+    });
+    expect(composerNotice({ ...refused, joined: false, joinState: 'joining' }, t)).toEqual({
+      text: 'chat.integrity.refused',
+      busy: false,
+      error: true,
+    });
   });
 });
 
@@ -216,11 +256,19 @@ describe('transcriptItems', () => {
 
   it('draws my own messages with their status, pending and failed flags', () => {
     const [sending, failed] = transcriptItems(
-      [item({ id: 'a', isOwn: true, sendState: 'pending' }), item({ id: 'b', isOwn: true, sendState: 'failed' })],
+      [
+        item({ id: 'a', isOwn: true, sendState: 'pending' }),
+        item({ id: 'b', isOwn: true, sendState: 'failed' }),
+      ],
       ctx,
       { isGroup: false },
     );
-    expect(sending).toMatchObject({ direction: 'outgoing', status: 'sending', pending: true, failed: false });
+    expect(sending).toMatchObject({
+      direction: 'outgoing',
+      status: 'sending',
+      pending: true,
+      failed: false,
+    });
     expect(failed).toMatchObject({ status: 'failed', failed: true });
   });
 
@@ -278,7 +326,10 @@ describe('transcriptItems', () => {
   });
 
   it('puts the unread separator before the first unread message', () => {
-    const rows = transcriptItems([item({ id: 'a' }), item({ id: 'b' })], ctx, { isGroup: false, firstUnreadId: 'b' });
+    const rows = transcriptItems([item({ id: 'a' }), item({ id: 'b' })], ctx, {
+      isGroup: false,
+      firstUnreadId: 'b',
+    });
     expect(rows.map((row) => row.unreadBefore)).toEqual([false, true]);
   });
 });
@@ -286,16 +337,34 @@ describe('transcriptItems', () => {
 describe('transcriptItems hold labels', () => {
   it('names the stalled echo differently from the unreachable one, and labels neither on a message that is not held', () => {
     const held = item({ isOwn: true, sendState: 'pending', holdReason: 'no_reachable_member' });
-    const stalled = item({ id: 'evt-2', isOwn: true, sendState: 'pending', holdReason: 'epoch_stalled' });
+    const stalled = item({
+      id: 'evt-2',
+      isOwn: true,
+      sendState: 'pending',
+      holdReason: 'epoch_stalled',
+    });
     const plain = item({ id: 'evt-3', isOwn: true, sendState: 'pending' });
-    const rows = transcriptItems([held, stalled, plain], ctx, { isGroup: false, holdLabel: 'Waiting for Alice to join', stalledLabel: 'Waiting to catch up' });
-    expect(rows.map((r) => r.labels?.pending)).toEqual(['Waiting for Alice to join', 'Waiting to catch up', undefined]);
+    const rows = transcriptItems([held, stalled, plain], ctx, {
+      isGroup: false,
+      holdLabel: 'Waiting for Alice to join',
+      stalledLabel: 'Waiting to catch up',
+    });
+    expect(rows.map((r) => r.labels?.pending)).toEqual([
+      'Waiting for Alice to join',
+      'Waiting to catch up',
+      undefined,
+    ]);
   });
 });
 
 describe('firstUnreadId', () => {
   it('counts back over incoming messages only', () => {
-    const items = [item({ id: 'a' }), item({ id: 'b' }), item({ id: 'mine', isOwn: true }), item({ id: 'c' })];
+    const items = [
+      item({ id: 'a' }),
+      item({ id: 'b' }),
+      item({ id: 'mine', isOwn: true }),
+      item({ id: 'c' }),
+    ];
     expect(firstUnreadId(items, 2)).toBe('b');
     expect(firstUnreadId(items, 0)).toBeUndefined();
     expect(firstUnreadId(items, 9)).toBeUndefined();
@@ -307,7 +376,13 @@ describe('previewText', () => {
     const voice = item({
       content: {
         kind: 'media',
-        media: { kind: 'voice', filename: 'v.m4a', mime: 'audio/m4a', size: 1, ref: { conversationId: 'c', blobId: 'b' } },
+        media: {
+          kind: 'voice',
+          filename: 'v.m4a',
+          mime: 'audio/m4a',
+          size: 1,
+          ref: { conversationId: 'c', blobId: 'b' },
+        },
       },
     });
     expect(previewText(voice, t)).toBe('chat.attachment.voice');
@@ -328,7 +403,9 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
       kind: 'poll',
       poll: {
         question: 'When should we do the handover?',
-        options: [{ id: 'a', label: 'Thursday', votes: 2, mine: true, accountIds: ['acc-me', 'acc-alice'] }],
+        options: [
+          { id: 'a', label: 'Thursday', votes: 2, mine: true, accountIds: ['acc-me', 'acc-alice'] },
+        ],
         totalVotes: 2,
         multiple: false,
         anonymous: false,
@@ -337,10 +414,15 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
     },
   });
   const place = item({
-    content: { kind: 'location', place: { latitude: 41.38879, longitude: 2.18994, label: 'Casa del Puerto' } },
+    content: {
+      kind: 'location',
+      place: { latitude: 41.38879, longitude: 2.18994, label: 'Casa del Puerto' },
+    },
   });
   const nowhere = item({ content: { kind: 'location', place: { latitude: 0, longitude: 0 } } });
-  const card = item({ content: { kind: 'contact', contact: { name: 'Marta Ferreira', phone: '+34600112233' } } });
+  const card = item({
+    content: { kind: 'contact', contact: { name: 'Marta Ferreira', phone: '+34600112233' } },
+  });
 
   it('says what the message is: the question, the place, the name', () => {
     expect(previewText(poll, t)).toBe('When should we do the handover?');
@@ -349,8 +431,18 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
   });
 
   it('previews a sticker as its emoji and the word, with the sticker glyph', () => {
-    const sad = item({ content: { kind: 'sticker', sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64), emoji: '😢' } } });
-    const bare = item({ content: { kind: 'sticker', sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64) } } });
+    const sad = item({
+      content: {
+        kind: 'sticker',
+        sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64), emoji: '😢' },
+      },
+    });
+    const bare = item({
+      content: {
+        kind: 'sticker',
+        sticker: { stickerId: 's', packId: 'p', sha256: 'a'.repeat(64) },
+      },
+    });
     expect(previewText(sad, t)).toBe('😢 chat.attachment.sticker');
     expect(previewText(bare, t)).toBe('chat.attachment.sticker');
     expect(chatSummary(view({ lastMessage: sad }), ctx).preview).toEqual({
@@ -380,7 +472,11 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
 
   it('still names the sender in a group, the way an attachment row does', () => {
     const summary = chatSummary(
-      view({ kind: 'group', memberAccountIds: ['acc-me', 'acc-alice', 'acc-bob'], lastMessage: poll }),
+      view({
+        kind: 'group',
+        memberAccountIds: ['acc-me', 'acc-alice', 'acc-bob'],
+        lastMessage: poll,
+      }),
       ctx,
     );
     expect(summary.preview).toEqual({
@@ -390,7 +486,9 @@ describe('previewText and the list row, for a poll, a place and a card', () => {
   });
 
   it('leaves the bubble itself textless: the media slot draws the whole thing', () => {
-    const [drawnPoll, drawnPlace, drawnCard] = transcriptItems([poll, place, card], ctx, { isGroup: false });
+    const [drawnPoll, drawnPlace, drawnCard] = transcriptItems([poll, place, card], ctx, {
+      isGroup: false,
+    });
     expect(drawnPoll.text).toBeUndefined();
     expect(drawnPlace.text).toBeUndefined();
     expect(drawnCard.text).toBeUndefined();
@@ -401,8 +499,18 @@ describe('pinnedMessages', () => {
   it('draws the pinned ones oldest first, with who wrote each and what it says', () => {
     const items = [
       item({ id: 'a', content: { kind: 'text', body: 'first', isEdited: false } }),
-      item({ id: 'b', pinned: true, content: { kind: 'text', body: 'bring the tape', isEdited: false } }),
-      item({ id: 'c', isOwn: true, senderAccountId: 'acc-me', pinned: true, content: { kind: 'text', body: 'eight o clock', isEdited: false } }),
+      item({
+        id: 'b',
+        pinned: true,
+        content: { kind: 'text', body: 'bring the tape', isEdited: false },
+      }),
+      item({
+        id: 'c',
+        isOwn: true,
+        senderAccountId: 'acc-me',
+        pinned: true,
+        content: { kind: 'text', body: 'eight o clock', isEdited: false },
+      }),
     ];
     expect(pinnedMessages(items, ctx)).toEqual([
       { id: 'b', preview: 'bring the tape', author: 'Alice' },

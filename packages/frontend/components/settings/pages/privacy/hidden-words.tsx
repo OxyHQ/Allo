@@ -10,7 +10,12 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useMyPrivacySettings, useUpdatePrivacySettings } from '@/hooks/usePrivacySettings';
-import { addHiddenWord, HIDDEN_WORD_MAX_LENGTH, removeHiddenWord, type HiddenWordRejection } from '@/lib/privacy/hiddenWords';
+import {
+  addHiddenWord,
+  HIDDEN_WORD_MAX_LENGTH,
+  removeHiddenWord,
+  type HiddenWordRejection,
+} from '@/lib/privacy/hiddenWords';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
 /**
@@ -89,7 +94,13 @@ export default function HiddenWordsScreen() {
           returnKeyType="done"
           onSubmitEditing={add}
         />
-        <Button  disabled={!saved || draft.trim().length === 0} loading={updateSettings.isPending} onPress={add} tone="accent" appearance="solid">
+        <Button
+          disabled={!saved || draft.trim().length === 0}
+          loading={updateSettings.isPending}
+          onPress={add}
+          tone="accent"
+          appearance="solid"
+        >
           {t('settings.privacy.add')}
         </Button>
       </View>

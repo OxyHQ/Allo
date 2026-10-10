@@ -54,7 +54,10 @@ export function NotificationPermissionGate() {
           <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
             {t('permission.notifications.title')}
           </Text>
-          <Text variant="body-regular" style={[styles.centered, { color: theme.colors.textSecondary }]}>
+          <Text
+            variant="body-regular"
+            style={[styles.centered, { color: theme.colors.textSecondary }]}
+          >
             {t('permission.notifications.body')}
           </Text>
         </View>
@@ -62,7 +65,12 @@ export function NotificationPermissionGate() {
           <Button size="lg" loading={requesting} onPress={() => void enable()}>
             {t('permission.notifications.enable')}
           </Button>
-          <Button size="lg"  onPress={() => sheet.current?.dismiss()} tone="neutral" appearance="outline">
+          <Button
+            size="lg"
+            onPress={() => sheet.current?.dismiss()}
+            tone="neutral"
+            appearance="outline"
+          >
             {t('permission.notifications.later')}
           </Button>
         </View>
@@ -72,7 +80,13 @@ export function NotificationPermissionGate() {
 }
 
 const styles = StyleSheet.create({
-  content: { alignItems: 'center', gap: 20, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 },
+  content: {
+    alignItems: 'center',
+    gap: 20,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
   copy: { gap: 6 },
   centered: { textAlign: 'center' },
   actions: { alignSelf: 'stretch', gap: 10 },

@@ -16,85 +16,85 @@
  * error cannot itself become a denial of service.
  */
 
-import { isIP } from "node:net";
+import { isIP } from 'node:net';
 
-const REDACTED = "[REDACTED]";
-const CIRCULAR = "[Circular]";
-const TRUNCATED = "[Truncated]";
-const FUNCTION = "[Function]";
-const ACCESSOR = "[Accessor]";
-const INVALID_DATE = "[Invalid Date]";
+const REDACTED = '[REDACTED]';
+const CIRCULAR = '[Circular]';
+const TRUNCATED = '[Truncated]';
+const FUNCTION = '[Function]';
+const ACCESSOR = '[Accessor]';
+const INVALID_DATE = '[Invalid Date]';
 const MAX_LOG_DEPTH = 5;
 const MAX_LOG_KEYS = 50;
 const MAX_LOG_ARRAY_ITEMS = 20;
 const MAX_LOG_STRING_LENGTH = 2_000;
 
 const PRESERVED_KEYS = new Set([
-  "requestid",
-  "route",
-  "routetemplate",
-  "method",
-  "duration",
-  "durationms",
-  "result",
-  "status",
-  "statuscode",
-  "type",
-  "kind",
-  "count",
-  "total",
-  "claimed",
-  "processed",
-  "failed",
-  "deleted",
-  "attempts",
-  "intervalms",
-  "phase",
-  "platform",
-  "rejection",
-  "deadlettered",
+  'requestid',
+  'route',
+  'routetemplate',
+  'method',
+  'duration',
+  'durationms',
+  'result',
+  'status',
+  'statuscode',
+  'type',
+  'kind',
+  'count',
+  'total',
+  'claimed',
+  'processed',
+  'failed',
+  'deleted',
+  'attempts',
+  'intervalms',
+  'phase',
+  'platform',
+  'rejection',
+  'deadlettered',
 ]);
 
 const SENSITIVE_EXACT_KEYS = new Set([
-  "authorization",
-  "body",
-  "challenge",
-  "clientip",
-  "connectionstring",
-  "content",
-  "cookie",
-  "credential",
-  "credentials",
-  "data",
-  "database",
-  "databasename",
-  "dbname",
-  "email",
-  "handle",
-  "host",
-  "hostname",
-  "ip",
-  "ipaddress",
-  "params",
-  "password",
-  "path",
-  "pathname",
-  "payload",
-  "privatekey",
-  "query",
-  "redisurl",
-  "remoteaddress",
-  "secret",
-  "session",
-  "signature",
-  "set-cookie",
-  "text",
-  "token",
-  "username",
+  'authorization',
+  'body',
+  'challenge',
+  'clientip',
+  'connectionstring',
+  'content',
+  'cookie',
+  'credential',
+  'credentials',
+  'data',
+  'database',
+  'databasename',
+  'dbname',
+  'email',
+  'handle',
+  'host',
+  'hostname',
+  'ip',
+  'ipaddress',
+  'params',
+  'password',
+  'path',
+  'pathname',
+  'payload',
+  'privatekey',
+  'query',
+  'redisurl',
+  'remoteaddress',
+  'secret',
+  'session',
+  'signature',
+  'set-cookie',
+  'text',
+  'token',
+  'username',
 ]);
 
 function normalizeKey(key: string): string {
-  return key.replace(/[-_.]/g, "").toLowerCase();
+  return key.replace(/[-_.]/g, '').toLowerCase();
 }
 
 function isSensitiveKey(key: string): boolean {
@@ -102,28 +102,28 @@ function isSensitiveKey(key: string): boolean {
   if (PRESERVED_KEYS.has(normalized)) return false;
   if (SENSITIVE_EXACT_KEYS.has(normalized)) return true;
   return (
-    normalized.endsWith("id") ||
-    normalized.endsWith("ids") ||
-    normalized.endsWith("uri") ||
-    normalized.endsWith("uris") ||
-    normalized.endsWith("url") ||
-    normalized.endsWith("urls") ||
-    normalized.endsWith("ipaddress") ||
-    normalized.endsWith("handle") ||
-    normalized.endsWith("username") ||
-    normalized.endsWith("email") ||
-    normalized.endsWith("password") ||
-    normalized.endsWith("secret") ||
-    normalized.endsWith("token") ||
-    normalized.endsWith("credential") ||
-    normalized.endsWith("credentials") ||
-    normalized.endsWith("privatekey") ||
-    normalized.endsWith("publickey") ||
-    normalized.endsWith("apikey") ||
-    normalized.endsWith("accesskey") ||
-    normalized.endsWith("sessionid") ||
-    normalized.endsWith("signature") ||
-    normalized.endsWith("cursor")
+    normalized.endsWith('id') ||
+    normalized.endsWith('ids') ||
+    normalized.endsWith('uri') ||
+    normalized.endsWith('uris') ||
+    normalized.endsWith('url') ||
+    normalized.endsWith('urls') ||
+    normalized.endsWith('ipaddress') ||
+    normalized.endsWith('handle') ||
+    normalized.endsWith('username') ||
+    normalized.endsWith('email') ||
+    normalized.endsWith('password') ||
+    normalized.endsWith('secret') ||
+    normalized.endsWith('token') ||
+    normalized.endsWith('credential') ||
+    normalized.endsWith('credentials') ||
+    normalized.endsWith('privatekey') ||
+    normalized.endsWith('publickey') ||
+    normalized.endsWith('apikey') ||
+    normalized.endsWith('accesskey') ||
+    normalized.endsWith('sessionid') ||
+    normalized.endsWith('signature') ||
+    normalized.endsWith('cursor')
   );
 }
 
@@ -131,7 +131,7 @@ function sanitizeLogString(value: string, preserveBareIdentifier = false): strin
   const sanitized = value
     .replace(/\b(?:https?|wss?|redis|rediss|postgres(?:ql)?):\/\/[^\s"'<>]+/gi, (match) => {
       let candidateEnd = match.length;
-      while (candidateEnd > 0 && "),.;!?".includes(match[candidateEnd - 1] ?? "")) {
+      while (candidateEnd > 0 && '),.;!?'.includes(match[candidateEnd - 1] ?? '')) {
         candidateEnd -= 1;
       }
       const candidate = match.slice(0, candidateEnd);
@@ -139,15 +139,15 @@ function sanitizeLogString(value: string, preserveBareIdentifier = false): strin
       try {
         const parsed = new URL(candidate);
         if (
-          parsed.protocol.startsWith("redis") ||
-          parsed.protocol.startsWith("postgres") ||
+          parsed.protocol.startsWith('redis') ||
+          parsed.protocol.startsWith('postgres') ||
           parsed.username ||
           parsed.password
         ) {
           return `${REDACTED}${trailing}`;
         }
         const host =
-          /^(?:\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname) || parsed.hostname.includes(":")
+          /^(?:\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname) || parsed.hostname.includes(':')
             ? REDACTED
             : parsed.host;
         return `${parsed.protocol}//${host}/[REDACTED]${trailing}`;
@@ -161,7 +161,7 @@ function sanitizeLogString(value: string, preserveBareIdentifier = false): strin
     .replace(/(^|[\s(])@[A-Z0-9_][A-Z0-9_.-]*/gi, `$1${REDACTED}`)
     .replace(/\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g, REDACTED)
     .replace(/(?<![A-Z0-9:])\[?[A-F0-9:]{2,}\]?(?![A-Z0-9:])/gi, (candidate) => {
-      const unwrapped = candidate.replace(/^\[/, "").replace(/\]$/, "");
+      const unwrapped = candidate.replace(/^\[/, '').replace(/\]$/, '');
       return isIP(unwrapped) === 6 ? REDACTED : candidate;
     })
     .replace(
@@ -184,27 +184,31 @@ function sanitizeLogString(value: string, preserveBareIdentifier = false): strin
   return `${identifiersRedacted.slice(0, MAX_LOG_STRING_LENGTH)}…${TRUNCATED}`;
 }
 
-function sanitizeError(error: Error, depth: number, seen: WeakSet<object>): Record<string, unknown> {
+function sanitizeError(
+  error: Error,
+  depth: number,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
   const descriptors = Object.getOwnPropertyDescriptors(error);
   const dataValue = (key: string): unknown => {
     const descriptor = descriptors[key];
-    return descriptor && "value" in descriptor ? descriptor.value : undefined;
+    return descriptor && 'value' in descriptor ? descriptor.value : undefined;
   };
-  const name = dataValue("name");
-  const message = dataValue("message");
-  const stack = dataValue("stack");
+  const name = dataValue('name');
+  const message = dataValue('message');
+  const stack = dataValue('stack');
   const safe: Record<string, unknown> = {
-    name: sanitizeLogString(typeof name === "string" ? name : "Error"),
-    message: sanitizeLogString(typeof message === "string" ? message : ""),
+    name: sanitizeLogString(typeof name === 'string' ? name : 'Error'),
+    message: sanitizeLogString(typeof message === 'string' ? message : ''),
   };
-  if (typeof stack === "string" && stack) {
+  if (typeof stack === 'string' && stack) {
     safe.stack = sanitizeLogString(stack);
   }
-  const code = dataValue("code");
-  if (typeof code === "string" || typeof code === "number") {
-    safe.code = typeof code === "string" ? sanitizeLogString(code) : code;
+  const code = dataValue('code');
+  if (typeof code === 'string' || typeof code === 'number') {
+    safe.code = typeof code === 'string' ? sanitizeLogString(code) : code;
   }
-  const cause = dataValue("cause");
+  const cause = dataValue('cause');
   if (cause !== undefined && depth < MAX_LOG_DEPTH) {
     safe.cause = sanitizeLogValueInternal(cause, depth + 1, seen);
   }
@@ -212,15 +216,20 @@ function sanitizeError(error: Error, depth: number, seen: WeakSet<object>): Reco
 }
 
 function sanitizeLogValueInternal(value: unknown, depth: number, seen: WeakSet<object>): unknown {
-  if (typeof value === "string") return sanitizeLogString(value);
-  if (value === null || typeof value === "number" || typeof value === "boolean" || typeof value === "undefined") {
+  if (typeof value === 'string') return sanitizeLogString(value);
+  if (
+    value === null ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'undefined'
+  ) {
     return value;
   }
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "symbol") return sanitizeLogString(String(value));
-  if (typeof value === "function") return FUNCTION;
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'symbol') return sanitizeLogString(String(value));
+  if (typeof value === 'function') return FUNCTION;
   if (depth >= MAX_LOG_DEPTH) return TRUNCATED;
-  if (typeof value !== "object") return String(value);
+  if (typeof value !== 'object') return String(value);
   if (seen.has(value)) return CIRCULAR;
   seen.add(value);
 
@@ -249,9 +258,9 @@ function sanitizeLogValueInternal(value: unknown, depth: number, seen: WeakSet<o
     const normalized = normalizeKey(key);
     if (isSensitiveKey(key)) {
       output[key] = REDACTED;
-    } else if (!("value" in nested)) {
+    } else if (!('value' in nested)) {
       output[key] = ACCESSOR;
-    } else if (normalized === "requestid" && typeof nested.value === "string") {
+    } else if (normalized === 'requestid' && typeof nested.value === 'string') {
       output[key] = sanitizeLogString(nested.value, true);
     } else {
       output[key] = sanitizeLogValueInternal(nested.value, depth + 1, seen);
@@ -266,7 +275,7 @@ export function sanitizeLogValue(value: unknown): unknown {
   try {
     return sanitizeLogValueInternal(value, 0, new WeakSet<object>());
   } catch {
-    return "[Unserializable]";
+    return '[Unserializable]';
   }
 }
 
@@ -290,13 +299,16 @@ export const logger: Logger = {
     console.info(`[INFO] ${sanitizeLogString(message)}`, ...safeArgs(args));
   },
   error: (message: string, error?: unknown) => {
-    console.error(`[ERROR] ${sanitizeLogString(message)}`, error === undefined ? "" : sanitizeLogValue(error));
+    console.error(
+      `[ERROR] ${sanitizeLogString(message)}`,
+      error === undefined ? '' : sanitizeLogValue(error),
+    );
   },
   warn: (message: string, ...args: unknown[]) => {
     console.warn(`[WARN] ${sanitizeLogString(message)}`, ...safeArgs(args));
   },
   debug: (message: string, ...args: unknown[]) => {
-    if (process.env.NODE_ENV !== "production") {
+    if (process.env.NODE_ENV !== 'production') {
       console.debug(`[DEBUG] ${sanitizeLogString(message)}`, ...safeArgs(args));
     }
   },

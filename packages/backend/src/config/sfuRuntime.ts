@@ -10,7 +10,7 @@
  * refuses with `unavailable` rather than inventing a room.
  */
 
-import type { LiveKitConfig } from "./livekit";
+import type { LiveKitConfig } from './livekit';
 
 let current: LiveKitConfig | null = null;
 

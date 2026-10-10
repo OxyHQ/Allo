@@ -1,4 +1,11 @@
-import { IndexedDbStorage, prefixRange, type KvIdb, type KvIdbRequest, type KvIdbStore, type KvIdbTransaction } from '@/lib/allo/storage.web';
+import {
+  IndexedDbStorage,
+  prefixRange,
+  type KvIdb,
+  type KvIdbRequest,
+  type KvIdbStore,
+  type KvIdbTransaction,
+} from '@/lib/allo/storage.web';
 
 /**
  * The IndexedDB adapter, against an in-memory IndexedDB that implements the
@@ -49,7 +56,8 @@ class FakeTransaction implements KvIdbTransaction {
       queueMicrotask(() => {
         if (tx.aborted) return;
         try {
-          if (tx.db.failOnKey !== null && (work as { key?: string }).key === tx.db.failOnKey) throw new Error('disk full');
+          if (tx.db.failOnKey !== null && (work as { key?: string }).key === tx.db.failOnKey)
+            throw new Error('disk full');
           req.result = work();
           req.onsuccess?.(undefined as never);
         } catch (error) {
@@ -64,7 +72,8 @@ class FakeTransaction implements KvIdbTransaction {
       return req;
     };
     return {
-      get: (key) => request(() => (tx.db.rows.has(key) ? new Uint8Array(tx.db.rows.get(key)!) : undefined)),
+      get: (key) =>
+        request(() => (tx.db.rows.has(key) ? new Uint8Array(tx.db.rows.get(key)!) : undefined)),
       put: (value, key) => {
         if (tx.mode !== 'readwrite') throw new Error('read-only transaction');
         const work = () => {
@@ -157,7 +166,10 @@ describe('IndexedDbStorage', () => {
       { type: 'set', key: 'allo/a/conversations-other', value: bytes('') },
       { type: 'set', key: 'allo/b/conversation/1', value: bytes('') },
     ]);
-    expect(await adapter.list('allo/a/conversation/')).toEqual(['allo/a/conversation/1', 'allo/a/conversation/2']);
+    expect(await adapter.list('allo/a/conversation/')).toEqual([
+      'allo/a/conversation/1',
+      'allo/a/conversation/2',
+    ]);
     // The prefix that is itself a key is included; a sibling that merely shares a shorter prefix is not.
     expect(await adapter.list('allo/a/conversation')).toEqual([
       'allo/a/conversation',

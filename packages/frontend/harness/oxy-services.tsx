@@ -6,26 +6,71 @@
 import React from 'react';
 import { Pressable, Text } from 'react-native';
 
-export const HARNESS_ME = { id: '6700000000000000000000a1', username: 'nate', name: { displayName: 'Nate Isern' }, avatar: undefined };
+export const HARNESS_ME = {
+  id: '6700000000000000000000a1',
+  username: 'nate',
+  name: { displayName: 'Nate Isern' },
+  avatar: undefined,
+};
 
 /** The people the harness's directory knows, so search has something to answer with. */
 const DIRECTORY = [
-  { id: '6700000000000000000000a2', username: 'ana', name: { displayName: 'Ana Restrepo' }, avatar: 'ana' },
-  { id: '6700000000000000000000a3', username: 'teodor', name: { displayName: 'Teodor Ilić' }, avatar: 'teodor' },
-  { id: '6700000000000000000000a4', username: 'mira', name: { displayName: 'Mira Halvorsen' }, avatar: 'mira' },
-  { id: '6700000000000000000000a5', username: 'kwabena', name: { displayName: 'Kwabena Osei' }, avatar: 'kwabena' },
-  { id: '6700000000000000000000a6', username: 'juno', name: { displayName: 'Juno Fábregas' }, avatar: 'juno' },
-  { id: '6700000000000000000000a7', username: 'bea', name: { displayName: 'Béa Lindqvist' }, avatar: 'bea' },
+  {
+    id: '6700000000000000000000a2',
+    username: 'ana',
+    name: { displayName: 'Ana Restrepo' },
+    avatar: 'ana',
+  },
+  {
+    id: '6700000000000000000000a3',
+    username: 'teodor',
+    name: { displayName: 'Teodor Ilić' },
+    avatar: 'teodor',
+  },
+  {
+    id: '6700000000000000000000a4',
+    username: 'mira',
+    name: { displayName: 'Mira Halvorsen' },
+    avatar: 'mira',
+  },
+  {
+    id: '6700000000000000000000a5',
+    username: 'kwabena',
+    name: { displayName: 'Kwabena Osei' },
+    avatar: 'kwabena',
+  },
+  {
+    id: '6700000000000000000000a6',
+    username: 'juno',
+    name: { displayName: 'Juno Fábregas' },
+    avatar: 'juno',
+  },
+  {
+    id: '6700000000000000000000a7',
+    username: 'bea',
+    name: { displayName: 'Béa Lindqvist' },
+    avatar: 'bea',
+  },
 ];
 
 const services = {
-  assets: { publicUrl: (id: string, variant?: string) => `https://i.pravatar.cc/200?u=${id}${variant ?? ''}` },
+  assets: {
+    publicUrl: (id: string, variant?: string) =>
+      `https://i.pravatar.cc/200?u=${id}${variant ?? ''}`,
+  },
   users: {
-    byUsername: async (handle: string) => ({ id: handle, username: handle, name: { displayName: handle } }),
-    getMany: async (ids: string[]) => ids.map((id) => ({ id, username: id, name: { displayName: id } })),
+    byUsername: async (handle: string) => ({
+      id: handle,
+      username: handle,
+      name: { displayName: handle },
+    }),
+    getMany: async (ids: string[]) =>
+      ids.map((id) => ({ id, username: id, name: { displayName: id } })),
     search: async (term: string) => ({
       data: DIRECTORY.filter((person) =>
-        `${person.name.displayName} ${person.username}`.toLocaleLowerCase().includes(term.toLocaleLowerCase()),
+        `${person.name.displayName} ${person.username}`
+          .toLocaleLowerCase()
+          .includes(term.toLocaleLowerCase()),
       ),
     }),
     me: async () => HARNESS_ME,

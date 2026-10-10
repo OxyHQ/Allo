@@ -44,7 +44,9 @@ export default function CallsScreen() {
   const someone = t('calls.someone');
   const nameFor = useCallback(
     (ids: readonly string[]) => {
-      const names = ids.map((id) => person(id)?.displayName).filter((name): name is string => Boolean(name));
+      const names = ids
+        .map((id) => person(id)?.displayName)
+        .filter((name): name is string => Boolean(name));
       if (names.length === 0) return someone;
       if (names.length === 1) return names[0];
       return t('calls.withOthers', { name: names[0], count: names.length - 1 });
@@ -131,7 +133,6 @@ export default function CallsScreen() {
         }}
         emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
       />
-
     </Page>
   );
 }

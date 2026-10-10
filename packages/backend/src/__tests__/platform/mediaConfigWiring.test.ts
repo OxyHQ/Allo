@@ -17,12 +17,18 @@
  * working". The wiring is now in `createRuntimeApp`, and this holds it there.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearIceConfig, getIceConfig } from "../../config/iceRuntime";
-import { clearLiveKitConfig, getLiveKitConfig } from "../../config/sfuRuntime";
-import { createRuntimeApp } from "../../runtimeApp";
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { clearIceConfig, getIceConfig } from '../../config/iceRuntime';
+import { clearLiveKitConfig, getLiveKitConfig } from '../../config/sfuRuntime';
+import { createRuntimeApp } from '../../runtimeApp';
 
-const KEYS = ["TURN_URLS", "TURN_SHARED_SECRET", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"] as const;
+const KEYS = [
+  'TURN_URLS',
+  'TURN_SHARED_SECRET',
+  'LIVEKIT_URL',
+  'LIVEKIT_API_KEY',
+  'LIVEKIT_API_SECRET',
+] as const;
 const saved: Partial<Record<(typeof KEYS)[number], string | undefined>> = {};
 
 beforeEach(() => {
@@ -40,38 +46,38 @@ afterEach(() => {
   clearLiveKitConfig();
 });
 
-describe("booting the app", () => {
-  it("reads the relay and the SFU out of the ENVIRONMENT, not out of an empty object", () => {
-    process.env.TURN_URLS = "turns:relay.allo.test:443?transport=tcp";
-    process.env.TURN_SHARED_SECRET = "a-shared-secret";
-    process.env.LIVEKIT_URL = "wss://livekit.oxy.so";
-    process.env.LIVEKIT_API_KEY = "APIboot";
-    process.env.LIVEKIT_API_SECRET = "boot-secret";
+describe('booting the app', () => {
+  it('reads the relay and the SFU out of the ENVIRONMENT, not out of an empty object', () => {
+    process.env.TURN_URLS = 'turns:relay.allo.test:443?transport=tcp';
+    process.env.TURN_SHARED_SECRET = 'a-shared-secret';
+    process.env.LIVEKIT_URL = 'wss://livekit.oxy.so';
+    process.env.LIVEKIT_API_KEY = 'APIboot';
+    process.env.LIVEKIT_API_SECRET = 'boot-secret';
 
     createRuntimeApp();
 
     const ice = getIceConfig();
     expect(ice.turn).not.toBeNull();
-    expect(ice.turn?.urls).toEqual(["turns:relay.allo.test:443?transport=tcp"]);
-    expect(getLiveKitConfig()).toMatchObject({ url: "wss://livekit.oxy.so", apiKey: "APIboot" });
+    expect(ice.turn?.urls).toEqual(['turns:relay.allo.test:443?transport=tcp']);
+    expect(getLiveKitConfig()).toMatchObject({ url: 'wss://livekit.oxy.so', apiKey: 'APIboot' });
   });
 
-  it("boots with neither configured — 1:1 calls need no relay and no SFU", () => {
+  it('boots with neither configured — 1:1 calls need no relay and no SFU', () => {
     for (const key of KEYS) delete process.env[key];
     createRuntimeApp();
     expect(getIceConfig().turn).toBeNull();
     expect(getLiveKitConfig()).toBeNull();
   });
 
-  it("refuses to boot on a half-configured relay rather than failing the first call", () => {
+  it('refuses to boot on a half-configured relay rather than failing the first call', () => {
     for (const key of KEYS) delete process.env[key];
-    process.env.TURN_URLS = "turns:relay.allo.test:443";
+    process.env.TURN_URLS = 'turns:relay.allo.test:443';
     expect(() => createRuntimeApp()).toThrow(/TURN_SHARED_SECRET/);
   });
 
-  it("refuses to boot on a half-configured SFU for the same reason", () => {
+  it('refuses to boot on a half-configured SFU for the same reason', () => {
     for (const key of KEYS) delete process.env[key];
-    process.env.LIVEKIT_API_KEY = "APIboot";
+    process.env.LIVEKIT_API_KEY = 'APIboot';
     expect(() => createRuntimeApp()).toThrow(/together or not at all/);
   });
 });

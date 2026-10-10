@@ -73,7 +73,7 @@ describe('CircuitBreaker', () => {
       await failWith(breaker, httpError(500), THRESHOLD);
 
       await expect(breaker.execute(() => Promise.resolve('ok'))).rejects.toThrow(
-        /open for test .* Retrying in \d+s/
+        /open for test .* Retrying in \d+s/,
       );
     });
   });

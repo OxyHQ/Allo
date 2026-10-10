@@ -23,8 +23,8 @@ export const PROTECTED_COLUMNS = {
    * Inbound and outbound moderation payloads, stored whole and opaque. They
    * carry a third party's case material and are for this service's own workers.
    */
-  moderation_events: ["payload"],
-  moderation_outbox: ["payloadDecision"],
+  moderation_events: ['payload'],
+  moderation_outbox: ['payloadDecision'],
   /**
    * Messaging platform material. Ciphertext, MLS public material meant for
    * exactly one claimer, and a third party's push credential. Each has ONE
@@ -32,17 +32,17 @@ export const PROTECTED_COLUMNS = {
    * `GET …/events` and `GET /v1/sync` for the payload, the claim for a key
    * package, the delivery worker for the token.
    */
-  key_packages: ["data"],
-  conversation_events: ["payload"],
-  blob_bytes: ["data"],
-  client_instances: ["pushToken"],
+  key_packages: ['data'],
+  conversation_events: ['payload'],
+  blob_bytes: ['data'],
+  client_instances: ['pushToken'],
   /**
    * The conversation's GroupInfo: public MLS material, but whoever holds it can
    * attempt an external join, so it is served by `GET …/group-info` to a
    * joined member (`groupInfoRepository.ts` names the opt-in) and by no
    * listing.
    */
-  conversation_group_info: ["data"],
+  conversation_group_info: ['data'],
   /**
    * Archive key material. `sealed_key` is the archive key sealed to ONE
    * recipient's transfer key and is for that recipient alone; `key_check` is
@@ -50,8 +50,8 @@ export const PROTECTED_COLUMNS = {
    * against offline. Both are returned by exactly the routes that hand them to
    * their owner (`historyRepository.ts` names the opt-in) and by no listing.
    */
-  history_offers: ["sealedKey"],
-  account_backups: ["keyCheck"],
+  history_offers: ['sealedKey'],
+  account_backups: ['keyCheck'],
   /**
    * A status update's body, and the per-status key sealed to ONE recipient
    * device. The body is AES-256-GCM under a key the server never holds; the
@@ -60,6 +60,6 @@ export const PROTECTED_COLUMNS = {
    * (`statusRepository.ts` names the opt-in) and by no listing of anybody
    * else's.
    */
-  statuses: ["payload", "nonce"],
-  status_keys: ["sealedKey"],
+  statuses: ['payload', 'nonce'],
+  status_keys: ['sealedKey'],
 } as const;

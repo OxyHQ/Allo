@@ -19,7 +19,7 @@
  * encrypted `call_log` message written when the call ends; these rows are
  * operational and are swept.
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   accountIdSchema,
   conversationIdSchema,
@@ -27,10 +27,10 @@ import {
   idempotencyKeySchema,
   instanceIdSchema,
   isoDateSchema,
-} from "./common";
+} from './common';
 
 /** Voice or video. A call that starts as voice may turn its camera on; the row keeps what it started as. */
-export const CALL_MODES = ["voice", "video"] as const;
+export const CALL_MODES = ['voice', 'video'] as const;
 export const callModeSchema = z.enum(CALL_MODES);
 export type CallMode = z.infer<typeof callModeSchema>;
 
@@ -41,7 +41,7 @@ export type CallMode = z.infer<typeof callModeSchema>;
  * ending, and it is the server that notices, because the caller may have gone
  * too.
  */
-export const CALL_STATES = ["ringing", "active", "ended"] as const;
+export const CALL_STATES = ['ringing', 'active', 'ended'] as const;
 export const callStateSchema = z.enum(CALL_STATES);
 export type CallState = z.infer<typeof callStateSchema>;
 
@@ -51,14 +51,14 @@ export type CallState = z.infer<typeof callStateSchema>;
  * that invents its own vocabulary has to translate it twice.
  */
 export const CALL_END_REASONS = [
-  "hangup",
-  "declined",
-  "missed",
-  "busy",
-  "cancelled",
-  "failed",
-  "answered_elsewhere",
-  "declined_elsewhere",
+  'hangup',
+  'declined',
+  'missed',
+  'busy',
+  'cancelled',
+  'failed',
+  'answered_elsewhere',
+  'declined_elsewhere',
 ] as const;
 export const callEndReasonSchema = z.enum(CALL_END_REASONS);
 export type CallEndReason = z.infer<typeof callEndReasonSchema>;
@@ -75,7 +75,7 @@ export const callParticipantSchema = z.object({
   accountId: accountIdSchema,
   instanceId: instanceIdSchema,
   /** `ringing` until it answers, declines or the call ends without it. */
-  state: z.enum(["ringing", "joined", "left", "declined", "missed"]),
+  state: z.enum(['ringing', 'joined', 'left', 'declined', 'missed']),
   joinedAt: isoDateSchema.nullable(),
   leftAt: isoDateSchema.nullable(),
 });
@@ -122,7 +122,7 @@ export type CallResponse = z.infer<typeof callResponseSchema>;
 
 export const endCallRequestSchema = z.object({
   /** What the caller believes happened. The server refuses one that contradicts the state it holds. */
-  reason: z.enum(["hangup", "declined", "busy", "cancelled", "failed"]),
+  reason: z.enum(['hangup', 'declined', 'busy', 'cancelled', 'failed']),
 });
 export type EndCallRequest = z.infer<typeof endCallRequestSchema>;
 

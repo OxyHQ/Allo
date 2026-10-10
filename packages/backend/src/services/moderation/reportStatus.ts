@@ -1,4 +1,4 @@
-import type { ModerationLocalStatus, ReportStatus } from "../../db/schema/moderation";
+import type { ModerationLocalStatus, ReportStatus } from '../../db/schema/moderation';
 
 /**
  * The one place a report's two status axes are decided.
@@ -32,12 +32,12 @@ import type { ModerationLocalStatus, ReportStatus } from "../../db/schema/modera
  */
 export function legacyStatusForOutcome(outcome: string): ReportStatus {
   switch (outcome) {
-    case "violation":
-      return "resolved";
-    case "no_violation":
-      return "dismissed";
+    case 'violation':
+      return 'resolved';
+    case 'no_violation':
+      return 'dismissed';
     default:
-      return "reviewed";
+      return 'reviewed';
   }
 }
 
@@ -54,7 +54,7 @@ export interface ReportDecisionState {
  * reopened. `superseded` is not here either — a superseded revision is not the
  * current answer and must never be the one that closes the report.
  */
-const TERMINAL_DECISION_STATUSES: ReadonlySet<string> = new Set(["final", "corrected"]);
+const TERMINAL_DECISION_STATUSES: ReadonlySet<string> = new Set(['final', 'corrected']);
 
 /** Both axes for a report whose case has been decided. */
 export function reportStateForDecision(input: {
@@ -63,6 +63,6 @@ export function reportStateForDecision(input: {
 }): ReportDecisionState {
   return {
     status: legacyStatusForOutcome(input.outcome),
-    localStatus: TERMINAL_DECISION_STATUSES.has(input.decisionStatus) ? "closed" : "submitted",
+    localStatus: TERMINAL_DECISION_STATUSES.has(input.decisionStatus) ? 'closed' : 'submitted',
   };
 }

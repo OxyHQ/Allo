@@ -18,7 +18,7 @@ export function getErrorStatus(error: unknown): number | undefined {
     return undefined;
   }
 
-  return typeof error.status === "number" ? error.status : undefined;
+  return typeof error.status === 'number' ? error.status : undefined;
 }
 
 export function getErrorCode(error: unknown): string | undefined {
@@ -26,7 +26,7 @@ export function getErrorCode(error: unknown): string | undefined {
     return undefined;
   }
 
-  return typeof error.code === "string" ? error.code : undefined;
+  return typeof error.code === 'string' ? error.code : undefined;
 }
 
 export function getErrorMessage(error: unknown): string | undefined {
@@ -38,14 +38,14 @@ export function getErrorMessage(error: unknown): string | undefined {
     return undefined;
   }
 
-  return typeof error.message === "string" ? error.message : undefined;
+  return typeof error.message === 'string' ? error.message : undefined;
 }
 
 export function isOxyUserNotFound(error: unknown): boolean {
   const shapedError: OxyUserErrorShape = isRecord(error) ? error : {};
-  return shapedError.status === 404 || shapedError.code === "ERR_BAD_REQUEST";
+  return shapedError.status === 404 || shapedError.code === 'ERR_BAD_REQUEST';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }

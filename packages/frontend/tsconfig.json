@@ -10,10 +10,7 @@
     // actually ships on its primary platforms; the `.web` files are still
     // typechecked as members of the program, and they conform to the same
     // contract because each one annotates its exports with it.
-    "moduleSuffixes": [
-      ".native",
-      ""
-    ],
+    "moduleSuffixes": [".native", ""],
     // No "composite"/"noEmit": false here. Both existed only so the root config
     // could list this package as a project reference; a referenced project must
     // be composite, and composite forbids noEmit — which meant this config
@@ -22,16 +19,8 @@
     // frontend (nothing imports it), so it inherits Expo's noEmit and can only
     // typecheck.
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"]
 }

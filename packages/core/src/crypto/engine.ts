@@ -76,11 +76,19 @@ import {
   type Proposal,
   type PublicMessage,
   type RatchetTree,
-} from "ts-mls";
-import { DecryptError, FutureEpochError, InvalidStateError, JoinRefusedError } from "../errors";
-import { base64Decode, bytesEqual, concatBytes, sha256Bytes, utf8Decode, utf8Encode, varLenData } from "../util/bytes";
-import { NOBLE_SUITE_NAME, nobleCryptoProvider } from "./nobleCryptoProvider";
-import type { SigningKeyPair } from "./signing";
+} from 'ts-mls';
+import { DecryptError, FutureEpochError, InvalidStateError, JoinRefusedError } from '../errors';
+import {
+  base64Decode,
+  bytesEqual,
+  concatBytes,
+  sha256Bytes,
+  utf8Decode,
+  utf8Encode,
+  varLenData,
+} from '../util/bytes';
+import { NOBLE_SUITE_NAME, nobleCryptoProvider } from './nobleCryptoProvider';
+import type { SigningKeyPair } from './signing';
 
 export const CIPHERSUITE_ID = 1;
 export const DEFAULT_PAD_UNTIL_LENGTH = 256;
@@ -111,12 +119,12 @@ export interface LeafInfo {
 }
 
 export interface PeekResult {
-  kind: "private" | "public" | "welcome" | "key_package" | "group_info";
+  kind: 'private' | 'public' | 'welcome' | 'key_package' | 'group_info';
   epoch: number | null;
-  contentType: "application" | "proposal" | "commit" | null;
+  contentType: 'application' | 'proposal' | 'commit' | null;
 }
 
-export type ProcessKind = "application" | "commit" | "proposal";
+export type ProcessKind = 'application' | 'commit' | 'proposal';
 
 export interface ProcessResult {
   next: GroupState;
@@ -171,22 +179,24 @@ export function identityString(accountId: string, instanceId: string): string {
   return `${accountId}:${instanceId}`;
 }
 
-export function parseIdentity(identity: Uint8Array): { accountId: string; instanceId: string } | null {
+export function parseIdentity(
+  identity: Uint8Array,
+): { accountId: string; instanceId: string } | null {
   let text: string;
   try {
     text = utf8Decode(identity);
   } catch {
     return null;
   }
-  const i = text.indexOf(":");
+  const i = text.indexOf(':');
   if (i <= 0 || i === text.length - 1) return null;
   const accountId = text.slice(0, i);
   const instanceId = text.slice(i + 1);
-  if (instanceId.includes(":")) return null;
+  if (instanceId.includes(':')) return null;
   return { accountId, instanceId };
 }
 
-const KEY_PACKAGE_REF_LABEL = utf8Encode("MLS 1.0 KeyPackage Reference");
+const KEY_PACKAGE_REF_LABEL = utf8Encode('MLS 1.0 KeyPackage Reference');
 
 /** RefHash("MLS 1.0 KeyPackage Reference", KeyPackage) — the same bytes ts-mls computes and a Welcome carries. */
 export function keyPackageRefFromWire(publicWire: Uint8Array): Uint8Array {
@@ -201,31 +211,46 @@ export class CryptoEngine {
     readonly clientConfig: ClientConfig,
   ) {}
 
-  static async create(provider: CryptoProvider = nobleCryptoProvider, options?: { padUntilLength?: number }): Promise<CryptoEngine> {
+  static async create(
+    provider: CryptoProvider = nobleCryptoProvider,
+    options?: { padUntilLength?: number },
+  ): Promise<CryptoEngine> {
     const impl = await getCiphersuiteImpl(getCiphersuiteFromName(NOBLE_SUITE_NAME), provider);
     const clientConfig: ClientConfig = {
       keyRetentionConfig: defaultKeyRetentionConfig,
       lifetimeConfig: defaultLifetimeConfig,
       keyPackageEqualityConfig: defaultKeyPackageEqualityConfig,
-      paddingConfig: { kind: "padUntilLength", padUntilLength: options?.padUntilLength ?? DEFAULT_PAD_UNTIL_LENGTH },
+      paddingConfig: {
+        kind: 'padUntilLength',
+        padUntilLength: options?.padUntilLength ?? DEFAULT_PAD_UNTIL_LENGTH,
+      },
       authService: {
         async validateCredential(credential) {
           // A leaf must at least name an account and an instance. Binding the
           // leaf's signature key to the instance the server enrolled is left
           // to the callers, which hold the listings.
-          return credential.credentialType === "basic" && parseIdentity(credential.identity) !== null;
+          return (
+            credential.credentialType === 'basic' && parseIdentity(credential.identity) !== null
+          );
         },
       },
     };
     return new CryptoEngine(impl, clientConfig);
   }
 
-  createIdentity(input: { accountId: string; instanceId: string; signingKey: SigningKeyPair }): Identity {
+  createIdentity(input: {
+    accountId: string;
+    instanceId: string;
+    signingKey: SigningKeyPair;
+  }): Identity {
     return {
       accountId: input.accountId,
       instanceId: input.instanceId,
       signingKey: input.signingKey,
-      credential: { credentialType: "basic", identity: utf8Encode(identityString(input.accountId, input.instanceId)) },
+      credential: {
+        credentialType: 'basic',
+        identity: utf8Encode(identityString(input.accountId, input.instanceId)),
+      },
     };
   }
 
@@ -241,20 +266,37 @@ export class CryptoEngine {
         { signKey: identity.signingKey.secretKey, publicKey: identity.signingKey.publicKey },
         this.impl,
       );
-      const publicWire = encodeMlsMessage({ wireformat: "mls_key_package", version: "mls10", keyPackage: kp.publicPackage });
-      out.push({ ref: keyPackageRefFromWire(publicWire), publicWire, keyPackage: kp.publicPackage, privatePackage: kp.privatePackage });
+      const publicWire = encodeMlsMessage({
+        wireformat: 'mls_key_package',
+        version: 'mls10',
+        keyPackage: kp.publicPackage,
+      });
+      out.push({
+        ref: keyPackageRefFromWire(publicWire),
+        publicWire,
+        keyPackage: kp.publicPackage,
+        privatePackage: kp.privatePackage,
+      });
     }
     return out;
   }
 
   async createGroup(identity: Identity, groupId: Uint8Array): Promise<GroupState> {
     const [own] = await this.generateKeyPackages(identity, 1);
-    return createGroup(groupId, own.keyPackage, own.privatePackage, [], this.impl, this.clientConfig);
+    return createGroup(
+      groupId,
+      own.keyPackage,
+      own.privatePackage,
+      [],
+      this.impl,
+      this.clientConfig,
+    );
   }
 
   decodeKeyPackage(publicWire: Uint8Array): KeyPackage {
     const m = this.unwire(publicWire);
-    if (m.wireformat !== "mls_key_package") throw new InvalidStateError("expected an mls_key_package");
+    if (m.wireformat !== 'mls_key_package')
+      throw new InvalidStateError('expected an mls_key_package');
     return m.keyPackage;
   }
 
@@ -264,23 +306,32 @@ export class CryptoEngine {
    * the state AFTER the commit, which the caller keeps aside until the
    * server accepts it (invariant 2).
    */
-  async commit(state: GroupState, changes: { addKeyPackages?: Uint8Array[]; removeLeafIndexes?: number[] }): Promise<CommitResult> {
+  async commit(
+    state: GroupState,
+    changes: { addKeyPackages?: Uint8Array[]; removeLeafIndexes?: number[] },
+  ): Promise<CommitResult> {
     this.assertActive(state);
     const proposals: Proposal[] = [];
     const added: Array<{ accountId: string; instanceId: string }> = [];
     for (const wire of changes.addKeyPackages ?? []) {
       const keyPackage = this.decodeKeyPackage(wire);
       const cred = keyPackage.leafNode.credential;
-      const id = cred.credentialType === "basic" ? parseIdentity(cred.identity) : null;
-      if (!id) throw new InvalidStateError("key package credential is not an Allo identity");
-      proposals.push({ proposalType: "add", add: { keyPackage } });
+      const id = cred.credentialType === 'basic' ? parseIdentity(cred.identity) : null;
+      if (!id) throw new InvalidStateError('key package credential is not an Allo identity');
+      proposals.push({ proposalType: 'add', add: { keyPackage } });
       added.push(id);
     }
-    for (const removed of changes.removeLeafIndexes ?? []) proposals.push({ proposalType: "remove", remove: { removed } });
-    const res = await createCommit({ state, cipherSuite: this.impl }, { extraProposals: proposals, ratchetTreeExtension: true });
+    for (const removed of changes.removeLeafIndexes ?? [])
+      proposals.push({ proposalType: 'remove', remove: { removed } });
+    const res = await createCommit(
+      { state, cipherSuite: this.impl },
+      { extraProposals: proposals, ratchetTreeExtension: true },
+    );
     return {
       commit: encodeMlsMessage(res.commit),
-      welcome: res.welcome ? encodeMlsMessage({ wireformat: "mls_welcome", version: "mls10", welcome: res.welcome }) : undefined,
+      welcome: res.welcome
+        ? encodeMlsMessage({ wireformat: 'mls_welcome', version: 'mls10', welcome: res.welcome })
+        : undefined,
       next: res.newState,
       added,
       groupInfo: await this.publishGroupInfo(res.newState),
@@ -291,7 +342,10 @@ export class CryptoEngine {
     return this.commit(state, { addKeyPackages: keyPackagesWire });
   }
 
-  async removeMembers(state: GroupState, leafIndexes: number[]): Promise<{ commit: Uint8Array; next: GroupState; groupInfo: Uint8Array }> {
+  async removeMembers(
+    state: GroupState,
+    leafIndexes: number[],
+  ): Promise<{ commit: Uint8Array; next: GroupState; groupInfo: Uint8Array }> {
     const r = await this.commit(state, { removeLeafIndexes: leafIndexes });
     return { commit: r.commit, next: r.next, groupInfo: r.groupInfo };
   }
@@ -308,12 +362,13 @@ export class CryptoEngine {
   async publishGroupInfo(state: GroupState): Promise<Uint8Array> {
     this.assertActive(state);
     const groupInfo = await createGroupInfoWithExternalPubAndRatchetTree(state, [], this.impl);
-    return encodeMlsMessage({ wireformat: "mls_group_info", version: "mls10", groupInfo });
+    return encodeMlsMessage({ wireformat: 'mls_group_info', version: 'mls10', groupInfo });
   }
 
   decodeGroupInfo(wire: Uint8Array): GroupInfo {
     const m = this.unwire(wire);
-    if (m.wireformat !== "mls_group_info") throw new InvalidStateError("expected an mls_group_info");
+    if (m.wireformat !== 'mls_group_info')
+      throw new InvalidStateError('expected an mls_group_info');
     return m.groupInfo;
   }
 
@@ -331,29 +386,49 @@ export class CryptoEngine {
    * it, which is a fork. The library exports no tree decoder, so the tree is
    * read off a probe join: the plain join IS the probe, a resync costs one more.
    */
-  async joinExternal(identity: Identity, groupInfoWire: Uint8Array, options: { resync: boolean }): Promise<ExternalJoinResult> {
+  async joinExternal(
+    identity: Identity,
+    groupInfoWire: Uint8Array,
+    options: { resync: boolean },
+  ): Promise<ExternalJoinResult> {
     const groupInfo = this.decodeGroupInfo(groupInfoWire);
     const [own] = await this.generateKeyPackages(identity, 1);
     const join = async (resync: boolean) => {
       try {
-        return await joinGroupExternal(groupInfo, own.keyPackage, own.privatePackage, resync, this.impl, undefined, this.clientConfig);
+        return await joinGroupExternal(
+          groupInfo,
+          own.keyPackage,
+          own.privatePackage,
+          resync,
+          this.impl,
+          undefined,
+          this.clientConfig,
+        );
       } catch (cause) {
-        throw new DecryptError("the GroupInfo could not be joined", { cause });
+        throw new DecryptError('the GroupInfo could not be joined', { cause });
       }
     };
     let res = await join(false);
     const mine = res.newState.privatePath.leafIndex;
     const former = leavesOf(res.newState.ratchetTree).filter(
-      (l) => l.leafIndex !== mine && (l.instanceId === identity.instanceId || bytesEqual(l.signaturePublicKey, identity.signingKey.publicKey)),
+      (l) =>
+        l.leafIndex !== mine &&
+        (l.instanceId === identity.instanceId ||
+          bytesEqual(l.signaturePublicKey, identity.signingKey.publicKey)),
     );
     if (options.resync) {
-      if (former.length === 0) throw new InvalidStateError("resync: the tree holds no leaf of this instance");
+      if (former.length === 0)
+        throw new InvalidStateError('resync: the tree holds no leaf of this instance');
       res = await join(true);
     } else if (former.length > 0) {
-      throw new InvalidStateError("this instance already holds a leaf in the tree; resync instead");
+      throw new InvalidStateError('this instance already holds a leaf in the tree; resync instead');
     }
     return {
-      commit: encodeMlsMessage({ wireformat: "mls_public_message", version: "mls10", publicMessage: res.publicMessage }),
+      commit: encodeMlsMessage({
+        wireformat: 'mls_public_message',
+        version: 'mls10',
+        publicMessage: res.publicMessage,
+      }),
       next: res.newState,
       epoch: Number(groupInfo.groupContext.epoch),
       groupInfo: await this.publishGroupInfo(res.newState),
@@ -368,84 +443,125 @@ export class CryptoEngine {
    */
   externalJoinerOf(message: Uint8Array): ExternalJoiner | null {
     const m = this.unwire(message);
-    if (m.wireformat !== "mls_public_message") return null;
+    if (m.wireformat !== 'mls_public_message') return null;
     return this.joinerOf(m.publicMessage);
   }
 
   private joinerOf(pm: PublicMessage): ExternalJoiner | null {
     const { content } = pm;
-    if (content.contentType !== "commit" || content.sender.senderType !== "new_member_commit") return null;
+    if (content.contentType !== 'commit' || content.sender.senderType !== 'new_member_commit')
+      return null;
     const path = content.commit.path;
-    if (!path) throw new JoinRefusedError("an external commit carries no path");
+    if (!path) throw new JoinRefusedError('an external commit carries no path');
     const cred = path.leafNode.credential;
-    const id = cred.credentialType === "basic" ? parseIdentity(cred.identity) : null;
+    const id = cred.credentialType === 'basic' ? parseIdentity(cred.identity) : null;
     if (!id) throw new JoinRefusedError("the joiner's credential is not an Allo identity");
     const removedLeafIndexes: number[] = [];
     for (const p of content.commit.proposals) {
-      if (p.proposalOrRefType !== "proposal") throw new JoinRefusedError("an external commit carries proposals by value only");
-      if (p.proposal.proposalType === "remove") removedLeafIndexes.push(p.proposal.remove.removed);
+      if (p.proposalOrRefType !== 'proposal')
+        throw new JoinRefusedError('an external commit carries proposals by value only');
+      if (p.proposal.proposalType === 'remove') removedLeafIndexes.push(p.proposal.remove.removed);
     }
-    return { accountId: id.accountId, instanceId: id.instanceId, signaturePublicKey: path.leafNode.signaturePublicKey, removedLeafIndexes };
+    return {
+      accountId: id.accountId,
+      instanceId: id.instanceId,
+      signaturePublicKey: path.leafNode.signaturePublicKey,
+      removedLeafIndexes,
+    };
   }
 
   /**
    * Invariant 6. Throws {@link JoinRefusedError}; the state is never touched.
    * Exposed so a caller can judge a joiner without processing.
    */
-  async admitJoiner(state: GroupState, joiner: ExternalJoiner, admission: JoinerAdmission | undefined): Promise<void> {
-    if (!admission) throw new JoinRefusedError("no admission policy for an external joiner");
+  async admitJoiner(
+    state: GroupState,
+    joiner: ExternalJoiner,
+    admission: JoinerAdmission | undefined,
+  ): Promise<void> {
+    if (!admission) throw new JoinRefusedError('no admission policy for an external joiner');
     const members = this.membersOf(state);
     // Every leaf the commit removes must be the joiner's own former one (a resync), by instance id or by key.
     for (const idx of joiner.removedLeafIndexes) {
       const leaf = members.find((m) => m.leafIndex === idx);
-      if (!leaf || (leaf.instanceId !== joiner.instanceId && !bytesEqual(leaf.signaturePublicKey, joiner.signaturePublicKey))) {
-        throw new JoinRefusedError(`an external commit may only remove the joiner's own former leaf (leaf ${idx})`);
+      if (
+        !leaf ||
+        (leaf.instanceId !== joiner.instanceId &&
+          !bytesEqual(leaf.signaturePublicKey, joiner.signaturePublicKey))
+      ) {
+        throw new JoinRefusedError(
+          `an external commit may only remove the joiner's own former leaf (leaf ${idx})`,
+        );
       }
     }
     const removed = new Set(joiner.removedLeafIndexes);
     for (const m of members) {
       if (removed.has(m.leafIndex)) continue;
-      if (m.instanceId === joiner.instanceId) throw new JoinRefusedError(`instance ${joiner.instanceId} already holds an active leaf`);
-      if (bytesEqual(m.signaturePublicKey, joiner.signaturePublicKey)) throw new JoinRefusedError("the joiner's signing key is already active in the tree");
+      if (m.instanceId === joiner.instanceId)
+        throw new JoinRefusedError(`instance ${joiner.instanceId} already holds an active leaf`);
+      if (bytesEqual(m.signaturePublicKey, joiner.signaturePublicKey))
+        throw new JoinRefusedError("the joiner's signing key is already active in the tree");
     }
     const trusted = await admission.trustedInstancesOf(joiner.accountId);
     const enrolled = trusted.find((t) => t.id === joiner.instanceId);
-    if (!enrolled) throw new JoinRefusedError(`instance ${joiner.instanceId} is not in the verified chain of ${joiner.accountId}`);
+    if (!enrolled)
+      throw new JoinRefusedError(
+        `instance ${joiner.instanceId} is not in the verified chain of ${joiner.accountId}`,
+      );
     if (!bytesEqual(base64Decode(enrolled.signingPublicKey), joiner.signaturePublicKey)) {
-      throw new JoinRefusedError(`the joiner's signing key is not the one enrolled for instance ${joiner.instanceId}`);
+      throw new JoinRefusedError(
+        `the joiner's signing key is not the one enrolled for instance ${joiner.instanceId}`,
+      );
     }
   }
 
   /** The KeyPackageRefs a Welcome is addressed to. */
   welcomeRefs(welcomeWire: Uint8Array): Uint8Array[] {
     const m = this.unwire(welcomeWire);
-    if (m.wireformat !== "mls_welcome") throw new InvalidStateError("expected an mls_welcome");
+    if (m.wireformat !== 'mls_welcome') throw new InvalidStateError('expected an mls_welcome');
     return m.welcome.secrets.map((s) => s.newMember);
   }
 
   async joinFromWelcome(welcomeWire: Uint8Array, bundle: KeyPackageBundle): Promise<GroupState> {
     const m = this.unwire(welcomeWire);
-    if (m.wireformat !== "mls_welcome") throw new InvalidStateError("expected an mls_welcome");
+    if (m.wireformat !== 'mls_welcome') throw new InvalidStateError('expected an mls_welcome');
     try {
-      return await joinGroup(m.welcome, bundle.keyPackage, bundle.privatePackage, emptyPskIndex, this.impl, undefined, undefined, this.clientConfig);
+      return await joinGroup(
+        m.welcome,
+        bundle.keyPackage,
+        bundle.privatePackage,
+        emptyPskIndex,
+        this.impl,
+        undefined,
+        undefined,
+        this.clientConfig,
+      );
     } catch (cause) {
-      throw new DecryptError("welcome could not be joined", { cause });
+      throw new DecryptError('welcome could not be joined', { cause });
     }
   }
 
   peek(message: Uint8Array): PeekResult {
     const m = this.unwire(message);
     switch (m.wireformat) {
-      case "mls_private_message":
-        return { kind: "private", epoch: Number(m.privateMessage.epoch), contentType: m.privateMessage.contentType };
-      case "mls_public_message":
-        return { kind: "public", epoch: Number(m.publicMessage.content.epoch), contentType: m.publicMessage.content.contentType };
-      case "mls_welcome":
-        return { kind: "welcome", epoch: null, contentType: null };
-      case "mls_key_package":
-        return { kind: "key_package", epoch: null, contentType: null };
-      case "mls_group_info":
-        return { kind: "group_info", epoch: null, contentType: null };
+      case 'mls_private_message':
+        return {
+          kind: 'private',
+          epoch: Number(m.privateMessage.epoch),
+          contentType: m.privateMessage.contentType,
+        };
+      case 'mls_public_message':
+        return {
+          kind: 'public',
+          epoch: Number(m.publicMessage.content.epoch),
+          contentType: m.publicMessage.content.contentType,
+        };
+      case 'mls_welcome':
+        return { kind: 'welcome', epoch: null, contentType: null };
+      case 'mls_key_package':
+        return { kind: 'key_package', epoch: null, contentType: null };
+      case 'mls_group_info':
+        return { kind: 'group_info', epoch: null, contentType: null };
     }
   }
 
@@ -457,22 +573,36 @@ export class CryptoEngine {
    * external commit whose joiner `admission` does not admit — or for any
    * external commit when no `admission` is given (invariant 6).
    */
-  async processIncoming(state: GroupState, message: Uint8Array, admission?: JoinerAdmission): Promise<ProcessResult> {
+  async processIncoming(
+    state: GroupState,
+    message: Uint8Array,
+    admission?: JoinerAdmission,
+  ): Promise<ProcessResult> {
     const m = this.unwire(message);
-    if (m.wireformat !== "mls_private_message" && m.wireformat !== "mls_public_message") {
+    if (m.wireformat !== 'mls_private_message' && m.wireformat !== 'mls_public_message') {
       throw new DecryptError(`cannot process a ${m.wireformat} as a group message`);
     }
-    const epoch = m.wireformat === "mls_private_message" ? Number(m.privateMessage.epoch) : Number(m.publicMessage.content.epoch);
-    const contentType = m.wireformat === "mls_private_message" ? m.privateMessage.contentType : m.publicMessage.content.contentType;
+    const epoch =
+      m.wireformat === 'mls_private_message'
+        ? Number(m.privateMessage.epoch)
+        : Number(m.publicMessage.content.epoch);
+    const contentType =
+      m.wireformat === 'mls_private_message'
+        ? m.privateMessage.contentType
+        : m.publicMessage.content.contentType;
     const stateEpoch = this.epochOf(state);
     if (epoch > stateEpoch) throw new FutureEpochError(epoch, stateEpoch);
-    if (contentType !== "application" && epoch < stateEpoch) {
-      throw new DecryptError(`stale ${contentType} from epoch ${epoch} at state epoch ${stateEpoch}`);
+    if (contentType !== 'application' && epoch < stateEpoch) {
+      throw new DecryptError(
+        `stale ${contentType} from epoch ${epoch} at state epoch ${stateEpoch}`,
+      );
     }
-    if (state.groupActiveState.kind !== "active") throw new DecryptError("this leaf is no longer in the group");
-    const joiner = m.wireformat === "mls_public_message" ? this.joinerOf(m.publicMessage) : null;
+    if (state.groupActiveState.kind !== 'active')
+      throw new DecryptError('this leaf is no longer in the group');
+    const joiner = m.wireformat === 'mls_public_message' ? this.joinerOf(m.publicMessage) : null;
     if (joiner) await this.admitJoiner(state, joiner, admission);
-    const replacesUs = joiner !== null && joiner.removedLeafIndexes.includes(state.privatePath.leafIndex);
+    const replacesUs =
+      joiner !== null && joiner.removedLeafIndexes.includes(state.privatePath.leafIndex);
     let result;
     try {
       result = await processMessage(m, state, emptyPskIndex, acceptAll, this.impl);
@@ -480,26 +610,51 @@ export class CryptoEngine {
       // Invariant 7: a resync by another copy of this instance removed our leaf; the library cannot
       // follow the new epoch (no private key on the update path) and reports that as an InternalError
       // rather than as a removal. We are out either way.
-      if (replacesUs) return { next: { ...state, groupActiveState: { kind: "removedFromGroup" } }, kind: "commit", epoch, removedSelf: true };
+      if (replacesUs)
+        return {
+          next: { ...state, groupActiveState: { kind: 'removedFromGroup' } },
+          kind: 'commit',
+          epoch,
+          removedSelf: true,
+        };
       throw new DecryptError(`mls ${contentType} rejected`, { cause });
     }
-    if (replacesUs) return { next: { ...result.newState, groupActiveState: { kind: "removedFromGroup" } }, kind: "commit", epoch, removedSelf: true };
-    if (result.kind === "applicationMessage") {
-      return { next: result.newState, kind: "application", plaintext: result.message, epoch, removedSelf: false };
+    if (replacesUs)
+      return {
+        next: { ...result.newState, groupActiveState: { kind: 'removedFromGroup' } },
+        kind: 'commit',
+        epoch,
+        removedSelf: true,
+      };
+    if (result.kind === 'applicationMessage') {
+      return {
+        next: result.newState,
+        kind: 'application',
+        plaintext: result.message,
+        epoch,
+        removedSelf: false,
+      };
     }
     return {
       next: result.newState,
-      kind: contentType === "commit" ? "commit" : "proposal",
+      kind: contentType === 'commit' ? 'commit' : 'proposal',
       epoch,
-      removedSelf: result.newState.groupActiveState.kind === "removedFromGroup",
+      removedSelf: result.newState.groupActiveState.kind === 'removedFromGroup',
     };
   }
 
-  async encryptApplication(state: GroupState, plaintext: Uint8Array): Promise<{ ciphertext: Uint8Array; next: GroupState }> {
+  async encryptApplication(
+    state: GroupState,
+    plaintext: Uint8Array,
+  ): Promise<{ ciphertext: Uint8Array; next: GroupState }> {
     this.assertActive(state);
     const res = await createApplicationMessage(state, plaintext, this.impl);
     return {
-      ciphertext: encodeMlsMessage({ wireformat: "mls_private_message", version: "mls10", privateMessage: res.privateMessage }),
+      ciphertext: encodeMlsMessage({
+        wireformat: 'mls_private_message',
+        version: 'mls10',
+        privateMessage: res.privateMessage,
+      }),
       next: res.newState,
     };
   }
@@ -510,7 +665,7 @@ export class CryptoEngine {
 
   deserializeGroup(bytes: Uint8Array): GroupState {
     const r = decodeGroupState(bytes, 0);
-    if (!r) throw new InvalidStateError("group state bytes did not decode");
+    if (!r) throw new InvalidStateError('group state bytes did not decode');
     return { ...r[0], clientConfig: this.clientConfig };
   }
 
@@ -532,11 +687,11 @@ export class CryptoEngine {
   }
 
   isActive(state: GroupState): boolean {
-    return state.groupActiveState.kind === "active";
+    return state.groupActiveState.kind === 'active';
   }
 
   private assertActive(state: GroupState): void {
-    if (!this.isActive(state)) throw new InvalidStateError("this leaf is no longer in the group");
+    if (!this.isActive(state)) throw new InvalidStateError('this leaf is no longer in the group');
   }
 
   private unwire(bytes: Uint8Array): MLSMessage {
@@ -544,9 +699,9 @@ export class CryptoEngine {
     try {
       r = decodeMlsMessage(bytes, 0);
     } catch (cause) {
-      throw new DecryptError("not an MLS message", { cause });
+      throw new DecryptError('not an MLS message', { cause });
     }
-    if (!r) throw new DecryptError("not an MLS message");
+    if (!r) throw new DecryptError('not an MLS message');
     return r[0];
   }
 }
@@ -554,11 +709,16 @@ export class CryptoEngine {
 function leavesOf(tree: RatchetTree): LeafInfo[] {
   const out: LeafInfo[] = [];
   tree.forEach((node, i) => {
-    if (i % 2 !== 0 || !node || node.nodeType !== "leaf") return;
+    if (i % 2 !== 0 || !node || node.nodeType !== 'leaf') return;
     const cred = node.leaf.credential;
-    const id = cred.credentialType === "basic" ? parseIdentity(cred.identity) : null;
+    const id = cred.credentialType === 'basic' ? parseIdentity(cred.identity) : null;
     if (!id) return;
-    out.push({ leafIndex: i / 2, accountId: id.accountId, instanceId: id.instanceId, signaturePublicKey: node.leaf.signaturePublicKey });
+    out.push({
+      leafIndex: i / 2,
+      accountId: id.accountId,
+      instanceId: id.instanceId,
+      signaturePublicKey: node.leaf.signaturePublicKey,
+    });
   });
   return out;
 }

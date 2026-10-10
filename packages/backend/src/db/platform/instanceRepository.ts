@@ -9,12 +9,17 @@
  * reader that returns it is {@link findPushTarget}, for the delivery worker.
  */
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { publicColumns } from "@oxy.so/db/assert";
-import { uuidv7 } from "@oxy.so/db";
-import { getDb, type AlloDatabaseOrTransaction } from "../index";
-import { PROTECTED_COLUMNS } from "../protectedColumns";
-import { clientInstances, type InstancePlatform, type InstancePushProvider, type InstanceStatus } from "../schema/instances";
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { publicColumns } from '@oxy.so/db/assert';
+import { uuidv7 } from '@oxy.so/db';
+import { getDb, type AlloDatabaseOrTransaction } from '../index';
+import { PROTECTED_COLUMNS } from '../protectedColumns';
+import {
+  clientInstances,
+  type InstancePlatform,
+  type InstancePushProvider,
+  type InstanceStatus,
+} from '../schema/instances';
 
 /** Every column but the push token. What a route may read. */
 export const INSTANCE_COLUMNS = publicColumns(clientInstances, PROTECTED_COLUMNS);
@@ -51,7 +56,7 @@ export async function insertInstance(
       transferPublicKey: input.transferPublicKey,
       status: input.status,
       enrollmentChallenge: input.enrollmentChallenge,
-      enrolledAt: input.status === "active" ? now : null,
+      enrolledAt: input.status === 'active' ? now : null,
       lastSeenAt: now,
     })
     .returning(INSTANCE_COLUMNS);
@@ -62,7 +67,11 @@ export async function findInstanceById(
   id: string,
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<InstanceRow | null> {
-  const [row] = await db.select(INSTANCE_COLUMNS).from(clientInstances).where(eq(clientInstances.id, id)).limit(1);
+  const [row] = await db
+    .select(INSTANCE_COLUMNS)
+    .from(clientInstances)
+    .where(eq(clientInstances.id, id))
+    .limit(1);
   return row ?? null;
 }
 
@@ -71,7 +80,10 @@ export async function findInstancesByIds(
   db: AlloDatabaseOrTransaction = getDb(),
 ): Promise<InstanceRow[]> {
   if (ids.length === 0) return [];
-  return db.select(INSTANCE_COLUMNS).from(clientInstances).where(inArray(clientInstances.id, [...ids]));
+  return db
+    .select(INSTANCE_COLUMNS)
+    .from(clientInstances)
+    .where(inArray(clientInstances.id, [...ids]));
 }
 
 export async function listInstancesByAccount(
@@ -100,8 +112,17 @@ export async function listActiveInstancesForAccounts(
   return db
     .select(INSTANCE_COLUMNS)
     .from(clientInstances)
-    .where(and(inArray(clientInstances.accountId, [...accountIds]), eq(clientInstances.status, "active")))
-    .orderBy(asc(clientInstances.accountId), asc(clientInstances.createdAt), asc(clientInstances.id));
+    .where(
+      and(
+        inArray(clientInstances.accountId, [...accountIds]),
+        eq(clientInstances.status, 'active'),
+      ),
+    )
+    .orderBy(
+      asc(clientInstances.accountId),
+      asc(clientInstances.createdAt),
+      asc(clientInstances.id),
+    );
 }
 
 export async function listInstancesByAccountAndStatus(
@@ -133,8 +154,8 @@ export async function countActiveInstances(
   const rows = await db
     .select({ id: clientInstances.id })
     .from(clientInstances)
-    .where(and(eq(clientInstances.accountId, accountId), eq(clientInstances.status, "active")))
-    .for("update");
+    .where(and(eq(clientInstances.accountId, accountId), eq(clientInstances.status, 'active')))
+    .for('update');
   return rows.length;
 }
 
@@ -158,13 +179,13 @@ export async function activateInstance(
   const [row] = await db
     .update(clientInstances)
     .set({
-      status: "active",
+      status: 'active',
       approvedByInstanceId: input.approvedByInstanceId,
       approvalSignature: input.approvalSignature,
       enrolledAt: now,
       updatedAt: now,
     })
-    .where(and(eq(clientInstances.id, id), eq(clientInstances.status, "pending")))
+    .where(and(eq(clientInstances.id, id), eq(clientInstances.status, 'pending')))
     .returning(INSTANCE_COLUMNS);
   return row ?? null;
 }
@@ -178,7 +199,7 @@ export async function revokeInstance(
   const [row] = await db
     .update(clientInstances)
     .set({
-      status: "revoked",
+      status: 'revoked',
       enrollmentChallenge: null,
       revokedAt: sql`coalesce(${clientInstances.revokedAt}, ${now.toISOString()}::timestamptz)`,
       pushProvider: null,
@@ -219,7 +240,10 @@ export async function setPushToken(
     .where(eq(clientInstances.id, id));
 }
 
-export async function clearPushToken(id: string, db: AlloDatabaseOrTransaction = getDb()): Promise<void> {
+export async function clearPushToken(
+  id: string,
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<void> {
   await db
     .update(clientInstances)
     .set({ pushProvider: null, pushToken: null, updatedAt: new Date() })
@@ -266,6 +290,12 @@ export async function findPushTargets(
   return rows;
 }
 
-export async function touchLastSeen(id: string, db: AlloDatabaseOrTransaction = getDb()): Promise<void> {
-  await db.update(clientInstances).set({ lastSeenAt: new Date() }).where(eq(clientInstances.id, id));
+export async function touchLastSeen(
+  id: string,
+  db: AlloDatabaseOrTransaction = getDb(),
+): Promise<void> {
+  await db
+    .update(clientInstances)
+    .set({ lastSeenAt: new Date() })
+    .where(eq(clientInstances.id, id));
 }

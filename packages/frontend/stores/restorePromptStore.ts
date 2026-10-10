@@ -24,7 +24,11 @@ export const useRestorePromptStore = create<RestorePromptState>()(
     (set) => ({
       answeredInstanceIds: {},
       markAnswered: (instanceId) => {
-        set((state) => (state.answeredInstanceIds[instanceId] ? state : { answeredInstanceIds: { ...state.answeredInstanceIds, [instanceId]: true } }));
+        set((state) =>
+          state.answeredInstanceIds[instanceId]
+            ? state
+            : { answeredInstanceIds: { ...state.answeredInstanceIds, [instanceId]: true } },
+        );
       },
     }),
     {

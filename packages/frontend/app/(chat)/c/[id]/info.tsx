@@ -7,5 +7,7 @@ import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
 export default function ConversationInfoRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  return <ConversationInfo conversationId={id ?? ''} variant="screen" onClose={() => router.back()} />;
+  return (
+    <ConversationInfo conversationId={id ?? ''} variant="screen" onClose={() => router.back()} />
+  );
 }

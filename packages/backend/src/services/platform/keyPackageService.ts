@@ -2,11 +2,19 @@
  * Key package stock (`docs/platform/api-v1.md`, Key packages).
  */
 
-import type { ClaimKeyPackagesResponse, UploadKeyPackagesRequest, UploadKeyPackagesResponse } from "@allo/shared-types";
-import { getDb, type AlloDatabase } from "../../db";
-import { claimKeyPackage, countAvailableKeyPackages, insertKeyPackages } from "../../db/platform/keyPackageRepository";
-import { getRealtime } from "../../runtime/realtime";
-import { AlloHttpError } from "../../utils/httpErrors";
+import type {
+  ClaimKeyPackagesResponse,
+  UploadKeyPackagesRequest,
+  UploadKeyPackagesResponse,
+} from '@allo/shared-types';
+import { getDb, type AlloDatabase } from '../../db';
+import {
+  claimKeyPackage,
+  countAvailableKeyPackages,
+  insertKeyPackages,
+} from '../../db/platform/keyPackageRepository';
+import { getRealtime } from '../../runtime/realtime';
+import { AlloHttpError } from '../../utils/httpErrors';
 
 /** Below this many unconsumed packages an instance is told to upload more. */
 export const KEY_PACKAGE_LOW_WATER_MARK = 5;
@@ -34,11 +42,11 @@ export async function uploadKeyPackages(
   const db = deps.db ?? getDb();
   const refs = request.keyPackages.map((upload) => upload.ref);
   if (new Set(refs).size !== refs.length) {
-    throw new AlloHttpError("idempotency_conflict", "A ref appears twice in the upload");
+    throw new AlloHttpError('idempotency_conflict', 'A ref appears twice in the upload');
   }
   const result = await insertKeyPackages(instanceId, request.keyPackages, db);
   if (result.foreignRefs.length > 0) {
-    throw new AlloHttpError("idempotency_conflict", "A ref is already held by another instance", {
+    throw new AlloHttpError('idempotency_conflict', 'A ref is already held by another instance', {
       refs: result.foreignRefs,
     });
   }
@@ -70,7 +78,8 @@ export async function claimKeyPackages(
   const realtime = getRealtime();
   for (const pkg of claimed.keyPackages) {
     const available = await countAvailableKeyPackages(pkg.instanceId, db);
-    if (available < KEY_PACKAGE_LOW_WATER_MARK) realtime.keyPackagesLow(pkg.instanceId, { available });
+    if (available < KEY_PACKAGE_LOW_WATER_MARK)
+      realtime.keyPackagesLow(pkg.instanceId, { available });
   }
   return claimed;
 }

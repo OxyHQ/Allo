@@ -20,7 +20,7 @@
  *  - signature .............. @noble/curves ed25519 (raw 32-byte secret keys)
  *  - rng .................... crypto.getRandomValues
  */
-import { CipherSuite } from "@hpke/core";
+import { CipherSuite } from '@hpke/core';
 import {
   AeadId,
   Dhkem,
@@ -29,31 +29,50 @@ import {
   toArrayBuffer,
   type AeadEncryptionContext,
   type AeadInterface,
-} from "@hpke/common";
-import { X25519 } from "@hpke/dhkem-x25519";
-import { gcm } from "@noble/ciphers/aes.js";
-import { ed25519 } from "@noble/curves/ed25519.js";
-import { expand as hkdfExpand, extract as hkdfExtract } from "@noble/hashes/hkdf.js";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-import type { Ciphersuite, CiphersuiteImpl, CryptoProvider, Hash, Hpke, Kdf, PrivateKey, PublicKey, Rng, Signature } from "ts-mls";
-import { randomBytes } from "../util/bytes";
+} from '@hpke/common';
+import { X25519 } from '@hpke/dhkem-x25519';
+import { gcm } from '@noble/ciphers/aes.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { expand as hkdfExpand, extract as hkdfExtract } from '@noble/hashes/hkdf.js';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import type {
+  Ciphersuite,
+  CiphersuiteImpl,
+  CryptoProvider,
+  Hash,
+  Hpke,
+  Kdf,
+  PrivateKey,
+  PublicKey,
+  Rng,
+  Signature,
+} from 'ts-mls';
+import { randomBytes } from '../util/bytes';
 
-export const NOBLE_SUITE_NAME = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
+export const NOBLE_SUITE_NAME = 'MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519';
 
 const u8 = (b: ArrayBufferLike | ArrayBufferView) => new Uint8Array(toArrayBuffer(b));
-const ab = (b: Uint8Array): ArrayBuffer => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+const ab = (b: Uint8Array): ArrayBuffer =>
+  b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 
 /** HPKE KdfInterface (HKDF-SHA256) with no WebCrypto. */
 class NobleHkdfSha256 extends HkdfSha256Native {
   override async _setup(): Promise<void> {
     /* never load subtle */
   }
-  override async extract(salt: ArrayBufferLike | ArrayBufferView, ikm: ArrayBufferLike | ArrayBufferView): Promise<ArrayBuffer> {
+  override async extract(
+    salt: ArrayBufferLike | ArrayBufferView,
+    ikm: ArrayBufferLike | ArrayBufferView,
+  ): Promise<ArrayBuffer> {
     const s = u8(salt);
     return ab(hmac(sha256, s.byteLength === 0 ? new Uint8Array(this.hashSize) : s, u8(ikm)));
   }
-  override async expand(prk: ArrayBufferLike | ArrayBufferView, info: ArrayBufferLike | ArrayBufferView, len: number): Promise<ArrayBuffer> {
+  override async expand(
+    prk: ArrayBufferLike | ArrayBufferView,
+    info: ArrayBufferLike | ArrayBufferView,
+    len: number,
+  ): Promise<ArrayBuffer> {
     return ab(hkdfExpand(sha256, u8(prk), u8(info), len));
   }
   override async extractAndExpand(
@@ -148,7 +167,7 @@ const rng: Rng = {
 };
 
 class AeadFailure extends Error {
-  override readonly name = "CryptoError";
+  override readonly name = 'CryptoError';
 }
 
 /** ts-mls's `Hpke` over an @hpke `CipherSuite` plus a raw AEAD. Mirrors `ts-mls/crypto/implementation/hpke.js`. */
@@ -168,16 +187,30 @@ function makeHpke(cs: CipherSuite): Hpke {
       }
     },
     async seal(publicKey, plaintext, info, aad) {
-      const result = await cs.seal({ recipientPublicKey: publicKey, info: ab(info) }, ab(plaintext), aad ? ab(aad) : new ArrayBuffer(0));
+      const result = await cs.seal(
+        { recipientPublicKey: publicKey, info: ab(info) },
+        ab(plaintext),
+        aad ? ab(aad) : new ArrayBuffer(0),
+      );
       return { ct: new Uint8Array(result.ct), enc: new Uint8Array(result.enc) };
     },
     async exportSecret(publicKey, exporterContext, length, info) {
-      const context = await cs.createSenderContext({ recipientPublicKey: publicKey, info: ab(info) });
-      return { enc: new Uint8Array(context.enc), secret: new Uint8Array(await context.export(ab(exporterContext), length)) };
+      const context = await cs.createSenderContext({
+        recipientPublicKey: publicKey,
+        info: ab(info),
+      });
+      return {
+        enc: new Uint8Array(context.enc),
+        secret: new Uint8Array(await context.export(ab(exporterContext), length)),
+      };
     },
     async importSecret(privateKey, exporterContext, kemOutput, length, info) {
       try {
-        const context = await cs.createRecipientContext({ recipientKey: privateKey, info: ab(info), enc: ab(kemOutput) });
+        const context = await cs.createRecipientContext({
+          recipientKey: privateKey,
+          info: ab(info),
+          enc: ab(kemOutput),
+        });
         return new Uint8Array(await context.export(ab(exporterContext), length));
       } catch (e) {
         throw wrap(e);
@@ -232,12 +265,17 @@ function makeHpke(cs: CipherSuite): Hpke {
  * transfer (`crypto/transfer.ts`) uses it directly to seal an archive key.
  */
 export function createNobleHpkeSuite(): CipherSuite {
-  return new CipherSuite({ kem: new NobleDhkemX25519(), kdf: new NobleHkdfSha256(), aead: new NobleAes128Gcm() });
+  return new CipherSuite({
+    kem: new NobleDhkemX25519(),
+    kdf: new NobleHkdfSha256(),
+    aead: new NobleAes128Gcm(),
+  });
 }
 
 export const nobleCryptoProvider: CryptoProvider = {
   async getCiphersuiteImpl(cs: Ciphersuite): Promise<CiphersuiteImpl> {
-    if (cs.name !== NOBLE_SUITE_NAME) throw new Error(`nobleCryptoProvider: unsupported suite ${cs.name}`);
+    if (cs.name !== NOBLE_SUITE_NAME)
+      throw new Error(`nobleCryptoProvider: unsupported suite ${cs.name}`);
     const suite = createNobleHpkeSuite();
     return { hash, kdf, signature, hpke: makeHpke(suite), rng, name: cs.name };
   },

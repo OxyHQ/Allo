@@ -1,7 +1,7 @@
-import { DecisionSchema } from "@crowdsource.you/contracts";
-import { eq } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { uuidv7 } from "@oxy.so/db";
+import { DecisionSchema } from '@crowdsource.you/contracts';
+import { eq } from 'drizzle-orm';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { uuidv7 } from '@oxy.so/db';
 
 /**
  * What Allo does when a decision comes back — and, just as importantly, what it
@@ -15,21 +15,21 @@ import { uuidv7 } from "@oxy.so/db";
  * discover from a user report.
  */
 
-import { resetCrowdSourceConfigForTests } from "../../../config/crowdsource";
-import { closePostgres, connectPostgres, getDb } from "../../../db";
-import type { ModerationOutboxEvent } from "../../../db/moderation/moderationOutboxRepository";
-import * as schema from "../../../db/schema";
-import { setUpTestDatabase, type TestDatabaseHandle } from "../../../db/testDatabase";
+import { resetCrowdSourceConfigForTests } from '../../../config/crowdsource';
+import { closePostgres, connectPostgres, getDb } from '../../../db';
+import type { ModerationOutboxEvent } from '../../../db/moderation/moderationOutboxRepository';
+import * as schema from '../../../db/schema';
+import { setUpTestDatabase, type TestDatabaseHandle } from '../../../db/testDatabase';
 import {
   applyDecisionOutboxEvent,
   plannedActionForOutcome,
-} from "../../../services/moderation/ModerationDecisionWorker";
+} from '../../../services/moderation/ModerationDecisionWorker';
 import {
   legacyStatusForOutcome,
   reportStateForDecision,
-} from "../../../services/moderation/reportStatus";
+} from '../../../services/moderation/reportStatus';
 
-const CASE_ID = "case_1";
+const CASE_ID = 'case_1';
 
 /**
  * A decision that actually satisfies `DecisionSchema`.
@@ -48,21 +48,21 @@ const CASE_ID = "case_1";
  */
 function decision(overrides: Record<string, unknown> = {}) {
   return assertValidDecision({
-    id: "dec_1",
+    id: 'dec_1',
     caseId: CASE_ID,
     revision: 2,
-    supersedesDecisionId: "dec_0",
-    status: "final",
-    outcome: "violation",
-    contextSufficiency: "sufficient",
+    supersedesDecisionId: 'dec_0',
+    status: 'final',
+    outcome: 'violation',
+    contextSufficiency: 'sufficient',
     confidence: 0.9,
     findings: [
       {
-        code: "harassment.targeted_abuse",
-        severity: "high",
-        scope: "application_local",
+        code: 'harassment.targeted_abuse',
+        severity: 'high',
+        scope: 'application_local',
         confidence: 0.9,
-        resourceIds: ["res_1"],
+        resourceIds: ['res_1'],
       },
     ],
     recommendedActions: [],
@@ -74,9 +74,9 @@ function decision(overrides: Record<string, unknown> = {}) {
       specialistPresent: false,
     },
     policyVersions: {
-      taxonomy: "2026.07",
-      application: "allo-2026.07",
-      oxyConduct: "2026.07",
+      taxonomy: '2026.07',
+      application: 'allo-2026.07',
+      oxyConduct: '2026.07',
     },
     publishedAt: new Date().toISOString(),
     ...overrides,
@@ -109,8 +109,8 @@ function assertValidDecision(candidate: Record<string, unknown>): Record<string,
   if (!parsed.success) {
     throw new Error(
       `Test fixture is not a valid Decision — the contract has moved. Issues:\n${parsed.error.issues
-        .map((issue) => `  ${issue.path.join(".") || "(root)"}: ${issue.message}`)
-        .join("\n")}`,
+        .map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+        .join('\n')}`,
     );
   }
   return candidate;
@@ -118,9 +118,9 @@ function assertValidDecision(candidate: Record<string, unknown>): Record<string,
 
 function event(decisionPayload: unknown): ModerationOutboxEvent {
   return {
-    id: "moderation:decision.apply:evt_1",
-    kind: "decision.apply",
-    payload: { eventId: "evt_1", caseId: CASE_ID, decision: decisionPayload },
+    id: 'moderation:decision.apply:evt_1',
+    kind: 'decision.apply',
+    payload: { eventId: 'evt_1', caseId: CASE_ID, decision: decisionPayload },
     attempts: 1,
     availableAt: new Date(),
     expiresAt: new Date(Date.now() + 1000),
@@ -139,7 +139,7 @@ function event(decisionPayload: unknown): ModerationOutboxEvent {
  * would look identical and would silently drop the FIRST decision about every
  * report ever filed.
  */
-describe("decision application", () => {
+describe('decision application', () => {
   let handle: TestDatabaseHandle;
   let reportId: string;
 
@@ -170,11 +170,11 @@ describe("decision application", () => {
       .insert(schema.reports)
       .values({
         id: reportId,
-        reportedType: "user",
-        reportedId: "oxy-user-1",
-        reporter: "oxy-reporter-1",
-        categories: ["harassment"],
-        localStatus: "submitted",
+        reportedType: 'user',
+        reportedId: 'oxy-user-1',
+        reporter: 'oxy-reporter-1',
+        categories: ['harassment'],
+        localStatus: 'submitted',
         crowdSourceCaseId: CASE_ID,
         ...(stored.decisionRevision === undefined
           ? {}
@@ -190,17 +190,17 @@ describe("decision application", () => {
     return row;
   }
 
-  it("records the outcome and the action it WOULD take, never one it did", async () => {
+  it('records the outcome and the action it WOULD take, never one it did', async () => {
     await seedReport();
     await applyDecisionOutboxEvent(event(decision()));
 
     const row = await storedReport();
     expect(row).toMatchObject({
-      decisionOutcome: "violation",
+      decisionOutcome: 'violation',
       decisionRevision: 2,
-      enforcedAction: "restrict",
-      status: "resolved",
-      localStatus: "closed",
+      enforcedAction: 'restrict',
+      status: 'resolved',
+      localStatus: 'closed',
     });
 
     /**
@@ -213,8 +213,8 @@ describe("decision application", () => {
     expect(row?.enforcedAt).toBeNull();
   });
 
-  it("does not act even in automatic mode, because there is nothing to act with", async () => {
-    process.env.CROWDSOURCE_ENFORCEMENT_MODE = "automatic";
+  it('does not act even in automatic mode, because there is nothing to act with', async () => {
+    process.env.CROWDSOURCE_ENFORCEMENT_MODE = 'automatic';
     resetCrowdSourceConfigForTests();
     await seedReport();
 
@@ -226,7 +226,7 @@ describe("decision application", () => {
     expect(await getDb().select().from(schema.restricts)).toHaveLength(0);
   });
 
-  it("ignores a revision that is not newer than the one already stored", async () => {
+  it('ignores a revision that is not newer than the one already stored', async () => {
     /**
      * §10.6 allows redelivery and reordering, so an older revision arriving late
      * must never overwrite a newer one. Compared against what is STORED, not
@@ -243,13 +243,13 @@ describe("decision application", () => {
     expect((await storedReport())?.decisionOutcome).toBeNull();
   });
 
-  it("applies a strictly newer revision", async () => {
+  it('applies a strictly newer revision', async () => {
     await seedReport({ decisionRevision: 5 });
     await applyDecisionOutboxEvent(event(decision({ revision: 6 })));
     expect((await storedReport())?.decisionRevision).toBe(6);
   });
 
-  it("applies the FIRST decision, whose stored revision is NULL", async () => {
+  it('applies the FIRST decision, whose stored revision is NULL', async () => {
     /**
      * The case an `=` comparison drops in silence, and the reason the repository
      * compares with `is not distinct from`: `decision_revision = NULL` is NULL, so
@@ -262,7 +262,7 @@ describe("decision application", () => {
     expect((await storedReport())?.decisionRevision).toBe(2);
   });
 
-  it("retries — never dead-letters — a decision it cannot parse", async () => {
+  it('retries — never dead-letters — a decision it cannot parse', async () => {
     /**
      * A payload this deployment cannot parse is far more likely to be a newer
      * CrowdSource than a corrupt one. The outbox keeps a retryable failure for
@@ -276,32 +276,29 @@ describe("decision application", () => {
     );
 
     expect(thrown).toBeInstanceOf(Error);
-    expect(thrown).not.toHaveProperty("retryable", false);
+    expect(thrown).not.toHaveProperty('retryable', false);
     expect((await storedReport())?.decisionOutcome).toBeNull();
   });
 
-  it("is a no-op when no local report matches the case", async () => {
+  it('is a no-op when no local report matches the case', async () => {
     // A merged case (§7.3) can name a case another report opened. Nothing to apply.
     await expect(applyDecisionOutboxEvent(event(decision()))).resolves.toBeUndefined();
     expect(await getDb().select().from(schema.reports)).toHaveLength(0);
   });
 
-  it("dead-letters an event with no caseId", async () => {
+  it('dead-letters an event with no caseId', async () => {
     const malformed: ModerationOutboxEvent = {
       ...event(decision()),
-      payload: { eventId: "evt_1" },
+      payload: { eventId: 'evt_1' },
     };
-    await expect(applyDecisionOutboxEvent(malformed)).rejects.toHaveProperty(
-      "retryable",
-      false,
-    );
+    await expect(applyDecisionOutboxEvent(malformed)).rejects.toHaveProperty('retryable', false);
   });
 });
 
-describe("outcome mapping", () => {
-  it("maps only real verdicts to verdict statuses", () => {
-    expect(legacyStatusForOutcome("violation")).toBe("resolved");
-    expect(legacyStatusForOutcome("no_violation")).toBe("dismissed");
+describe('outcome mapping', () => {
+  it('maps only real verdicts to verdict statuses', () => {
+    expect(legacyStatusForOutcome('violation')).toBe('resolved');
+    expect(legacyStatusForOutcome('no_violation')).toBe('dismissed');
   });
 
   it("never turns 'we could not tell' into 'nothing was wrong'", () => {
@@ -311,43 +308,40 @@ describe("outcome mapping", () => {
      * CrowdSource invents — maps to `reviewed`, never `dismissed`.
      */
     for (const outcome of [
-      "insufficient_context",
-      "inconclusive",
-      "content_unavailable",
-      "duplicate",
-      "escalated",
-      "an_outcome_from_the_future",
+      'insufficient_context',
+      'inconclusive',
+      'content_unavailable',
+      'duplicate',
+      'escalated',
+      'an_outcome_from_the_future',
     ]) {
-      expect(legacyStatusForOutcome(outcome)).toBe("reviewed");
+      expect(legacyStatusForOutcome(outcome)).toBe('reviewed');
     }
   });
 
-  it("keeps a provisional decision open and closes a final one", () => {
+  it('keeps a provisional decision open and closes a final one', () => {
     expect(
-      reportStateForDecision({ outcome: "violation", decisionStatus: "provisional" })
-        .localStatus,
-    ).toBe("submitted");
+      reportStateForDecision({ outcome: 'violation', decisionStatus: 'provisional' }).localStatus,
+    ).toBe('submitted');
     expect(
-      reportStateForDecision({ outcome: "violation", decisionStatus: "final" }).localStatus,
-    ).toBe("closed");
+      reportStateForDecision({ outcome: 'violation', decisionStatus: 'final' }).localStatus,
+    ).toBe('closed');
     expect(
-      reportStateForDecision({ outcome: "violation", decisionStatus: "corrected" })
-        .localStatus,
-    ).toBe("closed");
+      reportStateForDecision({ outcome: 'violation', decisionStatus: 'corrected' }).localStatus,
+    ).toBe('closed');
     /**
      * A superseded revision is not the current answer and must never be the thing
      * that closes the report.
      */
     expect(
-      reportStateForDecision({ outcome: "violation", decisionStatus: "superseded" })
-        .localStatus,
-    ).toBe("submitted");
+      reportStateForDecision({ outcome: 'violation', decisionStatus: 'superseded' }).localStatus,
+    ).toBe('submitted');
   });
 
-  it("routes a non-verdict to a person rather than to silence", () => {
-    expect(plannedActionForOutcome("violation")).toBe("restrict");
-    expect(plannedActionForOutcome("no_violation")).toBe("restore");
-    expect(plannedActionForOutcome("inconclusive")).toBe("manual_review");
-    expect(plannedActionForOutcome("insufficient_context")).toBe("manual_review");
+  it('routes a non-verdict to a person rather than to silence', () => {
+    expect(plannedActionForOutcome('violation')).toBe('restrict');
+    expect(plannedActionForOutcome('no_violation')).toBe('restore');
+    expect(plannedActionForOutcome('inconclusive')).toBe('manual_review');
+    expect(plannedActionForOutcome('insufficient_context')).toBe('manual_review');
   });
 });

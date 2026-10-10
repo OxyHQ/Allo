@@ -40,7 +40,7 @@
  * than by a condition somebody could relax.
  */
 
-import type { ContextInput, ReportSubjectInput, ResourceInput } from "@crowdsource.you/core";
+import type { ContextInput, ReportSubjectInput, ResourceInput } from '@crowdsource.you/core';
 
 /**
  * The reported types a provider may be registered for: the ones whose identifier
@@ -55,7 +55,7 @@ import type { ContextInput, ReportSubjectInput, ResourceInput } from "@crowdsour
  * widens the alias — an edit to THIS file, under this comment, which is a
  * deliberate act and a reviewable one. The standing reasons are in `registry.ts`.
  */
-export type AccountReportedType = "user";
+export type AccountReportedType = 'user';
 
 /**
  * §5.4's subject types Allo may emit: the identity realm, and nothing else.
@@ -68,7 +68,7 @@ export type AccountReportedType = "user";
  * makes "a jury sees a profile and an allegation" a property of the type system
  * rather than a description of today's code.
  */
-export type IdentitySubjectType = "identity.profile";
+export type IdentitySubjectType = 'identity.profile';
 
 /**
  * The SDK's resource description, unchanged.

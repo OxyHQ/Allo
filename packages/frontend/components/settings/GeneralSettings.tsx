@@ -25,7 +25,9 @@ export function GeneralSettings() {
   const client = useAlloClient();
   const avatar = useAvatarUrl(user?.avatar ?? undefined);
   const notifications = useNotificationPermission();
-  const name = user ? (typeof user.name === 'string' ? user.name : user.name?.displayName) || user.username : '';
+  const name = user
+    ? (typeof user.name === 'string' ? user.name : user.name?.displayName) || user.username
+    : '';
   const ownProfile = profileHref(user?.username);
   const build = Constants.expoConfig?.runtimeVersion;
   const signOut = useCallback(async () => {
@@ -67,7 +69,11 @@ export function GeneralSettings() {
                         size="small"
                         horizontalInset={0}
                         trailing={ownProfile ? 'chevron' : 'none'}
-                        onPress={ownProfile ? () => settings.close(() => router.push(ownProfile)) : undefined}
+                        onPress={
+                          ownProfile
+                            ? () => settings.close(() => router.push(ownProfile))
+                            : undefined
+                        }
                       />
                     ),
                   },
@@ -75,7 +81,11 @@ export function GeneralSettings() {
                     key: 'manage',
                     label: t('settings.account.manage'),
                     control: (
-                      <Button  onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))} tone="neutral" appearance="outline">
+                      <Button
+                        onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))}
+                        tone="neutral"
+                        appearance="outline"
+                      >
                         {t('settings.account.manage')}
                       </Button>
                     ),
@@ -93,14 +103,19 @@ export function GeneralSettings() {
                   {
                     key: 'permission',
                     label: t('settings.preferences.notifications'),
-                    description: notifications.granted === false ? t('settings.notifications.allow') : undefined,
+                    description:
+                      notifications.granted === false
+                        ? t('settings.notifications.allow')
+                        : undefined,
                     control:
                       notifications.granted === false ? (
-                        <Button  onPress={notifications.request} tone="neutral" appearance="outline">
+                        <Button onPress={notifications.request} tone="neutral" appearance="outline">
                           {t('settings.notifications.allow')}
                         </Button>
                       ) : (
-                        <SettingsValueField>{notifications.granted === null ? '' : t('settings.notifications.on')}</SettingsValueField>
+                        <SettingsValueField>
+                          {notifications.granted === null ? '' : t('settings.notifications.on')}
+                        </SettingsValueField>
                       ),
                   },
                 ],
@@ -126,7 +141,9 @@ export function GeneralSettings() {
               key: 'build',
               label: t('settings.aboutallo.build'),
               control: (
-                <SettingsValueField muted>{typeof build === 'string' ? build : t('settings.aboutallo.buildVersion')}</SettingsValueField>
+                <SettingsValueField muted>
+                  {typeof build === 'string' ? build : t('settings.aboutallo.buildVersion')}
+                </SettingsValueField>
               ),
             },
           ],
@@ -140,7 +157,7 @@ export function GeneralSettings() {
                     key: 'signout',
                     label: t('settings.signOut'),
                     control: (
-                      <Button  tone="danger" onPress={() => void signOut()} appearance="outline">
+                      <Button tone="danger" onPress={() => void signOut()} appearance="outline">
                         {t('settings.signOut')}
                       </Button>
                     ),

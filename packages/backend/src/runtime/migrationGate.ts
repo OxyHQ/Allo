@@ -26,8 +26,8 @@ import {
   readMigrationPhases,
   type DeployPhase,
   type JournalEntry,
-} from "@oxy.so/db/migrate";
-import type postgres from "postgres";
+} from '@oxy.so/db/migrate';
+import type postgres from 'postgres';
 
 export interface PendingMigrationVerdict {
   /** Pending migrations the boot may proceed without: `post`-phase ones. */
@@ -46,12 +46,16 @@ export function classifyPendingMigrations(
   const refused: { tag: string; reason: string }[] = [];
   for (const entry of pending) {
     const phase = phases.get(entry.tag);
-    if (phase === "post") {
+    if (phase === 'post') {
       tolerated.push(entry.tag);
-    } else if (phase === "pre") {
-      refused.push({ tag: entry.tag, reason: "a pre-phase migration is applied before the rollout and is missing" });
+    } else if (phase === 'pre') {
+      refused.push({
+        tag: entry.tag,
+        reason: 'a pre-phase migration is applied before the rollout and is missing',
+      });
     } else {
-      const problem = problems.find((line) => line.includes(entry.tag)) ?? "its phase marker could not be read";
+      const problem =
+        problems.find((line) => line.includes(entry.tag)) ?? 'its phase marker could not be read';
       refused.push({ tag: entry.tag, reason: problem });
     }
   }
@@ -61,11 +65,11 @@ export function classifyPendingMigrations(
 export class PreMigrationsPendingError extends Error {
   constructor(readonly refused: readonly { tag: string; reason: string }[]) {
     super(
-      "Postgres schema is not current: " +
-        refused.map((r) => `${r.tag} (${r.reason})`).join("; ") +
-        ". Apply the pre-phase migrations with the deployment one-shot before this task can serve traffic.",
+      'Postgres schema is not current: ' +
+        refused.map((r) => `${r.tag} (${r.reason})`).join('; ') +
+        '. Apply the pre-phase migrations with the deployment one-shot before this task can serve traffic.',
     );
-    this.name = "PreMigrationsPendingError";
+    this.name = 'PreMigrationsPendingError';
   }
 }
 
@@ -89,9 +93,9 @@ export async function assertPreMigrationsCurrent(
     );
     const verdict = classifyPendingMigrations(error.pending, phases, problems);
     if (verdict.refused.length > 0) throw new PreMigrationsPendingError(verdict.refused);
-    log.warn("post-phase migrations pending; the deploy applies them after this rollout", {
+    log.warn('post-phase migrations pending; the deploy applies them after this rollout', {
       count: verdict.tolerated.length,
-      tags: verdict.tolerated.join(","),
+      tags: verdict.tolerated.join(','),
     });
   }
 }

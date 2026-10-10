@@ -13,7 +13,9 @@ import { logger } from '@/utils/logger';
  * blob named by the same message. One that cannot be read is dropped rather
  * than fatal: the attachment still goes, and receivers fall back to the original.
  */
-export async function toUpload(attachment: AlloOutgoingAttachment): Promise<{ bytes: Uint8Array; meta: UploadMediaMeta }> {
+export async function toUpload(
+  attachment: AlloOutgoingAttachment,
+): Promise<{ bytes: Uint8Array; meta: UploadMediaMeta }> {
   const meta: UploadMediaMeta = {
     kind: attachment.kind,
     filename: attachment.filename,

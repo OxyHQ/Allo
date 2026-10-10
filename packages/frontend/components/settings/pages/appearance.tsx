@@ -1,5 +1,17 @@
-import { SegmentedControl, SegmentedControlItem, SegmentedControlItemText } from '@oxy.so/bloom/segmented-control';
-import { Select, SelectContent, SelectItem, SelectItemIndicator, SelectItemText, SelectTrigger, SelectValue } from '@oxy.so/bloom/select';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+  SegmentedControlItemText,
+} from '@oxy.so/bloom/segmented-control';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemIndicator,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@oxy.so/bloom/select';
 import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
 import { COLOR_PRESET_REGISTRY, FREE_COLOR_NAMES, type AppColorName } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -39,7 +51,8 @@ export default function AppearanceSettingsScreen() {
       const saved = await store.updateMySettings({
         appearance: { themeMode: mode, colorTheme: preset, ...next },
       });
-      if (!saved && useAppearanceStore.getState().error) toast.error(t('settings.appearance.saveError'));
+      if (!saved && useAppearanceStore.getState().error)
+        toast.error(t('settings.appearance.saveError'));
     },
     [mode, preset, t],
   );
@@ -79,7 +92,10 @@ export default function AppearanceSettingsScreen() {
               label: t('settings.appearance.color'),
               description: current?.description,
               control: (
-                <Select value={preset} onValueChange={(value) => void save({ colorTheme: value as AppColorName })}>
+                <Select
+                  value={preset}
+                  onValueChange={(value) => void save({ colorTheme: value as AppColorName })}
+                >
                   <SelectTrigger label={t('settings.appearance.color')}>
                     <SelectValue />
                   </SelectTrigger>

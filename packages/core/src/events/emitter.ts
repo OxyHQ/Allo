@@ -4,7 +4,7 @@
  * by their owners and replaced only on change, so React sees stable
  * references between emissions.
  */
-import type { SubscriptionTopic } from "../types";
+import type { SubscriptionTopic } from '../types';
 
 export type Listener = () => void;
 
@@ -51,7 +51,7 @@ export class Emitter {
         /* ignore */
       }
     }
-    this.emit("error");
+    this.emit('error');
   }
 
   clear(): void {

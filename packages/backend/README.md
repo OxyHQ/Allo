@@ -484,7 +484,7 @@ drizzle/                        generated migrations, one phase marker each
 - `bun run db:migrate -- --target-database=<name> --phase=pre|post|all` — Apply
   migrations. The only migrator; never `drizzle-kit migrate`.
 
-This package declares no `lint` script. CI runs the suite on every PR
+This package declares no `lint` script: Biome lints it from the root (`bun run lint`). CI runs the suite on every PR
 (`.github/workflows/ci.yml`).
 
 ### Running the tests

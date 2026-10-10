@@ -84,12 +84,12 @@ const FORBIDDEN_IDENTIFIER_CHARACTERS =
  * caller is a guard that holds until the second one arrives.
  */
 export function reportedIdentifierProblem(identifier: string): string | undefined {
-  const bytes = Buffer.byteLength(identifier, "utf8");
+  const bytes = Buffer.byteLength(identifier, 'utf8');
   if (bytes > MAX_REPORTED_IDENTIFIER_BYTES) {
     return `reportedId must be at most ${MAX_REPORTED_IDENTIFIER_BYTES} bytes, received ${bytes}`;
   }
   if (FORBIDDEN_IDENTIFIER_CHARACTERS.test(identifier)) {
-    return "reportedId must not contain whitespace or control characters";
+    return 'reportedId must not contain whitespace or control characters';
   }
   return undefined;
 }
@@ -104,12 +104,12 @@ export function reportedIdentifierProblem(identifier: string): string | undefine
  */
 export type ModerationSubjectIdentity =
   | {
-      readonly kind: "oxy-account";
+      readonly kind: 'oxy-account';
       /** The Oxy account id, trimmed. */
       readonly reportedId: string;
     }
   | {
-      readonly kind: "not-an-oxy-account";
+      readonly kind: 'not-an-oxy-account';
       /**
        * The identifier as it was given. There is no Oxy id to canonicalise it to,
        * and inventing one would be the silent failure this module exists to remove.
@@ -126,7 +126,7 @@ export type ModerationSubjectIdentity =
     };
 
 /** The sigil a handle arrives with. Nothing else Allo accepts begins with it. */
-const HANDLE_SIGIL = "@";
+const HANDLE_SIGIL = '@';
 
 /**
  * The half of every reason that is the same fact: CrowdSource judges Oxy accounts.
@@ -135,12 +135,12 @@ const HANDLE_SIGIL = "@";
  * slightly different claims about what CrowdSource does.
  */
 const NOT_REVIEWABLE =
-  "CrowdSource reviews Oxy accounts only, so this report is recorded locally and is not sent for community review.";
+  'CrowdSource reviews Oxy accounts only, so this report is recorded locally and is not sent for community review.';
 
 const HANDLE_REASON = `The reported identifier is an Oxy handle rather than an account id, and a handle can be renamed or reassigned, so Allo does not resolve one at intake. ${NOT_REVIEWABLE}`;
 
 function notAnOxyAccount(reportedId: string, reason: string): ModerationSubjectIdentity {
-  return { kind: "not-an-oxy-account", reportedId, reason };
+  return { kind: 'not-an-oxy-account', reportedId, reason };
 }
 
 /**
@@ -160,7 +160,7 @@ export function resolveModerationSubject(reportedId: string): ModerationSubjectI
     return notAnOxyAccount(identifier, HANDLE_REASON);
   }
 
-  return { kind: "oxy-account", reportedId: identifier };
+  return { kind: 'oxy-account', reportedId: identifier };
 }
 
 /**
