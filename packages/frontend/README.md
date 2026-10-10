@@ -222,7 +222,7 @@ nothing. (`@bitdrift/react-native` is configured as an Expo plugin in
 - `bun run build-web:prod` — Build static web output for production
 - `bun run reset-project` — Reset to a fresh project state
 - `bun run clear-cache` — Clear Expo cache
-- `bun run lint` — Expo ESLint (`expo lint .`, eslint-plugin-expo rules only; Biome at the root lints and formats everything else)
+- `bun run lint` — Expo ESLint (`expo lint .`, eslint-plugin-expo rules and the react-hooks v7 React Compiler rules; Biome at the root lints and formats everything else)
 - `bun run test` — Run tests
 - `bun run clean` — Clean build artifacts
 

@@ -23,53 +23,54 @@ export interface StatusMediaState {
   error?: unknown;
 }
 
+/** What the last fetch for `key` came back with. */
+interface Settled {
+  key: string;
+  uri: string;
+  error?: unknown;
+}
+
 export function useStatusMedia(statusId: string | undefined, enabled = true): StatusMediaState {
   const client = useAlloClient();
-  const [state, setState] = useState<{
-    key: string;
-    uri: string;
-    loading: boolean;
-    error?: unknown;
-  }>({
-    key: '',
-    uri: '',
-    loading: false,
-  });
+  const [settled, setSettled] = useState<Settled | null>(null);
 
   useEffect(() => {
-    if (!statusId || !enabled) {
-      setState((prev) =>
-        prev.uri === '' && !prev.loading ? prev : { key: '', uri: '', loading: false },
-      );
-      return;
-    }
+    if (!statusId || !enabled) return;
     const abort = new AbortController();
     let handle: { uri: string; release: () => void } | null = null;
     let cancelled = false;
-    setState({ key: statusId, uri: '', loading: true });
 
     void client.statuses
       .media(statusId, { signal: abort.signal })
       .then((bytes) => {
         if (cancelled) return;
         handle = createMediaUri(bytes, 'image/jpeg', statusId);
-        setState({ key: statusId, uri: handle.uri, loading: false });
+        setSettled({ key: statusId, uri: handle.uri });
       })
       .catch((error: unknown) => {
         if (cancelled || abort.signal.aborted) return;
         logger.debug('[status] media could not be opened', error);
-        setState({ key: statusId, uri: '', loading: false, error });
+        setSettled({ key: statusId, uri: '', error });
       });
 
     return () => {
       cancelled = true;
       abort.abort();
       handle?.release();
+      // The URI just released must not be answered again if this same status is
+      // opened again before its next fetch settles.
+      setSettled(null);
     };
   }, [client, enabled, statusId]);
 
-  // Between a change of status and the effect that follows it, answer `''`
-  // rather than the previous one's picture.
-  const uri = state.key === statusId ? state.uri : '';
-  return { uri, loading: state.key === statusId && state.loading, error: state.error };
+  // Loading and the answer are derived from the inputs, not reset by the
+  // effect: a change of status, or switching it off, never answers the
+  // previous one's picture.
+  const active = enabled && !!statusId;
+  const current = active && settled?.key === statusId ? settled : null;
+  return {
+    uri: current?.uri ?? '',
+    loading: active && current === null,
+    error: current?.error,
+  };
 }
