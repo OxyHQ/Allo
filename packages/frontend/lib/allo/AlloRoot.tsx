@@ -51,8 +51,12 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   const [client, setClient] = useState<AlloClient | null>(null);
   const held = useRef<Held | null>(null);
   // Read through a ref so a re-created services object does not rebuild the client.
+  // Updated in an effect, never during render, and declared BEFORE the effect
+  // that reads it, so it is already current when that one runs in the same commit.
   const oxyRef = useRef(oxyServices);
-  oxyRef.current = oxyServices;
+  useEffect(() => {
+    oxyRef.current = oxyServices;
+  }, [oxyServices]);
 
   useEffect(() => {
     // Until the session is known, `accountId === null` means "not yet", not "signed out".

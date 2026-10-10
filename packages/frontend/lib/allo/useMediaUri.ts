@@ -31,23 +31,33 @@ export function useMediaUri(
   const file = useMediaFile(enabled ? ref : undefined);
   const bytes = file.status === 'ready' ? file.bytes : undefined;
   const blobId = ref?.blobId;
-  const [state, setState] = useState<{ key: string; uri: string }>({ key: '', uri: '' });
+  // The URI minted for one exact (bytes, blobId, mime), so the one returned is
+  // always the one made for the CURRENT inputs: after a ref change, a mime
+  // change, or the bytes going away (and being released by the cleanup below),
+  // nothing stale or revoked is answered, without an effect resetting state.
+  const [minted, setMinted] = useState<{
+    bytes: Uint8Array;
+    blobId: string;
+    mime: string;
+    uri: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (!bytes || !blobId) {
-      setState((prev) => (prev.uri === '' ? prev : { key: '', uri: '' }));
-      return;
-    }
+    if (!bytes || !blobId) return;
     const handle = createMediaUri(bytes, mime, blobId);
-    setState({ key: blobId, uri: handle.uri });
+    // Minting writes a file or allocates an object URL, which must be released,
+    // so it cannot happen during render; this effect IS the external system.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- stores the handle this effect created and its cleanup releases
+    setMinted({ bytes, blobId, mime, uri: handle.uri });
     return () => {
       handle.release();
     };
   }, [bytes, blobId, mime]);
 
-  // Between a ref change and the effect that follows it, answer `''` rather
-  // than the previous ref's URI.
-  const uri = state.key === blobId ? state.uri : '';
+  const uri =
+    minted && minted.bytes === bytes && minted.blobId === blobId && minted.mime === mime
+      ? minted.uri
+      : '';
   return {
     uri,
     loading: file.status === 'loading' || (bytes !== undefined && uri === ''),

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { SettingsModalProps } from '@oxy.so/bloom/settings-modal';
 import TestRenderer, { act } from 'react-test-renderer';
 import { AlloSettingsProvider } from '@/components/settings/AlloSettingsProvider';
@@ -31,8 +31,17 @@ jest.mock('@/components/settings/pages/privacy/hidden-words', () => () => null);
 jest.mock('@/components/settings/pages/privacy/profile-visibility', () => () => null);
 
 let settings: AlloSettingsControl;
-function Consumer() {
-  settings = useAlloSettings();
+function captureSettings(next: AlloSettingsControl) {
+  settings = next;
+}
+// Hands the control out from an effect rather than assigning it during render,
+// which React does not allow (react-hooks/globals). `act` flushes effects, so it
+// is current before every assertion.
+function Consumer({ onSettings }: { onSettings: (next: AlloSettingsControl) => void }) {
+  const control = useAlloSettings();
+  useEffect(() => {
+    onSettings(control);
+  });
   return null;
 }
 
@@ -43,7 +52,7 @@ describe('Allo settings modal', () => {
     act(() => {
       tree = TestRenderer.create(
         <AlloSettingsProvider>
-          <Consumer />
+          <Consumer onSettings={captureSettings} />
         </AlloSettingsProvider>,
       );
     });

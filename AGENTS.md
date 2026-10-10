@@ -51,7 +51,9 @@ single quotes, width 100). `bun run lint` is `biome check .` plus the frontend's
 formats. The frontend keeps a MINIMAL `eslint.config.js` holding only what Biome
 cannot do — `eslint-plugin-expo`'s `no-env-var-destructuring`,
 `no-dynamic-env-var` and `use-dom-exports` (Metro inlines `EXPO_PUBLIC_*` only
-from a literal `process.env.X` read; anything else is silently `undefined`). Do
+from a literal `process.env.X` read; anything else is silently `undefined`) —
+and `eslint-plugin-react-hooks` v7's React Compiler rules, all at `error`
+(`rules-of-hooks` and `exhaustive-deps` stay with Biome). Do
 not grow it back into a second linter: a new guard goes in `biome.jsonc`, as the
 `expo-video` `VideoView` import restriction did (`noRestrictedImports`, scoped to
 `packages/frontend/**`). The rules set to `"warn"` in `biome.jsonc` are a baseline

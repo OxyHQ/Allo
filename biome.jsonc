@@ -18,9 +18,7 @@
       "!**/*.generated.*",
       // Recorded audit evidence (captured package.json/bun.lock snapshots, logs,
       // JSON receipts). It documents what was measured and must stay byte-identical.
-      "!docs/audits",
-      // Wrangler's local Miniflare state, committed by accident; tool-written.
-      "!packages/frontend/.wrangler"
+      "!docs/audits"
     ]
   },
   "formatter": {
