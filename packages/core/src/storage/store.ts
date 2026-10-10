@@ -11,7 +11,7 @@ import { StorageError } from '../errors';
 import type { StorageAdapter, StorageOp } from '../types';
 import { utf8Decode, utf8Encode } from '../util/bytes';
 import type { AtRestCipher } from '../crypto/atRest';
-import { InstanceNamespace, Namespace, type RecordKind } from './namespace';
+import type { InstanceNamespace, Namespace, RecordKind } from './namespace';
 import { instanceRecordSchema, type InstanceRecord } from './records';
 
 export class StoreBatch {

@@ -29,7 +29,8 @@
  * Boot-mounted, so no suspenseful hook is called here (see
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOxy } from '@oxy.so/services';
 import type { AlloClient } from '@allo/core';
 import { AlloProvider, useAlloClient, useInstanceState } from '@allo/react';

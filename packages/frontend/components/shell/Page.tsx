@@ -1,6 +1,6 @@
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useRouter } from 'expo-router';
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 

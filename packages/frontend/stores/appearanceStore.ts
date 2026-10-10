@@ -144,7 +144,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
             ...(partial.appearance && {
               appearance: { ...previous.appearance, ...partial.appearance },
             }),
-            ...(Object.prototype.hasOwnProperty.call(partial, 'profileHeaderImage') && {
+            ...(Object.hasOwn(partial, 'profileHeaderImage') && {
               profileHeaderImage: partial.profileHeaderImage,
             }),
             ...(partial.profileCustomization && {
@@ -158,7 +158,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
             oxyUserId: '',
             appearance: partial.appearance || { themeMode: 'system' },
             profileCustomization: partial.profileCustomization,
-            ...(Object.prototype.hasOwnProperty.call(partial, 'profileHeaderImage') && {
+            ...(Object.hasOwn(partial, 'profileHeaderImage') && {
               profileHeaderImage: partial.profileHeaderImage,
             }),
           } as UserAppearance);
@@ -168,7 +168,7 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       // Build payload with only allowed fields
       const payload: Partial<UserAppearance> = {
         ...(partial.appearance && { appearance: partial.appearance }),
-        ...(Object.prototype.hasOwnProperty.call(partial, 'profileHeaderImage') && {
+        ...(Object.hasOwn(partial, 'profileHeaderImage') && {
           profileHeaderImage: partial.profileHeaderImage,
         }),
         ...(partial.profileCustomization && {

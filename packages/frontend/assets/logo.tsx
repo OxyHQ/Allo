@@ -1,6 +1,6 @@
-import { ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
-import { ViewStyle } from 'react-native';
+import type { ViewStyle } from 'react-native';
 
 export const LogoIcon = ({
   color,

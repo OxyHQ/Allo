@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config');
 
-module.exports = function (_config) {
+module.exports = (_config) => {
   /**
    * App version number. Should be incremented as part of a release cycle.
    */

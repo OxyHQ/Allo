@@ -1,5 +1,5 @@
 import { createAlloClient, type AlloClient } from '../client';
-import { FakeAlloServer, createFakeAlloServer } from '../testing/fakeServer';
+import { type FakeAlloServer, createFakeAlloServer } from '../testing/fakeServer';
 import { FakeSession, MemorySecrets, MemoryStorage } from '../testing/memoryAdapters';
 import { until } from '../util/async';
 import type { TimelineItemView } from '../types';

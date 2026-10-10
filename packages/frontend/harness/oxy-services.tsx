@@ -3,7 +3,7 @@
  * `metro.config.js` and `README.md`). It stands in for the Oxy session so the
  * chat screens can be opened in a browser with no account and no backend.
  */
-import React from 'react';
+import type React from 'react';
 import { Pressable, Text } from 'react-native';
 
 export const HARNESS_ME = {

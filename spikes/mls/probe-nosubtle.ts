@@ -100,7 +100,7 @@ async function roundTrip(impl: CiphersuiteImpl) {
     },
   );
   ga = c.newState;
-  let gb = await joinGroup(c.welcome!, b.publicPackage, b.privatePackage, emptyPskIndex, impl);
+  const gb = await joinGroup(c.welcome!, b.publicPackage, b.privatePackage, emptyPskIndex, impl);
   const m = await createApplicationMessage(ga, te.encode('hi'), impl);
   const r = await processMessage(
     { wireformat: 'mls_private_message', privateMessage: m.privateMessage },

@@ -30,7 +30,7 @@ const DEFAULT_CONFIG: Required<RetryConfig> = {
  */
 function calculateDelay(attempt: number, config: Required<RetryConfig>): number {
   // Exponential backoff: delay = initialDelay * (multiplier ^ attempt)
-  const exponentialDelay = config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt);
+  const exponentialDelay = config.initialDelayMs * config.backoffMultiplier ** attempt;
 
   // Add jitter (±20%) to prevent thundering herd
   const jitter = exponentialDelay * 0.2 * (Math.random() * 2 - 1);

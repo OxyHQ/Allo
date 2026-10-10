@@ -1,4 +1,4 @@
-import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { create } from 'zustand';
 import { logger } from '@/utils/logger';
 
@@ -185,7 +185,7 @@ export async function waitForConnection(timeoutMs: number = 30000): Promise<bool
  */
 export function getReconnectDelay(attempt: number): number {
   // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
-  const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+  const delay = Math.min(1000 * 2 ** attempt, 30000);
 
   // Add jitter (±20%)
   const jitter = delay * 0.2 * (Math.random() * 2 - 1);
