@@ -93,7 +93,7 @@ export default function CallsScreen() {
     [entryById, router],
   );
 
-  const arriving = session !== null && session.incoming && session.status === 'ringing';
+  const arriving = session?.incoming && session.status === 'ringing';
   const callerId = session?.peers[0]?.accountId;
   const caller = person(callerId ?? '');
   const callerPresence = usePresence(callerId ? [callerId] : []);

@@ -27,7 +27,7 @@ export function CallPill() {
   const duration = useCallDuration(session);
   const peer = usePerson(session?.peers[0]?.accountId);
 
-  if (!session || !session.minimised) return null;
+  if (!session?.minimised) return null;
 
   const others = session.peers.length - 1;
   const who = peer?.displayName ?? t('calls.someone');

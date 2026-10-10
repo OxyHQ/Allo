@@ -785,7 +785,7 @@ export class FakeAlloServer implements SocketHost {
         mode: 'voice' | 'video';
       };
       const conv = this.conversations.get(req.conversationId);
-      if (!conv || conv.members.get(accountId)?.state !== 'joined')
+      if (conv?.members.get(accountId)?.state !== 'joined')
         throw new HttpError(404, 'not_found', 'conversation');
       const others = [...conv.members.entries()]
         .filter(([id, m]) => m.state === 'joined' && id !== accountId)
@@ -878,7 +878,7 @@ export class FakeAlloServer implements SocketHost {
     if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/reset$/)) && method === 'POST') {
       const me = signed();
       const conv = this.conversations.get(m[1]);
-      if (!conv || conv.members.get(accountId)?.state !== 'joined')
+      if (conv?.members.get(accountId)?.state !== 'joined')
         throw new HttpError(404, 'not_found', 'conversation');
       const req = this.parse(resetConversationRequestSchema, body);
       const mine = conv.leaves.get(me.id);
@@ -1042,7 +1042,7 @@ export class FakeAlloServer implements SocketHost {
     if (viewMatch) {
       const me = signed();
       const row = this.statuses.get(viewMatch[1]);
-      if (!row || row.state !== 'live') throw new HttpError(404, 'not_found', 'no such status');
+      if (row?.state !== 'live') throw new HttpError(404, 'not_found', 'no such status');
       if (method === 'POST') {
         if (row.authorAccountId === me.accountId) return new Response(null, { status: 204 });
         if (!row.keys.has(me.id)) throw new HttpError(404, 'not_found', 'no such status');
@@ -1234,7 +1234,7 @@ export class FakeAlloServer implements SocketHost {
     this.keyPackages.delete(target.id);
     for (const conv of this.conversations.values()) {
       const leaf = conv.leaves.get(target.id);
-      if (!leaf || leaf.state !== 'active') continue;
+      if (leaf?.state !== 'active') continue;
       leaf.state = 'removed';
       const recipients = [...conv.leaves.entries()]
         .filter(([id, l]) => l.state === 'active' && id !== target.id)
@@ -1376,8 +1376,7 @@ export class FakeAlloServer implements SocketHost {
 
   private memberConversation(id: string, accountId: string): FakeConversation {
     const conv = this.conversations.get(id);
-    if (!conv || !conv.members.has(accountId))
-      throw new HttpError(404, 'not_found', 'conversation');
+    if (!conv?.members.has(accountId)) throw new HttpError(404, 'not_found', 'conversation');
     return conv;
   }
 
@@ -1515,7 +1514,7 @@ export class FakeAlloServer implements SocketHost {
     } else if (kind === 'resync') {
       if (leaf?.state !== 'active')
         throw new HttpError(403, 'forbidden', 'sender holds no leaf to resync');
-    } else if (!leaf || leaf.state !== 'active')
+    } else if (leaf?.state !== 'active')
       throw new HttpError(403, 'forbidden', 'sender holds no active leaf');
     if (req.epoch !== conv.epoch)
       throw new HttpError(409, 'epoch_conflict', 'stale epoch', { currentEpoch: conv.epoch });
@@ -1562,7 +1561,7 @@ export class FakeAlloServer implements SocketHost {
     }
     for (const added of commit.addedLeaves) {
       const inst = this.instances.get(added.instanceId);
-      if (!inst || inst.status !== 'active' || inst.accountId !== added.accountId)
+      if (inst?.status !== 'active' || inst.accountId !== added.accountId)
         throw new HttpError(
           403,
           'forbidden',

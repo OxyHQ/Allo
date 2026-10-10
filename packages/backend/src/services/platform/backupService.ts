@@ -37,7 +37,7 @@ export async function putAccountBackup(
   const db = deps.db ?? getDb();
   const now = (deps.now ?? (() => new Date()))();
   const writerRow = await findInstanceById(writer.id, db);
-  if (!writerRow || writerRow.status !== 'active')
+  if (writerRow?.status !== 'active')
     throw new AlloHttpError('instance_not_active', 'Only an active instance may write a backup');
 
   await requireOwnChunkBlobs(writer.accountId, request.manifest.chunkBlobIds, db);

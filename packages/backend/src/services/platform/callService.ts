@@ -80,7 +80,7 @@ export async function createCall(
   if (replayed) return { call: await view(replayed, db) };
 
   const mine = await findMember(request.conversationId, caller.accountId, db);
-  if (!mine || mine.state !== 'joined') throw notFound('no such conversation');
+  if (mine?.state !== 'joined') throw notFound('no such conversation');
 
   const members = (await listMembers(request.conversationId, db)).filter(
     (member) => member.state === 'joined' && member.accountId !== caller.accountId,
@@ -320,7 +320,7 @@ export async function callSfuToken(
   if (call.state === 'ended') throw validationFailed('the call has ended', { callId });
 
   const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant || participant.state !== 'joined') {
+  if (participant?.state !== 'joined') {
     throw forbidden('answer the call before asking for a place in the room');
   }
 

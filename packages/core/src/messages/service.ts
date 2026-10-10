@@ -428,7 +428,7 @@ export class MessagesService {
       ctx.log.debug?.('typing message rejected', { error: describeError(error) });
       return;
     }
-    if (!message || message.t !== 'typing') return;
+    if (message?.t !== 'typing') return;
     // The sender is not in the plaintext; the socket relay does not name it either. The leaf that signed it is
     // known to MLS but not surfaced by the port, so typing is attributed to "someone" per conversation.
     sender = '*';

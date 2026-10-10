@@ -102,7 +102,7 @@ export async function createHistoryOffer(
   const now = (deps.now ?? (() => new Date()))();
 
   const donorRow = await findInstanceById(donor.id, db);
-  if (!donorRow || donorRow.status !== 'active')
+  if (donorRow?.status !== 'active')
     throw new AlloHttpError('instance_not_active', 'Only an active instance may offer history');
 
   const recipient = await findInstanceById(request.recipientInstanceId, db);

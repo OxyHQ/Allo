@@ -475,7 +475,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     await stop();
     const accountId = c?.accountId ?? options.session.getAccountId();
     let outcome: ResetOutcome = { revoked: 'not-needed' };
-    if (c && c.instance.isActive) {
+    if (c?.instance.isActive) {
       const instanceId = c.instanceId;
       try {
         await c.instance.revoke(instanceId);

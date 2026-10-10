@@ -234,7 +234,7 @@ export async function resetConversation(
 ): Promise<{ conversation: ConversationSummary; nudges: string[] }> {
   const db = deps.db ?? getDb();
   const member = await findMember(conversationId, caller.accountId, db);
-  if (!member || member.state !== 'joined') throw notFound('Conversation not found');
+  if (member?.state !== 'joined') throw notFound('Conversation not found');
 
   const claimed = await findConversationByMlsGroupId(request.mlsGroupId, db);
   if (claimed && claimed.id !== conversationId) {

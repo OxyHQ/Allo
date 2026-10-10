@@ -601,8 +601,7 @@ export class CryptoEngine {
       throw new DecryptError('this leaf is no longer in the group');
     const joiner = m.wireformat === 'mls_public_message' ? this.joinerOf(m.publicMessage) : null;
     if (joiner) await this.admitJoiner(state, joiner, admission);
-    const replacesUs =
-      joiner !== null && joiner.removedLeafIndexes.includes(state.privatePath.leafIndex);
+    const replacesUs = joiner?.removedLeafIndexes.includes(state.privatePath.leafIndex);
     let result;
     try {
       result = await processMessage(m, state, emptyPskIndex, acceptAll, this.impl);

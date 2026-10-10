@@ -180,8 +180,7 @@ export async function approveInstance(
 ): Promise<ClientInstance> {
   const db = deps.db ?? getDb();
   const approverRow = await findInstanceById(approver.id, db);
-  if (!approverRow || approverRow.status !== 'active')
-    throw forbidden('Only an active instance may approve');
+  if (approverRow?.status !== 'active') throw forbidden('Only an active instance may approve');
   const target = await requireOwnInstance(approver.accountId, targetId, db);
   if (target.status !== 'pending' || target.enrollmentChallenge === null) {
     throw new AlloHttpError('idempotency_conflict', 'The instance is not awaiting approval');

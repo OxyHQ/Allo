@@ -180,7 +180,7 @@ export async function appendClientEvent(
       (senderLeaf.state === 'active' ||
         (senderLeaf.state === 'removed' && senderLeaf.removedEpoch === null));
     if (!holdsLeaf) throw forbidden('This instance holds no leaf in the conversation to resync');
-  } else if (!senderLeaf || senderLeaf.state !== 'active') {
+  } else if (senderLeaf?.state !== 'active') {
     throw forbidden('This instance holds no active leaf in the conversation');
   }
 

@@ -203,14 +203,10 @@ export class InstanceManager {
      *               raced to enrol on this device
      */
     if (existing || secret) {
-      const reason = !existing
-        ? 'no-record'
-        : !secret || secret.length !== 32
-          ? 'no-key'
-          : 'mismatch';
+      const reason = !existing ? 'no-record' : secret?.length !== 32 ? 'no-key' : 'mismatch';
       this.deps.log.warn?.('enrolling a new instance rather than resuming', { reason });
     }
-    if (!secret || secret.length !== 32) {
+    if (secret?.length !== 32) {
       const fresh = generateSigningKey();
       await secrets.set(keyName, fresh.secretKey);
       const check = await secrets.get(keyName);

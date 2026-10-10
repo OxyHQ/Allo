@@ -89,14 +89,14 @@ describe.each(PRODUCTION_BUILDS)('production app config (%j)', (env) => {
   it('claims no host outside Allo: not oxy.so, not the dead allo.chat', () => {
     const hosts = config.android.intentFilters
       .flatMap((filter) => filter.data)
-      .flatMap((entry) => (entry && entry.host ? [entry.host] : []));
+      .flatMap((entry) => (entry !== false && entry.host ? [entry.host] : []));
     expect(hosts.filter((host) => /(^|\.)oxy\.so$|allo\.chat/.test(host))).toEqual([]);
   });
 
   it('has only verified https entries, so no host can fail the filter', () => {
     for (const filter of config.android.intentFilters) {
       expect(filter.autoVerify).toBe(true);
-      for (const entry of filter.data) expect(entry && entry.scheme).toBe('https');
+      for (const entry of filter.data) expect(entry !== false && entry.scheme).toBe('https');
     }
   });
 

@@ -128,7 +128,7 @@ export function project(input: ProjectionInput): TimelineItemView[] {
       }
       case 'poll_vote': {
         const t = resolve(message.target);
-        if (!t || t.item.content.kind !== 'poll' || !t.votes) break;
+        if (t?.item.content.kind !== 'poll' || !t.votes) break;
         // A vote is the voter's CURRENT answer, not an increment: the last one
         // replaces the one before it, and an empty list retracts.
         if (message.optionIds.length === 0) t.votes.delete(sender);
