@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Wrangler's local state (Miniflare cache, D1/KV/R2 sqlite) from `wrangler dev`
+.wrangler/
+
 # Expo
 .expo/
 dist/
