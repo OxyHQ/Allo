@@ -6,8 +6,7 @@
  * value, `for update skip locked` handing two dispatchers different rows, and an
  * `on conflict do nothing` that leaves the tuple untouched. A mocked `insert`
  * accepts any statement — including one the server rejects outright — which is
- * exactly why this backend already boots a real Mongo replica set for the
- * moderation suite it is replacing rather than mocking the model.
+ * exactly why these run against a real server rather than a mock.
  *
  * ## The concurrency cases hold a real lock
  *
@@ -475,8 +474,7 @@ describe("the claim is a lease, and leases are held under concurrency", () => {
 
   it("never claims a row that has never been leased through the reclaim branch", async () => {
     // `lease_until` is NULL for a fresh row and `NULL <= now` is NULL, so the
-    // reclaim branch excludes it by the comparison itself — as `{$lte: now}` did
-    // for a missing field in Mongo.
+    // reclaim branch excludes it by the comparison itself.
     const eventId = id("outbox");
     await insertDueOutboxEvent(eventId);
     await db
@@ -580,9 +578,7 @@ describe("only the owner of a live lease may finish the work", () => {
       .from(schema.moderationOutbox)
       .where(eq(schema.moderationOutbox.id, eventId));
     expect(row.status).toBe("dead_letter");
-    // The Mongoose schema bounded nothing and the service sliced at 2 000 before
-    // every write; the bound lives at the repository now so it holds for callers
-    // that do not.
+    // The bound lives at the repository so it holds for every caller.
     expect(row.lastError).toHaveLength(2_000);
     expect(row.leaseOwner).toBeNull();
   });
@@ -860,7 +856,7 @@ describe("what delivery writes back onto the report", () => {
     expect(stored?.crowdSourceMerged).toBe(true);
   });
 
-  it("bounds a delivery error at the length the Mongoose schema declared", async () => {
+  it("bounds a delivery error at its declared length", async () => {
     const reportId = await deliverableReport();
     await markReportDeliveryFailed(reportId, "y".repeat(9_000), db);
     expect((await findReportById(reportId, db))?.lastDeliveryError).toHaveLength(2_000);
@@ -938,7 +934,7 @@ describe("the reporter's own list", () => {
     }
   });
 
-  it("truncates a reporter's details at the length the Mongoose schema declared", async () => {
+  it("truncates a reporter's details at their declared length", async () => {
     const report = await db.transaction(async (tx) =>
       insertReport(
         {

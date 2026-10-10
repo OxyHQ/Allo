@@ -112,22 +112,19 @@ app's own components use `StyleSheet` with theme colours. Check the exact tag in
 ## Data storage: PostgreSQL, and nothing else
 
 `DATABASE_URL` is REQUIRED to boot (`server.ts`) and every route, worker and
-sweep reads Postgres. The Mongo→Postgres port is finished: everything landed,
-the Mongoose models and the Mongo connection are deleted, and there is no
-second store to choose between.
+sweep reads Postgres. There is no second store to choose between.
 
 Schema is `db/schema/` (one file per domain) and the binding decisions — naming,
-primary keys, closed value sets, the `jsonb` register, the Mongoose-hook →
+primary keys, closed value sets, the `jsonb` register, the hook →
 constraint map — are in `db/schema/CONVENTIONS.md`. Read it before touching a
 table. Repositories are `db/<domain>/`; routes go through them and never build
 SQL themselves. The migrator and the test setup are in
 `packages/backend/README.md`.
 
-**Row ids are `text` and come in TWO shapes.** Rows created since the cutover
-carry a uuid v7; rows the backfill copied carry their original 24-character
-Mongo ObjectId hex, verbatim, because the id is the only thing both stores
-agreed on. So nothing may assume a format — an ObjectId-shaped validator would
-reject every row written since, and a uuid-shaped one every row written before.
+**Row ids are `text` and come in TWO shapes.** New rows carry a uuid v7; older
+rows carry a 24-character hex id, verbatim. So nothing may assume a format — a
+hex-shaped validator would reject every new row, and a uuid-shaped one every
+older row.
 
 **Sub-millisecond creation order is not a property this schema has.**
 `@oxy.so/db`'s `createdAt` is `date_trunc('milliseconds', now())`, and the uuid v7
@@ -136,17 +133,6 @@ exact sequence for rows written in a tight loop is asserting the generator's
 luck; space the writes across milliseconds or assert only at the resolution the
 schema guarantees. Measured: one such assertion in `social.realdb.test.ts` failed
 4 runs in 8 before it was spaced.
-
-**There is no Mongo anywhere, and a test enforces it.** The final backfill pass
-ran and reported `totalInserted=0` — an empty switchover window — so the script
-and `mongoose` came out together. `src/__tests__/noMongo.test.ts` now fails the
-build on a Mongo dependency, import, connection string or `MONGODB_URI`
-reference in any source or manifest file, so this cannot regress by accident.
-
-The guard deliberately exempts comments and markdown, which is where the last
-residue survived three separate passes. That exemption is why prose may still
-mention Mongo — to explain why a column is `text`, or why a shape is what it is —
-and why such a mention is not evidence that anything connects to it.
 
 ## The Allo platform
 

@@ -1,15 +1,9 @@
 /**
  * Refusing the root connection where a TRANSACTION was required.
  *
- * ## What this replaces, and why a type is not enough
+ * ## Why a type is not enough
  *
- * Under Mongo the invariant was `session.inTransaction()`, and
- * `ModerationOutboxService` explains at length why the TYPE alone could not carry
- * it: a required `ClientSession` parameter is satisfied by any session, including
- * a bare `startSession()` nobody opened a transaction on, which type-checks
- * perfectly and commits the row on its own.
- *
- * Drizzle has the same hole and a wider one. The root handle and a transaction
+ * Drizzle cannot carry this invariant in a type. The root handle and a transaction
  * handle are both accepted wherever `AlloDatabaseOrTransaction` is asked for — so
  * `enqueueModerationOutboxEvent(input, getDb())` compiles, runs, commits the row
  * alone, and passes any test that only asserts the row exists. It is also what

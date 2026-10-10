@@ -78,13 +78,6 @@ jobs:
             echo "synced -> $path"
           }
 
-          # No MONGODB_URI. The service no longer opens a Mongo connection, so
-          # there is nothing here to keep in sync. Dropping the sync does NOT
-          # delete `/oxy/allo/MONGODB_URI` — the parameter keeps its last value,
-          # which is what the one-shot backfill task still reads while it runs.
-          # Removing the parameter and the task definition's reference to it is
-          # oxy-infra's, once that final pass is done.
-
           # Postgres. Required at boot — `server.ts` refuses to start without
           # it — and it was live in SSM and on the task definition while being
           # enumerated NOWHERE, so a rotation of the GitHub secret would never

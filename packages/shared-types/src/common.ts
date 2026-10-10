@@ -3,9 +3,9 @@
  *
  * Everything on the wire is JSON; bytes travel as base64 (standard alphabet,
  * padded) except where a URL or a header carries them, which is base64url
- * (no padding). Ids are OPAQUE TEXT: rows written since the Postgres cutover
- * carry a uuid v7, rows the backfill copied carry a 24-hex Mongo ObjectId, and
- * Oxy account ids are ObjectIds too. Nothing may assume a format, so
+ * (no padding). Ids are OPAQUE TEXT: most rows carry a uuid v7,
+ * older rows carry a 24-hex ObjectId-shaped id, and Oxy account ids are
+ * 24-hex too. Nothing may assume a format, so
  * {@link idSchema} accepts the alphabet both shapes share and nothing narrower.
  */
 import { z } from "zod";

@@ -191,7 +191,7 @@ issue #139 (the named tests are the evidence).
 
 | Test | Status |
 |---|---|
-| No Matrix imports on the final product path | met, test exists: zero references in packages/*; the frontend census `noLegacyChatPath` and the backend `noMongo` scan run in CI |
+| No Matrix imports on the final product path | met, test exists: zero references in packages/*; the frontend census `noLegacyChatPath` runs in CI |
 | No legacy `signalProtocol.ts` | met |
 | No endpoint accepts native chat plaintext | met, test exists: `noPlaintextPaths.test.ts` (AST scan of the v1 routes and the zod contract) |
 | No compatibility DTOs without a consumer | met: the old DTOs are deleted with their routes |

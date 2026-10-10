@@ -1,10 +1,9 @@
 /**
  * CrowdSource moderation: reports, the inbound event log and the outbox.
  *
- * Ported from `models/Report.ts`, `models/ModerationEvent.ts` and
- * `models/ModerationOutbox.ts`. Two of these three carried a Mongo TTL index;
- * Postgres has none, so both appear in `db/expiry.ts` and that registry is what
- * keeps the retention promise their own doc comments make.
+ * Two of these three tables expire rows. Postgres has no TTL index, so both
+ * appear in `db/expiry.ts` and that registry is what keeps the retention promise
+ * their own doc comments make.
  */
 
 import { sql } from "drizzle-orm";
@@ -95,7 +94,7 @@ export const MODERATION_OUTBOX_STATUSES = [
 export type ModerationOutboxStatus = (typeof MODERATION_OUTBOX_STATUSES)[number];
 
 /**
- * The three Mongoose `maxlength` bounds this table carried.
+ * The three length bounds this table carries.
  *
  * Exported because `db/moderation/reportRepository.ts` truncates to them at every
  * write and the two must not be able to disagree — a truncation to 501 characters
@@ -108,15 +107,14 @@ export const MAX_REPORT_DELIVERY_ERROR_LENGTH = 2_000;
 /**
  * One person's report of one thing.
  *
- * `categories` stays an ARRAY. Mongoose declared it `[String]` with an `enum`
- * AND a separate "at least one" validator, so the port keeps both as separate
- * constraints — containment alone is satisfied by an empty array, which is
+ * `categories` is an ARRAY with two separate constraints: every element is in
+ * the closed set, AND there is at least one element — containment alone is satisfied by an empty array, which is
  * precisely the case the validator existed to reject.
  *
  * ## The three length bounds are CHECKs as well as truncations
  *
- * Mongoose's `maxlength` REJECTED an over-long value; `reportRepository`
- * TRUNCATES it, which is what every existing caller already did to these three
+ * `reportRepository` TRUNCATES an over-long value rather than rejecting it,
+ * which is what every existing caller already did to these three
  * values before handing them over — the route slices `details`, the delivery
  * worker slices its error — so a 201 does not become a 500 for a report whose
  * details ran one character long.
@@ -150,7 +148,7 @@ export const reports = pgTable(
 
     crowdSourceReportId: text(),
     crowdSourceCaseId: text(),
-    /** Nullable, not `false` by default: Mongo stored absence for "not yet known". */
+    /** Nullable, not `false` by default: `NULL` means "not yet known". */
     crowdSourceMerged: boolean(),
     submittedAt: timestamptz(),
 
@@ -215,7 +213,7 @@ export const reports = pgTable(
  * one-row result IS the "already seen" answer. A surrogate key would make every
  * redelivery a new row and dedupe nothing.
  *
- * TTL in Mongo, {@link import('../expiry').EXPIRY_SWEEP_TARGETS} here.
+ * Expired by {@link import('../expiry').EXPIRY_SWEEP_TARGETS}.
  */
 export const moderationEvents = pgTable(
   "moderation_events",
@@ -248,10 +246,10 @@ export const moderationEvents = pgTable(
 /**
  * Moderation work that has to happen and has not happened yet.
  *
- * `id` is the caller-supplied idempotency key, exactly as in Mongo: enqueueing
+ * `id` is the caller-supplied idempotency key: enqueueing
  * the same logical work twice is a unique violation, not a second delivery.
  *
- * TTL in Mongo, {@link import('../expiry').EXPIRY_SWEEP_TARGETS} here — and note
+ * Expired by {@link import('../expiry').EXPIRY_SWEEP_TARGETS} — and note
  * what that means for a STALLED dispatcher, which the registry entry states
  * outright rather than leaving to be discovered.
  */
@@ -277,7 +275,7 @@ export const moderationOutbox = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    /** Due work and expired claims stay separate bounded scans, as in Mongo. */
+    /** Due work and expired claims stay separate bounded scans. */
     index("moderation_outbox_status_available_at_created_at_idx").on(
       t.status,
       t.availableAt,

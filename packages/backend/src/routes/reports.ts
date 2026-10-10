@@ -212,7 +212,7 @@ router.get("/mine", async (req: AuthRequest, res: Response) => {
      * a user-facing read, so an unbounded page size would be a parameter deciding
      * how much work an authenticated request can ask for.
      *
-     * `details` comes back as `string | null` where Mongo left the key absent.
+     * `details` comes back as `string | null`, never an absent key.
      * Both serialise to a field a client reads with `??`, and `null` is what every
      * other nullable column on this row already emits, so it is not normalised
      * back into `undefined` for this one field.

@@ -1,40 +1,31 @@
 /**
  * `moderation_outbox` — the durable promise that moderation work will happen.
  *
- * The at-least-once contract is unchanged from Mongo: an expired lease is
- * reclaimable and a worker can die mid-delivery, so every handler MUST make its
- * downstream effect idempotent using the event id.
+ * The contract is at-least-once: an expired lease is reclaimable and a worker can
+ * die mid-delivery, so every handler MUST make its downstream effect idempotent
+ * using the event id.
  *
- * ## The claim is `FOR UPDATE SKIP LOCKED`, not a `findOneAndUpdate`
+ * ## The claim is `FOR UPDATE SKIP LOCKED`
  *
- * Mongo claimed with an atomic `findOneAndUpdate` over a disjunctive filter.
- * Postgres has a better primitive for exactly this shape: the `select … order by
- * created_at limit 1 for update skip locked` lives INSIDE the `update`, so N
- * dispatchers draining the queue never hand each other the same row and never block
- * on one another either — `skip locked` steps over a row another task is already
+ * The `select … order by created_at limit 1 for update skip locked` lives INSIDE
+ * the `update`, so N dispatchers draining the queue never hand each other the same
+ * row and never block on one another either — `skip locked` steps over a row another task is already
  * claiming instead of waiting for it. Allo runs on ECS Fargate behind one ALB and
  * every task starts a dispatcher, so that is the normal case rather than an edge
  * one.
  *
  * `lease_until` is nullable and `NULL <= now` is NULL, so a row that has never been
- * leased is excluded from the reclaim branch by the comparison itself — matching
- * Mongo, where a missing field did not match `{$lte: now}` either.
+ * leased is excluded from the reclaim branch by the comparison itself.
  *
- * ## The Mongo `timestamps: false` hazard has no counterpart here, and that is the point
+ * ## A repeated enqueue writes nothing
  *
- * The Mongo enqueue carried a long comment about writing `createdAt`/`updatedAt`
- * explicitly under `timestamps: false`, because Mongoose otherwise named
- * `updatedAt` in two operators of one update document and the server rejected the
- * WHOLE write — which, inside the intake transaction, took the `Report` with it.
- * The fix it settled on was not interchangeable with the obvious one: letting
- * Mongoose own the timestamps also cleared the server error but left a
- * `$set: { updatedAt }` on the update, turning a repeated enqueue into a real write
- * that contends with the dispatcher's live lease on that same row.
+ * A repeated enqueue must not become a real write: one would contend with the
+ * dispatcher's live lease on that same row.
  *
  * `on conflict (id) do nothing` writes nothing at all — no tuple version, no
  * timestamp, no lock — so a repeat is a genuine no-op for a STRUCTURAL reason
- * rather than by matching a spelling. `onConflictDoUpdate` reintroduces exactly the
- * bug the Mongo flag existed to fix, and measurably so: drizzle applies the
+ * rather than by matching a spelling. `onConflictDoUpdate` would turn a repeat into
+ * exactly that contending write, and measurably so: drizzle applies the
  * column's `$onUpdate` to a conflict branch's `set`, so "write the same data back"
  * is not even a quiet write — it moves `updated_at` AND the row's `xmin`. Both are
  * asserted in `__tests__/db/moderation.realdb.test.ts`.
@@ -72,10 +63,8 @@ export const MODERATION_OUTBOX_RETENTION_SECONDS = 90 * 24 * 60 * 60;
 /**
  * Bound on a stored dispatch error.
  *
- * The Mongoose schema declared none and `ModerationOutboxService` sliced at this
- * length before every write, which is a guard that holds for exactly one caller.
- * It lives here now so it holds for all of them — the message comes from a third
- * party and nothing else bounds it. It can carry no reported material because Allo
+ * It lives here, not in `ModerationOutboxService`, so it holds for every caller —
+ * the message comes from a third party and nothing else bounds it. It can carry no reported material because Allo
  * never puts any into a request.
  */
 const MAX_LAST_ERROR_LENGTH = 2_000;
@@ -125,14 +114,14 @@ type OutboxRow = typeof moderationOutbox.$inferSelect;
 /**
  * Absent values come back as `undefined`, never `null`.
  *
- * A field Mongo left ABSENT is `NULL` in Postgres, and every consumer of
+ * An absent optional is `NULL` in Postgres, and every consumer of
  * `ModerationOutboxEvent` was written against `undefined` — including
  * `applyDecisionOutboxEvent`, whose first statement is `if (caseId === undefined)`.
  * A `null` reaching that check passes it and the event proceeds with no case.
  * The normalization therefore happens once, here, rather than at each reader.
  *
- * A decision stored as JSON `null` is indistinguishable from an absent one. Mongo's
- * `Mixed` had the same ambiguity and no caller depends on the difference: a
+ * A decision stored as JSON `null` is indistinguishable from an absent one, and
+ * no caller depends on the difference: a
  * `decision.apply` event with no decision fails contract parsing either way.
  */
 function toEvent(row: OutboxRow): ModerationOutboxEvent {

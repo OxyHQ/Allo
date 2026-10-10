@@ -1,16 +1,11 @@
 /**
  * Global test setup for the backend package.
  *
- * Mongoose is deliberately NOT mocked. An earlier version of this file replaced
- * `connect`/`disconnect` with stubs to keep unit tests off the network, and the
- * cost of that convenience was a bug that made `POST /reports` fail for EVERY
- * report ever submitted while the whole suite stayed green — a mocked
- * `updateOne` accepts any update document, including one Mongo rejects outright.
- *
- * Nothing opens a connection merely by importing: `utils/database.ts` exports a
- * function nobody calls at module scope. The moderation tests either mock the
- * MODEL (unit) or connect to the replica set from `vitest.globalSetup.ts`
- * explicitly (integration).
+ * The database is deliberately NOT mocked here. A mocked write accepts any
+ * statement, including one the server rejects outright, so a suite built on
+ * one stays green while the route fails for every caller. Database-backed
+ * tests are the `*.realdb.test.ts` suites, each on its own throwaway database
+ * (`src/db/testDatabase.ts`); nothing opens a connection merely by importing.
  */
 import { vi } from "vitest";
 

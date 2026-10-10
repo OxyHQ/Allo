@@ -2,10 +2,9 @@
 --
 -- Drops the index that served `findOpenLinkSessions`, which this change deletes.
 --
--- Both were ported faithfully from a Mongoose schema that declared
--- `{oxyUserId, network, outcome}` and from application code that never queried
--- it: nothing in Mongo asked "does this user have an attempt OPEN?" and nothing
--- in Postgres does either — the only guard at link start counts LINKED ACCOUNTS.
+-- The index covered `{oxyUserId, network, outcome}`, and nothing asks "does this
+-- user have an attempt OPEN?" — the only guard at link start counts LINKED
+-- ACCOUNTS.
 -- Keeping an index to serve a query nobody makes is paying for it on every
 -- write to the table.
 --

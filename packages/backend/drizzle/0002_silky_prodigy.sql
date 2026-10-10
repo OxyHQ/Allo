@@ -1,12 +1,8 @@
 -- oxy:deploy-phase=pre
 --
--- Additive only: the FIVE Mongoose `maxlength` bounds that were actually in
--- force, as CHECKs. Mongoose runs a `maxlength` validator on `.create()`/
--- `.save()` and not on an update without `runValidators: true`, which appears
--- nowhere in this service — so of the sixteen bounds the three bridge models
--- declared, only the three written by `BridgeLinkSession.create` and the two
--- written by `BridgeProxyLease.create` ever refused anything. The other eleven
--- are documented on their columns in `db/schema/bridges.ts` with the reason
+-- Additive only: FIVE length bounds as CHECKs — the three written by
+-- `BridgeLinkSession.create` and the two written by `BridgeProxyLease.create`.
+-- The other eleven bridge-model bounds are documented on their columns in `db/schema/bridges.ts` with the reason
 -- they get no constraint.
 --
 -- `pre` because no image can violate them: the serving image does not write

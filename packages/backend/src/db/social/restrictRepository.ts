@@ -11,8 +11,8 @@
  * `user_settings.privacy_restricted_users`. That column is a `text[]` the PUT
  * settings route overwrites wholesale; this table is the row-per-relation the
  * `/restricts` endpoints maintain, with its own unique index and its own
- * `created_at`. Mongo carried both too, and nothing reconciles them — porting
- * them into one place would be a behaviour change, not a cleanup.
+ * `created_at`. Nothing reconciles them — merging them into one place would be a
+ * behaviour change, not a cleanup.
  */
 
 import { and, desc, eq } from "drizzle-orm";
