@@ -6,6 +6,22 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{
+          // iPhone Safari plays a web `<video>` inline only when it carries
+          // `playsinline`, and expo-video writes that only when the prop is
+          // passed — without it a video shows its poster and never starts on
+          // iPhones. Bloom's VideoView (and the media gallery, which renders
+          // through it) defaults it on; the player itself (`useVideoPlayer`,
+          // `createVideoPlayer`) still comes from expo-video.
+          name: 'expo-video',
+          importNames: ['VideoView'],
+          message:
+            "Render VideoView from '@oxy.so/bloom/video-view' (VideoViewHandle for its ref type): it plays inline on iPhone Safari, where expo-video's own view shows only the poster.",
+        }],
+      }],
+    },
   },
   {
     settings: {
