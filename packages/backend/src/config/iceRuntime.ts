@@ -18,7 +18,8 @@ export function setIceConfig(config: IceConfig): void {
 
 /** STUN only until a relay is configured, which is also what tests see. */
 export function getIceConfig(): IceConfig {
-  return current ?? (current = readIceConfig({}));
+  current ??= readIceConfig({});
+  return current;
 }
 
 export function clearIceConfig(): void {

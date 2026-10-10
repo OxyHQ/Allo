@@ -81,7 +81,13 @@ function clockedServer() {
     await c.start();
     return { client: c, storage, secrets, accountId, name };
   };
-  return { server, client, advance: (ms: number) => void (clock += ms) };
+  return {
+    server,
+    client,
+    advance: (ms: number) => {
+      clock += ms;
+    },
+  };
 }
 
 describe('members without an instance', () => {

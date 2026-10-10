@@ -637,11 +637,15 @@ export class FakeAlloServer implements SocketHost {
     const accountId = this.oxyAccount(headers);
     const signed = () => this.signedInstance(method, pathWithQuery, headers, body, accountId);
     let m: RegExpMatchArray | null;
+    // A route's captures, or null when the method (any, for `null`) or the path does not match.
+    const route = (verb: string | null, pattern: RegExp): RegExpMatchArray | null =>
+      verb === null || method === verb ? path.match(pattern) : null;
 
     if (method === 'POST' && path === '/v1/instances') return this.register(accountId, body);
     if (method === 'GET' && path === '/v1/instances')
       return json(200, { instances: this.instancesOf(accountId).map(toClient) });
-    if (method === 'GET' && (m = path.match(/^\/v1\/accounts\/([^/]+)\/instances$/))) {
+    m = route('GET', /^\/v1\/accounts\/([^/]+)\/instances$/);
+    if (m) {
       // An account with no instance, never seen or not, is an empty list (the backend answers the same).
       const all = this.instancesOf(m[1]);
       return json(200, { instances: all.filter((i) => i.status === 'active').map(toPublic) });
@@ -667,10 +671,8 @@ export class FakeAlloServer implements SocketHost {
       );
       return json(200, { offers });
     }
-    if (
-      method === 'POST' &&
-      (m = path.match(/^\/v1\/instances\/me\/history-offers\/([^/]+)\/consume$/))
-    ) {
+    m = route('POST', /^\/v1\/instances\/me\/history-offers\/([^/]+)\/consume$/);
+    if (m) {
       const me = signed();
       this.expireOffers();
       const offer = this.historyOffers.get(m[1]);
@@ -682,7 +684,8 @@ export class FakeAlloServer implements SocketHost {
       this.releaseBlobs(offer.manifest.chunkBlobIds);
       return json(200, { offer });
     }
-    if (method === 'POST' && (m = path.match(/^\/v1\/instances\/([^/]+)\/history-offers$/))) {
+    m = route('POST', /^\/v1\/instances\/([^/]+)\/history-offers$/);
+    if (m) {
       return this.createHistoryOffer(signed(), m[1], body);
     }
     if (path === '/v1/accounts/me/backup') {
@@ -712,16 +715,15 @@ export class FakeAlloServer implements SocketHost {
     }
     // Session-authenticated: no `signed()`, because the case this exists for is
     // an account with no signing key left to sign with.
-    if (method === 'DELETE' && (m = path.match(/^\/v1\/instances\/([^/]+)$/))) {
+    m = route('DELETE', /^\/v1\/instances\/([^/]+)$/);
+    if (m) {
       const target = this.instances.get(m[1]);
       if (!target || target.accountId !== accountId)
         throw new HttpError(404, 'not_found', 'instance');
       return this.revoke(target);
     }
-    if (
-      method === 'POST' &&
-      (m = path.match(/^\/v1\/instances\/([^/]+)\/(approve|reject|revoke)$/))
-    ) {
+    m = route('POST', /^\/v1\/instances\/([^/]+)\/(approve|reject|revoke)$/);
+    if (m) {
       const me = signed();
       const target = this.instances.get(m[1]);
       if (!target || target.accountId !== accountId)
@@ -822,7 +824,8 @@ export class FakeAlloServer implements SocketHost {
       }
       return json(201, { call: this.callWire(call) });
     }
-    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/ice$/)) && method === 'GET') {
+    m = route('GET', /^\/v1\/calls\/([^/]+)\/ice$/);
+    if (m) {
       signed();
       const call = this.calls.get(m[1]);
       if (!call) throw new HttpError(404, 'not_found', 'call');
@@ -832,7 +835,8 @@ export class FakeAlloServer implements SocketHost {
         relayOnly: call.relayed,
       });
     }
-    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/)) && method === 'POST') {
+    m = route('POST', /^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/);
+    if (m) {
       const me = signed();
       const call = this.calls.get(m[1]);
       if (!call) throw new HttpError(404, 'not_found', 'call');
@@ -870,12 +874,14 @@ export class FakeAlloServer implements SocketHost {
         .map((c) => this.summary(c, me.id));
       return json(200, { conversations: list });
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)$/)) && method === 'GET') {
+    m = route('GET', /^\/v1\/conversations\/([^/]+)$/);
+    if (m) {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
       return json(200, { conversation: this.summary(conv, me.id) });
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/reset$/)) && method === 'POST') {
+    m = route('POST', /^\/v1\/conversations\/([^/]+)\/reset$/);
+    if (m) {
       const me = signed();
       const conv = this.conversations.get(m[1]);
       if (conv?.members.get(accountId)?.state !== 'joined')
@@ -915,7 +921,8 @@ export class FakeAlloServer implements SocketHost {
       }
       return json(200, { conversation: this.summary(conv, me.id) });
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/leave$/)) && method === 'POST') {
+    m = route('POST', /^\/v1\/conversations\/([^/]+)\/leave$/);
+    if (m) {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
       const member = conv.members.get(accountId)!;
@@ -927,7 +934,8 @@ export class FakeAlloServer implements SocketHost {
       void me;
       return new Response(null, { status: 204 });
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/group-info$/))) {
+    m = route(null, /^\/v1\/conversations\/([^/]+)\/group-info$/);
+    if (m) {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
       if (method === 'GET') {
@@ -949,7 +957,8 @@ export class FakeAlloServer implements SocketHost {
         return new Response(null, { status: 204 });
       }
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/events$/)) && method === 'POST') {
+    m = route('POST', /^\/v1\/conversations\/([^/]+)\/events$/);
+    if (m) {
       const me = signed();
       const conv = this.memberConversation(m[1], accountId);
       const req = this.parse(submitEventRequestSchema, body);
@@ -958,7 +967,8 @@ export class FakeAlloServer implements SocketHost {
         body: { event: this.submitEvent(conv, me, req) },
       }));
     }
-    if ((m = path.match(/^\/v1\/conversations\/([^/]+)\/events$/)) && method === 'GET') {
+    m = route('GET', /^\/v1\/conversations\/([^/]+)\/events$/);
+    if (m) {
       signed();
       const conv = this.memberConversation(m[1], accountId);
       const q = listEventsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
@@ -1125,7 +1135,8 @@ export class FakeAlloServer implements SocketHost {
       });
       return json(201, { blobId, size: body.byteLength });
     }
-    if (method === 'GET' && (m = path.match(/^\/v1\/blobs\/([^/]+)$/))) {
+    m = route('GET', /^\/v1\/blobs\/([^/]+)$/);
+    if (m) {
       signed();
       const blob = this.blobs.get(m[1]);
       if (!blob) throw new HttpError(404, 'not_found', 'blob');
