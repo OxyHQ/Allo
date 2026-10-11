@@ -238,9 +238,9 @@ jobs:
       - name: Test frontend
         run: bun run --filter @allo/frontend test
 
-      # The allo-frontend Worker (`packages/frontend/worker/`): the edge-activity
-      # telemetry wrapper and `/.well-known` routing of the composed Worker. Bun's
-      # own runner, not jest: the Worker is plain ESM with no React Native in it.
+      # The allo-frontend Worker (`packages/frontend/worker/`): asset pass-through
+      # and `/.well-known` routing of the composed Worker. Bun's own runner, not
+      # jest: the Worker is plain ESM with no React Native in it.
       - name: Test edge Worker
         run: bun run test:edge
 
