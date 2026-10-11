@@ -58,7 +58,7 @@
     "start:frontend": "bun run --filter @allo/frontend start",
     "start:backend": "bun run --filter @allo/backend start",
     "postinstall": "bun run build:shared-types && bun run build:core && bun run build:react",
-    "test:edge": "bun test scripts/edge-activity.test.ts",
+    "test:edge": "bun test scripts/edge-worker.test.ts",
     "build:core": "bun run --filter @allo/core build",
     "build:react": "bun run --filter @allo/react build",
     "typecheck:core": "bun run --filter @allo/core typecheck",

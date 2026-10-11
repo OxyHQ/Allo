@@ -34,7 +34,9 @@ workers_dev = false
 APPLE_TEAM_ID = ""
 ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS = ""
 
-# Every request is observed; ASSETS retains routing and public/_headers.
+# The Worker runs first so it can answer `/.well-known/*` before the SPA
+# fallback; every other request goes to ASSETS, which retains routing and
+# public/_headers.
 [assets]
 binding = "ASSETS"
 run_worker_first = true
