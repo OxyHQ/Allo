@@ -4,6 +4,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "description": "allo Monorepo - Frontend and Backend",
   "private": true,
+  "packageManager": "bun@1.4.3",
   "workspaces": [
     "packages/*"
   ],
@@ -59,6 +60,7 @@
     "start:backend": "bun run --filter @allo/backend start",
     "postinstall": "bun run build:shared-types && bun run build:core && bun run build:react",
     "test:edge": "bun test scripts/edge-worker.test.ts",
+    "check:bun-pin": "bun ./scripts/check-bun-pin.mjs && bun ./scripts/test-check-bun-pin.mjs",
     "build:core": "bun run --filter @allo/core build",
     "build:react": "bun run --filter @allo/react build",
     "typecheck:core": "bun run --filter @allo/core typecheck",

@@ -20,7 +20,8 @@
 
 FROM node:22-alpine
 
-# Pin Bun to the same version used in CI for reproducible installs.
+# The bun that wrote bun.lock: must equal the root package.json `packageManager`,
+# which CI's setup-bun reads. `bun run check:bun-pin` (CI lint job) fails if not.
 ENV BUN_VERSION=1.4.3
 ENV BUN_INSTALL=/usr/local
 RUN apk add --no-cache bash curl unzip libstdc++ \
