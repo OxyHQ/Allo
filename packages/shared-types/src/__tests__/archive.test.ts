@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   ARCHIVE_CHUNK_AAD_PREFIX,
   ARCHIVE_CHUNK_MAX_BYTES,

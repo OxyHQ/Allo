@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, waitFor, waitForText, waitJoined } from './e2eHelpers';
 
 describe('outbox', () => {

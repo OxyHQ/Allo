@@ -11,7 +11,7 @@
  * The media is a stand-in, which is the point of the seam: a client with no
  * adapter still rings, answers, declines and ends.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, waitFor } from './e2eHelpers';
 import { fingerprintOf } from '../calls/service';
 import type { CallMediaAdapter, SessionDescription } from '../calls/media';

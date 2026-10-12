@@ -12,7 +12,7 @@
  * commits predate the field looks like, so these tests keep exercising the
  * fallback deterministically; `join.test.ts` covers the self-join path.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import type { Platform } from '@allo/shared-types';
 import {
   fakeServer,

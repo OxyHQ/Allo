@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 
 /**
  * The production socket must never use HTTP long-polling: the API runs on
@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
  * allo.you on 2026-09-18 (`/socket.io/?EIO=4&transport=polling&sid=…` → 400).
  */
 const captured: Array<{ url: string; options: Record<string, unknown> }> = [];
-vi.mock('socket.io-client', () => ({
+mock.module('socket.io-client', () => ({
   io: (url: string, options: Record<string, unknown>) => {
     captured.push({ url, options });
     return { on() {}, off() {}, emit() {}, connect() {}, disconnect() {}, connected: false };

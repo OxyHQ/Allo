@@ -24,7 +24,7 @@ src/
 ├── api.ts              # legacy success/error envelope (directory routes only)
 ├── directory.ts        # people directory DTOs (the Oxy lookups, projected)
 ├── index.ts            # re-exports every module
-└── __tests__/          # vitest; positive AND negative cases per schema
+└── __tests__/          # bun test; positive AND negative cases per schema
 ```
 
 Naming: `fooSchema` is the zod schema, `Foo` is `z.infer<typeof fooSchema>`,
@@ -51,7 +51,7 @@ const body: SubmitEventRequest = submitEventRequestSchema.parse(req.body);
 ```bash
 bun run build       # tsc → dist/ (tests excluded)
 bun run typecheck   # tsc --noEmit over src/ INCLUDING the tests
-bun run test        # vitest run
+bun run test        # bun test
 bun run clean
 ```
 

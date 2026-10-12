@@ -6,7 +6,7 @@
  * end-to-end encrypted system can honestly offer, because the other copy sits
  * on the other person's device under keys only they hold.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from './e2eHelpers';
 
 describe('deleting a conversation', () => {

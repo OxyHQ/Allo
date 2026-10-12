@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { AtRestCipher } from '../crypto/atRest';
 import { keyPackageRefFromWire } from '../crypto/engine';
 import { FutureEpochError, StorageError } from '../errors';

@@ -76,8 +76,8 @@
       },
       "devDependencies": {
         "@types/node": "^24.9.2",
+        "bun-types": "1.4.3",
         "typescript": "^5.9.3",
-        "vitest": "^4.1.10",
       },
     },
     "packages/frontend": {
@@ -203,8 +203,8 @@
       },
       "devDependencies": {
         "@types/node": "^24.9.2",
+        "bun-types": "1.4.3",
         "typescript": "^5.9.3",
-        "vitest": "^4.1.10",
       },
     },
   },
@@ -1265,6 +1265,8 @@
     "buffer-equal-constant-time": ["buffer-equal-constant-time@1.0.1", "", {}, "sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA=="],
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
+
+    "bun-types": ["bun-types@1.4.3", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-tinRJNGOmUN+tEAsn2y2e942n9JHRHR42iUYzDH75NmhJqVBokGSQkkfSFdNWwsANIdrK6ACH9t01M452YyTwg=="],
 
     "bytes": ["bytes@3.1.2", "", {}, "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg=="],
 

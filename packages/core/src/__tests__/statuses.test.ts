@@ -5,7 +5,7 @@
  * is sealed before it leaves, only a device the key was sealed to can open it,
  * and a status whose signature does not check out is not shown at all.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, waitFor, waitJoined } from './e2eHelpers';
 
 async function pair() {
