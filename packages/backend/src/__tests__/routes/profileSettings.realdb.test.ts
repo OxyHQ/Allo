@@ -19,7 +19,7 @@
 
 import express from 'express';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import { connectPostgres, closePostgres, getDb } from '../../db';
 import * as schema from '../../db/schema';

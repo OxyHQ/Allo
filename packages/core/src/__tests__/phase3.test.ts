@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   HISTORY_KEY_SEAL_INFO,
   archiveManifestMessage,
@@ -147,8 +147,8 @@ describe('history transfer between instances of one account', () => {
     const offers = [...server.historyOffers.values()];
     expect(offers).toHaveLength(1);
     expect(offers[0].status).toBe('consumed');
-    expect(offers[0].donorInstanceId).toBe(bobIos.client.instanceId);
-    expect(offers[0].recipientInstanceId).toBe(bobDesktop.client.instanceId);
+    expect<string | null>(offers[0].donorInstanceId).toBe(bobIos.client.instanceId);
+    expect<string | null>(offers[0].recipientInstanceId).toBe(bobDesktop.client.instanceId);
     for (const id of offers[0].manifest.chunkBlobIds) {
       const blob = server.blobs.get(id)!;
       expect(bytesInclude(blob.bytes, utf8Encode('one'))).toBe(false);
@@ -515,7 +515,9 @@ describe('backup and recovery', () => {
     expect(s2.enabled).toBe(true);
     expect(s2.lastBackupAt).toBe(second.updatedAt);
     await fresh.client.backup.refresh();
-    expect(server.backups.get('acc-alice-01')!.instanceId).toBe(fresh.client.instanceId);
+    expect<string | null>(server.backups.get('acc-alice-01')!.instanceId).toBe(
+      fresh.client.instanceId,
+    );
     // disable deletes and forgets
     await fresh.client.backup.disable();
     expect(server.backups.has('acc-alice-01')).toBe(false);

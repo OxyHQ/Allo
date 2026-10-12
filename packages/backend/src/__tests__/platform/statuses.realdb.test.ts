@@ -8,7 +8,7 @@
  * the status's own, and the blobs it named.
  */
 
-import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import request from 'supertest';
 import {
   createStatusResponseSchema,

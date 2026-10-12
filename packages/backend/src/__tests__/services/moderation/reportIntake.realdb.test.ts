@@ -1,4 +1,7 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mocked } from '../../testDoubles';
+import * as realSubjectRegistry from '../../../services/moderation/subjects/registry';
+import * as realOutboxRepository from '../../../db/moderation/moderationOutboxRepository';
 
 /**
  * The intake path against a REAL Postgres server.
@@ -26,12 +29,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
  * `subjectProviders.test.ts` — asserting it here too would couple this file to
  * Allo's own nouns, and the property under test is about any application's.
  */
-vi.mock('../../../services/moderation/subjects/registry', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../services/moderation/subjects/registry')
-  >('../../../services/moderation/subjects/registry');
-  return { ...actual, subjectProviderFor: vi.fn() };
-});
+mock.module('../../../services/moderation/subjects/registry', () => ({
+  ...realSubjectRegistry,
+  subjectProviderFor: mock(),
+}));
 
 /**
  * Real by default, and overridable in exactly one case.
@@ -41,12 +42,10 @@ vi.mock('../../../services/moderation/subjects/registry', async () => {
  * the duration, because a durable second write that fails on demand has no
  * natural trigger: the enqueue converges on conflict by design.
  */
-vi.mock('../../../db/moderation/moderationOutboxRepository', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../db/moderation/moderationOutboxRepository')
-  >('../../../db/moderation/moderationOutboxRepository');
-  return { ...actual, enqueueModerationOutboxEvent: vi.fn(actual.enqueueModerationOutboxEvent) };
-});
+mock.module('../../../db/moderation/moderationOutboxRepository', () => ({
+  ...realOutboxRepository,
+  enqueueModerationOutboxEvent: mock(realOutboxRepository.enqueueModerationOutboxEvent),
+}));
 
 import { enqueueModerationOutboxEvent } from '../../../db/moderation/moderationOutboxRepository';
 import { closePostgres, connectPostgres, getDb } from '../../../db';
@@ -96,11 +95,11 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  vi.mocked(subjectProviderFor).mockReturnValue(userProvider);
+  mocked(subjectProviderFor).mockReturnValue(userProvider);
 });
 
 afterEach(async () => {
-  vi.clearAllMocks();
+  mock.clearAllMocks();
   await getDb().delete(schema.moderationOutbox);
   await getDb().delete(schema.reports);
 });
@@ -134,7 +133,7 @@ describe('report intake durability', () => {
      * message is durably recorded and there is nothing anywhere that will ever
      * send it for review.
      */
-    vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    mocked(subjectProviderFor).mockReturnValue(undefined);
 
     const { outboxEventId } = await createReport({
       reporter: id('reporter'),
@@ -165,7 +164,7 @@ describe('report intake durability', () => {
      * is a report nothing will ever send, and nobody finds out until somebody asks
      * why a case never opened.
      */
-    vi.mocked(enqueueModerationOutboxEvent).mockRejectedValueOnce(new Error('outbox down'));
+    mocked(enqueueModerationOutboxEvent).mockRejectedValueOnce(new Error('outbox down'));
 
     await expect(
       createReport({
@@ -353,7 +352,7 @@ describe('a subject that is not an Oxy account', () => {
  */
 describe('a type with no provider is decided before the subject is resolved', () => {
   beforeEach(() => {
-    vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    mocked(subjectProviderFor).mockReturnValue(undefined);
   });
 
   it('stores a handle-shaped message id verbatim', async () => {
@@ -407,7 +406,7 @@ describe('the bound on a reported identifier', () => {
   });
 
   it('accepts one of exactly the ceiling, so the bound is not off by one', async () => {
-    vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    mocked(subjectProviderFor).mockReturnValue(undefined);
 
     await createReport({
       reporter: id('reporter'),
@@ -463,7 +462,7 @@ describe('the bound on a reported identifier', () => {
   });
 
   it('still forgives surrounding whitespace, which is trimmed', async () => {
-    vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    mocked(subjectProviderFor).mockReturnValue(undefined);
 
     await createReport({
       reporter: id('reporter'),

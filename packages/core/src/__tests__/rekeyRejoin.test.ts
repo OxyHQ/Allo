@@ -9,7 +9,7 @@
  * told. Reported from the app as "This message could not be decrypted on this
  * device".
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from './e2eHelpers';
 
 /** After a re-key, does the side that was OFFLINE come back into the same conversation? */

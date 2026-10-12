@@ -24,7 +24,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   createConversationRequestSchema,
   createStatusRequestSchema,

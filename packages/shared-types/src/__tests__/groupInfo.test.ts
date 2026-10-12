@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { GROUP_INFO_MAX_BASE64 } from '../events';
 import {
   groupInfoResponseSchema,

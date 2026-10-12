@@ -11,7 +11,7 @@
  * validation and a forged joiner is accepted; remove the "exactly self" rule on
  * the fake server and a commit adding somebody else goes through.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { submitEventRequestSchema, type SubmitEventRequest } from '@allo/shared-types';
 import {
   fakeServer,
@@ -158,7 +158,9 @@ describe('self-join by external commit', () => {
     // no initial commit (nobody to add), so the creator published the epoch-0 GroupInfo itself
     expect(server.eventsOf(conv.id).filter((e) => e.kind === 'mls_commit')).toHaveLength(0);
     expect(server.groupInfos.get(conv.id)?.epoch).toBe(0);
-    expect(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(alice1.client.instanceId);
+    expect<string | null | undefined>(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(
+      alice1.client.instanceId,
+    );
     const held = await alice1.client.messages.send(conv.id, 'while you were out');
     await alice1.client.sync.flush();
     await alice1.client.stop();
@@ -181,7 +183,7 @@ describe('self-join by external commit', () => {
     });
     // the commit was delivered to Alice's leaf and to nobody else (the joiner authored it)
     const commit = commitsBy(server, conv.id, bob.client.instanceId)[0];
-    expect(
+    expect<(string | null)[]>(
       server.deliveries.filter((d) => d.event.id === commit.id).map((d) => d.instanceId),
     ).toEqual([alice1.client.instanceId]);
     expect(bob.client.conversations.get(conv.id)?.memberAccountIds.sort()).toEqual([ALICE, BOB]);
@@ -355,7 +357,7 @@ describe('self-join by external commit', () => {
         .map((r) => r.failure),
     ).toEqual(['joiner_refused']);
     const state = e.deserializeGroup((await aliceStore.getBytes('groupState', conv.id))!);
-    expect(
+    expect<(string | null)[]>(
       e
         .membersOf(state)
         .map((m) => m.instanceId)
@@ -374,7 +376,7 @@ describe('self-join by external commit', () => {
     // build at epoch 0 whatever the scheduler does.
     let releaseBob: () => void = () => undefined;
     const bobMayPost = new Promise<void>((r) => (releaseBob = r));
-    const gated: typeof fetch = async (input, init) => {
+    const gated = (async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (
         (init?.method ?? 'GET') === 'POST' &&
@@ -382,7 +384,7 @@ describe('self-join by external commit', () => {
       )
         await bobMayPost;
       return server.fetch(input, init);
-    };
+    }) as typeof fetch;
     const bobStorage = new MemoryStorage();
     const bobSecrets = new MemorySecrets();
     const { createAlloClient } = await import('../client');
@@ -501,7 +503,9 @@ describe('self-join by external commit', () => {
       secrets: bob.secrets,
     });
     await waitFor(() => server.groupInfos.get(conv.id)?.epoch === 1);
-    expect(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(bob2.client.instanceId);
+    expect<string | null | undefined>(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(
+      bob2.client.instanceId,
+    );
     const puts = () =>
       server.requestLog.filter((r) => r.method === 'PUT' && r.path.endsWith('/group-info'));
     expect(puts()).toHaveLength(1);
@@ -675,7 +679,9 @@ describe('self-join by external commit', () => {
       { epoch: stored.epoch, data: stored.data },
     );
     expect(res.status).toBe(204);
-    expect(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(bob.client.instanceId);
+    expect<string | null | undefined>(server.groupInfos.get(conv.id)?.signerInstanceId).toBe(
+      bob.client.instanceId,
+    );
     // a member that left is told so on GET
     await bob.client.conversations.leave(conv.id);
     expect(

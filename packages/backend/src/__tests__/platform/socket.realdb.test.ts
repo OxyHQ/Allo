@@ -7,7 +7,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import {
   EMPTY_BODY_SHA256_HEX,

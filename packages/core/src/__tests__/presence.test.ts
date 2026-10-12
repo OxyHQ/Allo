@@ -4,7 +4,7 @@
  * is tested here is that the SDK asks the way the contract says, folds the
  * answers, and forgets them when it should.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, waitFor, waitJoined } from './e2eHelpers';
 
 describe('presence', () => {

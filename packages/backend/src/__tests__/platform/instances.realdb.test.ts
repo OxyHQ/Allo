@@ -5,7 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
 import {
   INSTANCE_HEADER,

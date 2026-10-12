@@ -62,7 +62,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/OxyHQ/Allo
             io.oxy.source.tree=${{ steps.guard.outputs.source_tree }}
-            io.oxy.dockerfile.sha256=fc38746c57a018f566a8c45633fffe55393421c67bf7db468564305bebde5a68
+            io.oxy.dockerfile.sha256=f0a3a9d6ca5ee9eaba83ac22e384b2d9b4fa5791150084704045b8d348c2552e
           cache-from: type=gha,scope=allo
           cache-to: type=gha,mode=max,scope=allo
       - name: Verify authenticated ECR bytes

@@ -27,7 +27,8 @@ Messaging platform routes: see [docs/platform/api-v1.md](../../docs/platform/api
 
 ### Prerequisites
 
-- Node.js 20.19+ and Bun 1.3+
+- Bun (the version pinned by the root `package.json` `packageManager`); the
+  backend runs on Bun, in development and in the image
 - A PostgreSQL instance (the service, and the `*.realdb.test.ts` suites)
 - Git
 
@@ -478,7 +479,7 @@ drizzle/                        generated migrations, one phase marker each
 - `bun run dev` — Start development server with hot reload
 - `bun run build` — Build the project
 - `bun run start` — Start production server
-- `bun run test` — Run the vitest suite
+- `bun run test` — Run the `bun test` suite (each file isolated, in parallel)
 - `bun run clean` — Clean build artifacts
 - `bun run db:generate` — Generate a migration from `src/db/schema/`
 - `bun run db:migrate -- --target-database=<name> --phase=pre|post|all` — Apply
@@ -501,6 +502,10 @@ TEST_DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/postgres bun run test
 Without `TEST_DATABASE_URL` (or `DATABASE_URL`) the schema suite fails with a
 message naming this command. That is deliberate: a database test that skips
 itself when no server is present is a test nobody notices has stopped running.
+
+The suite runs with `--no-env-file`, so Bun never loads a `.env` into it: set
+`TEST_DATABASE_URL` in the shell, as above. A `.env` holding the app's own
+`DATABASE_URL` therefore cannot become the server the suite creates databases on.
 
 A real server rather than a mock, because the properties under test only exist
 on one: `ON CONFLICT` against a unique index, `xmin`, a CHECK rendered from a

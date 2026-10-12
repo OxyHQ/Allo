@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   CALL_END_REASONS,
   CALL_RING_TIMEOUT_MS,

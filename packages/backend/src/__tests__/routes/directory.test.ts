@@ -1,6 +1,6 @@
 import express from 'express';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { SearchProfilesResponse, User } from '@oxy.so/core';
 
 import { createDirectoryRoutes } from '../../routes/directory';
@@ -66,22 +66,22 @@ function fakeClient(): FakeClient {
   return {
     calls,
     users: {
-      byUsername: vi.fn(async (username: string) => {
+      byUsername: mock(async (username: string) => {
         calls.push(`users.byUsername:${username}`);
         refuseIfAsked();
         return oxyUser({ username });
       }),
-      get: vi.fn(async (userId: string) => {
+      get: mock(async (userId: string) => {
         calls.push(`users.get:${userId}`);
         refuseIfAsked();
         return oxyUser({ id: userId });
       }),
-      getMany: vi.fn(async (ids: string[]) => {
+      getMany: mock(async (ids: string[]) => {
         calls.push(`users.getMany:${ids.join(',')}`);
         refuseIfAsked();
         return byIdsResult;
       }),
-      search: vi.fn(async (query: string, pagination?: { limit?: number; offset?: number }) => {
+      search: mock(async (query: string, pagination?: { limit?: number; offset?: number }) => {
         calls.push(`users.search:${query}:${pagination?.limit}:${pagination?.offset}`);
         refuseIfAsked();
         return searchResult;

@@ -3,7 +3,8 @@
   "compilerOptions": {
     "composite": false,
     "declaration": false,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node", "bun-types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -12,7 +12,8 @@
  * plaintext, asserted by searching every stored payload and blob.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mocked } from '../testDoubles';
 import { and, eq } from 'drizzle-orm';
 import type { MediaRef } from '@allo/core';
 import * as schema from '../../db/schema';
@@ -220,7 +221,7 @@ describe('@allo/core against the real backend', () => {
     await waitJoined(bob, group.id);
     await waitFor(async () => (await h.keyPackagesOf(carol.client.instanceId!)) >= 2);
 
-    const infoCalls = vi.mocked(logger.info).mock.calls.length;
+    const infoCalls = mocked(logger.info).mock.calls.length;
     await Promise.all([
       alice.client.conversations.addMember(group.id, carolId),
       bob.client.conversations.addMember(group.id, carolId),
@@ -236,8 +237,7 @@ describe('@allo/core against the real backend', () => {
     }
 
     // The 409 is visible in the request log (route template + status only).
-    const conflicts = vi
-      .mocked(logger.info)
+    const conflicts = mocked(logger.info)
       .mock.calls.slice(infoCalls)
       .filter(
         ([message, meta]) =>

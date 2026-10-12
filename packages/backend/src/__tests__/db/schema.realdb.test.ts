@@ -14,7 +14,8 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { pollUntil } from '../testDoubles';
 import { eq, getTableName, is, sql } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import { createDatabase, constraintNameOf } from '@oxy.so/db';
@@ -188,9 +189,9 @@ describe('the expiry sweep', () => {
       // return. The line is written once EVERY table has been swept; waiting
       // for the moderation row alone raced the remaining tables' deletes and
       // read the log before the summary existed (seen under a full parallel run).
-      await expect
-        .poll(() => lines.some((line) => line.message.includes('expiry sweep:')))
-        .toBe(true);
+      expect(
+        await pollUntil(() => lines.some((line) => line.message.includes('expiry sweep:'))),
+      ).toBe(true);
     } finally {
       stopExpirySweep();
     }
@@ -397,7 +398,7 @@ describe('timestamps', () => {
     `;
     // `timestamp` without a zone reinterprets the value in the session's
     // TimeZone on every read, silently changing what it means.
-    expect(rows).toEqual([]);
+    expect<unknown[]>(rows).toEqual([]);
   });
 });
 

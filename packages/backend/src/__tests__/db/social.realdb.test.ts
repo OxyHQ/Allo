@@ -11,7 +11,7 @@
  * Nothing here imports a route; the repositories are exercised directly.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, getTableColumns } from 'drizzle-orm';
 import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from '@oxy.so/db';
 import type postgres from 'postgres';
@@ -522,7 +522,7 @@ describe('the allow-list is checked against the real table', () => {
     // A column added to the schema and forgotten in the tuple would be silently
     // unsettable — an endpoint that appears to accept a field and never stores
     // it. This is the gate that makes the tuple and the table one fact.
-    expect([...UPDATABLE_USER_SETTINGS_COLUMNS].sort()).toEqual(schemaColumns);
+    expect<string[]>([...UPDATABLE_USER_SETTINGS_COLUMNS].sort()).toEqual(schemaColumns);
     // Anti-vacuity: a traversal returning nothing would satisfy the equality above.
     expect(UPDATABLE_USER_SETTINGS_COLUMNS).toHaveLength(22);
   });

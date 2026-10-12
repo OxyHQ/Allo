@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import {
   fakeServer,
   flush,
@@ -118,7 +118,7 @@ describe('end to end over the fake server', () => {
     await bobIos.client.instance.refreshPending();
     const pending = bobIos.client.instance.pending();
     expect(pending).toHaveLength(1);
-    expect(pending[0].instance.id).toBe(bobDesktop.client.instanceId);
+    expect<string | null>(pending[0].instance.id).toBe(bobDesktop.client.instanceId);
     expect(pending[0].fingerprint).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){3}$/);
     // a wrong challenge is refused before anything is signed
     await expect(
@@ -413,7 +413,7 @@ describe('end to end over the fake server', () => {
     await waitJoined(bobDesktop, conv.id);
     await waitJoined(bobLaptop, conv.id);
     const leaves = server.conversations.get(conv.id)!.leaves;
-    expect([...leaves.keys()].sort()).toEqual(
+    expect<(string | null)[]>([...leaves.keys()].sort()).toEqual(
       [
         alice.client.instanceId,
         rootId,

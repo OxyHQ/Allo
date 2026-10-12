@@ -1,7 +1,7 @@
 /**
  * THE SEAM BETWEEN THE SDK AND THE MEDIA — ADR 0002, Decision 5.
  *
- * `@allo/core` runs in Node under `vitest`, where there is no
+ * `@allo/core` is tested under `bun test`, where there is no
  * `RTCPeerConnection` and no microphone. So the media is injected, the way
  * storage, secrets, the session and the people directory already are, and the
  * SDK keeps everything that is protocol or security: the state machine, the

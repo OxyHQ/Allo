@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 import { REPORTED_TYPES } from '../../../db/schema/moderation';
 import {
   deliverableTypes,
@@ -232,13 +232,13 @@ describe('user subject provider', () => {
      * would otherwise let a stale display name be the thing that was reviewed, and
      * a moderation snapshot is a consistency-critical read.
      */
-    const getUserById = vi.fn().mockResolvedValue(oxyUser);
+    const getUserById = mock().mockResolvedValue(oxyUser);
     await createUserSubjectProvider({ getUserById }).snapshot('user-1');
     expect(getUserById).toHaveBeenCalledWith('user-1', { cache: false });
   });
 
   it('passes displayName through and never recomposes it from a handle', async () => {
-    const getUserById = vi.fn().mockResolvedValue(oxyUser);
+    const getUserById = mock().mockResolvedValue(oxyUser);
     const snapshot = await createUserSubjectProvider({ getUserById }).snapshot('user-1');
 
     expect(snapshot?.content).toEqual({
@@ -258,7 +258,7 @@ describe('user subject provider', () => {
      * name the account does not actually display — evidence Allo invented. The
      * handle still travels, as a claim.
      */
-    const getUserById = vi.fn().mockResolvedValue({
+    const getUserById = mock().mockResolvedValue({
       id: 'user-2',
       username: 'handle_only',
       name: {},
@@ -272,7 +272,7 @@ describe('user subject provider', () => {
   });
 
   it('emits no permalink, because Allo has no public profile page', async () => {
-    const getUserById = vi.fn().mockResolvedValue(oxyUser);
+    const getUserById = mock().mockResolvedValue(oxyUser);
     const snapshot = await createUserSubjectProvider({ getUserById }).snapshot('user-1');
 
     expect(snapshot?.subject).toEqual({
@@ -290,7 +290,7 @@ describe('user subject provider', () => {
      * grows later, the serialised snapshot must never carry a message, a
      * ciphertext, a key or a participant list.
      */
-    const getUserById = vi.fn().mockResolvedValue(oxyUser);
+    const getUserById = mock().mockResolvedValue(oxyUser);
     const snapshot = await createUserSubjectProvider({ getUserById }).snapshot('user-1');
     const serialised = JSON.stringify(snapshot);
 
@@ -316,7 +316,7 @@ describe('user subject provider', () => {
      * former, and `isOxyUserNotFound` recognises both shapes the Oxy client uses.
      */
     const notFound = Object.assign(new Error('Not Found'), { status: 404 });
-    const getUserById = vi.fn().mockRejectedValue(notFound);
+    const getUserById = mock().mockRejectedValue(notFound);
     await expect(createUserSubjectProvider({ getUserById }).snapshot('gone')).resolves.toBeNull();
   });
 
@@ -327,14 +327,14 @@ describe('user subject provider', () => {
      * silently discarded because Oxy had a bad minute.
      */
     const outage = Object.assign(new Error('Service Unavailable'), { status: 503 });
-    const getUserById = vi.fn().mockRejectedValue(outage);
+    const getUserById = mock().mockRejectedValue(outage);
     await expect(createUserSubjectProvider({ getUserById }).snapshot('user-1')).rejects.toThrow(
       'Service Unavailable',
     );
   });
 
   it('bounds every claim so a profile cannot inflate an envelope', async () => {
-    const getUserById = vi.fn().mockResolvedValue({
+    const getUserById = mock().mockResolvedValue({
       id: 'user-3',
       username: 'x'.repeat(500),
       name: { displayName: 'y'.repeat(500) },

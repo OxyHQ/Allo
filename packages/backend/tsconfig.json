@@ -10,6 +10,7 @@
     "strict": false,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "types": ["node", "bun-types"],
     "composite": true,
     "baseUrl": ".",
     "paths": {

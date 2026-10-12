@@ -11,7 +11,8 @@
  * manifest, sealed key and event payload is byte-searched for the texts sent.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mocked } from '../testDoubles';
 import { and, eq, isNull } from 'drizzle-orm';
 import { io } from 'socket.io-client';
 import {
@@ -107,13 +108,12 @@ async function chunkBlobs(ids: string[]) {
 
 /** The backend's request log (route template + method + status), from the mocked logger. */
 function requestLog(since = 0) {
-  return vi
-    .mocked(logger.info)
+  return mocked(logger.info)
     .mock.calls.slice(since)
     .filter(([message]) => message === 'HTTP request completed')
     .map(([, meta]) => meta as { method: string; route: string; status: number });
 }
-const logMark = () => vi.mocked(logger.info).mock.calls.length;
+const logMark = () => mocked(logger.info).mock.calls.length;
 
 describe('history transfer', () => {
   it('a newly approved device is nudged over its socket, receives the six pre-join messages in order and the picture with its thumbnail; the server held ciphertext only and released the chunks', async () => {
@@ -320,12 +320,12 @@ describe('backup and recovery', () => {
     await waitFor(() => alice.client.instance.state() === 'revoked');
     await alice.client.stop();
     let blobGets = 0;
-    const countingFetch: typeof fetch = (input, init) => {
+    const countingFetch = ((input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if ((init?.method ?? 'GET').toUpperCase() === 'GET' && /\/v1\/blobs\//.test(url))
         blobGets += 1;
       return fetch(input, init);
-    };
+    }) as typeof fetch;
     const fresh = await h.makeClient(aliceId, 'Alice new phone', 'ios', {
       transport: { fetch: countingFetch },
     });

@@ -82,7 +82,7 @@ Or one at a time:
 
 ```bash
 bun run dev:frontend   # Expo on Metro port 8140, then press w, i or a
-bun run dev:backend    # nodemon + ts-node with hot reload
+bun run dev:backend    # bun --watch with hot reload
 ```
 
 iOS needs macOS and Xcode. Android needs Android Studio. The per platform scripts have no
@@ -119,7 +119,7 @@ bun run typecheck && bun run test
 **`@allo/frontend`**: `start`, `dev`, `android`, `ios`, `web`, `build`, `build-web`,
 `test` (Jest), `lint` (`expo lint .`, the minimal Expo-only ESLint config), `clean`, plus `clear-cache` and `reset-project`.
 
-**`@allo/backend`**: `dev`, `start`, `build`, `test` (Vitest, which needs a real Postgres
+**`@allo/backend`**: `dev`, `start`, `build`, `test` (`bun test`, which needs a real Postgres
 server — each `*.realdb.test.ts` suite creates its own throwaway, fully-migrated
 database on it), `clean`, plus `db:generate` and `db:migrate`.
 

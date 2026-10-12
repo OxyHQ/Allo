@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { uuidV7 } from '../util/ids';
 import { project } from '../messages/projection';
 import type { EventRecord, OutboxItemRecord } from '../storage/records';

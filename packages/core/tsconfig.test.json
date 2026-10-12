@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "composite": false, "noEmit": true, "rootDir": "." },
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "bun-types"]
+  },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

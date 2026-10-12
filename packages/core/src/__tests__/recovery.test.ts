@@ -17,7 +17,7 @@
  *                     just lost. That is the dead end `reclaimAccount()`
  *                     exists for.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { fakeServer, makeClient, stopAll, texts, waitFor, waitForText } from './e2eHelpers';
 import { storageKeyName } from '../crypto/atRest';
 import { instanceKeyName } from '../instance/manager';

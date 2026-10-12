@@ -61,7 +61,7 @@ of pre-existing violations to tighten, not a statement that they are fine. CI
 runs `biome ci .` and the Expo ESLint in the `lint` job. `.git-blame-ignore-revs`
 lists the mass-format commit (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
 
-CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `vitest`
+CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `bun test`
 against a real Postgres service container, and frontend typecheck plus `jest`.
 Running the backend suite locally needs a Postgres server and nothing else — the
 `*.realdb.test.ts` suites each create their own throwaway, fully-migrated
@@ -482,5 +482,5 @@ same ESM reason.
 never inside a package: a sub-package install can drop workspace resolution lines
 from `bun.lock` and break CI. The root `packageManager` is the one bun pin:
 every workflow's setup-bun reads it (`bun-version-file`, never a literal) and
-`bun run check:bun-pin` fails when `packages/backend/Dockerfile`'s `BUN_VERSION`
-disagrees. Regenerate the lockfile with that bun; a bump moves both pins.
+`bun run check:bun-pin` fails when `packages/backend/Dockerfile`'s
+`FROM oven/bun:<version>` tag disagrees. Regenerate the lockfile with that bun; a bump moves both pins.
