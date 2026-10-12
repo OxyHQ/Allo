@@ -11,7 +11,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
+    // Cleared (null) rather than `node` (node10), which TypeScript 7 and
+    // `bun check` reject (TS5108). tsc 5.9 then defaults to node10 exactly as
+    // before, and TypeScript 7 picks its own default for `commonjs`. Not
+    // Node16: under it, the ESM-only `@noble/hashes` imports become TS1479 and
+    // TS1541 in this CommonJS package.
+    "moduleResolution": null,
     "allowSyntheticDefaultImports": true,
     "composite": true
   },
