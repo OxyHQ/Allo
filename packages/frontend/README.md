@@ -87,7 +87,7 @@ Push notifications go through the platform: see
 
 ## Looking at the chat screens without an account
 
-`ALLO_HARNESS=1 npx expo start --web` swaps two modules for in-memory
+`ALLO_HARNESS=1 bunx expo start --web` swaps two modules for in-memory
 stand-ins (`harness/`, wired in `metro.config.js`): the Oxy session becomes a
 fixed person, and the Allo client is built against `@allo/core`'s fake server
 with a DM and a group already seeded. Every chat screen then opens in a browser
