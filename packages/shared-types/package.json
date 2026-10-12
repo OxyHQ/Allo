@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "bun check -p tsconfig.test.json",
     "test": "bun test --isolate --no-env-file ./src/__tests__",
     "prepublishOnly": "bun run build"
   },
