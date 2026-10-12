@@ -8,9 +8,12 @@
  *   Socket.IO (+ Redis adapter, optional) → workers → listen → READY.
  *
  * Anything failing before `listen` marks `boot_failed` and exits 1.
+ *
+ * Runs on Bun, which loads `.env` from the working directory before this file
+ * is evaluated (never overriding a variable already set), so there is no
+ * dotenv call here. The image ships no `.env`; ECS injects the environment.
  */
 
-import dotenv from 'dotenv';
 import http from 'node:http';
 import { join } from 'node:path';
 import { startEcosystemActivity, stopEcosystemActivity } from './src/ecosystemActivity';
@@ -51,7 +54,6 @@ import { startCallRingWorker, stopCallRingWorker } from './src/workers/callRingW
 import { startBlobGc, stopBlobGc } from './src/workers/blobGc';
 import { startDeliveryWorker, stopDeliveryWorker } from './src/workers/deliveryWorker';
 
-dotenv.config();
 registerGlobalErrorHandlers();
 
 export { APP_ORIGINS } from './src/app';

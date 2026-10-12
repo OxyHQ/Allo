@@ -24,10 +24,12 @@
  * `--phase=all` because a throwaway database has no previous image to protect:
  * the pre/post split exists to sequence a rollout, and there is no rollout here.
  *
- * The subprocess runs through `ts-node --transpile-only`, which is how this
- * package runs TypeScript everywhere else (`npm start`, `npm run dev`). Using a
- * different runner here would mean the suite migrates through a toolchain no
- * operator ever uses.
+ * The subprocess runs through Bun (`process.execPath`, the bun running the
+ * suite), which is how this package runs TypeScript everywhere else
+ * (`bun run start`, `bun run db:migrate`, the image's CMD and the deploy's
+ * migration task). Using a different runner here would mean the suite migrates
+ * through a toolchain no operator ever uses. `--no-env-file` keeps a developer's
+ * `.env` out of it: the child gets exactly the environment passed below.
  */
 
 import { spawn } from 'node:child_process';
@@ -75,14 +77,8 @@ function migrate(databaseUrl: string): Promise<void> {
   const databaseName = databaseNameOf(databaseUrl);
   return new Promise((resolve, reject) => {
     const child = spawn(
-      'npx',
-      [
-        'ts-node',
-        '--transpile-only',
-        MIGRATE_SCRIPT,
-        `--target-database=${databaseName}`,
-        '--phase=all',
-      ],
+      process.execPath,
+      ['--no-env-file', MIGRATE_SCRIPT, `--target-database=${databaseName}`, '--phase=all'],
       {
         cwd: PACKAGE_ROOT,
         env: { ...process.env, DATABASE_URL: databaseUrl },

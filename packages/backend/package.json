@@ -6,13 +6,13 @@
   "type": "commonjs",
   "main": "server.ts",
   "scripts": {
-    "start": "ts-node --transpile-only server.ts",
-    "dev": "nodemon --watch \"**/*.ts\" --exec ts-node --transpile-only server.ts",
+    "start": "bun server.ts",
+    "dev": "bun --watch server.ts",
     "build": "tsc",
     "test": "bun test --parallel --no-env-file --preload ./src/__tests__/setup.ts --timeout 30000 ./src/__tests__",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "ts-node --transpile-only src/db/migrate.ts"
+    "db:migrate": "bun src/db/migrate.ts"
   },
   "dependencies": {
     "@allo/shared-types": "workspace:*",
@@ -22,7 +22,6 @@
     "@oxy.so/core": "4.2.0",
     "@oxy.so/db": "^1.0.0",
     "@socket.io/redis-adapter": "^8.3.0",
-    "dotenv": "^17.4.2",
     "drizzle-orm": "0.45.2",
     "express": "^4.22.2",
     "express-rate-limit": "^8.0.0",
@@ -40,10 +39,7 @@
     "@types/supertest": "^6.0.3",
     "bun-types": "1.4.3",
     "drizzle-kit": "0.31.10",
-    "node-fetch": "^2.7.0",
-    "nodemon": "^3.1.14",
     "supertest": "^7.1.4",
-    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
 }

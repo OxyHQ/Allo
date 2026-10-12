@@ -82,7 +82,7 @@ Or one at a time:
 
 ```bash
 bun run dev:frontend   # Expo on Metro port 8140, then press w, i or a
-bun run dev:backend    # nodemon + ts-node with hot reload
+bun run dev:backend    # bun --watch with hot reload
 ```
 
 iOS needs macOS and Xcode. Android needs Android Studio. The per platform scripts have no

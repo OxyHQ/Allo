@@ -1,7 +1,7 @@
 /**
  * The ONLY thing that applies migrations for this service.
  *
- * Run as `npm run db:migrate -- --target-database=<name> --phase=pre|post|all`.
+ * Run as `bun run db:migrate --target-database=<name> --phase=pre|post|all`.
  * Never `drizzle-kit migrate`: that is a devDependency and cannot be reached
  * from the production image, so a deploy relying on it would have no migrator
  * at all.

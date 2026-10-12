@@ -27,7 +27,8 @@ Messaging platform routes: see [docs/platform/api-v1.md](../../docs/platform/api
 
 ### Prerequisites
 
-- Node.js 20.19+ and Bun 1.3+
+- Bun (the version pinned by the root `package.json` `packageManager`); the
+  backend runs on Bun, in development and in the image
 - A PostgreSQL instance (the service, and the `*.realdb.test.ts` suites)
 - Git
 
