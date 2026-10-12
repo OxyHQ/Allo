@@ -26,10 +26,10 @@ packages/frontend/*
 .vscode
 .idea
 
-# Local env files (secrets are injected at runtime)
+# Local env files (secrets are injected at runtime). No .env.example either:
+# nothing in the build or at runtime reads it.
 **/.env
 **/.env.*
-!**/.env.example
 
 # Docs and misc
 docs
