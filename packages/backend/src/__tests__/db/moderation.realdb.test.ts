@@ -29,7 +29,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, sql } from 'drizzle-orm';
 import { createDatabase, constraintNameOf, isUniqueViolation } from '@oxy.so/db';
 import type postgres from 'postgres';
-import type { AlloDatabase } from '../../db';
+import { type AlloDatabase, type OpenDatabase, openDatabase } from '../../db';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import * as schema from '../../db/schema';
 import { MissingTransactionError, requireTransaction } from '../../db/moderation/transactionGuard';
@@ -60,6 +60,7 @@ import {
 } from '../../db/moderation/reportRepository';
 
 let handle: TestDatabaseHandle;
+let database: OpenDatabase;
 let db: AlloDatabase;
 let client: postgres.Sql;
 
@@ -112,12 +113,16 @@ async function parkPendingOutboxWork(): Promise<void> {
 
 beforeAll(async () => {
   handle = await setUpTestDatabase();
-  const created = createDatabase({ databaseUrl: handle.databaseUrl, schema });
-  db = created.db;
-  client = created.client;
+  // The repositories run on the driver DATABASE_DRIVER selects, as the service
+  // would. The raw `client` stays postgres.js: it asserts the SCHEMA (catalog
+  // reads, statements the server must refuse), which is no driver's property.
+  database = openDatabase(handle.databaseUrl);
+  db = database.db;
+  client = createDatabase({ databaseUrl: handle.databaseUrl, schema }).client;
 }, 180_000);
 
 afterAll(async () => {
+  await database?.close();
   await client?.end();
   await handle?.drop();
 });

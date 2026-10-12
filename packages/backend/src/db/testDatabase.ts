@@ -35,6 +35,7 @@
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { createTestDatabase, dropTestDatabase } from '@oxy.so/db/testing';
+import { readDatabaseDriver } from './driver';
 
 const PACKAGE_ROOT = join(__dirname, '..', '..');
 const MIGRATE_SCRIPT = join(PACKAGE_ROOT, 'src', 'db', 'migrate.ts');
@@ -104,10 +105,15 @@ export interface TestDatabaseHandle {
 }
 
 export async function setUpTestDatabase(): Promise<TestDatabaseHandle> {
-  const databaseUrl = await createTestDatabase({ adminUrl: adminUrl(), migrate });
+  // DATABASE_DRIVER reaches every connection a suite opens: the admin one
+  // here, the migrator (a child process that inherits this environment) and
+  // `connectPostgres` / `openDatabase`. So `DATABASE_DRIVER=bun-sql bun run
+  // test` runs the whole backend on Bun.SQL.
+  const driver = readDatabaseDriver();
+  const databaseUrl = await createTestDatabase({ adminUrl: adminUrl(), driver, migrate });
   return {
     databaseUrl,
     databaseName: databaseNameOf(databaseUrl),
-    drop: () => dropTestDatabase(databaseUrl),
+    drop: () => dropTestDatabase(databaseUrl, { driver }),
   };
 }

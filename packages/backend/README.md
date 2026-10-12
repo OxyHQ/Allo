@@ -497,7 +497,19 @@ on it, named `oxydb_test_<hex>`, and drops it afterwards.
 ```bash
 docker compose -f docker-compose.postgres.yml up -d
 TEST_DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/postgres bun run test
+# the same suite on Bun's built-in client, as CI also runs it
+DATABASE_DRIVER=bun-sql TEST_DATABASE_URL=postgres://allo:allo@127.0.0.1:5440/postgres bun run test
 ```
+
+`DATABASE_DRIVER` (`postgres-js` when unset, or `bun-sql`) reaches every
+connection a run opens: the admin one, the migrator and the service's pool.
+Under `bun-sql` each pool opens all 10 of its connections on its first query,
+and `--parallel` starts one worker per core: on a many-core machine raise the
+server's `max_connections` (measured: 32 workers exhaust the default 100), or
+the run fails with `too many clients already`.
+`src/__tests__/db/driverParity.realdb.test.ts` opens BOTH drivers on one
+database whichever is selected, and checks that each reads back what the other
+wrote and that the server stored the type it was given.
 
 Without `TEST_DATABASE_URL` (or `DATABASE_URL`) the schema suite fails with a
 message naming this command. That is deliberate: a database test that skips

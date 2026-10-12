@@ -33,6 +33,7 @@ import {
   readTargetDatabase,
   runMigrations,
 } from '@oxy.so/db/migrate';
+import { readDatabaseDriver } from './driver';
 
 const PACKAGE_ROOT = join(__dirname, '..', '..');
 
@@ -78,6 +79,10 @@ async function main(): Promise<void> {
 
   await runMigrations({
     databaseUrl,
+    // The deploy's pre/post one-shots run on the service's own task definition,
+    // so they read the same DATABASE_DRIVER the service does. `Bun.SQL` has no
+    // NOTICE hook, so `logger.debug` gets no server notices under bun-sql.
+    driver: readDatabaseDriver(),
     migrationsFolder: join(PACKAGE_ROOT, 'drizzle'),
     /**
      * None. This schema uses no PostGIS, no pgvector and no pg_trgm — and an

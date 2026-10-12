@@ -164,6 +164,18 @@ jobs:
       - name: Test backend
         run: bun run --filter @allo/backend test
 
+      # The same suite again on Bun's built-in client, the opt-in driver
+      # production switches to with DATABASE_DRIVER=bun-sql (src/db/driver.ts).
+      # Every connection a suite opens follows the variable: the admin one, the
+      # migrator and the service's pool. Bun opens all 10 pool connections on
+      # the first query where postgres.js opens them as needed, so this run holds
+      # far more connections: measured, 32 parallel workers exhaust this image's
+      # default max_connections (100) and a 4-vCPU runner's 4 workers do not.
+      - name: Test backend on Bun.SQL
+        env:
+          DATABASE_DRIVER: bun-sql
+        run: bun run --filter @allo/backend test
+
   # The SDK packages the app and the backend integration test build on. They
   # need no Postgres: @allo/core's e2e suite runs against its in-memory fake
   # server, which validates every request with the same zod contract the
