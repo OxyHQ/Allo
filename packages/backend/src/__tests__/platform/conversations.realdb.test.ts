@@ -3,7 +3,7 @@
  * idempotency on `dm_key`, listing, reading, leaving.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { asc, eq } from 'drizzle-orm';
 import {
   conversationResponseSchema,

@@ -2,7 +2,7 @@
  * The per-instance delivery stream: opaque cursors, `hasMore`, ack.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import { decodeCursor, encodeCursor, INITIAL_CURSOR, syncResponseSchema } from '@allo/shared-types';
 import * as schema from '../../db/schema';

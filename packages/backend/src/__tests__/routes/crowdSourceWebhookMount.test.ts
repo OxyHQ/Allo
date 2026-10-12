@@ -2,7 +2,7 @@ import { WebhookEventEnvelopeSchema } from '@crowdsource.you/contracts';
 import { createHmac } from 'crypto';
 import express from 'express';
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 /**
  * The webhook signature covers the bytes that arrived, so a body parser mounted
@@ -19,16 +19,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * other way would test a mock of the thing that breaks.
  */
 
-vi.mock('../../services/moderation/moderationEventStore', () => ({
+mock.module('../../services/moderation/moderationEventStore', () => ({
   postgresProcessedEventStore: () => ({
-    claim: vi.fn(async () => true),
-    release: vi.fn(async () => undefined),
+    claim: mock(async () => true),
+    release: mock(async () => undefined),
   }),
 }));
 
-vi.mock('../../services/moderation/ModerationInboundService', () => ({
-  recordDecisionEvent: vi.fn(async () => undefined),
-  recordIgnoredEvent: vi.fn(async () => undefined),
+mock.module('../../services/moderation/ModerationInboundService', () => ({
+  recordDecisionEvent: mock(async () => undefined),
+  recordIgnoredEvent: mock(async () => undefined),
 }));
 
 import { resetCrowdSourceConfigForTests } from '../../config/crowdsource';
@@ -134,7 +134,7 @@ function signedDelivery(secret: string) {
 
 describe('crowdsource webhook mount order', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mock.clearAllMocks();
     resetCrowdSourceConfigForTests();
     process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
   });
@@ -323,7 +323,7 @@ describe('crowdsource webhook secret rotation', () => {
   const UNRELATED_SECRET = 'a-secret-nobody-configured-yy';
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mock.clearAllMocks();
     resetCrowdSourceConfigForTests();
     process.env.CROWDSOURCE_WEBHOOK_SECRET = SECRET;
     process.env.CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS = PREVIOUS_SECRET;

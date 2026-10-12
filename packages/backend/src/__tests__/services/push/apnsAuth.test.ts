@@ -1,5 +1,5 @@
 import { createPublicKey, generateKeyPairSync, verify } from 'crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import type { ApnsCredentials } from '../../../config/push';
 import { createApnsTokenProvider, TOKEN_LIFETIME_MS } from '../../../services/push/apnsAuth';

@@ -10,7 +10,8 @@
  * `joined` the whole way, never `removed` by a commit that did not touch it.
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mocked } from '../testDoubles';
 import { and, asc, eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { logger } from '../../utils/logger';
@@ -68,13 +69,12 @@ async function leavesOf(conversationId: string) {
 
 /** The backend's request log (method, route template, status) since `since`, from the mocked logger. */
 function requestLog(since = 0) {
-  return vi
-    .mocked(logger.info)
+  return mocked(logger.info)
     .mock.calls.slice(since)
     .filter(([message]) => message === 'HTTP request completed')
     .map(([, meta]) => meta as { method: string; route: string; status: number });
 }
-const logMark = () => vi.mocked(logger.info).mock.calls.length;
+const logMark = () => mocked(logger.info).mock.calls.length;
 
 describe('members without an instance', () => {
   it("(a) a DM with an account that has no instance: created, two texts held, then delivered in order once Bob installs; Bob's member row joined throughout", async () => {

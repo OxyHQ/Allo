@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mocked } from '../../testDoubles';
+import * as realSubjectRegistry from '../../../services/moderation/subjects/registry';
 import { REPORT_CATEGORIES } from '../../../db/schema/moderation';
 import { loadCrowdSourceConfig, resetCrowdSourceConfigForTests } from '../../../config/crowdsource';
 import {
@@ -6,12 +8,10 @@ import {
   allegationsForCategories,
 } from '../../../services/moderation/reportTaxonomy';
 
-vi.mock('../../../services/moderation/subjects/registry', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../../services/moderation/subjects/registry')
-  >('../../../services/moderation/subjects/registry');
-  return { ...actual, subjectProviderFor: vi.fn() };
-});
+mock.module('../../../services/moderation/subjects/registry', () => ({
+  ...realSubjectRegistry,
+  subjectProviderFor: mock(),
+}));
 
 import {
   ModerationSubjectNotAnOxyAccountError,
@@ -80,8 +80,8 @@ describe('report envelope input', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(subjectProviderFor).mockReturnValue({
+    mock.clearAllMocks();
+    mocked(subjectProviderFor).mockReturnValue({
       reportedType: 'user',
       subjectType: 'identity.profile',
       snapshot: async () => snapshot,
@@ -89,7 +89,7 @@ describe('report envelope input', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    mock.restore();
   });
 
   it("uses the report's own timestamp, not the moment of delivery", async () => {
@@ -138,7 +138,7 @@ describe('report envelope input', () => {
   });
 
   it('returns null when the account is gone', async () => {
-    vi.mocked(subjectProviderFor).mockReturnValue({
+    mocked(subjectProviderFor).mockReturnValue({
       reportedType: 'user',
       subjectType: 'identity.profile',
       snapshot: async () => null,
@@ -153,7 +153,7 @@ describe('report envelope input', () => {
      * a human will look, rather than filing it among the deliberate local-only
      * reports, which in Allo is where every reported message already sits.
      */
-    vi.mocked(subjectProviderFor).mockReturnValue(undefined);
+    mocked(subjectProviderFor).mockReturnValue(undefined);
     const thrown = await buildModerationReportInput(report).catch((error: unknown) => error);
     expect(thrown).toBeInstanceOf(ModerationSubjectUnsupportedError);
     expect(thrown).toHaveProperty('retryable', false);
@@ -189,8 +189,8 @@ describe('report envelope input', () => {
        * one day describes something richer than a profile it would have composed
        * the material too — leaving only a promise that nobody serialises it.
        */
-      const snapshotFn = vi.fn().mockResolvedValue(snapshot);
-      vi.mocked(subjectProviderFor).mockReturnValue({
+      const snapshotFn = mock().mockResolvedValue(snapshot);
+      mocked(subjectProviderFor).mockReturnValue({
         reportedType: 'user',
         subjectType: 'identity.profile',
         snapshot: snapshotFn,
@@ -222,8 +222,8 @@ describe('report envelope input', () => {
        * The counterpart, and the one that would make this guard a regression if it
        * were missing: an ordinary account report must resolve and deliver.
        */
-      const snapshotFn = vi.fn().mockResolvedValue(snapshot);
-      vi.mocked(subjectProviderFor).mockReturnValue({
+      const snapshotFn = mock().mockResolvedValue(snapshot);
+      mocked(subjectProviderFor).mockReturnValue({
         reportedType: 'user',
         subjectType: 'identity.profile',
         snapshot: snapshotFn,

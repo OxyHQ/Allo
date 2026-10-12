@@ -2,7 +2,7 @@
  * Blobs: upload with digest and size checks, download, the collector.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import request from 'supertest';
 import { eq } from 'drizzle-orm';
 import { BLOB_SHA256_HEADER, uploadBlobResponseSchema } from '@allo/shared-types';

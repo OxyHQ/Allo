@@ -1,6 +1,6 @@
 import { DecisionSchema } from '@crowdsource.you/contracts';
 import { eq } from 'drizzle-orm';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { uuidv7 } from '@oxy.so/db';
 
 /**

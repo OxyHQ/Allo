@@ -1,17 +1,15 @@
 /**
  * The log sanitiser: what must never reach a line, and what must survive.
- * The setup file mocks the logger module for every other suite; this one
- * needs the real thing.
+ * The setup preload replaces only the `logger` export of this module for every
+ * suite and passes the rest through, so the sanitiser imported here is the real
+ * one.
  */
 
-import { describe, expect, it, vi } from 'vitest';
-
-vi.unmock('../../utils/logger');
+import { describe, expect, it } from 'bun:test';
+import { sanitizeLogValue } from '../../utils/logger';
 
 describe('sanitizeLogValue', () => {
-  it('redacts ids, tokens, urls, emails and uuids of any version, and keeps the request fields', async () => {
-    const { sanitizeLogValue } =
-      await vi.importActual<typeof import('../../utils/logger')>('../../utils/logger');
+  it('redacts ids, tokens, urls, emails and uuids of any version, and keeps the request fields', () => {
     const out = sanitizeLogValue({
       requestId: 'req-abcdef12',
       route: '/v1/conversations/:id/events',
@@ -54,9 +52,7 @@ describe('sanitizeLogValue', () => {
     expect(note).not.toContain('0192f7a0-1234-7abc-8def-0123456789ab');
   });
 
-  it('survives errors, cycles, buffers and depth', async () => {
-    const { sanitizeLogValue } =
-      await vi.importActual<typeof import('../../utils/logger')>('../../utils/logger');
+  it('survives errors, cycles, buffers and depth', () => {
     const cyclic: Record<string, unknown> = { a: 1 };
     cyclic.self = cyclic;
     const error = new Error('token=abc failed for 507f1f77bcf86cd799439011');

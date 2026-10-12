@@ -6,7 +6,7 @@
  * across a block, and notice silence.
  */
 
-import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import request from 'supertest';
 import {
   callResponseSchema,

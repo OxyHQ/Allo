@@ -6,7 +6,7 @@
  * is the one a reasonable implementation gets wrong by being helpful.
  */
 
-import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'bun:test';
 import request from 'supertest';
 import { presenceResponseSchema, type PresenceState } from '@allo/shared-types';
 import { getDb } from '../../db';

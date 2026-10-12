@@ -1,6 +1,6 @@
 import { createServer, type Http2Server } from 'http2';
 import type { AddressInfo } from 'net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 
 import type { ApnsCredentials } from '../../../config/push';
 import {

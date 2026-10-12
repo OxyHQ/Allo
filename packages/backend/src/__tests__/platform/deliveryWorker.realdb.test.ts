@@ -4,7 +4,7 @@
  * cleared on rejection, lease reclaim after a dead worker.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import type { PushDevice, PushNotification } from '../../services/push/delivery';

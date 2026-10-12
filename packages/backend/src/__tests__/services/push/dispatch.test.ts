@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 
 import type { PushPlatform } from '../../../config/push';
 import type {
@@ -33,7 +33,7 @@ function senderReturning(
   platform: PushPlatform,
   outcomes: readonly PushDeliveryOutcome[],
 ): PushSender {
-  return { platform, send: vi.fn(async () => outcomes) };
+  return { platform, send: mock(async () => outcomes) };
 }
 
 describe('routing by platform', () => {

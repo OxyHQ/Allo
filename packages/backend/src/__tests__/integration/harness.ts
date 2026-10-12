@@ -9,8 +9,8 @@
  * handshake.
  *
  * Each suite boots its own harness (`beforeAll(() => h.boot())`), because
- * vitest runs files in separate workers and the backend's Postgres handle is
- * module-global.
+ * `bun test --parallel` runs every file isolated, in its own module registry,
+ * and the backend's Postgres handle is module-global.
  */
 
 import http from 'node:http';

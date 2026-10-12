@@ -20,7 +20,8 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mocked } from '../testDoubles';
 import { and, asc, eq } from 'drizzle-orm';
 import {
   CryptoEngine,
@@ -140,13 +141,12 @@ async function expectRealGroupInfo(conversationId: string) {
 
 /** The backend's request log (method, route template, status) since `since`, from the mocked logger. */
 function requestLog(since = 0) {
-  return vi
-    .mocked(logger.info)
+  return mocked(logger.info)
     .mock.calls.slice(since)
     .filter(([message]) => message === 'HTTP request completed')
     .map(([, meta]) => meta as { method: string; route: string; status: number });
 }
-const logMark = () => vi.mocked(logger.info).mock.calls.length;
+const logMark = () => mocked(logger.info).mock.calls.length;
 const conflictsSince = (mark: number) => requestLog(mark).filter((r) => r.status === 409);
 
 /**

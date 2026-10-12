@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, mock } from 'bun:test';
 
 import {
   canAuthenticateAsOxyService,
@@ -78,7 +78,7 @@ describe('the Oxy service credential', () => {
 
 describe('handing the credential to the SDK', () => {
   it('configures the client and says so', () => {
-    const client = { configureServiceAuth: vi.fn() };
+    const client = { configureServiceAuth: mock() };
 
     const configured = configureOxyServiceAuth(client, {
       ALLO_OXY_SERVICE_API_KEY: API_KEY,
@@ -90,7 +90,7 @@ describe('handing the credential to the SDK', () => {
   });
 
   it('leaves the client alone when there is no credential', () => {
-    const client = { configureServiceAuth: vi.fn() };
+    const client = { configureServiceAuth: mock() };
 
     expect(configureOxyServiceAuth(client, {})).toBe(false);
     expect(client.configureServiceAuth).not.toHaveBeenCalled();

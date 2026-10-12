@@ -12,7 +12,7 @@
  * weakening a passing one.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { and, asc, eq } from 'drizzle-orm';
 import {
   epochConflictDetailsSchema,

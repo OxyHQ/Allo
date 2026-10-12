@@ -61,7 +61,7 @@ of pre-existing violations to tighten, not a statement that they are fine. CI
 runs `biome ci .` and the Expo ESLint in the `lint` job. `.git-blame-ignore-revs`
 lists the mass-format commit (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
 
-CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `vitest`
+CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `bun test`
 against a real Postgres service container, and frontend typecheck plus `jest`.
 Running the backend suite locally needs a Postgres server and nothing else — the
 `*.realdb.test.ts` suites each create their own throwaway, fully-migrated

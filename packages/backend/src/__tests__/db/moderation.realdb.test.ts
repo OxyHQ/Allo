@@ -25,7 +25,7 @@
  * that fails.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, sql } from 'drizzle-orm';
 import { createDatabase, constraintNameOf, isUniqueViolation } from '@oxy.so/db';
 import type postgres from 'postgres';

@@ -2,7 +2,7 @@
  * Key package stock: upload, atomic claim, exhaustion, the low-water nudge.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { and, eq, isNull } from 'drizzle-orm';
 import {
   claimKeyPackagesResponseSchema,

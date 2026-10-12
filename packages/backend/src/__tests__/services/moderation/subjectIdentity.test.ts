@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 
 import { MAX_REPORT_LOCAL_STATUS_REASON_LENGTH } from '../../../db/schema/moderation';
 import {

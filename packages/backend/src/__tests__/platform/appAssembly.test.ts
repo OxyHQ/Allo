@@ -8,7 +8,8 @@
 
 import express from 'express';
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mocked } from '../testDoubles';
 import { errorResponseSchema } from '@allo/shared-types';
 import { createApp, type CreateAppDependencies } from '../../app';
 import {
@@ -147,16 +148,16 @@ describe('the error envelope', () => {
     expect(expectError(crashed.body)).toEqual({ code: 'internal', message: 'Internal error' });
     expect(JSON.stringify(crashed.body)).not.toContain('secret');
 
-    vi.mocked(logger.info).mockClear();
+    mocked(logger.info).mockClear();
     const limited = await request(app).get('/api/profile/teapot').set(USER_HEADER, 'acct-00000001');
     expect(limited.status).toBe(429);
     expect(expectError(limited.body).code).toBe('rate_limited');
     // The request line names the MOUNTED template even on the error path, where
     // every router has unwound (and restored `req.baseUrl`) before the handler
     // answers; it never names the URL.
-    const line = vi
-      .mocked(logger.info)
-      .mock.calls.find(([message]) => message === 'HTTP request completed');
+    const line = mocked(logger.info).mock.calls.find(
+      ([message]) => message === 'HTTP request completed',
+    );
     expect(line?.[1]).toMatchObject({ method: 'GET', route: '/api/profile/teapot', status: 429 });
     expect(JSON.stringify(line?.[1])).not.toContain('acct-00000001');
 
