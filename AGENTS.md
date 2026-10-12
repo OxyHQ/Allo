@@ -480,6 +480,7 @@ same ESM reason.
 
 **`bun.lock` regeneration.** Always run `bun install` from the **monorepo root**,
 never inside a package: a sub-package install can drop workspace resolution lines
-from `bun.lock` and break CI. CI and `packages/backend/Dockerfile` (via its
-`BUN_VERSION` env) pin the same bun version. Keep them aligned with your local
-bun when regenerating the lockfile.
+from `bun.lock` and break CI. The root `packageManager` is the one bun pin:
+every workflow's setup-bun reads it (`bun-version-file`, never a literal) and
+`bun run check:bun-pin` fails when `packages/backend/Dockerfile`'s `BUN_VERSION`
+disagrees. Regenerate the lockfile with that bun; a bump moves both pins.
