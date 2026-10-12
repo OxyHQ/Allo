@@ -24,7 +24,12 @@
 # The bun that wrote bun.lock: the tag must equal the root package.json
 # `packageManager`, which CI's setup-bun reads. `bun run check:bun-pin` (CI lint
 # job) fails if not.
-FROM oven/bun:1.4.3-alpine
+#
+# The digest is what the build uses; the tag is only for reading and for
+# check:bun-pin. It is the multi-arch index digest (linux/amd64 + linux/arm64),
+# resolved 2026-10-12. A bump, even of the same tag, needs a new digest and a
+# re-review (`reviewed-image.py pin`); without one the deploy refuses to build.
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
 
 WORKDIR /app
 
@@ -81,6 +86,13 @@ COPY packages/backend ./packages/backend
 RUN bun run --cwd packages/shared-types build
 
 EXPOSE 8080
+
+# Run as the base image's unprivileged `bun` user (uid 1000), not root. Every
+# file above was copied as root, so the app can read but not rewrite its own
+# code and dependencies. Nothing at runtime writes outside /tmp: the API writes
+# no files, the migrator materialises journal prefixes under os.tmpdir(), and
+# the base sets BUN_RUNTIME_TRANSPILER_CACHE_PATH=0. Port 8080 needs no root.
+USER bun
 
 # Bun runs the TypeScript entrypoint directly (`start` is `bun server.ts`, the
 # same as `bun run start:backend`).
