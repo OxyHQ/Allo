@@ -482,5 +482,5 @@ same ESM reason.
 never inside a package: a sub-package install can drop workspace resolution lines
 from `bun.lock` and break CI. The root `packageManager` is the one bun pin:
 every workflow's setup-bun reads it (`bun-version-file`, never a literal) and
-`bun run check:bun-pin` fails when `packages/backend/Dockerfile`'s `BUN_VERSION`
-disagrees. Regenerate the lockfile with that bun; a bump moves both pins.
+`bun run check:bun-pin` fails when `packages/backend/Dockerfile`'s
+`FROM oven/bun:<version>` tag disagrees. Regenerate the lockfile with that bun; a bump moves both pins.

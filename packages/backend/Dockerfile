@@ -1,15 +1,18 @@
 # Backend Dockerfile (Express API).
 #
-# Runs on AWS Graviton (linux/arm64) as well as x86_64; base node:22-alpine.
+# Runs on AWS Graviton (linux/arm64) as well as x86_64; base oven/bun alpine.
 #
-# Node 22 (LTS). The hazard that keeps this >= 20:
+# Bun is the runtime, not only the installer: `start` is `bun server.ts` and
+# `db:migrate` (the deploy's pre/post one-shot tasks, which run in this image)
+# is `bun src/db/migrate.ts`. Nothing in this image runs Node, so it does not
+# ship one. The package scripts that call a Node-shebang binary at install time
+# (the root postinstall's `tsc` builds of the SDK packages) still work: when no
+# `node` is on PATH, `bun run` puts a `node` that is bun in front of the script.
 #
-# Node 18 (EOL 2025-04) does not expose globalThis.crypto when executing a
-# script file, so @oxy.so/core's crypto polyfill installs an RN-only
-# getRandomValues stub that throws on Node. Node >= 20 exposes the global, the
-# polyfill's guard is skipped, and native crypto is used. That is a property of
-# @oxy.so/core, which every Oxy backend loads, and it is unrelated to which
-# database is underneath.
+# The hazard the old Node 22 floor guarded against does not apply: Bun exposes
+# `globalThis.crypto` everywhere, so @oxy.so/core's RN-only getRandomValues
+# polyfill is never installed.
+#
 # The repo is a Bun workspaces monorepo with a committed bun.lock, so we use
 # Bun for a deterministic install instead of npm. npm's strict ERESOLVE
 # resolver fails here because @oxy.so/services declares OPTIONAL peer deps
@@ -18,15 +21,10 @@
 # resolves the workspace cleanly. The backend itself only needs @oxy.so/core
 # (a shared root dependency) and never imports any expo/frontend package.
 
-FROM node:22-alpine
-
-# The bun that wrote bun.lock: must equal the root package.json `packageManager`,
-# which CI's setup-bun reads. `bun run check:bun-pin` (CI lint job) fails if not.
-ENV BUN_VERSION=1.4.3
-ENV BUN_INSTALL=/usr/local
-RUN apk add --no-cache bash curl unzip libstdc++ \
-    && curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
-    && bun --version
+# The bun that wrote bun.lock: the tag must equal the root package.json
+# `packageManager`, which CI's setup-bun reads. `bun run check:bun-pin` (CI lint
+# job) fails if not.
+FROM oven/bun:1.4.3-alpine
 
 WORKDIR /app
 
@@ -84,5 +82,6 @@ RUN bun run --cwd packages/shared-types build
 
 EXPOSE 8080
 
-# ts-node runs the TypeScript entrypoint directly (matches `bun run start:backend`).
+# Bun runs the TypeScript entrypoint directly (`start` is `bun server.ts`, the
+# same as `bun run start:backend`).
 CMD ["bun", "run", "--cwd", "packages/backend", "start"]

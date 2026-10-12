@@ -6,7 +6,7 @@
       "services": ["allo"],
       "ecrRepository": "oxy/allo",
       "dockerfile": "packages/backend/Dockerfile",
-      "dockerfileSha256": "35c7d56ec0f98a71f051230348c2145f0a2cc1c2101ebab46e29d7f8d9eb03b6",
+      "dockerfileSha256": "f0a3a9d6ca5ee9eaba83ac22e384b2d9b4fa5791150084704045b8d348c2552e",
       "target": null,
       "tagSuffix": "",
       "cacheScope": "allo"
