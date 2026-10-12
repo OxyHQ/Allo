@@ -3,13 +3,11 @@
   "recipes": [
     {
       "name": "allo",
-      "services": ["allo"],
       "ecrRepository": "oxy/allo",
       "dockerfile": "packages/backend/Dockerfile",
-      "dockerfileSha256": "f0a3a9d6ca5ee9eaba83ac22e384b2d9b4fa5791150084704045b8d348c2552e",
+      "context": ".",
       "target": null,
-      "tagSuffix": "",
-      "cacheScope": "allo"
+      "buildInputsSha256": "d1ada5c71e8f99d4fc9e990f81360d0d99bba5c25251ccc691f042491aea94ab"
     }
   ]
 }
