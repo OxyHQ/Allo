@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, getTableColumns } from 'drizzle-orm';
 import { createDatabase, constraintNameOf, isCheckViolation, isUniqueViolation } from '@oxy.so/db';
 import type postgres from 'postgres';
+import type { AlloDatabase } from '../../db';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import * as schema from '../../db/schema';
 import { blockUser, listBlockedUserIds, unblockUser } from '../../db/social/blockRepository';
@@ -32,7 +33,7 @@ import {
 } from '../../db/social/userSettingsRepository';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
+let db: AlloDatabase;
 let client: postgres.Sql;
 
 /** Unique per call so cases cannot collide inside the one shared database. */

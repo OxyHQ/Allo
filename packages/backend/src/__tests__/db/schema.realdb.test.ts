@@ -21,6 +21,7 @@ import { PgTable } from 'drizzle-orm/pg-core';
 import { createDatabase, constraintNameOf } from '@oxy.so/db';
 import { findUnsupportedExpiryColumns } from '@oxy.so/db/assert';
 import type postgres from 'postgres';
+import type { AlloDatabase } from '../../db';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import {
   EXPIRY_SWEEP_TARGETS,
@@ -36,7 +37,7 @@ import {
 import * as schema from '../../db/schema';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
+let db: AlloDatabase;
 let client: postgres.Sql;
 
 const silentLog = { info: () => undefined, debug: () => undefined };

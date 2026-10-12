@@ -29,6 +29,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, sql } from 'drizzle-orm';
 import { createDatabase, constraintNameOf, isUniqueViolation } from '@oxy.so/db';
 import type postgres from 'postgres';
+import type { AlloDatabase } from '../../db';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import * as schema from '../../db/schema';
 import { MissingTransactionError, requireTransaction } from '../../db/moderation/transactionGuard';
@@ -59,7 +60,7 @@ import {
 } from '../../db/moderation/reportRepository';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
+let db: AlloDatabase;
 let client: postgres.Sql;
 
 /** Unique per call so cases cannot collide inside the one shared database. */
