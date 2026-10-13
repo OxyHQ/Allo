@@ -313,13 +313,8 @@ jobs:
       # can fail, not that it stopped looking.
       - name: Prove the reviewed-image gate can fail
         run: python3 -B -m unittest discover -s .github/scripts -p test_reviewed_image.py
-      # Without GITHUB_REPOSITORY: the fixtures' config names OxyHQ/Example,
-      # and reviewed-image.py refuses a config for another repository when the
-      # variable is set, which Actions always does. test_reviewed_image.py
-      # clears it in setUp; this suite does not, and it stays byte-identical
-      # to the fleet's copy, so the step clears it instead.
       - name: Prove the base-image digest bump works on fixtures
-        run: env -u GITHUB_REPOSITORY python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
+        run: python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
       - name: Verify the production image's build inputs are reviewed
         run: python3 -B .github/scripts/reviewed-image.py check
 
