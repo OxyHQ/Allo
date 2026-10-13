@@ -21,6 +21,7 @@ import { PgTable } from 'drizzle-orm/pg-core';
 import { createDatabase, constraintNameOf } from '@oxy.so/db';
 import { findUnsupportedExpiryColumns } from '@oxy.so/db/assert';
 import type postgres from 'postgres';
+import { type AlloDatabase, type OpenDatabase, openDatabase } from '../../db';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import {
   EXPIRY_SWEEP_TARGETS,
@@ -36,7 +37,8 @@ import {
 import * as schema from '../../db/schema';
 
 let handle: TestDatabaseHandle;
-let db: ReturnType<typeof createDatabase<typeof schema>>['db'];
+let database: OpenDatabase;
+let db: AlloDatabase;
 let client: postgres.Sql;
 
 const silentLog = { info: () => undefined, debug: () => undefined };
@@ -50,12 +52,16 @@ function id(prefix: string): string {
 
 beforeAll(async () => {
   handle = await setUpTestDatabase();
-  const created = createDatabase({ databaseUrl: handle.databaseUrl, schema });
-  db = created.db;
-  client = created.client;
+  // The repositories run on the driver DATABASE_DRIVER selects, as the service
+  // would. The raw `client` stays postgres.js: it asserts the SCHEMA (catalog
+  // reads, statements the server must refuse), which is no driver's property.
+  database = openDatabase(handle.databaseUrl);
+  db = database.db;
+  client = createDatabase({ databaseUrl: handle.databaseUrl, schema }).client;
 }, 180_000);
 
 afterAll(async () => {
+  await database?.close();
   await client?.end();
   await handle?.drop();
 });

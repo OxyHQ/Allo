@@ -27,7 +27,7 @@ import {
   type DeployPhase,
   type JournalEntry,
 } from '@oxy.so/db/migrate';
-import type postgres from 'postgres';
+import type { RawSqlClient } from '@oxy.so/db';
 
 export interface PendingMigrationVerdict {
   /** Pending migrations the boot may proceed without: `post`-phase ones. */
@@ -78,7 +78,7 @@ export class PreMigrationsPendingError extends Error {
  * ones (the deploy applies them after the rollout) and say so in the log.
  */
 export async function assertPreMigrationsCurrent(
-  client: postgres.Sql,
+  client: RawSqlClient,
   migrationsFolder: string,
   log: { warn(message: string, meta?: Record<string, unknown>): void },
 ): Promise<void> {

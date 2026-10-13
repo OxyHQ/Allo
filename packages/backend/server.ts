@@ -21,6 +21,7 @@ import {
   checkPostgresHealth,
   closePostgres,
   connectPostgres,
+  getDatabaseDriver,
   getDb,
   getPostgresClient,
 } from './src/db';
@@ -97,6 +98,9 @@ export async function bootServer(): Promise<void> {
     const env = validateEnvironment();
     const db = connectPostgres(env.databaseUrl);
     if (!(await checkPostgresHealth())) throw new Error('Postgres is unreachable');
+    // Which client the pool runs on (DATABASE_DRIVER), so a flip of the flag
+    // can be confirmed from the task's own log rather than assumed.
+    logger.info('Postgres connected', { driver: getDatabaseDriver() });
     if (process.env.NODE_ENV === 'production') {
       // Pending `post` migrations are the expected mid-rollout state; only a
       // pending `pre` migration refuses the boot. See runtime/migrationGate.ts.
