@@ -472,11 +472,14 @@ jobs:
           root=$(curl -fsS http://127.0.0.1:8080/) || { docker logs allo-smoke; exit 1; }
           echo "GET /health/ready -> $ready"
           echo "GET / -> $root"
-          echo "$ready" | grep -q '"status":"ready"'
-          echo "$root" | grep -q 'Welcome to Allo API'
+          grep -q '"status":"ready"' <<<"$ready"
+          grep -q 'Welcome to Allo API' <<<"$root"
+          # ECS stops a task with SIGTERM; the drain must run, not a kill.
+          # Captured first: `docker logs | grep -q` dies of SIGPIPE under pipefail.
           docker stop -t 20 allo-smoke >/dev/null
-          docker logs allo-smoke 2>&1 | tail -n 20
-          docker logs allo-smoke 2>&1 | grep -q 'shutting down gracefully'
+          logs=$(docker logs allo-smoke 2>&1)
+          tail -n 20 <<<"$logs"
+          grep -q 'HTTP, sockets, Redis and PostgreSQL closed' <<<"$logs"
 
       - name: Server logs on failure
         if: failure()
