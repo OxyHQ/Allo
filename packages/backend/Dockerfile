@@ -5,21 +5,24 @@
 # Bun is the runtime, not only the installer: `start` is `bun server.ts` and
 # `db:migrate` (the deploy's pre/post one-shot tasks, which run in this image)
 # is `bun src/db/migrate.ts`. Nothing in this image runs Node, so it does not
-# ship one. The package scripts that call a Node-shebang binary at install time
-# (the root postinstall's `tsc` builds of the SDK packages) still work: when no
-# `node` is on PATH, `bun run` puts a `node` that is bun in front of the script.
+# ship one. Bun exposes `globalThis.crypto` everywhere, so @oxy.so/core's
+# RN-only getRandomValues polyfill is never installed.
 #
-# The hazard the old Node 22 floor guarded against does not apply: Bun exposes
-# `globalThis.crypto` everywhere, so @oxy.so/core's RN-only getRandomValues
-# polyfill is never installed.
+# Two stages. `deps` installs the backend's PRODUCTION dependency closure and
+# nothing else; `runtime` is a fresh base holding that node_modules plus the
+# TypeScript sources bun runs. No dev dependency, no SDK workspace (@allo/core,
+# @allo/react), no frontend package and no compiler reaches the runtime image.
 #
-# The repo is a Bun workspaces monorepo with a committed bun.lock, so we use
-# Bun for a deterministic install instead of npm. npm's strict ERESOLVE
-# resolver fails here because @oxy.so/services declares OPTIONAL peer deps
-# (expo-font ~55, expo >=55, ...) that conflict with the expo 56 tree pulled
-# in by the frontend workspace; Bun honours peerDependenciesMeta.optional and
-# resolves the workspace cleanly. The backend itself only needs @oxy.so/core
-# (a shared root dependency) and never imports any expo/frontend package.
+# There is no build stage because nothing is built. Bun runs the backend's
+# TypeScript directly, and it loads @allo/shared-types from its SOURCE: the
+# backend tsconfig maps `@allo/shared-types` to `../shared-types/src`, and bun
+# honours tsconfig `paths` at runtime (measured: the server boots with
+# shared-types' `dist/` removed). The `tsc` builds the old single-stage image
+# ran produced nothing it loaded: its root postinstall never ran under
+# `--filter` (bun does not run the root's scripts when the root is not
+# selected), and the shared-types `dist/` it built by hand was shadowed by
+# `paths`. CI's image smoke boots this image, so a change that makes the
+# runtime need a build output fails there.
 
 # The bun that wrote bun.lock: the tag must equal the root package.json
 # `packageManager`, which CI's setup-bun reads. `bun run check:bun-pin` (CI lint
@@ -27,17 +30,15 @@
 #
 # The digest is what the build uses; the tag is only for reading and for
 # check:bun-pin. It is the multi-arch index digest (linux/amd64 + linux/arm64),
-# resolved 2026-10-12. A bump, even of the same tag, needs a new digest and a
-# re-review (`reviewed-image.py pin`); without one the deploy refuses to build.
-FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
+# resolved 2026-10-12. Both stages use the same reference. A bump, even of the
+# same tag, needs a new digest and a re-review (`reviewed-image.py pin`); without
+# one the deploy refuses to build. bump-base-digests.yml proposes those bumps.
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS deps
 
 WORKDIR /app
 
-# Copy the workspace manifests + lockfile. All workspace package.json files
-# must be present for `bun install --frozen-lockfile` to validate the committed
-# lockfile, but only the backend + shared-types workspaces are actually
-# installed below (via --filter), so the heavy expo/react-native frontend tree
-# is never downloaded into this image.
+# Every workspace manifest plus the lockfile: `--frozen-lockfile` validates the
+# committed bun.lock against all of them even though only two are installed.
 # bunfig.toml selects the HOISTED linker. Without it bun >= 1.3 defaults to the
 # isolated linker inside the image, which materialises the `file:` workspace
 # dependencies as nested per-package copies under packages/backend/node_modules
@@ -59,39 +60,54 @@ COPY packages/frontend/package.json ./packages/frontend/
 # "Couldn't find patch file: 'patches/expo@57.0.6.patch'".
 COPY patches ./patches/
 
-# The SDK workspaces' sources must exist before install: the root "postinstall"
-# script builds shared-types, core and react (in that order) as part of
-# `bun install`. The backend imports only shared-types at runtime; core is a
-# devDependency of the backend (its integration suite drives the real SDK
-# against the real app) and react is built only because the root postinstall
-# builds every SDK package the same way everywhere.
-COPY packages/shared-types ./packages/shared-types/
-COPY packages/core ./packages/core/
-COPY packages/react ./packages/react/
-
-# Install only the backend + SDK workspaces (and shared root deps such as
-# @oxy.so/core); the heavy expo/react-native frontend tree is never downloaded
-# into this image. --frozen-lockfile guarantees the committed bun.lock is used
-# verbatim, so the build is fully deterministic.
-RUN bun install --frozen-lockfile \
+# The production closure of the two workspaces the server runs: the backend and
+# @allo/shared-types, which it imports. --frozen-lockfile uses the committed
+# bun.lock verbatim.
+#
+# --production drops devDependencies (typescript, drizzle-kit, supertest,
+# bun-types, @allo/core and every @types/* the workspaces declare).
+#
+# --omit=peer: bun otherwise installs every peer the LOCKFILE resolved, and the
+# lockfile resolves them for the frontend. @oxy.so/core's optional peers
+# expo-crypto and expo-secure-store then drag in expo and react-native, and with
+# them typescript: measured 916 packages and 696 MB with peers against 317 and
+# 163 MB without. Every required peer in the closure is also a direct
+# dependency (drizzle-orm, postgres, express, zod, ...) except @oxy.so/protocol's
+# `expo-modules-core`, which only its React Native build loads. CI's image smoke
+# runs .github/scripts/check-runtime-closure.mjs against this tree and fails on
+# any other missing peer, and on any installed package nothing requires.
+#
+# --ignore-scripts: measured on this closure, the only install scripts are the
+# postinstalls of @firebase/util (writes a web-app config default from
+# FIREBASE_WEBAPP_CONFIG, unset here, so the shipped `undefined` stands) and
+# protobufjs (prints a version-scheme warning). Neither is in bun's default
+# trusted list, the tree is byte-identical with and without the flag, and there
+# is no native addon. The flag keeps it that way if a trust list ever grows.
+RUN bun install --frozen-lockfile --production --omit=peer --ignore-scripts \
         --filter '@allo/backend' \
-        --filter '@allo/shared-types' \
-        --filter '@allo/core' \
-        --filter '@allo/react'
+        --filter '@allo/shared-types'
 
-# Copy backend source.
-COPY packages/backend ./packages/backend
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runtime
 
-# Ensure shared-types is built (idempotent if postinstall already ran).
-RUN bun run --cwd packages/shared-types build
+WORKDIR /app
+
+# Everything is copied as root (no --chown), so the app can read but not
+# rewrite its own code and dependencies. node_modules keeps the hoisted
+# workspace symlinks (@allo/backend, @allo/shared-types -> ../../packages/*),
+# which resolve to the two source trees below. Tests and Markdown are kept out
+# of the build context by .dockerignore.
+COPY --from=deps /app/node_modules ./node_modules
+COPY packages/shared-types ./packages/shared-types/
+COPY packages/backend ./packages/backend/
 
 EXPOSE 8080
 
-# Run as the base image's unprivileged `bun` user (uid 1000), not root. Every
-# file above was copied as root, so the app can read but not rewrite its own
-# code and dependencies. Nothing at runtime writes outside /tmp: the API writes
-# no files, the migrator materialises journal prefixes under os.tmpdir(), and
-# the base sets BUN_RUNTIME_TRANSPILER_CACHE_PATH=0. Port 8080 needs no root.
+# Run as the base image's unprivileged `bun` user (uid 1000), not root. Nothing
+# at runtime writes outside /tmp: the API writes no files, the migrator
+# materialises journal prefixes under os.tmpdir(), and the base sets
+# BUN_RUNTIME_TRANSPILER_CACHE_PATH=0. Port 8080 needs no root. CI's image
+# smoke asserts all of it: uid 1000, nothing under /app owned by or writable to
+# it, /tmp writable, and a boot that answers the ALB's `GET /`.
 USER bun
 
 # Bun runs the TypeScript entrypoint directly (`start` is `bun server.ts`, the
