@@ -18,6 +18,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # bump-base-digests.yml opens its PR with GITHUB_TOKEN, which triggers no
+  # `pull_request` run, so it dispatches this workflow on its branch instead.
+  # A dispatch is a non-PR event: every job below runs, the image smoke and the
+  # reviewed-image check included.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -55,6 +60,7 @@ jobs:
       pull-requests: read
     outputs:
       deploy: ${{ steps.filter.outputs.deploy }}
+      image: ${{ steps.filter.outputs.image }}
       backend: ${{ steps.filter.outputs.backend }}
       sdk: ${{ steps.filter.outputs.sdk }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -72,6 +78,15 @@ jobs:
               - '.github/**'
             deploy:
               - *shared
+            # Every input of the production image: the Dockerfile and both
+            # ignore files, the two workspaces it ships, and the manifests the
+            # frozen install validates.
+            image:
+              - *shared
+              - '.dockerignore'
+              - 'packages/backend/**'
+              - 'packages/shared-types/**'
+              - 'packages/*/package.json'
             sdk: &sdk
               - *shared
               - 'packages/shared-types/**'
@@ -298,8 +313,169 @@ jobs:
       # can fail, not that it stopped looking.
       - name: Prove the reviewed-image gate can fail
         run: python3 -B -m unittest discover -s .github/scripts -p test_reviewed_image.py
+      - name: Prove the base-image digest bump works on fixtures
+        run: python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
       - name: Verify the production image's build inputs are reviewed
         run: python3 -B .github/scripts/reviewed-image.py check
+
+  # Builds the production image exactly as deploy-aws.yml does (the reviewed
+  # Dockerfile and context from `guard`, linux/arm64 on an arm64 runner), then
+  # boots it. The deploy is the only other place this image is built, and it
+  # runs after merge: before this job, a Dockerfile change was first exercised by
+  # the production rollout.
+  #
+  # It reads the deploy's `allo` GHA cache scope and never writes it (no
+  # --cache-to), loads the image into the runner's daemon and never pushes.
+  # Asserted, in order: the runtime user is uid 1000 and owns nothing under
+  # /app and can write nothing there, while /tmp stays writable; node_modules is
+  # exactly the production closure (no typescript, no test tools, no SDK
+  # workspaces, no Expo or React Native); the deploy's migration commands run in
+  # the image as that user; and the server boots in production mode and answers
+  # the ALB's `GET /` and `/health/ready`.
+  image-smoke:
+    name: Image build + boot (linux/arm64)
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.image == 'true') }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: allo
+          POSTGRES_PASSWORD: allo
+          POSTGRES_DB: allo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U allo -d allo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      IMAGE: allo-image-smoke:${{ github.sha }}
+      # The containers share the runner's network, so the service's mapped
+      # port is reachable on 127.0.0.1.
+      DATABASE_URL: postgres://allo:allo@127.0.0.1:5432/allo
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # `--cache-from type=gha` needs the Actions runtime token and cache URL,
+      # which GitHub gives to JavaScript actions and NOT to `run:` steps.
+      - name: Expose the Actions cache to buildx
+        uses: crazy-max/ghaction-github-runtime@v4
+
+      # The same refusal the deploy runs: unreviewed inputs stop here, and the
+      # Dockerfile, context and label values below are its outputs.
+      - name: Refuse unreviewed image build inputs
+        id: reviewed
+        run: python3 -B .github/scripts/reviewed-image.py guard --recipe allo
+
+      - name: Build the production image (linux/arm64, loaded, not pushed)
+        env:
+          DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
+          CONTEXT: ${{ steps.reviewed.outputs.context }}
+          SOURCE_TREE: ${{ steps.reviewed.outputs.source_tree }}
+          BUILD_INPUTS_SHA256: ${{ steps.reviewed.outputs.build_inputs_sha256 }}
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --cache-from type=gha,scope=allo \
+            -f "$DOCKERFILE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "io.oxy.source.tree=$SOURCE_TREE" \
+            --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
+            --load \
+            -t "$IMAGE" \
+            "$CONTEXT"
+          docker image inspect "$IMAGE" --format 'size={{.Size}} arch={{.Architecture}} user={{.Config.User}}'
+
+      - name: Runtime user owns and can write nothing under /app
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')" = arm64
+          test "$(docker image inspect "$IMAGE" --format '{{.Config.User}}')" = bun
+          test "$(docker run --rm --entrypoint id "$IMAGE" -u)" = 1000
+          test "$(docker run --rm --entrypoint id "$IMAGE" -un)" = bun
+          # Owned by root, group root, and not world-writable: every file and
+          # directory under /app (symlinks carry no permissions of their own).
+          bad=$(docker run --rm --user 0 --entrypoint sh "$IMAGE" -c \
+            'find /app ! -type l \( ! -user 0 -o ! -group 0 -o -perm -0002 \) -print')
+          if [ -n "$bad" ]; then echo "::error::not root-owned or world-writable:"; echo "$bad"; exit 1; fi
+          # The probe can see a writable path: as root the same write succeeds.
+          docker run --rm --user 0 --entrypoint sh "$IMAGE" -c 'touch /app/.write-probe'
+          # As the app user, every write into the app must fail, and /tmp must work.
+          docker run --rm --entrypoint sh "$IMAGE" -euc '
+            for path in /app /app/node_modules /app/packages/backend /app/packages/backend/src \
+                        /app/packages/backend/drizzle /app/packages/shared-types/src; do
+              if touch "$path/.write-probe" 2>/dev/null; then
+                echo "::error::the runtime user can write to $path"; exit 1
+              fi
+            done
+            if echo tampered 2>/dev/null >> /app/packages/backend/server.ts; then
+              echo "::error::the runtime user can modify server.ts"; exit 1
+            fi
+            if echo tampered 2>/dev/null >> /app/node_modules/express/package.json; then
+              echo "::error::the runtime user can modify node_modules"; exit 1
+            fi
+            writable=$(find /app ! -type l | while IFS= read -r f; do
+              if [ -w "$f" ]; then echo "$f"; fi
+            done | head -n 5)
+            if [ -n "$writable" ]; then echo "::error::writable by the runtime user: $writable"; exit 1; fi
+            touch /tmp/.write-probe && rm /tmp/.write-probe
+            echo "uid $(id -u): /app read-only to the app, /tmp writable"
+          '
+
+      - name: node_modules is exactly the production closure
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint sh "$IMAGE" -c \
+            'echo "runtime node_modules: $(du -sm /app/node_modules | cut -f1) MB"; ls /app/packages'
+          test "$(docker run --rm --entrypoint sh "$IMAGE" -c 'ls /app/packages | tr "\n" " "')" = "backend shared-types "
+          docker run --rm \
+            -v "$PWD/.github/scripts:/checks:ro" \
+            --entrypoint bun "$IMAGE" \
+            /checks/check-runtime-closure.mjs /app packages/backend packages/shared-types
+
+      # Genesis with `--phase=all` (the documented from-zero run), then the
+      # deploy's own pre/post commands, which must find nothing left. All three
+      # run as the image's user, as the deploy's one-shot tasks do.
+      - name: Migrate as the runtime user (the deploy's commands)
+        run: |
+          set -euo pipefail
+          for phase in all pre post; do
+            docker run --rm --network host -e DATABASE_URL "$IMAGE" \
+              bun run --cwd packages/backend db:migrate --target-database=allo --phase=$phase
+          done
+
+      - name: Boot in production mode and answer the load balancer
+        run: |
+          set -euo pipefail
+          docker run -d --name allo-smoke --network host \
+            -e NODE_ENV=production -e PORT=8080 -e DATABASE_URL \
+            "$IMAGE"
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/health/ready >/dev/null 2>&1; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' allo-smoke)" != true ]; then break; fi
+            sleep 1
+          done
+          ready=$(curl -fsS http://127.0.0.1:8080/health/ready) || { docker logs allo-smoke; exit 1; }
+          root=$(curl -fsS http://127.0.0.1:8080/) || { docker logs allo-smoke; exit 1; }
+          echo "GET /health/ready -> $ready"
+          echo "GET / -> $root"
+          echo "$ready" | grep -q '"status":"ready"'
+          echo "$root" | grep -q 'Welcome to Allo API'
+          docker stop -t 20 allo-smoke >/dev/null
+          docker logs allo-smoke 2>&1 | tail -n 20
+          docker logs allo-smoke 2>&1 | grep -q 'shutting down gracefully'
+
+      - name: Server logs on failure
+        if: failure()
+        run: docker logs allo-smoke 2>&1 | tail -n 200 || true
 
   # The one check branch protection should require. A job skipped because the
   # PR does not touch its paths reports `skipped`; one that failed or was
@@ -308,7 +484,7 @@ jobs:
   ci-complete:
     name: CI complete
     if: always()
-    needs: [changes, lint, deploy-script-test, backend, sdk, frontend]
+    needs: [changes, lint, deploy-script-test, backend, sdk, frontend, image-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
