@@ -12,9 +12,13 @@ name: Refresh build cache
 #
 # It builds only: no AWS credentials, no ECR push, no deploy. It runs on the
 # default branch (schedule) or a dispatch from main, so it writes main's cache,
-# which only main-branch deploys read; no pull_request workflow writes a scope.
-# Same Dockerfile, context, platform and target(s) as deploy-aws.yml, so the
-# layers it writes are the ones the deploy looks up.
+# which only main-branch deploys read; no pull_request workflow writes a scope
+# (CI's image smoke reads it and never writes it).
+#
+# It writes the scope the deploy reads, so it builds only what the deploy would:
+# the same `reviewed-image.py guard --recipe allo` runs first, and the
+# Dockerfile, context and labels come from its outputs, as in deploy-aws.yml.
+# Same platform too, so the layers it writes are the ones the deploy looks up.
 
 on:
   schedule:
@@ -44,14 +48,28 @@ jobs:
       - name: Expose the Actions cache to buildx
         uses: crazy-max/ghaction-github-runtime@v4
 
+      # Unreviewed inputs stop here, before anything is built or cached.
+      - name: Refuse unreviewed image build inputs
+        id: reviewed
+        run: python3 -B .github/scripts/reviewed-image.py guard --recipe allo
+
       # No output: the result lives only in the exported cache. A failed export
       # fails the job, since writing the cache is the whole point.
       - name: Rebuild the allo image from scratch into the cache
+        env:
+          DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
+          CONTEXT: ${{ steps.reviewed.outputs.context }}
+          SOURCE_TREE: ${{ steps.reviewed.outputs.source_tree }}
+          BUILD_INPUTS_SHA256: ${{ steps.reviewed.outputs.build_inputs_sha256 }}
         run: |
           docker buildx build \
             --platform linux/arm64 \
             --no-cache \
             --pull \
             --cache-to type=gha,scope=allo,mode=max \
-            -f packages/backend/Dockerfile \
-            .
+            -f "$DOCKERFILE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "io.oxy.source.tree=$SOURCE_TREE" \
+            --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
+            "$CONTEXT"

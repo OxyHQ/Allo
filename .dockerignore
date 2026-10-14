@@ -6,11 +6,19 @@
 # Dependencies (always installed fresh inside the image)
 **/node_modules
 
-# Frontend source is not needed for the backend image, but its package.json
-# must remain available so `bun install --frozen-lockfile` can validate the
-# workspace lockfile (the frontend deps themselves are not installed).
+# The frontend and the SDK workspaces (@allo/core, @allo/react) are not part of
+# the backend image, but their package.json files must remain available so
+# `bun install --frozen-lockfile` can validate the workspace lockfile (their
+# dependencies are not installed and their sources are not copied).
 packages/frontend/*
 !packages/frontend/package.json
+packages/core/*
+!packages/core/package.json
+packages/react/*
+!packages/react/package.json
+
+# Tests never run in the image; nothing at runtime imports them.
+**/__tests__
 
 # Build output / caches
 **/dist
@@ -31,6 +39,6 @@ packages/frontend/*
 **/.env
 **/.env.*
 
-# Docs and misc
+# Docs and misc (`*.md` alone matches only the context root)
 docs
-*.md
+**/*.md
