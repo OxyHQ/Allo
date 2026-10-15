@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { OxyProvider, useOxy } from '@oxy.so/services';
 import { ImageResolverProvider, type ImageResolver } from '@oxy.so/bloom/image-resolver';
 import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
+import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
 import i18n, { setLanguage } from '@/lib/i18n';
@@ -89,9 +90,15 @@ export const AppProviders = memo(function AppProviders({
                 <MediaResolverProvider>
                   <I18nextProvider i18n={i18n}>
                     <ErrorBoundary>
-                      {children}
-                      <ConnectionStatusToasts />
-                      <StatusBar style="auto" />
+                      {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
+                          `PortalOutlet` mounted by the app, after the content they paint over.
+                          The inert boundary wraps everything but the outlet. */}
+                      <PortalProvider>
+                        <OverlayInertBoundary>{children}</OverlayInertBoundary>
+                        <ConnectionStatusToasts />
+                        <StatusBar style="auto" />
+                        <PortalOutlet />
+                      </PortalProvider>
                     </ErrorBoundary>
                   </I18nextProvider>
                 </MediaResolverProvider>

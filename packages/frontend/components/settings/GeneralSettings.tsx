@@ -66,7 +66,7 @@ export function GeneralSettings() {
                         name={name}
                         avatar={avatar}
                         subtitle={user.username ? `@${user.username}` : undefined}
-                        size="small"
+                        size="sm"
                         horizontalInset={0}
                         trailing={ownProfile ? 'chevron' : 'none'}
                         onPress={
