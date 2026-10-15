@@ -144,7 +144,7 @@ export default function NewConversationRoute() {
         const person = summaryOf(result);
         return {
           ...person,
-          size: 'small' as const,
+          size: 'sm' as const,
           trailing: 'checkbox' as const,
           selected: selected.has(person.id),
           onSelectedChange: () => toggle(person),

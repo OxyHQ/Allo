@@ -1,4 +1,6 @@
 import { useConversationActions, useSyncState } from '@allo/react';
+import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
+import { VoiceSession } from '@alia.onl/sdk/voice';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
   ChatFolderTabs,
@@ -9,15 +11,17 @@ import {
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
 import { PageAction } from '@/components/shell/PageAction';
+import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
+import { RiSparklingLine } from '@oxy.so/bloom/icons/RiSparklingLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { useOxy } from '@oxy.so/services';
 import { usePathname, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -59,6 +63,7 @@ export function ConversationList() {
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('all');
+  const aliaChatRef = useRef<AliaChatSheetRef>(null);
 
   const selectedId = split ? (conversationIdFromPath(pathname) ?? undefined) : undefined;
   const searching = query.trim().length > 0;
@@ -96,12 +101,13 @@ export function ConversationList() {
     [folder, summaries, t],
   );
 
+  const unread = useMemo(
+    () => summaries.reduce((total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0), 0),
+    [summaries],
+  );
+
   /** Only offered once there is something to filter: two rows need no folders. */
   const folders = useMemo(() => {
-    const unread = summaries.reduce(
-      (total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0),
-      0,
-    );
     const groups = summaries.filter((chat) => chat.kind === 'group').length;
     if (summaries.length < 5 && unread === 0) return [];
     return [
@@ -109,7 +115,7 @@ export function ConversationList() {
       { key: 'unread', label: t('chat.folder.unread'), unreadCount: unread || undefined },
       ...(groups > 0 ? [{ key: 'groups', label: t('chat.folder.groups') }] : []),
     ];
-  }, [summaries, t]);
+  }, [summaries, t, unread]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -174,6 +180,16 @@ export function ConversationList() {
     [clearHistory, router, selectedId, summaries, t],
   );
 
+  const aliaWelcomeSuggestions = useMemo(
+    () => [
+      { id: 'write', text: t('chat.aliaSuggestion.write') },
+      { id: 'private', text: t('chat.aliaSuggestion.private') },
+      { id: 'group', text: t('chat.aliaSuggestion.group') },
+    ],
+    [t],
+  );
+  const askAlia = useCallback(() => aliaChatRef.current?.present(), []);
+
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
   const me = user?.id;
   const openStory = useCallback(
@@ -188,6 +204,11 @@ export function ConversationList() {
         title={t('chat.title')}
         safeArea={!split}
         leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
+        actions={
+          <Button size="sm" appearance="outline" leadingIcon={RiSparklingLine} onPress={askAlia}>
+            {t('chat.askAlia')}
+          </Button>
+        }
       />
       <View style={styles.search}>
         <ChatSearchField
@@ -251,6 +272,13 @@ export function ConversationList() {
           onPress={() => router.push('/new')}
         />
       </PageAction>
+      {/* Mounted only in the signed-in tree: signed out, this route redirects to sign-in. */}
+      <AliaChatSheet
+        ref={aliaChatRef}
+        voiceSession={VoiceSession}
+        clientContext={t('chat.aliaClientContext', { unread })}
+        welcomeSuggestions={aliaWelcomeSuggestions}
+      />
     </View>
   );
 }
