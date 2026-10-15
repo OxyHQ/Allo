@@ -71,13 +71,25 @@ try {
   await page.waitForFunction(() =>
     window.turnPeers.every((p) => p.connectionState === 'connected'),
   );
-  await page.waitForTimeout(1500);
-  const after = await stats();
+  // A connected state can still describe the OLD selected pair while the
+  // new TLS allocation completes on a high-latency network. Wait for the
+  // observable new pair, not a local-loopback timing assumption.
+  let after = await stats();
+  const deadline = Date.now() + 30_000;
+  while (
+    Date.now() < deadline &&
+    after.some((r, i) => r.bytes <= 0 || r.candidate === before[i].candidate)
+  ) {
+    await page.waitForTimeout(250);
+    after = await stats();
+  }
   if (
     !preserved ||
     after.some((r, i) => r.type !== 'relay' || r.bytes <= 0 || r.candidate === before[i].candidate)
   )
-    throw new Error('new authenticated relay allocation / capture continuity failed');
+    throw new Error(
+      `new authenticated relay allocation / capture continuity failed: ${JSON.stringify({ before, after, preserved })}`,
+    );
   console.log(
     JSON.stringify({
       before,
