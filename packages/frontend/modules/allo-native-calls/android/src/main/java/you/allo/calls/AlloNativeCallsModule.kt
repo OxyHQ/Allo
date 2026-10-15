@@ -47,6 +47,7 @@ object CallState {
     prefs(c).edit().remove("account").remove("instance").remove("events").commit()
   }
   @Synchronized fun incoming(c: Context, data: Map<String, String>) {
+    if (prefs(c).getString("instance", null) == null) return
     if (data["instanceId"] != prefs(c).getString("instance", null) || data["accountId"] != prefs(c).getString("account", null)) return
     val id = data["callId"] ?: return
     val expires = runCatching { Instant.parse(data["expiresAt"]).toEpochMilli() }.getOrDefault(0)
@@ -106,13 +107,13 @@ object CallState {
 // to it. Two independent MESSAGING_EVENT services lose messages nondeterministically.
 class AlloMessagingService : ExpoFirebaseMessagingService() {
   override fun onNewToken(token: String) { super.onNewToken(token); CallState.token(this, token) }
-  override fun onMessageReceived(message: RemoteMessage) {
-    if (message.data["type"] == "allo.call") {
-      if (message.priority == RemoteMessage.PRIORITY_HIGH) CallState.incoming(this, message.data)
-    } else if (message.data["type"] == "allo.call.end") {
-      val id = message.data["callId"]
-      if (id != null && CallState.events(this).any { it["callId"] == id && it["instanceId"] == message.data["instanceId"] }) CallState.end(this, id)
-    } else super.onMessageReceived(message)
+  override fun onMessageReceived(remoteMessage: RemoteMessage) {
+    if (remoteMessage.data["type"] == "allo.call") {
+      if (remoteMessage.priority == RemoteMessage.PRIORITY_HIGH) CallState.incoming(this, remoteMessage.data)
+    } else if (remoteMessage.data["type"] == "allo.call.end") {
+      val id = remoteMessage.data["callId"]
+      if (id != null && CallState.events(this).any { it["callId"] == id && it["instanceId"] == remoteMessage.data["instanceId"] }) CallState.end(this, id)
+    } else super.onMessageReceived(remoteMessage)
   }
 }
 class AlloConnectionService : ConnectionService() {

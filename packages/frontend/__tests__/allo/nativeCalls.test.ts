@@ -70,7 +70,7 @@ it('answers only after authoritative restoration and uses an incoming route hand
 it('does not answer or route another account, an expired ring, or a cancelled server call', async () => {
   const f = fixture([
     { ...event, accountId: 'other' },
-    { ...event, callId: 'expired', expiresAt: new Date(0).toISOString() },
+    { ...event, callId: 'expired', expiresAt: new Date(Date.now() - 1).toISOString() },
     { ...event, callId: 'cancelled' },
   ]);
   f.calls.restoreIncoming.mockResolvedValue(null);
@@ -119,4 +119,31 @@ it('declines a ring and ends an active call, acknowledging only after the server
   expect(f.calls.decline).toHaveBeenCalledTimes(1);
   expect(f.bridge.acknowledge).toHaveBeenCalledWith('event', true, true);
   f.stop();
+});
+it('serializes a late previous-account token claim, retirement, and the new account claim', async () => {
+  const first = fixture([]);
+  const order: string[] = [];
+  let release!: () => void;
+  first.client.instance.setCallPushToken.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  first.client.instance.clearCallPushToken.mockImplementation(async () => {
+    order.push('retire old');
+  });
+  await settle();
+  first.stop();
+  const second = fixture([]);
+  second.client.instance.setCallPushToken.mockImplementation(async () => {
+    order.push('register new');
+  });
+  await settle();
+  expect(second.client.instance.setCallPushToken).not.toHaveBeenCalled();
+  release();
+  await settle();
+  expect(order).toEqual(['retire old', 'register new']);
+  second.stop();
+  await settle();
 });

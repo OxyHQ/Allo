@@ -17,6 +17,16 @@ export interface NativeCallBridge {
   audio?(active: boolean): Promise<void>;
 }
 
+// A token belongs to one installation but accounts have different signers.
+// Serialize registration/retirement across controllers so a late old-account
+// registration cannot steal a token back after the new account claimed it.
+let tokenWrites: Promise<void> = Promise.resolve();
+function writeToken(action: () => Promise<void>): Promise<void> {
+  const write = tokenWrites.then(action, action);
+  tokenWrites = write.catch(() => {});
+  return write;
+}
+
 /** Native UI can ring without JS. Authority and all media still belong to the SDK. */
 export function startNativeCalls(options: {
   client: AlloClient;
@@ -31,7 +41,7 @@ export function startNativeCalls(options: {
   const { accountId, id: instanceId } = instance;
   let stopped = false;
   let busy = false;
-  let registeredToken = '';
+  let registeredToken: string | null = null;
   let audioActive = false;
   const opened = new Set<string>();
   const bound = bridge.bind(accountId, instanceId);
@@ -48,9 +58,13 @@ export function startNativeCalls(options: {
         await bridge.audio?.(audioActive);
       }
       if (snapshot.token !== registeredToken) {
-        if (snapshot.token)
-          await client.instance.setCallPushToken(options.provider, snapshot.token);
-        else await client.instance.clearCallPushToken();
+        await writeToken(async () => {
+          if (stopped) return;
+          if (snapshot.token)
+            await client.instance.setCallPushToken(options.provider, snapshot.token);
+          else await client.instance.clearCallPushToken();
+        });
+        if (stopped) return;
         registeredToken = snapshot.token;
       }
       for (const event of snapshot.events) {
@@ -114,6 +128,6 @@ export function startNativeCalls(options: {
     // Registering the token for the next instance also atomically retires the
     // previous server binding; a session gap never destroys identity keys.
     void bound.then(() => bridge.clear(instanceId)).catch(options.report);
-    void client.instance.clearCallPushToken().catch(options.report);
+    void writeToken(() => client.instance.clearCallPushToken()).catch(options.report);
   };
 }
