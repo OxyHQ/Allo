@@ -502,5 +502,8 @@
   "homiio.team.removeWarning": "Il collaboratore verrà rimosso dal caso e dai messaggi futuri. I messaggi già ricevuti rimangono sui suoi dispositivi.",
   "homiio.team.retry": "La modifica non è completa. I messaggi rimangono in pausa durante la conferma del gruppo. Riprova per continuare.",
   "homiio.team.working": "Conferma del gruppo…",
-  "homiio.team.continue": "Conferma e apri la chat"
+  "homiio.team.continue": "Conferma e apri la chat",
+  "calls.enableAudio": "Attiva audio della chiamata",
+  "calls.waitingVideo": "In attesa del video",
+  "calls.membershipChanged": "La chiamata è terminata perché la sicurezza del gruppo è cambiata. Avvia una nuova chiamata per continuare."
 }

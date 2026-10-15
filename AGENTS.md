@@ -397,13 +397,24 @@ instance the fake server is made to list as an unapproved active root.
   call token and durable native actions. See `docs/adr/0002-calls-status-presence.md`
   for configuration and the physical-device validation still required. Incoming
   routes carry `incomingCallId` and must never fall into the outgoing dialler
-  when their call has disappeared. What is still missing: the remote video on the stage (`StagePlaceholder` stands in, and the screens say
-  so); the speaker, screen sharing, the camera flip and hold, which are simply
+  when their call has disappeared. The stage now renders live video (below).
+  What is still missing: the speaker, screen sharing, the camera flip and hold, which are simply
   not passed to Bloom, because Bloom draws a control when it is handed a
   HANDLER and a control nothing can do is a prop nobody passes; and coturn, so
   a relayed call cannot connect. The status route is `/updates` because
   Metro's dev server answers `/status` itself, and a screen that cannot be
   opened while developing is a screen nobody checks.
+- **Call video and audio are adapter-owned.** `lib/calls/webrtc.ts` exposes
+  per-client observable streams. Bloom slots render muted HTML video / native
+  `RTCView`; the one web audio host in `AlloRoot` survives route changes. A view
+  unmount never stops media. Pending capture is invalidated on end/account
+  retirement. Group LiveKit publishes with per-sender E2EE, subscribes only
+  after a verified sender key, and never accepts plaintext publications. Both
+  providers use the same PBKDF2 passphrase encoding; do not reintroduce web
+  HKDF while native defaults to PBKDF2. Any MLS epoch change ends the call and
+  asks the user to start a new one. `bun run test:call-media:browser` runs real
+  Chromium media; set `ALLO_CALL_LIVEKIT_BINARY` for a real local encrypted SFU.
+  Physical native interoperability remains pending (ADR 0002, upstream #88).
 - **The relay and the SFU are read at BOOT, in `runtimeApp.ts`, or they are not
   read at all.** `getIceConfig()`'s lazy fallback parses an EMPTY environment,
   so for as long as nothing called `setIceConfig` every deployment served STUN

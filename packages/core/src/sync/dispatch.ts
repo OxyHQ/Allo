@@ -513,7 +513,7 @@ export class Dispatcher {
       const payload = message;
       w.after.push(() =>
         ctx.calls
-          .onCallMessage(conversationId, payload)
+          .onCallMessage(conversationId, payload, event.senderInstanceId)
           .catch((error) =>
             ctx.log.warn?.('handling a call message failed', { error: describeError(error) }),
           ),

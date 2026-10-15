@@ -26,6 +26,7 @@
  * deliberate sign-out resets, and it does that while the token is still alive
  * (`lib/allo/signOut.ts`).
  */
+jest.mock('@/components/calls/CallNotice', () => ({ CallNotice: () => null }));
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
