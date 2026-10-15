@@ -1,3 +1,11 @@
+import { liveMessagingRecipients, type MessagingRecipient } from './recipientAuthority';
+import { visiblePresencePairs } from '../../db/platform/presencePolicyRepository';
+import {
+  deliveryDecisions,
+  messageDecisions,
+  uniqueParticipants,
+  type MessagingRequester,
+} from './messagingPolicy';
 /**
  * Presence, and the four rules that decide who may see it.
  *
@@ -57,10 +65,8 @@ function coarse(at: Date): string {
 /**
  * Which of `accountIds` this viewer is allowed an honest answer about.
  *
- * Three queries, none of them per account. The result is worth caching for a
- * short while by a caller that asks repeatedly — the socket hub does — but not
- * for long: a block should stop being visible within a minute of being made,
- * not at the next sign-in.
+ * Three queries, none of them per account. Callers must recheck every read;
+ * a remembered permission is not authority for a later presence delivery.
  */
 export async function visibleTo(
   viewerAccountId: string,
@@ -97,10 +103,11 @@ export async function publishesPresence(
  * this viewer may not see.
  */
 export async function readPresence(
-  viewerAccountId: string,
+  requester: MessagingRequester,
   accountIds: readonly string[],
   deps: PresenceServiceDeps = {},
 ): Promise<PresenceResponse> {
+  const viewerAccountId = requester.accountId;
   const db = deps.db ?? getDb();
   const store = deps.store ?? getPresenceStore();
   const now = deps.now?.() ?? new Date();
@@ -109,6 +116,15 @@ export async function readPresence(
   if (!publishing) return { presence: accountIds.map(hiddenPresence), publishing: false };
 
   const visible = await visibleTo(viewerAccountId, accountIds, deps);
+  const policies = await messageDecisions(
+    requester,
+    accountIds.map((accountId) => ({
+      resourceId: `presence:${accountId}`,
+      participantAccountIds: uniqueParticipants([viewerAccountId, accountId]),
+    })),
+  );
+  for (const accountId of visible)
+    if (!policies.get(`presence:${accountId}`)?.allowed) visible.delete(accountId);
   const subjects = [...visible];
   const [online, seen] = await Promise.all([
     store.onlineOf(subjects, now),
@@ -162,4 +178,62 @@ export async function farewell(
   const now = deps.now?.() ?? new Date();
   await store.drop(accountId, instanceId);
   await touchLastSeen(deps.db ?? getDb(), accountId, now);
+}
+
+/** Background presence checks every socket session and every pair in bounded batches.
+ * No per-watcher Oxy request and no remembered permission survives a tick. */
+export async function readPresenceBatch(
+  watchers: readonly (MessagingRecipient & { accountIds: readonly string[] })[],
+  deps: PresenceServiceDeps = {},
+): Promise<Map<string, PresenceState[]>> {
+  const db = deps.db ?? getDb();
+  const now = deps.now?.() ?? new Date();
+  const live = await liveMessagingRecipients(watchers);
+  const pairs = watchers
+    .filter((watcher) => live.get(watcher.requestId)?.status === 'active')
+    .flatMap((watcher) =>
+      watcher.accountIds.map((subjectId, index) => ({
+        requestId: `${watcher.requestId}:${index}`,
+        viewerId: watcher.accountId,
+        subjectId,
+        watcherId: watcher.requestId,
+      })),
+    );
+  const visible = await visiblePresencePairs(db, pairs);
+  const policies = await deliveryDecisions(
+    pairs.map((pair) => ({
+      resourceId: pair.requestId,
+      senderAccountId: pair.subjectId,
+      participantAccountIds: uniqueParticipants([pair.viewerId, pair.subjectId]),
+    })),
+  );
+  const subjects = uniqueParticipants(
+    pairs
+      .filter((pair) => visible.has(pair.requestId) && policies.get(pair.requestId)?.allowed)
+      .map((pair) => pair.subjectId),
+  );
+  const [online, seen] = await Promise.all([
+    (deps.store ?? getPresenceStore()).onlineOf(subjects, now),
+    lastSeenOf(db, subjects),
+  ]);
+  const answer = new Map(
+    watchers
+      .filter((watcher) => live.get(watcher.requestId)?.status === 'active')
+      .map((watcher) => [watcher.requestId, [] as PresenceState[]]),
+  );
+  for (const pair of pairs) {
+    const isVisible = visible.has(pair.requestId) && policies.get(pair.requestId)?.allowed;
+    const isOnline = online.has(pair.subjectId);
+    const at = seen.get(pair.subjectId);
+    answer.get(pair.watcherId)?.push(
+      isVisible
+        ? {
+            accountId: pair.subjectId,
+            online: isOnline,
+            lastSeenAt: isOnline || !at ? null : coarse(at),
+          }
+        : hiddenPresence(pair.subjectId),
+    );
+  }
+  return answer;
 }

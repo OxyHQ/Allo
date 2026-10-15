@@ -1,3 +1,6 @@
+import type { MessagingRequester } from './messagingPolicy';
+import { requireMessageAccess } from './messagingPolicy';
+import { findInstancesByIds } from '../../db/platform/instanceRepository';
 /**
  * Key package stock (`docs/platform/api-v1.md`, Key packages).
  */
@@ -59,16 +62,21 @@ export async function uploadKeyPackages(
  * stock dropped below the low-water mark is nudged.
  */
 export async function claimKeyPackages(
-  claimerInstanceId: string,
+  caller: MessagingRequester & { instanceId: string },
   instanceIds: readonly string[],
   deps: { db?: AlloDatabase } = {},
 ): Promise<ClaimKeyPackagesResponse> {
   const db = deps.db ?? getDb();
   const unique = [...new Set(instanceIds)];
+  const instances = await findInstancesByIds(unique, db);
+  await requireMessageAccess(caller, `key-packages:${caller.instanceId}`, [
+    caller.accountId,
+    ...instances.map((instance) => instance.accountId),
+  ]);
   const claimed = await db.transaction(async (tx) => {
     const out: ClaimKeyPackagesResponse = { keyPackages: [], missing: [] };
     for (const instanceId of unique) {
-      const row = await claimKeyPackage(instanceId, claimerInstanceId, tx);
+      const row = await claimKeyPackage(instanceId, caller.instanceId, tx);
       if (row) out.keyPackages.push(row);
       else out.missing.push(instanceId);
     }

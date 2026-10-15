@@ -495,5 +495,15 @@
   "transfer.receiving": "Recibiendo el historial de otro dispositivo",
   "transfer.receivingFrom": "Recibiendo el historial de {{name}}",
   "transfer.sending": "Enviando el historial a otro dispositivo",
-  "transfer.sendingTo": "Enviando el historial a {{name}}"
+  "transfer.sendingTo": "Enviando el historial a {{name}}",
+  "supervision.conversation": "Conversación",
+  "supervision.checking.title": "Comprobando acceso",
+  "supervision.checking.body": "Tus mensajes aparecerán cuando se confirme el acceso.",
+  "supervision.blocked.title": "Conversación no disponible",
+  "supervision.blocked.body": "El acceso a esta conversación está restringido. Revisa los ajustes de supervisión.",
+  "supervision.unavailable.title": "No se puede comprobar el acceso",
+  "supervision.unavailable.body": "Tus mensajes están ocultos hasta que podamos confirmar el acceso. Vuelve a intentarlo.",
+  "supervision.unsupported.title": "No disponible con supervisión",
+  "supervision.unsupported.body": "La transferencia de historial y las copias de seguridad aún no están disponibles para cuentas supervisadas.",
+  "supervision.review": "Revisar supervisión"
 }

@@ -1,3 +1,4 @@
+import { originalBearer, requireMessageAccess } from '../../services/platform/messagingPolicy';
 import { Router, type RequestHandler } from 'express';
 import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
@@ -49,6 +50,12 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     '/accounts/:accountId/instances',
     asyncRoute(async (req, res) => {
       const accountId = parseParam(accountIdSchema, req.params.accountId, 'accountId');
+      const callerAccountId = getRequiredOxyUserId(req);
+      await requireMessageAccess(
+        { accountId: callerAccountId, accessToken: originalBearer(req) },
+        `instances:${accountId}`,
+        [callerAccountId, accountId],
+      );
       res.json({ instances: await listPublicInstances(accountId) });
     }),
   );

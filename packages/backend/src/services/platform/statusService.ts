@@ -33,7 +33,7 @@ import {
 import { getDb, type AlloDatabase } from '../../db';
 import { retainBlobs } from '../../db/platform/blobRepository';
 import { listSharedAccountsAmong } from '../../db/platform/conversationRepository';
-import { findInstanceById } from '../../db/platform/instanceRepository';
+import { findInstancesByIds } from '../../db/platform/instanceRepository';
 import {
   findStatusById,
   findStatusByIdempotencyKey,
@@ -52,11 +52,13 @@ import { statusViewReceiptsOf } from '../../db/social/userSettingsRepository';
 import { forbidden, notFound, validationFailed } from '../../utils/httpErrors';
 import { getRealtime } from '../../runtime/realtime';
 import { toStatus } from './wire';
+import { messageDecisions, requireMessageAccess, uniqueParticipants } from './messagingPolicy';
 
 /** The slack a client's clock is allowed against the server's, as everywhere else. */
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 export interface StatusCaller {
+  accessToken: string;
   instanceId: string;
   accountId: string;
 }
@@ -149,12 +151,17 @@ async function screenRecipients(
   const allowed: ScreenedRecipient[] = [];
   const refused: string[] = [];
 
-  const instances = await Promise.all(
-    request.recipients.map((r) => findInstanceById(r.instanceId, db)),
+  const instances = new Map(
+    (
+      await findInstancesByIds(
+        request.recipients.map((r) => r.instanceId),
+        db,
+      )
+    ).map((instance) => [instance.id, instance]),
   );
-  const candidates = request.recipients.map((recipient, index) => ({
+  const candidates = request.recipients.map((recipient) => ({
     recipient,
-    instance: instances[index],
+    instance: instances.get(recipient.instanceId),
   }));
 
   const otherAccounts = [
@@ -171,9 +178,17 @@ async function screenRecipients(
     blockedEitherWay(db, caller.accountId, otherAccounts),
   ]);
 
+  const policies = await messageDecisions(
+    caller,
+    uniqueParticipants([caller.accountId, ...otherAccounts]).map((accountId) => ({
+      resourceId: `status:${request.id}:${accountId}`,
+      participantAccountIds: uniqueParticipants([caller.accountId, accountId]),
+    })),
+  );
   for (const { recipient, instance } of candidates) {
     const reachable =
       instance?.status === 'active' &&
+      policies.get(`status:${request.id}:${instance.accountId}`)?.allowed &&
       // An author's own other devices are always allowed: that is how a status
       // shows on the phone that did not post it.
       (instance.accountId === caller.accountId ||
@@ -201,13 +216,26 @@ export async function listStatuses(
     listInbox(caller.instanceId, MAX_STATUS_PAGE, db),
     listOwn(caller.accountId, MAX_STATUS_PAGE, db),
   ]);
+  const policies = await messageDecisions(
+    caller,
+    [
+      ...new Map(
+        [...inbox.map(({ status }) => status), ...own].map((status) => [status.id, status]),
+      ).values(),
+    ].map((status) => ({
+      resourceId: status.id,
+      participantAccountIds: uniqueParticipants([caller.accountId, status.authorAccountId]),
+    })),
+  );
   const seen = new Set<string>();
   const statuses: Status[] = [];
   for (const { status, sealedKey } of inbox) {
+    if (!policies.get(status.id)?.allowed) continue;
     seen.add(status.id);
     statuses.push(toStatus(status, sealedKey));
   }
   for (const status of own) {
+    if (!policies.get(status.id)?.allowed) continue;
     if (seen.has(status.id)) continue;
     statuses.push(toStatus(status, null));
   }
@@ -243,6 +271,7 @@ export async function viewStatus(
   const now = deps.now?.() ?? new Date();
   const status = await findStatusById(statusId, db);
   if (!status) throw notFound('no such status');
+  await requireMessageAccess(caller, status.id, [caller.accountId, status.authorAccountId]);
   if (status.authorAccountId === caller.accountId) return; // your own is not a view
   if (!(await holdsKey(statusId, caller.instanceId, db))) throw notFound('no such status');
 
@@ -268,11 +297,20 @@ export async function listStatusViews(
   const db = deps.db ?? getDb();
   await requireOwn(caller, statusId, db);
   const summary = await listViews(statusId, db);
-  return {
-    views: summary.views.map((view) => ({
-      accountId: view.accountId,
-      viewedAt: view.viewedAt.toISOString(),
+  const policies = await messageDecisions(
+    caller,
+    summary.views.map((view) => ({
+      resourceId: view.accountId,
+      participantAccountIds: uniqueParticipants([caller.accountId, view.accountId]),
     })),
+  );
+  return {
+    views: summary.views
+      .filter((view) => policies.get(view.accountId)?.allowed)
+      .map((view) => ({
+        accountId: view.accountId,
+        viewedAt: view.viewedAt.toISOString(),
+      })),
     total: summary.total,
   };
 }

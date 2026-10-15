@@ -31,10 +31,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
-      const answer = await createStatus(
-        { instanceId: caller.instanceId, accountId: caller.accountId },
-        parseBody(createStatusRequestSchema, req),
-      );
+      const answer = await createStatus(caller, parseBody(createStatusRequestSchema, req));
       res.status(201).json(answer);
     }),
   );
@@ -44,7 +41,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
-      res.json(await listStatuses({ instanceId: caller.instanceId, accountId: caller.accountId }));
+      res.json(await listStatuses(caller));
     }),
   );
 
@@ -53,10 +50,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
-      await deleteStatus(
-        { instanceId: caller.instanceId, accountId: caller.accountId },
-        parseParam(idSchema, req.params.id, 'id'),
-      );
+      await deleteStatus(caller, parseParam(idSchema, req.params.id, 'id'));
       res.status(204).end();
     }),
   );
@@ -66,10 +60,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
-      await viewStatus(
-        { instanceId: caller.instanceId, accountId: caller.accountId },
-        parseParam(idSchema, req.params.id, 'id'),
-      );
+      await viewStatus(caller, parseParam(idSchema, req.params.id, 'id'));
       res.status(204).end();
     }),
   );
@@ -79,12 +70,7 @@ export function createStatusRoutes(deps: { instanceAuth: RequestHandler }): Rout
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const caller = callerOf(req);
-      res.json(
-        await listStatusViews(
-          { instanceId: caller.instanceId, accountId: caller.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await listStatusViews(caller, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 

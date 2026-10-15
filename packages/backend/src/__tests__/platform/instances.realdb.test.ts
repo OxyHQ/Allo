@@ -1,3 +1,4 @@
+import { registerFixtureActor } from './oxySafetyFixture';
 /**
  * Enrollment and the instance signature, end to end against a real database
  * with real Ed25519 keys. Every response is parsed with its contract schema.
@@ -472,7 +473,7 @@ describe('the request signature', () => {
   it('refuses an instance owned by another account with 403 forbidden', async () => {
     const me = await TestInstance.register(h.app, accountId());
     const headers = me.headers('GET', '/v1/sync');
-    headers[USER_HEADER] = accountId('other');
+    headers.Authorization = `Bearer ${registerFixtureActor(accountId('other'))}`;
     const response = await request(h.app).get('/v1/sync').set(headers);
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('forbidden');

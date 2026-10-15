@@ -3,7 +3,7 @@
  * `metro.config.js` and `README.md`). It stands in for the Oxy session so the
  * chat screens can be opened in a browser with no account and no backend.
  */
-import React from 'react';
+import type React from 'react';
 import { Pressable, Text } from 'react-native';
 
 export const HARNESS_ME = {
@@ -54,6 +54,21 @@ const DIRECTORY = [
 ];
 
 const services = {
+  safety: {
+    people: async (input: { accountIds?: string[]; query?: string }) => ({
+      items: DIRECTORY.filter((person) =>
+        input.accountIds
+          ? input.accountIds.includes(person.id)
+          : `${person.name.displayName} ${person.username}`
+              .toLowerCase()
+              .includes((input.query ?? '').toLowerCase()),
+      ).map((person) => ({
+        accountId: person.id,
+        username: person.username,
+        displayName: person.name.displayName,
+      })),
+    }),
+  },
   assets: {
     publicUrl: (id: string, variant?: string) =>
       `https://i.pravatar.cc/200?u=${id}${variant ?? ''}`,

@@ -1,3 +1,7 @@
+import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
+import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
+import { Page } from '@/components/shell/Page';
+import { useAlloClient } from '@allo/react';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
 import {
   useConversation,
@@ -88,6 +92,15 @@ const WIDE_BUBBLE_MAX_WIDTH = 560;
 
 /** One conversation: its header, its messages and the composer. */
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
+  return (
+    <ConversationReadGate conversationId={conversationId}>
+      <AuthorizedConversationScreen conversationId={conversationId} />
+    </ConversationReadGate>
+  );
+}
+
+function AuthorizedConversationScreen({ conversationId }: { conversationId: string }) {
+  const client = useAlloClient();
   const router = useRouter();
   const split = useSplitLayout();
   // Below the third column the info is a route of its own, so the press always lands somewhere.
@@ -418,6 +431,17 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   }, [conversationId, isGroup, leave, router, t]);
 
   if (!view) return null;
+  if (view.access && view.access !== 'allowed')
+    return (
+      <Page title={t('supervision.conversation')} scroll={false}>
+        <ConversationAccessState
+          state={view.access}
+          onRetry={() => {
+            void client.conversations.refresh().catch(() => undefined);
+          }}
+        />
+      </Page>
+    );
 
   const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
   /**

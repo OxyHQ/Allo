@@ -18,10 +18,16 @@ import {
 import { getGroupInfo, putGroupInfo } from '../../services/platform/groupInfoService';
 import { asyncRoute } from './asyncRoute';
 import { parseBody, parseParam } from './validate';
+import { originalBearer } from '../../services/platform/messagingPolicy';
 
 export function callerOf(req: Parameters<typeof getRequiredInstance>[0]): Caller {
   const me = getRequiredInstance(req);
-  return { instanceId: me.id, accountId: me.accountId, appId: me.appId };
+  return {
+    instanceId: me.id,
+    accountId: me.accountId,
+    appId: me.appId,
+    accessToken: originalBearer(req),
+  };
 }
 
 export function createConversationRoutes(deps: { instanceAuth: RequestHandler }): Router {

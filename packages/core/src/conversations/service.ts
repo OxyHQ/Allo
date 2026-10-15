@@ -85,6 +85,9 @@ const LAST_MESSAGE_KINDS = new Set<TimelineContent['kind']>([
 ]);
 
 export class ConversationsService {
+  private allowedTranscripts = new Set<string>();
+  private accessState: 'checking' | 'ready' | 'unavailable' = 'checking';
+  private accessGeneration = 0;
   private views = new Map<string, ConversationView>();
   private listCache: ConversationView[] | null = null;
   private reconciling = false;
@@ -119,6 +122,7 @@ export class ConversationsService {
   }
 
   stop(): void {
+    this.suspendAccess('unavailable');
     this.stopped = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -133,12 +137,49 @@ export class ConversationsService {
     this.ctx.emitter.emit('conversations');
   }
 
+  /** Clears only presentation authority; encrypted history and MLS keys remain intact. */
+  suspendAccess(state: 'checking' | 'unavailable' = 'checking'): void {
+    if (!this.ctx.options.requireLiveConversationAccess) return;
+    this.accessGeneration += 1;
+    this.accessState = state;
+    this.allowedTranscripts.clear();
+    for (const id of this.ctx.model.conversations.keys()) this.ctx.messages.invalidate(id);
+    this.invalidate();
+  }
+
+  canRead(conversationId: string): boolean {
+    return (
+      !this.ctx.options.requireLiveConversationAccess ||
+      (this.accessState === 'ready' && this.allowedTranscripts.has(conversationId))
+    );
+  }
+
+  private blockedView(record: ConversationRecord): ConversationView {
+    return {
+      id: record.id,
+      kind: record.kind,
+      appId: record.appId,
+      title: null,
+      memberAccountIds: [],
+      myRole: 'member',
+      epoch: 0,
+      joined: false,
+      joinState: 'waiting_for_member',
+      integrity: 'ok',
+      unreachableMemberAccountIds: [],
+      unreadCount: 0,
+      lastActivityAt: record.createdAt,
+      createdAt: record.createdAt,
+      access: this.accessState === 'ready' ? 'blocked' : this.accessState,
+    };
+  }
+
   get(conversationId: string): ConversationView | undefined {
-    const cached = this.views.get(conversationId);
-    if (cached) return cached;
     const record = this.ctx.model.conversations.get(conversationId);
     if (!record) return undefined;
-    const view = this.toView(record);
+    const cached = this.views.get(conversationId);
+    if (cached) return cached;
+    const view = this.canRead(conversationId) ? this.toView(record) : this.blockedView(record);
     this.views.set(conversationId, view);
     return view;
   }
@@ -181,6 +222,7 @@ export class ConversationsService {
       : (this.joinStatus.get(record.id) ??
         (me?.state === 'joined' && !record.removed ? 'joining' : 'waiting_for_member'));
     return {
+      ...(ctx.options.requireLiveConversationAccess ? { access: 'allowed' as const } : {}),
       id: record.id,
       kind: record.kind,
       appId: record.appId,
@@ -312,6 +354,7 @@ export class ConversationsService {
       await ctx.mutex.run(async () => {
         if (!ctx.model.conversations.get(summary.id)) await this.storeSummary(summary, null);
       });
+      if (ctx.options.requireLiveConversationAccess) await this.refreshFromServer();
       ctx.sync.request();
       return this.get(summary.id)!;
     }
@@ -337,6 +380,7 @@ export class ConversationsService {
     for (const accountId of others)
       if (!reached.has(accountId))
         this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
+    if (ctx.options.requireLiveConversationAccess) await this.refreshFromServer();
     this.invalidate(summary.id);
     return this.get(summary.id)!;
   }
@@ -471,6 +515,8 @@ export class ConversationsService {
   }
 
   private requireState(conversationId: string) {
+    if (!this.canRead(conversationId))
+      throw new InvalidStateError('conversation access is unavailable');
     const state = this.ctx.groups.get(conversationId);
     const record = this.ctx.model.conversations.get(conversationId);
     if (!state || !record) throw new NotFoundError(`conversation ${conversationId}`);
@@ -485,12 +531,21 @@ export class ConversationsService {
   async refreshFromServer(): Promise<void> {
     const { ctx } = this;
     if (!ctx.instance.isActive) return;
-    const res = await ctx.http.request({
-      method: 'GET',
-      path: '/v1/conversations',
-      schema: listConversationsResponseSchema,
-      signer: ctx.signer,
-    });
+    this.suspendAccess();
+    const generation = this.accessGeneration;
+    let res;
+    try {
+      res = await ctx.http.request({
+        method: 'GET',
+        path: '/v1/conversations',
+        schema: listConversationsResponseSchema,
+        signer: ctx.signer,
+      });
+    } catch (error) {
+      if (generation === this.accessGeneration) this.suspendAccess('unavailable');
+      throw error;
+    }
+    if (generation !== this.accessGeneration || this.stopped) return;
     /**
      * Conversations whose MLS group has lost EVERY active leaf.
      *
@@ -552,6 +607,31 @@ export class ConversationsService {
         }
       }
     });
+    if (ctx.options.requireLiveConversationAccess) {
+      for (const summary of res.conversations) {
+        const record = ctx.model.conversations.get(summary.id);
+        if (
+          record &&
+          ctx.groups.has(summary.id) &&
+          !stale.includes(summary.id) &&
+          summary.lastSeq > record.lastSeq
+        ) {
+          try {
+            await ctx.sync.catchUpConversation(summary.id, summary.lastSeq);
+          } catch (error) {
+            this.suspendAccess('unavailable');
+            throw error;
+          }
+        }
+      }
+    }
+    if (generation !== this.accessGeneration || this.stopped) return;
+    if (ctx.options.requireLiveConversationAccess) {
+      this.allowedTranscripts = new Set(res.conversations.map((item) => item.id));
+      this.accessState = 'ready';
+      for (const id of ctx.model.conversations.keys()) ctx.messages.invalidate(id);
+      this.invalidate();
+    }
     // The stale ones lose their group state; the join path takes it from there,
     // letting this device back in from the new group's GroupInfo.
     for (const conversationId of stale) {
@@ -687,6 +767,7 @@ export class ConversationsService {
       /** Own instances that share, or are being given, a leaf in a conversation this instance is the elector of. */
       const electorFor = new Set<string>();
       for (const conversationId of ctx.groups.ids()) {
+        if (!this.canRead(conversationId)) continue;
         const state = ctx.groups.get(conversationId)!;
         const record = ctx.model.conversations.get(conversationId);
         if (!record || !ctx.engine.isActive(state) || record.removed) continue;
@@ -805,7 +886,8 @@ export class ConversationsService {
         }
       }
       // Not awaited: exporting and uploading an archive must not hold the sync loop; autoOffer never throws and dedupes.
-      if (electorFor.size) void ctx.history.autoOffer([...electorFor]);
+      if (!ctx.options.requireLiveConversationAccess && electorFor.size)
+        void ctx.history.autoOffer([...electorFor]);
     } finally {
       this.reconciling = false;
     }
@@ -818,6 +900,7 @@ export class ConversationsService {
   private async selfJoin(): Promise<void> {
     const { ctx } = this;
     for (const record of [...ctx.model.conversations.values()]) {
+      if (!this.canRead(record.id)) continue;
       if (record.removed) continue;
       if (record.members.find((m) => m.accountId === ctx.accountId)?.state !== 'joined') continue;
       const state = ctx.groups.get(record.id);

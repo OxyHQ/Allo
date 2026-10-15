@@ -64,6 +64,7 @@ export class StatusService {
   private held = new Map<string, Held>();
   private cache: readonly StatusView[] = EMPTY;
   private stale = true;
+  private refreshGeneration = 0;
 
   constructor(private readonly ctx: Context) {}
 
@@ -75,6 +76,8 @@ export class StatusService {
   /** Re-read the server's listing and decrypt what this device holds a key for. */
   async refresh(): Promise<void> {
     const { ctx } = this;
+    const generation = ++this.refreshGeneration;
+    if (ctx.options.requireLiveConversationAccess) this.clearPresentation();
     const answer = await ctx.http.request({
       method: 'GET',
       path: '/v1/statuses',
@@ -97,6 +100,7 @@ export class StatusService {
         ctx.log.debug?.('status could not be opened', { error: describeError(error) });
       }
     }
+    if (generation !== this.refreshGeneration) return;
     this.held = next;
     this.invalidate();
   }
@@ -244,7 +248,20 @@ export class StatusService {
     );
   }
 
+  clearPresentation(): void {
+    this.held.clear();
+    this.cache = EMPTY;
+    this.ctx.emitter.emit('statuses');
+  }
+
+  suspendAccess(): void {
+    if (!this.ctx.options.requireLiveConversationAccess) return;
+    this.refreshGeneration += 1;
+    this.clearPresentation();
+  }
+
   stop(): void {
+    this.refreshGeneration += 1;
     this.held.clear();
     this.cache = EMPTY;
     this.stale = true;

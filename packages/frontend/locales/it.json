@@ -495,5 +495,15 @@
   "transfer.receiving": "Ricezione della cronologia da un altro dispositivo",
   "transfer.receivingFrom": "Ricezione della cronologia da {{name}}",
   "transfer.sending": "Invio della cronologia a un altro dispositivo",
-  "transfer.sendingTo": "Invio della cronologia a {{name}}"
+  "transfer.sendingTo": "Invio della cronologia a {{name}}",
+  "supervision.conversation": "Conversazione",
+  "supervision.checking.title": "Verifica dell’accesso",
+  "supervision.checking.body": "I tuoi messaggi appariranno dopo la conferma dell’accesso.",
+  "supervision.blocked.title": "Conversazione non disponibile",
+  "supervision.blocked.body": "L’accesso a questa conversazione è limitato. Controlla le impostazioni di supervisione.",
+  "supervision.unavailable.title": "Impossibile verificare l’accesso",
+  "supervision.unavailable.body": "I tuoi messaggi sono nascosti finché non possiamo confermare l’accesso. Riprova.",
+  "supervision.unsupported.title": "Non disponibile con la supervisione",
+  "supervision.unsupported.body": "Il trasferimento della cronologia e i backup non sono ancora disponibili per gli account supervisionati.",
+  "supervision.review": "Controlla la supervisione"
 }

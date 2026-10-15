@@ -1,3 +1,4 @@
+import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import React, { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -158,6 +159,13 @@ export default function NewConversationRoute() {
     : count > 1
       ? t('chat.new.createGroup')
       : t('chat.new.start');
+
+  if (search.unavailable)
+    return (
+      <Page title={t('chat.new.title')} back="always" scroll={false}>
+        <ConversationAccessState state="unavailable" onRetry={search.retry} />
+      </Page>
+    );
 
   return (
     <Page

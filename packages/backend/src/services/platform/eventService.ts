@@ -1,3 +1,4 @@
+import { transcriptParticipants } from '../../db/platform/transcriptPolicyRepository';
 /**
  * Event submission and reads (`docs/platform/api-v1.md`, Events and Sync).
  *
@@ -17,13 +18,19 @@ import {
   type SyncResponse,
 } from '@allo/shared-types';
 import { getDb, type AlloDatabase } from '../../db';
-import { findMember } from '../../db/platform/conversationRepository';
+import { findMember, lockConversation } from '../../db/platform/conversationRepository';
 import { ackDeliveries, readSyncStream } from '../../db/platform/deliveryRepository';
 import { appendClientEvent, listEvents } from '../../db/platform/eventRepository';
 import { getRealtime } from '../../runtime/realtime';
-import { notFound, validationFailed } from '../../utils/httpErrors';
+import { forbidden, notFound, validationFailed } from '../../utils/httpErrors';
 import { toConversationEvent } from './wire';
 import type { Caller } from './conversationService';
+import {
+  conversationParticipants,
+  transcriptDecisions,
+  requireMessageAccess,
+  requireUnchangedParticipants,
+} from './messagingPolicy';
 
 export async function submitEvent(
   caller: Caller,
@@ -32,16 +39,24 @@ export async function submitEvent(
   deps: { db?: AlloDatabase } = {},
 ): Promise<SubmitEventResponse> {
   const db = deps.db ?? getDb();
-  const appended = await db.transaction((tx) =>
-    appendClientEvent(
+  const participants =
+    (await conversationParticipants([conversationId], db)).get(conversationId) ?? [];
+  await requireMessageAccess(caller, conversationId, [
+    ...participants,
+    ...(request.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+  ]);
+  const appended = await db.transaction(async (tx) => {
+    if (!(await lockConversation(conversationId, tx))) throw notFound('Conversation not found');
+    await requireUnchangedParticipants(conversationId, participants, tx);
+    return appendClientEvent(
       {
         conversationId,
         sender: { instanceId: caller.instanceId, accountId: caller.accountId },
         request,
       },
       tx,
-    ),
-  );
+    );
+  });
   if (appended.recipients.length > 0) getRealtime().nudge(appended.recipients, { conversationId });
   return {
     event: {
@@ -59,9 +74,19 @@ export async function listConversationEvents(
   deps: { db?: AlloDatabase } = {},
 ): Promise<{ events: ConversationEvent[]; hasMore: boolean }> {
   const db = deps.db ?? getDb();
-  const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound('Conversation not found');
-  const page = await listEvents(conversationId, query.after, query.limit, db);
+  const { participants, page } = await db.transaction(
+    async (tx) => {
+      const member = await findMember(conversationId, caller.accountId, tx);
+      if (!member) throw notFound('Conversation not found');
+      const participants = await transcriptParticipants([conversationId], tx);
+      const page = await listEvents(conversationId, query.after, query.limit, tx);
+      return { participants, page };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const decisions = await transcriptDecisions(caller, participants);
+  if (!decisions.get(conversationId)?.allowed)
+    throw forbidden('This conversation is not available.');
   return { events: page.events.map(toConversationEvent), hasMore: page.hasMore };
 }
 
@@ -84,16 +109,29 @@ export async function readSync(
 ): Promise<SyncResponse> {
   const db = deps.db ?? getDb();
   const after = positionOf(query.cursor);
-  const page = await readSyncStream(caller.instanceId, after, query.limit, db);
-  const deliveries = page.entries.map((entry) => ({
-    cursor: encodeCursor(entry.deliveryId),
-    conversationId: entry.conversationId,
-    event: toConversationEvent(entry.event),
-  }));
-  const last = deliveries[deliveries.length - 1];
+  const { page, participants } = await db.transaction(
+    async (tx) => {
+      const page = await readSyncStream(caller.instanceId, after, query.limit, tx);
+      const participants = await transcriptParticipants(
+        [...new Set(page.entries.map((entry) => entry.conversationId))],
+        tx,
+      );
+      return { page, participants };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const decisions = await transcriptDecisions(caller, participants);
+  const deliveries = page.entries
+    .filter((entry) => decisions.get(entry.conversationId)?.allowed)
+    .map((entry) => ({
+      cursor: encodeCursor(entry.deliveryId),
+      conversationId: entry.conversationId,
+      event: toConversationEvent(entry.event),
+    }));
+  const last = page.entries[page.entries.length - 1];
   return {
     deliveries,
-    nextCursor: last ? last.cursor : (query.cursor ?? INITIAL_CURSOR),
+    nextCursor: last ? encodeCursor(last.deliveryId) : (query.cursor ?? INITIAL_CURSOR),
     hasMore: page.hasMore,
   };
 }

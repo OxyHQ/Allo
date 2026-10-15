@@ -90,6 +90,8 @@ export class OutboxEngine {
   ): Promise<OutboxItemRecord> {
     const { ctx } = this;
     ctx.instance.assertActive();
+    if (!ctx.conversations.canRead(conversationId))
+      throw new InvalidStateError('conversation access is unavailable');
     const conv = ctx.model.conversations.get(conversationId);
     if (!conv) throw new InvalidStateError(`unknown conversation ${conversationId}`);
     const item: OutboxItemRecord = {

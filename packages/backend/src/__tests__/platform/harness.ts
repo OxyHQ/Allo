@@ -1,3 +1,4 @@
+import { registerFixtureActor } from './oxySafetyFixture';
 /**
  * The platform suites' shared fixture: a throwaway migrated database, the
  * REAL `createApp` assembly with a fake Oxy auth, a recording `Realtime`, and
@@ -26,6 +27,9 @@ import {
   type SyncNudgeEvent,
 } from '@allo/shared-types';
 import { createApp, type CreateAppDependencies } from '../../app';
+import { oxy } from '../../oxy';
+import { createMessagingAuth } from '../../middleware/messagingAuth';
+oxy.configureServiceAuth('allo-fixture-key', 'allo-fixture-secret');
 import {
   checkPostgresHealth,
   closePostgres,
@@ -46,6 +50,7 @@ export const fakeOxyAuth: RequestHandler = (req, res, next) => {
     res.status(401).json({ error: { code: 'unauthorized', message: 'no session' } });
     return;
   }
+  req.headers.authorization ??= `Bearer ${registerFixtureActor(userId)}`;
   Reflect.set(req, 'userId', userId);
   Reflect.set(req, 'user', { id: userId });
   next();
@@ -156,6 +161,7 @@ export async function createPlatformHarness(
   setRealtime(realtime);
   const app = createApp({
     auth: fakeOxyAuth,
+    v1Auth: [fakeOxyAuth, createMessagingAuth(oxy)],
     instanceAuth: requireInstance({ getDb }),
     rateLimit: passThrough,
     cors: passThrough,
@@ -267,6 +273,7 @@ export class TestInstance {
     });
     return {
       [USER_HEADER]: this.accountId,
+      Authorization: `Bearer ${registerFixtureActor(this.accountId)}`,
       [INSTANCE_HEADER]: this.id,
       [TIMESTAMP_HEADER]: String(timestampMs),
       [SIGNATURE_HEADER]: signMessage(this.key, message),

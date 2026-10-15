@@ -1,3 +1,4 @@
+import { registerFixtureActor } from './oxySafetyFixture';
 /**
  * Presence: the four rules of ADR 0002, each one broken on purpose.
  *
@@ -172,7 +173,11 @@ describe('the heartbeat', () => {
     await beat(b.accountId, b.id, { store, now: () => at });
 
     const later = new Date(at.getTime() + 76_000);
-    const answer = await readPresence(a.accountId, [b.accountId], { store, now: () => later });
+    const answer = await readPresence(
+      { accountId: a.accountId, accessToken: registerFixtureActor(a.accountId) },
+      [b.accountId],
+      { store, now: () => later },
+    );
     expect(answer.presence[0].online).toBe(false);
   });
 
@@ -198,6 +203,7 @@ describe('the watch set', () => {
     return {
       socket: {
         id,
+        disconnect: () => undefined,
         emit: (_event: 'presence', payload: PresenceState) =>
           sent.push({ accountId: payload.accountId, online: payload.online }),
       },
@@ -216,7 +222,7 @@ describe('the watch set', () => {
       status: 'active' as const,
     };
 
-    await hub.attach(watcher.socket, instanceA);
+    await hub.attach(watcher.socket, instanceA, registerFixtureActor(instanceA.accountId));
     await hub.watch(watcher.socket, { accountIds: [b.accountId] });
     expect(watcher.sent).toEqual([{ accountId: b.accountId, online: false }]);
 
@@ -235,12 +241,16 @@ describe('the watch set', () => {
     const { a, b } = await dmBetween(h.app);
     const hub = new PresenceHub();
     const watcher = fakeSocket('s2');
-    await hub.attach(watcher.socket, {
-      id: a.id,
-      accountId: a.accountId,
-      appId: 'allo',
-      status: 'active',
-    });
+    await hub.attach(
+      watcher.socket,
+      {
+        id: a.id,
+        accountId: a.accountId,
+        appId: 'allo',
+        status: 'active',
+      },
+      registerFixtureActor(a.accountId),
+    );
     await hub.watch(watcher.socket, { accountIds: [] });
 
     await beat(b.accountId, b.id, { store });
@@ -261,11 +271,11 @@ describe('the watch set', () => {
     const first = fakeSocket('b1');
     const second = fakeSocket('b2');
 
-    await hub.attach(first.socket, instanceB);
+    await hub.attach(first.socket, instanceB, registerFixtureActor(instanceB.accountId));
     expect((await store.onlineOf([b.accountId])).has(b.accountId)).toBe(true);
 
     // Two sockets, one instance: the first goodbye is not a goodbye.
-    await hub.attach(second.socket, instanceB);
+    await hub.attach(second.socket, instanceB, registerFixtureActor(instanceB.accountId));
     await hub.detach(first.socket, instanceB);
     expect((await store.onlineOf([b.accountId])).has(b.accountId)).toBe(true);
 
@@ -278,12 +288,16 @@ describe('the watch set', () => {
     const pending = await TestInstance.register(h.app, accountId('p'));
     const hub = new PresenceHub();
     const socket = fakeSocket('p1');
-    await hub.attach(socket.socket, {
-      id: pending.id,
-      accountId: pending.accountId,
-      appId: 'allo',
-      status: 'pending',
-    });
+    await hub.attach(
+      socket.socket,
+      {
+        id: pending.id,
+        accountId: pending.accountId,
+        appId: 'allo',
+        status: 'pending',
+      },
+      registerFixtureActor(pending.accountId),
+    );
     expect((await store.onlineOf([pending.accountId])).has(pending.accountId)).toBe(false);
     hub.stop();
   });
@@ -292,12 +306,16 @@ describe('the watch set', () => {
     const { a } = await dmBetween(h.app);
     const hub = new PresenceHub();
     const watcher = fakeSocket('s3');
-    await hub.attach(watcher.socket, {
-      id: a.id,
-      accountId: a.accountId,
-      appId: 'allo',
-      status: 'active',
-    });
+    await hub.attach(
+      watcher.socket,
+      {
+        id: a.id,
+        accountId: a.accountId,
+        appId: 'allo',
+        status: 'active',
+      },
+      registerFixtureActor(a.accountId),
+    );
     await hub.watch(watcher.socket, { accountIds: 'not a list' });
     expect(watcher.sent).toEqual([]);
     hub.stop();

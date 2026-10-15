@@ -1,3 +1,4 @@
+import { transcriptParticipants } from '../db/platform/transcriptPolicyRepository';
 /**
  * The delivery worker: tells an instance something is waiting in its stream.
  *
@@ -15,6 +16,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { SERVER_SENDER_ID } from '@allo/shared-types';
+import { deliveryDecisions, uniqueParticipants } from '../services/platform/messagingPolicy';
 import { getDb, type AlloDatabase } from '../db';
 import {
   claimDueDeliveries,
@@ -108,8 +111,55 @@ export async function runDeliveryTick(deps: DeliveryWorkerDeps = {}): Promise<De
     (await findEventsByIds([...new Set(claimed.map((d) => d.eventId))], db)).map((e) => [e.id, e]),
   );
 
+  const participants = await transcriptParticipants(
+    [...new Set(claimed.map((row) => row.conversationId))],
+    db,
+  );
+  let policy;
+  try {
+    policy = await deliveryDecisions(
+      claimed.flatMap((delivery) => {
+        const event = events.get(delivery.eventId);
+        const target = targets.get(delivery.instanceId);
+        if (!event || !target) return [];
+        const senderAccountId =
+          event.senderAccountId === SERVER_SENDER_ID ? target.accountId : event.senderAccountId;
+        return [
+          {
+            resourceId: String(delivery.id),
+            senderAccountId,
+            participantAccountIds: uniqueParticipants([
+              ...(participants.get(delivery.conversationId) ?? []),
+              senderAccountId,
+              target.accountId,
+            ]),
+          },
+        ];
+      }),
+    );
+  } catch {
+    // Authority outage must not consume or kill notifications. Release the lease
+    // with bounded retry, irrespective of previous PSP/push attempt counts.
+    for (const delivery of claimed)
+      await deferDelivery(
+        delivery.id,
+        leaseOwner,
+        {
+          availableAt: new Date(now().getTime() + backoffMs(delivery.attempts)),
+          error: 'Messaging authorization unavailable',
+        },
+        db,
+      );
+    result.deferred = claimed.length;
+    return result;
+  }
   for (const delivery of claimed) {
     try {
+      if (!policy.get(String(delivery.id))?.allowed) {
+        await settleDelivery(delivery.id, leaseOwner, 'notified', db);
+        result.skipped += 1;
+        continue;
+      }
       const outcome = await handleOne(
         delivery,
         targets.get(delivery.instanceId),

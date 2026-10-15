@@ -1,3 +1,4 @@
+import { registerFixtureActor } from '../platform/oxySafetyFixture';
 /**
  * Self-join by MLS external commit and lost-state resync, the real SDK against
  * the real backend.
@@ -45,7 +46,6 @@ import {
   Harness,
   stopAll,
   texts,
-  TOKEN_PREFIX,
   waitFor,
   waitForText,
   waitJoined,
@@ -185,7 +185,7 @@ async function signedFetch(
   const res = await fetch(`${h.baseUrl}${pathWithQuery}`, {
     method,
     headers: {
-      authorization: `Bearer ${TOKEN_PREFIX}${accountId}`,
+      authorization: `Bearer ${registerFixtureActor(accountId)}`,
       [INSTANCE_HEADER]: instanceId,
       [TIMESTAMP_HEADER]: String(timestampMs),
       [SIGNATURE_HEADER]: signature,

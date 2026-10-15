@@ -135,6 +135,7 @@ const GROUP_TITLE_NAMES = 3;
  * in it can be named yet — never an account id.
  */
 export function conversationTitle(view: ConversationView, ctx: ChatContext): string {
+  if (view.access && view.access !== 'allowed') return ctx.t('supervision.conversation');
   const members = others(view, ctx.me);
   if (view.kind === 'dm') return members[0] ? nameOf(members[0], ctx) : '';
   if (view.title) return view.title;

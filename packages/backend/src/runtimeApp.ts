@@ -5,12 +5,7 @@
  * result; `server.ts` listens.
  */
 
-import {
-  createOptionalOxyAuth,
-  createOxyAuthMiddleware,
-  createOxyCors,
-  createOxyRateLimit,
-} from '@oxy.so/core/server';
+import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from '@oxy.so/core/server';
 import { APP_ORIGINS, createApp } from './app';
 import { setIceConfig } from './config/iceRuntime';
 import { readLiveKitConfig } from './config/livekit';
@@ -20,7 +15,7 @@ import { readIceConfig } from './config/turn';
 import { checkPostgresHealth } from './db';
 import { ecosystemActivityMiddleware } from './ecosystemActivity';
 import { requireInstance } from './middleware/instanceAuth';
-import { requireOxySession } from './middleware/oxySession';
+import { createMessagingAuth } from './middleware/messagingAuth';
 import { oxy } from './oxy';
 import { createCrowdSourceWebhookRoutes } from './routes/crowdSourceWebhook';
 import { createDirectoryRoutes } from './routes/directory';
@@ -44,7 +39,7 @@ export function createRuntimeApp() {
   setLiveKitConfig(readLiveKitConfig());
   const app = createApp({
     auth: createOxyAuthMiddleware(oxy),
-    v1Auth: [createOptionalOxyAuth(oxy), requireOxySession],
+    v1Auth: [createMessagingAuth(oxy)],
     instanceAuth: requireInstance(),
     rateLimit: createOxyRateLimit(oxy),
     cors: createOxyCors({ appOrigins: APP_ORIGINS }),

@@ -188,6 +188,28 @@ export class CallsService {
     return this.historyCache;
   }
 
+  /** A live media session is not an authorization lease. */
+  async refreshAccess(): Promise<void> {
+    const live = this.live;
+    if (!this.ctx.options.requireLiveConversationAccess || !live || live.view.phase === 'ended')
+      return;
+    try {
+      await this.ctx.http.request({
+        method: 'GET',
+        path: `/v1/calls/${live.view.id}`,
+        schema: callResponseSchema,
+        signer: this.ctx.signer,
+      });
+    } catch {
+      if (this.live === live) await this.finish('failed', false);
+    }
+  }
+
+  suspendAccess(): void {
+    if (this.ctx.options.requireLiveConversationAccess && this.live?.view.phase !== 'ended')
+      void this.finish('failed', false);
+  }
+
   // ---- starting, answering, ending -----------------------------------------
 
   /** Rings every other member's devices. Resolves once the server has the call, not once somebody answers. */

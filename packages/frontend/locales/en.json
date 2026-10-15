@@ -495,5 +495,15 @@
   "transfer.receiving": "Receiving history from another device",
   "transfer.receivingFrom": "Receiving history from {{name}}",
   "transfer.sending": "Sending history to another device",
-  "transfer.sendingTo": "Sending history to {{name}}"
+  "transfer.sendingTo": "Sending history to {{name}}",
+  "supervision.conversation": "Conversation",
+  "supervision.checking.title": "Checking access",
+  "supervision.checking.body": "Your messages will appear after access is confirmed.",
+  "supervision.blocked.title": "Conversation unavailable",
+  "supervision.blocked.body": "Access to this conversation is restricted. Review your supervision settings.",
+  "supervision.unavailable.title": "Cannot check access",
+  "supervision.unavailable.body": "Your messages are hidden until we can confirm access. Try again.",
+  "supervision.unsupported.title": "Not available with supervision",
+  "supervision.unsupported.body": "History transfer and backups are not available for supervised accounts yet.",
+  "supervision.review": "Review supervision"
 }

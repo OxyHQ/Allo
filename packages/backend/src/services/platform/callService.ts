@@ -57,8 +57,10 @@ import { callRoomName, type LiveKitConfig } from '../../config/livekit';
 import { getLiveKitConfig } from '../../config/sfuRuntime';
 import { mintTurnCredential, type IceConfig } from '../../config/turn';
 import { toCall } from './wire';
+import { requireMessageAccess } from './messagingPolicy';
 
 export interface CallCaller {
+  accessToken: string;
   instanceId: string;
   accountId: string;
 }
@@ -77,7 +79,7 @@ export async function createCall(
   const now = deps.now?.() ?? new Date();
 
   const replayed = await findCallByIdempotencyKey(caller.instanceId, request.idempotencyKey, db);
-  if (replayed) return { call: await view(replayed, db) };
+  if (replayed) return readCall(caller, replayed.id, deps);
 
   const mine = await findMember(request.conversationId, caller.accountId, db);
   if (!mine || mine.state !== 'joined') throw notFound('no such conversation');
@@ -86,6 +88,7 @@ export async function createCall(
     (member) => member.state === 'joined' && member.accountId !== caller.accountId,
   );
   const otherAccounts = [...new Set(members.map((member) => member.accountId))];
+  await requireMessageAccess(caller, request.conversationId, [caller.accountId, ...otherAccounts]);
   if (otherAccounts.length === 0)
     throw validationFailed('nobody to call', { path: ['conversationId'] });
 
@@ -167,6 +170,7 @@ export async function answerCall(
   const now = deps.now?.() ?? new Date();
   const participant = await findParticipant(callId, caller.instanceId, db);
   if (!participant) throw notFound('no such call');
+  await requireCallPolicy(caller, await requireCall(callId, db), db);
 
   const claimed = await claimAnswer(callId, now, db);
   const call = claimed ?? (await requireCall(callId, db));
@@ -200,6 +204,7 @@ export async function declineCall(
   const now = deps.now?.() ?? new Date();
   const participant = await findParticipant(callId, caller.instanceId, db);
   if (!participant) throw notFound('no such call');
+  await requireCallPolicy(caller, await requireCall(callId, db), db);
 
   await setParticipantState(callId, caller.instanceId, 'declined', now, db);
   const participants = await listParticipants(callId, db);
@@ -230,6 +235,7 @@ export async function endCall(
   const participant = await findParticipant(callId, caller.instanceId, db);
   if (existing.initiatorInstanceId !== caller.instanceId && !participant)
     throw notFound('no such call');
+  await requireCallPolicy(caller, existing, db);
 
   const ended = await claimEnd(callId, reason, now, db);
   const call = ended ?? existing;
@@ -250,6 +256,7 @@ export async function readCall(
   const participant = await findParticipant(callId, caller.instanceId, db);
   if (call.initiatorInstanceId !== caller.instanceId && !participant)
     throw notFound('no such call');
+  await requireCallPolicy(caller, call, db);
   return { call: await view(call, db) };
 }
 
@@ -353,6 +360,19 @@ export async function callSfuToken(
 }
 
 // ---- the parts --------------------------------------------------------------
+
+async function requireCallPolicy(
+  caller: CallCaller,
+  call: CallRow,
+  db: AlloDatabase,
+): Promise<void> {
+  const participants = await listParticipants(call.id, db);
+  await requireMessageAccess(caller, call.id, [
+    caller.accountId,
+    call.initiatorAccountId,
+    ...participants.map((one) => one.accountId),
+  ]);
+}
 
 async function requireCall(callId: string, db: AlloDatabase): Promise<CallRow> {
   const row = await findCallById(callId, db);
