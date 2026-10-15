@@ -1,4 +1,4 @@
-import { TEAM_CAPABILITY_HEADER } from '@allo/contracts';
+import { TEAM_CAPABILITY_HEADER } from '@oxy.so/allo-contracts';
 import { HOMIIO_TEAM_OPERATION_HEADER } from '@homiio/contracts';
 import { authorizeTeamOperation } from '../../services/platform/managedTeamService';
 import { Router, type RequestHandler } from 'express';

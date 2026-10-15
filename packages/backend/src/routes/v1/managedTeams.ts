@@ -2,7 +2,7 @@ import { getDb } from '../../db';
 import { lockConversation } from '../../db/platform/conversationRepository';
 import { findTeamByHash } from '../../db/platform/managedTeamRepository';
 import { Router, type RequestHandler } from 'express';
-import { TEAM_CAPABILITY_HEADER, teamOperationRequestSchema } from '@allo/contracts';
+import { TEAM_CAPABILITY_HEADER, teamOperationRequestSchema } from '@oxy.so/allo-contracts';
 import { HOMIIO_TEAM_OPERATION_HEADER } from '@homiio/contracts';
 import { callerOf } from './conversations';
 import { asyncRoute } from './asyncRoute';

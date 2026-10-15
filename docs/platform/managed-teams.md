@@ -2,7 +2,7 @@
 
 A Homiio case owns the collaboration policy; Allo owns the encrypted conversation, its membership and delivery. `homiio-team` is an Allo-hosted workflow so the creator's existing Allo instance performs every MLS operation. Homiio never holds an MLS key, forwards a human bearer, stores message content, or trusts a client receipt as proof of removal.
 
-The creator authorizes a narrow read grant when opening the team flow. Homiio stores the opaque reference encrypted at rest; Allo stores its SHA-256 hash, its own conversation id and the opaque Homiio case reference. The capability is sent in `x-allo-team-capability`, never in a URL, and permits only `@allo/sdk`'s coherent membership snapshot. The source operation's distinct capability is sent in `x-homiio-team-operation` and is read through `@homiio/sdk`. Both SDKs fix the remote origin and refuse redirects. Neither grant can sign an Allo mutation or decrypt a message. Headers are excluded from request logs and explicitly redacted by the logger.
+The creator authorizes a narrow read grant when opening the team flow. Homiio stores the opaque reference encrypted at rest; Allo stores its SHA-256 hash, its own conversation id and the opaque Homiio case reference. The capability is sent in `x-allo-team-capability`, never in a URL, and permits only `@oxy.so/allo-sdk`'s coherent membership snapshot. The source operation's distinct capability is sent in `x-homiio-team-operation` and is read through `@homiio/sdk`. Both SDKs fix the remote origin and refuse redirects. Neither grant can sign an Allo mutation or decrypt a message. Headers are excluded from request logs and explicitly redacted by the logger.
 
 ## Commit protocol
 

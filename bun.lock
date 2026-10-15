@@ -27,12 +27,12 @@
       "name": "@allo/backend",
       "version": "1.0.0",
       "dependencies": {
-        "@allo/contracts": "workspace:*",
         "@allo/shared-types": "workspace:*",
         "@crowdsource.you/contracts": "1.1.0",
         "@crowdsource.you/core": "3.0.0",
         "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
         "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
+        "@oxy.so/allo-contracts": "workspace:*",
         "@oxy.so/contracts": "4.12.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/db": "^1.1.0",
@@ -50,7 +50,7 @@
       },
       "devDependencies": {
         "@allo/core": "workspace:*",
-        "@allo/sdk": "workspace:*",
+        "@oxy.so/allo-sdk": "workspace:*",
         "@types/express": "^4.17.21",
         "@types/supertest": "^6.0.3",
         "bun-types": "1.4.3",
@@ -60,7 +60,7 @@
       },
     },
     "packages/contracts": {
-      "name": "@allo/contracts",
+      "name": "@oxy.so/allo-contracts",
       "version": "0.1.0",
       "dependencies": {
         "zod": "^4.4.3",
@@ -73,7 +73,6 @@
       "name": "@allo/core",
       "version": "0.1.0",
       "dependencies": {
-        "@allo/contracts": "workspace:*",
         "@allo/shared-types": "workspace:*",
         "@hpke/common": "1.10.1",
         "@hpke/core": "1.9.0",
@@ -81,6 +80,7 @@
         "@noble/ciphers": "^2.2.0",
         "@noble/curves": "^2.2.0",
         "@noble/hashes": "^2.2.0",
+        "@oxy.so/allo-contracts": "workspace:*",
         "@scure/bip39": "^1.6.0",
         "socket.io-client": "^4.8.3",
         "ts-mls": "1.6.4",
@@ -97,8 +97,6 @@
       "version": "2.0.0",
       "dependencies": {
         "@alia.onl/sdk": "^15.4.0",
-        "@alia.onl/sdk": "^13.2.0",
-        "@allo/contracts": "workspace:*",
         "@allo/core": "workspace:*",
         "@allo/react": "workspace:*",
         "@allo/shared-types": "workspace:*",
@@ -116,6 +114,7 @@
         "@livekit/react-native-webrtc": "144.2.0",
         "@lottiefiles/dotlottie-react": "^0.19.16",
         "@lottiefiles/dotlottie-web": "0.80.0",
+        "@oxy.so/allo-contracts": "workspace:*",
         "@oxy.so/bloom": "^10.7.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/expo-splash": "^1.0.0",
@@ -215,10 +214,10 @@
       },
     },
     "packages/sdk": {
-      "name": "@allo/sdk",
+      "name": "@oxy.so/allo-sdk",
       "version": "0.1.0",
       "dependencies": {
-        "@allo/contracts": "0.1.0",
+        "@oxy.so/allo-contracts": "0.1.0",
       },
       "devDependencies": {
         "typescript": "^5.9.3",
@@ -263,15 +262,11 @@
 
     "@allo/backend": ["@allo/backend@workspace:packages/backend"],
 
-    "@allo/contracts": ["@allo/contracts@workspace:packages/contracts"],
-
     "@allo/core": ["@allo/core@workspace:packages/core"],
 
     "@allo/frontend": ["@allo/frontend@workspace:packages/frontend"],
 
     "@allo/react": ["@allo/react@workspace:packages/react"],
-
-    "@allo/sdk": ["@allo/sdk@workspace:packages/sdk"],
 
     "@allo/shared-types": ["@allo/shared-types@workspace:packages/shared-types"],
 
@@ -796,6 +791,10 @@
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.142.0", "", {}, "sha512-7W+2q5AKQVU36fkaryontrHn3YDt1RyUYXatw9i5H8ocYe2sPKSFB6eS8WNPeRKiN1qAWWZUPm7gwFzJGrccqQ=="],
+
+    "@oxy.so/allo-contracts": ["@oxy.so/allo-contracts@workspace:packages/contracts"],
+
+    "@oxy.so/allo-sdk": ["@oxy.so/allo-sdk@workspace:packages/sdk"],
 
     "@oxy.so/bloom": ["@oxy.so/bloom@10.7.0", "", { "dependencies": { "@tanstack/react-virtual": "^3.14.3", "react-native-css": "3.1.0-rc.0", "react-remove-scroll-bar": "^2.3.8" }, "peerDependencies": { "@lottiefiles/dotlottie-react": ">=0.13.0", "@react-native-community/netinfo": ">=11.1.0", "expo": "*", "expo-blur": "*", "expo-font": "*", "expo-haptics": "*", "expo-image": "*", "expo-router": ">=3.0.0", "expo-symbols": ">=0.4.5", "expo-video": "*", "lottie-react-native": ">=7.0.0", "nativewind": ">=5.0.0 || 5.0.0-rc.0", "react": ">=18.0.0", "react-dom": ">=18.0.0", "react-native": ">=0.73.0", "react-native-gesture-handler": ">=2.16.1", "react-native-keyboard-controller": ">=1.11.4", "react-native-reanimated": ">=3.13.0", "react-native-safe-area-context": ">=5.0.0", "react-native-screens": ">=3.16.0", "react-native-svg": ">=13.0.0", "react-native-webview": ">=13.0.0" }, "optionalPeers": ["@lottiefiles/dotlottie-react", "@react-native-community/netinfo", "expo", "expo-font", "expo-haptics", "expo-router", "expo-video", "lottie-react-native", "nativewind", "react-dom", "react-native-keyboard-controller", "react-native-webview"] }, "sha512-PpzPTfofcUEGJpchGDHYmXA9sK0sO+SQTIaYTSrWRFN09fzAMmgmhxUKKFspjOZSrCgGgK7iMY18EtqhsDNQdQ=="],
 

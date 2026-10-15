@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { managedTeams } from '../schema';
 import { getDb, type AlloDatabaseOrTransaction } from '..';
 import { listMembers, findConversationById } from './conversationRepository';
-import type { TeamSnapshot } from '@allo/contracts';
+import type { TeamSnapshot } from '@oxy.so/allo-contracts';
 export const teamCapabilityHash = (capability: string) =>
   createHash('sha256').update(capability).digest('hex');
 export async function findManagedTeam(

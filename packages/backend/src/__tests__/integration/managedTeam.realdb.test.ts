@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { TeamOperation } from '@homiio/sdk';
-import { AlloTeamAccessClient } from '@allo/sdk';
+import { AlloTeamAccessClient } from '@oxy.so/allo-sdk';
 import { managedTeams, conversations } from '../../db/schema';
 import { Harness, stopAll, texts, waitForText, waitJoined, waitFor } from './harness';
 

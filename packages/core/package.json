@@ -24,7 +24,7 @@
     "socket.io-client": "^4.8.3",
     "ts-mls": "1.6.4",
     "zod": "^4.4.3",
-    "@allo/contracts": "workspace:*"
+    "@oxy.so/allo-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.9.2",

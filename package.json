@@ -61,7 +61,7 @@
     "install:all": "bun install",
     "start:frontend": "bun run --filter @allo/frontend start",
     "start:backend": "bun run --filter @allo/backend start",
-    "postinstall": "bun run build:contracts && bun run --filter @allo/sdk build && bun run build:shared-types && bun run build:core && bun run build:react && bun scripts/prepare-call-worker.mjs",
+    "postinstall": "bun run build:contracts && bun run --filter @oxy.so/allo-sdk build && bun run build:shared-types && bun run build:core && bun run build:react && bun scripts/prepare-call-worker.mjs",
     "test:edge": "bun test scripts/edge-worker.test.ts",
     "check:bun-pin": "bun ./scripts/check-bun-pin.mjs && bun ./scripts/test-check-bun-pin.mjs",
     "build:core": "bun run --filter @allo/core build",
@@ -69,7 +69,7 @@
     "typecheck:core": "bun run --filter @allo/core typecheck",
     "typecheck:react": "bun run --filter @allo/react typecheck",
     "check:team-openapi": "bun scripts/check-team-openapi.ts",
-    "build:contracts": "bun run --filter @allo/contracts build",
+    "build:contracts": "bun run --filter @oxy.so/allo-contracts build",
     "test:call-media:browser": "bun scripts/call-media-browser/run.ts"
   },
   "devDependencies": {

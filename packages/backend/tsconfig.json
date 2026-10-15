@@ -15,8 +15,8 @@
     "paths": {
       "@allo/shared-types": ["../shared-types/src"],
       "@allo/shared-types/*": ["../shared-types/src/*"],
-      "@allo/contracts": ["../contracts/src"],
-      "@allo/contracts/dist/*": ["../contracts/src/*"]
+      "@oxy.so/allo-contracts": ["../contracts/src"],
+      "@oxy.so/allo-contracts/dist/*": ["../contracts/src/*"]
     }
   },
   "include": ["**/*.ts", "package.json"],

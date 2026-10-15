@@ -23,7 +23,7 @@
  *      `validation_failed`, everything else → 500 `internal` with NO message.
  */
 
-import { generateTeamOpenApi } from '@allo/contracts/dist/openapi';
+import { generateTeamOpenApi } from '@oxy.so/allo-contracts/dist/openapi';
 import express, {
   type ErrorRequestHandler,
   type Express,

@@ -1,4 +1,4 @@
-import type { TeamSnapshot } from '@allo/contracts';
+import type { TeamSnapshot } from '@oxy.so/allo-contracts';
 import type { AlloClient } from '@allo/core';
 import { isAlloNotFound } from '../allo/errors';
 import type { HomiioTeamClient, BeginTeamOperation } from '@homiio/sdk';

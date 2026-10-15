@@ -1,5 +1,5 @@
-import { TEAM_CAPABILITY_HEADER, teamSnapshotSchema, type TeamSnapshot } from '@allo/contracts';
-export type { TeamSnapshot } from '@allo/contracts';
+import { TEAM_CAPABILITY_HEADER, teamSnapshotSchema, type TeamSnapshot } from '@oxy.so/allo-contracts';
+export type { TeamSnapshot } from '@oxy.so/allo-contracts';
 /** Resource-scoped read access. This capability confers no write or message access. */
 export class AlloTeamAccessClient {
   constructor(private readonly fetcher: typeof fetch = globalThis.fetch.bind(globalThis)) {}

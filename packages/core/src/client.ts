@@ -169,8 +169,8 @@ export interface AlloClient {
       memberAccountIds: string[],
       access?: TeamOperationAccess,
     ): Promise<ConversationView>;
-    prepareTeam(access: TeamOperationAccess): Promise<import('@allo/contracts').TeamSnapshot>;
-    finishTeam(access: TeamOperationAccess): Promise<import('@allo/contracts').TeamSnapshot>;
+    prepareTeam(access: TeamOperationAccess): Promise<import('@oxy.so/allo-contracts').TeamSnapshot>;
+    finishTeam(access: TeamOperationAccess): Promise<import('@oxy.so/allo-contracts').TeamSnapshot>;
     confirmMembers(
       conversationId: string,
       memberAccountIds: readonly string[],

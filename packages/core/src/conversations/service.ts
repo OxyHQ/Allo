@@ -31,7 +31,7 @@
  *   packages for their trusted active instances and commits the Add. Once
  *   the account holds one leaf, its own elector adds its further devices.
  */
-import { TEAM_CAPABILITY_HEADER, teamSnapshotSchema } from '@allo/contracts';
+import { TEAM_CAPABILITY_HEADER, teamSnapshotSchema } from '@oxy.so/allo-contracts';
 import type { TeamOperationAccess } from '../client';
 import {
   conversationResponseSchema,

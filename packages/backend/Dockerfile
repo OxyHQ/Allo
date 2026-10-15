@@ -89,7 +89,7 @@ COPY patches ./patches/
 RUN bun install --frozen-lockfile --production --omit=peer --ignore-scripts \
         --filter '@allo/backend' \
         --filter '@allo/shared-types' \
-        --filter '@allo/contracts'
+        --filter '@oxy.so/allo-contracts'
 
 FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runtime
 
