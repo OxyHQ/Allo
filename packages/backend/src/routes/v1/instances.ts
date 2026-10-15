@@ -1,3 +1,7 @@
+import {
+  setInstanceCallPushToken,
+  clearInstanceCallPushToken,
+} from '../../services/platform/instanceService';
 import { Router, type RequestHandler } from 'express';
 import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
@@ -93,6 +97,25 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     }),
   );
 
+  router.put(
+    '/instances/me/call-push',
+    deps.instanceAuth,
+    asyncRoute(async (req, res) => {
+      await setInstanceCallPushToken(
+        getRequiredInstance(req).id,
+        parseBody(setPushTokenRequestSchema, req),
+      );
+      res.status(204).end();
+    }),
+  );
+  router.delete(
+    '/instances/me/call-push',
+    deps.instanceAuth,
+    asyncRoute(async (req, res) => {
+      await clearInstanceCallPushToken(getRequiredInstance(req).id);
+      res.status(204).end();
+    }),
+  );
   router.put(
     '/instances/me/push',
     deps.instanceAuth,

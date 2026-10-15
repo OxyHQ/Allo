@@ -98,7 +98,7 @@ async function sendOne(
   try {
     response = await transport({
       path: `${DEVICE_PATH_PREFIX}${encodeURIComponent(device.token)}`,
-      headers: buildHeaders(credentials, tokens),
+      headers: buildHeaders(credentials, tokens, notification),
       body: JSON.stringify(buildPayload(notification)),
     });
   } catch (error) {
@@ -127,12 +127,16 @@ async function sendOne(
 function buildHeaders(
   credentials: ApnsCredentials,
   tokens: ApnsTokenProvider,
+  notification: PushNotification,
 ): Record<string, string> {
   return {
     authorization: `bearer ${tokens.token()}`,
-    'apns-topic': credentials.topic,
-    'apns-push-type': 'alert',
-    'apns-priority': PRIORITY_IMMEDIATE,
+    'apns-topic': notification.call ? `${credentials.topic}.voip` : credentials.topic,
+    'apns-push-type': notification.call ? 'voip' : notification.background ? 'background' : 'alert',
+    ...(notification.call
+      ? { 'apns-expiration': '0', 'apns-collapse-id': notification.data.callId }
+      : {}),
+    'apns-priority': notification.background ? '5' : PRIORITY_IMMEDIATE,
   };
 }
 
@@ -143,10 +147,13 @@ function buildHeaders(
 function buildPayload(notification: PushNotification): Record<string, unknown> {
   const { aps: _reserved, ...coordinates } = notification.data;
   return {
-    aps: {
-      alert: { title: notification.title, body: notification.body },
-      'mutable-content': 1,
-    },
+    aps:
+      notification.call || notification.background
+        ? { 'content-available': 1 }
+        : {
+            alert: { title: notification.title, body: notification.body },
+            'mutable-content': 1,
+          },
     ...coordinates,
   };
 }

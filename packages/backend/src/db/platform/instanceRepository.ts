@@ -204,6 +204,8 @@ export async function revokeInstance(
       revokedAt: sql`coalesce(${clientInstances.revokedAt}, ${now.toISOString()}::timestamptz)`,
       pushProvider: null,
       pushToken: null,
+      callPushToken: null,
+      callPushProvider: null,
       updatedAt: now,
     })
     .where(eq(clientInstances.id, id))
@@ -298,4 +300,41 @@ export async function touchLastSeen(
     .update(clientInstances)
     .set({ lastSeenAt: new Date() })
     .where(eq(clientInstances.id, id));
+}
+
+/** Claim the installation token for ONE enrolled instance, including account switches. */
+export async function setCallPushToken(
+  id: string,
+  provider: 'apns' | 'fcm',
+  token: string,
+  db: AlloDatabaseOrTransaction,
+): Promise<void> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`call-push:${provider}:${token}`}, 0))`,
+  );
+  await db
+    .update(clientInstances)
+    .set({ callPushProvider: null, callPushToken: null })
+    .where(
+      and(eq(clientInstances.callPushProvider, provider), eq(clientInstances.callPushToken, token)),
+    );
+  await db
+    .update(clientInstances)
+    .set({ callPushProvider: provider, callPushToken: token, updatedAt: new Date() })
+    .where(and(eq(clientInstances.id, id), eq(clientInstances.status, 'active')));
+}
+export async function clearCallPushToken(
+  id: string,
+  db: AlloDatabaseOrTransaction,
+  expectedToken?: string,
+): Promise<void> {
+  await db
+    .update(clientInstances)
+    .set({ callPushProvider: null, callPushToken: null })
+    .where(
+      and(
+        eq(clientInstances.id, id),
+        expectedToken === undefined ? undefined : eq(clientInstances.callPushToken, expectedToken),
+      ),
+    );
 }

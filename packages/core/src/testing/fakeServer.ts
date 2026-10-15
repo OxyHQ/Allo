@@ -831,6 +831,13 @@ export class FakeAlloServer implements SocketHost {
       }
       return json(201, { call: this.callWire(call) });
     }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)$/)) && method === 'GET') {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call || (call.initiatorInstanceId !== me.id && !call.rung.includes(me.id)))
+        throw new HttpError(404, 'not_found', 'call');
+      return json(200, { call: this.callWire(call) });
+    }
     if ((m = path.match(/^\/v1\/calls\/([^/]+)\/ice$/)) && method === 'GET') {
       signed();
       const call = this.calls.get(m[1]);
@@ -1485,7 +1492,12 @@ export class FakeAlloServer implements SocketHost {
       participants: call.rung.map((instanceId) => ({
         accountId: this.instances.get(instanceId)?.accountId ?? '',
         instanceId,
-        state: call.answeredBy === instanceId ? ('joined' as const) : ('ringing' as const),
+        state:
+          call.answeredBy === instanceId
+            ? ('joined' as const)
+            : call.answeredBy
+              ? ('left' as const)
+              : ('ringing' as const),
         joinedAt: call.answeredBy === instanceId ? call.startedAt : null,
         leftAt: null,
       })),
@@ -1493,7 +1505,10 @@ export class FakeAlloServer implements SocketHost {
       answeredAt: call.answeredBy ? call.startedAt : null,
       endedAt: call.state === 'ended' ? this.iso() : null,
       endReason: call.endReason as null,
-      ringExpiresAt: call.state === 'ringing' ? new Date(this.now() + 45_000).toISOString() : null,
+      ringExpiresAt:
+        call.state === 'ringing'
+          ? new Date(Date.parse(call.startedAt) + 45_000).toISOString()
+          : null,
     };
   }
 

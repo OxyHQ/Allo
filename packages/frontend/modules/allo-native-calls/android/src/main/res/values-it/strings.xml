@@ -1,0 +1,7 @@
+<resources>
+  <string name="allo_calls_channel">Chiamate Allo</string>
+  <string name="allo_call_active">Chiamata in corso</string>
+  <string name="allo_call_incoming">Chiamata in arrivo</string>
+  <string name="allo_call_decline">Rifiuta</string>
+  <string name="allo_call_answer">Rispondi</string>
+</resources>

@@ -110,10 +110,18 @@ export default function CallsScreen() {
           status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
           onAccept={() => {
             void calls.answer().catch(reportCallError);
-            router.push(`/c/${session.conversationId}/call`);
+            router.push({
+              pathname: '/c/[id]/call',
+              params: { id: session.conversationId, incomingCallId: session.id },
+            });
           }}
           onDecline={() => void calls.decline().catch(reportCallError)}
-          onPress={() => router.push(`/c/${session.conversationId}/call`)}
+          onPress={() =>
+            router.push({
+              pathname: '/c/[id]/call',
+              params: { id: session.conversationId, incomingCallId: session.id },
+            })
+          }
           labels={{
             accept: t('calls.control.accept'),
             decline: t('calls.control.decline'),

@@ -134,6 +134,7 @@ export interface AlloClient {
     history(): CallHistoryEntry[];
     /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
     start(conversationId: string, mode?: 'voice' | 'video'): Promise<CallView>;
+    restoreIncoming(callId: string): Promise<CallView | null>;
     answer(): Promise<void>;
     decline(): Promise<void>;
     end(): Promise<void>;
@@ -155,6 +156,8 @@ export interface AlloClient {
     revoke(instanceId: string): Promise<void>;
     setPushToken(provider: 'fcm' | 'apns', token: string): Promise<void>;
     clearPushToken(): Promise<void>;
+    setCallPushToken(provider: 'fcm' | 'apns', token: string): Promise<void>;
+    clearCallPushToken(): Promise<void>;
   };
   conversations: {
     list(): ConversationView[];
@@ -565,6 +568,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       current: () => ctx?.calls.current() ?? null,
       history: () => ctx?.calls.history() ?? NO_CALLS,
       start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? 'voice'),
+      restoreIncoming: (id) => requireCtx().calls.restoreIncoming(id),
       answer: () => requireCtx().calls.answer(),
       decline: () => requireCtx().calls.decline(),
       end: () => requireCtx().calls.end(),
@@ -593,6 +597,9 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       revoke: (id) => requireCtx().instance.revoke(id),
       setPushToken: (provider, token) => requireCtx().instance.setPushToken(provider, token),
       clearPushToken: () => requireCtx().instance.clearPushToken(),
+      setCallPushToken: (provider, token) =>
+        requireCtx().instance.setCallPushToken(provider, token),
+      clearCallPushToken: () => requireCtx().instance.clearCallPushToken(),
     },
     conversations: {
       list: () => ctx?.conversations.list() ?? NO_CONVERSATIONS,

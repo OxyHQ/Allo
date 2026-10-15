@@ -41,5 +41,5 @@ yarn-error.*
 
 app-example
 
-android/
+/android/
 ios/nativewind-env.d.ts

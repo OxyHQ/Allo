@@ -250,6 +250,64 @@ export class CallsService {
     }
   }
 
+  /** Cold/native wake-up: a push is only a hint. Re-read the enrolled device's authority. */
+  async restoreIncoming(callId: string): Promise<CallView | null> {
+    this.ctx.instance.assertActive();
+    const { call } = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/calls/${callId}`,
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
+    const mine = call.participants.find(
+      (one) => one.instanceId === this.ctx.instanceId && one.accountId === this.ctx.accountId,
+    );
+    const eligible =
+      mine &&
+      (mine.state === 'ringing' || mine.state === 'joined') &&
+      call.state !== 'ended' &&
+      (call.state !== 'ringing' ||
+        (call.ringExpiresAt !== null && Date.parse(call.ringExpiresAt) > this.ctx.now()));
+    if (!eligible) {
+      if (this.live?.view.id === callId)
+        await this.finish(call.endReason ?? 'answered_elsewhere', false);
+      return null;
+    }
+    if (this.live?.view.id === callId && this.live.view.phase !== 'ended') return this.live.view;
+    if (this.live && this.live.view.phase !== 'ended')
+      throw new InvalidStateError('already in another call');
+    this.onIncoming({
+      callId,
+      conversationId: call.conversationId,
+      initiatorAccountId: call.initiatorAccountId,
+      mode: call.mode,
+      group: call.group,
+    });
+    this.set({ startedAt: call.startedAt, answeredAt: call.answeredAt });
+    // Sync may already have acknowledged the encrypted offer before a process
+    // restart. Recover only this initiator's authenticated, locally decrypted
+    // signalling from the encrypted instance store; never replay another call.
+    for (const record of this.ctx.model.eventsOf(call.conversationId)) {
+      const message = record.message;
+      if (
+        record.senderInstanceId === call.initiatorInstanceId &&
+        message?.t === 'call' &&
+        message.callId === callId &&
+        (message.kind === 'offer' || message.kind === 'ice')
+      ) {
+        await this.onCallMessage(call.conversationId, message);
+      }
+    }
+    if (this.current()?.phase === 'ended') return null;
+    // A reply may have been lost after this instance won. Reconstruct connecting,
+    // then recover the encrypted offer through ordinary sync, never from push.
+    if (mine.state === 'joined') {
+      this.set({ phase: this.media ? 'connecting' : 'active' });
+      await this.answerOfferIfReady();
+    }
+    return this.current();
+  }
+
   /** This device takes the call. The server decides whether it won the race. */
   async answer(): Promise<void> {
     const { ctx } = this;
@@ -275,14 +333,12 @@ export class CallsService {
 
   async decline(): Promise<void> {
     const live = this.requireLive();
-    await this.ctx.http
-      .request({
-        method: 'POST',
-        path: `/v1/calls/${live.view.id}/decline`,
-        schema: callResponseSchema,
-        signer: this.ctx.signer,
-      })
-      .catch((error) => this.ctx.log.warn?.('decline failed', { error: describeError(error) }));
+    await this.ctx.http.request({
+      method: 'POST',
+      path: `/v1/calls/${live.view.id}/decline`,
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
     await this.finish('declined');
   }
 
@@ -295,15 +351,13 @@ export class CallsService {
         : reason === 'declined'
           ? 'declined'
           : 'hangup';
-    await this.ctx.http
-      .request({
-        method: 'POST',
-        path: `/v1/calls/${live.view.id}/end`,
-        body: { reason: wire },
-        schema: callResponseSchema,
-        signer: this.ctx.signer,
-      })
-      .catch((error) => this.ctx.log.warn?.('end failed', { error: describeError(error) }));
+    await this.ctx.http.request({
+      method: 'POST',
+      path: `/v1/calls/${live.view.id}/end`,
+      body: { reason: wire },
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
     await this.signal(live.view.conversationId, { kind: 'end', reason: wire }).catch(
       () => undefined,
     );
@@ -331,13 +385,13 @@ export class CallsService {
     const parsed = SERVER_TO_CLIENT_EVENTS['call.incoming'].safeParse(payload);
     if (!parsed.success) return;
     const event = parsed.data;
+    if (this.live?.view.id === event.callId && this.live.view.phase !== 'ended') return;
     if (this.live && this.live.view.phase !== 'ended') {
       // Busy. The server is told so the caller hears it rather than ringing out.
       void this.ctx.http
         .request({
           method: 'POST',
-          path: `/v1/calls/${event.callId}/end`,
-          body: { reason: 'busy' },
+          path: `/v1/calls/${event.callId}/decline`,
           schema: callResponseSchema,
           signer: this.ctx.signer,
         })

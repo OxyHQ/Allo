@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { oxySplashScreenPlugin } = require('@oxy.so/expo-splash/config');
 
-module.exports = function (_config) {
+module.exports = (_config) => {
   /**
    * App version number. Should be incremented as part of a release cycle.
    */
@@ -200,6 +200,7 @@ module.exports = function (_config) {
                 // compileSdk 36 is required by androidx.camera 1.6.0
                 // (pulled in by expo-camera); compileSdk can be bumped
                 // independently of targetSdk, which stays at 35.
+                minSdkVersion: 26,
                 compileSdkVersion: 36,
                 targetSdkVersion: 35,
                 buildToolsVersion: '36.0.0',
@@ -233,6 +234,7 @@ module.exports = function (_config) {
         if (PLATFORM !== 'web') {
           // Native call adapter registers LiveKit's WebRTC globals. Both
           // plugins are required by the official Expo integration.
+          base.push('./plugins/withNativeCalls');
           base.push('@livekit/react-native-expo-plugin');
           base.push('@config-plugins/react-native-webrtc');
           base.splice(3, 0, [

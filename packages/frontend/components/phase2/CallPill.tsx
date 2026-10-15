@@ -44,7 +44,10 @@ export function CallPill() {
       onMutedChange={(muted) => void calls.setMuted(muted).catch(reportCallError)}
       onExpand={() => {
         setMinimised(false);
-        router.push(`/c/${session.conversationId}/call`);
+        router.push({
+          pathname: '/c/[id]/call',
+          params: { id: session.conversationId, incomingCallId: session.id },
+        });
       }}
       onEndCall={() => void calls.end().catch(reportCallError)}
       labels={{

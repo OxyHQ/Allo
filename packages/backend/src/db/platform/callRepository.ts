@@ -8,7 +8,7 @@
 
 import { and, eq, inArray, lte, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
-import type { CallEndReason, CallMode } from '@allo/shared-types';
+import { CALL_RETENTION_MS, type CallEndReason, type CallMode } from '@allo/shared-types';
 import { requireTransaction } from '../moderation/transactionGuard';
 import type { AlloDatabaseOrTransaction } from '../index';
 import { callParticipants, calls, type CallParticipantState } from '../schema/calls';
@@ -178,7 +178,13 @@ export async function claimEnd(
 ): Promise<CallRow | null> {
   const [row] = await db
     .update(calls)
-    .set({ state: 'ended', endedAt: at, endReason: reason, ringExpiresAt: null, expiresAt: at })
+    .set({
+      state: 'ended',
+      endedAt: at,
+      endReason: reason,
+      ringExpiresAt: null,
+      expiresAt: new Date(at.getTime() + CALL_RETENTION_MS),
+    })
     .where(and(eq(calls.id, callId), sql`${calls.state} <> 'ended'`))
     .returning();
   return row ?? null;
@@ -205,7 +211,18 @@ export async function claimExpiredRings(
     .limit(limit);
   return db
     .update(calls)
-    .set({ state: 'ended', endedAt: now, endReason: 'missed', ringExpiresAt: null, expiresAt: now })
+    .set({
+      state: 'ended',
+      endedAt: now,
+      endReason: 'missed',
+      ringExpiresAt: null,
+      expiresAt: new Date(now.getTime() + CALL_RETENTION_MS),
+    })
     .where(inArray(calls.id, due))
     .returning();
+}
+
+export async function lockCall(id: string, db: AlloDatabaseOrTransaction): Promise<CallRow | null> {
+  const [row] = await db.select().from(calls).where(eq(calls.id, id)).for('update');
+  return row ?? null;
 }

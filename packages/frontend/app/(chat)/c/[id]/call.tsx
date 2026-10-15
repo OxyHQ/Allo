@@ -42,7 +42,11 @@ import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/l
  * better than a button that moves and changes nothing, which is what they were.
  */
 export default function CallRoute() {
-  const { id, mode } = useLocalSearchParams<{ id: string; mode?: 'voice' | 'video' }>();
+  const { id, mode, incomingCallId } = useLocalSearchParams<{
+    id: string;
+    mode?: 'voice' | 'video';
+    incomingCallId?: string;
+  }>();
   const { t } = useTranslation();
   const router = useRouter();
   const theme = useTheme();
@@ -92,10 +96,11 @@ export default function CallRoute() {
    */
   const placed = useRef(false);
   useEffect(() => {
-    if (session !== null || peerAccountIds.length === 0 || !id || placed.current) return;
+    if (incomingCallId || session !== null || peerAccountIds.length === 0 || !id || placed.current)
+      return;
     placed.current = true;
     void calls.start(id, mode === 'video' ? 'video' : 'voice').catch(reportCallError);
-  }, [calls, id, mode, peerAccountIds, session]);
+  }, [calls, id, mode, incomingCallId, peerAccountIds, session]);
 
   const duration = useCallDuration(session);
   const someone = t('calls.someone');
@@ -146,7 +151,9 @@ export default function CallRoute() {
   if (!session) {
     return (
       <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <Muted style={styles.centred}>{t('calls.starting')}</Muted>
+        <Muted style={styles.centred}>
+          {t(incomingCallId ? 'calls.status.ended' : 'calls.starting')}
+        </Muted>
       </View>
     );
   }

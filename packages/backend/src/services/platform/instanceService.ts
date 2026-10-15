@@ -1,3 +1,4 @@
+import { setCallPushToken, clearCallPushToken } from '../../db/platform/instanceRepository';
 /**
  * Enrollment and the instance lifecycle (`docs/platform/api-v1.md`, Instances).
  */
@@ -302,4 +303,14 @@ export async function clearInstancePushToken(
   deps: InstanceServiceDeps = {},
 ): Promise<void> {
   await clearPushToken(instanceId, deps.db ?? getDb());
+}
+
+export async function setInstanceCallPushToken(
+  id: string,
+  body: { provider: 'fcm' | 'apns'; token: string },
+): Promise<void> {
+  await getDb().transaction((tx) => setCallPushToken(id, body.provider, body.token, tx));
+}
+export async function clearInstanceCallPushToken(id: string): Promise<void> {
+  await clearCallPushToken(id, getDb());
 }

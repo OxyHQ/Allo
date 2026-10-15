@@ -31,6 +31,13 @@
       "exclude": [
         "typescript"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-notifications"
+        ]
+      }
     }
   },
   "dependencies": {
@@ -111,7 +118,8 @@
     "zustand": "^5.0.14",
     "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
     "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
-    "@allo/contracts": "workspace:*"
+    "@allo/contracts": "workspace:*",
+    "expo-modules-core": "~57.0.5"
   },
   "devDependencies": {
     "@babel/plugin-transform-modules-commonjs": "^7.28.6",

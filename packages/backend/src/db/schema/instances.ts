@@ -64,6 +64,9 @@ export const clientInstances = pgTable(
     lastSeenAt: timestamptz(),
     pushProvider: text({ enum: PUSH_PROVIDERS }),
     pushToken: text(),
+    /** Dedicated native call channel; APNs VoIP tokens cannot receive ordinary alerts. */
+    callPushProvider: text({ enum: PUSH_PROVIDERS }),
+    callPushToken: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -75,6 +78,11 @@ export const clientInstances = pgTable(
     index('client_instances_account_id_status_idx').on(t.accountId, t.status),
     checkOneOf('client_instances_platform_check', t.platform, PLATFORMS),
     checkOneOf('client_instances_status_check', t.status, INSTANCE_STATUSES),
+    checkOneOf('client_instances_call_push_provider_check', t.callPushProvider, PUSH_PROVIDERS),
+    check(
+      'client_instances_call_push_pair_check',
+      sql`(${t.callPushProvider} is null) = (${t.callPushToken} is null)`,
+    ),
     checkOneOf('client_instances_push_provider_check', t.pushProvider, PUSH_PROVIDERS),
     check(
       'client_instances_push_pair_check',
