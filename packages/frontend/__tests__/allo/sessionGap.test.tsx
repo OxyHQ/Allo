@@ -74,6 +74,15 @@ jest.mock('@/lib/allo/push', () => ({
   clearPushToken: async () => undefined,
   onPushPermissionGranted: () => () => undefined,
 }));
+let mockSupervision: { data: { self: null } | undefined; isError: boolean } = {
+  data: { self: null },
+  isError: false,
+};
+jest.mock('@oxy.so/services/ui', () => ({
+  useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
+}));
+jest.mock('@/lib/allo/people', () => ({ configurePeople: jest.fn() }));
+jest.mock('@/lib/allo/ConversationAccessState', () => ({ ConversationAccessState: () => null }));
 jest.mock('@/lib/allo/RestoreHistoryPrompt', () => ({ RestoreHistoryPrompt: () => null }));
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -154,6 +163,30 @@ describe('a session that goes away', () => {
     expect(registrations()).toBe(1);
     expect(await mockStorage.get(`allo/allo/${ACCOUNT}/self`)).toEqual(enrolled);
     expect(mockBuilt).toBeGreaterThanOrEqual(1);
+    // Cached success metadata is not permission: until the new observer returns
+    // current-session data the previous transcript tree is removed.
+    await act(async () => {
+      mockSupervision = { data: undefined, isError: false };
+      tree!.update(
+        <AlloRoot>
+          <Text>private app</Text>
+        </AlloRoot>,
+      );
+    });
+    expect(JSON.stringify(tree!.toJSON())).not.toContain('private app');
+    await settle();
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => {
+      mockSupervision = { data: { self: null }, isError: false };
+      tree!.update(
+        <AlloRoot>
+          <Text>private app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    expect(JSON.stringify(tree!.toJSON())).toContain('private app');
+    expect(registrations()).toBe(1);
     await act(async () => {
       tree!.unmount();
     });

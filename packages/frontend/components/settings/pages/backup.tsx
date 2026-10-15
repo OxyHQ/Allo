@@ -1,3 +1,5 @@
+import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
+import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { toast } from '@oxy.so/bloom/toast';
 import { useNavigation } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
@@ -16,6 +18,14 @@ import { useAlloSettings } from '../context';
  * last anyone saw of it.
  */
 export default function BackupScreen() {
+  return useMessagingSupervision() ? (
+    <ConversationAccessState state="unsupported" />
+  ) : (
+    <OrdinaryBackupScreen />
+  );
+}
+
+function OrdinaryBackupScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
   // A ref, not state: nothing re-renders on it; only the listener reads it.

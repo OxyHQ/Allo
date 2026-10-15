@@ -1,3 +1,8 @@
+import { MessagingDelivery } from './messagingDelivery';
+import {
+  conversationParticipants,
+  requireMessageAccess,
+} from '../services/platform/messagingPolicy';
 /**
  * The Socket.IO server on namespace `/v1` (`SOCKET_NAMESPACE`).
  *
@@ -53,7 +58,9 @@ import type { Realtime } from './realtime';
 
 export interface SocketAuthProvider {
   readonly middleware: {
-    socket(): (socket: unknown, next: (err?: Error) => void) => Promise<void>;
+    socket(options?: {
+      supervisedAction?: 'messaging';
+    }): (socket: unknown, next: (err?: Error) => void) => Promise<void>;
   };
 }
 
@@ -118,7 +125,7 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
   });
 
   const namespace: V1Namespace = io.of(SOCKET_NAMESPACE);
-  const oxyAuth = deps.oxy.middleware.socket();
+  const oxyAuth = deps.oxy.middleware.socket({ supervisedAction: 'messaging' });
   namespace.use((socket, next) => {
     void oxyAuth(socket, next);
   });
@@ -157,33 +164,34 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
     );
   });
 
+  const delivery = new MessagingDelivery((rooms) => namespace.in(rooms).fetchSockets());
   const realtime: Realtime = {
     nudge(instanceIds, event) {
-      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit('sync.nudge', event);
+      delivery.enqueue('sync.nudge', event, instanceIds.map(instanceRoom));
     },
     instanceApproved(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('instance.approved', event);
+      delivery.enqueue('instance.approved', event, [instanceRoom(instanceId)]);
     },
     instanceRevoked(accountId, event) {
-      namespace.to(accountRoom(accountId)).emit('instance.revoked', event);
+      delivery.enqueue('instance.revoked', event, [accountRoom(accountId)]);
     },
     keyPackagesLow(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('keypackages.low', event);
+      delivery.enqueue('keypackages.low', event, [instanceRoom(instanceId)]);
     },
     historyOffer(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('history.offer', event);
+      delivery.enqueue('history.offer', event, [instanceRoom(instanceId)]);
     },
     statusPosted(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('status.posted', event);
+      delivery.enqueue('status.posted', event, [instanceRoom(instanceId)]);
     },
     callIncoming(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('call.incoming', event);
+      delivery.enqueue('call.incoming', event, [instanceRoom(instanceId)]);
     },
     callUpdated(instanceId, event) {
-      namespace.to(instanceRoom(instanceId)).emit('call.updated', event);
+      delivery.enqueue('call.updated', event, [instanceRoom(instanceId)]);
     },
     typing(instanceIds, event) {
-      for (const id of instanceIds) namespace.to(instanceRoom(id)).emit('typing', event);
+      delivery.enqueue('typing', event, instanceIds.map(instanceRoom));
     },
     async isInstanceConnected(instanceId) {
       const sockets = await namespace.in(instanceRoom(instanceId)).fetchSockets();
@@ -203,27 +211,36 @@ export function createSocketServer(server: http.Server, deps: SocketServerDeps):
       socket.disconnect(true);
       return;
     }
+    const accessToken = socket.handshake.auth.token;
+    if (typeof accessToken !== 'string') {
+      socket.disconnect(true);
+      return;
+    }
+    const requester = { accountId: instance.accountId, accessToken };
+    const alive = () =>
+      requireMessageAccess(requester, `socket:${socket.id}`, [instance.accountId]);
     void socket.join([instanceRoom(instance.id), accountRoom(instance.accountId)]);
     void presence
-      .attach(socket, instance)
+      .attach(socket, instance, accessToken)
       .catch((error: unknown) => logger.debug('presence attach failed', error));
 
     socket.on('typing', (payload) => {
-      void relayTyping(instance, payload, realtime).catch((error: unknown) => {
+      void relayTyping(instance, payload, realtime, accessToken).catch((error: unknown) => {
+        socket.disconnect(true);
         logger.debug('typing relay failed', error);
       });
     });
 
     socket.on('presence.watch', (payload) => {
-      void presence
-        .watch(socket, payload)
-        .catch((error: unknown) => logger.debug('presence watch failed', error));
+      void alive()
+        .then(() => presence.watch(socket, payload))
+        .catch(() => socket.disconnect(true));
     });
 
     socket.on('presence.heartbeat', () => {
-      void presence
-        .heartbeat(instance)
-        .catch((error: unknown) => logger.debug('presence heartbeat failed', error));
+      void alive()
+        .then(() => presence.heartbeat(instance))
+        .catch(() => socket.disconnect(true));
     });
 
     socket.on('disconnect', () => {
@@ -241,9 +258,22 @@ export async function relayTyping(
   sender: AuthenticatedInstance,
   payload: unknown,
   realtime: Realtime,
+  accessToken: string,
 ): Promise<void> {
   const parsed = typingEventSchema.safeParse(payload);
   if (!parsed.success) return;
+  // The live Oxy decision is an HTTP call: made before the transaction, never
+  // while it holds a connection. The block check stays inside it, as before.
+  if (!(await findActiveLeaf(parsed.data.conversationId, sender.id))) return;
+  const participants =
+    (await conversationParticipants([parsed.data.conversationId])).get(
+      parsed.data.conversationId,
+    ) ?? [];
+  await requireMessageAccess(
+    { accountId: sender.accountId, accessToken },
+    parsed.data.conversationId,
+    participants,
+  );
   await getDb().transaction(async (tx) => {
     const mine = await findActiveLeaf(parsed.data.conversationId, sender.id, tx);
     if (!mine) return;

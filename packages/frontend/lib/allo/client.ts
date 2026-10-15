@@ -69,13 +69,18 @@ export function deviceDisplayName(
 export interface AppAlloClientOptions {
   /** The `OxyServices` instance `useOxy()` provides: the session authority. */
   oxy: OxySessionSource;
+  supervised?: boolean;
 }
 
-export async function createAppAlloClient({ oxy }: AppAlloClientOptions): Promise<AlloClient> {
+export async function createAppAlloClient({
+  oxy,
+  supervised = false,
+}: AppAlloClientOptions): Promise<AlloClient> {
   const storage = await createStorage();
   const media = createCallMedia();
   const client = createAlloClient({
     baseUrl: ALLO_PLATFORM_URL,
+    requireLiveConversationAccess: supervised,
     appId: APP_ID,
     platform: alloPlatform(),
     displayName: deviceDisplayName(),

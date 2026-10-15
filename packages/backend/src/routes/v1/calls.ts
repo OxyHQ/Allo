@@ -32,10 +32,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      const answer = await createCall(
-        { instanceId: me.instanceId, accountId: me.accountId },
-        parseBody(createCallRequestSchema, req),
-      );
+      const answer = await createCall(me, parseBody(createCallRequestSchema, req));
       res.status(201).json(answer);
     }),
   );
@@ -45,12 +42,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      res.json(
-        await readCall(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await readCall(me, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 
@@ -64,12 +56,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      res.json(
-        await callIceServers(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await callIceServers(me, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 
@@ -83,12 +70,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      res.json(
-        await callSfuToken(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await callSfuToken(me, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 
@@ -97,12 +79,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      res.json(
-        await answerCall(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await answerCall(me, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 
@@ -111,12 +88,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
-      res.json(
-        await declineCall(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-        ),
-      );
+      res.json(await declineCall(me, parseParam(idSchema, req.params.id, 'id')));
     }),
   );
 
@@ -126,13 +98,7 @@ export function createCallRoutes(deps: { instanceAuth: RequestHandler }): Router
     asyncRoute(async (req, res) => {
       const me = callerOf(req);
       const body = parseBody(endCallRequestSchema, req);
-      res.json(
-        await endCall(
-          { instanceId: me.instanceId, accountId: me.accountId },
-          parseParam(idSchema, req.params.id, 'id'),
-          body.reason,
-        ),
-      );
+      res.json(await endCall(me, parseParam(idSchema, req.params.id, 'id'), body.reason));
     }),
   );
 

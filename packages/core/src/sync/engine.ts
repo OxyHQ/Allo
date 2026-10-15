@@ -89,6 +89,9 @@ export class SyncEngine {
       } while (this.dirty && !this.stopped);
     } catch (error) {
       failure = error;
+      this.ctx.conversations.suspendAccess('unavailable');
+      this.ctx.statuses.suspendAccess();
+      this.ctx.calls.suspendAccess();
       this.setState(error instanceof TransportError && error.isNetwork ? 'offline' : 'error');
       this.ctx.log.warn?.('sync failed', { error: describeError(error) });
       if (!(error instanceof InstanceNotActiveError)) this.ctx.emitter.emitError(error);
@@ -106,6 +109,7 @@ export class SyncEngine {
       return;
     }
     this.setState('syncing');
+    if (ctx.options.requireLiveConversationAccess) await ctx.conversations.refreshFromServer();
     for (;;) {
       const page = await ctx.http.request({
         method: 'GET',
@@ -117,6 +121,12 @@ export class SyncEngine {
         await this.fillGap(delivery.event);
         const outcome = await this.dispatcher.dispatch(delivery.event, delivery.cursor);
         if (outcome.epochAdvanced) await this.replayQueued(delivery.conversationId);
+      }
+      // A page can scan withheld conversations without delivering their events.
+      // Advance only the transport cursor; no conversation sequence or MLS state moves.
+      if (page.nextCursor !== ctx.model.cursor) {
+        await ctx.store.putJson('cursor', 'sync', { cursor: page.nextCursor });
+        ctx.model.cursor = page.nextCursor;
       }
       if (page.deliveries.length > 0) {
         await ctx.http.request({
@@ -144,11 +154,17 @@ export class SyncEngine {
         ctx.log.debug?.('instance refresh failed', { error: describeError(error) });
       }
     }
+    if (ctx.options.requireLiveConversationAccess) {
+      await ctx.statuses.refresh();
+      await ctx.calls.refreshAccess();
+    }
     await ctx.conversations.reconcile();
     ctx.outbox.kick();
     // Not awaited: a history import can take a while and must not hold the sync loop.
-    void ctx.history.checkOffers();
-    ctx.backup.afterSync();
+    if (!ctx.options.requireLiveConversationAccess) {
+      void ctx.history.checkOffers();
+      ctx.backup.afterSync();
+    }
   }
 
   /** A delivery whose seq is ahead of what we saw: fetch what lies between (some of it is legitimately not ours). */
@@ -173,6 +189,29 @@ export class SyncEngine {
         after = e.seq;
       }
       if (!page.hasMore || page.events.length === 0) return;
+    }
+  }
+
+  /** Recover withheld deliveries after a fresh complete-transcript authorization.
+   * Pages stay whole; commits are processed sequentially by the normal dispatcher. */
+  async catchUpConversation(conversationId: string, through: number): Promise<void> {
+    const { ctx } = this;
+    let after = ctx.model.conversations.get(conversationId)?.lastSeq ?? 0;
+    while (after < through) {
+      const page = await ctx.http.request({
+        method: 'GET',
+        path: `/v1/conversations/${conversationId}/events?after=${after}&limit=${PAGE}`,
+        schema: listEventsResponseSchema,
+        signer: ctx.signer,
+      });
+      for (const event of page.events) {
+        if (event.kind !== 'mls_welcome') {
+          const outcome = await this.dispatcher.dispatch(event, null);
+          if (outcome.epochAdvanced) await this.replayQueued(conversationId);
+        }
+        after = event.seq;
+      }
+      if (!page.hasMore || !page.events.length) return;
     }
   }
 

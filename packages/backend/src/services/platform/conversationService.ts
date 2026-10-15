@@ -1,3 +1,4 @@
+import { transcriptParticipants } from '../../db/platform/transcriptPolicyRepository';
 /**
  * Conversations (`docs/platform/api-v1.md`, Conversations).
  */
@@ -40,10 +41,17 @@ import { appendClientEvent, appendControlEvent } from '../../db/platform/eventRe
 import { findGroupInfo } from '../../db/platform/groupInfoRepository';
 import { assertContactAllowed } from '../../db/social/blockRepository';
 import { getRealtime } from '../../runtime/realtime';
-import { AlloHttpError, notFound, validationFailed } from '../../utils/httpErrors';
+import { AlloHttpError, forbidden, notFound, validationFailed } from '../../utils/httpErrors';
 import { toConversationSummary } from './wire';
+import {
+  conversationParticipants,
+  transcriptDecisions,
+  requireMessageAccess,
+  requireUnchangedParticipants,
+} from './messagingPolicy';
 
 export interface Caller {
+  accessToken: string;
   instanceId: string;
   accountId: string;
   appId: string;
@@ -78,8 +86,18 @@ export async function listConversations(
   deps: { db?: AlloDatabase } = {},
 ): Promise<ConversationSummary[]> {
   const db = deps.db ?? getDb();
-  const ids = await listConversationIdsForAccount(caller.accountId, db);
-  return summariesFor(ids, caller.instanceId, db);
+  const { summaries, evidence } = await db.transaction(
+    async (tx) => {
+      const ids = await listConversationIdsForAccount(caller.accountId, tx);
+      return {
+        summaries: await summariesFor(ids, caller.instanceId, tx),
+        evidence: await transcriptParticipants(ids, tx),
+      };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const decisions = await transcriptDecisions(caller, evidence);
+  return summaries.filter((row) => decisions.get(row.id)?.allowed);
 }
 
 export async function getConversation(
@@ -88,10 +106,19 @@ export async function getConversation(
   deps: { db?: AlloDatabase } = {},
 ): Promise<ConversationSummary> {
   const db = deps.db ?? getDb();
-  const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound('Conversation not found');
-  const [summary] = await summariesFor([conversationId], caller.instanceId, db);
-  if (!summary) throw notFound('Conversation not found');
+  const { summary, evidence } = await db.transaction(
+    async (tx) => {
+      const member = await findMember(conversationId, caller.accountId, tx);
+      if (!member) throw notFound('Conversation not found');
+      const [summary] = await summariesFor([conversationId], caller.instanceId, tx);
+      if (!summary) throw notFound('Conversation not found');
+      return { summary, evidence: await transcriptParticipants([conversationId], tx) };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const decisions = await transcriptDecisions(caller, evidence);
+  if (!decisions.get(conversationId)?.allowed)
+    throw forbidden('This conversation is not available.');
   return summary;
 }
 
@@ -119,6 +146,11 @@ export async function createConversation(
       path: ['memberAccountIds'],
     });
   }
+  await requireMessageAccess(caller, `allo:create:${request.mlsGroupId}`, [
+    caller.accountId,
+    ...request.memberAccountIds,
+    ...(request.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+  ]);
   if (request.teamOperationId && !deps.managed)
     throw validationFailed('Managed creation requires authorization');
   if (deps.managed) {
@@ -156,7 +188,7 @@ export async function createConversation(
         'This mlsGroupId belongs to another conversation',
       );
     }
-    const [conversation] = await summariesFor([existingByGroup.id], caller.instanceId, db);
+    const conversation = await getConversation(caller, existingByGroup.id, { db });
     return { conversation, created: false, nudges: [] };
   }
 
@@ -286,6 +318,12 @@ export async function resetConversation(
   const member = await findMember(conversationId, caller.accountId, db);
   if (!member || member.state !== 'joined') throw notFound('Conversation not found');
 
+  const participants =
+    (await conversationParticipants([conversationId], db)).get(conversationId) ?? [];
+  await requireMessageAccess(caller, conversationId, [
+    ...participants,
+    ...(request.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+  ]);
   const claimed = await findConversationByMlsGroupId(request.mlsGroupId, db);
   if (claimed && claimed.id !== conversationId) {
     throw new AlloHttpError(
@@ -298,6 +336,7 @@ export async function resetConversation(
   await db.transaction(async (tx) => {
     const conversation = await lockConversation(conversationId, tx);
     if (!conversation) throw notFound('Conversation not found');
+    await requireUnchangedParticipants(conversationId, participants, tx);
     const leaves = await listLeaves(conversationId, tx);
     /**
      * A replay of the caller's own reset. Once it lands the group is ALIVE —

@@ -61,6 +61,23 @@ function noop(known: Record<string, unknown>): Record<string, any> {
 }
 
 const client: Record<string, any> = noop({
+  safety: {
+    people: async (input: { accountIds?: string[]; query?: string }) => ({
+      items: Object.values(PEOPLE)
+        .filter((person) =>
+          input.accountIds
+            ? input.accountIds.includes(person.id)
+            : `${person.name.displayName} ${person.username}`
+                .toLowerCase()
+                .includes((input.query ?? '').toLowerCase()),
+        )
+        .map((person) => ({
+          accountId: person.id,
+          username: person.username,
+          displayName: person.name.displayName,
+        })),
+    }),
+  },
   users: noop(users),
   assets: noop({ publicUrl: (id: string) => `https://i.pravatar.cc/200?u=${id}` }),
   session: noop({

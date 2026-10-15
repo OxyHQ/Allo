@@ -19,14 +19,19 @@ import {
 } from '../../services/platform/historyService';
 import { validationFailed } from '../../utils/httpErrors';
 import { asyncRoute } from './asyncRoute';
+import { oxy } from '../../oxy';
 import { parseBody, parseParam } from './validate';
 
 export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
+  // Opaque archives have no authoritative per-conversation coverage. Apply
+  // ordinary-account authorization to each matched route, including case variants.
+  const archiveAuth = oxy.middleware.auth();
 
   // `me` before `:id`, so it is never read as an id.
   router.get(
     '/instances/me/history-offers',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -36,6 +41,7 @@ export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Rou
 
   router.post(
     '/instances/me/history-offers/:id/consume',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -46,6 +52,7 @@ export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Rou
 
   router.post(
     '/instances/:id/history-offers',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);

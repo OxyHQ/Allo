@@ -1,3 +1,4 @@
+import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -43,8 +44,11 @@ export function useUserSearch(): {
   /** Something is typed, but not yet enough to search for. */
   tooShort: boolean;
   clear: () => void;
+  unavailable: boolean;
+  retry: () => void;
 } {
-  const { oxyServices } = useOxy();
+  const { oxyServices, user, activeSessionId } = useOxy();
+  const supervised = useMessagingSupervision();
   const [term, setTermState] = useState('');
   const [settledTerm, setSettledTerm] = useState('');
 
@@ -88,8 +92,16 @@ export function useUserSearch(): {
   const enabled = settledTerm.length >= MIN_SEARCH_LENGTH;
 
   const query = useQuery({
-    queryKey: ['users', 'search', settledTerm] as const,
+    queryKey: ['users', 'search', user?.id, activeSessionId, supervised, settledTerm] as const,
     queryFn: async (): Promise<readonly SearchedUser[]> => {
+      if (supervised) {
+        const response = await oxyServices.safety.people({ query: settledTerm });
+        return response.items.map((person) => ({
+          id: person.accountId,
+          displayName: person.displayName ?? person.username ?? '',
+          handle: person.username ?? '',
+        }));
+      }
       const response = await oxyServices.users.search(settledTerm, { limit: MAX_RESULTS });
       return response.data.map((profile) => {
         const handle =
@@ -103,14 +115,22 @@ export function useUserSearch(): {
       });
     },
     enabled,
+    ...(supervised ? { staleTime: 0, refetchOnMount: 'always' as const } : {}),
   });
 
   return {
     term,
     setTerm,
-    results: query.data ?? NO_RESULTS,
+    results:
+      supervised && (!query.isFetchedAfterMount || query.isError)
+        ? NO_RESULTS
+        : (query.data ?? NO_RESULTS),
     searching: enabled && query.isPending,
     tooShort: term.trim().length > 0 && term.trim().length < MIN_SEARCH_LENGTH,
     clear,
+    unavailable: enabled && query.isError,
+    retry: () => {
+      void query.refetch();
+    },
   };
 }

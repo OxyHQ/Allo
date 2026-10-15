@@ -11,6 +11,10 @@
  * (`src/db/testDatabase.ts`); nothing opens a connection merely by importing.
  */
 import { mock } from 'bun:test';
+import { fixtureOxy } from './platform/oxySafetyFixture';
+// Bind the real SDK to this isolated file's external HTTP fixture; never mutate
+// process.env between parallel suites or replace a policy/transport method.
+mock.module('../oxy', () => ({ oxy: fixtureOxy }));
 import * as realLogger from '../utils/logger';
 
 // Suppress log output; assertions that care about logging spy on it explicitly.

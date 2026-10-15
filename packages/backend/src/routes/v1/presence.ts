@@ -25,7 +25,7 @@ export function createPresenceRoutes(deps: { instanceAuth: RequestHandler }): Ro
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const { accountIds } = parseQuery(presenceQuerySchema, req);
-      res.json(await readPresence(callerOf(req).accountId, accountIds));
+      res.json(await readPresence(callerOf(req), accountIds));
     }),
   );
 

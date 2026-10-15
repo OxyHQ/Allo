@@ -9,6 +9,10 @@ import { io } from 'socket.io-client';
 import type { SocketAuthPayload, SocketFactory, SocketLike } from '../types';
 import { signRequest, type SigningKeyPair } from '../crypto/signing';
 
+/** Backoff for the reconnects socket.io-client will not make on its own. */
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 60_000;
+
 export const defaultSocketFactory: SocketFactory = (url, auth) => {
   const socket = io(url, {
     autoConnect: false,
@@ -31,7 +35,63 @@ export const defaultSocketFactory: SocketFactory = (url, auth) => {
       );
     },
   });
-  return socket as unknown as SocketLike;
+  /**
+   * socket.io-client stays down after the server drops the socket or a
+   * middleware refuses the handshake. The server does both whenever the
+   * handshake's Oxy access token stops proving the session (it expires every
+   * few minutes), so the client connects again, with a fresh token from
+   * `auth`, until this side disconnects on purpose. A revoked instance is
+   * stopped by the realtime layer, which disconnects here.
+   */
+  let wanted = false;
+  let attempts = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const retry = () => {
+    if (!wanted || timer) return;
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempts);
+    attempts += 1;
+    timer = setTimeout(
+      () => {
+        timer = null;
+        if (wanted && !socket.connected) socket.connect();
+      },
+      delay * (0.5 + Math.random() / 2),
+    );
+  };
+  socket.on('connect', () => {
+    attempts = 0;
+  });
+  socket.on('disconnect', (reason) => {
+    if (reason === 'io server disconnect') retry();
+  });
+  socket.on('connect_error', () => {
+    if (!socket.active) retry();
+  });
+  const like: SocketLike = {
+    get connected() {
+      return socket.connected;
+    },
+    connect() {
+      wanted = true;
+      socket.connect();
+    },
+    disconnect() {
+      wanted = false;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      socket.disconnect();
+    },
+    on: (event, handler) => {
+      socket.on(event, handler);
+    },
+    off: (event, handler) => {
+      socket.off(event, handler);
+    },
+    emit: (event, payload) => {
+      socket.emit(event, payload);
+    },
+  };
+  return like;
 };
 
 export function socketUrl(baseUrl: string): string {

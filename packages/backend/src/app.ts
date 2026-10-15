@@ -56,8 +56,8 @@ export interface CreateAppDependencies {
   auth: RequestHandler;
   /**
    * Oxy auth for `/v1`: the chain that ends in the contract's `unauthorized`
-   * envelope (`createOptionalOxyAuth` then `requireOxySession`). Defaults to
-   * `[auth]`, which is what a test double wants.
+   * envelope (`createMessagingAuth`, the reviewed supervised messaging action).
+   * Defaults to `[auth]`, which is what a test double wants.
    */
   v1Auth?: RequestHandler[];
   /** The per-route instance signature check. */

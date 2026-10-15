@@ -1,3 +1,5 @@
+import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
+import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useConversation, useConversationActions, useTimeline } from '@allo/react';
 import { GroupAvatar } from '@oxy.so/bloom/chat-list';
 import {
@@ -67,7 +69,15 @@ interface ConversationInfoProps {
  * endpoint; and nothing here claims what the platform does not have — no calls,
  * no per-conversation mute, no disappearing messages.
  */
-export function ConversationInfo({
+export function ConversationInfo(props: ConversationInfoProps) {
+  return (
+    <ConversationReadGate conversationId={props.conversationId}>
+      <AuthorizedConversationInfo {...props} />
+    </ConversationReadGate>
+  );
+}
+
+function AuthorizedConversationInfo({
   conversationId,
   variant,
   onClose,
@@ -220,6 +230,8 @@ export function ConversationInfo({
   }, [other, t]);
 
   if (!view) return null;
+  if (view.access && view.access !== 'allowed')
+    return <ConversationAccessState state={view.access} />;
 
   const title = conversationTitle(view, ctx);
   const faces = conversationFaces(view, ctx);

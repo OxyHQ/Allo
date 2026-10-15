@@ -1,3 +1,4 @@
+import { callerOf } from './conversations';
 import { Router, type RequestHandler } from 'express';
 import { claimKeyPackagesRequestSchema, uploadKeyPackagesRequestSchema } from '@allo/shared-types';
 import { getRequiredInstance } from '../../middleware/instanceAuth';
@@ -33,9 +34,8 @@ export function createKeyPackageRoutes(deps: { instanceAuth: RequestHandler }): 
     '/key-packages/claim',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
-      const me = getRequiredInstance(req);
       const body = parseBody(claimKeyPackagesRequestSchema, req);
-      res.json(await claimKeyPackages(me.id, body.instanceIds));
+      res.json(await claimKeyPackages(callerOf(req), body.instanceIds));
     }),
   );
 

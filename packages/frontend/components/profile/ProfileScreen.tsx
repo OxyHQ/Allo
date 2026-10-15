@@ -1,3 +1,8 @@
+import { toast } from '@oxy.so/bloom/toast';
+import { useQuery } from '@tanstack/react-query';
+import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
+import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
+import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { Button } from '@oxy.so/bloom/button';
 import { Card } from '@oxy.so/bloom/card';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
@@ -25,6 +30,68 @@ import { useProfileData } from '@/hooks/useProfileData';
  * the two places this renders has route params.
  */
 export function ProfileScreen({ handle }: { handle: string }) {
+  return useMessagingSupervision() ? (
+    <SupervisedProfile handle={handle} />
+  ) : (
+    <OrdinaryProfile handle={handle} />
+  );
+}
+
+function SupervisedProfile({ handle }: { handle: string }) {
+  const { t } = useTranslation();
+  const { oxyServices, user, activeSessionId } = useOxy();
+  const router = useRouter();
+  const create = useCreateConversation();
+  const query = useQuery({
+    queryKey: ['supervised-person', user?.id, activeSessionId, handle],
+    staleTime: 0,
+    refetchOnMount: 'always',
+    queryFn: async () => {
+      const response = await oxyServices.safety.people({ query: handle });
+      return (
+        response.items.find((person) => person.username?.toLowerCase() === handle.toLowerCase()) ??
+        null
+      );
+    },
+  });
+  const person = query.isFetchedAfterMount && !query.isError ? query.data : undefined;
+  return (
+    <Page title={t('supervision.conversation')}>
+      {query.isError ? (
+        <ConversationAccessState
+          state="unavailable"
+          onRetry={() => {
+            void query.refetch();
+          }}
+        />
+      ) : !query.isFetchedAfterMount ? (
+        <ConversationAccessState state="checking" />
+      ) : !person ? (
+        <ConversationAccessState state="blocked" />
+      ) : (
+        <>
+          <ProfileIdentity
+            displayName={person.displayName ?? person.username ?? ''}
+            handle={person.username ?? ''}
+          />
+          {person.accountId !== user?.id ? (
+            <Button
+              onPress={() => {
+                void create({ participantIds: [person.accountId], name: undefined })
+                  .then((id) => router.push(`/c/${id}`))
+                  .catch(() => toast.error(t('chat.new.failed')));
+              }}
+            >
+              {t('profile.message')}
+            </Button>
+          ) : null}
+        </>
+      )}
+    </Page>
+  );
+}
+
+function OrdinaryProfile({ handle }: { handle: string }) {
   const { t } = useTranslation();
   const theme = useTheme();
   const router = useRouter();
