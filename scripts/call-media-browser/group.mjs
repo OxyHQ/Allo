@@ -1,5 +1,20 @@
 import { chromium } from 'playwright';
 import { AccessToken } from 'livekit-server-sdk';
+const externalUrl = process.env.ALLO_CALL_LIVEKIT_URL;
+const url = externalUrl ?? 'ws://127.0.0.1:55912';
+const apiKey = externalUrl ? process.env.ALLO_CALL_LIVEKIT_KEY : 'devkey';
+const apiSecret = externalUrl
+  ? process.env.ALLO_CALL_LIVEKIT_SECRET
+  : 'development-only-video-verification-secret';
+const room = externalUrl ? process.env.ALLO_CALL_LIVEKIT_ROOM : 'video-verification';
+if (
+  externalUrl &&
+  (url !== 'wss://livekit.oxy.so' || !apiKey || !apiSecret || !room?.startsWith('allo_validation_'))
+) {
+  throw new Error(
+    'External validation requires explicit credentials and a dedicated allo_validation_ room',
+  );
+}
 const browser = await chromium.launch({
   executablePath: process.env.ALLO_CALL_CHROMIUM_PATH,
   headless: true,
@@ -15,20 +30,17 @@ try {
       throw error;
     });
     await page.goto(process.env.ALLO_CALL_TEST_ORIGIN);
-    const token = new AccessToken('devkey', 'development-only-video-verification-secret', {
-      identity,
-    });
+    const token = new AccessToken(apiKey, apiSecret, { ttl: 300, identity });
     token.addGrant({
       roomJoin: true,
-      room: 'video-verification',
+      room,
       canPublish: true,
       canSubscribe: true,
       canPublishData: false,
     });
     await page.evaluate(
-      async ({ identity, token }) =>
-        window.group(identity, { url: 'ws://127.0.0.1:55912', token, room: 'video-verification' }),
-      { identity, token: await token.toJwt() },
+      async ({ identity, token, url, room }) => window.group(identity, { url, token, room }),
+      { identity, token: await token.toJwt(), url, room },
     );
   }
   await pages[0].waitForTimeout(1500);
@@ -61,28 +73,26 @@ try {
       })),
     ),
   );
-  const renewed = new AccessToken('devkey', 'development-only-video-verification-secret', {
-    identity: 'sender-a',
-  });
+  const renewed = new AccessToken(apiKey, apiSecret, { ttl: 300, identity: 'sender-a' });
   renewed.addGrant({
     roomJoin: true,
-    room: 'video-verification',
+    room,
     canPublish: true,
     canSubscribe: true,
     canPublishData: false,
   });
   await pages[0].evaluate(
-    async (token) =>
+    async ({ token, url, room }) =>
       window.group(
         'sender-a',
         {
-          url: 'ws://127.0.0.1:55912',
+          url,
           token,
-          room: 'video-verification',
+          room,
         },
         3,
       ),
-    await renewed.toJwt(),
+    { token: await renewed.toJwt(), url, room },
   );
   await pages[0].evaluate(() => window.receive('sender-b'));
   await pages[1].evaluate(() => window.a.setReceiveKey('sender-a', new Uint8Array(32).fill(3)));
@@ -95,12 +105,10 @@ try {
       ),
     ),
   );
-  const plainToken = new AccessToken('devkey', 'development-only-video-verification-secret', {
-    identity: 'sender-plain',
-  });
+  const plainToken = new AccessToken(apiKey, apiSecret, { ttl: 300, identity: 'sender-plain' });
   plainToken.addGrant({
     roomJoin: true,
-    room: 'video-verification',
+    room,
     canPublish: true,
     canSubscribe: true,
   });
@@ -109,10 +117,10 @@ try {
   ).newPage();
   await plain.goto(process.env.ALLO_CALL_TEST_ORIGIN);
   await pages[0].evaluate(() => window.a.setReceiveKey('sender-plain', new Uint8Array(32).fill(3)));
-  await plain.evaluate(
-    (token) => window.plain({ url: 'ws://127.0.0.1:55912', token }),
-    await plainToken.toJwt(),
-  );
+  await plain.evaluate(({ token, url }) => window.plain({ url, token }), {
+    token: await plainToken.toJwt(),
+    url,
+  });
   await pages[0].waitForTimeout(1000);
   const rejectedPlaintext = await pages[0].evaluate(
     () => !window.a.state.getSnapshot().remote.some((r) => r.id === 'sender-plain'),

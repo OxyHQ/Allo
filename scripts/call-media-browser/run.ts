@@ -62,7 +62,9 @@ try {
   await run('verify');
   if (process.env.ALLO_CALL_TEST_TURN_URL) await run('relay');
   const binary = process.env.ALLO_CALL_LIVEKIT_BINARY;
-  if (binary) {
+  if (process.env.ALLO_CALL_LIVEKIT_URL) {
+    await run('group');
+  } else if (binary) {
     const config = `${output}/livekit.yaml`;
     await writeFile(
       config,
