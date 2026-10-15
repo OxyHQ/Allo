@@ -252,6 +252,12 @@ describe('the ring nobody answered', () => {
 });
 
 describe('GET /v1/calls/:id/ice', () => {
+  it('does not mint new relay credentials from a historical ended call', async () => {
+    const { a, conversationId } = await dmBetween(h.app);
+    const id = (await ring(a, conversationId)).body.call.id as string;
+    await a.signed('post', `/v1/calls/${id}/end`, { reason: 'cancelled' }).expect(200);
+    expect((await a.signed('get', `/v1/calls/${id}/ice`)).status).toBe(400);
+  });
   it('answers STUN alone when no relay is configured, and says the call is direct', async () => {
     const { a, conversationId } = await dmBetween(h.app);
     const id = (await ring(a, conversationId)).body.call.id as string;

@@ -2,7 +2,7 @@
  * The relay's configuration, and the credentials it accepts.
  *
  * A TURN server is what carries a call when a NAT will not let two devices
- * talk directly — the fifteen per cent or so — and, when somebody turns on
+ * talk directly and, when somebody turns on
  * "hide my IP address in calls", every call they are in.
  *
  * **The credential is the 2013 REST scheme, which never became an RFC and is
@@ -15,7 +15,7 @@
  * Two deviations from the draft, both deliberate:
  *
  * - **A short TTL.** The draft suggested a day; this issues an hour, which is
- *   longer than a call and short enough that a leaked credential is not a
+ *   bounded and short enough that a leaked credential is not a
  *   standing grant.
  * - **The account id in the username.** The relay's own logs and quotas are
  *   then per account rather than per process, which is what makes abuse
@@ -41,11 +41,27 @@ export interface IceConfig {
   turn: TurnConfig | null;
 }
 
-/** An hour: longer than a call, short enough that a leaked credential expires while it still matters. */
+/** New allocations need credentials issued within an hour. Coturn preserves authenticated allocations across expiry and normal allocation refreshes. */
 export const DEFAULT_TURN_TTL_SECONDS = 3600;
 
 /** Google's public STUN, which is what every WebRTC example uses and costs nothing. */
 const DEFAULT_STUN = ['stun:stun.l.google.com:19302'] as const;
+
+function checkIceUrl(value: string, kind: 'turn' | 'stun'): void {
+  const match =
+    /^(turns?|stuns?):([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])(?::([0-9]{1,5}))?(?:\?transport=(udp|tcp))?$/.exec(
+      value,
+    );
+  if (
+    !match ||
+    !match[1].startsWith(kind) ||
+    (match[3] !== undefined && (Number(match[3]) < 1 || Number(match[3]) > 65535)) ||
+    (match[1] === 'turns' && match[4] === 'udp') ||
+    (kind === 'stun' && match[4])
+  ) {
+    throw new Error(`${kind.toUpperCase()}_URLS contains an invalid ICE URL`);
+  }
+}
 
 /**
  * Read once at boot, so a half-configured relay fails the boot rather than
@@ -58,10 +74,23 @@ export function readIceConfig(env: NodeJS.ProcessEnv = process.env): IceConfig {
     .map((url) => url.trim())
     .filter((url) => url.length > 0);
   const secret = (env.TURN_SHARED_SECRET ?? '').trim();
+  if (env.TURN_REQUIRED !== undefined && !['true', 'false'].includes(env.TURN_REQUIRED)) {
+    throw new Error('TURN_REQUIRED must be true or false');
+  }
+  const required = env.TURN_REQUIRED === 'true';
   const stunUrls = (env.STUN_URLS ?? '')
     .split(',')
     .map((url) => url.trim())
     .filter((url) => url.length > 0);
+  for (const url of urls) checkIceUrl(url, 'turn');
+  for (const url of stunUrls) checkIceUrl(url, 'stun');
+  if (required && urls.length === 0) throw new Error('TURN_REQUIRED needs a configured relay');
+  if (required && !/^[a-fA-F0-9]{64}$/.test(secret)) {
+    throw new Error('TURN_SHARED_SECRET must be 32 random bytes encoded as hex');
+  }
+  if (required && !urls.some((url) => /^turns:[^?]+:443\?transport=tcp$/.test(url))) {
+    throw new Error('TURN_REQUIRED needs a TLS relay on port 443 for restrictive networks');
+  }
 
   if (urls.length > 0 && secret.length === 0) {
     throw new Error(
@@ -75,7 +104,7 @@ export function readIceConfig(env: NodeJS.ProcessEnv = process.env): IceConfig {
   }
 
   const ttl = Number(env.TURN_TTL_SECONDS ?? DEFAULT_TURN_TTL_SECONDS);
-  if (!Number.isFinite(ttl) || ttl < 60 || ttl > 86_400) {
+  if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86_400) {
     throw new Error('TURN_TTL_SECONDS must be between 60 and 86400');
   }
 
