@@ -5,24 +5,23 @@
 name: Deploy to AWS
 
 on:
-  push:
+  # After CI passes on a push to main, never alongside it. Until 2026-10 this ran
+  # on `push`, in parallel with CI, so a commit whose CI went red could still
+  # reach production, and every merge that touched anything but Markdown rolled
+  # the backend, frontend-only ones included. The `scope` job below owns the
+  # guards and the path scope `push` used to give, narrowed to what the backend
+  # image and its rollout are built from.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+  # Releases main's head on demand, and still only once CI succeeded on a push
+  # for it (`deploy-scope.sh gate` checks that, once, and refuses otherwise).
   workflow_dispatch:
 
 # Un despliegue que no arranca no se ve en rojo en ninguna parte: CI queda en
 # verde, el PR queda fusionado y producción se queda atrás en silencio. Antes de
 # dar por desplegado un cambio de backend, compruébelo contra el servicio.
-
-# Dos merges seguidos lanzan dos `update-service --force-new-deployment` sobre el
-# mismo servicio y ninguno llega a estabilizarse. Los despliegues se encolan en
-# vez de solaparse; no se cancela el que esté en curso, porque abortar a mitad
-# deja el servicio con la mitad de las tareas en la revisión nueva.
-concurrency:
-  group: deploy-aws-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   id-token: write
@@ -33,15 +32,94 @@ env:
   ECR_REGISTRY: 237343248947.dkr.ecr.us-west-2.amazonaws.com
   APP: allo
   CLUSTER: oxy-cluster
+  # The commit under release: the one CI tested on `workflow_run`, main's head on
+  # a dispatch. Not `github.sha`, which on `workflow_run` is whatever main's head
+  # was when CI finished. Not named DEPLOY_SHA: deploy-ecs-image.sh reads that
+  # name to arm a head guard script this repository does not carry.
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
-  deploy:
-    # workflow_dispatch can be run against arbitrary refs; only deploys from the
-    # protected main branch may assume the AWS deploy role.
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04-arm
+  # Decides, OUTSIDE the release lane, whether `deploy` runs at all: the trigger
+  # guards, which commit to release, and the path scope. See
+  # .github/scripts/deploy-scope.sh for why each is needed once the trigger is
+  # `workflow_run`. It must sit outside the concurrency group: GitHub cancels a
+  # PENDING run when another queues behind it in the same group, so a run for an
+  # older commit whose CI finished late could displace a pending release of a
+  # newer one and then hold itself, leaving neither deployed.
+  scope:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Job level: no OIDC token here, and `actions: read` (CI's runs, the release
+    # marker) reaches no other job.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      backend: ${{ steps.backend.outputs.backend }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Release only the newest CI-green main commit
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/deploy-scope.sh gate
+      # What goes into the backend image or its rollout, diffed against the last
+      # commit this workflow actually released, so a frontend- or SDK-only merge
+      # (deploy-frontends.yml ships those) does not roll the API.
+      # packages/backend/Dockerfile copies the root manifests, every workspace
+      # package.json, patches/, contracts, shared-types and the backend; the
+      # `.dockerignore` and the release scripts (deploy-ecs-image.sh, the
+      # reviewed-image pin) change what is built or how it rolls out. The same
+      # set as CI's `image` filter. test-deploy-scope.sh reads this line.
+      - name: Decide whether anything the backend ships changed
+        id: backend
+        if: steps.gate.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_PATHS: '^(packages/(backend|contracts|shared-types)/|packages/[^/]+/package\.json$|package\.json$|bun\.lock$|bunfig\.toml$|tsconfig\.json$|patches/|\.github/workflows/deploy-aws\.yml$|\.github/scripts/)|\.dockerignore$'
+        run: bash .github/scripts/deploy-scope.sh target backend include "$BACKEND_PATHS" allo-release-backend-
+
+  deploy:
+    needs: scope
+    # `scope` admits only a commit CI passed on a push to main in this
+    # repository, the newest such commit, with something backend to release.
+    # The ref check stays as well: only the protected main branch may assume
+    # the AWS deploy role.
+    if: github.ref == 'refs/heads/main' && needs.scope.outputs.backend == 'true'
+    # On the JOB, not the workflow, so only a run `scope` judged releasable ever
+    # enters the lane.
+    #
+    # Dos merges seguidos lanzan dos `update-service --force-new-deployment` sobre
+    # el mismo servicio y ninguno llega a estabilizarse. Los despliegues se
+    # encolan en vez de solaparse; no se cancela el que esté en curso, porque
+    # abortar a mitad deja el servicio con la mitad de las tareas en la revisión
+    # nueva. A newer pending run may replace an older pending one, which is safe:
+    # its scope diffs from the last commit actually released, so it carries the
+    # older.
+    concurrency:
+      group: deploy-allo-backend
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04-arm
+    # The image build, then the pre-migration task, the rollout and the
+    # post-migration task, each bounded by deploy-ecs-image.sh's MAX_WAIT_SECS
+    # (20 min), plus a rollback window; recent successful runs took 4-6 min.
+    # Without a bound a hung step holds a runner for GitHub's 6-hour default.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Configure AWS credentials (OIDC, no stored keys)
         uses: aws-actions/configure-aws-credentials@v6
@@ -121,7 +199,7 @@ jobs:
       - name: Build and push (linux/arm64)
         id: build
         env:
-          COMMIT_TAG: ${{ github.sha }}
+          COMMIT_TAG: ${{ env.RELEASE_SHA }}
           DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
           CONTEXT: ${{ steps.reviewed.outputs.context }}
           SOURCE_TREE: ${{ steps.reviewed.outputs.source_tree }}
@@ -138,7 +216,7 @@ jobs:
             --cache-from type=gha,scope=$APP \
             --cache-to type=gha,scope=$APP,mode=max,ignore-error=true \
             -f "$DOCKERFILE" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "io.oxy.source.tree=$SOURCE_TREE" \
             --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
@@ -217,3 +295,15 @@ jobs:
             exit 0
           fi
           bash .github/scripts/deploy-ecs-image.sh
+
+      # The scope job's base for the next release: the last commit this workflow
+      # actually rolled out, as an Actions cache key (its content is irrelevant).
+      # Only a successful rollout reaches this step, and it runs on main only, so
+      # no pull request can move it. Lost or evicted, the next run releases.
+      - name: Write the release marker
+        run: printf '%s\n' "$RELEASE_SHA" >"$RUNNER_TEMP/release-marker"
+      - name: Record this release for the next scope decision
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/release-marker
+          key: allo-release-backend-${{ env.RELEASE_SHA }}

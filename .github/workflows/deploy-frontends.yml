@@ -17,9 +17,21 @@ on:
       - 'package.json'
       - 'bun.lock'
 
+# Nothing here writes to the repository; the Cloudflare credentials are secrets,
+# not the GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   deploy-frontend:
     runs-on: ubuntu-latest
+    # One Worker upload at a time, in merge order. Never cancelled in progress:
+    # an interrupted `wrangler deploy` can leave a half-uploaded asset set.
+    concurrency:
+      group: deploy-allo-frontend
+      cancel-in-progress: false
+    # Measured 2-3 min end to end; the build step keeps its own bound below.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -33,7 +45,7 @@ jobs:
         run: bun run --cwd packages/shared-types build
       - name: Build frontend
         run: bun run --cwd packages/frontend build
-        timeout-minutes: 60
+        timeout-minutes: 25
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           NODE_ENV: production

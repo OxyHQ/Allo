@@ -6,12 +6,17 @@
 # stays a manual `bun update` (and root `overrides`/`resolutions`).
 # The `oxy-platform` PR auto-merges once `CI complete` is green
 # (.github/workflows/automerge-first-party.yml).
+#
+# Weekly, on Thursdays, rather than daily: every bump PR runs the full CI, and
+# the org shares one 20-job Actions concurrency cap across every repository.
+# Security updates do not run on this schedule.
 version: 2
 updates:
   - package-ecosystem: "bun"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "thursday"
     open-pull-requests-limit: 5
     versioning-strategy: increase
     allow:
@@ -20,6 +25,18 @@ updates:
       oxy-platform:
         patterns:
           - "@oxy.so/*"
+      # Today `allow` admits only the first-party scope, so this stays empty; it
+      # is here so that widening `allow` lands minor and patch bumps as ONE
+      # weekly PR instead of one per package. A dependency joins the first group
+      # it matches, so the first-party SDKs stay in `oxy-platform`, whose branch
+      # name the auto-merge workflow keys on. Majors still arrive one per
+      # dependency, for a person to read.
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
     labels:
       - "dependencies"
 
@@ -27,3 +44,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "thursday"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
