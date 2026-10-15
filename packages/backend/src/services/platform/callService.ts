@@ -276,6 +276,7 @@ export async function callIceServers(
   deps: CallServiceDeps & { ice?: IceConfig; now?: () => Date } = {},
 ): Promise<IceServersResponse> {
   const { call } = await readCall(caller, callId, deps);
+  if (call.state === 'ended') throw validationFailed('the call has ended', { callId });
   const ice = deps.ice ?? getIceConfig();
   const now = deps.now?.() ?? new Date();
 

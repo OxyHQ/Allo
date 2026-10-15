@@ -162,6 +162,10 @@ jobs:
 
       - name: Register immutable task definition and deploy
         env:
+          # Set only after the dedicated relay passes the infra runbook. Values
+          # are owned in SSM, never synced from GitHub, and _shared/LIVEKIT_*
+          # stays read-only. Turning this off does not erase a live binding.
+          ALLO_TURN_ENABLED: ${{ vars.ALLO_TURN_ENABLED }}
           IMAGE_URI: ${{ env.ECR_REGISTRY }}/oxy/${{ env.APP }}@${{ steps.build.outputs.digest }}
           # The deploy applies this release's schema. Until now it shipped the
           # image and left the migrations behind, so `0000` and `0001` had to be
@@ -188,6 +192,18 @@ jobs:
           POST_DEPLOY_TASK_COMMAND_JSON: >-
             ["bun","run","--cwd","packages/backend","db:migrate","--target-database=allo","--phase=post"]
         run: |
+          if [ "$ALLO_TURN_ENABLED" = "true" ]; then
+            export TASK_SECRET_OVERRIDES_JSON='{
+              "TURN_SHARED_SECRET":"arn:aws:ssm:us-west-2:237343248947:parameter/oxy/allo/TURN_SHARED_SECRET",
+              "TURN_URLS":"arn:aws:ssm:us-west-2:237343248947:parameter/oxy/allo/TURN_URLS",
+              "STUN_URLS":"arn:aws:ssm:us-west-2:237343248947:parameter/oxy/allo/STUN_URLS",
+              "TURN_TTL_SECONDS":"arn:aws:ssm:us-west-2:237343248947:parameter/oxy/allo/TURN_TTL_SECONDS",
+              "TURN_REQUIRED":"arn:aws:ssm:us-west-2:237343248947:parameter/oxy/allo/TURN_REQUIRED"
+            }'
+          elif [ -n "$ALLO_TURN_ENABLED" ] && [ "$ALLO_TURN_ENABLED" != "false" ]; then
+            echo '::error::ALLO_TURN_ENABLED must be true or false'
+            exit 1
+          fi
           STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].status' --output text 2>/dev/null || echo NONE)
           if [ "$STATUS" != "ACTIVE" ]; then
             echo "ECS service $APP not created yet - image is in ECR, skipping deploy"
