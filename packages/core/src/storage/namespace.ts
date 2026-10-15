@@ -28,6 +28,7 @@ export type RecordKind =
   | 'conversation'
   | 'groupState'
   | 'pendingCommit'
+  | 'groupCreation'
   | 'event'
   | 'outbox'
   | 'cursor'

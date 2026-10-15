@@ -85,10 +85,14 @@ jobs:
               - *shared
               - '.dockerignore'
               - 'packages/backend/**'
+              - 'packages/contracts/**'
+              - 'vendor/**'
               - 'packages/shared-types/**'
               - 'packages/*/package.json'
             sdk: &sdk
               - *shared
+              - 'packages/contracts/**'
+              - 'vendor/**'
               - 'packages/shared-types/**'
               - 'packages/core/**'
               - 'packages/react/**'
@@ -303,6 +307,9 @@ jobs:
       - name: Install
         run: bun install
 
+      - name: Managed team API contract
+        run: bun run check:team-openapi
+
       - name: Biome
         run: bunx biome ci .
 
@@ -447,11 +454,11 @@ jobs:
           set -euo pipefail
           docker run --rm --entrypoint sh "$IMAGE" -c \
             'echo "runtime node_modules: $(du -sm /app/node_modules | cut -f1) MB"; ls /app/packages'
-          test "$(docker run --rm --entrypoint sh "$IMAGE" -c 'ls /app/packages | tr "\n" " "')" = "backend shared-types "
+          test "$(docker run --rm --entrypoint sh "$IMAGE" -c 'ls /app/packages | tr "\n" " "')" = "backend contracts shared-types "
           docker run --rm \
             -v "$PWD/.github/scripts:/checks:ro" \
             --entrypoint bun "$IMAGE" \
-            /checks/check-runtime-closure.mjs /app packages/backend packages/shared-types
+            /checks/check-runtime-closure.mjs /app packages/backend packages/shared-types packages/contracts
 
       # Genesis with `--phase=all` (the documented from-zero run), then the
       # deploy's own pre/post commands, which must find nothing left. All three

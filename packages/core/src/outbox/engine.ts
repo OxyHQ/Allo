@@ -54,7 +54,7 @@ import {
 } from '../storage/records';
 import { base64Decode, base64Encode } from '../util/bytes';
 import { uuidV7 } from '../util/ids';
-import { backoffMs, sleep } from '../util/async';
+import { backoffMs } from '../util/async';
 import { describeError } from '../util/logger';
 
 const MAX_ATTEMPTS = 50;
@@ -125,7 +125,19 @@ export class OutboxEngine {
       );
     const adds = intent.adds.filter((a) => !covered(a.instanceId));
     const removes = intent.removes.filter((r) => !covered(r));
-    if (adds.length === 0 && removes.length === 0) return;
+    const addedAccountIds = (intent.addedAccountIds ?? []).filter(
+      (id) => !pending.some((p) => p.commit?.addedAccountIds?.includes(id)),
+    );
+    const removedAccountIds = (intent.removedAccountIds ?? []).filter(
+      (id) => !pending.some((p) => p.commit?.removedAccountIds?.includes(id)),
+    );
+    if (
+      adds.length === 0 &&
+      removes.length === 0 &&
+      !addedAccountIds.length &&
+      !removedAccountIds.length
+    )
+      return;
     const item: OutboxItemRecord = {
       id: uuidV7(ctx.now()),
       conversationId,
@@ -135,7 +147,7 @@ export class OutboxEngine {
       state: 'pending',
       failure: null,
       message: null,
-      commit: { adds, removes, reason: intent.reason },
+      commit: { adds, removes, addedAccountIds, removedAccountIds, reason: intent.reason },
       blobIds: [],
     };
     await ctx.store.putJson('outbox', item.id, item);
@@ -222,7 +234,11 @@ export class OutboxEngine {
   private async loop(): Promise<void> {
     const { ctx } = this;
     while (!this.stopped) {
-      const item = ctx.model.outboxItems().find((i) => i.state === 'pending' && !this.isHeld(i));
+      const pending = ctx.model
+        .outboxItems()
+        .filter((i) => i.state === 'pending' && !this.isHeld(i));
+      // Membership repair must be able to pass application messages held by a frozen team.
+      const item = pending.find((i) => i.kind === 'commit') ?? pending[0];
       if (!item) return;
       if (!ctx.instance.isActive) return;
       try {
@@ -320,6 +336,22 @@ export class OutboxEngine {
         this.scheduleStallWake();
       }
       return 'retry';
+    }
+    if (
+      error instanceof TransportError &&
+      error.serverCode === 'unavailable' &&
+      typeof error.details === 'object' &&
+      error.details !== null &&
+      'teamPending' in error.details &&
+      error.details.teamPending === true
+    ) {
+      // A durable membership operation is not a failed delivery. Keep the echo
+      // and retry without consuming the ordinary network-error budget.
+      const held = { ...item, attempts: Math.max(0, item.attempts - 1) };
+      await ctx.store.putJson('outbox', held.id, held);
+      ctx.model.outbox.set(held.id, held);
+      await this.delay({ ...held, attempts: 0 });
+      return this.stopped ? 'stop' : 'retry';
     }
     if (error instanceof TransportError && error.isRetryable) {
       if (item.attempts >= MAX_ATTEMPTS) {
@@ -569,8 +601,30 @@ export class OutboxEngine {
     const members = ctx.engine.membersOf(state);
     const present = new Set(members.map((m) => m.instanceId));
     const adds = intent.adds.filter((a) => !present.has(a.instanceId));
-    const removes = intent.removes.filter((r) => present.has(r));
-    if (adds.length === 0 && removes.length === 0) return null;
+    // Re-evaluate ALL devices of a removed account after an epoch conflict. A
+    // device which self-joined during the request must not retain future access.
+    const removes = [
+      ...new Set([
+        ...intent.removes.filter((r) => present.has(r)),
+        ...members
+          .filter((m) => intent.removedAccountIds?.includes(m.accountId))
+          .map((m) => m.instanceId),
+      ]),
+    ];
+    const joinedAccounts = new Set(
+      conv?.members.filter((m) => m.state === 'joined').map((m) => m.accountId),
+    );
+    const addedAccountIds = (intent.addedAccountIds ?? []).filter((id) => !joinedAccounts.has(id));
+    const removedAccountIds = (intent.removedAccountIds ?? []).filter((id) =>
+      joinedAccounts.has(id),
+    );
+    if (
+      adds.length === 0 &&
+      removes.length === 0 &&
+      !addedAccountIds.length &&
+      !removedAccountIds.length
+    )
+      return null;
     const leafIndexes = removes.map((r) => members.find((m) => m.instanceId === r)!.leafIndex);
     const result = await ctx.engine.commit(state, {
       addKeyPackages: adds.map((a) => base64Decode(a.keyPackage)),
@@ -587,6 +641,8 @@ export class OutboxEngine {
         kind: 'member',
         addedLeaves: result.added,
         removedLeaves: removes,
+        addedAccountIds,
+        removedAccountIds,
         ...(result.welcome && adds.length
           ? {
               welcome: {
@@ -651,8 +707,14 @@ export class OutboxEngine {
       let nextConv = conv;
       if (conv) {
         const accounts = new Set(ctx.engine.membersOf(next).map((m) => m.accountId));
+        for (const accountId of item.commit?.addedAccountIds ?? []) accounts.add(accountId);
+        const removedAccounts = new Set(item.commit?.removedAccountIds ?? []);
         const members = conv.members.map((m) =>
-          accounts.has(m.accountId) ? { ...m, state: 'joined' as const } : m,
+          removedAccounts.has(m.accountId)
+            ? { ...m, state: 'removed' as const }
+            : accounts.has(m.accountId)
+              ? { ...m, state: 'joined' as const }
+              : m,
         );
         for (const a of accounts)
           if (!members.some((m) => m.accountId === a))

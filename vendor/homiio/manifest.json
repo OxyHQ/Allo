@@ -1,0 +1,15 @@
+{
+  "repository": "OxyHQ/Homiio",
+  "packages": {
+    "@homiio/contracts": {
+      "file": "homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
+      "sha256": "ed8d6f4f35eb8b851e4865a27e75c8364a0717b31bfc28fa63d86bc46c212bb8",
+      "sourceCommit": "14205cfb32244a3d2a792f42a1b3e207389ebad8"
+    },
+    "@homiio/sdk": {
+      "file": "homiio-sdk-0.1.0-af069510c2c8.tgz",
+      "sha256": "af069510c2c8a7f940aea3dfd759aea9667da5942ebce1e43e7afead4a53f905",
+      "sourceCommit": "14205cfb32244a3d2a792f42a1b3e207389ebad8"
+    }
+  }
+}

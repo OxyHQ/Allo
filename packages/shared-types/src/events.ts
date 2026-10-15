@@ -122,6 +122,9 @@ export const commitInfoSchema = z.object({
   addedLeaves: z.array(addedLeafSchema),
   /** Instance ids. */
   removedLeaves: z.array(instanceIdSchema),
+  /** Explicit account changes also cover people who have never enrolled a device. */
+  addedAccountIds: z.array(accountIdSchema).max(255).optional(),
+  removedAccountIds: z.array(accountIdSchema).max(255).optional(),
   welcome: welcomeSchema.optional(),
   /**
    * The `GroupInfo` of `newEpoch` (with `external_pub` and `ratchet_tree`),
@@ -140,6 +143,12 @@ export type CommitInfoInput = z.input<typeof commitInfoSchema>;
  */
 function checkCommitKindShape(commit: CommitInfo, ctx: z.RefinementCtx): void {
   if (commit.kind === 'member') return;
+  if (commit.addedAccountIds?.length || commit.removedAccountIds?.length)
+    ctx.addIssue({
+      code: 'custom',
+      path: ['commit'],
+      message: 'self joins cannot change account membership',
+    });
   if (commit.addedLeaves.length !== 1) {
     ctx.addIssue({
       code: 'custom',

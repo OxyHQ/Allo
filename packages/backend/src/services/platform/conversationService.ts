@@ -2,6 +2,9 @@
  * Conversations (`docs/platform/api-v1.md`, Conversations).
  */
 
+import { managedTeams } from '../../db/schema';
+import { findTeamByHash, findManagedTeam } from '../../db/platform/managedTeamRepository';
+import type { ManagedTeamAuthorization } from './managedTeamService';
 import { isUniqueViolation } from '@oxy.so/db';
 import {
   dmKeyFor,
@@ -108,13 +111,37 @@ export interface CreateConversationResult {
 export async function createConversation(
   caller: Caller,
   request: CreateConversationRequest,
-  deps: { db?: AlloDatabase } = {},
+  deps: { db?: AlloDatabase; managed?: ManagedTeamAuthorization } = {},
 ): Promise<CreateConversationResult> {
   const db = deps.db ?? getDb();
   if (request.memberAccountIds.includes(caller.accountId)) {
     throw validationFailed('the creator is implied and must not be listed', {
       path: ['memberAccountIds'],
     });
+  }
+  if (request.teamOperationId && !deps.managed)
+    throw validationFailed('Managed creation requires authorization');
+  if (deps.managed) {
+    const { operation, capabilityHash } = deps.managed;
+    if (
+      request.kind !== 'group' ||
+      request.teamOperationId !== operation.id ||
+      operation.ownerAccountId !== caller.accountId ||
+      JSON.stringify([...request.memberAccountIds, caller.accountId].sort()) !==
+        JSON.stringify([...operation.targetAccountIds].sort())
+    )
+      throw validationFailed('Managed group must match the Homiio operation');
+    const bound = await findTeamByHash(capabilityHash, db);
+    if (bound) {
+      const [conversation] = await summariesFor([bound.id], caller.instanceId, db);
+      if (
+        conversation.createdByAccountId !== caller.accountId ||
+        bound.sourceReference !== operation.caseId
+      )
+        throw notFound('Team chat not found');
+      return { conversation, created: false, nudges: [] };
+    }
+    if (operation.finalized) throw validationFailed('A finalized operation cannot create a group');
   }
   const dmKey =
     request.kind === 'dm'
@@ -148,6 +175,15 @@ export async function createConversation(
         },
         tx,
       );
+      if (deps.managed)
+        await tx.insert(managedTeams).values({
+          id: row.id,
+          sourceReference: deps.managed.operation.caseId,
+          readCapabilityHash: deps.managed.capabilityHash,
+          operationId: deps.managed.operation.id,
+          frozen: true,
+          targetAccountIds: deps.managed.operation.targetAccountIds,
+        });
       await assertContactAllowed(tx, caller.accountId, [
         ...request.memberAccountIds,
         ...(request.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
@@ -191,6 +227,15 @@ export async function createConversation(
       return row.id;
     });
   } catch (error: unknown) {
+    if (deps.managed && isUniqueViolation(error, 'managed_teams_capability_key')) {
+      const bound = await findTeamByHash(deps.managed.capabilityHash, db);
+      if (!bound) throw error;
+      const [conversation] = await summariesFor([bound.id], caller.instanceId, db);
+      if (conversation.createdByAccountId !== caller.accountId)
+        throw notFound('Team chat not found');
+      return { conversation, created: false, nudges: [] };
+    }
+
     if (dmKey !== null && isUniqueViolation(error, 'conversations_dm_key_key')) {
       const existing = await findConversationByDmKey(dmKey, db);
       if (!existing) throw error;
@@ -369,6 +414,9 @@ export async function leaveConversation(
   deps: { db?: AlloDatabase } = {},
 ): Promise<void> {
   const db = deps.db ?? getDb();
+  if (await findManagedTeam(conversationId, db))
+    throw new AlloHttpError('forbidden', 'Manage this team in Homiio');
+
   const member = await findMember(conversationId, caller.accountId, db);
   if (!member) throw notFound('Conversation not found');
   if (member.state !== 'joined') return;

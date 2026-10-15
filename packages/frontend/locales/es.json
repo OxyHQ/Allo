@@ -495,5 +495,12 @@
   "transfer.receiving": "Recibiendo el historial de otro dispositivo",
   "transfer.receivingFrom": "Recibiendo el historial de {{name}}",
   "transfer.sending": "Enviando el historial a otro dispositivo",
-  "transfer.sendingTo": "Enviando el historial a {{name}}"
+  "transfer.sendingTo": "Enviando el historial a {{name}}",
+  "homiio.team.title": "Chat del equipo",
+  "homiio.team.description": "Chat privado del creador del caso y sus colaboradores. Solo el creador puede gestionar el equipo.",
+  "homiio.team.addWarning": "El colaborador podrá editar el caso, consultar la dirección exacta y recibir los nuevos mensajes del equipo. Confirma para continuar.",
+  "homiio.team.removeWarning": "Se retirará al colaborador del caso y de los mensajes futuros. Los mensajes ya recibidos permanecen en sus dispositivos.",
+  "homiio.team.retry": "El cambio no ha terminado. Los mensajes siguen en pausa mientras se confirma el equipo. Reintenta para continuar.",
+  "homiio.team.working": "Confirmando el equipo…",
+  "homiio.team.continue": "Confirmar y abrir el chat"
 }
