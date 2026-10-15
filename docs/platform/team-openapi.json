@@ -234,9 +234,7 @@
             "maxLength": 200
           }
         },
-        "required": [
-          "operationId"
-        ],
+        "required": ["operationId"],
         "additionalProperties": false
       }
     },

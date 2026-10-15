@@ -116,8 +116,8 @@
     "react-native-web": "~0.21.0",
     "tailwindcss": "4.3.2",
     "zustand": "^5.0.14",
-    "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
-    "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
+    "@oxy.so/homiio-sdk": "0.1.0",
+    "@oxy.so/homiio-contracts": "0.1.0",
     "@oxy.so/allo-contracts": "workspace:*",
     "expo-modules-core": "~57.0.5"
   },

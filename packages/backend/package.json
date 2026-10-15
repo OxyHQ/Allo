@@ -32,8 +32,8 @@
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3",
-    "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
-    "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
+    "@oxy.so/homiio-sdk": "0.1.0",
+    "@oxy.so/homiio-contracts": "0.1.0",
     "@oxy.so/allo-contracts": "workspace:*"
   },
   "devDependencies": {

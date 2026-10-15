@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOxy } from '@oxy.so/services';
 import { useAlloClient } from '@allo/react';
-import { HomiioTeamClient } from '@homiio/sdk';
+import { HomiioTeamClient } from '@oxy.so/homiio-sdk';
 import { Button } from '@oxy.so/bloom/button';
 import { Text } from '@oxy.so/bloom/typography';
 import { useTranslation } from 'react-i18next';

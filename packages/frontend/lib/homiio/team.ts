@@ -1,7 +1,7 @@
 import type { TeamSnapshot } from '@oxy.so/allo-contracts';
 import type { AlloClient } from '@allo/core';
 import { isAlloNotFound } from '../allo/errors';
-import type { HomiioTeamClient, BeginTeamOperation } from '@homiio/sdk';
+import type { HomiioTeamClient, BeginTeamOperation } from '@oxy.so/homiio-sdk';
 /** Every retry resumes the source's durable intent. Only the creator's device touches MLS keys. */
 export async function completeHomiioTeam(
   client: AlloClient,

@@ -48,7 +48,6 @@ WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/sdk/package.json ./packages/sdk/
-COPY vendor/homiio ./vendor/homiio/
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/core/package.json ./packages/core/

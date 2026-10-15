@@ -1,4 +1,4 @@
-import { HomiioTeamClient, type TeamOperation } from '@homiio/sdk';
+import { HomiioTeamClient, type TeamOperation } from '@oxy.so/homiio-sdk';
 import { getDb } from '../../db';
 import { lockConversation } from '../../db/platform/conversationRepository';
 import {

@@ -348,6 +348,10 @@ export class ConversationsService {
       ctx.groups.commitInMemory(summary.id, effective);
       ctx.model.conversations.set(record.id, record);
     });
+    // Creation already looked up these accounts and found no device. Preserve
+    // the same throttle across a write-ahead retry before requesting sync.
+    for (const accountId of prepared.unreachableAccountIds)
+      this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
     if (prepared.request.initialCommit) this.groupInfoChecked.add(summary.id);
     else if (summary.epoch === 0) await this.publishGroupInfo(summary.id, next);
     ctx.sync.request();
@@ -406,6 +410,9 @@ export class ConversationsService {
         ...(initialCommit ? { initialCommit } : {}),
       }),
       nextState: base64Encode(ctx.engine.serializeGroup(next)),
+      unreachableAccountIds: others.filter(
+        (accountId) => !targets.some((target) => target.accountId === accountId),
+      ),
       conversationId: null,
     };
   }

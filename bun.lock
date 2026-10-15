@@ -30,12 +30,12 @@
         "@allo/shared-types": "workspace:*",
         "@crowdsource.you/contracts": "1.1.0",
         "@crowdsource.you/core": "3.0.0",
-        "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
-        "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
         "@oxy.so/allo-contracts": "workspace:*",
         "@oxy.so/contracts": "4.12.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/db": "^1.1.0",
+        "@oxy.so/homiio-contracts": "0.1.0",
+        "@oxy.so/homiio-sdk": "0.1.0",
         "@socket.io/redis-adapter": "^8.3.0",
         "drizzle-orm": "0.45.2",
         "express": "^4.22.2",
@@ -107,8 +107,6 @@
         "@babel/plugin-transform-export-namespace-from": "^7.27.1",
         "@bitdrift/react-native": "^0.12.12",
         "@config-plugins/react-native-webrtc": "^15.0.2",
-        "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
-        "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
         "@livekit/react-native": "3.0.0",
         "@livekit/react-native-expo-plugin": "^1.0.2",
         "@livekit/react-native-webrtc": "144.2.0",
@@ -118,6 +116,8 @@
         "@oxy.so/bloom": "^10.7.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/expo-splash": "^1.0.0",
+        "@oxy.so/homiio-contracts": "0.1.0",
+        "@oxy.so/homiio-sdk": "0.1.0",
         "@oxy.so/services": "^11.2.0",
         "@oxy.so/stickers": "^0.1.1",
         "@react-native-async-storage/async-storage": "^2.2.0",
@@ -240,7 +240,6 @@
     "expo@57.0.6": "patches/expo@57.0.6.patch",
   },
   "overrides": {
-    "@homiio/contracts": "file:./vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
     "@isaacs/brace-expansion": "^5.0.1",
     "@oxy.so/bloom": "10.7.0",
     "@oxy.so/contracts": "4.12.0",
@@ -686,10 +685,6 @@
 
     "@grpc/proto-loader": ["@grpc/proto-loader@0.8.0", "", { "dependencies": { "lodash.camelcase": "^4.3.0", "long": "^5.0.0", "protobufjs": "^7.5.3", "yargs": "^17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, "sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ=="],
 
-    "@homiio/contracts": ["@homiio/contracts@./vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz", { "dependencies": { "zod": "^4.3.6" } }, "sha512-0lJTX/enkUEHI82ptKg7ne5OMDqmpsP74+0hGdupfcsW6ypTH4x0RKCUaedROMtAdCNx5hz25hIWqQZogzGF4Q=="],
-
-    "@homiio/sdk": ["@homiio/sdk@../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz", { "dependencies": { "@homiio/contracts": "0.1.0" } }, "sha512-LJSLI6g7LkvxjoFrGXn53WO2KaZ3zd4owWFDShxmzU7SEt+zPo/AxDe5MedWzYj+faoDHPKiMDrNxjQT0NGd+w=="],
-
     "@hpke/common": ["@hpke/common@1.10.1", "", {}, "sha512-moJwhmtLtuxiUzzNp1jpfBfx8yefKoO9D/RCR9dmwrnc7qjJqId1rEtQz+lSlU5cabX8daToMSx/7HayXOiaFw=="],
 
     "@hpke/core": ["@hpke/core@1.9.0", "", { "dependencies": { "@hpke/common": "^1.10.0" } }, "sha512-pFxWl1nNJeQCSUFs7+GAblHvXBCjn9EPN65vdKlYQil2aURaRxfGMO6vBKGqm1YHTKwiAxJQNEI70PbSowMP9Q=="],
@@ -805,6 +800,10 @@
     "@oxy.so/db": ["@oxy.so/db@1.1.0", "", { "peerDependencies": { "drizzle-orm": "^0.45.2", "postgres": "^3.4.9" } }, "sha512-VotVrgHxfbqIn3Tn+pXa1nrIUFYA1VnQ6jQw2X8odTGoWmHcJYbzDVowzCU4pRbHZr1fTEOmdVjTJyl5pzJxgA=="],
 
     "@oxy.so/expo-splash": ["@oxy.so/expo-splash@1.0.0", "", { "dependencies": { "@expo/image-utils": ">=0.7.0", "xml2js": "^0.6.2" }, "peerDependencies": { "expo": ">=51.0.0", "expo-splash-screen": ">=0.27.0", "react": ">=18.0.0", "react-native": ">=0.74.0" } }, "sha512-v1jMNwb0WpHhDuGss8kNOi7rYWlIA2H96d8ejHiB3H12iKkrNBNA02vFfG7Q8Xrd2SlSu1vrfU8Tl4B33s3cVA=="],
+
+    "@oxy.so/homiio-contracts": ["@oxy.so/homiio-contracts@0.1.0", "", { "dependencies": { "zod": "^4.3.6" } }, "sha512-nn2t2fn3WYPq/jNK9BS+vayHNZT0vunstVR9HXl9RN4niOmjQwDK3VmB6DZGo5nRHYvZA7BStqsyM3jSB2PJtg=="],
+
+    "@oxy.so/homiio-sdk": ["@oxy.so/homiio-sdk@0.1.0", "", { "dependencies": { "@oxy.so/homiio-contracts": "0.1.0" } }, "sha512-tnfngNHZLD1ucoI2igeFADEBK/h4JbLrd/Ju58vT84uBIWt3KFrP+pWdMJrRtkn6WcAqt8wTytI4BEzXlPoEXQ=="],
 
     "@oxy.so/protocol": ["@oxy.so/protocol@1.2.2", "", { "dependencies": { "@noble/curves": "^1.9.7", "@oxy.so/contracts": "^4.9.0", "zod": "^3.25.64" }, "peerDependencies": { "@react-native-async-storage/async-storage": "<3.0.0", "expo-crypto": "<58.0.0", "expo-modules-core": "<58.0.0", "expo-secure-store": "<58.0.0", "express": "^4.18.0 || ^5.0.0" }, "optionalPeers": ["@react-native-async-storage/async-storage", "expo-crypto", "expo-secure-store", "express"] }, "sha512-6PlaD/GwG0CKvA1kZ0HVB5xM8JMKBms0dYmgAngGIk5lkPRz8x6hu7JkpvGGFef1yAvcxv8F19wW2pf3+YrEoQ=="],
 

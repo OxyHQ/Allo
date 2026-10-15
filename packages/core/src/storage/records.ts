@@ -185,6 +185,7 @@ export type { AppMessage };
 /** Creation write-ahead record. A lost HTTP reply reuses the exact MLS state and request. */
 export const groupCreationRecordSchema = z.object({
   request: createConversationRequestSchema,
+  unreachableAccountIds: z.array(z.string()).default([]),
   nextState: z.string().nullable(),
   conversationId: z.string().nullable(),
 });
