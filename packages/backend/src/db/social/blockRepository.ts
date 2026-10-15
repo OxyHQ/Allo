@@ -20,10 +20,11 @@
  * enforce, in a layer that cannot produce the 400 the caller needs.
  */
 
-import { and, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
-import type { AlloDatabase } from '../index';
+import type { AlloDatabase, AlloDatabaseOrTransaction, AlloTransaction } from '../index';
 import { blocks } from '../schema/social';
+import { forbidden } from '../../utils/httpErrors';
 
 /** The pair naming one direction of a block. An object because both are `string`. */
 export interface BlockPair {
@@ -61,7 +62,7 @@ export async function listBlockedUserIds(db: AlloDatabase, userId: string): Prom
  * blocking them tells them they were blocked.
  */
 export async function blockedEitherWay(
-  db: AlloDatabase,
+  db: AlloDatabaseOrTransaction,
   userId: string,
   others: readonly string[],
 ): Promise<Set<string>> {
@@ -83,7 +84,7 @@ export async function blockedEitherWay(
 /**
  * Block `blockedId`. Returns whether this call is what created the block.
  *
- * ONE statement, converging on `blocks_user_id_blocked_id_key`. A read followed
+ * One INSERT under the contact-pair lock, converging on `blocks_user_id_blocked_id_key`. A read followed
  * by an insert would leave a window in which two concurrent requests both see
  * nothing and both insert. The unique index is what makes the
  * duplicate impossible, and `ON CONFLICT DO NOTHING` is what turns losing that
@@ -95,12 +96,15 @@ export async function blockedEitherWay(
  * rather than being read as a duplicate the way a `catch` on the insert would.
  */
 export async function blockUser(db: AlloDatabase, pair: BlockPair): Promise<boolean> {
-  const inserted = await db
-    .insert(blocks)
-    .values({ id: uuidv7(), userId: pair.userId, blockedId: pair.blockedId })
-    .onConflictDoNothing({ target: [blocks.userId, blocks.blockedId] })
-    .returning({ id: blocks.id });
-  return inserted.length > 0;
+  return db.transaction(async (tx) => {
+    await lockContactPairs(tx, pair.userId, [pair.blockedId]);
+    const inserted = await tx
+      .insert(blocks)
+      .values({ id: uuidv7(), userId: pair.userId, blockedId: pair.blockedId })
+      .onConflictDoNothing({ target: [blocks.userId, blocks.blockedId] })
+      .returning({ id: blocks.id });
+    return inserted.length > 0;
+  });
 }
 
 /**
@@ -108,9 +112,47 @@ export async function blockUser(db: AlloDatabase, pair: BlockPair): Promise<bool
  * answers 404 when it did not, so the caller needs to tell the two apart.
  */
 export async function unblockUser(db: AlloDatabase, pair: BlockPair): Promise<boolean> {
-  const deleted = await db
-    .delete(blocks)
-    .where(and(eq(blocks.userId, pair.userId), eq(blocks.blockedId, pair.blockedId)))
-    .returning({ id: blocks.id });
-  return deleted.length > 0;
+  return db.transaction(async (tx) => {
+    await lockContactPairs(tx, pair.userId, [pair.blockedId]);
+    const deleted = await tx
+      .delete(blocks)
+      .where(and(eq(blocks.userId, pair.userId), eq(blocks.blockedId, pair.blockedId)))
+      .returning({ id: blocks.id });
+    return deleted.length > 0;
+  });
+}
+
+/**
+ * Serialize a block with contact attempts, including when no block row exists.
+ * Callers hold these transaction locks until their event/invitation commits.
+ * Pair keys are unordered, unambiguous and sorted to prevent multi-add deadlocks.
+ * A hash collision only serializes unrelated pairs; it cannot grant access.
+ */
+export async function lockContactPairs(
+  tx: AlloTransaction,
+  accountId: string,
+  others: readonly string[],
+): Promise<void> {
+  const keys = [
+    ...new Set(
+      others.filter((id) => id !== accountId).map((id) => JSON.stringify([accountId, id].sort())),
+    ),
+  ].sort();
+  for (const key of keys) {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`allo-contact:${key}`}, 0))`,
+    );
+  }
+}
+
+/** New direct content and invitations stop in both directions. History stays readable. */
+export async function assertContactAllowed(
+  tx: AlloTransaction,
+  accountId: string,
+  others: readonly string[],
+): Promise<void> {
+  await lockContactPairs(tx, accountId, others);
+  if ((await blockedEitherWay(tx, accountId, others)).size > 0) {
+    throw forbidden('Contact is unavailable');
+  }
 }

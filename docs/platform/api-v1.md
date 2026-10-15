@@ -689,3 +689,18 @@ instance sends it once it has imported everything up to `upTo`, encrypted like
 from another ACCOUNT (a DM's other party, or any other member of a group) and
 marks its own items with `seq ≤ upTo` as delivered unless they are already
 read; one from its own account's other instances is ignored.
+
+## Blocking and new contact
+
+A block from either account refuses new direct application events and typing,
+new conversations inviting the other account (DM or group), and MLS additions
+that invite or re-admit that account. The HTTP response is `403 forbidden`
+with no indication of who blocked whom. Existing shared-group messages and
+membership remain unchanged. MLS device maintenance for existing members,
+history reads, sync and already-accepted idempotent replays remain available.
+A block never deletes previously accepted messages or their deliveries.
+
+Block changes and new contact take the same transaction-scoped lock per
+unordered account pair. A send that commits before the block is history;
+one serialized after it is refused. Unblocking permits new sends again;
+messages already marked failed by the SDK are not automatically resent.

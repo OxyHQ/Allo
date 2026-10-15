@@ -100,7 +100,7 @@ describe('blocks converge on the unique index instead of reading first', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('blocks in ONE statement, so there is no window between a read and a write', async () => {
+  it('locks the pair and inserts atomically without reading the block first', async () => {
     const statements: string[] = [];
     const observed = createDatabase({
       databaseUrl: handle.databaseUrl,
@@ -126,19 +126,19 @@ describe('blocks converge on the unique index instead of reading first', () => {
       expect(await blockUser(observed.db, pair)).toBe(false);
       const secondCall = [...statements];
 
-      // THE property, and the only deterministic way to observe it. Both a
-      // correct repository and a read-then-write one answer `false` for a block
-      // that already exists, so no assertion about the RESULT can tell them
-      // apart; what differs is that the second issues two statements with a gap
-      // between them, and the gap is the race. Measured: the mutation makes this
-      // read 2.
-      expect(firstCall).toHaveLength(1);
-      expect(secondCall).toHaveLength(1);
-      expect(firstCall[0]).toContain('insert into "blocks"');
-      expect(firstCall[0]).toContain('on conflict');
-      expect(firstCall[0]).not.toContain('select');
+      // BEGIN, pair lock, one conflict-safe INSERT, COMMIT. There is no
+      // existence read to race, and new contact holds this same lock.
+      for (const call of [firstCall, secondCall]) {
+        expect(call).toHaveLength(4);
+        expect(call[0].trim()).toBe('begin');
+        expect(call[1]).toContain('pg_advisory_xact_lock');
+        expect(call[2]).toContain('insert into "blocks"');
+        expect(call[2]).toContain('on conflict');
+        expect(call[2]).not.toContain('select');
+        expect(call[3].trim()).toBe('commit');
+      }
 
-      // Anti-vacuity: the hook really does count each statement, so `1` above is
+      // Anti-vacuity: the hook really does count each statement, so the count is
       // a measurement rather than a callback that never fired.
       statements.length = 0;
       await listBlockedUserIds(observed.db, pair.userId);

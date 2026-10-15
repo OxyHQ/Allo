@@ -33,12 +33,19 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from '@allo/shared-types';
-import { findActiveLeaf, listLeaves } from '../db/platform/conversationRepository';
+import {
+  findActiveLeaf,
+  listLeaves,
+  findConversationById,
+  listMembers,
+} from '../db/platform/conversationRepository';
 import {
   authenticateInstance,
   type AuthenticatedInstance,
   type InstanceAuthDeps,
 } from '../middleware/instanceAuth';
+import { getDb } from '../db';
+import { assertContactAllowed } from '../db/social/blockRepository';
 import { logger } from '../utils/logger';
 import { APP_ORIGINS } from '../app';
 import { PresenceHub } from './presenceHub';
@@ -237,10 +244,21 @@ export async function relayTyping(
 ): Promise<void> {
   const parsed = typingEventSchema.safeParse(payload);
   if (!parsed.success) return;
-  const mine = await findActiveLeaf(parsed.data.conversationId, sender.id);
-  if (!mine) return;
-  const others = (await listLeaves(parsed.data.conversationId))
-    .filter((leaf) => leaf.state === 'active' && leaf.instanceId !== sender.id)
-    .map((leaf) => leaf.instanceId);
-  realtime.typing(others, parsed.data);
+  await getDb().transaction(async (tx) => {
+    const mine = await findActiveLeaf(parsed.data.conversationId, sender.id, tx);
+    if (!mine) return;
+    const conversation = await findConversationById(parsed.data.conversationId, tx);
+    if (conversation?.kind === 'dm') {
+      const members = await listMembers(conversation.id, tx);
+      await assertContactAllowed(
+        tx,
+        sender.accountId,
+        members.map((m) => m.accountId),
+      );
+    }
+    const others = (await listLeaves(parsed.data.conversationId, tx))
+      .filter((leaf) => leaf.state === 'active' && leaf.instanceId !== sender.id)
+      .map((leaf) => leaf.instanceId);
+    realtime.typing(others, parsed.data);
+  });
 }

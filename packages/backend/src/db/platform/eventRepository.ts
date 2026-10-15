@@ -39,6 +39,7 @@ import { AlloHttpError, forbidden, notFound, validationFailed } from '../../util
 import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from '../index';
 import { requireTransaction } from '../moderation/transactionGuard';
 import { conversationEvents, type EventKind } from '../schema/events';
+import { assertContactAllowed } from '../social/blockRepository';
 import { retainBlobs } from './blobRepository';
 import {
   findAddableInstances,
@@ -158,6 +159,17 @@ export async function appendClientEvent(
       replayed: true,
       recipients: [],
     };
+  }
+
+  // MLS maintenance remains available so existing devices can recover history.
+  // Every application kind (including media, edits and receipts) is opaque here.
+  if (conversation.kind === 'dm' && request.kind !== 'mls_commit') {
+    const members = await listMembers(conversationId, tx);
+    await assertContactAllowed(
+      tx,
+      sender.accountId,
+      members.map((m) => m.accountId),
+    );
   }
 
   const leaves = await listLeaves(conversationId, tx);
@@ -298,6 +310,14 @@ export async function appendClientEvent(
       throw forbidden('a dm cannot gain a third account');
     }
   }
+
+  // Adding a device of an existing member is maintenance, not an invitation.
+  // A new or re-added account must not be invited across a block.
+  await assertContactAllowed(
+    tx,
+    sender.accountId,
+    commit.addedLeaves.filter((leaf) => !joined.has(leaf.accountId)).map((leaf) => leaf.accountId),
+  );
 
   // Removed leaves: present, and either the sender's own account or removed by an owner/admin.
   // A resync's removed leaf is the sender's own, replaced by the upsert below
