@@ -1,5 +1,6 @@
 import { useConversationActions, useSyncState } from '@allo/react';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
+import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
 import { VoiceSession } from '@alia.onl/sdk/voice';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
@@ -14,7 +15,6 @@ import { PageAction } from '@/components/shell/PageAction';
 import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
-import { RiSparklingLine } from '@oxy.so/bloom/icons/RiSparklingLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -205,7 +205,7 @@ export function ConversationList() {
         safeArea={!split}
         leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
         actions={
-          <Button size="sm" appearance="outline" leadingIcon={RiSparklingLine} onPress={askAlia}>
+          <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={askAlia}>
             {t('chat.askAlia')}
           </Button>
         }
