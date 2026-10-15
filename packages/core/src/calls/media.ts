@@ -55,7 +55,9 @@ export interface CallMediaAdapter {
   /** Build the local side. Called once per call, before any offer or answer. */
   prepare(plan: CallMediaPlan): Promise<void>;
   /** The description this device offers. */
-  createOffer(): Promise<SessionDescription>;
+  createOffer(options?: { iceRestart: boolean }): Promise<SessionDescription>;
+  /** Refresh credentials without replacing the connection or capture tracks. */
+  updateIce?(plan: Pick<CallMediaPlan, 'iceServers' | 'relayOnly'>): Promise<void>;
   /** Takes the caller's description, returns this device's answer. */
   acceptOffer(offer: SessionDescription): Promise<SessionDescription>;
   /** Takes the callee's answer. */

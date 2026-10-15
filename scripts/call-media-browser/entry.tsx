@@ -36,7 +36,7 @@ Object.assign(window, {
     for (const track of stream.getTracks()) await room.localParticipant.publishTrack(track);
     return true;
   },
-  group: async (identity: string, ticket: unknown) => {
+  group: async (identity: string, ticket: unknown, keyByte?: number) => {
     groupLayout = true;
     await a.prepare({
       mode: 'video',
@@ -45,14 +45,17 @@ Object.assign(window, {
       iceServers: [],
       relayOnly: false,
     });
-    await a.joinRoom!(ticket, new Uint8Array(32).fill(identity === 'sender-a' ? 1 : 2));
+    await a.joinRoom!(
+      ticket,
+      new Uint8Array(32).fill(keyByte ?? (identity === 'sender-a' ? 1 : 2)),
+    );
     render();
   },
   receive: async (id: string) => {
     await a.setReceiveKey!(id, new Uint8Array(32).fill(id === 'sender-a' ? 1 : 2));
   },
-  run: async () => {
-    const plan = { mode: 'video' as const, iceServers: [], relayOnly: false };
+  run: async (overrides = {}) => {
+    const plan = { mode: 'video' as const, iceServers: [], relayOnly: false, ...overrides };
     await Promise.all([a.prepare(plan), b.prepare(plan)]);
     const ac: string[] = [],
       bc: string[] = [];
@@ -66,8 +69,15 @@ Object.assign(window, {
       void a.addCandidates(bc.splice(0));
     }, 40);
     Object.assign(window, { stopIce: () => clearInterval(timer) });
-    setTimeout(() => clearInterval(timer), 5000);
     render();
+  },
+  restart: async (plan = { iceServers: [], relayOnly: false }) => {
+    const streams = [a.localStream(), b.localStream()];
+    await Promise.all([a.updateIce!(plan), b.updateIce!(plan)]);
+    const offer = await a.createOffer({ iceRestart: true });
+    const answer = await b.acceptOffer(offer);
+    await a.acceptAnswer(answer);
+    return streams[0] === a.localStream() && streams[1] === b.localStream();
   },
   toggle: () => {
     show = !show;

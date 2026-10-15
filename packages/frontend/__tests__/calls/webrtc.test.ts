@@ -35,6 +35,7 @@ class Peer {
   ontrack?: (event: { track: Track; streams: Stream[] }) => void;
   onicecandidate?: (event: { candidate: { candidate: string; toJSON(): unknown } | null }) => void;
   addTrack = jest.fn();
+  setConfiguration = jest.fn();
   close = jest.fn();
   addIceCandidate = jest.fn().mockResolvedValue(undefined);
   constructor() {
@@ -51,6 +52,33 @@ beforeEach(() => {
     configurable: true,
     value: { mediaDevices: { getUserMedia: gum } },
   });
+});
+it('refreshes relay credentials without replacing capture, peer or relay-only policy', async () => {
+  const track = new Track('video');
+  gum.mockResolvedValue(new Stream([track]));
+  const media = createCallMedia();
+  await media.prepare(plan);
+  const stream = media.localStream();
+  const relay = {
+    iceServers: [
+      {
+        urls: ['turns:turn.allo.you:443?transport=tcp'],
+        username: 'fresh',
+        credential: 'ephemeral',
+      },
+    ],
+    relayOnly: true,
+  };
+  await media.updateIce!(relay);
+  expect(Peer.all).toHaveLength(1);
+  expect(Peer.all[0].setConfiguration).toHaveBeenCalledWith({
+    iceServers: relay.iceServers,
+    iceTransportPolicy: 'relay',
+  });
+  expect(media.localStream()).toBe(stream);
+  expect(track.stop).not.toHaveBeenCalled();
+  expect(gum).toHaveBeenCalledTimes(1);
+  await media.close();
 });
 it('closes capture granted after the call ended without reviving camera or state', async () => {
   let resolve!: (stream: Stream) => void;

@@ -27,6 +27,11 @@ try {
       muted: v.muted,
     })),
   );
+  const preserved = await page.evaluate(() => window.restart());
+  await page.waitForFunction(
+    () => document.querySelector('video')?.getVideoPlaybackQuality().totalVideoFrames > 10,
+  );
+  if (!preserved) throw new Error('ICE restart replaced capture streams');
   await page.evaluate(() => window.toggle());
   await page.waitForTimeout(150);
   const aliveAfterUnmount = await page.evaluate(() =>
@@ -48,7 +53,9 @@ try {
       window.old.getTracks().every((t) => t.readyState === 'ended') &&
       window.a.state.getSnapshot().remote.length === 0,
   );
-  console.log(JSON.stringify({ decoded, aliveAfterUnmount, stopped }));
+  console.log(
+    JSON.stringify({ decoded, iceRestartPreservesCapture: preserved, aliveAfterUnmount, stopped }),
+  );
   if (decoded.length !== 3 || !aliveAfterUnmount || !stopped || decoded.some((v) => !v.muted))
     throw new Error('media lifecycle failed');
 } finally {

@@ -271,10 +271,13 @@ including audio, remain required before claiming native group video operational.
   header is deleted with the store it describes.
 - TURN and the native call UI are the two places this design needs something
   the repository cannot provide: a relay with a bill attached, and a dev build
-  carrying CallKit and Telecom. Both were decided with the owner before the
-  calls change started: the relay rides on the LiveKit box Oxy already
-  operates, and the ring is CallKit and Android Telecom in a development
-  build, with the Play Console declaration that implies.
+  carrying CallKit and Telecom. The relay now has a dedicated EC2/EIP and TLS
+  443 endpoint in oxy-infra (`allo-turn.tf`), keeping its traffic, quotas and
+  credential custody independent of the shared SFU. It is prepared for manual
+  deployment, not applied. See `../platform/turn-connectivity.md` for actual
+  coturn/browser verification and remaining external gates. Native ring remains
+  CallKit and Android Telecom in a development build, with the Play Console
+  declaration that implies.
 - `privacy_relay_calls` joins `privacy_show_online_status` and
   `privacy_status_view_receipts` as a setting the platform actually acts on.
 
