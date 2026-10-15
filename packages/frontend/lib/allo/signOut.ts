@@ -1,3 +1,4 @@
+import { nativeCallBridge } from './nativeCallBridge';
 /**
  * SIGNING OUT OF ALLO — the one deliberate act that takes this device off the
  * account, and the only thing allowed to destroy its keys.
@@ -47,6 +48,8 @@ export type Logout = () => Promise<unknown>;
 export async function signOutOfAllo(client: AlloClient, logout: Logout): Promise<ResetOutcome> {
   let outcome: ResetOutcome = { revoked: 'not-needed' };
   try {
+    await nativeCallBridge?.clear();
+    await client.instance.clearCallPushToken();
     await clearPushToken(client);
   } catch (error) {
     logger.warn('[allo] clearing the push token on sign-out failed', error);

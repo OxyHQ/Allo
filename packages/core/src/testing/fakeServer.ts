@@ -182,6 +182,7 @@ export class FakeAlloServer implements SocketHost {
       relayed: boolean;
       rung: string[];
       answeredBy: string | null;
+      joined: Set<string>;
       startedAt: string;
       endReason: string | null;
     }
@@ -482,6 +483,15 @@ export class FakeAlloServer implements SocketHost {
       const conv = this.conversations.get(p.conversationId);
       if (!conv) return;
       if (conv.leaves.get(socket.instanceId)?.state !== 'active') return;
+      if (
+        conv.kind === 'dm' &&
+        [...conv.members.keys()].some(
+          (other) =>
+            this.blocks.has(`${inst.accountId}:${other}`) ||
+            this.blocks.has(`${other}:${inst.accountId}`),
+        )
+      )
+        return;
       for (const [instanceId, leaf] of conv.leaves) {
         if (leaf.state === 'active' && instanceId !== socket.instanceId)
           this.emitTo(instanceId, 'typing', { conversationId: conv.id, ciphertext: p.ciphertext });
@@ -807,6 +817,7 @@ export class FakeAlloServer implements SocketHost {
         relayed: group,
         rung,
         answeredBy: null,
+        joined: new Set([me.id]),
         startedAt: this.iso(),
         endReason: null,
       };
@@ -822,6 +833,13 @@ export class FakeAlloServer implements SocketHost {
       }
       return json(201, { call: this.callWire(call) });
     }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)$/)) && method === 'GET') {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call || (call.initiatorInstanceId !== me.id && !call.rung.includes(me.id)))
+        throw new HttpError(404, 'not_found', 'call');
+      return json(200, { call: this.callWire(call) });
+    }
     if ((m = path.match(/^\/v1\/calls\/([^/]+)\/ice$/)) && method === 'GET') {
       signed();
       const call = this.calls.get(m[1]);
@@ -832,6 +850,18 @@ export class FakeAlloServer implements SocketHost {
         relayOnly: call.relayed,
       });
     }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/token$/)) && method === 'GET') {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call || !call.group || call.state === 'ended' || !call.joined.has(me.id))
+        throw new HttpError(403, 'forbidden', 'room unavailable');
+      return json(200, {
+        url: 'wss://sfu.test',
+        token: 'test-ticket',
+        room: `call-${call.id}`,
+        expiresAt: new Date(this.now() + 60_000).toISOString(),
+      });
+    }
     if ((m = path.match(/^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/)) && method === 'POST') {
       const me = signed();
       const call = this.calls.get(m[1]);
@@ -839,10 +869,11 @@ export class FakeAlloServer implements SocketHost {
       const action = m[2];
       if (action === 'answer') {
         // First to answer wins; the losers are told who did.
-        if (call.state !== 'ringing')
+        if (call.state !== 'ringing' && !(call.group && call.state === 'active'))
           throw new HttpError(409, 'idempotency_conflict', 'the call is not ringing');
         call.state = 'active';
         call.answeredBy = me.id;
+        call.joined.add(me.id);
       } else if (action === 'decline') {
         call.state = 'ended';
         call.endReason = 'declined';
@@ -1407,6 +1438,17 @@ export class FakeAlloServer implements SocketHost {
     };
   }
 
+  private assertContactAllowed(accountId: string, others: readonly string[]): void {
+    if (
+      others.some(
+        (other) =>
+          this.blocks.has(`${accountId}:${other}`) || this.blocks.has(`${other}:${accountId}`),
+      )
+    ) {
+      throw new HttpError(403, 'forbidden', 'Contact is unavailable');
+    }
+  }
+
   private createConversation(me: FakeInstance, body: Uint8Array): Response {
     const req = this.parse(createConversationRequestSchema, body);
     return this.withIdempotency(me.id, req.idempotencyKey, body, () => {
@@ -1423,6 +1465,10 @@ export class FakeAlloServer implements SocketHost {
       }
       if ([...this.conversations.values()].some((c) => c.mlsGroupId === req.mlsGroupId))
         throw new HttpError(409, 'idempotency_conflict', 'group id in use');
+      this.assertContactAllowed(me.accountId, [
+        ...req.memberAccountIds,
+        ...(req.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+      ]);
       const now = this.iso();
       const conv: FakeConversation = {
         id: uuidV7(this.now()),
@@ -1458,18 +1504,25 @@ export class FakeAlloServer implements SocketHost {
       state: call.state,
       relayed: call.relayed,
       group: call.group,
-      participants: call.rung.map((instanceId) => ({
+      participants: [call.initiatorInstanceId, ...call.rung].map((instanceId) => ({
         accountId: this.instances.get(instanceId)?.accountId ?? '',
         instanceId,
-        state: call.answeredBy === instanceId ? ('joined' as const) : ('ringing' as const),
-        joinedAt: call.answeredBy === instanceId ? call.startedAt : null,
+        state: call.joined.has(instanceId)
+          ? ('joined' as const)
+          : call.answeredBy && !call.group
+            ? ('left' as const)
+            : ('ringing' as const),
+        joinedAt: call.joined.has(instanceId) ? call.startedAt : null,
         leftAt: null,
       })),
       startedAt: call.startedAt,
       answeredAt: call.answeredBy ? call.startedAt : null,
       endedAt: call.state === 'ended' ? this.iso() : null,
       endReason: call.endReason as null,
-      ringExpiresAt: call.state === 'ringing' ? new Date(this.now() + 45_000).toISOString() : null,
+      ringExpiresAt:
+        call.state === 'ringing'
+          ? new Date(Date.parse(call.startedAt) + 45_000).toISOString()
+          : null,
     };
   }
 
@@ -1519,6 +1572,9 @@ export class FakeAlloServer implements SocketHost {
       throw new HttpError(403, 'forbidden', 'sender holds no active leaf');
     if (req.epoch !== conv.epoch)
       throw new HttpError(409, 'epoch_conflict', 'stale epoch', { currentEpoch: conv.epoch });
+    if (conv.kind === 'dm' && req.kind !== 'mls_commit') {
+      this.assertContactAllowed(sender.accountId, [...conv.members.keys()]);
+    }
     const activeOthers = [...conv.leaves.entries()]
       .filter(([id, l]) => l.state === 'active' && id !== sender.id)
       .map(([id]) => id);
@@ -1535,6 +1591,26 @@ export class FakeAlloServer implements SocketHost {
       return { id: event.id, seq: event.seq, createdAt: event.createdAt };
     }
     const commit = req.commit!;
+    const addedAccounts = commit.addedAccountIds ?? [];
+    const removedAccounts = commit.removedAccountIds ?? [];
+    for (const accountId of removedAccounts) {
+      const role = conv.members.get(sender.accountId)?.role;
+      if (accountId !== sender.accountId && role !== 'owner' && role !== 'admin')
+        throw new HttpError(403, 'forbidden', 'only an owner or admin may remove accounts');
+      if (
+        [...conv.leaves].some(
+          ([id, leaf]) =>
+            leaf.accountId === accountId &&
+            leaf.state !== 'removed' &&
+            !commit.removedLeaves.includes(id),
+        )
+      )
+        throw new HttpError(400, 'validation_failed', 'all account leaves must be removed');
+    }
+    this.assertContactAllowed(
+      sender.accountId,
+      addedAccounts.filter((id) => conv.members.get(id)?.state !== 'joined'),
+    );
     // A self-join adds exactly the sender and, for a resync, removes exactly the sender: the schema fixed the
     // counts, the server alone knows who signed the request.
     if (kind !== 'member') {
@@ -1560,6 +1636,12 @@ export class FakeAlloServer implements SocketHost {
         );
       }
     }
+    this.assertContactAllowed(
+      sender.accountId,
+      commit.addedLeaves
+        .filter((leaf) => conv.members.get(leaf.accountId)?.state !== 'joined')
+        .map((leaf) => leaf.accountId),
+    );
     for (const added of commit.addedLeaves) {
       const inst = this.instances.get(added.instanceId);
       if (!inst || inst.status !== 'active' || inst.accountId !== added.accountId)
@@ -1620,6 +1702,15 @@ export class FakeAlloServer implements SocketHost {
           joinedAt: this.iso(),
         });
       else conv.members.get(added.accountId)!.state = 'joined';
+    }
+    for (const accountId of addedAccounts) {
+      const existing = conv.members.get(accountId);
+      if (existing) existing.state = 'joined';
+      else conv.members.set(accountId, { role: 'member', state: 'joined', joinedAt: this.iso() });
+    }
+    for (const accountId of removedAccounts) {
+      const existing = conv.members.get(accountId);
+      if (existing) existing.state = accountId === sender.accountId ? 'left' : 'removed';
     }
     // An account whose last leaf this commit removed is out. One that never had a leaf (invited before it
     // installed Allo) stays a joined member: the elector adds its first device when it appears.

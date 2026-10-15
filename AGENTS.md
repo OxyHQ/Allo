@@ -363,7 +363,7 @@ instance the fake server is made to list as an unapproved active root.
   with a deadline; the client keeps the deadline it verified in the signature
   rather than a later claim; and a status already decrypted on a device is that
   device's, which the screens say rather than implying a remote delete.
-- **Calls connect. What is missing is the ring on a closed app and the relay.**
+- **Calls connect. Native ring code exists; physical validation and the relay remain outstanding.**
   The backend runs the part a client cannot — who may ring
   (a joined member, never across a block), the fork across a callee's devices,
   first-to-answer-wins as an UPDATE guarded on the state, the ring nobody
@@ -392,15 +392,29 @@ instance the fake server is made to list as an unapproved active root.
   pushes the route. A screen that navigated AND dialled placed two calls per
   press, twice — once from the conversation header, then again from the
   call-back row after the first was fixed.
-  What is still missing: the native ring (CallKit, Telecom, a `phoneCall`
-  foreground service), so a phone with the app closed does not ring; the
-  remote video on the stage (`StagePlaceholder` stands in, and the screens say
-  so); the speaker, screen sharing, the camera flip and hold, which are simply
+  Native ringing now uses a local Expo module (PushKit/CallKit and Android
+  FCM/Telecom with a `phoneCall` foreground service), a separate instance-signed
+  call token and durable native actions. See `docs/adr/0002-calls-status-presence.md`
+  for configuration and the physical-device validation still required. Incoming
+  routes carry `incomingCallId` and must never fall into the outgoing dialler
+  when their call has disappeared. The stage now renders live video (below).
+  What is still missing: the speaker, screen sharing, the camera flip and hold, which are simply
   not passed to Bloom, because Bloom draws a control when it is handed a
   HANDLER and a control nothing can do is a prop nobody passes; and coturn, so
   a relayed call cannot connect. The status route is `/updates` because
   Metro's dev server answers `/status` itself, and a screen that cannot be
   opened while developing is a screen nobody checks.
+- **Call video and audio are adapter-owned.** `lib/calls/webrtc.ts` exposes
+  per-client observable streams. Bloom slots render muted HTML video / native
+  `RTCView`; the one web audio host in `AlloRoot` survives route changes. A view
+  unmount never stops media. Pending capture is invalidated on end/account
+  retirement. Group LiveKit publishes with per-sender E2EE, subscribes only
+  after a verified sender key, and never accepts plaintext publications. Both
+  providers use the same PBKDF2 passphrase encoding; do not reintroduce web
+  HKDF while native defaults to PBKDF2. Any MLS epoch change ends the call and
+  asks the user to start a new one. `bun run test:call-media:browser` runs real
+  Chromium media; set `ALLO_CALL_LIVEKIT_BINARY` for a real local encrypted SFU.
+  Physical native interoperability remains pending (ADR 0002, upstream #88).
 - **The relay and the SFU are read at BOOT, in `runtimeApp.ts`, or they are not
   read at all.** `getIceConfig()`'s lazy fallback parses an EMPTY environment,
   so for as long as nothing called `setIceConfig` every deployment served STUN
@@ -409,17 +423,20 @@ instance the fake server is made to list as an unapproved active root.
   list, which is an impossible call rather than a degraded one.
   `mediaConfigWiring.test.ts` boots the app and holds that line, including
   that a HALF-configured relay or SFU fails the boot. `LIVEKIT_API_KEY` and
-  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, written by
-  OxyHQServices, bound per service by terraform): never `sync_secret` them from
+  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, owned by
+  oxy-infra, bound per service by terraform): never `sync_secret` them from
   Allo's workflow, which would overwrite the value every other app uses.
-  Production still needs both halves wired in `oxy-infra` by hand —
-  `app-allo.tf` gains `{ name = "LIVEKIT_URL", value = "wss://livekit.oxy.so" }`
-  in `environment` and the two `valueFrom = "${local.ssm}/oxy/_shared/LIVEKIT_*"`
-  entries in `secrets`, exactly as `app-services-realtime.tf:29,68-69` does for
-  another app — and coturn does not exist yet, so until it does a deployment
-  serves STUN alone and a relayed call cannot connect. That is now an absence
-  of infrastructure rather than a bug, and the group-call ticket answers
-  `unavailable` instead of inventing a room.
+  The shared LiveKit bindings are declared in infra's `app-allo.tf`. Dedicated
+  coturn configuration now lives in `terraform-uswest2/allo-turn.tf` (manual
+  apply only), with UDP/TCP 3478 and TLS 443. Enable the app binding only after
+  the relay's external gate, via `ALLO_TURN_ENABLED=true`; its five SSM paths
+  are read-only to the app deploy. `TURN_REQUIRED` fails boot on missing/weak
+  configuration. See `docs/platform/turn-connectivity.md` and infra runbook 55
+  for provisioning, real local relay evidence and pending device/network gates.
+  Network recovery refreshes authorized ICE grants, preserving P2P tracks;
+  callee-only loss requests a caller-led restart through encrypted MLS. Group
+  recovery obtains a fresh ticket before recapture and rotates its sender key.
+  Healthy coturn allocations continue across credential issuance expiry.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.
@@ -440,8 +457,9 @@ instance the fake server is made to list as an unapproved active root.
   (`allowTags`, `hide*Counts`); Allo names none of them. **`showOnlineStatus`
   is the one setting the platform acts on**, and a block now cuts presence in
   both directions (ADR 0002); `hiddenWords` and `Restrict` are still written
-  and never read, and a block still stops no message, which is why those
-  screens say so rather than implying protection.
+  and never read, and blocks stop new direct messages and conversation invitations in both
+  directions. They preserve history and existing shared-group membership and messages.
+  Pair transaction locks serialize block changes with sends and invitations.
 - **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
   dotted key per entry at the top level, not nested objects.
 

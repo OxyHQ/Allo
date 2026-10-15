@@ -1,3 +1,6 @@
+import { TEAM_CAPABILITY_HEADER } from '@oxy.so/allo-contracts';
+import { HOMIIO_TEAM_OPERATION_HEADER } from '@oxy.so/homiio-contracts';
+import { authorizeTeamOperation } from '../../services/platform/managedTeamService';
 import { Router, type RequestHandler } from 'express';
 import {
   conversationIdSchema,
@@ -32,7 +35,16 @@ export function createConversationRoutes(deps: { instanceAuth: RequestHandler })
     '/conversations',
     asyncRoute(async (req, res) => {
       const body = parseBody(createConversationRequestSchema, req);
-      const result = await createConversation(callerOf(req), body);
+      const caller = callerOf(req);
+      const managed = body.teamOperationId
+        ? await authorizeTeamOperation(
+            caller,
+            body.teamOperationId,
+            req.get(HOMIIO_TEAM_OPERATION_HEADER) ?? '',
+            req.get(TEAM_CAPABILITY_HEADER) ?? '',
+          )
+        : undefined;
+      const result = await createConversation(caller, body, { managed });
       if (result.nudges.length > 0)
         getRealtime().nudge(result.nudges, { conversationId: result.conversation.id });
       res

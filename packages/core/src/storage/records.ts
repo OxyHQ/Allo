@@ -6,6 +6,7 @@
  */
 import {
   appMessageSchema,
+  createConversationRequestSchema,
   conversationEventSchema,
   submitEventRequestSchema,
   type AppMessage,
@@ -110,6 +111,8 @@ export const outboxCommitIntentSchema = z.object({
   adds: z.array(z.object({ instanceId: z.string(), accountId: z.string(), keyPackage: b64 })),
   /** Instance ids whose leaves to remove. */
   removes: z.array(z.string()),
+  addedAccountIds: z.array(z.string()).optional(),
+  removedAccountIds: z.array(z.string()).optional(),
   /** Why: `add_instances` | `revoked` | `member_left` | `remove_member`. Informational. */
   reason: z.string(),
 });
@@ -178,3 +181,11 @@ export const backupStateRecordSchema = z.object({
 export type BackupStateRecord = z.infer<typeof backupStateRecordSchema>;
 
 export type { AppMessage };
+
+/** Creation write-ahead record. A lost HTTP reply reuses the exact MLS state and request. */
+export const groupCreationRecordSchema = z.object({
+  request: createConversationRequestSchema,
+  unreachableAccountIds: z.array(z.string()).default([]),
+  nextState: z.string().nullable(),
+  conversationId: z.string().nullable(),
+});

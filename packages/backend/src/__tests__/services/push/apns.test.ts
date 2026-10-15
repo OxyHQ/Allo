@@ -276,3 +276,30 @@ describe('the HTTP/2 transport, against a real server', () => {
     expect(sessions).toBe(1);
   });
 });
+
+it('uses the VoIP topic only for an incoming call and expires it immediately at APNs', async () => {
+  const { transport, sent } = recordingTransport(ACCEPTED);
+  const sender = createApnsSender(CREDENTIALS, TOKENS, transport);
+  await sender.send([DEVICE], {
+    ...ALERT,
+    call: { expiresAt: new Date(Date.now() + 45_000).toISOString() },
+    data: { type: 'allo.call', callId: 'opaque-call' },
+  });
+  expect(sent[0].headers).toMatchObject({
+    'apns-topic': 'so.oxy.allo.voip',
+    'apns-push-type': 'voip',
+    'apns-priority': '10',
+    'apns-expiration': '0',
+  });
+  expect(payloadOf(sent[0]).aps).toEqual({ 'content-available': 1 });
+  await sender.send([DEVICE], {
+    ...ALERT,
+    background: true,
+    data: { type: 'allo.call.end', callId: 'opaque-call' },
+  });
+  expect(sent[1].headers).toMatchObject({
+    'apns-topic': 'so.oxy.allo',
+    'apns-push-type': 'background',
+    'apns-priority': '5',
+  });
+});

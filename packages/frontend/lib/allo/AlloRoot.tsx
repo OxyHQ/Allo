@@ -1,3 +1,9 @@
+import { CallNotice } from '@/components/calls/CallNotice';
+import { CallAudio } from '@/components/calls/CallAudio';
+import { Platform } from 'react-native';
+import { useRouter } from 'expo-router';
+import { startNativeCalls } from './nativeCalls';
+import { nativeCallBridge } from './nativeCallBridge';
 /**
  * OWNS THE CLIENT'S LIFECYCLE and mounts `@allo/react`'s provider under the
  * Oxy provider.
@@ -29,7 +35,8 @@
  * Boot-mounted, so no suspenseful hook is called here (see
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOxy } from '@oxy.so/services';
 import type { AlloClient } from '@allo/core';
 import { AlloProvider, useAlloClient, useInstanceState } from '@allo/react';
@@ -101,6 +108,8 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   return (
     <AlloProvider client={client}>
       <PushRegistration />
+      <CallAudio />
+      <CallNotice />
       <EnrollmentGate
         onSignOut={() => {
           void signOutOfAllo(client, logout);
@@ -118,6 +127,18 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
 function PushRegistration() {
   const client = useAlloClient();
   const { state } = useInstanceState();
+  const router = useRouter();
+  useEffect(() => {
+    if (state !== 'active' || !nativeCallBridge) return;
+    return startNativeCalls({
+      client,
+      bridge: nativeCallBridge,
+      provider: Platform.OS === 'ios' ? 'apns' : 'fcm',
+      open: (id, callId) =>
+        router.push({ pathname: '/c/[id]/call', params: { id, incomingCallId: callId } }),
+      report: (error) => logger.warn('[calls] native handoff failed', error),
+    });
+  }, [client, state, router]);
   useEffect(() => {
     if (state !== 'active') return;
     void registerPushToken(client);

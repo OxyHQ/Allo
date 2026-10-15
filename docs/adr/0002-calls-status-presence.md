@@ -207,11 +207,12 @@ it is either protocol or security:
   same outbox and sync path as any other message, so they inherit its
   ordering, retries and end-to-end encryption instead of reimplementing them;
 - **the DTLS fingerprint check.** The fingerprint arrives inside the encrypted
-  offer, and comparing it against the one the local peer connection reports is
-  the entire reason a 1:1 call is end to end encrypted (Decision 1). A
-  comparison done in the app is one each platform can get wrong differently;
-- the per-sender frame-key schedule for a group: generate, distribute, rotate
-  on a membership change;
+  offer/answer. Core refuses a description without a fingerprint; WebRTC
+  verifies its peer certificate against that authenticated SDP. There is no
+  second fingerprint comparison in application code;
+- per-sender group keys, distributed through MLS and bound to the authenticated
+  envelope sender instance, which must currently be joined to the call. This
+  phase ends the call on any MLS epoch change; a new call uses fresh keys.
 - `CallView`, and the `call_log` message written when it ends.
 
 **The app owns what cannot be anywhere else**: the `RTCPeerConnection` or the
@@ -226,8 +227,8 @@ reports. A wide adapter is where this kind of code rots, so the interface
 carries no policy.
 
 A client built without one can still ring, be rung, decline and end; it simply
-carries no audio. That is what the app does today and what a test does for
-ever.
+carries no audio. The app supplies its WebRTC/LiveKit adapter; headless tests
+can omit it. Group calls refuse to start without an encrypted room adapter.
 
 **Why not the alternatives.** Putting the state machine in the app duplicates
 it per platform and moves the fingerprint check out of the one place it can be
@@ -242,12 +243,20 @@ from a single codebase, and `@livekit/react-native` registers the WebRTC
 globals, so `lib/calls/` is written once; only registering those globals and
 the audio session need a platform file.
 
-**What this costs, measured rather than assumed.** RN's LiveKit E2EE is
-AES-128 whatever key size is asked for, and derives keys differently on web and
-native, so a mixed room cannot decrypt; `livekit/react-native-webrtc#88`
-(open, unanswered since 2026-06) has iOS video decoding to zero frames on
-Android with E2EE on. A two-device iOS↔Android spike therefore comes before
-any group-video UI. Group voice shows no such report.
+**Platform encryption interoperability is an explicit verification boundary.**
+The installed RN provider defaults to PBKDF2 even for byte-array keys; importing
+those bytes as HKDF in the web provider creates incompatible keys. Allo uses
+the same hexadecimal encoding of each random 32-byte sender key as the
+PBKDF2 passphrase on both platforms, with AES-128 and the SDK's shared salt.
+A refused native key installation fails the call before publication. Neither
+platform falls back to plaintext. The older blanket claim that web/native
+necessarily derive different keys is superseded by this explicit configuration.
+
+[Upstream issue #88](https://github.com/livekit/react-native-webrtc/issues/88)
+remains open as checked on 2026-10-15: it reports iOS-to-Android video decode
+failure with E2EE on older SDKs. Web SFU verification does not settle that
+hardware-specific report. Physical iOS↔Android and web↔native decode tests,
+including audio, remain required before claiming native group video operational.
 
 ## Consequences
 
@@ -262,10 +271,13 @@ any group-video UI. Group voice shows no such report.
   header is deleted with the store it describes.
 - TURN and the native call UI are the two places this design needs something
   the repository cannot provide: a relay with a bill attached, and a dev build
-  carrying CallKit and Telecom. Both were decided with the owner before the
-  calls change started: the relay rides on the LiveKit box Oxy already
-  operates, and the ring is CallKit and Android Telecom in a development
-  build, with the Play Console declaration that implies.
+  carrying CallKit and Telecom. The relay now has a dedicated EC2/EIP and TLS
+  443 endpoint in oxy-infra (`allo-turn.tf`), keeping its traffic, quotas and
+  credential custody independent of the shared SFU. It is prepared for manual
+  deployment, not applied. See `../platform/turn-connectivity.md` for actual
+  coturn/browser verification and remaining external gates. Native ring remains
+  CallKit and Android Telecom in a development build, with the Play Console
+  declaration that implies.
 - `privacy_relay_calls` joins `privacy_show_online_status` and
   `privacy_status_view_receipts` as a setting the platform actually acts on.
 
@@ -274,3 +286,139 @@ any group-video UI. Group voice shows no such report.
 Federation of any of the three. Status replies. Call recording, which is
 deliberately not a feature. Calls between an Allo account and a phone number,
 which is not a thing this platform has.
+
+## Native incoming-call implementation (October 2026)
+
+Incoming calls now have a dedicated push channel per enrolled instance. The
+normal notification registration remains independent: an APNs alert token is
+not a PushKit token. `PUT/DELETE /v1/instances/me/call-push` use the existing
+instance signature plus Oxy session. Claiming a rotated token atomically removes
+its previous binding, including a previous account on the same installation;
+revocation clears both channels. The token is a protected database column.
+Migration `0012_native_call_push` is additive and must run before the new image.
+
+The ring worker leases pending participant rows with `SKIP LOCKED`, retries
+transient provider failures, and stops sending after the ring deadline. Delivery
+is at least once: both native implementations deduplicate call IDs and retain
+short-lived terminal tombstones. APNs receives `voip`, the `.voip` topic and
+expiration zero only for incoming rings. Android receives high-priority data-only
+FCM; ordinary messages continue through Expo's existing notification service.
+Terminal hints use ordinary background APNs/FCM, never a second VoIP push. These
+hints are best effort; the native deadline and authenticated SDK reconciliation
+remain necessary when background notifications are throttled.
+
+The local Expo module is `packages/frontend/modules/allo-native-calls`. An iOS
+AppDelegate subscriber starts PushKit before JavaScript and reports calls to
+CallKit immediately. Android's native FCM service delegates non-call messages to
+Expo and registers incoming calls with a self-managed `ConnectionService`; a
+`phoneCall` foreground service owns the call notification. Answering enables the
+microphone foreground type after user interaction. Notification actions target
+an Activity directly rather than a prohibited notification trampoline. Android
+requires API 26 or newer for this implementation.
+
+Native storage contains only routing IDs, deadlines, the push token and pending
+OS actions. It contains no Oxy bearer, identity secret, decrypted message, SDP or
+media key. A generic `Allo` caller label protects lock-screen identity. Oxy cold
+restore and the enrolled Allo instance must be ready before an action executes.
+`calls.restoreIncoming(id)` reads current server state, rejects cancelled,
+expired, revoked and other-device answers, and recovers an already-acknowledged
+encrypted offer from the encrypted local event store. The server serializes
+answer/decline on the call row and replays an answer from its winning device.
+Native action timeouts fail the OS action and retain an end intent for recovery.
+Pending handoffs expire after the call's 24-hour operational retention window.
+
+Call routes reached from native handoffs, incoming banners or the active-call
+pill carry `incomingCallId`; they never dial when state is absent. Explicit
+outgoing calls and history callbacks remain the dialler entry points. Account
+changes immediately retire the local binding, and cleanup is conditional on the
+old instance so a late cleanup cannot erase the new account's binding. Session
+gaps stop the client without deleting its keys.
+
+### Configuration and release validation
+
+- Use a native development/production build, not Expo Go. Run Expo prebuild to
+  autolink the local module and apply `plugins/withNativeCalls`.
+- iOS needs the app's push entitlement, `voip`, `audio` and remote-notification
+  background modes, a matching Apple provisioning profile, and existing
+  `ALLO_APNS_*` credentials. `ALLO_APNS_TOPIC` remains the bundle identifier;
+  the sender appends `.voip` for the call token only. Match sandbox/production
+  APNs to the provisioning environment. Native CallKit audio activation is
+  forwarded to the existing LiveKit WebRTC audio session.
+- Android needs the app's real `google-services.json` and existing backend
+  Firebase credentials from the same project. Expo Notifications is built from
+  source so the local FCM subclass has a version-matched dependency. Permit
+  notifications and full-screen call notifications where Android requires it.
+- Test signed release builds on physical iOS and Android phones: terminated
+  process, locked screen, delayed Oxy restore, answer/decline, cancellation,
+  two-device answer race, token rotation, account switch/sign-out, unavailable
+  network, duplicate/late push, and normal message notifications. A force-stop
+  chosen in Android settings suppresses FCM until the user reopens the app.
+- No physical phones or Xcode were available during this implementation. Unit,
+  database and Android compiler checks do not establish APNs/FCM delivery,
+  lock-screen audio, OS policy acceptance or physical closed-app behavior. Keep
+  this feature pending device/provider validation until that matrix passes.
+
+Native platform requirements were checked against Apple's
+[PushKit incoming-call guidance](https://developer.apple.com/documentation/pushkit/responding-to-voip-notifications-from-pushkit)
+and Android's [ConnectionService contract](https://developer.android.com/reference/android/telecom/ConnectionService).
+
+Local verification on the cumulative managed-team foundation: 62 backend
+call/push tests, 19 managed-team/schema tests over real PostgreSQL, six core call
+tests (including an encrypted offer recovered after restart), and 14 frontend
+handoff/session/route tests. TypeScript builds and scoped Biome/Expo ESLint pass.
+Android Expo prebuild, `:allo-native-calls:compileDebugKotlin` and
+`:app:processDebugMainManifest` passed; the merged manifest contains API 26,
+one Allo FCM handler replacing Expo's handler, the protected Telecom service,
+and `phoneCall|microphone`. The iOS JavaScript/Hermes export passed. This is
+**not an iOS Swift/Xcode build, APK device test or provider delivery test**.
+
+
+## Implemented media and verification (2026-10-15)
+
+The call route uses Bloom video slots with a muted HTML video on web and
+`RTCView` on native. One account-scoped web audio host stays mounted across
+navigation and minimisation; video previews never also play audio. Browser
+autoplay denial exposes an explicit enable-audio action. Views detach streams
+without stopping tracks; the adapter alone stops capture and closes media.
+
+Capture preparations carry a generation token, so a permission prompt resolved
+after end, replacement, or account retirement stops its resulting tracks.
+Streamless `ontrack` events are projected, duplicate tracks deduplicate, and
+candidates preserve their SDP mid/m-line. Connection failure ends the call;
+a temporary disconnect gets a 20-second grace period on P2P. Native call ring
+and audio activation remain owned by the existing native bridge.
+
+Groups join the existing signed SFU ticket endpoint with per-instance E2EE.
+There is no auto-subscription: a remote publication must advertise encryption
+and have an authenticated joined sender's key. A different account answering
+does not dismiss a remaining group's ring. Any MLS epoch change closes media
+immediately, informs the server, and displays a localized restart notice. This
+includes routine MLS self-updates; seamless in-call membership rotation is not
+implemented. Old tickets, pending capture and late keys cannot resurrect the
+closed call.
+
+Reproducible browser verification:
+
+```sh
+bun install --frozen-lockfile
+bunx playwright install chromium
+bun run test:call-media:browser
+# Optional real local SFU, using a downloaded official LiveKit server binary:
+ALLO_CALL_LIVEKIT_BINARY=/absolute/path/livekit-server bun run test:call-media:browser
+```
+
+`ALLO_CALL_CHROMIUM_PATH` optionally selects an installed Chromium. The runner
+uses fake camera/microphone input with real browser peer connections, actual
+adapter and actual React video rendering; artifacts go under
+`.local/call-media-browser/`. It binds the test SFU to localhost ports
+55912–55914 with a development-only key and stops it afterward.
+
+Measured: both P2P directions render 640-pixel video; remount keeps capture
+alive and end stops tracks. Two Chromium clients through LiveKit 1.13.10
+render encrypted video both directions, no key yields no subscription, a
+wrong key yields zero decoded video, and an unencrypted third publication is
+rejected even when its identity has a key. MLS tests cover three recipients,
+identity binding, epoch closure and a delayed ticket. Web export, iOS Hermes
+export and TypeScript checks are source/build evidence, not device evidence.
+No physical devices, Xcode build, APNs/FCM delivery, production TURN network,
+or deployment was validated by the video task.

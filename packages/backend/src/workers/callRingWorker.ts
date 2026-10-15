@@ -1,3 +1,4 @@
+import { runCallPushTick } from './callPushWorker';
 /**
  * THE RING THAT NOBODY ANSWERED.
  *
@@ -27,7 +28,7 @@ import { getRealtime } from '../runtime/realtime';
 import { logger } from '../utils/logger';
 
 /** How often the sweep runs. A quarter of the ring, so a missed call is noticed within about ten seconds of its deadline. */
-export const CALL_RING_TICK_MS = Math.round(CALL_RING_TIMEOUT_MS / 4);
+export const CALL_RING_TICK_MS = Math.min(2_000, Math.round(CALL_RING_TIMEOUT_MS / 4));
 /** How many rings one tick settles. A burst bigger than this is caught by the next one. */
 const BATCH = 100;
 
@@ -76,7 +77,7 @@ export function startCallRingWorker(deps: { db?: AlloDatabase } = {}): void {
   timer = setInterval(() => {
     if (inFlight) return;
     inFlight = true;
-    void runCallRingTick(deps)
+    void Promise.all([runCallRingTick(deps), runCallPushTick(deps)])
       .catch((error: unknown) => logger.warn('call ring sweep failed', error))
       .finally(() => {
         inFlight = false;

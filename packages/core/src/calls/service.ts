@@ -32,6 +32,7 @@
  */
 import {
   callResponseSchema,
+  callTokenResponseSchema,
   iceServersResponseSchema,
   SERVER_TO_CLIENT_EVENTS,
   type CallEndReason,
@@ -39,6 +40,7 @@ import {
 } from '@allo/shared-types';
 import type { Context } from '../context';
 import { InvalidStateError, NotFoundError } from '../errors';
+import { base64Decode, base64Encode, randomBytes } from '../util/bytes';
 import { uuidV7 } from '../util/ids';
 import { describeError } from '../util/logger';
 import type { CallMediaAdapter, SessionDescription } from './media';
@@ -69,10 +71,14 @@ export interface CallView {
   phase: CallPhase;
   /** True when this device started it. An incoming call is the other case, and the one that rings. */
   outgoing: boolean;
+  group?: boolean;
+  /** Instance IDs bind media tiles to authenticated accounts. */
+  participants?: Array<{ instanceId: string; accountId: string }>;
   /** Who is being called, or who is calling. */
   withAccountIds: string[];
   /** Set once the call ends, and the reason the log records. */
   endReason: CallEndReason | null;
+  endNotice?: 'membership_changed';
   muted: boolean;
   cameraOn: boolean;
   startedAt: string;
@@ -80,6 +86,16 @@ export interface CallView {
 }
 
 interface Live {
+  recoveryTimer?: ReturnType<typeof setTimeout>;
+  restartPending?: boolean;
+  recovering?: Promise<void>;
+  sendKeyGeneration?: number;
+  epoch: number | null;
+  mediaConnected?: boolean;
+  stopConnection?: () => void;
+  roomJoining?: Promise<void>;
+  roomJoined?: boolean;
+  keys: Map<string, { generation: number; key: Uint8Array }>;
   view: CallView;
   /**
    * Whether the media has been given the other side's description yet.
@@ -108,6 +124,7 @@ export class CallsService {
   private live: Live | null = null;
   /** A dial is in flight. Set before the first await, so a second one is refused rather than placed. */
   private starting = false;
+  private stopped = false;
   /**
    * Signalling with nothing to apply it to YET, keyed by the call it names.
    *
@@ -141,6 +158,26 @@ export class CallsService {
     // that onto every consumer.
     this.unwatchConversations = ctx.emitter.subscribe('conversations', () => {
       this.historyCache = null;
+      const live = this.live;
+      if (
+        live?.view.group &&
+        live.view.phase !== 'ended' &&
+        live.epoch !== this.epoch(live.view.conversationId)
+      ) {
+        // Fail closed on every MLS epoch transition, including self updates.
+        // A fresh call is required; old room credentials never reopen media.
+        this.set({ endNotice: 'membership_changed' });
+        void this.finish('failed', false);
+        void ctx.http
+          .request({
+            method: 'POST',
+            path: `/v1/calls/${live.view.id}/end`,
+            body: { reason: 'failed' },
+            schema: callResponseSchema,
+            signer: ctx.signer,
+          })
+          .catch(() => undefined);
+      }
     });
   }
 
@@ -194,6 +231,7 @@ export class CallsService {
   async start(conversationId: string, mode: CallMode = 'voice'): Promise<CallView> {
     const { ctx } = this;
     ctx.instance.assertActive();
+    if (this.stopped) throw new InvalidStateError('call service stopped');
     if (this.live && this.live.view.phase !== 'ended')
       throw new InvalidStateError('already in a call');
     const conversation = ctx.conversations.get(conversationId);
@@ -217,13 +255,32 @@ export class CallsService {
         signer: ctx.signer,
       });
       const call = res.call;
+      if (this.stopped) {
+        void ctx.http
+          .request({
+            method: 'POST',
+            path: `/v1/calls/${call.id}/end`,
+            body: { reason: 'cancelled' },
+            schema: callResponseSchema,
+            signer: ctx.signer,
+          })
+          .catch(() => undefined);
+        throw new InvalidStateError('call service stopped');
+      }
       this.live = {
+        epoch: this.epoch(conversationId),
+        keys: new Map(),
         view: {
           id: call.id,
           conversationId,
           mode,
           phase: 'ringing',
           outgoing: true,
+          group: call.group,
+          participants: call.participants.map(({ instanceId, accountId }) => ({
+            instanceId,
+            accountId,
+          })),
           withAccountIds: conversation.memberAccountIds.filter((id) => id !== ctx.accountId),
           endReason: null,
           muted: false,
@@ -238,16 +295,96 @@ export class CallsService {
       this.invalidate();
 
       // The offer goes out now, so the callee's device has it the moment it answers.
+      if (call.group) {
+        await this.joinGroup();
+        return this.requireLive().view;
+      }
       await this.withMedia(call.id, async (media) => {
+        this.streamCandidates(conversationId, media);
         await this.prepare(media, call.id);
         const offer = await media.createOffer();
-        await this.signal(conversationId, { kind: 'offer', sdp: offer.sdp });
+        await this.signal(conversationId, { kind: 'offer', sdp: offer.sdp }, call.id);
         this.streamCandidates(conversationId, media);
       });
-      return this.live.view;
+      return this.requireLive().view;
+    } catch (error) {
+      const live = this.live;
+      if (live && live.view.phase !== 'ended') {
+        await this.finish('failed', false);
+        void ctx.http
+          .request({
+            method: 'POST',
+            path: `/v1/calls/${live.view.id}/end`,
+            body: { reason: 'failed' },
+            schema: callResponseSchema,
+            signer: ctx.signer,
+          })
+          .catch(() => undefined);
+      }
+      throw error;
     } finally {
       this.starting = false;
     }
+  }
+
+  /** Cold/native wake-up: a push is only a hint. Re-read the enrolled device's authority. */
+  async restoreIncoming(callId: string): Promise<CallView | null> {
+    this.ctx.instance.assertActive();
+    const { call } = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/calls/${callId}`,
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
+    if (this.stopped) throw new InvalidStateError('call service stopped');
+    const mine = call.participants.find(
+      (one) => one.instanceId === this.ctx.instanceId && one.accountId === this.ctx.accountId,
+    );
+    const eligible =
+      mine &&
+      (mine.state === 'ringing' || mine.state === 'joined') &&
+      call.state !== 'ended' &&
+      (call.state !== 'ringing' ||
+        (call.ringExpiresAt !== null && Date.parse(call.ringExpiresAt) > this.ctx.now()));
+    if (!eligible) {
+      if (this.live?.view.id === callId)
+        await this.finish(call.endReason ?? 'answered_elsewhere', false);
+      return null;
+    }
+    if (this.live?.view.id === callId && this.live.view.phase !== 'ended') return this.live.view;
+    if (this.live && this.live.view.phase !== 'ended')
+      throw new InvalidStateError('already in another call');
+    this.onIncoming({
+      callId,
+      conversationId: call.conversationId,
+      initiatorAccountId: call.initiatorAccountId,
+      mode: call.mode,
+      group: call.group,
+    });
+    this.set({ startedAt: call.startedAt, answeredAt: call.answeredAt });
+    // Sync may already have acknowledged the encrypted offer before a process
+    // restart. Recover only this initiator's authenticated, locally decrypted
+    // signalling from the encrypted instance store; never replay another call.
+    for (const record of this.ctx.model.eventsOf(call.conversationId)) {
+      const message = record.message;
+      if (
+        record.senderInstanceId === call.initiatorInstanceId &&
+        message?.t === 'call' &&
+        message.callId === callId &&
+        (message.kind === 'offer' || message.kind === 'ice')
+      ) {
+        await this.onCallMessage(call.conversationId, message, record.senderInstanceId);
+      }
+    }
+    if (this.current()?.phase === 'ended') return null;
+    // A reply may have been lost after this instance won. Reconstruct connecting,
+    // then recover the encrypted offer through ordinary sync, never from push.
+    if (mine.state === 'joined') {
+      this.set({ phase: this.media ? 'connecting' : 'active' });
+      if (call.group) await this.joinGroup();
+      else await this.answerOfferIfReady();
+    }
+    return this.current();
   }
 
   /** This device takes the call. The server decides whether it won the race. */
@@ -268,6 +405,10 @@ export class CallsService {
       phase: this.media ? 'connecting' : 'active',
       answeredAt: new Date(ctx.now()).toISOString(),
     });
+    if (live.view.group) {
+      await this.joinGroup();
+      return;
+    }
     // The answer itself waits for the offer; `onCallMessage` sends it when the
     // offer arrives, which may already have happened.
     await this.answerOfferIfReady();
@@ -275,14 +416,12 @@ export class CallsService {
 
   async decline(): Promise<void> {
     const live = this.requireLive();
-    await this.ctx.http
-      .request({
-        method: 'POST',
-        path: `/v1/calls/${live.view.id}/decline`,
-        schema: callResponseSchema,
-        signer: this.ctx.signer,
-      })
-      .catch((error) => this.ctx.log.warn?.('decline failed', { error: describeError(error) }));
+    await this.ctx.http.request({
+      method: 'POST',
+      path: `/v1/calls/${live.view.id}/decline`,
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
     await this.finish('declined');
   }
 
@@ -292,22 +431,22 @@ export class CallsService {
     const wire =
       live.view.phase === 'ringing' && live.view.outgoing
         ? 'cancelled'
-        : reason === 'declined'
-          ? 'declined'
-          : 'hangup';
-    await this.ctx.http
-      .request({
-        method: 'POST',
-        path: `/v1/calls/${live.view.id}/end`,
-        body: { reason: wire },
-        schema: callResponseSchema,
-        signer: this.ctx.signer,
-      })
-      .catch((error) => this.ctx.log.warn?.('end failed', { error: describeError(error) }));
-    await this.signal(live.view.conversationId, { kind: 'end', reason: wire }).catch(
+        : reason === 'failed'
+          ? 'failed'
+          : reason === 'declined'
+            ? 'declined'
+            : 'hangup';
+    await this.ctx.http.request({
+      method: 'POST',
+      path: `/v1/calls/${live.view.id}/end`,
+      body: { reason: wire },
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
+    await this.signal(live.view.conversationId, { kind: 'end', reason: wire }, live.view.id).catch(
       () => undefined,
     );
-    await this.finish(reason);
+    if (this.live === live) await this.finish(reason);
   }
 
   async setMuted(muted: boolean): Promise<void> {
@@ -328,16 +467,17 @@ export class CallsService {
 
   /** `call.incoming`: somebody is calling this device. The offer arrives separately, encrypted. */
   onIncoming(payload: unknown): void {
+    if (this.stopped) return;
     const parsed = SERVER_TO_CLIENT_EVENTS['call.incoming'].safeParse(payload);
     if (!parsed.success) return;
     const event = parsed.data;
+    if (this.live?.view.id === event.callId && this.live.view.phase !== 'ended') return;
     if (this.live && this.live.view.phase !== 'ended') {
       // Busy. The server is told so the caller hears it rather than ringing out.
       void this.ctx.http
         .request({
           method: 'POST',
-          path: `/v1/calls/${event.callId}/end`,
-          body: { reason: 'busy' },
+          path: `/v1/calls/${event.callId}/decline`,
           schema: callResponseSchema,
           signer: this.ctx.signer,
         })
@@ -345,16 +485,19 @@ export class CallsService {
       return;
     }
     this.live = {
+      epoch: this.epoch(event.conversationId),
+      keys: new Map(),
       view: {
         id: event.callId,
         conversationId: event.conversationId,
         mode: event.mode,
         phase: 'ringing',
         outgoing: false,
+        group: event.group,
         withAccountIds: [event.initiatorAccountId],
         endReason: null,
         muted: false,
-        cameraOn: false,
+        cameraOn: event.mode === 'video',
         startedAt: new Date(this.ctx.now()).toISOString(),
         answeredAt: null,
       },
@@ -384,6 +527,12 @@ export class CallsService {
       void this.finish(event.endReason ?? 'hangup', expired && live.view.outgoing);
       return;
     }
+    if (event.state === 'active' && live.view.group) {
+      // An answer from a different account does not answer this device.
+      // Only our own account losing its device race may dismiss this ring.
+      void this.refreshGroupAuthority(live);
+      return;
+    }
     if (event.state === 'active' && live.view.phase === 'ringing') {
       const mine = event.answeredByInstanceId === this.ctx.instanceId;
       if (!mine && !live.view.outgoing) {
@@ -406,7 +555,16 @@ export class CallsService {
    */
   async onCallMessage(
     conversationId: string,
-    message: { callId: string; kind: string; sdp?: string; candidates?: string[]; reason?: string },
+    message: {
+      callId: string;
+      kind: string;
+      sdp?: string;
+      candidates?: string[];
+      reason?: string;
+      key?: string;
+      generation?: number;
+    },
+    senderInstanceId?: string | null,
   ): Promise<void> {
     const live = this.live;
     if (!live || live.view.id !== message.callId || live.view.conversationId !== conversationId) {
@@ -418,24 +576,77 @@ export class CallsService {
         this.pendingFor(message.callId).candidates.push(...message.candidates);
       return;
     }
+    if (live.view.phase === 'ended') return;
+    if (live.view.group) {
+      if (
+        message.kind === 'key' &&
+        senderInstanceId &&
+        senderInstanceId !== this.ctx.instanceId &&
+        message.key &&
+        message.generation !== undefined
+      ) {
+        const { call } = await this.ctx.http.request({
+          method: 'GET',
+          path: `/v1/calls/${live.view.id}`,
+          schema: callResponseSchema,
+          signer: this.ctx.signer,
+        });
+        if (this.live !== live || this.current()?.phase === 'ended' || call.state === 'ended')
+          return;
+        if (
+          !call.participants.some((p) => p.instanceId === senderInstanceId && p.state === 'joined')
+        )
+          return;
+        const previous = live.keys.get(senderInstanceId);
+        if (previous && previous.generation >= message.generation) return;
+        const key = base64Decode(message.key);
+        if (key.length !== 32) return;
+        live.keys.set(senderInstanceId, { key, generation: message.generation });
+        if (live.roomJoined) await this.media?.setReceiveKey?.(senderInstanceId, key);
+      }
+      // SDP/ICE are never interpreted in an SFU session. The server, not an
+      // arbitrary conversation member's end message, owns room termination.
+      return;
+    }
     switch (message.kind) {
+      case 'restart':
+        // Only the original caller creates offers, including when only the
+        // callee changed networks. This avoids simultaneous-offer glare.
+        if (
+          live.view.outgoing &&
+          live.remoteDescriptionSet &&
+          (await this.authorizedRemoteSignal(live, senderInstanceId))
+        )
+          this.recoverConnection(live);
+        break;
       case 'offer':
         if (!message.sdp) return;
         if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated('offer');
+        if (live.remoteDescriptionSet) {
+          if (live.view.outgoing || !(await this.authorizedRemoteSignal(live, senderInstanceId)))
+            return;
+          this.set({ phase: 'connecting' });
+        }
         this.pendingFor(live.view.id).offer = message.sdp;
         if (live.view.phase === 'connecting') await this.answerOfferIfReady();
         break;
       case 'answer': {
         if (!message.sdp || !live.view.outgoing) return;
         if (!fingerprintOf(message.sdp)) return this.refuseUnauthenticated('answer');
+        if (
+          live.remoteDescriptionSet &&
+          !(await this.authorizedRemoteSignal(live, senderInstanceId))
+        )
+          return;
         const answer: SessionDescription = { sdp: message.sdp };
         await this.withMedia(live.view.id, async (media) => {
           await media.acceptAnswer(answer);
+          live.restartPending = false;
           live.remoteDescriptionSet = true;
           await this.drainCandidates(media);
         });
         this.set({
-          phase: 'active',
+          phase: this.connectedPhase(live),
           answeredAt: live.view.answeredAt ?? new Date(this.ctx.now()).toISOString(),
         });
         break;
@@ -463,14 +674,20 @@ export class CallsService {
     if (!offerSdp || live.view.phase !== 'connecting') return;
     pending.offer = null;
     await this.withMedia(live.view.id, async (media) => {
-      await this.prepare(media, live.view.id);
+      this.streamCandidates(live.view.conversationId, media);
+      if (live.remoteDescriptionSet) await this.refreshIce(media, live);
+      else await this.prepare(media, live.view.id);
       const answer = await media.acceptOffer({ sdp: offerSdp });
       live.remoteDescriptionSet = true;
-      await this.signal(live.view.conversationId, { kind: 'answer', sdp: answer.sdp });
+      await this.signal(
+        live.view.conversationId,
+        { kind: 'answer', sdp: answer.sdp },
+        live.view.id,
+      );
       this.streamCandidates(live.view.conversationId, media);
       await this.drainCandidates(media);
     });
-    this.set({ phase: 'active' });
+    this.set({ phase: this.connectedPhase(live) });
   }
 
   /** A description with no DTLS fingerprint is an unauthenticated call. End it rather than connect it. */
@@ -497,7 +714,37 @@ export class CallsService {
       schema: iceServersResponseSchema,
       signer: this.ctx.signer,
     });
+    if (
+      this.current()?.id !== callId ||
+      this.current()?.phase === 'ended' ||
+      Date.parse(ice.expiresAt) <= this.ctx.now()
+    )
+      throw new InvalidStateError('call ended');
+    const live = this.requireLive();
+    live.stopConnection?.();
+    live.stopConnection = media.onConnectionState?.((state) => {
+      if (this.live !== live || live.view.phase === 'ended') return;
+      live.mediaConnected = state === 'connected';
+      if (state === 'failed') {
+        if (live.recovering) return;
+        void this.finish('failed', false);
+        void this.ctx.http
+          .request({
+            method: 'POST',
+            path: `/v1/calls/${callId}/end`,
+            body: { reason: 'failed' },
+            schema: callResponseSchema,
+            signer: this.ctx.signer,
+          })
+          .catch(() => undefined);
+      } else if (live.view.phase !== 'ringing')
+        this.set({ phase: state === 'connected' ? 'active' : 'connecting' });
+      if (state === 'disconnected' && (live.remoteDescriptionSet || live.roomJoined))
+        this.recoverConnection(live);
+    });
     await media.prepare({
+      group: this.live?.view.group,
+      instanceId: this.ctx.instanceId,
       mode: this.live?.view.mode ?? 'voice',
       iceServers: ice.iceServers.map((s) => ({
         urls: [...s.urls],
@@ -506,17 +753,130 @@ export class CallsService {
       })),
       relayOnly: ice.relayOnly,
     });
+    if (this.current()?.id !== callId || this.current()?.phase === 'ended')
+      throw new InvalidStateError('call ended');
+    await media.setMuted(live.view.muted);
+    await media.setCameraEnabled(live.view.cameraOn);
   }
 
   private streamCandidates(conversationId: string, media: CallMediaAdapter): void {
     const live = this.live;
     if (!live || live.stopCandidates) return;
     live.stopCandidates = media.onCandidates((candidates) => {
-      void this.signal(conversationId, { kind: 'ice', candidates: [...candidates] }).catch(
-        (error) =>
-          this.ctx.log.debug?.('sending candidates failed', { error: describeError(error) }),
+      void this.signal(
+        conversationId,
+        { kind: 'ice', candidates: [...candidates] },
+        live.view.id,
+      ).catch((error) =>
+        this.ctx.log.debug?.('sending candidates failed', { error: describeError(error) }),
       );
     });
+  }
+
+  private async authorizedRemoteSignal(
+    live: Live,
+    senderInstanceId?: string | null,
+  ): Promise<boolean> {
+    if (!senderInstanceId) return false;
+    const { call } = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/calls/${live.view.id}`,
+      schema: callResponseSchema,
+      signer: this.ctx.signer,
+    });
+    if (this.live !== live || live.view.phase === 'ended' || call.state !== 'active') return false;
+    return live.view.outgoing
+      ? call.participants.some(
+          (participant) =>
+            participant.instanceId === senderInstanceId &&
+            participant.accountId !== this.ctx.accountId &&
+            participant.state === 'joined',
+        )
+      : senderInstanceId === call.initiatorInstanceId;
+  }
+
+  private async refreshIce(media: CallMediaAdapter, live: Live): Promise<void> {
+    if (!media.updateIce)
+      throw new InvalidStateError('media adapter cannot recover its connection');
+    const ice = await this.ctx.http.request({
+      method: 'GET',
+      path: `/v1/calls/${live.view.id}/ice`,
+      schema: iceServersResponseSchema,
+      signer: this.ctx.signer,
+    });
+    if (
+      this.live !== live ||
+      live.view.phase === 'ended' ||
+      Date.parse(ice.expiresAt) <= this.ctx.now()
+    )
+      throw new InvalidStateError('call or relay grant expired');
+    await media.updateIce({
+      iceServers: ice.iceServers.map((server) => ({ ...server, urls: [...server.urls] })),
+      relayOnly: ice.relayOnly,
+    });
+    if (this.live !== live || this.current()?.phase === 'ended')
+      throw new InvalidStateError('call ended');
+  }
+
+  private recoverConnection(live: Live): void {
+    const media = this.media;
+    if (
+      live.recovering ||
+      live.restartPending ||
+      this.live !== live ||
+      live.view.phase === 'ended' ||
+      !media
+    )
+      return;
+    // Older injected adapters keep their previous failure behavior. The app's
+    // adapter supports updateIce; no prepare fallback may discard P2P tracks.
+    if (!live.view.group && !media.updateIce) return;
+    if (!live.view.group && live.view.outgoing) live.restartPending = true;
+    live.recoveryTimer = setTimeout(() => {
+      if (this.live === live && live.view.phase !== 'ended') void this.failRecovery(live);
+    }, 20_000);
+    live.recovering = (async () => {
+      try {
+        if (live.view.group) {
+          live.roomJoined = false;
+          live.roomJoining = undefined;
+          await this.joinGroup();
+        } else {
+          await this.refreshIce(media, live);
+          if (live.view.outgoing) {
+            const offer = await media.createOffer({ iceRestart: true });
+            if (this.live !== live || live.view.phase === 'ended') return;
+            if (!fingerprintOf(offer.sdp)) return this.refuseUnauthenticated('offer');
+            await this.signal(
+              live.view.conversationId,
+              { kind: 'offer', sdp: offer.sdp },
+              live.view.id,
+            );
+          } else {
+            await this.signal(live.view.conversationId, { kind: 'restart' }, live.view.id);
+          }
+        }
+      } catch (error) {
+        if (this.live === live && live.view.phase !== 'ended') {
+          this.ctx.log.warn?.('call network recovery failed', { error: describeError(error) });
+          await this.failRecovery(live);
+        }
+      } finally {
+        live.recovering = undefined;
+        if (live.recoveryTimer) clearTimeout(live.recoveryTimer);
+        live.recoveryTimer = undefined;
+      }
+    })();
+  }
+
+  private async failRecovery(live: Live): Promise<void> {
+    try {
+      await this.end('failed');
+    } catch {
+      // A broken network may also prevent reporting the end. It must never
+      // leave capture alive or reject an unobserved recovery callback.
+      if (this.live === live) await this.finish('failed', false);
+    }
   }
 
   private async drainCandidates(media: CallMediaAdapter): Promise<void> {
@@ -531,14 +891,23 @@ export class CallsService {
   private async signal(
     conversationId: string,
     body: {
-      kind: 'offer' | 'answer' | 'ice' | 'key' | 'end';
+      kind: 'offer' | 'answer' | 'ice' | 'key' | 'restart' | 'end';
       sdp?: string;
       candidates?: string[];
       reason?: string;
+      key?: string;
+      generation?: number;
     },
+    expectedCallId: string,
   ): Promise<void> {
     const live = this.live;
-    if (!live) return;
+    if (
+      !live ||
+      live.view.id !== expectedCallId ||
+      live.view.conversationId !== conversationId ||
+      live.view.phase === 'ended'
+    )
+      return;
     await this.ctx.outbox.enqueueMessage(conversationId, {
       v: 1,
       t: 'call',
@@ -548,6 +917,7 @@ export class CallsService {
       ...(body.sdp ? { sdp: body.sdp } : {}),
       ...(body.candidates ? { candidates: body.candidates } : {}),
       ...(body.reason ? { reason: body.reason } : {}),
+      ...(body.key ? { key: body.key, generation: body.generation } : {}),
     });
   }
 
@@ -560,7 +930,11 @@ export class CallsService {
       this.ctx.log.debug?.('no media adapter: signalling only', { callId });
       return;
     }
+    if (this.current()?.id !== callId || this.current()?.phase === 'ended')
+      throw new InvalidStateError('call ended');
     await fn(this.media);
+    if (this.current()?.id !== callId || this.current()?.phase === 'ended')
+      throw new InvalidStateError('call ended');
   }
 
   /**
@@ -576,8 +950,15 @@ export class CallsService {
   private async finish(reason: CallEndReason, writeLog = true): Promise<void> {
     const live = this.live;
     if (!live || live.view.phase === 'ended') return;
+    // Invalidate before awaiting teardown so late permission prompts/tickets
+    // cannot resurrect a finished call.
+    this.set({ phase: 'ended', endReason: reason });
+    if (live.recoveryTimer) clearTimeout(live.recoveryTimer);
+    live.recoveryTimer = undefined;
     live.stopCandidates?.();
     live.stopCandidates = null;
+    live.keys.clear();
+    live.stopConnection?.();
     this.pending = null;
     await this.media
       ?.close()
@@ -614,6 +995,110 @@ export class CallsService {
     }
   }
 
+  private connectedPhase(live: Live): CallPhase {
+    return !this.media?.onConnectionState || live.mediaConnected ? 'active' : 'connecting';
+  }
+
+  private epoch(conversationId: string): number | null {
+    const state = this.ctx.groups.get(conversationId);
+    return state ? this.ctx.engine.epochOf(state) : null;
+  }
+
+  private async refreshGroupAuthority(live: Live): Promise<void> {
+    try {
+      const { call } = await this.ctx.http.request({
+        method: 'GET',
+        path: `/v1/calls/${live.view.id}`,
+        schema: callResponseSchema,
+        signer: this.ctx.signer,
+      });
+      if (this.live !== live || live.view.phase === 'ended') return;
+      const me = call.participants.find((p) => p.instanceId === this.ctx.instanceId);
+      if (call.state === 'ended' || !me || ['left', 'declined', 'missed'].includes(me.state)) {
+        await this.finish(call.endReason ?? 'answered_elsewhere', false);
+        return;
+      }
+      this.set({
+        participants: call.participants
+          .filter((p) => p.state === 'joined')
+          .map(({ instanceId, accountId }) => ({ instanceId, accountId })),
+      });
+      if (live.roomJoined && call.state === 'active')
+        this.set({ phase: this.connectedPhase(live), answeredAt: call.answeredAt });
+    } catch (error) {
+      this.ctx.log.warn?.('reading group call authority failed', { error: describeError(error) });
+    }
+  }
+
+  private async joinGroup(): Promise<void> {
+    const live = this.requireLive();
+    if (live.roomJoining) return live.roomJoining;
+    if (live.roomJoined) return;
+    const media = this.media;
+    if (!media?.joinRoom || !media.setReceiveKey)
+      throw new InvalidStateError('encrypted group media is unavailable');
+    const assertCurrent = () => {
+      if (
+        this.live !== live ||
+        live.view.phase === 'ended' ||
+        this.epoch(live.view.conversationId) !== live.epoch
+      )
+        throw new InvalidStateError('call ended');
+    };
+    live.roomJoining = (async () => {
+      try {
+        const ticket = await this.ctx.http.request({
+          method: 'GET',
+          path: `/v1/calls/${live.view.id}/token`,
+          schema: callTokenResponseSchema,
+          signer: this.ctx.signer,
+        });
+        assertCurrent();
+        if (Date.parse(ticket.expiresAt) <= this.ctx.now())
+          throw new InvalidStateError('room ticket expired');
+        await this.prepare(media, live.view.id);
+        assertCurrent();
+        const key = randomBytes(32);
+        live.sendKeyGeneration = Math.max(this.ctx.now(), (live.sendKeyGeneration ?? 0) + 1);
+        await this.signal(
+          live.view.conversationId,
+          {
+            kind: 'key',
+            key: base64Encode(key),
+            generation: live.sendKeyGeneration,
+          },
+          live.view.id,
+        );
+        assertCurrent();
+        // Keys can arrive before the ring/answer. Replay only authenticated
+        // decrypted records of this call; onCallMessage checks live authority.
+        for (const record of this.ctx.model.eventsOf(live.view.conversationId)) {
+          if (
+            record.message?.t === 'call' &&
+            record.message.callId === live.view.id &&
+            record.message.kind === 'key'
+          )
+            await this.onCallMessage(
+              live.view.conversationId,
+              record.message,
+              record.senderInstanceId,
+            );
+        }
+        assertCurrent();
+        await media.joinRoom!(ticket, key);
+        assertCurrent();
+        for (const [id, received] of live.keys) await media.setReceiveKey!(id, received.key);
+        assertCurrent();
+        live.roomJoined = true;
+        await this.refreshGroupAuthority(live);
+      } catch (error) {
+        if (this.live === live && live.view.phase !== 'ended') await this.finish('failed', false);
+        throw error;
+      }
+    })();
+    return live.roomJoining;
+  }
+
   private requireLive(): Live {
     if (!this.live || this.live.view.phase === 'ended')
       throw new InvalidStateError('no call in progress');
@@ -621,7 +1106,7 @@ export class CallsService {
   }
 
   private set(patch: Partial<CallView>): void {
-    if (!this.live) return;
+    if (!this.live || (this.live.view.phase === 'ended' && patch.phase !== 'ended')) return;
     this.live.view = { ...this.live.view, ...patch };
     this.invalidate();
   }
@@ -639,8 +1124,12 @@ export class CallsService {
    * account mid-call.
    */
   stop(): void {
+    this.stopped = true;
     this.unwatchConversations();
+    if (this.live?.recoveryTimer) clearTimeout(this.live.recoveryTimer);
+    if (this.live) this.set({ phase: 'ended', endReason: 'hangup' });
     this.live?.stopCandidates?.();
+    this.live?.stopConnection?.();
     if (this.live) this.live.stopCandidates = null;
     this.pending = null;
     void this.media

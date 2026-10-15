@@ -87,6 +87,12 @@ export type ResetOutcome =
   /** The wipe happened and the server still lists this instance as active. */
   | { revoked: 'failed'; instanceId: string; reason: string };
 
+export interface TeamOperationAccess {
+  operationId: string;
+  operationCapability: string;
+  teamReference: string;
+}
+
 export interface AlloClient {
   readonly accountId: string;
   /** The instance id once registered. */
@@ -128,6 +134,7 @@ export interface AlloClient {
     history(): CallHistoryEntry[];
     /** Rings every other member's devices. Resolves when the server has the call, not when somebody answers. */
     start(conversationId: string, mode?: 'voice' | 'video'): Promise<CallView>;
+    restoreIncoming(callId: string): Promise<CallView | null>;
     answer(): Promise<void>;
     decline(): Promise<void>;
     end(): Promise<void>;
@@ -149,12 +156,28 @@ export interface AlloClient {
     revoke(instanceId: string): Promise<void>;
     setPushToken(provider: 'fcm' | 'apns', token: string): Promise<void>;
     clearPushToken(): Promise<void>;
+    setCallPushToken(provider: 'fcm' | 'apns', token: string): Promise<void>;
+    clearCallPushToken(): Promise<void>;
   };
   conversations: {
     list(): ConversationView[];
     get(id: string): ConversationView | undefined;
     createDirect(accountId: string): Promise<ConversationView>;
     createGroup(memberAccountIds: string[]): Promise<ConversationView>;
+    createGroupOnce(
+      operationKey: string,
+      memberAccountIds: string[],
+      access?: TeamOperationAccess,
+    ): Promise<ConversationView>;
+    prepareTeam(
+      access: TeamOperationAccess,
+    ): Promise<import('@oxy.so/allo-contracts').TeamSnapshot>;
+    finishTeam(access: TeamOperationAccess): Promise<import('@oxy.so/allo-contracts').TeamSnapshot>;
+    confirmMembers(
+      conversationId: string,
+      memberAccountIds: readonly string[],
+      signal?: AbortSignal,
+    ): Promise<import('@allo/shared-types').ConversationSummary>;
     addMember(conversationId: string, accountId: string): Promise<void>;
     removeMember(conversationId: string, accountId: string): Promise<void>;
     leave(conversationId: string): Promise<void>;
@@ -547,6 +570,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       current: () => ctx?.calls.current() ?? null,
       history: () => ctx?.calls.history() ?? NO_CALLS,
       start: (conversationId, mode) => requireCtx().calls.start(conversationId, mode ?? 'voice'),
+      restoreIncoming: (id) => requireCtx().calls.restoreIncoming(id),
       answer: () => requireCtx().calls.answer(),
       decline: () => requireCtx().calls.decline(),
       end: () => requireCtx().calls.end(),
@@ -575,12 +599,21 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       revoke: (id) => requireCtx().instance.revoke(id),
       setPushToken: (provider, token) => requireCtx().instance.setPushToken(provider, token),
       clearPushToken: () => requireCtx().instance.clearPushToken(),
+      setCallPushToken: (provider, token) =>
+        requireCtx().instance.setCallPushToken(provider, token),
+      clearCallPushToken: () => requireCtx().instance.clearCallPushToken(),
     },
     conversations: {
       list: () => ctx?.conversations.list() ?? NO_CONVERSATIONS,
       get: (id) => ctx?.conversations.get(id),
       createDirect: (accountId) => requireCtx().conversations.createDirect(accountId),
       createGroup: (ids) => requireCtx().conversations.createGroup(ids),
+      createGroupOnce: (key, ids, access) =>
+        requireCtx().conversations.createGroupOnce(key, ids, access),
+      prepareTeam: (access) => requireCtx().conversations.prepareTeam(access),
+      finishTeam: (access) => requireCtx().conversations.finishTeam(access),
+      confirmMembers: (id, ids, signal) =>
+        requireCtx().conversations.confirmMembers(id, ids, signal),
       addMember: (id, accountId) => requireCtx().conversations.addMember(id, accountId),
       removeMember: (id, accountId) => requireCtx().conversations.removeMember(id, accountId),
       leave: (id) => requireCtx().conversations.leave(id),

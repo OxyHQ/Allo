@@ -1,0 +1,263 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Allo managed team access",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.allo.you/v1"
+    }
+  ],
+  "paths": {
+    "/team-access/snapshot": {
+      "post": {
+        "operationId": "readTeamSnapshot",
+        "description": "Resource-scoped header capability. Reveals only membership and operation state, never messages or housing content. No-store.",
+        "security": [
+          {
+            "TeamCapability": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current coherent team snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSnapshot"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Creator authorization failed"
+          },
+          "404": {
+            "description": "No accessible team"
+          },
+          "409": {
+            "description": "Another operation must complete first"
+          },
+          "503": {
+            "description": "Source unavailable; group remains frozen"
+          }
+        }
+      }
+    },
+    "/teams/prepare": {
+      "post": {
+        "operationId": "prepareTeamOperation",
+        "description": "Creator-signed operation; verifies the Homiio source operation through its owning SDK. Membership remains frozen until source finalization.",
+        "security": [
+          {
+            "TeamCapability": [],
+            "OxySession": [],
+            "InstanceSignature": [],
+            "HomiioOperationCapability": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamOperationRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-allo-instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-allo-timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current coherent team snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSnapshot"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Creator authorization failed"
+          },
+          "404": {
+            "description": "No accessible team"
+          },
+          "409": {
+            "description": "Another operation must complete first"
+          },
+          "503": {
+            "description": "Source unavailable; group remains frozen"
+          }
+        }
+      }
+    },
+    "/teams/finish": {
+      "post": {
+        "operationId": "finishTeamOperation",
+        "description": "Creator-signed operation; verifies the Homiio source operation through its owning SDK. Membership remains frozen until source finalization.",
+        "security": [
+          {
+            "TeamCapability": [],
+            "OxySession": [],
+            "InstanceSignature": [],
+            "HomiioOperationCapability": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamOperationRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-allo-instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-allo-timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current coherent team snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSnapshot"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Creator authorization failed"
+          },
+          "404": {
+            "description": "No accessible team"
+          },
+          "409": {
+            "description": "Another operation must complete first"
+          },
+          "503": {
+            "description": "Source unavailable; group remains frozen"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TeamSnapshot": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          },
+          "sourceReference": {
+            "type": "string"
+          },
+          "ownerAccountId": {
+            "type": "string"
+          },
+          "memberAccountIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "frozen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "conversationId",
+          "sourceReference",
+          "ownerAccountId",
+          "memberAccountIds",
+          "epoch",
+          "operationId",
+          "frozen"
+        ],
+        "additionalProperties": false
+      },
+      "TeamOperationRequest": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": ["operationId"],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "TeamCapability": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-allo-team-capability"
+      },
+      "OxySession": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "InstanceSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-allo-signature"
+      },
+      "HomiioOperationCapability": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-homiio-team-operation"
+      }
+    }
+  }
+}

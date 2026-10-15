@@ -22,6 +22,9 @@ export interface PushDevice {
 
 /** A notification, in the only shape the senders ever see. */
 export interface PushNotification {
+  /** Only incoming calls use APNs VoIP and data-only FCM. */
+  readonly background?: boolean;
+  readonly call?: { readonly expiresAt: string };
   readonly title: string;
   readonly body: string;
   /**

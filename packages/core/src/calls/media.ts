@@ -36,6 +36,8 @@ export interface SessionDescription {
 
 export interface CallMediaPlan {
   mode: 'voice' | 'video';
+  group?: boolean;
+  instanceId?: string;
   /** What the server handed out; the adapter uses them and asks nothing about them. */
   iceServers: Array<{ urls: string[]; username?: string; credential?: string }>;
   /** `true` maps to WebRTC's `iceTransportPolicy: "relay"`: no host and no server-reflexive candidate is offered. */
@@ -53,7 +55,9 @@ export interface CallMediaAdapter {
   /** Build the local side. Called once per call, before any offer or answer. */
   prepare(plan: CallMediaPlan): Promise<void>;
   /** The description this device offers. */
-  createOffer(): Promise<SessionDescription>;
+  createOffer(options?: { iceRestart: boolean }): Promise<SessionDescription>;
+  /** Refresh credentials without replacing the connection or capture tracks. */
+  updateIce?(plan: Pick<CallMediaPlan, 'iceServers' | 'relayOnly'>): Promise<void>;
   /** Takes the caller's description, returns this device's answer. */
   acceptOffer(offer: SessionDescription): Promise<SessionDescription>;
   /** Takes the callee's answer. */
@@ -73,6 +77,9 @@ export interface CallMediaAdapter {
   setReceiveKey?(instanceId: string, key: Uint8Array): Promise<void>;
   setMuted(muted: boolean): Promise<void>;
   setCameraEnabled(on: boolean): Promise<void>;
+  onConnectionState?(
+    listener: (state: 'connected' | 'disconnected' | 'failed') => void,
+  ): () => void;
   /** Tear everything down. Called exactly once per call, however it ended. */
   close(): Promise<void>;
 }

@@ -26,6 +26,7 @@
  * deliberate sign-out resets, and it does that while the token is still alive
  * (`lib/allo/signOut.ts`).
  */
+jest.mock('@/components/calls/CallNotice', () => ({ CallNotice: () => null }));
 import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -42,9 +43,13 @@ const mockStorage = new MemoryStorage();
 const mockSecrets = new MemorySecrets();
 
 let mockBuilt = 0;
+const mockClients: AlloClient[] = [];
+afterAll(async () => {
+  await Promise.all(mockClients.map((client) => client.stop()));
+});
 const mockBuildClient = (): AlloClient => {
   mockBuilt += 1;
-  return createAlloClient({
+  const client = createAlloClient({
     baseUrl: mockServer.baseUrl,
     appId: 'allo',
     platform: 'web',
@@ -55,12 +60,15 @@ const mockBuildClient = (): AlloClient => {
     transport: { fetch: mockServer.fetch, socketFactory: mockServer.socketFactory },
     syncIntervalMs: 60_000,
   });
+  mockClients.push(client);
+  return client;
 };
 
 jest.mock('@/lib/allo/client', () => ({
   APP_ID: 'allo',
   createAppAlloClient: async () => mockBuildClient(),
 }));
+jest.mock('@/lib/allo/nativeCallBridge', () => ({ nativeCallBridge: null }));
 jest.mock('@/lib/allo/push', () => ({
   registerPushToken: async () => false,
   clearPushToken: async () => undefined,
@@ -146,5 +154,8 @@ describe('a session that goes away', () => {
     expect(registrations()).toBe(1);
     expect(await mockStorage.get(`allo/allo/${ACCOUNT}/self`)).toEqual(enrolled);
     expect(mockBuilt).toBeGreaterThanOrEqual(1);
+    await act(async () => {
+      tree!.unmount();
+    });
   }, 30_000);
 });

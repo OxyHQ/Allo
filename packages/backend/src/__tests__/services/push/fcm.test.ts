@@ -150,3 +150,17 @@ describe('what FCM says about a token', () => {
     expect(outcomes[1]?.kind).toBe('delivered');
   });
 });
+
+it('delivers call rings as high-priority data only so native Telecom receives them while closed', async () => {
+  const { transport, sent } = recordingTransport([delivered]);
+  await createFcmSender(transport).send([DEVICE], {
+    ...NOTIFICATION,
+    call: { expiresAt: new Date(Date.now() + 45_000).toISOString() },
+    data: { type: 'allo.call', callId: 'opaque-call' },
+  });
+  expect(sent[0][0].notification).toBeUndefined();
+  expect(sent[0][0].android?.notification).toBeUndefined();
+  expect(sent[0][0].android?.priority).toBe('high');
+  expect(sent[0][0].android?.ttl).toBeLessThanOrEqual(45_000);
+  expect(sent[0][0].android?.collapseKey).toBe('opaque-call');
+});

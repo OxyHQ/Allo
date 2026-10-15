@@ -235,3 +235,238 @@ describe('what a call leaves behind', () => {
     await stopAll(alice, bob);
   }, 40_000);
 });
+
+describe('native cold restore', () => {
+  it('restores a missed socket ring and authenticated offer after a process restart without placing another call', async () => {
+    const server = fakeServer();
+    const aliceMedia = fakeMedia();
+    const bobMedia = fakeMedia();
+    const alice = await makeClient(server, 'native-alice', 'Alice', 'web', undefined, true, {
+      media: aliceMedia,
+    });
+    const bob = await makeClient(server, 'native-bob', 'Bob', 'web', undefined, true, {
+      media: bobMedia,
+    });
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.sync.flush();
+    await waitFor(() => bob.client.conversations.get(conversation.id)?.joined === true);
+    await alice.client.calls.start(conversation.id);
+    const id = alice.client.calls.current()!.id;
+    await alice.client.sync.flush();
+    await bob.client.sync.now();
+    await bob.client.stop();
+    await bob.client.start();
+    const restored = await bob.client.calls.restoreIncoming(id);
+    expect(restored).toMatchObject({ id, outgoing: false, phase: 'ringing' });
+    expect(
+      server.requestLog.filter(
+        (request) => request.method === 'POST' && request.path === '/v1/calls',
+      ),
+    ).toHaveLength(1);
+    await bob.client.calls.answer();
+    expect(bobMedia.calls).toContain('acceptOffer');
+    await bob.client.sync.flush();
+    await alice.client.sync.now();
+    await waitFor(() => alice.client.calls.current()?.phase === 'active');
+    await alice.client.calls.end();
+    expect(await bob.client.calls.restoreIncoming(id)).toBeNull();
+    await stopAll(alice, bob);
+  });
+});
+
+describe('encrypted group media', () => {
+  it('joins each answered device, binds sender keys to MLS identity, and ends on an MLS epoch change', async () => {
+    const server = fakeServer();
+    const media = () => {
+      const base = fakeMedia();
+      return {
+        ...base,
+        received: new Map<string, Uint8Array>(),
+        async joinRoom(_ticket: unknown, key: Uint8Array) {
+          expect(key.length).toBe(32);
+          base.calls.push('joinRoom');
+        },
+        async setReceiveKey(id: string, key: Uint8Array) {
+          this.received.set(id, key);
+        },
+      };
+    };
+    const am = media(),
+      bm = media(),
+      cm = media();
+    const a = await makeClient(server, 'acc-group-a', 'A', 'web', undefined, true, { media: am });
+    const b = await makeClient(server, 'acc-group-b', 'B', 'web', undefined, true, { media: bm });
+    const c = await makeClient(server, 'acc-group-c', 'C', 'web', undefined, true, { media: cm });
+    try {
+      const conversation = await a.client.conversations.createGroup([b.accountId, c.accountId]);
+      await a.client.sync.flush();
+      await waitFor(
+        () =>
+          b.client.conversations.get(conversation.id)?.joined === true &&
+          c.client.conversations.get(conversation.id)?.joined === true,
+      );
+      await a.client.calls.start(conversation.id, 'video');
+      await waitFor(
+        () =>
+          b.client.calls.current()?.phase === 'ringing' &&
+          c.client.calls.current()?.phase === 'ringing',
+      );
+      await b.client.calls.answer();
+      await waitFor(() => b.client.calls.current()?.phase === 'active');
+      expect(c.client.calls.current()?.phase).toBe('ringing');
+      await c.client.calls.answer();
+      await Promise.all([a.client.sync.flush(), b.client.sync.flush(), c.client.sync.flush()]);
+      await waitFor(
+        () => am.received.size >= 2 && bm.received.size >= 2 && cm.received.size >= 2,
+        10000,
+      );
+      expect(am.calls).toContain('joinRoom');
+      expect(am.calls).not.toContain('createOffer');
+      await a.client.conversations.removeMember(conversation.id, c.accountId);
+      await waitFor(() => a.client.calls.current()?.phase === 'ended');
+      expect(am.calls).toContain('close');
+      expect(a.client.calls.current()?.phase).toBe('ended');
+    } finally {
+      await stopAll(a, b, c);
+    }
+  }, 40000);
+});
+
+function recoverableMedia() {
+  const base = fakeMedia();
+  let report: ((state: 'connected' | 'disconnected' | 'failed') => void) | undefined;
+  return {
+    ...base,
+    state(value: 'connected' | 'disconnected' | 'failed') {
+      report?.(value);
+    },
+    onConnectionState(next: typeof report) {
+      report = next;
+      return () => {
+        report = undefined;
+      };
+    },
+    async updateIce() {
+      base.calls.push('updateIce');
+    },
+    async createOffer(options?: { iceRestart: boolean }) {
+      base.calls.push(options?.iceRestart ? 'restartOffer' : 'createOffer');
+      return { sdp: sdpWith(FINGERPRINT) };
+    },
+  };
+}
+
+it('recovers a callee-only network change with fresh authority and encrypted caller-led restart, without recapture', async () => {
+  const server = fakeServer();
+  const am = recoverableMedia(),
+    bm = recoverableMedia();
+  const a = await makeClient(server, 'acc-turn-a', 'A', 'web', undefined, true, { media: am });
+  const b = await makeClient(server, 'acc-turn-b', 'B', 'web', undefined, true, { media: bm });
+  const pump = async () => {
+    for (let i = 0; i < 5; i++) {
+      await a.client.sync.flush();
+      await b.client.sync.now();
+      await b.client.sync.flush();
+      await a.client.sync.now();
+    }
+  };
+  try {
+    const conversation = await a.client.conversations.createDirect(b.accountId);
+    await a.client.sync.flush();
+    await waitFor(() => b.client.conversations.get(conversation.id)?.joined === true);
+    await a.client.calls.start(conversation.id, 'video');
+    await waitFor(() => b.client.calls.current()?.phase === 'ringing');
+    await pump();
+    await b.client.calls.answer();
+    await pump();
+    am.state('connected');
+    bm.state('connected');
+    const reads = server.requestLog.filter((r) => r.path.endsWith('/ice')).length;
+    bm.state('disconnected');
+    await waitFor(() => bm.calls.includes('updateIce'));
+    await pump();
+    await waitFor(() => am.calls.includes('restartOffer'));
+    await pump();
+    expect(bm.calls.filter((c) => c === 'acceptOffer')).toHaveLength(2);
+    expect(am.calls.filter((c) => c === 'acceptAnswer')).toHaveLength(2);
+    expect(am.calls.filter((c) => c === 'prepare')).toHaveLength(1);
+    expect(bm.calls.filter((c) => c === 'prepare')).toHaveLength(1);
+    expect(bm.calls).not.toContain('restartOffer');
+    expect(server.requestLog.filter((r) => r.path.endsWith('/ice')).length).toBeGreaterThan(reads);
+    am.state('connected');
+    bm.state('connected');
+    // Both report loss together: only the original caller may offer, and a
+    // repeated restart request cannot race an outstanding answer.
+    am.state('disconnected');
+    bm.state('disconnected');
+    am.state('disconnected');
+    await pump();
+    await pump();
+    expect(am.calls.filter((c) => c === 'restartOffer')).toHaveLength(2);
+    expect(bm.calls).not.toContain('restartOffer');
+    await a.client.calls.end();
+    const count = am.calls.length;
+    am.state('disconnected');
+    await pump();
+    expect(am.calls).toHaveLength(count);
+  } finally {
+    await stopAll(a, b);
+  }
+}, 40000);
+
+it('rejoins an interrupted group with a fresh sender key, and rejects revoked SFU authority before recapturing', async () => {
+  const server = fakeServer();
+  const media = () => {
+    const base = recoverableMedia();
+    return {
+      ...base,
+      keys: [] as Uint8Array[],
+      async joinRoom(_ticket: unknown, key: Uint8Array) {
+        this.keys.push(key);
+        base.calls.push('joinRoom');
+        base.state('connected');
+      },
+      async setReceiveKey() {},
+    };
+  };
+  const am = media(),
+    bm = media();
+  const a = await makeClient(server, 'acc-turn-group-a', 'A', 'web', undefined, true, {
+    media: am,
+  });
+  const b = await makeClient(server, 'acc-turn-group-b', 'B', 'web', undefined, true, {
+    media: bm,
+  });
+  const c = await makeClient(server, 'acc-turn-group-c', 'C');
+  try {
+    const conversation = await a.client.conversations.createGroup([b.accountId, c.accountId]);
+    await a.client.sync.flush();
+    await waitFor(
+      () =>
+        b.client.conversations.get(conversation.id)?.joined === true &&
+        c.client.conversations.get(conversation.id)?.joined === true,
+    );
+    await a.client.calls.start(conversation.id, 'video');
+    await waitFor(() => b.client.calls.current()?.phase === 'ringing');
+    await b.client.calls.answer();
+    await waitFor(() => a.client.calls.current()?.phase === 'active');
+    am.state('disconnected');
+    await waitFor(() => am.keys.length === 2);
+    expect(am.keys[1]).not.toEqual(am.keys[0]);
+    expect(am.calls.filter((entry) => entry === 'prepare')).toHaveLength(2);
+    expect(am.calls).not.toContain('restartOffer');
+    await waitFor(() => a.client.calls.current()?.phase === 'active');
+    server.faults.push({
+      match: (method, path) => method === 'GET' && path.endsWith('/token'),
+      times: 1,
+      status: 403,
+      code: 'forbidden',
+    });
+    am.state('disconnected');
+    await waitFor(() => a.client.calls.current()?.phase === 'ended');
+    expect(am.calls.filter((entry) => entry === 'prepare')).toHaveLength(2);
+    expect(am.keys).toHaveLength(2);
+  } finally {
+    await stopAll(a, b, c);
+  }
+}, 40000);

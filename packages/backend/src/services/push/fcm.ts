@@ -131,11 +131,22 @@ function buildMessage(device: PushDevice, notification: PushNotification): Messa
   return {
     token: device.token,
     data: { ...notification.data },
-    notification: { title: notification.title, body: notification.body },
+    ...(notification.call || notification.background
+      ? {}
+      : { notification: { title: notification.title, body: notification.body } }),
     android: {
       /** A message is worth waking the device for. */
       priority: 'high',
-      notification: { channelId: 'default' },
+      ...(notification.call
+        ? {
+            ttl: Math.max(0, Date.parse(notification.call.expiresAt) - Date.now()),
+            collapseKey: notification.data.callId,
+          }
+        : {
+            ...(notification.background
+              ? { ttl: 45_000 }
+              : { notification: { channelId: 'default' } }),
+          }),
     },
   };
 }

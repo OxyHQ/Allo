@@ -23,6 +23,7 @@
  *      `validation_failed`, everything else → 500 `internal` with NO message.
  */
 
+import { generateTeamOpenApi } from '@oxy.so/allo-contracts/dist/openapi';
 import express, {
   type ErrorRequestHandler,
   type Express,
@@ -34,6 +35,7 @@ import { errorResponseSchema, type AlloErrorCode } from '@allo/shared-types';
 import { requestObservability } from './middleware/requestObservability';
 import { getRuntimeHealthState } from './runtime/health';
 import { createBlobBodyParser, createBlobUploadHandler } from './routes/v1/blobs';
+import { createTeamAccessRoutes } from './routes/v1/managedTeams';
 import { createV1Router } from './routes/v1';
 import { AlloHttpError, STATUS_BY_CODE } from './utils/httpErrors';
 import { logger } from './utils/logger';
@@ -190,6 +192,8 @@ export function createApp(deps: CreateAppDependencies): Express {
   api.use('/directory', deps.api.directory);
   app.use('/api', deps.auth, api);
 
+  app.get('/v1/openapi.json', (_req, res) => res.json(generateTeamOpenApi()));
+  app.use('/v1/team-access', createTeamAccessRoutes());
   app.use(
     '/v1',
     ...(deps.v1Auth ?? [deps.auth]),

@@ -15,7 +15,8 @@ import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
 
 import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
-import { StagePlaceholder } from '@/components/phase2/StagePlaceholder';
+import { CallVideo } from '@/components/calls/CallVideo';
+import { useCallMedia } from '@/lib/allo/callMedia';
 import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
 import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
@@ -27,8 +28,7 @@ import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/l
  * this device, `CallScreen` otherwise, and `CallScreen minimised` — which IS
  * `CallMinimisedPill` — once it has been collapsed. A call with more than one
  * other person fills the stage with `GroupCallGrid`; a one-to-one video call
- * gets a placeholder frame, because `remoteVideo` is a `ReactNode` slot and
- * the screen does not draw the tracks yet.
+ * receives the adapter's live video track through Bloom's `remoteVideo` slot.
  *
  * **This route is the app's ONE dialler.** Opening it with no call in progress
  * places one; nothing else in the app calls `start`. Every entry point — the
@@ -42,13 +42,18 @@ import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/l
  * better than a button that moves and changes nothing, which is what they were.
  */
 export default function CallRoute() {
-  const { id, mode } = useLocalSearchParams<{ id: string; mode?: 'voice' | 'video' }>();
+  const { id, mode, incomingCallId } = useLocalSearchParams<{
+    id: string;
+    mode?: 'voice' | 'video';
+    incomingCallId?: string;
+  }>();
   const { t } = useTranslation();
   const router = useRouter();
   const theme = useTheme();
   const { user } = useOxy();
   const conversation = useConversation(id ?? '');
   const session = useCallSession();
+  const media = useCallMedia();
 
   /** The call itself is the SDK's; this screen only asks. */
   const calls = useCallActions();
@@ -92,10 +97,11 @@ export default function CallRoute() {
    */
   const placed = useRef(false);
   useEffect(() => {
-    if (session !== null || peerAccountIds.length === 0 || !id || placed.current) return;
+    if (incomingCallId || session !== null || peerAccountIds.length === 0 || !id || placed.current)
+      return;
     placed.current = true;
     void calls.start(id, mode === 'video' ? 'video' : 'voice').catch(reportCallError);
-  }, [calls, id, mode, peerAccountIds, session]);
+  }, [calls, id, mode, incomingCallId, peerAccountIds, session]);
 
   const duration = useCallDuration(session);
   const someone = t('calls.someone');
@@ -114,19 +120,32 @@ export default function CallRoute() {
   // than none: it moves, so it reads as information.
   const participants = useMemo<GroupCallParticipant[]>(
     () => [
-      ...(session?.peers ?? []).map((peer) => ({
-        id: peer.accountId,
-        name: person(peer.accountId)?.displayName ?? someone,
-        avatar: person(peer.accountId)?.avatar,
-      })),
+      ...media.remote.map(({ id: instanceId, stream }) => {
+        const accountId = session?.participants.find((p) => p.instanceId === instanceId)?.accountId;
+        const name = accountId ? (person(accountId)?.displayName ?? someone) : someone;
+        return {
+          id: instanceId,
+          name,
+          avatar: accountId ? person(accountId)?.avatar : undefined,
+          video: stream
+            .getVideoTracks()
+            .some((track) => track.readyState === 'live' && !track.muted) ? (
+            <CallVideo stream={stream} label={name} />
+          ) : undefined,
+        };
+      }),
       {
         id: user?.id ?? 'me',
         name: t('calls.you'),
         label: t('calls.you'),
         muted: session?.muted,
+        video:
+          session?.videoOn && media.local ? (
+            <CallVideo stream={media.local} mirror label={t('calls.yourCamera')} />
+          ) : undefined,
       },
     ],
-    [person, session?.muted, session?.peers, someone, t, user?.id],
+    [media, person, session?.muted, session?.participants, session?.videoOn, someone, t, user?.id],
   );
 
   // No call, and nobody to call: an id that is this account, or a conversation
@@ -146,14 +165,16 @@ export default function CallRoute() {
   if (!session) {
     return (
       <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <Muted style={styles.centred}>{t('calls.starting')}</Muted>
+        <Muted style={styles.centred}>
+          {t(incomingCallId ? 'calls.status.ended' : 'calls.starting')}
+        </Muted>
       </View>
     );
   }
 
   // What the stage cannot do — the video is not drawn here yet. It used to say
   // "nothing sent", which stopped being true the moment the media landed.
-  const stageNotice = t('calls.stageNotice');
+  const stageNotice = t('calls.waitingVideo');
 
   const hangUp = () => {
     end();
@@ -183,7 +204,7 @@ export default function CallRoute() {
     );
   }
 
-  const group = session.peers.length > 1;
+  const group = session.group;
   const stage = group ? (
     <GroupCallGrid
       participants={participants}
@@ -195,8 +216,12 @@ export default function CallRoute() {
       formatOverflow={(count) => t('calls.more', { count })}
       formatMuted={(name) => t('calls.mutedPerson', { name })}
     />
+  ) : media.remote[0]?.stream
+      .getVideoTracks()
+      .some((track) => track.readyState === 'live' && !track.muted) ? (
+    <CallVideo stream={media.remote[0].stream} label={title} />
   ) : (
-    <StagePlaceholder label={stageNotice} />
+    <Muted>{stageNotice}</Muted>
   );
 
   /**
@@ -216,18 +241,20 @@ export default function CallRoute() {
       // Only where the stage is: a voice call has no video to be missing, so
       // saying so under somebody's name would be answering a question nobody
       // asked.
-      subtitle={stageMode === 'video' ? stageNotice : undefined}
+      subtitle={undefined}
       avatar={avatar}
       status={session.status}
       duration={duration === '' ? undefined : duration}
       minimised={session.minimised}
       remoteVideo={stageMode === 'video' ? stage : undefined}
       localVideo={
-        session.videoOn ? <StagePlaceholder compact label={t('calls.yourCamera')} /> : undefined
+        !group && session.videoOn && media.local ? (
+          <CallVideo stream={media.local} mirror label={t('calls.yourCamera')} />
+        ) : undefined
       }
       localVideoCorner={session.pipCorner}
       onMoveLocal={movePip}
-      participantCount={group ? session.peers.length + 1 : undefined}
+      participantCount={group ? participants.length : undefined}
       onOpenParticipants={
         group ? () => router.push(`/c/${session.conversationId}/members`) : undefined
       }
@@ -244,8 +271,8 @@ export default function CallRoute() {
         muted: session.muted,
         onMutedChange: setMuted,
         videoOn: session.videoOn,
-        onVideoChange: setVideo,
-        onAddParticipant: () => router.push(`/new?addTo=${session.conversationId}`),
+        onVideoChange: session.mode === 'video' ? setVideo : undefined,
+
         onEndCall: hangUp,
         showLabels: true,
         labels: {

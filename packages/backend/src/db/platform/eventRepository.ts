@@ -32,6 +32,7 @@
  * explicitly.
  */
 
+import { findManagedTeam } from './managedTeamRepository';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { SERVER_SENDER_ID, type ControlEvent, type SubmitEventRequest } from '@allo/shared-types';
@@ -39,6 +40,7 @@ import { AlloHttpError, forbidden, notFound, validationFailed } from '../../util
 import { getDb, type AlloDatabaseOrTransaction, type AlloTransaction } from '../index';
 import { requireTransaction } from '../moderation/transactionGuard';
 import { conversationEvents, type EventKind } from '../schema/events';
+import { assertContactAllowed } from '../social/blockRepository';
 import { retainBlobs } from './blobRepository';
 import {
   findAddableInstances,
@@ -160,10 +162,52 @@ export async function appendClientEvent(
     };
   }
 
+  // MLS maintenance remains available so existing devices can recover history.
+  // Every application kind (including media, edits and receipts) is opaque here.
+  if (conversation.kind === 'dm' && request.kind !== 'mls_commit') {
+    const members = await listMembers(conversationId, tx);
+    await assertContactAllowed(
+      tx,
+      sender.accountId,
+      members.map((m) => m.accountId),
+    );
+  }
+
   const leaves = await listLeaves(conversationId, tx);
   const senderLeaf = leaves.find((leaf) => leaf.instanceId === sender.instanceId);
   // Who may append depends on how a commit was authored (module comment);
   // everything that is not an external commit needs an active leaf.
+  const managedTeam = await findManagedTeam(conversationId, tx);
+  if (managedTeam) {
+    if (request.kind !== 'mls_commit' && managedTeam.frozen)
+      throw new AlloHttpError('unavailable', 'Team membership is being confirmed', {
+        teamPending: true,
+      });
+    if (request.kind === 'mls_commit' && request.commit) {
+      const changes = request.commit;
+      const allowed = new Set(managedTeam.targetAccountIds);
+      if (
+        changes.addedLeaves.some((leaf) => !allowed.has(leaf.accountId)) ||
+        changes.addedAccountIds?.some((id) => !allowed.has(id)) ||
+        changes.removedAccountIds?.some((id) => allowed.has(id))
+      )
+        throw forbidden('Managed team changes must match Homiio');
+      const currentAccounts = new Set(
+        (await listMembers(conversationId, tx))
+          .filter((m) => m.state === 'joined')
+          .map((m) => m.accountId),
+      );
+      const accountChange =
+        changes.addedAccountIds?.length ||
+        changes.removedAccountIds?.length ||
+        changes.addedLeaves.some((leaf) => !currentAccounts.has(leaf.accountId));
+      if (
+        accountChange &&
+        (!managedTeam.frozen || sender.accountId !== conversation.createdByAccountId)
+      )
+        throw forbidden('Managed team membership requires a pending creator operation');
+    }
+  }
   const commitKind = request.kind === 'mls_commit' ? (request.commit?.kind ?? 'member') : 'member';
   if (commitKind === 'external') {
     // The sender has no leaf yet; its account's `joined` row is the admission.
@@ -238,6 +282,29 @@ export async function appendClientEvent(
   // server knows who signed the request, so WHO is checked here and is not
   // trusted to the schema either: a joiner naming any other instance — even
   // another of its own account — is refused.
+  const addedAccounts = [...new Set(commit.addedAccountIds ?? [])];
+  const removedAccounts = [...new Set(commit.removedAccountIds ?? [])];
+  if (addedAccounts.some((id) => removedAccounts.includes(id)))
+    throw validationFailed('an account cannot be added and removed together');
+  if (commit.kind !== 'member' && (addedAccounts.length || removedAccounts.length))
+    throw forbidden('a self join cannot change account membership');
+  if (conversation.kind === 'dm' && addedAccounts.some((id) => !joined.has(id)))
+    throw forbidden('a dm cannot gain a third account');
+  for (const id of removedAccounts) {
+    if (id !== sender.accountId && member.role !== 'owner' && member.role !== 'admin')
+      throw forbidden('only an owner or admin may remove another account');
+    if (
+      leaves.some(
+        (leaf) =>
+          leaf.accountId === id &&
+          leaf.state !== 'removed' &&
+          !commit.removedLeaves.includes(leaf.instanceId),
+      )
+    )
+      throw validationFailed('removing an account must remove all its leaves');
+    if (commit.addedLeaves.some((leaf) => leaf.accountId === id))
+      throw validationFailed('a removed account cannot receive a new leaf');
+  }
   const selfJoin = commit.kind === 'external' || commit.kind === 'resync';
   if (selfJoin) {
     const [added] = commit.addedLeaves;
@@ -298,6 +365,15 @@ export async function appendClientEvent(
       throw forbidden('a dm cannot gain a third account');
     }
   }
+
+  // Adding a device of an existing member is maintenance, not an invitation.
+  // A new or re-added account must not be invited across a block.
+  await assertContactAllowed(tx, sender.accountId, [
+    ...commit.addedLeaves
+      .filter((leaf) => !joined.has(leaf.accountId))
+      .map((leaf) => leaf.accountId),
+    ...addedAccounts.filter((id) => !joined.has(id)),
+  ]);
 
   // Removed leaves: present, and either the sender's own account or removed by an owner/admin.
   // A resync's removed leaf is the sender's own, replaced by the upsert below
@@ -375,6 +451,20 @@ export async function appendClientEvent(
       tx,
     );
   }
+  for (const accountId of addedAccounts) {
+    await upsertJoinedMember(
+      { conversationId, accountId, role: 'member', addedByAccountId: sender.accountId },
+      tx,
+    );
+  }
+  for (const accountId of removedAccounts) {
+    await setMemberState(
+      conversationId,
+      accountId,
+      accountId === sender.accountId ? 'left' : 'removed',
+      tx,
+    );
+  }
   for (const leaf of removedLeaves) {
     await markLeafRemoved(conversationId, leaf.instanceId, newEpoch, tx);
   }
@@ -387,7 +477,11 @@ export async function appendClientEvent(
   const remaining = await listLeaves(conversationId, tx);
   const accountsStillIn = new Set(activeLeaves(remaining).map((leaf) => leaf.accountId));
   for (const leaf of removedLeaves) {
-    if (accountsStillIn.has(leaf.accountId)) continue;
+    if (
+      accountsStillIn.has(leaf.accountId) ||
+      managedTeam?.targetAccountIds.includes(leaf.accountId)
+    )
+      continue;
     await setMemberState(
       conversationId,
       leaf.accountId,

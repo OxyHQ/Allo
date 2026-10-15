@@ -353,13 +353,18 @@ describe('a device that holds no leaf in the conversation yet', () => {
   it('says it is being added, and that another device has to be online, when the server holds no GroupInfo', async () => {
     const server = createFakeAlloServer();
     server.keepGroupInfo = false; // every conversation as if its commits predated the field
-    const alice = makeClient(server, ALICE, 'Alice web', 'web');
+    const addMember = gate();
+    let holdMemberAdd = false;
+    const alice = makeClient(server, ALICE, 'Alice web', 'web', undefined, async (method, url) => {
+      if (holdMemberAdd && method === 'POST' && url.endsWith('/events')) await addMember.wait;
+    });
     started.push(alice.client);
     await alice.client.start();
     await waitUntil(() => alice.client.instance.state() === 'active');
     const conversation = await alice.client.conversations.createDirect(BOB);
     expect(conversation.unreachableMemberAccountIds).toEqual([BOB]);
     expect(server.groupInfos.size).toBe(0);
+    holdMemberAdd = true;
 
     const bob = makeClient(server, BOB, 'Bob iOS', 'ios');
     started.push(bob.client);
@@ -371,7 +376,9 @@ describe('a device that holds no leaf in the conversation yet', () => {
     expect(notice(renderer)).toEqual({ text: WAITING, busy: false, error: false });
     expect(bob.client.conversations.get(conversation.id)?.joinState).toBe('waiting_for_member');
 
-    // Alice is online: the server nudged her, her elector adds him, and the notice goes.
+    // Let Alice's Add arrive only after the waiting state has been observed.
+    // Otherwise a fast join can replace that transient notice before the assertion.
+    addMember.open();
     await waitUntil(() => bob.client.conversations.get(conversation.id)?.joined === true, 60_000);
     await waitUntil(() => notice(renderer) === null, 10_000);
     expect(commitsBy(server, conversation.id, alice.client.instanceId)).toHaveLength(1);

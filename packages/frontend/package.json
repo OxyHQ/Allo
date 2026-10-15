@@ -31,6 +31,13 @@
       "exclude": [
         "typescript"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-notifications"
+        ]
+      }
     }
   },
   "dependencies": {
@@ -45,9 +52,9 @@
     "@babel/plugin-transform-export-namespace-from": "^7.27.1",
     "@bitdrift/react-native": "^0.12.12",
     "@config-plugins/react-native-webrtc": "^15.0.2",
-    "@livekit/react-native": "^2.12.0",
+    "@livekit/react-native": "3.0.0",
     "@livekit/react-native-expo-plugin": "^1.0.2",
-    "@livekit/react-native-webrtc": "^144.1.2",
+    "@livekit/react-native-webrtc": "144.2.0",
     "@lottiefiles/dotlottie-react": "^0.19.16",
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/bloom": "^10.7.0",
@@ -108,7 +115,11 @@
     "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "~0.21.0",
     "tailwindcss": "4.3.2",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@oxy.so/homiio-sdk": "0.1.0",
+    "@oxy.so/homiio-contracts": "0.1.0",
+    "@oxy.so/allo-contracts": "workspace:*",
+    "expo-modules-core": "~57.0.5"
   },
   "devDependencies": {
     "@babel/plugin-transform-modules-commonjs": "^7.28.6",
