@@ -41,7 +41,7 @@
     }
   },
   "dependencies": {
-    "@alia.onl/sdk": "^15.4.0",
+    "@alia.onl/sdk": "^15.6.0",
     "@allo/core": "workspace:*",
     "@allo/react": "workspace:*",
     "@allo/shared-types": "workspace:*",
