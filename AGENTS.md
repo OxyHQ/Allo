@@ -440,8 +440,9 @@ instance the fake server is made to list as an unapproved active root.
   (`allowTags`, `hide*Counts`); Allo names none of them. **`showOnlineStatus`
   is the one setting the platform acts on**, and a block now cuts presence in
   both directions (ADR 0002); `hiddenWords` and `Restrict` are still written
-  and never read, and a block still stops no message, which is why those
-  screens say so rather than implying protection.
+  and never read, and blocks stop new direct messages and conversation invitations in both
+  directions. They preserve history and existing shared-group membership and messages.
+  Pair transaction locks serialize block changes with sends and invitations.
 - **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
   dotted key per entry at the top level, not nested objects.
 

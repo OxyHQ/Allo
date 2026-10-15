@@ -482,6 +482,15 @@ export class FakeAlloServer implements SocketHost {
       const conv = this.conversations.get(p.conversationId);
       if (!conv) return;
       if (conv.leaves.get(socket.instanceId)?.state !== 'active') return;
+      if (
+        conv.kind === 'dm' &&
+        [...conv.members.keys()].some(
+          (other) =>
+            this.blocks.has(`${inst.accountId}:${other}`) ||
+            this.blocks.has(`${other}:${inst.accountId}`),
+        )
+      )
+        return;
       for (const [instanceId, leaf] of conv.leaves) {
         if (leaf.state === 'active' && instanceId !== socket.instanceId)
           this.emitTo(instanceId, 'typing', { conversationId: conv.id, ciphertext: p.ciphertext });
@@ -1407,6 +1416,17 @@ export class FakeAlloServer implements SocketHost {
     };
   }
 
+  private assertContactAllowed(accountId: string, others: readonly string[]): void {
+    if (
+      others.some(
+        (other) =>
+          this.blocks.has(`${accountId}:${other}`) || this.blocks.has(`${other}:${accountId}`),
+      )
+    ) {
+      throw new HttpError(403, 'forbidden', 'Contact is unavailable');
+    }
+  }
+
   private createConversation(me: FakeInstance, body: Uint8Array): Response {
     const req = this.parse(createConversationRequestSchema, body);
     return this.withIdempotency(me.id, req.idempotencyKey, body, () => {
@@ -1423,6 +1443,10 @@ export class FakeAlloServer implements SocketHost {
       }
       if ([...this.conversations.values()].some((c) => c.mlsGroupId === req.mlsGroupId))
         throw new HttpError(409, 'idempotency_conflict', 'group id in use');
+      this.assertContactAllowed(me.accountId, [
+        ...req.memberAccountIds,
+        ...(req.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+      ]);
       const now = this.iso();
       const conv: FakeConversation = {
         id: uuidV7(this.now()),
@@ -1519,6 +1543,9 @@ export class FakeAlloServer implements SocketHost {
       throw new HttpError(403, 'forbidden', 'sender holds no active leaf');
     if (req.epoch !== conv.epoch)
       throw new HttpError(409, 'epoch_conflict', 'stale epoch', { currentEpoch: conv.epoch });
+    if (conv.kind === 'dm' && req.kind !== 'mls_commit') {
+      this.assertContactAllowed(sender.accountId, [...conv.members.keys()]);
+    }
     const activeOthers = [...conv.leaves.entries()]
       .filter(([id, l]) => l.state === 'active' && id !== sender.id)
       .map(([id]) => id);
@@ -1560,6 +1587,12 @@ export class FakeAlloServer implements SocketHost {
         );
       }
     }
+    this.assertContactAllowed(
+      sender.accountId,
+      commit.addedLeaves
+        .filter((leaf) => conv.members.get(leaf.accountId)?.state !== 'joined')
+        .map((leaf) => leaf.accountId),
+    );
     for (const added of commit.addedLeaves) {
       const inst = this.instances.get(added.instanceId);
       if (!inst || inst.status !== 'active' || inst.accountId !== added.accountId)

@@ -35,6 +35,7 @@ import {
 } from '../../db/platform/conversationRepository';
 import { appendClientEvent, appendControlEvent } from '../../db/platform/eventRepository';
 import { findGroupInfo } from '../../db/platform/groupInfoRepository';
+import { assertContactAllowed } from '../../db/social/blockRepository';
 import { getRealtime } from '../../runtime/realtime';
 import { AlloHttpError, notFound, validationFailed } from '../../utils/httpErrors';
 import { toConversationSummary } from './wire';
@@ -147,6 +148,10 @@ export async function createConversation(
         },
         tx,
       );
+      await assertContactAllowed(tx, caller.accountId, [
+        ...request.memberAccountIds,
+        ...(request.initialCommit?.commit?.addedLeaves.map((leaf) => leaf.accountId) ?? []),
+      ]);
       await upsertJoinedMember(
         {
           conversationId: row.id,
