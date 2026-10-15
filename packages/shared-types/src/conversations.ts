@@ -81,6 +81,7 @@ export const createConversationRequestSchema = z
     memberAccountIds: z.array(accountIdSchema).max(MAX_GROUP_MEMBERS),
     idempotencyKey: idempotencyKeySchema,
     initialCommit: submitEventRequestSchema.optional(),
+    teamOperationId: z.string().min(1).max(200).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.kind === 'dm' && v.memberAccountIds.length !== 1) {

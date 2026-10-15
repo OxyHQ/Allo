@@ -31,9 +31,12 @@
  *   packages for their trusted active instances and commits the Add. Once
  *   the account holds one leaf, its own elector adds its further devices.
  */
+import { TEAM_CAPABILITY_HEADER, teamSnapshotSchema } from '@allo/contracts';
+import type { TeamOperationAccess } from '../client';
 import {
   conversationResponseSchema,
   createConversationResponseSchema,
+  createConversationRequestSchema,
   groupInfoResponseSchema,
   listConversationsResponseSchema,
   resetConversationResponseSchema,
@@ -46,7 +49,12 @@ import type { Context } from '../context';
 import type { GroupState } from '../crypto/engine';
 import { EpochConflictError, InvalidStateError, NotFoundError, TransportError } from '../errors';
 import { Model } from '../storage/model';
-import type { ConversationRecord, EventRecord } from '../storage/records';
+import {
+  groupCreationRecordSchema,
+  type ConversationRecord,
+  type EventRecord,
+} from '../storage/records';
+import { Mutex, sleep } from '../util/async';
 import type { ConversationView, TimelineContent } from '../types';
 import { base64Decode, base64Encode, randomBytes } from '../util/bytes';
 import { uuidV7 } from '../util/ids';
@@ -85,6 +93,7 @@ const LAST_MESSAGE_KINDS = new Set<TimelineContent['kind']>([
 ]);
 
 export class ConversationsService {
+  private readonly creationMutex = new Mutex();
   private views = new Map<string, ConversationView>();
   private listCache: ConversationView[] | null = null;
   private reconciling = false;
@@ -250,9 +259,104 @@ export class ConversationsService {
     return this.create('group', others);
   }
 
-  private async create(kind: 'dm' | 'group', others: string[]): Promise<ConversationView> {
+  /** Stable per-device operation key; retries (including after restart) cannot create a second group. */
+  createGroupOnce(
+    operationKey: string,
+    memberAccountIds: string[],
+    access?: TeamOperationAccess,
+  ): Promise<ConversationView> {
+    if (!operationKey || operationKey.length > 200 || /[/]/.test(operationKey))
+      throw new InvalidStateError('invalid group creation operation key');
+    const others = [...new Set(memberAccountIds)].filter((a) => a !== this.ctx.accountId).sort();
+    return this.creationMutex.run(() => this.create('group', others, operationKey, access));
+  }
+
+  private async create(
+    kind: 'dm' | 'group',
+    others: string[],
+    operationKey?: string,
+    access?: TeamOperationAccess,
+  ): Promise<ConversationView> {
     const { ctx } = this;
     ctx.instance.assertActive();
+    const saved = operationKey
+      ? await ctx.store.getJson('groupCreation', operationKey, groupCreationRecordSchema)
+      : undefined;
+    if (
+      saved &&
+      JSON.stringify([...saved.request.memberAccountIds].sort()) !==
+        JSON.stringify([...others].sort())
+    )
+      throw new InvalidStateError(
+        'group creation operation was already used with different members',
+      );
+    if (saved?.conversationId) {
+      const { conversation } = await ctx.http.request({
+        method: 'GET',
+        path: `/v1/conversations/${saved.conversationId}`,
+        schema: conversationResponseSchema,
+        signer: ctx.signer,
+      });
+      await this.storeSummary(conversation, null);
+      ctx.sync.request();
+      return this.get(conversation.id)!;
+    }
+    const prepared = saved ?? (await this.prepareCreation(kind, others, access?.operationId));
+    if (prepared.request.teamOperationId !== access?.operationId)
+      throw new InvalidStateError('team operation does not match creation');
+    if (operationKey && !saved) await ctx.store.putJson('groupCreation', operationKey, prepared);
+    const next = ctx.engine.deserializeGroup(base64Decode(prepared.nextState!));
+    const res = await ctx.http.request({
+      method: 'POST',
+      path: '/v1/conversations',
+      body: prepared.request,
+      headers: access ? this.teamHeaders(access) : undefined,
+      schema: createConversationResponseSchema,
+      signer: ctx.signer,
+    });
+    const summary = res.conversation;
+    if (!res.created && (!operationKey || summary.mlsGroupId !== prepared.request.mlsGroupId)) {
+      // Another end created it first: our group is discarded; we are (or will be) added as a leaf by the elector of our account.
+      ctx.log.info?.('conversation already existed', { conversationId: summary.id });
+      await ctx.mutex.run(async () => {
+        if (!ctx.model.conversations.get(summary.id)) await this.storeSummary(summary, null);
+      });
+      if (operationKey)
+        await ctx.store.putJson('groupCreation', operationKey, {
+          ...prepared,
+          nextState: null,
+          conversationId: summary.id,
+        });
+      ctx.sync.request();
+      return this.get(summary.id)!;
+    }
+    await ctx.mutex.run(async () => {
+      const batch = ctx.store.batch();
+      // Sync may have recovered an ambiguous create before the HTTP retry. Never rewind its epoch.
+      const live = ctx.groups.get(summary.id);
+      const effective = live ?? next;
+      ctx.groups.stage(batch, summary.id, effective);
+      if (operationKey)
+        batch.putJson('groupCreation', operationKey, {
+          ...prepared,
+          nextState: null,
+          conversationId: summary.id,
+        });
+      const record = this.recordFromSummary(summary, ctx.engine.epochOf(effective));
+      batch.putJson('conversation', record.id, record);
+      await ctx.store.commit(batch);
+      ctx.groups.commitInMemory(summary.id, effective);
+      ctx.model.conversations.set(record.id, record);
+    });
+    if (prepared.request.initialCommit) this.groupInfoChecked.add(summary.id);
+    else if (summary.epoch === 0) await this.publishGroupInfo(summary.id, next);
+    ctx.sync.request();
+    this.invalidate(summary.id);
+    return this.get(summary.id)!;
+  }
+
+  private async prepareCreation(kind: 'dm' | 'group', others: string[], teamOperationId?: string) {
+    const { ctx } = this;
     // A member with no trusted active instance (never installed Allo, or every device gone) is still a member:
     // the server keeps the row, the group starts with whatever leaves exist (possibly only this one), and the
     // elector rule adds the account's first device when it appears. `initialCommit` only when there is a leaf to add.
@@ -292,53 +396,82 @@ export class ConversationsService {
         },
       };
     }
-    const res = await ctx.http.request({
-      method: 'POST',
-      path: '/v1/conversations',
-      body: {
+    return {
+      request: createConversationRequestSchema.parse({
+        teamOperationId,
         kind,
         mlsGroupId: base64Encode(groupId),
         memberAccountIds: others,
         idempotencyKey: uuidV7(ctx.now()),
         ...(initialCommit ? { initialCommit } : {}),
-      },
-      schema: createConversationResponseSchema,
-      signer: ctx.signer,
+      }),
+      nextState: base64Encode(ctx.engine.serializeGroup(next)),
+      conversationId: null,
+    };
+  }
+
+  private teamHeaders(access: TeamOperationAccess): Record<string, string> {
+    return {
+      [TEAM_CAPABILITY_HEADER]: access.teamReference,
+      'x-homiio-team-operation': access.operationCapability,
+    };
+  }
+  async prepareTeam(access: TeamOperationAccess) {
+    return this.ctx.http.request({
+      method: 'POST',
+      path: '/v1/teams/prepare',
+      body: { operationId: access.operationId },
+      headers: this.teamHeaders(access),
+      schema: teamSnapshotSchema,
+      signer: this.ctx.signer,
     });
-    const summary = res.conversation;
-    if (!res.created) {
-      // Another end created it first: our group is discarded; we are (or will be) added as a leaf by the elector of our account.
-      ctx.log.info?.('conversation already existed', { conversationId: summary.id });
-      await ctx.mutex.run(async () => {
-        if (!ctx.model.conversations.get(summary.id)) await this.storeSummary(summary, null);
-      });
-      ctx.sync.request();
-      return this.get(summary.id)!;
+  }
+  async finishTeam(access: TeamOperationAccess) {
+    return this.ctx.http.request({
+      method: 'POST',
+      path: '/v1/teams/finish',
+      body: { operationId: access.operationId },
+      headers: this.teamHeaders(access),
+      schema: teamSnapshotSchema,
+      signer: this.ctx.signer,
+    });
+  }
+
+  /** Resolves only after Allo confirms the exact account set, never merely after queuing a commit. */
+  async confirmMembers(
+    conversationId: string,
+    memberAccountIds: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ConversationSummary> {
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), 30_000);
+    const requestSignal = signal ?? timeout.signal;
+    const expected = [...new Set(memberAccountIds)].sort().join('\0');
+    try {
+      for (;;) {
+        if (requestSignal.aborted) throw new Error('Team membership confirmation aborted');
+        const { conversation } = await this.ctx.http.request({
+          method: 'GET',
+          path: `/v1/conversations/${conversationId}`,
+          schema: conversationResponseSchema,
+          signer: this.ctx.signer,
+          signal: requestSignal,
+        });
+        if (
+          conversation.members
+            .filter((m) => m.state === 'joined')
+            .map((m) => m.accountId)
+            .sort()
+            .join('\0') === expected
+        ) {
+          await this.storeSummary(conversation, null);
+          return conversation;
+        }
+        await sleep(50);
+      }
+    } finally {
+      clearTimeout(timer);
     }
-    await ctx.mutex.run(async () => {
-      const batch = ctx.store.batch();
-      ctx.groups.stage(batch, summary.id, next);
-      const record = this.recordFromSummary(summary, ctx.engine.epochOf(next));
-      batch.putJson('conversation', record.id, record);
-      await ctx.store.commit(batch);
-      ctx.groups.commitInMemory(summary.id, next);
-      ctx.model.conversations.set(record.id, record);
-    });
-    if (claimed.missing.length)
-      ctx.log.info?.('instances with no key packages were not added', {
-        count: claimed.missing.length,
-      });
-    // The initial commit carried the GroupInfo of epoch 1. Without one the group sits at epoch 0 with no commit
-    // to carry it, so the creator publishes it now: the member's first device, or its own next one, joins from it.
-    if (initialCommit) this.groupInfoChecked.add(summary.id);
-    else await this.publishGroupInfo(summary.id, next);
-    // The accounts just looked up and found without a device need not be asked again by the next reconcile.
-    const reached = new Set(targets.map((t) => t.accountId));
-    for (const accountId of others)
-      if (!reached.has(accountId))
-        this.reachNextAt.set(`${summary.id}/${accountId}`, ctx.now() + REACH_THROTTLE_MS);
-    this.invalidate(summary.id);
-    return this.get(summary.id)!;
   }
 
   private recordFromSummary(
@@ -407,11 +540,7 @@ export class ConversationsService {
     const targets = (await this.trustedLeafTargets([accountId], present)).filter(
       (t) => !present.has(t.instanceId),
     );
-    if (targets.length === 0)
-      throw new InvalidStateError('no trusted instance of that account can be added');
     const claimed = await ctx.instance.claimKeyPackages(targets.map((t) => t.instanceId));
-    if (claimed.keyPackages.length === 0)
-      throw new InvalidStateError('that account has no key packages available');
     await ctx.outbox.enqueueCommit(conversationId, {
       adds: claimed.keyPackages.map((k) => ({
         instanceId: k.instanceId,
@@ -419,6 +548,7 @@ export class ConversationsService {
         keyPackage: k.data,
       })),
       removes: [],
+      addedAccountIds: [accountId],
       reason: 'add_member',
     });
   }
@@ -428,10 +558,12 @@ export class ConversationsService {
     ctx.instance.assertActive();
     const state = this.requireState(conversationId);
     const leaves = ctx.engine.membersOf(state).filter((m) => m.accountId === accountId);
-    if (leaves.length === 0) throw new NotFoundError(`member ${accountId}`);
+    const record = ctx.model.conversations.get(conversationId);
+    if (!record?.members.some((m) => m.accountId === accountId && m.state === 'joined')) return;
     await ctx.outbox.enqueueCommit(conversationId, {
       adds: [],
       removes: leaves.map((m) => m.instanceId),
+      removedAccountIds: [accountId],
       reason: 'remove_member',
     });
   }

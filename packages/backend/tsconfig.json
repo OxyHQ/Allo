@@ -14,13 +14,18 @@
     "composite": true,
     "paths": {
       "@allo/shared-types": ["../shared-types/src"],
-      "@allo/shared-types/*": ["../shared-types/src/*"]
+      "@allo/shared-types/*": ["../shared-types/src/*"],
+      "@allo/contracts": ["../contracts/src"],
+      "@allo/contracts/dist/*": ["../contracts/src/*"]
     }
   },
   "include": ["**/*.ts", "package.json"],
   "references": [
     {
       "path": "../shared-types"
+    },
+    {
+      "path": "../contracts"
     }
   ]
 }

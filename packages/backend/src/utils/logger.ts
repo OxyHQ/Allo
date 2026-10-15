@@ -57,6 +57,8 @@ const PRESERVED_KEYS = new Set([
 
 const SENSITIVE_EXACT_KEYS = new Set([
   'authorization',
+  'xalloteamcapability',
+  'xhomiioteamoperation',
   'body',
   'challenge',
   'clientip',
@@ -279,9 +281,7 @@ export function sanitizeLogValue(value: unknown): unknown {
   }
 }
 
-interface LoggerFunction {
-  (message: string, ...args: unknown[]): void;
-}
+type LoggerFunction = (message: string, ...args: unknown[]) => void;
 
 interface Logger {
   info: LoggerFunction;

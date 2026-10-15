@@ -26,9 +26,12 @@
       "name": "@allo/backend",
       "version": "1.0.0",
       "dependencies": {
+        "@allo/contracts": "workspace:*",
         "@allo/shared-types": "workspace:*",
         "@crowdsource.you/contracts": "1.1.0",
         "@crowdsource.you/core": "3.0.0",
+        "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
+        "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
         "@oxy.so/contracts": "4.12.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/db": "^1.1.0",
@@ -46,6 +49,7 @@
       },
       "devDependencies": {
         "@allo/core": "workspace:*",
+        "@allo/sdk": "workspace:*",
         "@types/express": "^4.17.21",
         "@types/supertest": "^6.0.3",
         "bun-types": "1.4.3",
@@ -54,10 +58,21 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/contracts": {
+      "name": "@allo/contracts",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/core": {
       "name": "@allo/core",
       "version": "0.1.0",
       "dependencies": {
+        "@allo/contracts": "workspace:*",
         "@allo/shared-types": "workspace:*",
         "@hpke/common": "1.10.1",
         "@hpke/core": "1.9.0",
@@ -81,6 +96,7 @@
       "version": "2.0.0",
       "dependencies": {
         "@alia.onl/sdk": "^13.2.0",
+        "@allo/contracts": "workspace:*",
         "@allo/core": "workspace:*",
         "@allo/react": "workspace:*",
         "@allo/shared-types": "workspace:*",
@@ -91,6 +107,8 @@
         "@babel/plugin-transform-export-namespace-from": "^7.27.1",
         "@bitdrift/react-native": "^0.12.12",
         "@config-plugins/react-native-webrtc": "^15.0.2",
+        "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
+        "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
         "@livekit/react-native": "^2.12.0",
         "@livekit/react-native-expo-plugin": "^1.0.2",
         "@livekit/react-native-webrtc": "^144.1.2",
@@ -193,6 +211,16 @@
         "react": ">=18",
       },
     },
+    "packages/sdk": {
+      "name": "@allo/sdk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@allo/contracts": "0.1.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared-types": {
       "name": "@allo/shared-types",
       "version": "1.0.0",
@@ -210,6 +238,7 @@
     "expo@57.0.6": "patches/expo@57.0.6.patch",
   },
   "overrides": {
+    "@homiio/contracts": "file:./vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
     "@isaacs/brace-expansion": "^5.0.1",
     "@oxy.so/bloom": "10.4.0",
     "@oxy.so/contracts": "4.12.0",
@@ -230,11 +259,15 @@
 
     "@allo/backend": ["@allo/backend@workspace:packages/backend"],
 
+    "@allo/contracts": ["@allo/contracts@workspace:packages/contracts"],
+
     "@allo/core": ["@allo/core@workspace:packages/core"],
 
     "@allo/frontend": ["@allo/frontend@workspace:packages/frontend"],
 
     "@allo/react": ["@allo/react@workspace:packages/react"],
+
+    "@allo/sdk": ["@allo/sdk@workspace:packages/sdk"],
 
     "@allo/shared-types": ["@allo/shared-types@workspace:packages/shared-types"],
 
@@ -653,6 +686,10 @@
     "@grpc/grpc-js": ["@grpc/grpc-js@1.14.0", "", { "dependencies": { "@grpc/proto-loader": "^0.8.0", "@js-sdsl/ordered-map": "^4.4.2" } }, "sha512-N8Jx6PaYzcTRNzirReJCtADVoq4z7+1KQ4E70jTg/koQiMoUSN1kbNjPOqpPbhMFhfU1/l7ixspPl8dNY+FoUg=="],
 
     "@grpc/proto-loader": ["@grpc/proto-loader@0.8.0", "", { "dependencies": { "lodash.camelcase": "^4.3.0", "long": "^5.0.0", "protobufjs": "^7.5.3", "yargs": "^17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, "sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ=="],
+
+    "@homiio/contracts": ["@homiio/contracts@./vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz", { "dependencies": { "zod": "^4.3.6" } }, "sha512-0lJTX/enkUEHI82ptKg7ne5OMDqmpsP74+0hGdupfcsW6ypTH4x0RKCUaedROMtAdCNx5hz25hIWqQZogzGF4Q=="],
+
+    "@homiio/sdk": ["@homiio/sdk@../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz", { "dependencies": { "@homiio/contracts": "0.1.0" } }, "sha512-LJSLI6g7LkvxjoFrGXn53WO2KaZ3zd4owWFDShxmzU7SEt+zPo/AxDe5MedWzYj+faoDHPKiMDrNxjQT0NGd+w=="],
 
     "@hpke/common": ["@hpke/common@1.10.1", "", {}, "sha512-moJwhmtLtuxiUzzNp1jpfBfx8yefKoO9D/RCR9dmwrnc7qjJqId1rEtQz+lSlU5cabX8daToMSx/7HayXOiaFw=="],
 

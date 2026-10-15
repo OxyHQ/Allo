@@ -388,3 +388,5 @@ in `roadmap.md`; the backend does not yet check that an instance's `appId`
 matches a conversation's, and there is no route by which Mention could be
 granted a view of an Allo conversation. Until those exist, Mention's chat is
 an independent app space that happens to share the server and the SDK.
+
+Homiio team operations and retry guarantees are described in [Managed teams](./managed-teams.md).

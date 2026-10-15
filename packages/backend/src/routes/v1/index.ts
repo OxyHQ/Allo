@@ -11,6 +11,7 @@
  * ahead of the JSON parser, so `app.ts` mounts it itself.
  */
 
+import { createManagedTeamRoutes } from './managedTeams';
 import { Router, type RequestHandler } from 'express';
 import { createInstanceRoutes } from './instances';
 import { createKeyPackageRoutes } from './keyPackages';
@@ -31,6 +32,7 @@ export interface V1RouterDeps {
 
 export function createV1Router(deps: V1RouterDeps): Router {
   const router = Router();
+  router.use(createManagedTeamRoutes(deps));
   router.use(createInstanceRoutes(deps));
   router.use(createKeyPackageRoutes(deps));
   router.use(createConversationRoutes(deps));

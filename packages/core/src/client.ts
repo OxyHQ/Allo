@@ -87,6 +87,12 @@ export type ResetOutcome =
   /** The wipe happened and the server still lists this instance as active. */
   | { revoked: 'failed'; instanceId: string; reason: string };
 
+export interface TeamOperationAccess {
+  operationId: string;
+  operationCapability: string;
+  teamReference: string;
+}
+
 export interface AlloClient {
   readonly accountId: string;
   /** The instance id once registered. */
@@ -155,6 +161,18 @@ export interface AlloClient {
     get(id: string): ConversationView | undefined;
     createDirect(accountId: string): Promise<ConversationView>;
     createGroup(memberAccountIds: string[]): Promise<ConversationView>;
+    createGroupOnce(
+      operationKey: string,
+      memberAccountIds: string[],
+      access?: TeamOperationAccess,
+    ): Promise<ConversationView>;
+    prepareTeam(access: TeamOperationAccess): Promise<import('@allo/contracts').TeamSnapshot>;
+    finishTeam(access: TeamOperationAccess): Promise<import('@allo/contracts').TeamSnapshot>;
+    confirmMembers(
+      conversationId: string,
+      memberAccountIds: readonly string[],
+      signal?: AbortSignal,
+    ): Promise<import('@allo/shared-types').ConversationSummary>;
     addMember(conversationId: string, accountId: string): Promise<void>;
     removeMember(conversationId: string, accountId: string): Promise<void>;
     leave(conversationId: string): Promise<void>;
@@ -581,6 +599,12 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
       get: (id) => ctx?.conversations.get(id),
       createDirect: (accountId) => requireCtx().conversations.createDirect(accountId),
       createGroup: (ids) => requireCtx().conversations.createGroup(ids),
+      createGroupOnce: (key, ids, access) =>
+        requireCtx().conversations.createGroupOnce(key, ids, access),
+      prepareTeam: (access) => requireCtx().conversations.prepareTeam(access),
+      finishTeam: (access) => requireCtx().conversations.finishTeam(access),
+      confirmMembers: (id, ids, signal) =>
+        requireCtx().conversations.confirmMembers(id, ids, signal),
       addMember: (id, accountId) => requireCtx().conversations.addMember(id, accountId),
       removeMember: (id, accountId) => requireCtx().conversations.removeMember(id, accountId),
       leave: (id) => requireCtx().conversations.leave(id),

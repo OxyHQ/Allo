@@ -46,6 +46,9 @@ WORKDIR /app
 # it produces has no package.json, so the very first `require` at boot fails
 # with MODULE_NOT_FOUND. Measured on 2026-09-17: image built, boot died.
 COPY package.json bun.lock bunfig.toml ./
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/sdk/package.json ./packages/sdk/
+COPY vendor/homiio ./vendor/homiio/
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/core/package.json ./packages/core/
@@ -85,7 +88,8 @@ COPY patches ./patches/
 # is no native addon. The flag keeps it that way if a trust list ever grows.
 RUN bun install --frozen-lockfile --production --omit=peer --ignore-scripts \
         --filter '@allo/backend' \
-        --filter '@allo/shared-types'
+        --filter '@allo/shared-types' \
+        --filter '@allo/contracts'
 
 FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runtime
 
@@ -97,6 +101,7 @@ WORKDIR /app
 # which resolve to the two source trees below. Tests and Markdown are kept out
 # of the build context by .dockerignore.
 COPY --from=deps /app/node_modules ./node_modules
+COPY packages/contracts ./packages/contracts/
 COPY packages/shared-types ./packages/shared-types/
 COPY packages/backend ./packages/backend/
 

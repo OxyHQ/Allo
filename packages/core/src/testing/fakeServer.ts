@@ -1562,6 +1562,26 @@ export class FakeAlloServer implements SocketHost {
       return { id: event.id, seq: event.seq, createdAt: event.createdAt };
     }
     const commit = req.commit!;
+    const addedAccounts = commit.addedAccountIds ?? [];
+    const removedAccounts = commit.removedAccountIds ?? [];
+    for (const accountId of removedAccounts) {
+      const role = conv.members.get(sender.accountId)?.role;
+      if (accountId !== sender.accountId && role !== 'owner' && role !== 'admin')
+        throw new HttpError(403, 'forbidden', 'only an owner or admin may remove accounts');
+      if (
+        [...conv.leaves].some(
+          ([id, leaf]) =>
+            leaf.accountId === accountId &&
+            leaf.state !== 'removed' &&
+            !commit.removedLeaves.includes(id),
+        )
+      )
+        throw new HttpError(400, 'validation_failed', 'all account leaves must be removed');
+    }
+    this.assertContactAllowed(
+      sender.accountId,
+      addedAccounts.filter((id) => conv.members.get(id)?.state !== 'joined'),
+    );
     // A self-join adds exactly the sender and, for a resync, removes exactly the sender: the schema fixed the
     // counts, the server alone knows who signed the request.
     if (kind !== 'member') {
@@ -1653,6 +1673,15 @@ export class FakeAlloServer implements SocketHost {
           joinedAt: this.iso(),
         });
       else conv.members.get(added.accountId)!.state = 'joined';
+    }
+    for (const accountId of addedAccounts) {
+      const existing = conv.members.get(accountId);
+      if (existing) existing.state = 'joined';
+      else conv.members.set(accountId, { role: 'member', state: 'joined', joinedAt: this.iso() });
+    }
+    for (const accountId of removedAccounts) {
+      const existing = conv.members.get(accountId);
+      if (existing) existing.state = accountId === sender.accountId ? 'left' : 'removed';
     }
     // An account whose last leaf this commit removed is out. One that never had a leaf (invited before it
     // installed Allo) stays a joined member: the elector adds its first device when it appears.

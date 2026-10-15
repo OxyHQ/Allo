@@ -495,5 +495,12 @@
   "transfer.receiving": "Ricezione della cronologia da un altro dispositivo",
   "transfer.receivingFrom": "Ricezione della cronologia da {{name}}",
   "transfer.sending": "Invio della cronologia a un altro dispositivo",
-  "transfer.sendingTo": "Invio della cronologia a {{name}}"
+  "transfer.sendingTo": "Invio della cronologia a {{name}}",
+  "homiio.team.title": "Chat del gruppo",
+  "homiio.team.description": "Chat privata del creatore del caso e dei collaboratori. Solo il creatore può gestire il gruppo.",
+  "homiio.team.addWarning": "Il collaboratore potrà modificare il caso, vedere l’indirizzo esatto e ricevere i nuovi messaggi. Conferma per continuare.",
+  "homiio.team.removeWarning": "Il collaboratore verrà rimosso dal caso e dai messaggi futuri. I messaggi già ricevuti rimangono sui suoi dispositivi.",
+  "homiio.team.retry": "La modifica non è completa. I messaggi rimangono in pausa durante la conferma del gruppo. Riprova per continuare.",
+  "homiio.team.working": "Conferma del gruppo…",
+  "homiio.team.continue": "Conferma e apri la chat"
 }
