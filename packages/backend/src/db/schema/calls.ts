@@ -88,6 +88,9 @@ export const callParticipants = pgTable(
     instanceId: text().notNull(),
     state: text({ enum: CALL_PARTICIPANT_STATES }).notNull().default('ringing'),
     joinedAt: timestamptz(),
+    ringPushLeaseUntil: timestamptz(),
+    ringPushDeliveredAt: timestamptz(),
+    ringPushEndedAt: timestamptz(),
     leftAt: timestamptz(),
     createdAt: createdAt(),
     /** The call's own deadline, copied so the sweep reaps without a join. */

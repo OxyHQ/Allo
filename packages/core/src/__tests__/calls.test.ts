@@ -235,3 +235,28 @@ describe('what a call leaves behind', () => {
     await stopAll(alice, bob);
   }, 40_000);
 });
+
+describe('native cold restore', () => {
+  it('restores a missed socket ring and authenticated offer after a process restart without placing another call', async () => {
+    const server = fakeServer();
+    const alice = await makeClient(server, 'native-alice', 'Alice');
+    const bob = await makeClient(server, 'native-bob', 'Bob');
+    const conversation = await alice.client.conversations.createDirect(bob.accountId);
+    await alice.client.sync.flush();
+    await waitFor(() => bob.client.conversations.get(conversation.id)?.joined === true);
+    await alice.client.calls.start(conversation.id);
+    const id = alice.client.calls.current()!.id;
+    await bob.client.stop();
+    await bob.client.start();
+    const restored = await bob.client.calls.restoreIncoming(id);
+    expect(restored).toMatchObject({ id, outgoing: false, phase: 'ringing' });
+    expect(
+      server.requestLog.filter(
+        (request) => request.method === 'POST' && request.path === '/v1/calls',
+      ),
+    ).toHaveLength(1);
+    await alice.client.calls.end();
+    expect(await bob.client.calls.restoreIncoming(id)).toBeNull();
+    await stopAll(alice, bob);
+  });
+});

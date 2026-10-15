@@ -85,6 +85,13 @@
       "when": 1792051253899,
       "tag": "0011_managed_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792052194863,
+      "tag": "0012_native_call_push",
+      "breakpoints": true
     }
   ]
 }

@@ -274,3 +274,78 @@ any group-video UI. Group voice shows no such report.
 Federation of any of the three. Status replies. Call recording, which is
 deliberately not a feature. Calls between an Allo account and a phone number,
 which is not a thing this platform has.
+
+## Native incoming-call implementation (October 2026)
+
+Incoming calls now have a dedicated push channel per enrolled instance. The
+normal notification registration remains independent: an APNs alert token is
+not a PushKit token. `PUT/DELETE /v1/instances/me/call-push` use the existing
+instance signature plus Oxy session. Claiming a rotated token atomically removes
+its previous binding, including a previous account on the same installation;
+revocation clears both channels. The token is a protected database column.
+Migration `0012_native_call_push` is additive and must run before the new image.
+
+The ring worker leases pending participant rows with `SKIP LOCKED`, retries
+transient provider failures, and stops sending after the ring deadline. Delivery
+is at least once: both native implementations deduplicate call IDs and retain
+short-lived terminal tombstones. APNs receives `voip`, the `.voip` topic and
+expiration zero only for incoming rings. Android receives high-priority data-only
+FCM; ordinary messages continue through Expo's existing notification service.
+Terminal hints use ordinary background APNs/FCM, never a second VoIP push. These
+hints are best effort; the native deadline and authenticated SDK reconciliation
+remain necessary when background notifications are throttled.
+
+The local Expo module is `packages/frontend/modules/allo-native-calls`. An iOS
+AppDelegate subscriber starts PushKit before JavaScript and reports calls to
+CallKit immediately. Android's native FCM service delegates non-call messages to
+Expo and registers incoming calls with a self-managed `ConnectionService`; a
+`phoneCall` foreground service owns the call notification. Answering enables the
+microphone foreground type after user interaction. Notification actions target
+an Activity directly rather than a prohibited notification trampoline. Android
+requires API 26 or newer for this implementation.
+
+Native storage contains only routing IDs, deadlines, the push token and pending
+OS actions. It contains no Oxy bearer, identity secret, decrypted message, SDP or
+media key. A generic `Allo` caller label protects lock-screen identity. Oxy cold
+restore and the enrolled Allo instance must be ready before an action executes.
+`calls.restoreIncoming(id)` reads current server state, rejects cancelled,
+expired, revoked and other-device answers, and recovers an already-acknowledged
+encrypted offer from the encrypted local event store. The server serializes
+answer/decline on the call row and replays an answer from its winning device.
+Native action timeouts fail the OS action and retain an end intent for recovery.
+Pending handoffs expire after the call's 24-hour operational retention window.
+
+Call routes reached from native handoffs, incoming banners or the active-call
+pill carry `incomingCallId`; they never dial when state is absent. Explicit
+outgoing calls and history callbacks remain the dialler entry points. Account
+changes immediately retire the local binding, and cleanup is conditional on the
+old instance so a late cleanup cannot erase the new account's binding. Session
+gaps stop the client without deleting its keys.
+
+### Configuration and release validation
+
+- Use a native development/production build, not Expo Go. Run Expo prebuild to
+  autolink the local module and apply `plugins/withNativeCalls`.
+- iOS needs the app's push entitlement, `voip`, `audio` and remote-notification
+  background modes, a matching Apple provisioning profile, and existing
+  `ALLO_APNS_*` credentials. `ALLO_APNS_TOPIC` remains the bundle identifier;
+  the sender appends `.voip` for the call token only. Match sandbox/production
+  APNs to the provisioning environment. Native CallKit audio activation is
+  forwarded to the existing LiveKit WebRTC audio session.
+- Android needs the app's real `google-services.json` and existing backend
+  Firebase credentials from the same project. Expo Notifications is built from
+  source so the local FCM subclass has a version-matched dependency. Permit
+  notifications and full-screen call notifications where Android requires it.
+- Test signed release builds on physical iOS and Android phones: terminated
+  process, locked screen, delayed Oxy restore, answer/decline, cancellation,
+  two-device answer race, token rotation, account switch/sign-out, unavailable
+  network, duplicate/late push, and normal message notifications. A force-stop
+  chosen in Android settings suppresses FCM until the user reopens the app.
+- No physical phones or Xcode were available during this implementation. Unit,
+  database and Android compiler checks do not establish APNs/FCM delivery,
+  lock-screen audio, OS policy acceptance or physical closed-app behavior. Keep
+  this feature pending device/provider validation until that matrix passes.
+
+Native platform requirements were checked against Apple's
+[PushKit incoming-call guidance](https://developer.apple.com/documentation/pushkit/responding-to-voip-notifications-from-pushkit)
+and Android's [ConnectionService contract](https://developer.android.com/reference/android/telecom/ConnectionService).

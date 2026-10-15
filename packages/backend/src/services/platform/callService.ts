@@ -34,6 +34,7 @@ import {
 import { getDb, type AlloDatabase } from '../../db';
 import {
   claimAnswer,
+  lockCall,
   claimEnd,
   findCallById,
   findCallByIdempotencyKey,
@@ -165,27 +166,29 @@ export async function answerCall(
 ): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
-  const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant) throw notFound('no such call');
-
-  const claimed = await claimAnswer(callId, now, db);
-  const call = claimed ?? (await requireCall(callId, db));
-  if (!claimed) {
-    // Somebody else got there first. Say so rather than pretending to join.
-    const answeredBy = (await listParticipants(callId, db)).find((one) => one.state === 'joined');
-    throw forbidden(
-      answeredBy?.instanceId === caller.instanceId ? 'already answered here' : 'answered elsewhere',
-    );
-  }
-
-  await setParticipantState(callId, caller.instanceId, 'joined', now, db);
-  // This account's OTHER phones stop ringing. In a group everybody else's keep
-  // going — one person picking up is not the group answering.
-  await settleRingingParticipants(callId, 'left', now, db, {
-    exceptInstanceId: caller.instanceId,
-    onlyAccountId: caller.accountId,
+  const call = await db.transaction(async (tx) => {
+    const existing = await lockCall(callId, tx);
+    const participant = await findParticipant(callId, caller.instanceId, tx);
+    if (!existing || !participant || participant.accountId !== caller.accountId)
+      throw notFound('no such call');
+    // Replayed native actions recover the same answer after a lost response.
+    if (existing.state === 'active' && participant.state === 'joined') return existing;
+    if (
+      participant.state !== 'ringing' ||
+      existing.state === 'ended' ||
+      (existing.state === 'active' && !existing.group) ||
+      (existing.ringExpiresAt !== null && existing.ringExpiresAt <= now)
+    )
+      throw forbidden('call is no longer ringing here');
+    const claimed = existing.state === 'ringing' ? await claimAnswer(callId, now, tx) : existing;
+    if (!claimed) throw forbidden('call is no longer ringing');
+    await setParticipantState(callId, caller.instanceId, 'joined', now, tx);
+    await settleRingingParticipants(callId, 'left', now, tx, {
+      exceptInstanceId: caller.instanceId,
+      onlyAccountId: caller.accountId,
+    });
+    return claimed;
   });
-
   announce(call, { answeredByInstanceId: caller.instanceId }, await audienceOf(call, db));
   return { call: await view(call, db) };
 }
@@ -198,21 +201,23 @@ export async function declineCall(
 ): Promise<CallResponse> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
-  const participant = await findParticipant(callId, caller.instanceId, db);
-  if (!participant) throw notFound('no such call');
-
-  await setParticipantState(callId, caller.instanceId, 'declined', now, db);
-  const participants = await listParticipants(callId, db);
-  const stillRinging = participants.some((one) => one.state === 'ringing');
-  const anybodyJoined = participants.some((one) => one.state === 'joined');
-
-  if (!stillRinging && !anybodyJoined) {
-    const ended = await claimEnd(callId, 'declined', now, db);
-    const call = ended ?? (await requireCall(callId, db));
-    announce(call, {}, await audienceOf(call, db));
-    return { call: await view(call, db) };
-  }
-  const call = await requireCall(callId, db);
+  const call = await db.transaction(async (tx) => {
+    const existing = await lockCall(callId, tx);
+    const participant = await findParticipant(callId, caller.instanceId, tx);
+    if (!existing || !participant || participant.accountId !== caller.accountId)
+      throw notFound('no such call');
+    if (existing.state === 'ended' || participant.state === 'declined') return existing;
+    if (participant.state !== 'ringing') throw forbidden('call is no longer ringing here');
+    // Declining on one phone is this account declining, across its fork.
+    await settleRingingParticipants(callId, 'declined', now, tx, {
+      onlyAccountId: caller.accountId,
+    });
+    const participants = await listParticipants(callId, tx);
+    if (!participants.some((one) => one.state === 'ringing' || one.state === 'joined')) {
+      return (await claimEnd(callId, 'declined', now, tx)) ?? existing;
+    }
+    return existing;
+  });
   announce(call, {}, await audienceOf(call, db));
   return { call: await view(call, db) };
 }

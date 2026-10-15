@@ -522,6 +522,24 @@ export class InstanceManager {
     });
   }
 
+  async setCallPushToken(provider: 'fcm' | 'apns', token: string): Promise<void> {
+    this.assertActive();
+    await this.deps.http.request({
+      method: 'PUT',
+      path: '/v1/instances/me/call-push',
+      body: { provider, token },
+      signer: this.signer,
+    });
+  }
+  async clearCallPushToken(): Promise<void> {
+    this.assertActive();
+    await this.deps.http.request({
+      method: 'DELETE',
+      path: '/v1/instances/me/call-push',
+      signer: this.signer,
+    });
+  }
+
   // ---- trust ---------------------------------------------------------------
 
   /** Own instances (cached listing) that pass the chain check. */

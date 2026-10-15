@@ -35,7 +35,7 @@ export const PROTECTED_COLUMNS = {
   key_packages: ['data'],
   conversation_events: ['payload'],
   blob_bytes: ['data'],
-  client_instances: ['pushToken'],
+  client_instances: ['pushToken', 'callPushToken'],
   /**
    * The conversation's GroupInfo: public MLS material, but whoever holds it can
    * attempt an external join, so it is served by `GET …/group-info` to a

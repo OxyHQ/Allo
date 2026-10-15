@@ -1,0 +1,7 @@
+<resources>
+  <string name="allo_calls_channel">Allo calls</string>
+  <string name="allo_call_active">Call in progress</string>
+  <string name="allo_call_incoming">Incoming call</string>
+  <string name="allo_call_decline">Decline</string>
+  <string name="allo_call_answer">Answer</string>
+</resources>

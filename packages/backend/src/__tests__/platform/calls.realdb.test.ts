@@ -16,7 +16,9 @@ import {
 } from '@allo/shared-types';
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../../db';
-import { calls } from '../../db/schema/calls';
+import { calls, callParticipants } from '../../db/schema/calls';
+import { clientInstances } from '../../db/schema/instances';
+import { runCallPushTick } from '../../workers/callPushWorker';
 import { blockUser } from '../../db/social/blockRepository';
 import { ensureUserSettings, updateUserSettings } from '../../db/social/userSettingsRepository';
 import { runCallRingTick } from '../../workers/callRingWorker';
@@ -389,5 +391,118 @@ describe('GET /v1/calls/:id/token', () => {
       apiSecret: 's',
       ttlSeconds: 3600,
     });
+  });
+});
+
+describe('native cold call delivery', () => {
+  it('accepts the same answer after a lost reply, rejects an expired ring before the sweeper', async () => {
+    const { a, b, conversationId } = await dmBetween(h.app);
+    const response = await ring(a, conversationId);
+    const id = response.body.call.id;
+    expect((await b.signed('post', `/v1/calls/${id}/answer`)).status).toBe(200);
+    expect((await b.signed('post', `/v1/calls/${id}/answer`)).status).toBe(200);
+    const expired = (await ring(a, conversationId)).body.call.id;
+    await getDb()
+      .update(calls)
+      .set({ ringExpiresAt: new Date(Date.now() - 1) })
+      .where(eq(calls.id, expired));
+    expect((await b.signed('post', `/v1/calls/${expired}/answer`)).status).toBe(403);
+  });
+
+  it('claims push once across workers, preserves alert tokens, transfers only the call binding, and cancels native rings', async () => {
+    const { a, b, conversationId } = await dmBetween(h.app);
+    expect(
+      (
+        await b.signed('put', '/v1/instances/me/push', {
+          provider: 'apns',
+          token: 'ordinary-token',
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await b.signed('put', '/v1/instances/me/call-push', {
+          provider: 'apns',
+          token: 'voip-token',
+        })
+      ).status,
+    ).toBe(204);
+    const id = (await ring(a, conversationId)).body.call.id;
+    const sent: Array<{
+      devices: unknown;
+      notification: import('../../services/push/delivery').PushNotification;
+    }> = [];
+    const push: typeof import('../../services/push/dispatch').sendPush = async (
+      devices,
+      notification,
+    ) => {
+      sent.push({ devices, notification });
+      return { rejected: [], hasTransientFailure: false };
+    };
+    await Promise.all([runCallPushTick({ push }), runCallPushTick({ push })]);
+    const rings = sent.filter((entry) => entry.notification.data.callId === id);
+    expect(rings).toHaveLength(1);
+    expect(rings[0].devices).toEqual([{ platform: 'ios', token: 'voip-token' }]);
+    expect(rings[0].notification.data).toMatchObject({
+      type: 'allo.call',
+      instanceId: b.id,
+      accountId: b.accountId,
+    });
+    expect(Object.keys(rings[0].notification.data).sort()).toEqual([
+      'accountId',
+      'callId',
+      'conversationId',
+      'expiresAt',
+      'instanceId',
+      'mode',
+      'type',
+    ]);
+    await a.signed('post', `/v1/calls/${id}/end`, { reason: 'cancelled' });
+    await runCallPushTick({ push });
+    const terminal = sent.find(
+      (entry) =>
+        entry.notification.data.type === 'allo.call.end' && entry.notification.data.callId === id,
+    );
+    expect(terminal?.notification.background).toBe(true);
+    expect(terminal?.notification.call).toBeUndefined();
+    expect(terminal?.devices).toEqual([{ platform: 'ios', token: 'ordinary-token' }]);
+    await a.signed('put', '/v1/instances/me/call-push', { provider: 'apns', token: 'voip-token' });
+    const [old] = await getDb().select().from(clientInstances).where(eq(clientInstances.id, b.id));
+    expect(old.callPushToken).toBeNull();
+    expect(old.pushToken).toBe('ordinary-token');
+  });
+
+  it('retries a transient call push from its persisted lease and rejects unsigned token changes', async () => {
+    const { a, b, conversationId } = await dmBetween(h.app);
+    expect(
+      (
+        await request(h.app)
+          .put('/v1/instances/me/call-push')
+          .set(USER_HEADER, b.accountId)
+          .send({ provider: 'fcm', token: 'fake' })
+      ).status,
+    ).toBe(401);
+    await b.signed('put', '/v1/instances/me/call-push', {
+      provider: 'fcm',
+      token: 'retry-native-token',
+    });
+    const id = (await ring(a, conversationId)).body.call.id;
+    let attempts = 0;
+    const push: typeof import('../../services/push/dispatch').sendPush = async (
+      _devices,
+      notification,
+    ) => {
+      if (notification.data.callId === id) attempts++;
+      return { rejected: [], hasTransientFailure: true };
+    };
+    await runCallPushTick({ push });
+    await runCallPushTick({ push });
+    expect(attempts).toBe(1);
+    await getDb()
+      .update(callParticipants)
+      .set({ ringPushLeaseUntil: new Date(Date.now() - 1) })
+      .where(eq(callParticipants.callId, id));
+    await runCallPushTick({ push });
+    expect(attempts).toBe(2);
   });
 });
