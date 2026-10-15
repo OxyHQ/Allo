@@ -19,3 +19,5 @@ export * from './moderation';
 export * from './presence';
 export * from './social';
 export * from './statuses';
+
+export * from './managedTeams';
