@@ -423,17 +423,20 @@ instance the fake server is made to list as an unapproved active root.
   list, which is an impossible call rather than a degraded one.
   `mediaConfigWiring.test.ts` boots the app and holds that line, including
   that a HALF-configured relay or SFU fails the boot. `LIVEKIT_API_KEY` and
-  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, written by
-  OxyHQServices, bound per service by terraform): never `sync_secret` them from
+  `LIVEKIT_API_SECRET` are **shared across Oxy** (`/oxy/_shared/`, owned by
+  oxy-infra, bound per service by terraform): never `sync_secret` them from
   Allo's workflow, which would overwrite the value every other app uses.
-  Production still needs both halves wired in `oxy-infra` by hand —
-  `app-allo.tf` gains `{ name = "LIVEKIT_URL", value = "wss://livekit.oxy.so" }`
-  in `environment` and the two `valueFrom = "${local.ssm}/oxy/_shared/LIVEKIT_*"`
-  entries in `secrets`, exactly as `app-services-realtime.tf:29,68-69` does for
-  another app — and coturn does not exist yet, so until it does a deployment
-  serves STUN alone and a relayed call cannot connect. That is now an absence
-  of infrastructure rather than a bug, and the group-call ticket answers
-  `unavailable` instead of inventing a room.
+  The shared LiveKit bindings are declared in infra's `app-allo.tf`. Dedicated
+  coturn configuration now lives in `terraform-uswest2/allo-turn.tf` (manual
+  apply only), with UDP/TCP 3478 and TLS 443. Enable the app binding only after
+  the relay's external gate, via `ALLO_TURN_ENABLED=true`; its five SSM paths
+  are read-only to the app deploy. `TURN_REQUIRED` fails boot on missing/weak
+  configuration. See `docs/platform/turn-connectivity.md` and infra runbook 55
+  for provisioning, real local relay evidence and pending device/network gates.
+  Network recovery refreshes authorized ICE grants, preserving P2P tracks;
+  callee-only loss requests a caller-led restart through encrypted MLS. Group
+  recovery obtains a fresh ticket before recapture and rotates its sender key.
+  Healthy coturn allocations continue across credential issuance expiry.
 - **Moderation:** CrowdSource integration for account reports
   (`packages/backend/src/services/moderation/`, `POST /api/reports`). Message
   content is deliberately never sent for review.

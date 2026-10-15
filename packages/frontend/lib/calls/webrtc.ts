@@ -88,7 +88,7 @@ export function createCallMedia(): WebRtcCallMedia {
     disconnectedTimer = null;
     const oldGroup = group;
     group = null;
-    void oldGroup
+    const closing = oldGroup
       ?.close()
       .catch((error: unknown) => logger.warn('[calls] closing room failed', error));
     groupRemote = [];
@@ -103,6 +103,7 @@ export function createCallMedia(): WebRtcCallMedia {
     pc?.close();
     pc = null;
     publish();
+    return closing;
   };
 
   return {
@@ -118,14 +119,16 @@ export function createCallMedia(): WebRtcCallMedia {
       registerWebrtcGlobals();
       // A second `prepare()` without a `close()` used to overwrite `pc` and
       // strand the previous connection with its tracks still live.
-      teardown();
+      const closing = teardown();
+      const attempt = generation;
+      if (closing) await closing;
+      if (attempt !== generation) throw new Error('call media preparation cancelled');
       plan = nextPlan;
       muted = false;
       cameraOn = plan.mode === 'video';
       // `relayOnly` is the SDK's answer, not a preference: with it on, no host
       // and no server-reflexive candidate is offered, so the other side sees
       // only the relay's address.
-      const attempt = generation;
       const connection = new RTCPeerConnection({
         iceServers: plan.iceServers,
         iceTransportPolicy: plan.relayOnly ? 'relay' : 'all',
@@ -220,9 +223,18 @@ export function createCallMedia(): WebRtcCallMedia {
       await group?.setKey(id, key);
     },
 
-    async createOffer(): Promise<SessionDescription> {
+    async updateIce(next) {
+      if (!plan) throw new Error('call media must be prepared');
+      plan = { ...plan, ...next };
+      require().setConfiguration({
+        iceServers: next.iceServers,
+        iceTransportPolicy: next.relayOnly ? 'relay' : 'all',
+      });
+    },
+
+    async createOffer(options): Promise<SessionDescription> {
       const connection = require();
-      const offer = await connection.createOffer({});
+      const offer = await connection.createOffer(options ?? {});
       await connection.setLocalDescription(offer);
       return { sdp: connection.localDescription?.sdp ?? offer.sdp ?? '' };
     },
@@ -289,7 +301,7 @@ export function createCallMedia(): WebRtcCallMedia {
     async close() {
       connectionListener = null;
       listener = null;
-      teardown();
+      await teardown();
     },
   };
 }

@@ -61,6 +61,40 @@ try {
       })),
     ),
   );
+  const renewed = new AccessToken('devkey', 'development-only-video-verification-secret', {
+    identity: 'sender-a',
+  });
+  renewed.addGrant({
+    roomJoin: true,
+    room: 'video-verification',
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: false,
+  });
+  await pages[0].evaluate(
+    async (token) =>
+      window.group(
+        'sender-a',
+        {
+          url: 'ws://127.0.0.1:55912',
+          token,
+          room: 'video-verification',
+        },
+        3,
+      ),
+    await renewed.toJwt(),
+  );
+  await pages[0].evaluate(() => window.receive('sender-b'));
+  await pages[1].evaluate(() => window.a.setReceiveKey('sender-a', new Uint8Array(32).fill(3)));
+  await Promise.all(
+    pages.map((page) =>
+      page.waitForFunction(
+        () =>
+          document.querySelector('video')?.videoWidth > 0 &&
+          document.querySelector('video')?.getVideoPlaybackQuality().totalVideoFrames > 10,
+      ),
+    ),
+  );
   const plainToken = new AccessToken('devkey', 'development-only-video-verification-secret', {
     identity: 'sender-plain',
   });

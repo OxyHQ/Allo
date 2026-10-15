@@ -267,7 +267,7 @@ export const callMessageSchema = z.object({
   t: z.literal('call'),
   ctl: z.literal(true),
   callId: idempotencyKeySchema,
-  kind: z.enum(['offer', 'answer', 'ice', 'key', 'end']),
+  kind: z.enum(['offer', 'answer', 'ice', 'key', 'restart', 'end']),
   /** The SDP, for `offer` and `answer`. Its DTLS fingerprint is what makes the media end to end. */
   sdp: z.string().min(1).max(MAX_TEXT_BODY_LENGTH).optional(),
   /** A batch of ICE candidates, for `ice`. An empty array is the end-of-candidates marker. */
