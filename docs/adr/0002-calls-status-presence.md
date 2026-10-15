@@ -349,3 +349,13 @@ gaps stop the client without deleting its keys.
 Native platform requirements were checked against Apple's
 [PushKit incoming-call guidance](https://developer.apple.com/documentation/pushkit/responding-to-voip-notifications-from-pushkit)
 and Android's [ConnectionService contract](https://developer.android.com/reference/android/telecom/ConnectionService).
+
+Local verification on the cumulative managed-team foundation: 62 backend
+call/push tests, 19 managed-team/schema tests over real PostgreSQL, six core call
+tests (including an encrypted offer recovered after restart), and 14 frontend
+handoff/session/route tests. TypeScript builds and scoped Biome/Expo ESLint pass.
+Android Expo prebuild, `:allo-native-calls:compileDebugKotlin` and
+`:app:processDebugMainManifest` passed; the merged manifest contains API 26,
+one Allo FCM handler replacing Expo's handler, the protected Telecom service,
+and `phoneCall|microphone`. The iOS JavaScript/Hermes export passed. This is
+**not an iOS Swift/Xcode build, APK device test or provider delivery test**.

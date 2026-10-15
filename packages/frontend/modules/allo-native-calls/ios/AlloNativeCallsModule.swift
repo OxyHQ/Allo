@@ -67,8 +67,8 @@ final class AlloCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate {
     // Always report a VoIP push before completing, including stale/foreign hints.
     // Apple requires this even when the server state will subsequently reject it.
     let id = data["callId"] ?? UUID().uuidString
-    if calls[id] != nil { completion(); return }
-    let uuid = UUID()
+    let existing = calls[id]
+    let uuid = existing ?? UUID()
     calls[id] = uuid
     data["nativeUUID"] = uuid.uuidString
     let update = CXCallUpdate()
@@ -80,10 +80,13 @@ final class AlloCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate {
     update.supportsUngrouping = false
     update.supportsDTMF = false
     provider.reportNewIncomingCall(with: uuid, update: update) { error in
+      // Duplicate delivery reports the SAME UUID to CallKit, never a second call.
+      if existing != nil { completion(); return }
       let formatter = ISO8601DateFormatter()
       formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
       let expires = formatter.date(from: data["expiresAt"] ?? "") ?? .distantPast
       let valid = error == nil && (self.ended[id] ?? 0) < Date().timeIntervalSince1970 && data["type"] == "allo.call"
+        && self.defaults.string(forKey: "allo.calls.instance") != nil
         && data["instanceId"] == self.defaults.string(forKey: "allo.calls.instance")
         && data["accountId"] == self.defaults.string(forKey: "allo.calls.account")
         && expires > Date()

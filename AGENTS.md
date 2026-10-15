@@ -363,7 +363,7 @@ instance the fake server is made to list as an unapproved active root.
   with a deadline; the client keeps the deadline it verified in the signature
   rather than a later claim; and a status already decrypted on a device is that
   device's, which the screens say rather than implying a remote delete.
-- **Calls connect. What is missing is the ring on a closed app and the relay.**
+- **Calls connect. Native ring code exists; physical validation and the relay remain outstanding.**
   The backend runs the part a client cannot — who may ring
   (a joined member, never across a block), the fork across a callee's devices,
   first-to-answer-wins as an UPDATE guarded on the state, the ring nobody
@@ -392,9 +392,12 @@ instance the fake server is made to list as an unapproved active root.
   pushes the route. A screen that navigated AND dialled placed two calls per
   press, twice — once from the conversation header, then again from the
   call-back row after the first was fixed.
-  What is still missing: the native ring (CallKit, Telecom, a `phoneCall`
-  foreground service), so a phone with the app closed does not ring; the
-  remote video on the stage (`StagePlaceholder` stands in, and the screens say
+  Native ringing now uses a local Expo module (PushKit/CallKit and Android
+  FCM/Telecom with a `phoneCall` foreground service), a separate instance-signed
+  call token and durable native actions. See `docs/adr/0002-calls-status-presence.md`
+  for configuration and the physical-device validation still required. Incoming
+  routes carry `incomingCallId` and must never fall into the outgoing dialler
+  when their call has disappeared. What is still missing: the remote video on the stage (`StagePlaceholder` stands in, and the screens say
   so); the speaker, screen sharing, the camera flip and hold, which are simply
   not passed to Bloom, because Bloom draws a control when it is handed a
   HANDLER and a control nothing can do is a prop nobody passes; and coturn, so
