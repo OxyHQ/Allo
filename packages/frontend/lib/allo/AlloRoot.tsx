@@ -1,3 +1,5 @@
+import { CallNotice } from '@/components/calls/CallNotice';
+import { CallAudio } from '@/components/calls/CallAudio';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { startNativeCalls } from './nativeCalls';
@@ -106,6 +108,8 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   return (
     <AlloProvider client={client}>
       <PushRegistration />
+      <CallAudio />
+      <CallNotice />
       <EnrollmentGate
         onSignOut={() => {
           void signOutOfAllo(client, logout);

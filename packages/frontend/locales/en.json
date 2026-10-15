@@ -502,5 +502,8 @@
   "homiio.team.removeWarning": "Remove this collaborator from the case and future team messages. Messages already received remain on their devices.",
   "homiio.team.retry": "The change is not complete. Team messages remain paused while membership is being confirmed. Try again to resume safely.",
   "homiio.team.working": "Confirming team…",
-  "homiio.team.continue": "Confirm and open team chat"
+  "homiio.team.continue": "Confirm and open team chat",
+  "calls.enableAudio": "Enable call audio",
+  "calls.waitingVideo": "Waiting for video",
+  "calls.membershipChanged": "The call ended because group security changed. Start a new call to continue."
 }

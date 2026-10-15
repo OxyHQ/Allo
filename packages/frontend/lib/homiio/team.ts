@@ -1,6 +1,6 @@
 import type { TeamSnapshot } from '@allo/contracts';
 import type { AlloClient } from '@allo/core';
-import { TransportError } from '@allo/core';
+import { isAlloNotFound } from '../allo/errors';
 import type { HomiioTeamClient, BeginTeamOperation } from '@homiio/sdk';
 /** Every retry resumes the source's durable intent. Only the creator's device touches MLS keys. */
 export async function completeHomiioTeam(
@@ -16,7 +16,7 @@ export async function completeHomiioTeam(
     try {
       snapshot = await client.conversations.prepareTeam(access);
     } catch (error) {
-      if (!(error instanceof TransportError) || error.status !== 404) throw error;
+      if (!isAlloNotFound(error)) throw error;
       await client.conversations.createGroupOnce(operation.id, operation.targetAccountIds, access);
       snapshot = await client.conversations.prepareTeam(access);
     }

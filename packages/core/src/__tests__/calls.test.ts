@@ -273,3 +273,61 @@ describe('native cold restore', () => {
     await stopAll(alice, bob);
   });
 });
+
+describe('encrypted group media', () => {
+  it('joins each answered device, binds sender keys to MLS identity, and ends on an MLS epoch change', async () => {
+    const server = fakeServer();
+    const media = () => {
+      const base = fakeMedia();
+      return {
+        ...base,
+        received: new Map<string, Uint8Array>(),
+        async joinRoom(_ticket: unknown, key: Uint8Array) {
+          expect(key.length).toBe(32);
+          base.calls.push('joinRoom');
+        },
+        async setReceiveKey(id: string, key: Uint8Array) {
+          this.received.set(id, key);
+        },
+      };
+    };
+    const am = media(),
+      bm = media(),
+      cm = media();
+    const a = await makeClient(server, 'acc-group-a', 'A', 'web', undefined, true, { media: am });
+    const b = await makeClient(server, 'acc-group-b', 'B', 'web', undefined, true, { media: bm });
+    const c = await makeClient(server, 'acc-group-c', 'C', 'web', undefined, true, { media: cm });
+    try {
+      const conversation = await a.client.conversations.createGroup([b.accountId, c.accountId]);
+      await a.client.sync.flush();
+      await waitFor(
+        () =>
+          b.client.conversations.get(conversation.id)?.joined === true &&
+          c.client.conversations.get(conversation.id)?.joined === true,
+      );
+      await a.client.calls.start(conversation.id, 'video');
+      await waitFor(
+        () =>
+          b.client.calls.current()?.phase === 'ringing' &&
+          c.client.calls.current()?.phase === 'ringing',
+      );
+      await b.client.calls.answer();
+      await waitFor(() => b.client.calls.current()?.phase === 'active');
+      expect(c.client.calls.current()?.phase).toBe('ringing');
+      await c.client.calls.answer();
+      await Promise.all([a.client.sync.flush(), b.client.sync.flush(), c.client.sync.flush()]);
+      await waitFor(
+        () => am.received.size >= 2 && bm.received.size >= 2 && cm.received.size >= 2,
+        10000,
+      );
+      expect(am.calls).toContain('joinRoom');
+      expect(am.calls).not.toContain('createOffer');
+      await a.client.conversations.removeMember(conversation.id, c.accountId);
+      await waitFor(() => a.client.calls.current()?.phase === 'ended');
+      expect(am.calls).toContain('close');
+      expect(a.client.calls.current()?.phase).toBe('ended');
+    } finally {
+      await stopAll(a, b, c);
+    }
+  }, 40000);
+});

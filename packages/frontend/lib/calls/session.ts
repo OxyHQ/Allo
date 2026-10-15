@@ -57,6 +57,8 @@ export interface CallPeer {
 
 /** The one call this device is in, projected for the screens. */
 export interface CallSession {
+  readonly group: boolean;
+  readonly participants: ReadonlyArray<{ instanceId: string; accountId: string }>;
   readonly id: string;
   readonly conversationId: string;
   readonly peers: readonly CallPeer[];
@@ -104,6 +106,8 @@ export function useCallSession(): CallSession | null {
     if (!call || call.phase === 'ended') return null;
     return {
       id: call.id,
+      group: call.group ?? call.withAccountIds.length > 1,
+      participants: call.participants ?? [],
       conversationId: call.conversationId,
       peers: call.withAccountIds.map((accountId: string) => ({ accountId })),
       mode: call.mode,

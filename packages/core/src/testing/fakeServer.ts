@@ -182,6 +182,7 @@ export class FakeAlloServer implements SocketHost {
       relayed: boolean;
       rung: string[];
       answeredBy: string | null;
+      joined: Set<string>;
       startedAt: string;
       endReason: string | null;
     }
@@ -816,6 +817,7 @@ export class FakeAlloServer implements SocketHost {
         relayed: group,
         rung,
         answeredBy: null,
+        joined: new Set([me.id]),
         startedAt: this.iso(),
         endReason: null,
       };
@@ -848,6 +850,18 @@ export class FakeAlloServer implements SocketHost {
         relayOnly: call.relayed,
       });
     }
+    if ((m = path.match(/^\/v1\/calls\/([^/]+)\/token$/)) && method === 'GET') {
+      const me = signed();
+      const call = this.calls.get(m[1]);
+      if (!call || !call.group || call.state === 'ended' || !call.joined.has(me.id))
+        throw new HttpError(403, 'forbidden', 'room unavailable');
+      return json(200, {
+        url: 'wss://sfu.test',
+        token: 'test-ticket',
+        room: `call-${call.id}`,
+        expiresAt: new Date(this.now() + 60_000).toISOString(),
+      });
+    }
     if ((m = path.match(/^\/v1\/calls\/([^/]+)\/(answer|decline|end)$/)) && method === 'POST') {
       const me = signed();
       const call = this.calls.get(m[1]);
@@ -855,10 +869,11 @@ export class FakeAlloServer implements SocketHost {
       const action = m[2];
       if (action === 'answer') {
         // First to answer wins; the losers are told who did.
-        if (call.state !== 'ringing')
+        if (call.state !== 'ringing' && !(call.group && call.state === 'active'))
           throw new HttpError(409, 'idempotency_conflict', 'the call is not ringing');
         call.state = 'active';
         call.answeredBy = me.id;
+        call.joined.add(me.id);
       } else if (action === 'decline') {
         call.state = 'ended';
         call.endReason = 'declined';
@@ -1489,16 +1504,15 @@ export class FakeAlloServer implements SocketHost {
       state: call.state,
       relayed: call.relayed,
       group: call.group,
-      participants: call.rung.map((instanceId) => ({
+      participants: [call.initiatorInstanceId, ...call.rung].map((instanceId) => ({
         accountId: this.instances.get(instanceId)?.accountId ?? '',
         instanceId,
-        state:
-          call.answeredBy === instanceId
-            ? ('joined' as const)
-            : call.answeredBy
-              ? ('left' as const)
-              : ('ringing' as const),
-        joinedAt: call.answeredBy === instanceId ? call.startedAt : null,
+        state: call.joined.has(instanceId)
+          ? ('joined' as const)
+          : call.answeredBy && !call.group
+            ? ('left' as const)
+            : ('ringing' as const),
+        joinedAt: call.joined.has(instanceId) ? call.startedAt : null,
         leftAt: null,
       })),
       startedAt: call.startedAt,
