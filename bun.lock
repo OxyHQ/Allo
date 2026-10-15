@@ -111,9 +111,9 @@
         "@config-plugins/react-native-webrtc": "^15.0.2",
         "@homiio/contracts": "file:../../vendor/homiio/homiio-contracts-0.1.0-ed8d6f4f35eb.tgz",
         "@homiio/sdk": "file:../../vendor/homiio/homiio-sdk-0.1.0-af069510c2c8.tgz",
-        "@livekit/react-native": "^2.12.0",
+        "@livekit/react-native": "3.0.0",
         "@livekit/react-native-expo-plugin": "^1.0.2",
-        "@livekit/react-native-webrtc": "^144.1.2",
+        "@livekit/react-native-webrtc": "144.2.0",
         "@lottiefiles/dotlottie-react": "^0.19.16",
         "@lottiefiles/dotlottie-web": "0.80.0",
         "@oxy.so/bloom": "^10.7.0",
@@ -773,7 +773,7 @@
 
     "@livekit/protocol": ["@livekit/protocol@1.51.0", "", { "dependencies": { "@bufbuild/protobuf": "^1.10.0" } }, "sha512-kEDEDaFvIcp5VlYBromdSKMJMEJKfPvXPfEaJPdEz1Qgo84gZAoLF2g58CcMlVYGsjrwE5XYgQxRS5B7KuEj3w=="],
 
-    "@livekit/react-native": ["@livekit/react-native@2.12.0", "", { "dependencies": { "@livekit/components-react": "^2.9.17", "@livekit/mutex": "^1.1.1", "array.prototype.at": "^1.1.1", "base64-js": "1.5.1", "events": "^3.3.0", "loglevel": "^1.8.0", "promise.allsettled": "^1.0.5", "react-native-url-polyfill": "^3.0.0", "typed-emitter": "^2.1.0", "web-streams-polyfill": "^4.3.0", "well-known-symbols": "^4.1.0" }, "peerDependencies": { "@livekit/react-native-webrtc": "^144.1.2", "livekit-client": "^2.19.0", "react": "*", "react-native": "*" } }, "sha512-6n4PQr22vtbl6WL6QbLVCLzM5/bCdTt+hHUyMecL8AheEuypVwbhMe5Vj7UuxOeyNojqXdgi2yRWGhB9WH4Gxg=="],
+    "@livekit/react-native": ["@livekit/react-native@3.0.0", "", { "dependencies": { "@livekit/components-react": "^2.9.17", "@livekit/mutex": "^1.1.1", "array.prototype.at": "^1.1.1", "base64-js": "1.5.1", "events": "^3.3.0", "loglevel": "^1.8.0", "promise.allsettled": "^1.0.5", "react-native-url-polyfill": "^3.0.0", "typed-emitter": "^2.1.0", "web-streams-polyfill": "^4.3.0", "well-known-symbols": "^4.1.0" }, "peerDependencies": { "@livekit/react-native-webrtc": "^144.2.0", "livekit-client": "^2.19.0", "react": "*", "react-native": "*" } }, "sha512-9x9Lv9gUUgw4Gl2BB3YO51FbruV5if+VXv4vx6KsHmVhfV98xYonZqTah/Ue2atyWAhsmLl2zA529fkbyNJuZQ=="],
 
     "@livekit/react-native-expo-plugin": ["@livekit/react-native-expo-plugin@1.0.3", "", { "peerDependencies": { "@livekit/react-native": "^2.1.0 || ^3.0.0", "expo": "*", "react": "*", "react-native": "*" } }, "sha512-U0z0JSUb3QnNnm6O66mgepTp/ZfTQ9e/yxl2Xb6Q3G0VKKA8/ifPjQACP6L1d5BpgcetMpkTOybACU2jMl5sYg=="],
 
