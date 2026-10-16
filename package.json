@@ -10,7 +10,7 @@
   ],
   "overrides": {
     "@isaacs/brace-expansion": "^5.0.1",
-    "@oxy.so/bloom": "10.14.0",
+    "@oxy.so/bloom": "10.14.1",
     "@oxy.so/core": "4.10.0",
     "@oxy.so/contracts": "4.16.0",
     "@oxy.so/services": "11.5.0",
@@ -25,7 +25,7 @@
   },
   "resolutions": {
     "@isaacs/brace-expansion": "^5.0.1",
-    "@oxy.so/bloom": "10.14.0",
+    "@oxy.so/bloom": "10.14.1",
     "@oxy.so/core": "4.10.0",
     "@oxy.so/contracts": "4.16.0",
     "@oxy.so/services": "11.5.0",
@@ -83,7 +83,7 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@oxy.so/bloom": "10.14.0",
+    "@oxy.so/bloom": "10.14.1",
     "@oxy.so/contracts": "4.16.0",
     "@oxy.so/core": "4.10.0",
     "@oxy.so/services": "11.5.0",
