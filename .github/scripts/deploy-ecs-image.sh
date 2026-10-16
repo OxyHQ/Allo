@@ -30,6 +30,18 @@ RUN_MIGRATIONS="${RUN_MIGRATIONS:-false}"
 MIGRATION_TASK_COMMAND_JSON="${MIGRATION_TASK_COMMAND_JSON:-[\"bun\",\"packages/backend/dist/scripts/migrate.js\"]}"
 INTERNAL_METRICS_PARAMETER="${INTERNAL_METRICS_PARAMETER:-}"
 TASK_SECRET_OVERRIDES_JSON="${TASK_SECRET_OVERRIDES_JSON:-}"
+# The environment-variable counterpart of TASK_SECRET_OVERRIDES_JSON, and the
+# only way CI can introduce a NEW plain variable to a service that already
+# exists. Every revision is rendered from the RUNNING one, so a variable declared
+# only in Terraform never reaches it; an override here is re-asserted on every
+# deploy, so a rollback cannot lose it either. Same contract as the copies in
+# Alia, Mention and OxyHQServices.
+#
+# Allo's workflow has passed LIVEKIT_URL through this since b25558e while this
+# script ignored it: every release from then on carried the LiveKit key and
+# secret without the URL, the boot refused the half-configured SFU, and ECS
+# rolled each one back.
+TASK_ENV_OVERRIDES_JSON="${TASK_ENV_OVERRIDES_JSON:-}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 AWS_PARTITION="${AWS_PARTITION:-aws}"
 POST_DEPLOY_SMOKE_SCRIPT="${POST_DEPLOY_SMOKE_SCRIPT:-}"
@@ -102,6 +114,25 @@ if ! jq -e '
   )
 ' <<<"$TASK_SECRET_OVERRIDES_JSON" >/dev/null; then
   echo "::error::TASK_SECRET_OVERRIDES_JSON must map environment variable names to complete SSM parameter ARNs."
+  exit 1
+fi
+if [[ -z "$TASK_ENV_OVERRIDES_JSON" ]]; then
+  TASK_ENV_OVERRIDES_JSON='{}'
+fi
+# The EMPTY-STRING rejection is the load-bearing clause: an empty override would
+# register a revision declaring the variable as "" rather than leaving it
+# absent, which reads as configured-and-broken instead of unconfigured. A caller
+# that means to send nothing sends `{}`.
+if ! jq -e '
+  type == "object" and
+  length <= 20 and
+  all(
+    to_entries[];
+    (.key | type == "string" and test("^[A-Z][A-Z0-9_]{0,127}$")) and
+    (.value | type == "string" and length > 0 and length <= 2048)
+  )
+' <<<"$TASK_ENV_OVERRIDES_JSON" >/dev/null; then
+  echo "::error::TASK_ENV_OVERRIDES_JSON must map environment variable names to non-empty string values."
   exit 1
 fi
 
@@ -475,6 +506,13 @@ task_secret_overrides="$(jq -c '
   ]
 ' <<<"$TASK_SECRET_OVERRIDES_JSON")"
 
+task_env_overrides="$(jq -c '
+  [
+    to_entries[]
+    | {name: .key, value: .value}
+  ]
+' <<<"$TASK_ENV_OVERRIDES_JSON")"
+
 aws ecs describe-task-definition \
   --task-definition "$current_task_definition" \
   --query taskDefinition \
@@ -492,6 +530,7 @@ jq \
   --arg image "$IMAGE_URI" \
   --arg internalMetricsSecretArn "$internal_metrics_secret_arn" \
   --argjson taskSecretOverrides "$task_secret_overrides" \
+  --argjson taskEnvOverrides "$task_env_overrides" \
   '
     del(
       .taskDefinitionArn,
@@ -503,6 +542,7 @@ jq \
       .registeredBy
     )
     | ($taskSecretOverrides | map(.name)) as $taskSecretNames
+    | ($taskEnvOverrides | map(.name)) as $taskEnvNames
     | .containerDefinitions |= map(
         if .name == $name then
           .image = $image
@@ -531,6 +571,18 @@ jq \
                     )
                   ))
               + $taskSecretOverrides
+            )
+          # AFTER the INTERNAL_METRICS_ENABLED branch above, so an override
+          # naming that variable wins rather than racing it.
+          | .environment = (
+              ((.environment // [])
+                | map(
+                    select(
+                      .name as $existingName
+                      | ($taskEnvNames | index($existingName)) == null
+                    )
+                  ))
+              + $taskEnvOverrides
             )
         else . end
       )
