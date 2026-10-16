@@ -21,7 +21,6 @@
  * does not answer (deleted, hidden) is remembered as unresolved for the same
  * TTL so the list does not ask for it on every render.
  */
-import type { User } from '@oxy.so/core';
 import type { PeopleDirectory, PersonInfo } from '@allo/core';
 import { oxyServices } from '@/lib/oxy';
 import { useUsersStore, type UserEntity } from '@/stores/usersStore';
@@ -42,9 +41,10 @@ export interface Person {
 /** How long "Oxy said nobody" is believed before being asked again. */
 const UNRESOLVED_TTL_MS = 5 * 60 * 1000;
 
-export type UsersLookup = (ids: string[]) => Promise<User[]>;
+export type UsersLookup = (ids: string[]) => Promise<UserEntity[]>;
 
 export class PeopleResolver implements PeopleDirectory {
+  private generation = 0;
   private queued = new Set<string>();
   private inFlight = new Map<string, Promise<void>>();
   private unresolvedAt = new Map<string, number>();
@@ -54,6 +54,14 @@ export class PeopleResolver implements PeopleDirectory {
     private readonly lookup: UsersLookup,
     private readonly now: () => number = () => Date.now(),
   ) {}
+
+  clear(): void {
+    this.generation += 1;
+    this.queued.clear();
+    this.inFlight.clear();
+    this.unresolvedAt.clear();
+    useUsersStore.getState().clearAll();
+  }
 
   /** Asks for anyone not known, without waiting. Safe to call on every render. */
   ensure(ids: readonly string[]): void {
@@ -98,8 +106,10 @@ export class PeopleResolver implements PeopleDirectory {
     const ids = [...this.queued];
     this.queued.clear();
     if (ids.length === 0) return Promise.resolve();
+    const generation = this.generation;
     const request = this.lookup(ids)
       .then((users) => {
+        if (generation !== this.generation) return;
         useUsersStore.getState().upsertMany(users);
         const answered = new Set(users.map((u) => String(u.id)));
         for (const id of ids) if (!answered.has(id)) this.unresolvedAt.set(id, this.now());
@@ -109,6 +119,7 @@ export class PeopleResolver implements PeopleDirectory {
         // is the right behaviour for a network blip and harmless for anything else.
       })
       .finally(() => {
+        if (generation !== this.generation) return;
         for (const id of ids) this.inFlight.delete(id);
       });
     for (const id of ids) this.inFlight.set(id, request);
@@ -135,7 +146,29 @@ export function personFromEntity(entity: UserEntity | undefined): Person | undef
 
 /**
  * The app's resolver, over the Oxy client `OxyProvider` signs in with
- * (`@/lib/oxy`). Every underlying route is public, so no session
- * is needed to draw a person; the bearer only widens what is visible.
+ * (`@/lib/oxy`). Ordinary accounts use public profiles; supervised accounts
+ * use the authenticated minimal people projection without public fallback.
  */
-export const people = new PeopleResolver((ids) => oxyServices.users.getMany(ids));
+let directoryMode: 'unknown' | 'ordinary' | 'supervised' = 'ordinary';
+export function configurePeople(mode: typeof directoryMode): void {
+  directoryMode = mode;
+  people.clear();
+}
+export const people = new PeopleResolver(async (ids) => {
+  if (directoryMode === 'unknown') return [];
+  if (directoryMode === 'ordinary') return oxyServices.users.getMany(ids);
+  const users: UserEntity[] = [];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const response = await oxyServices.safety.people({
+      accountIds: ids.slice(offset, offset + 100),
+    });
+    users.push(
+      ...response.items.map((person) => ({
+        id: person.accountId,
+        username: person.username ?? undefined,
+        name: { displayName: person.displayName ?? person.username ?? '' },
+      })),
+    );
+  }
+  return users;
+});

@@ -1,3 +1,7 @@
+import { transcriptParticipants } from '../../db/platform/transcriptPolicyRepository';
+import { SERVER_SENDER_ID } from '@allo/shared-types';
+import { blobReferences, MAX_BLOB_ACCESS_REFERENCES } from '../../db/platform/blobAccessRepository';
+import { messageDecisions, uniqueParticipants, type MessagingRequester } from './messagingPolicy';
 /**
  * Blobs (`docs/platform/api-v1.md`, Blobs).
  */
@@ -13,7 +17,7 @@ import {
   type BlobStore,
 } from '../../db/platform/blobRepository';
 import { sha256Hex } from '../../middleware/instanceAuth';
-import { AlloHttpError, notFound, validationFailed } from '../../utils/httpErrors';
+import { AlloHttpError, forbidden, notFound, validationFailed } from '../../utils/httpErrors';
 
 export interface BlobServiceDeps {
   db?: AlloDatabase;
@@ -75,4 +79,47 @@ export async function downloadBlob(id: string, deps: BlobServiceDeps = {}): Prom
   const bytes = await store.get(id, db);
   if (!bytes) throw notFound('Blob not found');
   return bytes;
+}
+
+/** An opaque capability is an ordinary-account surface. Supervised reads need
+ * a bounded persisted event/status association whose live policy allows it. */
+export async function blobMessagingAccess(
+  id: string,
+  caller: MessagingRequester & { instanceId: string },
+  deps: BlobServiceDeps = {},
+): Promise<boolean> {
+  const db = deps.db ?? getDb();
+  const snapshot = await db.transaction(
+    async (tx) => {
+      const references = await blobReferences(id, caller.accountId, caller.instanceId, tx);
+      const participants = await transcriptParticipants(
+        [...new Set(references.events.map((event) => event.conversationId))],
+        tx,
+      );
+      return { references, participants };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const { references, participants } = snapshot;
+  if (references.events.length + references.statuses.length > MAX_BLOB_ACCESS_REFERENCES)
+    return false;
+  const resources = [
+    ...references.events.map((event) => ({
+      resourceId: event.id,
+      participantAccountIds: uniqueParticipants([
+        caller.accountId,
+        ...(participants.get(event.conversationId) ?? []),
+        ...(event.senderAccountId === SERVER_SENDER_ID ? [] : [event.senderAccountId]),
+      ]),
+    })),
+    ...references.statuses.map((status) => ({
+      resourceId: status.id,
+      participantAccountIds: uniqueParticipants([caller.accountId, status.authorAccountId]),
+    })),
+  ];
+  if (resources.length === 0) return false;
+  const decisions = await messageDecisions(caller, resources);
+  if (![...decisions.values()].some((decision) => decision.allowed))
+    throw forbidden('This attachment is not available.');
+  return true;
 }

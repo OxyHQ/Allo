@@ -1,3 +1,4 @@
+import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useConversationActions, useSyncState } from '@allo/react';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
@@ -52,6 +53,7 @@ const DELETE = 'delete';
  * screen on a phone; the list pane beside the open conversation on a wide one.
  */
 export function ConversationList() {
+  const supervised = useMessagingSupervision();
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useOxy();
@@ -205,9 +207,11 @@ export function ConversationList() {
         safeArea={!split}
         leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
         actions={
-          <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={askAlia}>
-            {t('chat.askAlia')}
-          </Button>
+          !supervised ? (
+            <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={askAlia}>
+              {t('chat.askAlia')}
+            </Button>
+          ) : undefined
         }
       />
       <View style={styles.search}>
@@ -227,7 +231,7 @@ export function ConversationList() {
           divider
         />
       )}
-      <HistoryTransferBanner />
+      {!supervised && <HistoryTransferBanner />}
       {sync === 'offline' && (
         <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>
           {t('chat.sync.offline')}
@@ -273,12 +277,14 @@ export function ConversationList() {
         />
       </PageAction>
       {/* Mounted only in the signed-in tree: signed out, this route redirects to sign-in. */}
-      <AliaChatSheet
-        ref={aliaChatRef}
-        voiceSession={VoiceSession}
-        clientContext={t('chat.aliaClientContext', { unread })}
-        welcomeSuggestions={aliaWelcomeSuggestions}
-      />
+      {!supervised && (
+        <AliaChatSheet
+          ref={aliaChatRef}
+          voiceSession={VoiceSession}
+          clientContext={t('chat.aliaClientContext', { unread })}
+          welcomeSuggestions={aliaWelcomeSuggestions}
+        />
+      )}
     </View>
   );
 }

@@ -1,6 +1,7 @@
 /* LOCAL HARNESS ONLY — stands in for lib/allo/client.ts when ALLO_HARNESS=1.
    One in-memory fake server, two clients (me and Ana), a DM and a group with a
    few messages, so every chat screen can be looked at without a real account. */
+import { harnessPolicy, supervisedHarness } from './supervision';
 import type { AlloClient } from '@allo/core';
 
 /* The SDK is required lazily: this module is evaluated while `@allo/core` is
@@ -23,7 +24,25 @@ function build(server: Server, accountId: string, displayName: string): AlloClie
     session: FakeSession.for(accountId),
     storage: new MemoryStorage(),
     secrets: new MemorySecrets(),
-    transport: { fetch: server.fetch, socketFactory: server.socketFactory },
+    requireLiveConversationAccess: supervisedHarness && accountId === '6700000000000000000000a1',
+    transport: {
+      fetch: async (input, init) => {
+        if (
+          supervisedHarness &&
+          accountId === '6700000000000000000000a1' &&
+          new URL(String(input)).pathname === '/v1/conversations'
+        ) {
+          if (harnessPolicy() === 'blocked') return Response.json({ conversations: [] });
+          if (harnessPolicy() === 'unavailable')
+            return Response.json(
+              { error: { code: 'unavailable', message: 'Authority unavailable' } },
+              { status: 503 },
+            );
+        }
+        return server.fetch(input, init);
+      },
+      socketFactory: server.socketFactory,
+    },
     syncIntervalMs: 5_000,
   });
 }
@@ -100,6 +119,10 @@ async function buildMine(): Promise<AlloClient> {
     await until(() => ana.conversations.get(dm.id)?.joined === true, 30_000, 25);
     await ana.messages.send(dm.id, 'Morning! The loft viewing is still on for Thursday?');
     await ana.sync.flush();
+    if (supervisedHarness) {
+      await me.sync.now();
+      return;
+    }
     await me.messages.send(dm.id, "It is — eight o'clock, the place by the canal.");
     await ana.messages.send(dm.id, "Perfect. I'll bring the floorplan Teodor sent over.");
     await ana.sync.flush();

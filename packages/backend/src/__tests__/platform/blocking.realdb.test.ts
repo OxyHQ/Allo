@@ -5,6 +5,7 @@ import { appendClientEvent } from '../../db/platform/eventRepository';
 import { listMembers, listLeaves } from '../../db/platform/conversationRepository';
 import { conversationEvents, conversations } from '../../db/schema';
 import { relayTyping } from '../../runtime/socket';
+import { registerFixtureActor } from './oxySafetyFixture';
 import {
   accountId,
   base64,
@@ -160,16 +161,18 @@ describe('blocks govern new contact, preserving history and shared groups', () =
       const { a, b, conversationId } = await create(h.app);
       const frame = { conversationId, ciphertext: base64('typing') };
       const sender = { id: a.id, accountId: a.accountId, appId: 'allo', status: 'active' as const };
-      await relayTyping(sender, frame, h.realtime);
+      await relayTyping(sender, frame, h.realtime, registerFixtureActor(a.accountId));
       await blockUser(h.db, { userId: b.accountId, blockedId: a.accountId });
       h.realtime.reset();
       if (create === dmBetween) {
-        await expect(relayTyping(sender, frame, h.realtime)).rejects.toMatchObject({
+        await expect(
+          relayTyping(sender, frame, h.realtime, registerFixtureActor(a.accountId)),
+        ).rejects.toMatchObject({
           code: 'forbidden',
         });
         expect(h.realtime.typings).toHaveLength(0);
       } else {
-        await relayTyping(sender, frame, h.realtime);
+        await relayTyping(sender, frame, h.realtime, registerFixtureActor(a.accountId));
         expect(h.realtime.typings).toHaveLength(1);
       }
     }

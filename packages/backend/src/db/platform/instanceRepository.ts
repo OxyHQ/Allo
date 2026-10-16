@@ -266,6 +266,7 @@ export async function clearRejectedPushToken(
 
 export interface PushTarget {
   instanceId: string;
+  accountId: string;
   status: InstanceStatus;
   platform: InstancePlatform;
   pushProvider: InstancePushProvider | null;
@@ -282,6 +283,7 @@ export async function findPushTargets(
   const rows = await db
     .select({
       instanceId: clientInstances.id,
+      accountId: clientInstances.accountId,
       status: clientInstances.status,
       platform: clientInstances.platform,
       pushProvider: clientInstances.pushProvider,

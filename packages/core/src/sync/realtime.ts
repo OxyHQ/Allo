@@ -42,10 +42,21 @@ export class Realtime {
       // stops hearing about the accounts it is drawing.
       void ctx.presence.resume();
     });
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        // A revoked device receives no more payloads. Re-read its status using
+        // the original session rather than interpreting a disconnect as revocation.
+        void ctx.instance.refresh().catch(() => undefined);
+      }
+      ctx.conversations.suspendAccess('unavailable');
+      ctx.statuses.suspendAccess();
+      ctx.calls.suspendAccess();
       if (ctx.sync.state === 'live') ctx.sync.setState('idle');
     });
     socket.on('connect_error', (error) => {
+      ctx.conversations.suspendAccess('unavailable');
+      ctx.statuses.suspendAccess();
+      ctx.calls.suspendAccess();
       ctx.log.debug?.('socket connect error', { error: describeError(error) });
       // A refused handshake may mean this instance was revoked or is still pending: re-read our status, throttled.
       const now = ctx.now();

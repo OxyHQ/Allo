@@ -22,9 +22,8 @@
  *   deadline passing into an offline dot: nothing reports that, it is
  *   discovered.
  *
- * Who may see whom is `presenceService.visibleTo`, cached per watcher for
- * `VISIBILITY_TTL_MS`. The cache is short because a block has to take effect
- * while the person who made it is still looking at the screen.
+ * Every read checks live central session/contact authority. Only the last
+ * emitted value is retained to avoid sending unchanged dots, never permission.
  */
 
 import {
@@ -32,19 +31,19 @@ import {
   presenceWatchEventSchema,
   type PresenceState,
 } from '@allo/shared-types';
+import type { MessagingRequester } from '../services/platform/messagingPolicy';
 import type { AuthenticatedInstance } from '../middleware/instanceAuth';
-import { beat, farewell, readPresence, visibleTo } from '../services/platform/presenceService';
+import { beat, farewell, readPresenceBatch } from '../services/platform/presenceService';
 import { logger } from '../utils/logger';
 
 /** How often the union of the watch sets is re-read. */
 export const PRESENCE_TICK_MS = 15_000;
-/** How long a watcher's "may I see this account" answer is reused. */
-export const VISIBILITY_TTL_MS = 60_000;
 
 /** What the hub needs of a socket. Narrow on purpose: the tests drive it with a plain object. */
 export interface PresenceSocket {
   readonly id: string;
   emit(event: 'presence', payload: PresenceState): unknown;
+  disconnect(close?: boolean): unknown;
 }
 
 interface Watcher {
@@ -52,8 +51,7 @@ interface Watcher {
   accountId: string;
   instanceId: string;
   watching: string[];
-  visible: Set<string>;
-  visibleAt: number;
+  requester: MessagingRequester;
   /** What this watcher was last told, so a tick sends only differences. */
   last: Map<string, string>;
 }
@@ -65,8 +63,7 @@ export interface PresenceHubDeps {
   now?: () => Date;
   /** Injected by the tests; production uses the module defaults. */
   service?: {
-    readPresence: typeof readPresence;
-    visibleTo: typeof visibleTo;
+    readPresenceBatch: typeof readPresenceBatch;
     beat: typeof beat;
     farewell: typeof farewell;
   };
@@ -83,7 +80,7 @@ export class PresenceHub {
   constructor(private readonly deps: PresenceHubDeps = {}) {}
 
   private get service() {
-    return this.deps.service ?? { readPresence, visibleTo, beat, farewell };
+    return this.deps.service ?? { readPresenceBatch, beat, farewell };
   }
 
   private get now(): Date {
@@ -91,14 +88,17 @@ export class PresenceHub {
   }
 
   /** A socket arrived. An ACTIVE instance starts beating; a pending one is not present. */
-  async attach(socket: PresenceSocket, instance: AuthenticatedInstance): Promise<void> {
+  async attach(
+    socket: PresenceSocket,
+    instance: AuthenticatedInstance,
+    accessToken: string,
+  ): Promise<void> {
     this.watchers.set(socket.id, {
       socket,
       accountId: instance.accountId,
       instanceId: instance.id,
       watching: [],
-      visible: new Set(),
-      visibleAt: 0,
+      requester: { accountId: instance.accountId, accessToken },
       last: new Map(),
     });
     if (instance.status !== 'active') return;
@@ -148,60 +148,54 @@ export class PresenceHub {
       .slice(0, MAX_PRESENCE_WATCH);
     watcher.watching = accountIds;
     watcher.last.clear();
-    watcher.visibleAt = 0;
     if (accountIds.length === 0) return;
 
-    const answer = await this.service.readPresence(watcher.accountId, accountIds, {
-      now: () => this.now,
-    });
-    for (const state of answer.presence) {
-      watcher.last.set(state.accountId, fingerprint(state));
-      watcher.socket.emit('presence', state);
-    }
+    await this.refresh([watcher], this.now);
   }
 
-  /** One pass over this task's watchers, sending each only what changed for it. */
   async tick(): Promise<void> {
-    const watchers = [...this.watchers.values()].filter((w) => w.watching.length > 0);
-    if (watchers.length === 0) return;
-    const now = this.now;
-    for (const watcher of watchers) {
-      try {
-        await this.refresh(watcher, now);
-      } catch (error: unknown) {
-        logger.debug('presence tick failed for a watcher', error);
-      }
-    }
+    await this.refresh(
+      [...this.watchers.values()].filter((watcher) => watcher.watching.length > 0),
+      this.now,
+    );
   }
 
-  /** A connection changed on THIS task: tell the watchers here without waiting for the tick. */
   private async pushLocal(accountId: string): Promise<void> {
-    const now = this.now;
-    for (const watcher of this.watchers.values()) {
-      if (!watcher.watching.includes(accountId)) continue;
-      try {
-        await this.refresh(watcher, now);
-      } catch (error: unknown) {
-        logger.debug('presence push failed', error);
-      }
-    }
+    await this.refresh(
+      [...this.watchers.values()].filter((watcher) => watcher.watching.includes(accountId)),
+      this.now,
+    );
   }
 
-  private async refresh(watcher: Watcher, now: Date): Promise<void> {
-    if (now.getTime() - watcher.visibleAt > VISIBILITY_TTL_MS) {
-      watcher.visible = await this.service.visibleTo(watcher.accountId, watcher.watching, {
-        now: () => now,
-      });
-      watcher.visibleAt = now.getTime();
-    }
-    const answer = await this.service.readPresence(watcher.accountId, watcher.watching, {
-      now: () => now,
-    });
-    for (const state of answer.presence) {
-      const mark = fingerprint(state);
-      if (watcher.last.get(state.accountId) === mark) continue;
-      watcher.last.set(state.accountId, mark);
-      watcher.socket.emit('presence', state);
+  private async refresh(watchers: Watcher[], now: Date): Promise<void> {
+    if (!watchers.length) return;
+    try {
+      const answer = await this.service.readPresenceBatch(
+        watchers.map((watcher) => ({
+          requestId: watcher.socket.id,
+          instanceId: watcher.instanceId,
+          accountId: watcher.accountId,
+          accessToken: watcher.requester.accessToken,
+          accountIds: watcher.watching,
+        })),
+        { now: () => now },
+      );
+      for (const watcher of watchers) {
+        const states = answer.get(watcher.socket.id);
+        if (!states) {
+          watcher.socket.disconnect(true);
+          continue;
+        }
+        for (const state of states) {
+          const mark = fingerprint(state);
+          if (watcher.last.get(state.accountId) === mark) continue;
+          watcher.last.set(state.accountId, mark);
+          watcher.socket.emit('presence', state);
+        }
+      }
+    } catch (error) {
+      for (const watcher of watchers) watcher.socket.disconnect(true);
+      throw error;
     }
   }
 

@@ -1,3 +1,4 @@
+import { registerFixtureActor } from './oxySafetyFixture';
 /**
  * The `/v1` Socket.IO namespace: the handshake is Oxy + instance signature,
  * rooms come from the verified instance, `typing` is relayed to the other
@@ -79,6 +80,7 @@ function socketAuthFor(instance: TestInstance, overrides: Record<string, unknown
   );
   return {
     oxyUser: instance.accountId,
+    token: registerFixtureActor(instance.accountId),
     instanceId: instance.id,
     timestamp,
     signature,
@@ -186,15 +188,17 @@ describe('rooms and relays', () => {
     expect(leaked).toBe(false);
 
     // Revocation through the real service with the real realtime: b hears
-    // instance.revoked on the account room, then is disconnected.
+    // no new payload once revoked; its socket is disconnected. Other live
+    // instances of the account may receive the account notification.
     setRealtime(sockets.realtime);
-    const revokedEvent = new Promise<unknown>((resolve) =>
-      sb.socket.once('instance.revoked', resolve),
-    );
+    let revokedPayload = false;
+    sb.socket.once('instance.revoked', () => {
+      revokedPayload = true;
+    });
     const disconnected = new Promise<string>((resolve) => sb.socket.once('disconnect', resolve));
     await revokeInstance(b.accountId, b.id, { db: h.db });
-    expect(await revokedEvent).toEqual({ instanceId: b.id });
     expect(await disconnected).toBe('io server disconnect');
+    expect(revokedPayload).toBe(false);
     expect(await sockets.realtime.isInstanceConnected(b.id)).toBe(false);
     setRealtime(h.realtime);
 

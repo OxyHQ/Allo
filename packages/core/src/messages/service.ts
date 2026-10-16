@@ -61,7 +61,10 @@ export class MessagesService {
     this.typing.clear();
   }
 
+  private readonly withheldTimeline: TimelineItemView[] = [];
+
   timeline(conversationId: string): TimelineItemView[] {
+    if (!this.ctx.conversations.canRead(conversationId)) return this.withheldTimeline;
     const cached = this.timelines.get(conversationId);
     if (cached) return cached;
     const { ctx } = this;

@@ -79,6 +79,9 @@ export interface PeopleDirectory {
 }
 
 export interface AlloClientOptions {
+  /** Require a fresh server transcript decision before exposing stored content.
+   * Set by the host's canonical supervision state, never persisted as authority. */
+  requireLiveConversationAccess?: boolean;
   baseUrl: string;
   appId: string;
   platform: Platform;
@@ -284,6 +287,8 @@ export interface TimelineItemView {
 }
 
 export interface ConversationView {
+  /** Missing means the ordinary offline-capable mode. Denied views contain no transcript metadata. */
+  access?: 'allowed' | 'checking' | 'blocked' | 'unavailable';
   id: string;
   kind: 'dm' | 'group';
   appId: string;

@@ -507,5 +507,15 @@
   "homiio.team.continue": "Conferma e apri la chat",
   "calls.enableAudio": "Attiva audio della chiamata",
   "calls.waitingVideo": "In attesa del video",
-  "calls.membershipChanged": "La chiamata è terminata perché la sicurezza del gruppo è cambiata. Avvia una nuova chiamata per continuare."
+  "calls.membershipChanged": "La chiamata è terminata perché la sicurezza del gruppo è cambiata. Avvia una nuova chiamata per continuare.",
+  "supervision.conversation": "Conversazione",
+  "supervision.checking.title": "Verifica dell’accesso",
+  "supervision.checking.body": "I tuoi messaggi appariranno dopo la conferma dell’accesso.",
+  "supervision.blocked.title": "Conversazione non disponibile",
+  "supervision.blocked.body": "L’accesso a questa conversazione è limitato. Controlla le impostazioni di supervisione.",
+  "supervision.unavailable.title": "Impossibile verificare l’accesso",
+  "supervision.unavailable.body": "I tuoi messaggi sono nascosti finché non possiamo confermare l’accesso. Riprova.",
+  "supervision.unsupported.title": "Non disponibile con la supervisione",
+  "supervision.unsupported.body": "Il trasferimento della cronologia e i backup non sono ancora disponibili per gli account supervisionati.",
+  "supervision.review": "Controlla la supervisione"
 }

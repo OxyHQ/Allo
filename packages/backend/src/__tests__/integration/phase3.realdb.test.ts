@@ -1,3 +1,4 @@
+import { registerFixtureActor } from '../platform/oxySafetyFixture';
 /**
  * Phase 3 of the platform, the real SDK against the real backend: E2EE history
  * transfer between instances of one account, the encrypted account backup and
@@ -464,7 +465,10 @@ describe('transfer keys', () => {
     // The contract: `transferPublicKey` is required on `POST /v1/instances`.
     const res = await fetch(`${h.baseUrl}/v1/instances`, {
       method: 'POST',
-      headers: { authorization: `Bearer test:${bobId}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${registerFixtureActor(bobId)}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({
         appId: 'allo',
         platform: 'ios',

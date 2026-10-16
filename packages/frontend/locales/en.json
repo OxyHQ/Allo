@@ -507,5 +507,15 @@
   "homiio.team.continue": "Confirm and open team chat",
   "calls.enableAudio": "Enable call audio",
   "calls.waitingVideo": "Waiting for video",
-  "calls.membershipChanged": "The call ended because group security changed. Start a new call to continue."
+  "calls.membershipChanged": "The call ended because group security changed. Start a new call to continue.",
+  "supervision.conversation": "Conversation",
+  "supervision.checking.title": "Checking access",
+  "supervision.checking.body": "Your messages will appear after access is confirmed.",
+  "supervision.blocked.title": "Conversation unavailable",
+  "supervision.blocked.body": "Access to this conversation is restricted. Review your supervision settings.",
+  "supervision.unavailable.title": "Cannot check access",
+  "supervision.unavailable.body": "Your messages are hidden until we can confirm access. Try again.",
+  "supervision.unsupported.title": "Not available with supervision",
+  "supervision.unsupported.body": "History transfer and backups are not available for supervised accounts yet.",
+  "supervision.review": "Review supervision"
 }

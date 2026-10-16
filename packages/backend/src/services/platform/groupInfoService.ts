@@ -1,3 +1,10 @@
+import { transcriptParticipants } from '../../db/platform/transcriptPolicyRepository';
+import {
+  conversationParticipants,
+  requireMessageAccess,
+  requireUnchangedParticipants,
+  transcriptDecisions,
+} from './messagingPolicy';
 /**
  * The stored GroupInfo (`docs/platform/api-v1.md`, Conversations):
  * `GET` and `PUT /v1/conversations/:id/group-info`.
@@ -48,20 +55,26 @@ export async function getGroupInfo(
   deps: { db?: AlloDatabase } = {},
 ): Promise<GroupInfoResponse> {
   const db = deps.db ?? getDb();
-  // A stranger learns nothing, not even that the conversation exists; an
-  // account that left or was removed is told so, since re-admission is not
-  // its own to arrange.
-  const member = await findMember(conversationId, caller.accountId, db);
-  if (!member) throw notFound('Conversation not found');
-  if (member.state !== 'joined')
-    throw forbidden('This account is no longer a member of the conversation');
-  const conversation = await findConversationById(conversationId, db);
-  if (!conversation) throw notFound('Conversation not found');
-  const row = await findGroupInfo(conversationId, db);
-  // Only the current epoch's is any use to a joiner; a stale one (which the
-  // same-transaction upsert should make impossible) is served as none.
-  if (!row || row.epoch !== conversation.currentEpoch) return { groupInfo: null };
-  return { groupInfo: toStoredGroupInfo(row) };
+  const { groupInfo, evidence } = await db.transaction(
+    async (tx) => {
+      const member = await findMember(conversationId, caller.accountId, tx);
+      if (!member) throw notFound('Conversation not found');
+      if (member.state !== 'joined')
+        throw forbidden('This account is no longer a member of the conversation');
+      const conversation = await findConversationById(conversationId, tx);
+      if (!conversation) throw notFound('Conversation not found');
+      const row = await findGroupInfo(conversationId, tx);
+      return {
+        groupInfo: row && row.epoch === conversation.currentEpoch ? toStoredGroupInfo(row) : null,
+        evidence: await transcriptParticipants([conversationId], tx),
+      };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+  const decision = await transcriptDecisions(caller, evidence);
+  if (!decision.get(conversationId)?.allowed)
+    throw forbidden('This conversation is not available.');
+  return { groupInfo };
 }
 
 export async function putGroupInfo(
@@ -71,6 +84,9 @@ export async function putGroupInfo(
   deps: { db?: AlloDatabase } = {},
 ): Promise<GroupInfoResponse> {
   const db = deps.db ?? getDb();
+  const participants =
+    (await conversationParticipants([conversationId], db)).get(conversationId) ?? [];
+  await requireMessageAccess(caller, conversationId, participants);
   const member = await findMember(conversationId, caller.accountId, db);
   if (!member) throw notFound('Conversation not found');
   return db.transaction(async (tx) => {
@@ -78,6 +94,7 @@ export async function putGroupInfo(
     // row describes when the write lands.
     const conversation = await lockConversation(conversationId, tx);
     if (!conversation) throw notFound('Conversation not found');
+    await requireUnchangedParticipants(conversationId, participants, tx);
     const leaf = await findActiveLeaf(conversationId, caller.instanceId, tx);
     if (!leaf) throw forbidden('This instance holds no active leaf in the conversation');
     if (request.epoch !== conversation.currentEpoch) {

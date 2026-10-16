@@ -4,9 +4,8 @@
  *
  * `createApp` with the production `requireInstance`, the production Socket.IO
  * server and a throwaway, fully migrated Postgres; `@allo/core` clients over
- * real HTTP and real sockets on an ephemeral port. The only double is Oxy: a
- * bearer of the form `test:<accountId>` names the account, on HTTP and on the
- * handshake.
+ * real HTTP and real sockets on an ephemeral port. Oxy is an external HTTP authority fixture; the real shared SDK validates
+ * its responses on HTTP, sockets and every policy decision.
  *
  * Each suite boots its own harness (`beforeAll(() => h.boot())`), because
  * `bun test --parallel` runs every file isolated, in its own module registry,
@@ -37,46 +36,19 @@ import {
 import * as schema from '../../db/schema';
 import { setUpTestDatabase, type TestDatabaseHandle } from '../../db/testDatabase';
 import { requireInstance } from '../../middleware/instanceAuth';
-import { requireOxySession } from '../../middleware/oxySession';
+import { createMessagingAuth } from '../../middleware/messagingAuth';
+import { fixtureOxy, registerFixtureActor } from '../platform/oxySafetyFixture';
 import { clearRealtime, setRealtime } from '../../runtime/realtime';
 import { createSocketServer, type SocketRuntime } from '../../runtime/socket';
 
 const { MemorySecrets, MemoryStorage } = testing;
 
-export const TOKEN_PREFIX = 'test:';
-
-/** Oxy's HTTP half: `Authorization: Bearer test:<accountId>` → `req.userId`. */
-export const bearerAuth: RequestHandler = (req, _res, next) => {
-  const header = req.get('authorization') ?? '';
-  if (header.startsWith(`Bearer ${TOKEN_PREFIX}`)) {
-    const accountId = header.slice(`Bearer ${TOKEN_PREFIX}`.length);
-    Reflect.set(req, 'userId', accountId);
-    Reflect.set(req, 'user', { id: accountId });
-  }
-  next();
-};
-
-/** Oxy's socket half: the same bearer in `handshake.auth.token`. */
-export const socketOxy = {
-  middleware: {
-    socket: () => async (socket: unknown, next: (err?: Error) => void) => {
-      const s = socket as {
-        handshake: { auth: Record<string, unknown> };
-        data: Record<string, unknown>;
-      };
-      const token = s.handshake.auth.token;
-      if (typeof token !== 'string' || !token.startsWith(TOKEN_PREFIX))
-        return next(new Error('Authentication required'));
-      s.data.userId = token.slice(TOKEN_PREFIX.length);
-      Reflect.set(s, 'user', { id: s.data.userId });
-      next();
-    },
-  },
-};
+export const bearerAuth: RequestHandler = fixtureOxy.middleware.auth();
+export const socketOxy = fixtureOxy;
 
 export function sessionFor(accountId: string): OxySessionAdapter {
   return {
-    getAccessToken: async () => `${TOKEN_PREFIX}${accountId}`,
+    getAccessToken: async () => registerFixtureActor(accountId),
     getAccountId: () => accountId,
     subscribe: () => () => undefined,
   };
@@ -91,6 +63,7 @@ export interface TestClient {
 }
 
 export interface MakeClientOptions {
+  requireLiveConversationAccess?: boolean;
   /** Default true. */
   start?: boolean;
   /** Reuse an earlier client's adapters to simulate a restart on the same device. */
@@ -154,7 +127,7 @@ export class Harness {
     const pass: RequestHandler = (_req, _res, next) => next();
     const app = createApp({
       auth: bearerAuth,
-      v1Auth: [bearerAuth, requireOxySession],
+      v1Auth: [createMessagingAuth(fixtureOxy)],
       instanceAuth: requireInstance({ getDb }),
       rateLimit: pass,
       cors: pass,
@@ -201,6 +174,7 @@ export class Harness {
       syncIntervalMs: 60_000,
       keyPackageTarget: 6,
       backupDebounceMs: options.backupDebounceMs,
+      requireLiveConversationAccess: options.requireLiveConversationAccess,
       logger: process.env.ALLO_DEBUG
         ? {
             debug: (m, meta) => console.log(`[${name}] ${m}`, meta ?? ''),

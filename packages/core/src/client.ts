@@ -357,7 +357,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     }
     c.sync.start();
     c.outbox.start();
-    c.backup.start();
+    if (!options.requireLiveConversationAccess) c.backup.start();
     c.presence.start(PRESENCE_HEARTBEAT_MS);
     c.statuses.start();
     await c.instance.ensureTransferKey();

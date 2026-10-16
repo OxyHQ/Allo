@@ -38,6 +38,10 @@ import { nativeCallBridge } from './nativeCallBridge';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useOxy } from '@oxy.so/services';
+import { useSupervision } from '@oxy.so/services/ui';
+import { MessagingSupervisionContext } from './MessagingSupervision';
+import { configurePeople } from './people';
+import { ConversationAccessState } from './ConversationAccessState';
 import type { AlloClient } from '@allo/core';
 import { AlloProvider, useAlloClient, useInstanceState } from '@allo/react';
 import { logger } from '@/utils/logger';
@@ -48,15 +52,23 @@ import { RestoreHistoryPrompt } from './RestoreHistoryPrompt';
 import { signOutOfAllo } from './signOut';
 
 interface Held {
+  key: string;
   accountId: string;
   client: AlloClient;
 }
 
 export function AlloRoot({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, oxyServices, logout } = useOxy();
+  const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
-  const [client, setClient] = useState<AlloClient | null>(null);
+  const supervision = useSupervision();
+  const personal = (user?.kind ?? 'personal') === 'personal';
+  const known = !accountId || !personal || supervision.data !== undefined;
+  const supervised =
+    personal && Boolean(supervision.data?.self && supervision.data.self.status !== 'ended');
+  const key = accountId && known ? JSON.stringify([accountId, activeSessionId, supervised]) : null;
+  const [current, setCurrent] = useState<Held | null>(null);
   const held = useRef<Held | null>(null);
+  const stopTail = useRef<Promise<void>>(Promise.resolve());
   // Read through a ref so a re-created services object does not rebuild the client.
   // Updated in an effect, never during render, and declared BEFORE the effect
   // that reads it, so it is already current when that one runs in the same commit.
@@ -69,27 +81,34 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     // Until the session is known, `accountId === null` means "not yet", not "signed out".
     if (isLoading) return;
     const previous = held.current;
-    if (previous && previous.accountId === accountId) return;
+    if (previous && previous.key === key) return;
+    configurePeople(!known ? 'unknown' : supervised ? 'supervised' : 'ordinary');
 
     if (previous) {
       held.current = null;
-      setClient(null);
+      setCurrent(null);
       // Stopped in both cases — an account switch and a session that is not
       // there right now are the same thing to this device's keys.
-      previous.client
-        .stop()
-        .catch((error: unknown) =>
-          logger.warn('[allo] retiring the previous client failed', error),
-        );
     }
-    if (accountId === null) return;
+    const stopped = stopTail.current.then(() => previous?.client.stop());
+    stopTail.current = stopped;
+    if (accountId === null || key === null) {
+      void stopped.catch((error) =>
+        logger.error('[allo] the previous client could not stop', error),
+      );
+      return;
+    }
 
     let cancelled = false;
-    createAppAlloClient({ oxy: oxyRef.current })
+    stopped
+      .then(() => createAppAlloClient({ oxy: oxyRef.current, supervised }))
       .then(async (next) => {
-        if (cancelled) return;
-        held.current = { accountId, client: next };
-        setClient(next);
+        if (cancelled) {
+          await next.stop();
+          return;
+        }
+        held.current = { key, accountId, client: next };
+        setCurrent(held.current);
         try {
           await next.start();
         } catch (error) {
@@ -101,25 +120,48 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accountId, isLoading]);
+  }, [accountId, isLoading, key, known, supervised]);
+
+  useEffect(
+    () => () => {
+      const previous = held.current;
+      held.current = null;
+      void previous?.client
+        .stop()
+        .catch((error) => logger.error('[allo] unmount could not stop the client', error));
+    },
+    [],
+  );
 
   if (accountId === null) return <>{children}</>;
-  if (client === null) return null;
-  return (
-    <AlloProvider client={client}>
-      <PushRegistration />
-      <CallAudio />
-      <CallNotice />
-      <EnrollmentGate
-        onSignOut={() => {
-          void signOutOfAllo(client, logout);
+  if (!known)
+    return (
+      <ConversationAccessState
+        state={supervision.isError ? 'unavailable' : 'checking'}
+        onRetry={() => {
+          void supervision.refetch();
         }}
-      >
-        {children}
-        {/* Asked once of a fresh device whose account has a backup; never holds boot. */}
-        <RestoreHistoryPrompt />
-      </EnrollmentGate>
-    </AlloProvider>
+      />
+    );
+  if (current === null || current.key !== key) return <ConversationAccessState state="checking" />;
+  const client = current.client;
+  return (
+    <MessagingSupervisionContext.Provider value={supervised}>
+      <AlloProvider client={client}>
+        <PushRegistration />
+        <CallAudio />
+        <CallNotice />
+        <EnrollmentGate
+          onSignOut={() => {
+            void signOutOfAllo(client, logout);
+          }}
+        >
+          {children}
+          {/* Asked once of a fresh device whose account has a backup; never holds boot. */}
+          {!supervised && <RestoreHistoryPrompt />}
+        </EnrollmentGate>
+      </AlloProvider>
+    </MessagingSupervisionContext.Provider>
   );
 }
 

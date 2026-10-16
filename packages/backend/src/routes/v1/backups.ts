@@ -15,13 +15,18 @@ import {
   putAccountBackup,
 } from '../../services/platform/backupService';
 import { asyncRoute } from './asyncRoute';
+import { oxy } from '../../oxy';
 import { parseBody } from './validate';
 
 export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
+  // Opaque archives have no authoritative per-conversation coverage. Apply
+  // ordinary-account authorization to each matched route, including case variants.
+  const archiveAuth = oxy.middleware.auth();
 
   router.put(
     '/accounts/me/backup',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -35,6 +40,7 @@ export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Rout
 
   router.get(
     '/accounts/me/backup',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);
@@ -44,6 +50,7 @@ export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Rout
 
   router.delete(
     '/accounts/me/backup',
+    archiveAuth,
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const me = getRequiredInstance(req);

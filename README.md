@@ -170,3 +170,12 @@ Issues and pull requests are welcome. Fork, branch, make the change, run
 ## License
 
 [MIT](LICENSE). Copyright (c) 2024-present OxyHQ.
+
+For the supervised messaging UI, the existing local harness also accepts
+`?harnessSupervised=1` on the initial URL. It uses the real Allo client and MLS
+engine with the in-memory transport and minimal people fixtures. In that browser,
+`window.dispatchEvent(new CustomEvent('allo:harness-policy', { detail: 'blocked' }))`
+withholds the conversation; `unavailable` simulates authority failure and `allowed`
+restores it. These controls exist only behind `ALLO_HARNESS=1`; they are visual
+fixtures, not authorization proofs. The backend's supervised messaging tests run
+against PostgreSQL and the real Oxy SDK transport to a bounded authority fixture.

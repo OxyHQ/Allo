@@ -281,3 +281,58 @@ verifies it in the tree), `open` (not built in this change).
 | Desktop is first class without a primary phone | Approval can be given by any active instance; `platform` admits `desktop` and `node`; nothing in the API distinguishes a phone. | met by design |
 | A new device joins with no other device online | It fetches the GroupInfo the last committer stored and joins by external commit; the members admit it from the chain, not from the server's word. A conversation from before stored GroupInfos still waits for an elector, and the app says so. | met by design and by test (core `join.test.ts` j1, j2, j6, j7; backend `groupInfo.realdb.test.ts`; app `joinNotice.test.tsx`) |
 | A device that lost its group state recovers it alone | One resync commit by the same instance replaces its own leaf; membership is unchanged and nothing sent before it becomes readable. Losing the signing key too makes it a new instance. | met by design and by test (core `join.test.ts` j3, j3b) |
+
+## 8. Supervised accounts and live messaging authority
+
+Oxy owns supervision, guardian consent, approved contacts, blocks and session
+revocation. Allo declares the reviewed messaging action on its instance-signed
+platform routes and passes the original bearer to `messageAccessBatch`. It never
+substitutes an account ID for a human proof. Background delivery uses
+`deliveryAccessBatch` with the persisted sender and participants; socket delivery
+also verifies every recipient's original bearer with `messagingSessions` and
+intersects that account with the current, unrevoked Allo instance. A handshake is
+not a reusable authorization lease. Authority failures withhold data.
+
+Requests are bounded by the SDK's resource, participant-slot and byte limits.
+Recipients are checked in batches, not individually. Conversation writes compare
+the authorized participant set again under the conversation lock. Read metadata
+and historical membership evidence come from one database snapshot, which closes
+before the Oxy request. The full historical membership set includes removed
+senders: approving the remaining members does not authorize ciphertext from a
+removed, unapproved sender. It is read through the existing conversation/account
+unique index with a bounded overflow witness, not a scan of the event log.
+Human event insertion requires its persisted membership row; leave, removal and
+reset retain that row. The rollout read-only audit found no human event without
+membership evidence (154 events, 6 membership rows in production).
+
+A denied historical participant withholds the entire conversation. Allo does not
+filter individual MLS commits or advance its conversation sequence past denied
+ciphertext. The sync transport cursor may advance over a withheld conversation;
+on renewed authorization the client retrieves the complete missing history and
+processes commits sequentially before resuming reconciliation and sending. Tests
+cover a withheld page of 205 messages, a membership commit, another allowed
+conversation, restart, and exact recovery without duplicate messages.
+
+The official client hides cached conversation titles, participants, previews,
+messages and media while authority is unknown or denied. Opening a transcript or
+returning from the background requires a fresh decision. Account/session changes
+replace the client and clear the people cache; encrypted history and keys remain
+intact. Supervised people search and profiles expose only Oxy's authorized minimal
+people projection. Guardian management opens the shared Oxy Supervision screen.
+This presentation gate cannot retract plaintext previously seen by a modified
+client, a screenshot or an authorized recipient; E2EE's residual risks above
+still apply. No central policy request contains message plaintext or media keys.
+
+Opaque backup/history-transfer archives cannot prove which conversations they
+contain. They remain unavailable to supervised accounts, including direct HTTP
+calls and live history-offer delivery; their matched routes carry ordinary-account
+authorization independently of path spelling. Unassociated blobs use the same
+ordinary-account gate. Associated conversation/status blobs require their live
+policy. Adults retain existing backup and offline-history behavior. Supervised
+sessions do not expose the unreviewed assistant entry point.
+
+Deployment requires the reviewed Allo Oxy application capabilities
+`safety:messaging:v1`, `safety:messaging-delivery:v1` and the service scope
+`safety:decide`, provisioned by Oxy's reviewed workload plan. Shipping a route does
+not grant those capabilities; missing authority fails closed. No database or MLS
+wire-format migration is required for this change.
