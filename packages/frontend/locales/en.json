@@ -398,6 +398,8 @@
   "settings.preferences.appearance": "Appearance",
   "settings.preferences.language": "Language",
   "settings.preferences.notifications": "Notifications",
+  "settings.preferences.conversationTones": "Conversation tones",
+  "settings.preferences.conversationTonesDesc": "Play a sound when a message arrives, is sent or fails to send in the open conversation.",
   "settings.privacy.add": "Add",
   "settings.privacy.blockedProfiles": "Blocked profiles",
   "settings.privacy.blockedUsers": "Blocked Users",

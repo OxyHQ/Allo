@@ -41,6 +41,7 @@ import { hasMessageMedia, MessageMedia } from '@/components/chat/media/MessageMe
 import { stickerDraftOf } from '@/lib/chat/stickerRef';
 import type { Sticker } from '@oxy.so/stickers';
 import { Transcript } from '@/components/chat/transcript/Transcript';
+import { useConversationSounds } from '@/components/chat/useConversationSounds';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
 import { collectViewerItems } from '@/lib/chat/attachmentViewer';
@@ -86,6 +87,13 @@ const INSET_MEDIA: ReadonlySet<TimelineContent['kind']> = new Set<TimelineConten
 /** A readable measure for a bubble once the conversation has a pane to itself. */
 const WIDE_BUBBLE_MAX_WIDTH = 560;
 
+/** Allo's doodle wallpaper: a seamless 540 x 981 tile, drawn a phone's width across. */
+const WALLPAPER = {
+  source: require('@/assets/images/chat-wallpaper.png'),
+  width: 360,
+  height: 654,
+};
+
 /** One conversation: its header, its messages and the composer. */
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const router = useRouter();
@@ -115,6 +123,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   // conversation opened; the read receipt below zeroes it straight after.
   const [unreadAnchor, setUnreadAnchor] = useState<string | undefined | null>(null);
   const { items, markRead } = timeline;
+  useConversationSounds(items);
   if (unreadAnchor === null && items.length > 0)
     setUnreadAnchor(firstUnreadId(items, view?.unreadCount ?? 0));
 
@@ -525,7 +534,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         </View>
       )}
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
-        <ChatBackground variant="pattern" style={styles.root}>
+        <ChatBackground variant="pattern" patternImage={WALLPAPER} style={styles.root}>
           {matches.length === 0 && search !== null ? (
             <ChatEmptyState title={t('chat.search.empty')} />
           ) : items.length === 0 && timeline.reachedStart ? (

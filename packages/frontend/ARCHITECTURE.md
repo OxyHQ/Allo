@@ -46,6 +46,20 @@ never patched here.
 `ConversationScreen` = `ChatHeader` + `ChatBackground` › `Transcript` +
 `Composer`, with a `MediaViewer` (Bloom's zoomable gallery).
 
+- **The wallpaper** is Bloom's `ChatBackground variant="pattern"` with Allo's
+  doodle tile as `patternImage` (`assets/images/chat-wallpaper.png`, a seamless
+  540 x 981 white-on-transparent tile drawn 360 pt wide). Bloom uses only its
+  alpha and inks it like its own glyphs, so it follows the theme in both modes;
+  never pass it as `variant="image"`, which stretches and dims a photo.
+- **The tones** are `useConversationSounds` (expo-audio's `useAudioPlayer`, the
+  three files in `assets/sounds/`): `lib/chat/soundCue.ts` decides, purely,
+  whether a change to the open transcript is a message arriving (from somebody
+  else, new and under 30 s old, so opening, paging and a synced backlog stay
+  quiet), leaving (an own message `pending` → accepted) or failing. One tone per
+  change and at most one per 1.5 s, except a failure, which always plays; none
+  in the background or during a call. Settings → Preferences →
+  "Conversation tones" turns them off for this device (`stores/soundStore.ts`).
+
 - **`Transcript`** is Bloom's `MessageList` in a scroller: the list owns the
   runs, the separators, the avatars and the bubbles, and the app owns only the
   scrolling, because the history it pages through is the app's.
