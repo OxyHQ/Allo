@@ -1,10 +1,10 @@
 import type { TimelineItemView } from '@allo/core';
 import { useCall } from '@allo/react';
-import { useAudioPlayer } from 'expo-audio';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { type SoundCueMemory, soundCue } from '@/lib/chat/soundCue';
+import { useTones } from '@/lib/sounds/useTones';
 import { useSoundStore } from '@/stores/soundStore';
 
 /** A burst (a group catching up, an album) is one tone, not one per message. */
@@ -13,15 +13,13 @@ const MIN_GAP_MS = 1_500;
 /**
  * The open conversation's tones. Silent while the app is in the background
  * (the notification speaks then) and during a call, whose audio a tone would
- * talk over. The audio mode is left alone: expo-audio's default already mixes
- * with other apps instead of pausing their music.
+ * talk over. How a tone is played, so that it honours the silent switch, is
+ * `useTones`.
  */
 export function useConversationSounds(items: readonly TimelineItemView[]): void {
   const enabled = useSoundStore((state) => state.conversationTones);
   const inCall = useCall() !== null;
-  const incoming = useAudioPlayer(require('@/assets/sounds/incoming.wav'));
-  const outgoing = useAudioPlayer(require('@/assets/sounds/outgoing.wav'));
-  const failure = useAudioPlayer(require('@/assets/sounds/failure.wav'));
+  const play = useTones();
   const memory = useRef<SoundCueMemory | null>(null);
   const lastPlayed = useRef(0);
   useEffect(() => {
@@ -32,8 +30,6 @@ export function useConversationSounds(items: readonly TimelineItemView[]): void 
     // A failure always speaks: it is the one tone that asks for something.
     if (next.cue !== 'failure' && now - lastPlayed.current < MIN_GAP_MS) return;
     lastPlayed.current = now;
-    const player = { incoming, outgoing, failure }[next.cue];
-    player.seekTo(0);
-    player.play();
-  }, [items, enabled, inCall, incoming, outgoing, failure]);
+    play(next.cue);
+  }, [items, enabled, inCall, play]);
 }

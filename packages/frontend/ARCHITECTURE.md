@@ -51,8 +51,16 @@ never patched here.
   540 x 981 white-on-transparent tile drawn 360 pt wide). Bloom uses only its
   alpha and inks it like its own glyphs, so it follows the theme in both modes;
   never pass it as `variant="image"`, which stretches and dims a photo.
-- **The tones** are `useConversationSounds` (expo-audio's `useAudioPlayer`, the
-  three files in `assets/sounds/`): `lib/chat/soundCue.ts` decides, purely,
+- **The tones** are `useConversationSounds` (the three files in
+  `assets/sounds/`), played by `lib/sounds/useTones`. On a phone a tone is an
+  ALERT, not media: `modules/allo-tones` plays it through iOS System Sound
+  Services and Android's notification stream (`USAGE_NOTIFICATION_EVENT`), so
+  it is silent on silent or vibrate, follows the ringer volume and never
+  pauses the user's music. Never play one through expo-audio there: the
+  AVAudioSession is one setting for the whole app, expo-video sets it to
+  `.playback` whenever a video exists and never puts it back, and anything in
+  `.playback` ignores the silent switch. The web, which has no ringer, uses
+  expo-audio. `lib/chat/soundCue.ts` decides, purely,
   whether a change to the open transcript is a message arriving (from somebody
   else, new and under 30 s old, so opening, paging and a synced backlog stay
   quiet), leaving (an own message `pending` → accepted) or failing. One tone per
