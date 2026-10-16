@@ -1,6 +1,11 @@
 {
   "name": "@oxy.so/allo-contracts",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OxyHQ/Allo.git",
+    "directory": "packages/contracts"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
