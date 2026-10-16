@@ -25,6 +25,9 @@ export DEPLOY_TEST_EXPECT_METRICS_ARN=false
 export DEPLOY_TEST_METRICS_PARAMETER=/oxy/sampleapp/INTERNAL_METRICS_TOKEN
 export DEPLOY_TEST_TASK_EXIT_CODE=0
 export DEPLOY_TEST_EXPECT_TASK_SECRET_ARN=false
+export DEPLOY_TEST_EXPECT_TASK_ENV=false
+# Extra NAME=value pairs a case adds to the release environment.
+RELEASE_EXTRA_ENV=()
 export DEPLOY_TEST_SERVICE_DESIRED_COUNT=1
 export DEPLOY_TEST_ROLLOUT_SCENARIO=healthy
 
@@ -197,6 +200,35 @@ aws() {
           printf 'task-secret:arn:MISMATCH\n' >>"$DEPLOY_TEST_LOG"
         fi
       fi
+      if [[ "$DEPLOY_TEST_EXPECT_TASK_ENV" == "true" ]]; then
+        local previous_argument=""
+        local input_json=""
+        local argument
+        for argument in "$@"; do
+          if [[ "$previous_argument" == "--cli-input-json" ]]; then
+            input_json="${argument#file://}"
+            break
+          fi
+          previous_argument="$argument"
+        done
+        # The VALUE is part of the match, not just the name, and the variable
+        # must appear exactly once: an override that registered the right name
+        # with the wrong value, or beside a stale inherited copy, is the failure
+        # this hook prevents.
+        if jq -e '
+          [
+            .containerDefinitions[]
+            | select(.name == "deploy-test")
+            | .environment[]
+            | select(.name == "EXTRA_TASK_ENV")
+          ]
+          | length == 1 and .[0].value == "wss://sfu.example.invalid"
+        ' "$input_json" >/dev/null; then
+          printf 'task-env:value\n' >>"$DEPLOY_TEST_LOG"
+        else
+          printf 'task-env:value:MISMATCH\n' >>"$DEPLOY_TEST_LOG"
+        fi
+      fi
       printf '%s\n' "arn:aws:ecs:test:task-definition/deploy-test:2"
       ;;
     "ecs update-service")
@@ -303,6 +335,8 @@ run_release() {
 
   mkdir -p "$case_directory"
   DEPLOY_TEST_LOG="$case_directory/aws.log"
+  # Created empty so a case that fails before any `aws` call has a log to diff.
+  : >"$DEPLOY_TEST_LOG"
   DEPLOY_TEST_EXPECT_METRICS_ARN="$inject_internal_metrics"
   DEPLOY_TEST_TASK_EXIT_CODE="$task_exit_code"
   DEPLOY_TEST_EXPECT_TASK_SECRET_ARN="$inject_task_secret"
@@ -311,6 +345,7 @@ run_release() {
   export DEPLOY_TEST_LOG DEPLOY_TEST_EXPECT_METRICS_ARN
   export DEPLOY_TEST_TASK_EXIT_CODE
   export DEPLOY_TEST_EXPECT_TASK_SECRET_ARN
+  export DEPLOY_TEST_EXPECT_TASK_ENV
   export DEPLOY_TEST_SERVICE_DESIRED_COUNT
   export DEPLOY_TEST_ROLLOUT_SCENARIO
 
@@ -347,6 +382,10 @@ run_release() {
     release_environment+=(
       TASK_SECRET_OVERRIDES_JSON='{"EXTRA_TASK_SECRET":"arn:aws:ssm:test:123456789012:parameter/oxy/sample-app/EXTRA_TASK_SECRET"}'
     )
+  fi
+
+  if (( ${#RELEASE_EXTRA_ENV[@]} > 0 )); then
+    release_environment+=("${RELEASE_EXTRA_ENV[@]}")
   fi
 
   if env "${release_environment[@]}" \
@@ -407,6 +446,42 @@ printf '%s\n' \
 diff -u \
   "$test_directory/explicit-task-secret/expected.log" \
   "$test_directory/explicit-task-secret/aws.log"
+
+# TASK_ENV_OVERRIDES_JSON: the only way CI introduces a NEW plain variable to a
+# service that already exists. LIVEKIT_URL is the case in hand — the workflow
+# passed it for a day while this script ignored it, so every release carried the
+# LiveKit key and secret without the URL and the boot refused it.
+DEPLOY_TEST_EXPECT_TASK_ENV=true
+RELEASE_EXTRA_ENV=(
+  TASK_ENV_OVERRIDES_JSON='{"EXTRA_TASK_ENV":"wss://sfu.example.invalid"}'
+)
+run_release explicit-task-env true false false
+printf '%s\n' \
+  task-env:value \
+  'service:arn:aws:ecs:test:task-definition/deploy-test:2:desired=1' \
+  smoke \
+  reconcile \
+  >"$test_directory/explicit-task-env/expected.log"
+diff -u \
+  "$test_directory/explicit-task-env/expected.log" \
+  "$test_directory/explicit-task-env/aws.log"
+
+# An EMPTY value is refused during argument validation, before the first `aws`
+# call — which is what makes the empty expected.log an assertion.
+DEPLOY_TEST_EXPECT_TASK_ENV=false
+RELEASE_EXTRA_ENV=(
+  TASK_ENV_OVERRIDES_JSON='{"EXTRA_TASK_ENV":""}'
+)
+run_release empty-task-env-value false false false
+: >"$test_directory/empty-task-env-value/expected.log"
+diff -u \
+  "$test_directory/empty-task-env-value/expected.log" \
+  "$test_directory/empty-task-env-value/aws.log"
+grep -F \
+  "TASK_ENV_OVERRIDES_JSON must map environment variable names to non-empty string values" \
+  "$test_directory/empty-task-env-value/output.log" \
+  >/dev/null
+RELEASE_EXTRA_ENV=()
 
 run_release reconciliation-failure false false false 1
 printf '%s\n' \
