@@ -398,6 +398,8 @@
   "settings.preferences.appearance": "Aspetto",
   "settings.preferences.language": "Lingua",
   "settings.preferences.notifications": "Notifiche",
+  "settings.preferences.conversationTones": "Toni della conversazione",
+  "settings.preferences.conversationTonesDesc": "Riproduci un suono quando un messaggio arriva, viene inviato o non può essere inviato nella conversazione aperta.",
   "settings.privacy.add": "Aggiungi",
   "settings.privacy.blockedProfiles": "Profili bloccati",
   "settings.privacy.blockedUsers": "Utenti Bloccati",

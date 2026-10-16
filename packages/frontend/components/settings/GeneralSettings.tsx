@@ -7,6 +7,7 @@ import { Button } from '@oxy.so/bloom/button';
 import { ContactRow } from '@oxy.so/bloom/chat-people';
 import { SettingsGeneralPage, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
 import { useOxy } from '@oxy.so/services';
 import Constants from 'expo-constants';
@@ -14,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform } from 'react-native';
+import { useSoundStore } from '@/stores/soundStore';
 import { useAlloSettings } from './context';
 import { useNotificationPermission } from './use-notification-permission';
 
@@ -25,6 +27,8 @@ export function GeneralSettings() {
   const client = useAlloClient();
   const avatar = useAvatarUrl(user?.avatar ?? undefined);
   const notifications = useNotificationPermission();
+  const conversationTones = useSoundStore((state) => state.conversationTones);
+  const setConversationTones = useSoundStore((state) => state.setConversationTones);
   const name = user
     ? (typeof user.name === 'string' ? user.name : user.name?.displayName) || user.username
     : '';
@@ -94,12 +98,12 @@ export function GeneralSettings() {
               },
             ]
           : []),
-        ...(Platform.OS !== 'web'
-          ? [
-              {
-                key: 'notifications',
-                label: t('settings.sections.preferences'),
-                rows: [
+        {
+          key: 'notifications',
+          label: t('settings.sections.preferences'),
+          rows: [
+            ...(Platform.OS !== 'web'
+              ? [
                   {
                     key: 'permission',
                     label: t('settings.preferences.notifications'),
@@ -118,10 +122,23 @@ export function GeneralSettings() {
                         </SettingsValueField>
                       ),
                   },
-                ],
-              },
-            ]
-          : []),
+                ]
+              : []),
+            {
+              key: 'tones',
+              label: t('settings.preferences.conversationTones'),
+              description: t('settings.preferences.conversationTonesDesc'),
+              control: (
+                <Switch
+                  checked={conversationTones}
+                  onCheckedChange={setConversationTones}
+                  accessibilityLabel={t('settings.preferences.conversationTones')}
+                  testID="conversation-tones-switch"
+                />
+              ),
+            },
+          ],
+        },
         {
           key: 'about',
           label: t('settings.sections.aboutallo'),
