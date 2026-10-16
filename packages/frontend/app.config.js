@@ -227,6 +227,13 @@ module.exports = (_config) => {
           // providers, so cold boot can ask Commons for a signed identity
           // proof and share the device session (silent "Sign in with Oxy").
           '@oxy.so/services/plugins/withOxySharedPermissions',
+          // Every Oxy app MUST be release-signed with the one shared Oxy ecosystem
+          // certificate: the signature permissions above are only granted to apps
+          // signed like Commons. This replaces Expo's debug signing of the release
+          // buildType with the OXY_UPLOAD_* Gradle properties (never in the repo;
+          // debug fallback without them, so verify the artefact's certificate) and
+          // swaps in proguard-android-optimize.txt.
+          '@oxy.so/app-preset/plugin/withOxyAndroidRelease',
         ];
 
         // Only include expo-notifications for native builds (android/ios).
