@@ -35,6 +35,10 @@ rolled back, and the `post` one-shot never ran.
 
 ## Commands
 
+npm releases: only Actions → Release packages (`release-packages.yml`, Oxy's shared
+workflow, OIDC); a package's gates are its `prepublishOnly`. Never publish from a laptop —
+`~/Oxy/docs/npm-releases.md`.
+
 ```bash
 bun run dev                 # All packages dev mode
 bun run dev:frontend        # Frontend only (Expo tunnel)
