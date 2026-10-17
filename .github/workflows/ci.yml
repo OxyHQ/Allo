@@ -316,6 +316,12 @@ jobs:
       - name: Managed team API contract
         run: bun run check:team-openapi
 
+      # Every Oxy app shares one Postgres: a new migration may not hold a lock
+      # that stalls a hot table. Rules from @oxy.so/db; baseline and hot tables
+      # in packages/backend's db:check-locks script.
+      - name: Migration lock gate
+        run: bun run --filter @allo/backend db:check-locks
+
       - name: Biome
         run: bunx biome ci .
 
