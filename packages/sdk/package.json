@@ -17,7 +17,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@oxy.so/allo-contracts": "0.1.0"
+    "@oxy.so/allo-contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
