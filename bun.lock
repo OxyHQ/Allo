@@ -61,7 +61,7 @@
     },
     "packages/contracts": {
       "name": "@oxy.so/allo-contracts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
@@ -216,7 +216,7 @@
     },
     "packages/sdk": {
       "name": "@oxy.so/allo-sdk",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@oxy.so/allo-contracts": "0.1.0",
       },
