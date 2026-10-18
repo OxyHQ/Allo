@@ -12,7 +12,7 @@ import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useOxy } from '@oxy.so/services';
 import { Slot, Stack, usePathname, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
@@ -50,6 +50,7 @@ export default function ChatLayout() {
 
 function SplitShell({ split }: { split: boolean }) {
   const settings = useAlloSettings();
+  const [listWidth, setListWidth] = useState(360);
   const router = useRouter();
   const pathname = usePathname();
   const theme = useTheme();
@@ -129,6 +130,7 @@ function SplitShell({ split }: { split: boolean }) {
     <AppShell
       panels
       variant="dashboard"
+      contentMaxWidth="none"
       scroll="fixed"
       header={null}
       navFrom={SPLIT_FROM}
@@ -147,8 +149,10 @@ function SplitShell({ split }: { split: boolean }) {
       <AppShellPanels appearance="joined">
         {split ? (
           <AppShellPanel
+            key="list"
             id="list"
-            width={360}
+            width={listWidth}
+            onWidthChange={setListWidth}
             minWidth={280}
             maxWidth={520}
             resizable
@@ -157,7 +161,7 @@ function SplitShell({ split }: { split: boolean }) {
             <ConversationList />
           </AppShellPanel>
         ) : null}
-        <AppShellPanel id="detail">
+        <AppShellPanel key="detail" id="detail">
           <NavigationTheme transparent>
             {split ? (
               <Slot />
@@ -172,7 +176,7 @@ function SplitShell({ split }: { split: boolean }) {
           </NavigationTheme>
         </AppShellPanel>
         {conversationId && infoOpen && infoBeside ? (
-          <AppShellPanel id="info" width={320}>
+          <AppShellPanel key="info" id="info" width={320}>
             <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
           </AppShellPanel>
         ) : null}
