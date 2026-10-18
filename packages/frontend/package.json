@@ -59,7 +59,7 @@
     "@lottiefiles/dotlottie-react": "^0.19.16",
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/app-preset": "^3.2.1",
-    "@oxy.so/bloom": "^10.16.0",
+    "@oxy.so/bloom": "12.0.0",
     "@oxy.so/core": "5.2.0",
     "@oxy.so/expo-splash": "^1.0.0",
     "@oxy.so/services": "^11.14.0",
