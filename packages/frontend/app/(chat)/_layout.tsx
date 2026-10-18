@@ -1,5 +1,5 @@
 import { useTotalUnread } from '@allo/react';
-import { AppShell } from '@oxy.so/bloom/app-shell';
+import { AppShell, AppShellPanel, AppShellPanels } from '@oxy.so/bloom/app-shell';
 import { RiChat3Fill } from '@oxy.so/bloom/icons/RiChat3Fill';
 import { RiChat3Line } from '@oxy.so/bloom/icons/RiChat3Line';
 import { RiPhoneFill } from '@oxy.so/bloom/icons/RiPhoneFill';
@@ -12,7 +12,7 @@ import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useOxy } from '@oxy.so/services';
 import { Slot, Stack, usePathname, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
@@ -31,7 +31,7 @@ import { conversationIdFromPath } from '@/utils/routeUtils';
 /**
  * The signed-in app. On a phone, a stack: the list, and each screen pushed over
  * it. From `SPLIT_FROM` up, the navigation rail flush against Bloom's
- * `AppShell` split layout — list pane, the route as the conversation pane, and a
+ * `AppShellPanels` layout — list pane, the route as the conversation pane, and a
  * conversation's info beside it once a third column fits.
  */
 export default function ChatLayout() {
@@ -50,6 +50,7 @@ export default function ChatLayout() {
 
 function SplitShell({ split }: { split: boolean }) {
   const settings = useAlloSettings();
+  const [listWidth, setListWidth] = useState(360);
   const router = useRouter();
   const pathname = usePathname();
   const theme = useTheme();
@@ -127,13 +128,12 @@ function SplitShell({ split }: { split: boolean }) {
 
   return (
     <AppShell
-      variant="split"
+      panels
+      variant="dashboard"
+      contentMaxWidth="none"
       scroll="fixed"
       header={null}
       navFrom={SPLIT_FROM}
-      splitFrom={SPLIT_FROM}
-      infoFrom={1100}
-      paneScroll={false}
       sidebar={{
         variant: 'rail',
         showSearch: false,
@@ -145,27 +145,42 @@ function SplitShell({ split }: { split: boolean }) {
         secondaryItems,
         selected,
       }}
-      pane="detail"
-      list={split ? <ConversationList /> : undefined}
-      info={
-        conversationId && infoOpen && infoBeside ? (
-          <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
-        ) : undefined
-      }
-      resizeLabel={t('chat.resize')}
     >
-      <NavigationTheme transparent>
+      <AppShellPanels appearance="joined">
         {split ? (
-          <Slot />
-        ) : (
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: 'transparent' },
-            }}
-          />
-        )}
-      </NavigationTheme>
+          <AppShellPanel
+            key="list"
+            id="list"
+            width={listWidth}
+            onWidthChange={setListWidth}
+            minWidth={280}
+            maxWidth={520}
+            resizable
+            resizeLabel={t('chat.resize')}
+          >
+            <ConversationList />
+          </AppShellPanel>
+        ) : null}
+        <AppShellPanel key="detail" id="detail">
+          <NavigationTheme transparent>
+            {split ? (
+              <Slot />
+            ) : (
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: 'transparent' },
+                }}
+              />
+            )}
+          </NavigationTheme>
+        </AppShellPanel>
+        {conversationId && infoOpen && infoBeside ? (
+          <AppShellPanel key="info" id="info" width={320}>
+            <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
+          </AppShellPanel>
+        ) : null}
+      </AppShellPanels>
     </AppShell>
   );
 }
