@@ -21,7 +21,7 @@ import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, type TextInput } from 'react-native';
+import { ActivityIndicator, Platform, type TextInputInstance } from 'react-native';
 
 import {
   captureMediaAttachment,
@@ -122,7 +122,7 @@ const ErrorNoticeIcon: ChatComposerIcon = ({ width, height }) => {
  * (only to set one), and `ChatComposer` forwards no `onSelectionChange`, so the
  * end of the draft is the honest answer there: it is where somebody typing is.
  */
-function caretIn(field: TextInput | null, text: string): number {
+function caretIn(field: TextInputInstance | null, text: string): number {
   const node = field as unknown as { selectionStart?: number | null } | null;
   const at = node?.selectionStart;
   return typeof at === 'number' ? at : text.length;
@@ -151,7 +151,7 @@ export function Composer({
   const [mention, setMention] = useState<MentionFragment | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const voice = useVoiceRecording();
-  const field = useRef<TextInput | null>(null);
+  const field = useRef<TextInputInstance | null>(null);
   const lastTypingAt = useRef(0);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stagedSeq = useRef(0);

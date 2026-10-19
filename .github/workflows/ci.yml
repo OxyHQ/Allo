@@ -235,6 +235,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The Expo SDK 58 CLI (export, lint) supports Node 22.13+ / 24.3+ only.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
@@ -305,6 +310,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+
+      # The Expo SDK 58 CLI (export, lint) supports Node 22.13+ / 24.3+ only.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
 
       - uses: oven-sh/setup-bun@v2
         with:

@@ -1,8 +1,8 @@
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { toast } from '@oxy.so/bloom/toast';
-import { useNavigation } from 'expo-router';
-import { useCallback, useEffect, useRef } from 'react';
+import { usePreventRemove } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { BackupPanel } from '@/components/backup/BackupPanel';
@@ -27,25 +27,21 @@ export default function BackupScreen() {
 
 function OrdinaryBackupScreen() {
   const { t } = useTranslation();
-  const navigation = useNavigation();
-  // A ref, not state: nothing re-renders on it; only the listener reads it.
-  const pendingRef = useRef(false);
+  // State, not a ref: the router's removal prevention is switched by a value
+  // it is rendered with (expo-router 58 has no `beforeRemove` event).
+  const [phrasePending, setPhrasePendingHere] = useState(false);
   const { setPhrasePending } = useAlloSettings();
   const onPhrasePending = useCallback(
     (pending: boolean) => {
-      pendingRef.current = pending;
+      setPhrasePendingHere(pending);
       setPhrasePending(pending);
     },
     [setPhrasePending],
   );
 
-  useEffect(() => {
-    return navigation.addListener('beforeRemove', (event) => {
-      if (!pendingRef.current) return;
-      event.preventDefault();
-      toast.error(t('backup.phrase.mustConfirm'));
-    });
-  }, [navigation, t]);
+  usePreventRemove(phrasePending, () => {
+    toast.error(t('backup.phrase.mustConfirm'));
+  });
 
   return (
     <>

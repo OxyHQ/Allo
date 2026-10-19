@@ -65,8 +65,12 @@ function RootStack() {
   usePendingHref(signedIn);
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(chat)" redirect={!signedIn} />
-      <Stack.Screen name="(auth)" redirect={signedIn} />
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(chat)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
       <Stack.Screen name="+not-found" />
     </Stack>
   );

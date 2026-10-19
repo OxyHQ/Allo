@@ -143,7 +143,9 @@ module.exports = (_config) => {
       // native-only plugins (like expo-notifications) from web builds.
       plugins: (() => {
         const base = [
-          'expo-router',
+          // SDK 58 makes web routes lazy by default; keep SDK 57's single web
+          // bundle (what the web export budget measures) until that is a decision.
+          ['expo-router', { asyncRoutes: { web: false } }],
           // Oxy-standard native splash: Allo's own paper-plane logo centered on
           // the shared dark brand background (#0B0B0F), with the Oxy "from Oxy"
           // bottom branding added by the "@oxy.so/expo-splash" string plugin below.

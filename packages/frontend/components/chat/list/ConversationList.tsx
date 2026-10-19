@@ -2,7 +2,6 @@ import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useConversationActions, useSyncState } from '@allo/react';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
-import { VoiceSession } from '@alia.onl/sdk/voice';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
   ChatFolderTabs,
@@ -280,7 +279,6 @@ export function ConversationList() {
       {!supervised && (
         <AliaChatSheet
           ref={aliaChatRef}
-          voiceSession={VoiceSession}
           clientContext={t('chat.aliaClientContext', { unread })}
           welcomeSuggestions={aliaWelcomeSuggestions}
         />

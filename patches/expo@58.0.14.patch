@@ -1,0 +1,39 @@
+diff --git a/build/utils/getBundleUrl.web.js b/build/utils/getBundleUrl.web.js
+index 1fd7cc1..09c6f29 100644
+--- a/build/utils/getBundleUrl.web.js
++++ b/build/utils/getBundleUrl.web.js
+@@ -8,6 +8,14 @@ export function getBundleUrl() {
+         // For server runtime, we use the filename of the current script
+         scriptURL = 'file://' + __filename;
+     }
++    // `document.currentScript` is only set while a script is being evaluated,
++    // so the capture above is null whenever this module is first evaluated
++    // outside the bundle's synchronous run — which makes `import.meta.url` null,
++    // and any `new URL(relative, import.meta.url)` throw "Failed to construct
++    // 'URL': Invalid base URL" on import. The document's own URL is the correct
++    // base for a script served from the same origin, and is always available in
++    // a browser.
++    scriptURL ??= globalThis.location?.href ?? null;
+     if (scriptURL == null) {
+         return null;
+     }
+diff --git a/src/utils/getBundleUrl.web.ts b/src/utils/getBundleUrl.web.ts
+index e6012db..bfb358f 100644
+--- a/src/utils/getBundleUrl.web.ts
++++ b/src/utils/getBundleUrl.web.ts
+@@ -13,6 +13,15 @@ export function getBundleUrl(): string | null {
+     scriptURL = 'file://' + __filename;
+   }
+ 
++  // `document.currentScript` is only set while a script is being evaluated,
++  // so the capture above is null whenever this module is first evaluated
++  // outside the bundle's synchronous run — which makes `import.meta.url` null,
++  // and any `new URL(relative, import.meta.url)` throw "Failed to construct
++  // 'URL': Invalid base URL" on import. The document's own URL is the correct
++  // base for a script served from the same origin, and is always available in
++  // a browser.
++  scriptURL ??= globalThis.location?.href ?? null;
++
+   if (scriptURL == null) {
+     return null;
+   }

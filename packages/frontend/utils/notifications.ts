@@ -52,6 +52,17 @@ export async function createNotification(
 export async function setupNotifications() {
   const Notifications = await getNotifications();
   if (!Notifications) return;
+  // The handler goes first: since SDK 58 a foreground notification is shown
+  // when no handler is installed, so it is in place before anything here waits.
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
   // Android channel setup for high-importance notifications
   if (Platform.OS === 'android') {
     try {
@@ -67,15 +78,6 @@ export async function setupNotifications() {
       console.warn('Failed to set Android notification channel:', e);
     }
   }
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
 }
 
 export type DevicePushToken = { token: string; type: 'fcm' | 'apns' | 'unknown' } | null;
