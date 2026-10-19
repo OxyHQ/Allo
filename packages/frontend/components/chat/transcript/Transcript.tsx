@@ -4,6 +4,7 @@ import {
   StyleSheet,
   View,
   type NativeScrollEvent,
+  type ScrollViewInstance,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -47,7 +48,7 @@ export const Transcript = memo(function Transcript({
   labels,
 }: TranscriptProps) {
   const { t } = useTranslation();
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<ScrollViewInstance>(null);
   const [scrolledUp, setScrolledUp] = useState(false);
   const atBottom = useRef(true);
 

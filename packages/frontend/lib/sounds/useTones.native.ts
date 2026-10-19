@@ -1,5 +1,5 @@
 import { useAssets } from 'expo-asset';
-import { requireOptionalNativeModule } from 'expo-modules-core';
+import { requireOptionalNativeModule } from 'expo';
 import { useCallback } from 'react';
 
 import type { SoundCue } from '@/lib/chat/soundCue';

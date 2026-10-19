@@ -39,7 +39,9 @@ export function createMediaUri(bytes: Uint8Array, mime: string, blobId: string):
   directory.create({ intermediates: true, idempotent: true });
   const file = new File(directory, mediaFileName(blobId, mime));
   const name = file.uri;
-  if ((holders.get(name) ?? 0) === 0) file.write(bytes);
+  // Synchronous on purpose: the URI is handed to a player as soon as this
+  // returns, and `write()` is asynchronous since expo-file-system 58.
+  if ((holders.get(name) ?? 0) === 0) file.writeSync(bytes);
   holders.set(name, (holders.get(name) ?? 0) + 1);
   let released = false;
   return {

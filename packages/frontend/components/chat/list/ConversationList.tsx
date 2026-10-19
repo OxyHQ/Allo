@@ -1,8 +1,7 @@
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useConversationActions, useSyncState } from '@allo/react';
-import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
+import { AliaAskProvider, useAskAgent } from '@alia.onl/sdk/ask';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
-import { VoiceSession } from '@alia.onl/sdk/voice';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
   ChatFolderTabs,
@@ -22,7 +21,7 @@ import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { usePathname, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -65,7 +64,6 @@ export function ConversationList() {
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('all');
-  const aliaChatRef = useRef<AliaChatSheetRef>(null);
 
   const selectedId = split ? (conversationIdFromPath(pathname) ?? undefined) : undefined;
   const searching = query.trim().length > 0;
@@ -190,7 +188,6 @@ export function ConversationList() {
     ],
     [t],
   );
-  const askAlia = useCallback(() => aliaChatRef.current?.present(), []);
 
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
   const me = user?.id;
@@ -200,19 +197,13 @@ export function ConversationList() {
   );
   const openUpdates = useCallback(() => router.push('/updates'), [router]);
 
-  return (
+  const list = (
     <View style={styles.root}>
       <PageHeader
         title={t('chat.title')}
         safeArea={!split}
         leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-        actions={
-          !supervised ? (
-            <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={askAlia}>
-              {t('chat.askAlia')}
-            </Button>
-          ) : undefined
-        }
+        actions={!supervised ? <AskAliaButton label={t('chat.askAlia')} /> : undefined}
       />
       <View style={styles.search}>
         <ChatSearchField
@@ -276,16 +267,30 @@ export function ConversationList() {
           onPress={() => router.push('/new')}
         />
       </PageAction>
-      {/* Mounted only in the signed-in tree: signed out, this route redirects to sign-in. */}
-      {!supervised && (
-        <AliaChatSheet
-          ref={aliaChatRef}
-          voiceSession={VoiceSession}
-          clientContext={t('chat.aliaClientContext', { unread })}
-          welcomeSuggestions={aliaWelcomeSuggestions}
-        />
-      )}
     </View>
+  );
+
+  // Mounted only in the signed-in tree: signed out, this route redirects to sign-in.
+  // From `@alia.onl/sdk/ask`, whose sheet (the same chat, with its voice call) is
+  // loaded on the first ask instead of riding in the web entry bundle.
+  return supervised ? (
+    list
+  ) : (
+    <AliaAskProvider
+      clientContext={t('chat.aliaClientContext', { unread })}
+      welcomeSuggestions={aliaWelcomeSuggestions}
+    >
+      {list}
+    </AliaAskProvider>
+  );
+}
+
+function AskAliaButton({ label }: { label: string }) {
+  const { ask } = useAskAgent();
+  return (
+    <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={() => ask()}>
+      {label}
+    </Button>
   );
 }
 

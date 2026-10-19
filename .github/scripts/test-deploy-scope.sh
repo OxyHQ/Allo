@@ -136,7 +136,7 @@ run 0 api=true FAKE_MARKER=$prefix$older "FAKE_COMPARE=$(printf 'ahead\n2\nREADM
   -- target api exclude "$docs" $prefix
 for path in packages/backend/src/x.ts packages/backend/Dockerfile packages/shared-types/src/x.ts \
   packages/contracts/src/x.ts packages/frontend/package.json packages/core/package.json \
-  package.json bun.lock bunfig.toml tsconfig.json patches/expo@57.0.6.patch .dockerignore \
+  package.json bun.lock bunfig.toml tsconfig.json patches/expo@58.0.14.patch .dockerignore \
   .github/workflows/deploy-aws.yml .github/scripts/deploy-ecs-image.sh \
   .github/scripts/reviewed-images.json; do
   run 0 backend=true FAKE_MARKER=$prefix$older \
