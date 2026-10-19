@@ -6,6 +6,8 @@
 import type React from 'react';
 import { Pressable, Text } from 'react-native';
 
+export { useSupervision } from './supervision';
+
 export const HARNESS_ME = {
   id: '6700000000000000000000a1',
   username: 'nate',
