@@ -41,7 +41,7 @@
     }
   },
   "dependencies": {
-    "@alia.onl/sdk": "^21.3.1",
+    "@alia.onl/sdk": "^21.5.0",
     "@allo/core": "workspace:*",
     "@allo/react": "workspace:*",
     "@allo/shared-types": "workspace:*",
@@ -62,7 +62,7 @@
     "@oxy.so/bloom": "14.0.0",
     "@oxy.so/core": "6.0.0",
     "@oxy.so/expo-splash": "^1.1.0",
-    "@oxy.so/services": "^11.17.0",
+    "@oxy.so/services": "^12.2.0",
     "@oxy.so/stickers": "^0.2.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/netinfo": "12.0.1",
