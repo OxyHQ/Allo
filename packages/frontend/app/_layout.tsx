@@ -12,7 +12,7 @@ import '@/lib/immerSetup';
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import React, { useEffect, useState, type ReactNode } from 'react';

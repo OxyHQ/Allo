@@ -96,7 +96,7 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
   isLoading: false,
 };
 const mockLogout = jest.fn();
-jest.mock('@oxy.so/services', () => ({
+jest.mock('@oxy.so/services/ui/client', () => ({
   useOxy: () => ({ ...mockSession, oxyServices: {}, logout: mockLogout }),
 }));
 

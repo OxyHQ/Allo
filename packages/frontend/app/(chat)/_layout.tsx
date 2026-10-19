@@ -10,7 +10,7 @@ import { RiSlideshow3Line } from '@oxy.so/bloom/icons/RiSlideshow3Line';
 import { RiUser3Fill } from '@oxy.so/bloom/icons/RiUser3Fill';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { Slot, Stack, usePathname, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';

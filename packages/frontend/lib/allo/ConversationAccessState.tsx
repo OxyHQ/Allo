@@ -2,7 +2,7 @@ import { Button } from '@oxy.so/bloom/button';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiShieldLine } from '@oxy.so/bloom/icons/RiShieldLine';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 

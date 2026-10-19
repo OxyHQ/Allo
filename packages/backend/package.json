@@ -19,8 +19,8 @@
     "@allo/shared-types": "workspace:*",
     "@crowdsource.you/contracts": "1.1.0",
     "@crowdsource.you/core": "3.0.2",
-    "@oxy.so/contracts": "4.24.0",
-    "@oxy.so/core": "5.2.0",
+    "@oxy.so/contracts": "5.0.0",
+    "@oxy.so/core": "6.0.0",
     "@oxy.so/db": "^1.3.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "drizzle-orm": "0.45.4",
@@ -33,8 +33,8 @@
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3",
-    "@oxy.so/homiio-sdk": "0.1.0",
-    "@oxy.so/homiio-contracts": "0.1.0",
+    "@oxy.so/homiio-sdk": "0.1.3",
+    "@oxy.so/homiio-contracts": "0.2.0",
     "@oxy.so/allo-contracts": "workspace:*"
   },
   "devDependencies": {

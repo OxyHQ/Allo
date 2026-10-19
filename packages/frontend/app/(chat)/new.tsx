@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { ChatSearchField } from '@oxy.so/bloom/chat-list';
