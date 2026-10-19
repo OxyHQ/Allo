@@ -294,6 +294,11 @@ jobs:
       - name: Export frontend
         run: bun run build:frontend
 
+      # The export succeeds and the budget passes even when every page ships
+      # without a <script> (SDK 58's +html contract); this fails that build.
+      - name: Every exported page loads the app
+        run: bun run check:web-export-html
+
       - name: Enforce web bundle budget
         run: bun run check:web-bundle-budget
 
