@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import type { User } from '@oxy.so/core';
 
 import { useAppearanceStore, type UserAppearance } from '@/stores/appearanceStore';

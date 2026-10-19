@@ -78,9 +78,6 @@ let mockSupervision: { data: { self: null } | undefined; isError: boolean } = {
   data: { self: null },
   isError: false,
 };
-jest.mock('@oxy.so/services/ui', () => ({
-  useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
-}));
 jest.mock('@/lib/allo/people', () => ({ configurePeople: jest.fn() }));
 jest.mock('@/lib/allo/ConversationAccessState', () => ({ ConversationAccessState: () => null }));
 jest.mock('@/lib/allo/RestoreHistoryPrompt', () => ({ RestoreHistoryPrompt: () => null }));
@@ -96,8 +93,9 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
   isLoading: false,
 };
 const mockLogout = jest.fn();
-jest.mock('@oxy.so/services', () => ({
+jest.mock('@oxy.so/services/ui/client', () => ({
   useOxy: () => ({ ...mockSession, oxyServices: {}, logout: mockLogout }),
+  useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
 }));
 
 // Imported after the mocks, the way jest requires.

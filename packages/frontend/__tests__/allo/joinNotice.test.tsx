@@ -68,7 +68,7 @@ jest.mock('@/lib/oxy', () => ({
   },
 }));
 
-jest.mock('@oxy.so/services', () => ({
+jest.mock('@oxy.so/services/ui/client', () => ({
   useOxy: () => ({
     user: { id: 'acc-join-bob', username: 'bob', name: { displayName: 'Bob Example' } },
     oxyServices: {

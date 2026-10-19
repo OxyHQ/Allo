@@ -1,7 +1,7 @@
 import { Button } from '@oxy.so/bloom/button';
 import { SettingsCard, SettingsRow, SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { getNativeLanguageName } from '@oxy.so/core';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 import { useAlloSettings } from '../context';
 

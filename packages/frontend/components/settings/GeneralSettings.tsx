@@ -9,7 +9,7 @@ import { SettingsGeneralPage, SettingsValueField } from '@oxy.so/bloom/settings-
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useCallback } from 'react';

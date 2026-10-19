@@ -2,7 +2,7 @@ import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 
 /**
  * FINDING A PERSON BY TYPING.

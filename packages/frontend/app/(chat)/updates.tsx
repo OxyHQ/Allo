@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
 import { Avatar } from '@oxy.so/bloom/avatar';
 import { StoryRing } from '@oxy.so/bloom/chat-indicators';

@@ -20,7 +20,7 @@ jest.mock('@allo/react', () => ({
   useCallActions: () => mockCalls,
   useConversation: () => ({ memberAccountIds: ['self', 'peer'] }),
 }));
-jest.mock('@oxy.so/services', () => ({ useOxy: () => ({ user: { id: 'self' } }) }));
+jest.mock('@oxy.so/services/ui/client', () => ({ useOxy: () => ({ user: { id: 'self' } }) }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 jest.mock('@oxy.so/bloom/call-ui', () => ({
   CallScreen: () => null,

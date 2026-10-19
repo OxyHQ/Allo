@@ -80,8 +80,7 @@ const TS_MLS_OPTIONAL_PEERS = new Set([
 const HARNESS = process.env.ALLO_HARNESS === '1';
 const HARNESS_ALIASES = HARNESS
   ? new Map([
-      ['@oxy.so/services', path.resolve(__dirname, 'harness/oxy-services.tsx')],
-      ['@oxy.so/services/ui', path.resolve(__dirname, 'harness/supervision.ts')],
+      ['@oxy.so/services/ui/client', path.resolve(__dirname, 'harness/oxy-services.tsx')],
       ['@oxy.so/core', path.resolve(__dirname, 'harness/oxy-core.ts')],
       ['@/lib/allo/client', path.resolve(__dirname, 'harness/client.ts')],
     ])

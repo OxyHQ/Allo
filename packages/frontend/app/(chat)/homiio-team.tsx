@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient } from '@allo/react';
 import { HomiioTeamClient } from '@oxy.so/homiio-sdk';
 import { Button } from '@oxy.so/bloom/button';

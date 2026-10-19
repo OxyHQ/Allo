@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 
 import { personFromEntity } from '@/lib/allo/people';
 import type { ChatContext } from '@/lib/chat/model';

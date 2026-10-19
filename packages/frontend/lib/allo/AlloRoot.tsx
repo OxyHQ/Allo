@@ -37,8 +37,7 @@ import { nativeCallBridge } from './nativeCallBridge';
  */
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { useOxy } from '@oxy.so/services';
-import { useSupervision } from '@oxy.so/services/ui';
+import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { configurePeople } from './people';
 import { ConversationAccessState } from './ConversationAccessState';
