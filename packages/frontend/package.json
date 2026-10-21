@@ -61,7 +61,7 @@
     "@oxy.so/allo-contracts": "workspace:*",
     "@oxy.so/app-preset": "^3.3.0",
     "@oxy.so/bloom": "15.0.0",
-    "@oxy.so/core": "6.5.0",
+    "@oxy.so/core": "6.9.1",
     "@oxy.so/expo-splash": "^1.1.0",
     "@oxy.so/homiio-contracts": "0.2.0",
     "@oxy.so/homiio-sdk": "0.1.4",
