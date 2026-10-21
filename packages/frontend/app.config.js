@@ -111,7 +111,6 @@ module.exports = (_config) => {
             : []),
         ],
         softwareKeyboardLayoutMode: 'pan',
-        edgeToEdgeEnabled: true,
       },
       web: {
         bundler: 'metro',
@@ -201,13 +200,11 @@ module.exports = (_config) => {
                 deploymentTarget: '16.4',
               },
               android: {
-                // compileSdk 36 is required by androidx.camera 1.6.0
-                // (pulled in by expo-camera); compileSdk can be bumped
-                // independently of targetSdk, which stays at 35.
+                // compileSdk / targetSdk / build tools come from the Expo SDK
+                // template (SDK 58: 37 / 36 / 37.0.0). SDK 58's Expo modules
+                // require compileSdk 37; a pinned 36 fails the release build
+                // in :expo:checkReleaseAarMetadata.
                 minSdkVersion: 26,
-                compileSdkVersion: 36,
-                targetSdkVersion: 35,
-                buildToolsVersion: '36.0.0',
                 enableProguardInReleaseBuilds: true,
                 enableShrinkResourcesInReleaseBuilds: true,
                 useLegacyPackaging: false,
