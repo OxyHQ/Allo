@@ -184,6 +184,12 @@ jobs:
       - name: Typecheck backend
         run: bun run typecheck:backend
 
+      # Every migration keeps its locks short: one RDS serves every Oxy app, so a
+      # migration that holds ACCESS EXCLUSIVE on a hot table while it backfills
+      # stalls this service (oxy 2026-10-16). Rules: @oxy.so/db's lock gate.
+      - name: Verify migrations keep their locks short
+        run: bun run --filter @allo/backend check:migration-locks
+
       - name: Test backend
         run: bun run --filter @allo/backend test
 

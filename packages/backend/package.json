@@ -12,7 +12,8 @@
     "test": "bun test --parallel --no-env-file --preload ./src/__tests__/setup.ts --timeout 30000 ./src/__tests__",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "bun src/db/migrate.ts"
+    "db:migrate": "bun src/db/migrate.ts",
+    "check:migration-locks": "oxy-db-check-migration-locks --migrations=drizzle --after=12 --hot-tables=conversations,conversation_members,conversation_events,client_instances,instance_deliveries,user_settings,blocks,account_presence"
   },
   "dependencies": {
     "@allo/shared-types": "workspace:*",
