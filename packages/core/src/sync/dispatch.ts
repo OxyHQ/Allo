@@ -31,7 +31,7 @@ import {
 import type { StoreBatch } from '../storage/store';
 import { base64Decode, base64Encode, utf8Decode } from '../util/bytes';
 import { describeError } from '../util/logger';
-import type { GroupState, JoinerAdmission } from '../crypto/engine';
+import type { GroupState, JoinerAdmission, ProcessResult } from '../crypto/engine';
 
 export interface DispatchOutcome {
   /** A commit or a join changed the epoch: replay what was queued for the conversation. */
@@ -387,7 +387,7 @@ export class Dispatcher {
       });
       return false;
     }
-    let result;
+    let result: ProcessResult;
     try {
       const payload = base64Decode(event.payload);
       // An external commit (a device joining or resyncing by itself) is admitted BEFORE the library

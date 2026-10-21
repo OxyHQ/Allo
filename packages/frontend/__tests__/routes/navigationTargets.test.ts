@@ -87,7 +87,7 @@ function normalise(path: string): string {
 }
 
 /** Every path the router serves, from the files under `app/`. */
-export function servedRoutes(): string[] {
+function servedRoutes(): string[] {
   return walk(APP_DIR)
     .map((file) => relative(APP_DIR, file).split(sep).join('/'))
     .map((file) => file.replace(/\.(ts|tsx)$/, ''))
@@ -110,7 +110,7 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
-export interface NavigationTarget {
+interface NavigationTarget {
   readonly file: string;
   readonly path: string;
 }
@@ -123,7 +123,7 @@ export interface NavigationTarget {
  * variable or a function result produces no match and is not reported — this
  * lists what can be checked, not what exists.
  */
-export function navigationTargets(): NavigationTarget[] {
+function navigationTargets(): NavigationTarget[] {
   const calls = /(?:router|navigation)\s*\.\s*(?:push|replace|navigate)\(\s*(['"`])([^'"`]*)\1/g;
   const redirects = /href=\{?\s*(['"`])([^'"`]*)\1/g;
 

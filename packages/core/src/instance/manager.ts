@@ -16,6 +16,7 @@ import {
   uploadKeyPackagesResponseSchema,
   type ClaimedKeyPackage,
   type ClientInstance,
+  type ListAccountInstancesResponse,
   type PendingEnrollment,
   type PublicInstance,
 } from '@allo/shared-types';
@@ -535,7 +536,7 @@ export class InstanceManager {
       const own = this.trustedOwnInstances();
       return { trusted: own.trusted.map(toPublic), refused: own.refused };
     }
-    let res;
+    let res: ListAccountInstancesResponse;
     try {
       res = await this.deps.http.request({
         method: 'GET',

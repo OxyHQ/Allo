@@ -602,7 +602,7 @@ export class CryptoEngine {
     const joiner = m.wireformat === 'mls_public_message' ? this.joinerOf(m.publicMessage) : null;
     if (joiner) await this.admitJoiner(state, joiner, admission);
     const replacesUs = joiner?.removedLeafIndexes.includes(state.privatePath.leafIndex);
-    let result;
+    let result: Awaited<ReturnType<typeof processMessage>>;
     try {
       result = await processMessage(m, state, emptyPskIndex, acceptAll, this.impl);
     } catch (cause) {

@@ -444,6 +444,13 @@ export function transcriptItems(
         return { ...base, text: ctx.t('message.undecryptable') };
       case 'system':
         return { ...base, system: content.text };
+      default: {
+        // Exhaustive: a new kind fails to compile on this line. At runtime (a
+        // kind from a newer SDK) it draws as a plain bubble, not an `undefined` row.
+        const unhandled: never = content;
+        void unhandled;
+        return base;
+      }
     }
   });
 }

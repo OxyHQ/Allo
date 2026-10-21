@@ -56,7 +56,7 @@ function listFiles(target: string): string[] {
 }
 
 /** `req.body.<name>` chains and `const { <name> } = req.body` bindings. */
-export function findPlaintextReads(source: string, fileName = 'probe.ts'): string[] {
+function findPlaintextReads(source: string, fileName = 'probe.ts'): string[] {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const hits: string[] = [];
 

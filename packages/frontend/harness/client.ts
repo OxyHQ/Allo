@@ -53,8 +53,9 @@ function silence(seconds: number): Uint8Array {
   const samples = rate * seconds;
   const bytes = new Uint8Array(44 + samples);
   const view = new DataView(bytes.buffer);
-  const ascii = (offset: number, text: string) =>
-    [...text].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+  };
   ascii(0, 'RIFF');
   view.setUint32(4, 36 + samples, true);
   ascii(8, 'WAVEfmt ');

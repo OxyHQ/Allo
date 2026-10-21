@@ -27,7 +27,7 @@ describe('the other side after a re-key', () => {
     // Bob goes away. Alice re-enrols and re-keys.
     await bob.client.stop();
     await alice.client.stop();
-    server.instancesOf('acc-rj-a').forEach((i) => (i.status = 'revoked'));
+    for (const i of server.instancesOf('acc-rj-a')) i.status = 'revoked';
     const g = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of g.leaves)
       if (leaf.accountId === 'acc-rj-a') g.leaves.set(id, { ...leaf, state: 'removed' });
@@ -66,7 +66,7 @@ describe('the other side after a re-key', () => {
     await bob.client.stop();
     await alice.client.stop();
 
-    server.instancesOf('acc-rj2-a').forEach((i) => (i.status = 'revoked'));
+    for (const i of server.instancesOf('acc-rj2-a')) i.status = 'revoked';
     const g = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of g.leaves)
       if (leaf.accountId === 'acc-rj2-a') g.leaves.set(id, { ...leaf, state: 'removed' });

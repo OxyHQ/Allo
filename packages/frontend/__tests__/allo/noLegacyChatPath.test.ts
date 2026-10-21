@@ -56,7 +56,7 @@ const CHAT_PATH_PREFIXES = [
 
 const LEGACY_ENDPOINT = /\/(conversations|messages|devices)(\/|$|\?)/;
 
-export interface Finding {
+interface Finding {
   readonly file: string;
   readonly rule: 1 | 2 | 3 | 4;
   readonly detail: string;
@@ -153,7 +153,7 @@ function requestPaths(source: ts.SourceFile): string[] {
 }
 
 /** The census over one file. Exported so the positive control runs the same code as the measurement. */
-export function findingsFor(file: string, text: string): Finding[] {
+function findingsFor(file: string, text: string): Finding[] {
   const source = ts.createSourceFile(
     file,
     text,

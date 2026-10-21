@@ -157,7 +157,7 @@ describe('a conversation with no live device', () => {
 
     // Every device in the group goes: this is what a sign-out, or the reclaim
     // of an account whose devices were lost, leaves behind.
-    server.instancesOf('acc-revive-0001').forEach((i) => (i.status = 'revoked'));
+    for (const i of server.instancesOf('acc-revive-0001')) i.status = 'revoked';
     const group = server.conversations.get(conversation.id)!;
     const deadGroupId = group.mlsGroupId; // a string, not a live reference to the row
     for (const [id, leaf] of group.leaves) group.leaves.set(id, { ...leaf, state: 'removed' });
@@ -225,7 +225,7 @@ describe('a direct conversation with nobody able to let this device in', () => {
     // Alice re-enrols: her old device is revoked, the new one has no leaf, and
     // Bob — the only device that could add her — is not running.
     await alice.client.stop();
-    server.instancesOf('acc-rekey-a').forEach((i) => (i.status = 'revoked'));
+    for (const i of server.instancesOf('acc-rekey-a')) i.status = 'revoked';
     const group = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of group.leaves) {
       if (leaf.accountId === 'acc-rekey-a') group.leaves.set(id, { ...leaf, state: 'removed' });
@@ -260,7 +260,7 @@ describe('a direct conversation with nobody able to let this device in', () => {
 
     const groupIdBefore = server.conversations.get(conversation.id)!.mlsGroupId;
     await alice.client.stop();
-    server.instancesOf('acc-rekey-c').forEach((i) => (i.status = 'revoked'));
+    for (const i of server.instancesOf('acc-rekey-c')) i.status = 'revoked';
     const g = server.conversations.get(conversation.id)!;
     for (const [id, leaf] of g.leaves) {
       if (leaf.accountId === 'acc-rekey-c') g.leaves.set(id, { ...leaf, state: 'removed' });
