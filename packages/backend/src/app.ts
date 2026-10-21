@@ -5,6 +5,8 @@
  *
  * The ORDER below is the contract:
  *
+ *   0. `trust proxy` = `oxyTrustProxy`, so `req.ip` is the real client behind
+ *      the ALB and, once the hostname is proxied, Cloudflare in front of it
  *   1. request observability (request id + route template log)
  *   2. ecosystem activity observer (a no-op until boot starts it)
  *   3. CORS (`createOxyCors`, plus `APP_ORIGINS`)
@@ -24,6 +26,7 @@
  */
 
 import { generateTeamOpenApi } from '@oxy.so/allo-contracts/dist/openapi';
+import { oxyTrustProxy } from '@oxy.so/core/server';
 import express, {
   type ErrorRequestHandler,
   type Express,
@@ -151,6 +154,12 @@ export function createErrorHandler(): ErrorRequestHandler {
 export function createApp(deps: CreateAppDependencies): Express {
   const app = express();
   app.disable('x-powered-by');
+  // `req.ip` (and so the per-user rate limit's anonymous key) is the real
+  // client: the socket peer is trusted only when private (the ALB), the next
+  // hop only when it is a Cloudflare edge address, and nothing further out —
+  // so a forged X-Forwarded-For is never believed. With no setting at all,
+  // every anonymous caller shared the ALB node's private address as its key.
+  app.set('trust proxy', oxyTrustProxy);
 
   app.use(requestObservability);
   if (deps.ecosystemActivity) app.use(deps.ecosystemActivity);

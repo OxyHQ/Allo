@@ -213,6 +213,40 @@ describe('the error envelope', () => {
   });
 });
 
+describe('req.ip is the client behind the ALB and Cloudflare', () => {
+  /**
+   * The rate limit keys an anonymous caller by `req.ip`, so this records what
+   * it would see. supertest connects from loopback, which stands in for the
+   * ALB's private address; the ALB appends the peer it saw to X-Forwarded-For.
+   */
+  async function ipFor(forwardedFor?: string): Promise<string | undefined> {
+    let seen: string | undefined;
+    const { app } = appWith({
+      rateLimit: (req, _res, next) => {
+        seen = req.ip;
+        next();
+      },
+    });
+    const call = request(app).get('/');
+    if (forwardedFor !== undefined) call.set('X-Forwarded-For', forwardedFor);
+    expect((await call).status).toBe(200);
+    return seen;
+  }
+
+  it('grey (DNS only): the address the ALB saw', async () => {
+    expect(await ipFor('203.0.113.7')).toBe('203.0.113.7');
+  });
+
+  it('orange (proxied): the client Cloudflare saw, not its edge', async () => {
+    expect(await ipFor('203.0.113.7, 172.70.1.2')).toBe('203.0.113.7');
+  });
+
+  it('a forged entry left of the real client is never believed', async () => {
+    expect(await ipFor('198.51.100.9, 203.0.113.7')).toBe('203.0.113.7');
+    expect(await ipFor('198.51.100.9, 203.0.113.7, 172.70.1.2')).toBe('203.0.113.7');
+  });
+});
+
 function expectError(body: unknown) {
   return errorResponseSchema.parse(body).error;
 }
