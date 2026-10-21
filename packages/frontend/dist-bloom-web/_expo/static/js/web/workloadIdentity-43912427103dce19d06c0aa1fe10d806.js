@@ -1,0 +1,1 @@
+__d(function(g,r,i,a,m,e,d){"use strict";Object.defineProperty(e,'__esModule',{value:!0}),e.canAttestWorkloadIdentity=function(){return!1},e.requestWorkloadServiceToken=async function(o){throw new Error('Workload identity is only available on a Node host')}},4344,[]);

@@ -1,0 +1,1 @@
+__d(function(g,r,i,a,m,e,d){const o=new Set(['__esModule','default','then']);m.exports=new Proxy({},{get(t,s){if('symbol'!=typeof s&&!o.has(s))throw new Error(`ts-mls asked for "${String(s)}" from an optional peer that Allo does not install. Allo uses the X25519 / AES-GCM / Ed25519 suite only; see metro/ts-mls-optional-peer.js.`)}})},3226,[]);
