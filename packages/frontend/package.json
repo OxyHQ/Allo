@@ -60,7 +60,7 @@
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/app-preset": "^3.3.0",
     "@oxy.so/bloom": "15.0.0",
-    "@oxy.so/core": "6.1.0",
+    "@oxy.so/core": "6.5.0",
     "@oxy.so/expo-splash": "^1.1.0",
     "@oxy.so/services": "^12.4.0",
     "@oxy.so/stickers": "^0.2.1",
