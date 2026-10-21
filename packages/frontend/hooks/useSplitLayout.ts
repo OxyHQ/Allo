@@ -2,8 +2,8 @@ import { useWindowDimensions } from 'react-native';
 
 /**
  * Where the chat shell stops being one screen at a time and becomes a list
- * beside a conversation. The same number as `AppShell`'s `splitFrom` (`md`), so
- * the route layout and the shell never disagree about which layout is showing.
+ * beside a conversation (`md`). The chat layout renders the list panel and picks
+ * its navigator from this one value, so the two never disagree.
  */
 export const SPLIT_FROM = 768;
 
