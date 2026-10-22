@@ -12,7 +12,7 @@ import '@/lib/immerSetup';
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
-import { useOxy } from '@oxy.so/services/ui/client';
+import { useAccountColor, useOxy } from '@oxy.so/services/ui/client';
 import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import React, { useEffect, useState, type ReactNode } from 'react';
@@ -27,7 +27,7 @@ import { AlloRoot } from '@/lib/allo/AlloRoot';
 import { AppInitializer } from '@/lib/appInitializer';
 import { usePendingHref } from '@/lib/navigation/usePendingHref';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
-import { colorPresetFromSetting, themeModeFromSetting } from '@/lib/theme';
+import { DEFAULT_COLOR_PRESET, themeModeFromSetting } from '@/lib/theme';
 import { useAppearanceStore } from '@/stores/appearanceStore';
 
 import '../styles/global.css';
@@ -38,14 +38,17 @@ preventNativeSplashAutoHide();
 
 const IS_WEB = Platform.OS === 'web';
 
-/** Bloom, driven by the account's appearance settings. */
+/**
+ * Bloom. The mode follows the account's appearance settings; the colour is the
+ * Oxy account's, applied by `useAccountColor` (Allo's green until it is known).
+ */
 function ThemeRoot({ children }: { children: ReactNode }) {
   const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
   return (
     <BloomProvider
       fonts
       mode={themeModeFromSetting(appearance?.themeMode)}
-      colorPreset={colorPresetFromSetting(appearance?.colorTheme)}
+      defaultColorPreset={DEFAULT_COLOR_PRESET}
       // Web shows its own splash while fonts load; native is still behind the OS splash.
       onFontsLoading={IS_WEB ? <AppSplashScreen /> : null}
     >
@@ -62,6 +65,9 @@ function ThemeRoot({ children }: { children: ReactNode }) {
 function RootStack() {
   const { user } = useOxy();
   const signedIn = Boolean(user);
+  // The Oxy account colour is the app's accent: applied once, below both the
+  // Oxy and Bloom providers.
+  useAccountColor();
   usePendingHref(signedIn);
   return (
     <Stack screenOptions={{ headerShown: false }}>
