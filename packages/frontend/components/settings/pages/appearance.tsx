@@ -13,12 +13,13 @@ import {
   SelectValue,
 } from '@oxy.so/bloom/select';
 import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
-import { COLOR_PRESET_REGISTRY, FREE_COLOR_NAMES, type AppColorName } from '@oxy.so/bloom/theme';
+import { COLOR_PRESET_REGISTRY } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
+import { useAccountColorSave } from '@oxy.so/services/ui/client';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { colorPresetFromSetting, THEME_MODES, themeModeFromSetting } from '@/lib/theme';
+import { THEME_MODES, themeModeFromSetting } from '@/lib/theme';
 import { useAppearanceStore, type AppearanceSettings } from '@/stores/appearanceStore';
 
 type Mode = (typeof THEME_MODES)[number];
@@ -29,32 +30,30 @@ const MODE_LABELS: Record<Mode, string> = {
   dark: 'settings.appearance.mode.dark',
 };
 
-const FREE = new Set<AppColorName>(FREE_COLOR_NAMES);
-const PRESETS = COLOR_PRESET_REGISTRY.filter((preset) => FREE.has(preset.name));
-
 /**
- * Light, dark or the system's, and a colour preset. Both live in the account's
- * appearance settings, which `BloomProvider` reads, so a choice re-themes the
- * app as soon as the store has it and follows the account to other devices.
+ * Light, dark or the system's, and the account colour. The mode lives in the
+ * account's appearance settings, which `BloomProvider` reads; the colour is the
+ * Oxy account's, shared by every Oxy app, and Oxy decides which ones it may wear.
  */
 export default function AppearanceSettingsScreen() {
   const { t } = useTranslation();
   const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
   const mode = themeModeFromSetting(appearance?.themeMode) as Mode;
-  const preset = colorPresetFromSetting(appearance?.colorTheme);
-  const current = PRESETS.find((entry) => entry.name === preset);
+  const { colors, value, saveColor } = useAccountColorSave();
+  const presets = COLOR_PRESET_REGISTRY.filter((entry) => colors.includes(entry.name));
+  const current = presets.find((entry) => entry.name === value);
 
   const save = useCallback(
     async (next: Partial<AppearanceSettings>) => {
       const store = useAppearanceStore.getState();
       // The store applies it optimistically and puts the old value back on failure.
       const saved = await store.updateMySettings({
-        appearance: { themeMode: mode, colorTheme: preset, ...next },
+        appearance: { themeMode: mode, ...next },
       });
       if (!saved && useAppearanceStore.getState().error)
         toast.error(t('settings.appearance.saveError'));
     },
-    [mode, preset, t],
+    [mode, t],
   );
 
   return (
@@ -93,15 +92,19 @@ export default function AppearanceSettingsScreen() {
               description: current?.description,
               control: (
                 <Select
-                  value={preset}
-                  onValueChange={(value) => void save({ colorTheme: value as AppColorName })}
+                  value={value}
+                  onValueChange={(next) =>
+                    saveColor(next as typeof value).catch(() =>
+                      toast.error(t('settings.appearance.colorSaveError')),
+                    )
+                  }
                 >
                   <SelectTrigger label={t('settings.appearance.color')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent
                     label={t('settings.appearance.color')}
-                    items={PRESETS.map((entry) => ({
+                    items={presets.map((entry) => ({
                       value: entry.name,
                       label: entry.displayName,
                     }))}

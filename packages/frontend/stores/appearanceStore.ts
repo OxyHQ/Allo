@@ -25,7 +25,6 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;
-  colorTheme?: string;
   primaryColor?: string;
 }
 
