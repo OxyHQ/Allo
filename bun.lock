@@ -218,7 +218,7 @@
     },
     "packages/sdk": {
       "name": "@oxy.so/allo-sdk",
-      "version": "0.2.1",
+      "version": "0.3.1",
       "dependencies": {
         "@oxy.so/allo-contracts": "workspace:*",
       },

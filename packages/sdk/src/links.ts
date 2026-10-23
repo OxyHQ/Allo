@@ -16,6 +16,10 @@
  *   (`packages/frontend/app/(chat)/c/[id]/index.tsx`). It is keyed by id rather
  *   than handle because `/c/` resolves no handles, and a handle can change under
  *   a link.
+ * - `/c/:id?text=` does the same and puts `text` in the composer as a DRAFT.
+ *   Allo never sends it: the reader presses Send, or edits it, or does not. A
+ *   link cannot send by itself, because any web page can open one. This is the
+ *   way to hand Allo a post for ONE person (Mention's share sheet).
  * - `/share?text=` shows the reader's conversations and a people search, sends
  *   `text` to whichever they pick and lands them in that conversation. Sending
  *   a post means sending its permalink.
@@ -66,12 +70,18 @@ function linksTo(pathAndQuery: string): AlloLinks {
 
 /**
  * The links that open a direct conversation with `oxyUserId`, or `null` when
- * the id cannot address one.
+ * the id cannot address one. `text`, when there is any, waits in the composer
+ * as a draft; it is not sent.
  */
-export function alloDirectMessageLinks(oxyUserId: string | null | undefined): AlloLinks | null {
+export function alloDirectMessageLinks(
+  oxyUserId: string | null | undefined,
+  options?: { text?: string | null },
+): AlloLinks | null {
   if (typeof oxyUserId !== 'string') return null;
   const id = oxyUserId.trim();
-  return ACCOUNT_ID.test(id) ? linksTo(`c/${id}`) : null;
+  if (!ACCOUNT_ID.test(id)) return null;
+  const text = typeof options?.text === 'string' ? options.text.trim() : '';
+  return linksTo(text ? `c/${id}?text=${encodeURIComponent(text)}` : `c/${id}`);
 }
 
 /** The links that open Allo's share picker with `text` to send, or `null` for no text. */
