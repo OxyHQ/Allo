@@ -8,7 +8,6 @@ import React, { memo, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { I18nextProvider } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { OxyProvider, useOxy } from '@oxy.so/services/ui/client';
@@ -73,39 +72,40 @@ export const AppProviders = memo(function AppProviders({
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardProvider>
-          <QueryClientProvider client={queryClient}>
-            <OxyProvider
-              oxyServices={oxyServices}
-              clientId={OXY_CLIENT_ID}
-              language={{
-                supportedLocales: SUPPORTED_LANGUAGES,
-                fallbackLocale: DEFAULT_LANGUAGE,
-                onChange: setLanguage,
-                onError: (error, locale) =>
-                  logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
-              }}
-            >
-              <StickersProvider client={stickersClient}>
-                <MediaResolverProvider>
-                  <I18nextProvider i18n={i18n}>
-                    <ErrorBoundary>
-                      {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
-                          `PortalOutlet` mounted by the app, after the content they paint over.
-                          The inert boundary wraps everything but the outlet. */}
-                      <PortalProvider>
-                        <OverlayInertBoundary>{children}</OverlayInertBoundary>
-                        <ConnectionStatusToasts />
-                        <StatusBar style="auto" />
-                        <PortalOutlet />
-                      </PortalProvider>
-                    </ErrorBoundary>
-                  </I18nextProvider>
-                </MediaResolverProvider>
-              </StickersProvider>
-            </OxyProvider>
-          </QueryClientProvider>
-        </KeyboardProvider>
+        {/* No KeyboardProvider here: OxyProvider mounts the one. A second one above it
+            took the native keyboard events, so every keyboard hook under OxyProvider read
+            a closed keyboard. */}
+        <QueryClientProvider client={queryClient}>
+          <OxyProvider
+            oxyServices={oxyServices}
+            clientId={OXY_CLIENT_ID}
+            language={{
+              supportedLocales: SUPPORTED_LANGUAGES,
+              fallbackLocale: DEFAULT_LANGUAGE,
+              onChange: setLanguage,
+              onError: (error, locale) =>
+                logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
+            }}
+          >
+            <StickersProvider client={stickersClient}>
+              <MediaResolverProvider>
+                <I18nextProvider i18n={i18n}>
+                  <ErrorBoundary>
+                    {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
+                        `PortalOutlet` mounted by the app, after the content they paint over.
+                        The inert boundary wraps everything but the outlet. */}
+                    <PortalProvider>
+                      <OverlayInertBoundary>{children}</OverlayInertBoundary>
+                      <ConnectionStatusToasts />
+                      <StatusBar style="auto" />
+                      <PortalOutlet />
+                    </PortalProvider>
+                  </ErrorBoundary>
+                </I18nextProvider>
+              </MediaResolverProvider>
+            </StickersProvider>
+          </OxyProvider>
+        </QueryClientProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
