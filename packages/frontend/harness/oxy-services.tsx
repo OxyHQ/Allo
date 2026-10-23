@@ -107,6 +107,14 @@ export function useOxy() {
   };
 }
 
+/** The account colour: the harness account has none, so Allo keeps its own green. */
+export function useAccountColor(): void {}
+
+/** What `@alia.onl/sdk/ask` reads: the harness has no private API to offer it. */
+export function useAuth() {
+  return { canUsePrivateApi: false, signIn: async () => undefined };
+}
+
 export function OxyProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
