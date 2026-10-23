@@ -1,6 +1,6 @@
 {
   "name": "@oxy.so/allo-sdk",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/OxyHQ/Allo.git",
@@ -8,11 +8,23 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./links": {
+      "types": "./dist/links.d.ts",
+      "default": "./dist/links.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test --no-env-file ./src/__tests__"
   },
   "dependencies": {
     "@oxy.so/allo-contracts": "workspace:*"
