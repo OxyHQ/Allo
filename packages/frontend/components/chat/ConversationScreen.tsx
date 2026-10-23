@@ -98,16 +98,36 @@ const WALLPAPER = {
   height: 654,
 };
 
-/** One conversation: its header, its messages and the composer. */
-export function ConversationScreen({ conversationId }: { conversationId: string }) {
+/**
+ * One conversation: its header, its messages and the composer.
+ *
+ * `draft` is text to start the composer with (`/c/:id?text=`); it is only ever
+ * put in the field, never sent. Taken on mount and kept here, above the read
+ * gate, because the route drops it from the URL straight away while the gate
+ * may not render the composer until later.
+ */
+export function ConversationScreen({
+  conversationId,
+  draft = '',
+}: {
+  conversationId: string;
+  draft?: string;
+}) {
+  const [initialDraft] = useState(draft);
   return (
     <ConversationReadGate conversationId={conversationId}>
-      <AuthorizedConversationScreen conversationId={conversationId} />
+      <AuthorizedConversationScreen conversationId={conversationId} draft={initialDraft} />
     </ConversationReadGate>
   );
 }
 
-function AuthorizedConversationScreen({ conversationId }: { conversationId: string }) {
+function AuthorizedConversationScreen({
+  conversationId,
+  draft,
+}: {
+  conversationId: string;
+  draft: string;
+}) {
   const client = useAlloClient();
   const router = useRouter();
   const split = useSplitLayout();
@@ -577,6 +597,7 @@ function AuthorizedConversationScreen({ conversationId }: { conversationId: stri
         </ChatBackground>
         <View style={{ paddingBottom: split ? 0 : insets.bottom }}>
           <Composer
+            initialDraft={draft}
             target={target}
             onClearTarget={() => setTarget(null)}
             notice={notice?.text}

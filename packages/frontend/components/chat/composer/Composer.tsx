@@ -54,6 +54,8 @@ export interface Mentionable {
 }
 
 interface ComposerProps {
+  /** What the draft starts as, read on mount only. Seeding never sends: the reader does. */
+  initialDraft?: string;
   target: ComposerTarget | null;
   onClearTarget: () => void;
   /** Read-only, with this line in place of the input. */
@@ -129,6 +131,7 @@ function caretIn(field: TextInputInstance | null, text: string): number {
 }
 
 export function Composer({
+  initialDraft = '',
   target,
   onClearTarget,
   notice,
@@ -145,7 +148,7 @@ export function Composer({
   onTyping,
 }: ComposerProps) {
   const { t } = useTranslation();
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(initialDraft);
   const [staged, setStaged] = useState<readonly StagedAttachment[]>([]);
   const [composingPoll, setComposingPoll] = useState(false);
   const [mention, setMention] = useState<MentionFragment | null>(null);

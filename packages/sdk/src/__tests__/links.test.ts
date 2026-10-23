@@ -20,6 +20,14 @@ describe('links', () => {
     }
   });
 
+  it('carries a direct message draft as one encoded query value, and no blank one', () => {
+    const text = 'see https://e.x/p/1?a=1&b=2';
+    expect(alloDirectMessageLinks(ID, { text: ` ${text} ` })?.app).toBe(
+      `allo://c/${ID}?text=${encodeURIComponent(text)}`,
+    );
+    expect(alloDirectMessageLinks(ID, { text: '  ' })?.app).toBe(`allo://c/${ID}`);
+  });
+
   it('carries share text as one encoded query value', () => {
     const text = 'https://mention.earth/p/abc?x=1&y=2#z';
     expect(alloShareLinks(text)?.web).toBe(
