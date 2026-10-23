@@ -33,6 +33,7 @@ never patched here.
 | `(chat)/c/[id]/index.tsx` | `ConversationScreen`; an account id opens (creates) the DM |
 | `(chat)/c/[id]/info.tsx` | `ConversationInfo` as a screen (phone) |
 | `(chat)/new.tsx` | People picker: DM, group, or `?addTo=<id>` to add members |
+| `(chat)/share.tsx` | `/share?text=<message>` (`allo://share?text=…`, `https://allo.you/share?text=…`): another app's "send" (Mention's on a post). Previews the message as a bubble, then recent conversations and a people search; sends via `messages.send`, a person through `useCreateConversation` (the DM). One destination opens it |
 | `(chat)/[username].tsx` | `/@handle` profile; otherwise 404 |
 | `(chat)/dm/[username].tsx` | `/dm/handle`: resolves the handle and replaces with `/c/<account id>` (the DM) |
 | `(chat)/calls.tsx` | Call history, and the banner an arriving call would use |
