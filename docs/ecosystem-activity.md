@@ -4,14 +4,13 @@ The backend publishes aggregate traffic and its infrastructure heartbeat to the
 Oxy API, which broadcasts changes to the website dashboard. Collection runs in
 the service process regardless of whether somebody opens the dashboard.
 
-Enable with `OXY_ECOSYSTEM_ACTIVITY_ENABLED=true`, `AWS_REGION`, and an Oxy
-service identity. On the infrastructure that identity is the ECS task role, which
-the SDK attests for a service token (oxy ADR 0026) — nothing to provision. A
-process that cannot attest, a developer's machine, falls back to the
-`ALLO_OXY_SERVICE_API_KEY` / `ALLO_OXY_SERVICE_API_SECRET` pair. An invalid
-activation value, or neither identity, fails at boot.
-Disabled collection emits a warning; it must not be interpreted as zero traffic.
-Provision credentials and enable the flag in the deployment before claiming coverage.
+Enable with `OXY_ECOSYSTEM_ACTIVITY_ENABLED=true` and `AWS_REGION`. The shared
+SDK uses the same temporary AWS role provider as Allo's `OxyServer`: ECS task
+identity or an authenticated local SSO/assumed role. Oxy verifies its registered
+application and environment (ADR 0049); no activity key or internal scopes apply.
+Invalid activation values fail at boot. Missing or revoked workload authority
+is reported by the publisher with bounded retry backoff. Disabled collection
+emits a warning and must not be interpreted as zero traffic.
 
 HTTP middleware is mounted before body parsers and routers, including public
 routes, webhooks, failures and authenticated internal calls. Outgoing fetch and

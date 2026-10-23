@@ -61,7 +61,7 @@ const mockBuildClient = (): AlloClient => {
     syncIntervalMs: 60_000,
   });
   mockClients.push(client);
-  return client;
+  return Object.assign(client, { dispose: () => client.stop() });
 };
 
 jest.mock('@/lib/allo/client', () => ({
