@@ -104,12 +104,7 @@ CROWDSOURCE_WEBHOOK_SECRET=your_webhook_secret
 # secret still verify.
 CROWDSOURCE_WEBHOOK_SECRET_PREVIOUS=
 
-# Allo's own credential for calling the Oxy API as itself (optional; both or
-# neither; LOCAL only — the deployment attests its task role instead). Every Oxy
-# route the directory uses is public, so the lookups work without it — see
-# "People directory" below.
-ALLO_OXY_SERVICE_API_KEY=
-ALLO_OXY_SERVICE_API_SECRET=
+# Own Oxy calls use registered workload identity; no application key pair.
 
 # Tests only: the Postgres server each run creates its throwaway database ON.
 # Point it at a maintenance database, never one holding anything. Falls back to
@@ -226,19 +221,15 @@ Authenticated, even though every underlying Oxy route is public: an
 unauthenticated profile lookup here would be an enumeration endpoint pointed at
 Oxy's whole user base with Allo's IP reputation in front of it.
 
-No service credential is required, for the same reason. Setting
-`ALLO_OXY_SERVICE_API_KEY` / `ALLO_OXY_SERVICE_API_SECRET` only changes how the
-bulk lookup authenticates; see `src/config/oxyService.ts`, which also documents
-the console.oxy.so step that mints them.
+Public directory lookups work without service identity. Own service calls use
+`OxyServer` with an attested workload, registered environment and receiver audience
+(Oxy ADR 0049). There are no internal OAuth scopes or application key fallbacks.
+A local process without workload identity may use the public directory; it cannot
+borrow Allo's authority with a customer API key.
 
-**The deployment carries neither.** Under oxy ADR 0026 a first-party service
-proves what it IS — a signed `GetCallerIdentity` for its ECS task role, which Oxy
-replays to AWS — and gets back the same short-lived service token the key pair
-used to buy, so `@oxy.so/core` needs nothing in a parameter store. The pair is
-how a machine that can attest nothing borrows Allo's identity. Anything deciding
-whether this process has an Oxy identity must therefore call
-`canAuthenticateAsOxyService()` rather than read the two variables: they stopped
-being the same question the day the task role could answer it.
+Team-operation and team-snapshot capabilities remain resource contracts: their
+membership, operation and version checks apply regardless of service identity.
+The public capability read contract also remains available to existing SDKs.
 
 ### Health
 
@@ -545,3 +536,12 @@ This package is part of the Allo monorepo and integrates with:
 - **Authentication**: All authenticated endpoints use Oxy's authentication middleware.
 - **Encryption**: the backend stores and relays ciphertext only and never holds
   a decryption key. See [docs/platform/crypto.md](../../docs/platform/crypto.md).
+
+### Own transport release gate
+
+The own transport migration is validated with core 7, contracts 6 and the
+prepared CrowdSource and Homiio SDKs. Publish and pin the SDK server factories
+before deploying this backend: `@oxy.so/allo-sdk/server` and
+`@oxy.so/homiio-sdk/server` use canonical receiver audiences. Package candidates
+are validation artifacts only; no local tarball path belongs in the lockfile.
+Existing resource-capability readers remain compatible without a service bearer.

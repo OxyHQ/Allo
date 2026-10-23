@@ -13,11 +13,12 @@ let sourceOffline = false;
 beforeAll(async () => {
   await h.boot();
   globalThis.fetch = (async (url, init) => {
-    if (String(url) === 'https://api.homiio.com/api/v1/team-chat/operations/read') {
+    const request = new Request(url, init);
+    if (request.url === 'https://api.homiio.com/api/v1/team-chat/operations/read') {
       if (sourceOffline) throw new Error('source disconnected');
-      const id = JSON.parse(String(init?.body)).operationId;
+      const id = (await request.json()).operationId;
       const entry = operations.get(id);
-      if (!entry || new Headers(init?.headers).get('x-homiio-team-operation') !== entry.capability)
+      if (!entry || request.headers.get('x-homiio-team-operation') !== entry.capability)
         return Response.json(
           { error: { code: 'not_found', message: 'Not found' } },
           { status: 404 },

@@ -9,7 +9,6 @@ import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from '@oxy
 import { APP_ORIGINS, createApp } from './app';
 import { setIceConfig } from './config/iceRuntime';
 import { readLiveKitConfig } from './config/livekit';
-import { configureOxyServiceAuth } from './config/oxyService';
 import { setLiveKitConfig } from './config/sfuRuntime';
 import { readIceConfig } from './config/turn';
 import { checkPostgresHealth } from './db';
@@ -25,7 +24,6 @@ import { createOxyDirectoryService } from './services/oxy/OxyDirectoryService';
 import { blobMaxBytes } from './services/platform/blobService';
 
 export function createRuntimeApp() {
-  configureOxyServiceAuth(oxy);
   /**
    * The media configuration is read HERE, once, so a half-configured relay or
    * SFU fails the boot rather than the first call — which is what both config

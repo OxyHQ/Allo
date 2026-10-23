@@ -68,15 +68,22 @@ const server = Bun.serve({
   port: 0,
   async fetch(req) {
     const path = new URL(req.url).pathname;
-    const body = req.method === 'POST' ? await req.json() : undefined;
+    const raw = req.method === 'POST' ? await req.text() : '';
+    const body = raw ? JSON.parse(raw) : undefined;
     safetyFixture.calls.push({ path, body });
     if (safetyFixture.unavailable) return json({ message: 'Authority unavailable' }, 503);
-    if (path === '/auth/service-token')
+    if (path === '/auth/service-token/workload/challenge')
+      return json({ nonce: 'allo-test-nonce' });
+    if (path === '/auth/service-token/workload')
       return json({
         token: token({
           type: 'service',
           appId: 'allo-fixture',
-          scopes: body.scopes ?? [],
+          authority: 'first_party',
+          credentialId: 'wl_allo_fixture',
+          audience: body.audience,
+          aud: body.audience,
+          environment: 'development',
           exp: Math.floor(Date.now() / 1000) + 3600,
         }),
         expiresIn: 3600,
@@ -145,5 +152,8 @@ const server = Bun.serve({
 server.unref();
 export const fixtureOxy = new OxyServer({
   baseURL: server.url.origin,
-  serviceAuth: { apiKey: 'allo-fixture-key', apiSecret: 'allo-fixture-secret' },
+  workloadCredentials: async () => ({
+    AccessKeyId: 'AKIAALLOFIXTURE',
+    SecretAccessKey: 'fixture-signing-secret',
+  }),
 });

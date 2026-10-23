@@ -218,13 +218,19 @@
     },
     "packages/sdk": {
       "name": "@oxy.so/allo-sdk",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "dependencies": {
         "@oxy.so/allo-contracts": "workspace:*",
       },
       "devDependencies": {
         "typescript": "^5.9.3",
       },
+      "peerDependencies": {
+        "@oxy.so/core": ">=7.0.0 <8",
+      },
+      "optionalPeers": [
+        "@oxy.so/core",
+      ],
     },
     "packages/shared-types": {
       "name": "@allo/shared-types",

@@ -1,4 +1,6 @@
-import { HomiioTeamClient, type TeamOperation } from '@oxy.so/homiio-sdk';
+import type { TeamOperation } from '@oxy.so/homiio-sdk';
+import { homiioTeamForOxyService } from '@oxy.so/homiio-sdk/server';
+import { oxy } from '../../oxy';
 import { getDb } from '../../db';
 import { lockConversation } from '../../db/platform/conversationRepository';
 import {
@@ -23,7 +25,7 @@ export async function authorizeTeamOperation(
 ): Promise<ManagedTeamAuthorization> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(teamCapability) || !operationCapability)
     throw validationFailed('Team capability is required');
-  const operation = await new HomiioTeamClient().read(operationId, operationCapability);
+  const operation = await homiioTeamForOxyService(oxy).read(operationId, operationCapability);
   const capabilityHash = teamCapabilityHash(teamCapability);
   if (
     operation.ownerAccountId !== caller.accountId ||

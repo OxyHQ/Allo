@@ -1,3 +1,4 @@
+import { safetyFixture } from '../../platform/oxySafetyFixture';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -20,17 +21,11 @@ import {
  * loopback HTTP for both Oxy and CrowdSource; only the responses are fixtures.
  */
 
-const SERVICE_TOKEN = 'fixture_oxy_service_token';
 const APPLICATION_ID = 'app_0123456789abcdef0123456789abcdef';
 const requests: Array<{ method: string; path: string; authorization?: string }> = [];
 let server: http.Server;
 const savedEnv: Record<string, string | undefined> = {};
-const ENV = [
-  'OXY_API_URL',
-  'OXY_SERVICE_API_KEY',
-  'OXY_SERVICE_API_SECRET',
-  'CROWDSOURCE_BASE_URL',
-] as const;
+const ENV = ['CROWDSOURCE_BASE_URL'] as const;
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
@@ -41,9 +36,7 @@ beforeAll(async () => {
     });
     req.resume();
     res.setHeader('content-type', 'application/json');
-    if (req.url === '/auth/service-token') {
-      res.end(JSON.stringify({ token: SERVICE_TOKEN, expiresIn: 3600 }));
-    } else if (req.url === '/v1/applications/me') {
+    if (req.url === '/v1/applications/me') {
       res.end(JSON.stringify({ applicationId: APPLICATION_ID }));
     } else if (req.method === 'POST' && req.url === '/v1/reports') {
       res.statusCode = 202;
@@ -65,9 +58,6 @@ beforeAll(async () => {
   const origin = `http://localhost:${(server.address() as AddressInfo).port}`;
 
   for (const name of ENV) savedEnv[name] = process.env[name];
-  process.env.OXY_API_URL = origin;
-  process.env.OXY_SERVICE_API_KEY = 'fixture_key';
-  process.env.OXY_SERVICE_API_SECRET = 'fixture_secret';
   process.env.CROWDSOURCE_BASE_URL = origin;
   resetCrowdSourceConfigForTests();
   resetCrowdSourceClient();
@@ -87,7 +77,7 @@ afterAll(async () => {
 describe('CrowdSource client on the installed Oxy SDK', () => {
   it('mints an Oxy service token and presents it when delivering a report', async () => {
     const client = getCrowdSourceClient();
-    if (!client) throw new Error('no CrowdSource client was built with a credential pair set');
+    if (!client) throw new Error('no CrowdSource client was built with a workload provider');
 
     // Awaited directly rather than through `.resolves`, so a rejection prints its
     // reason — which IS the finding when the two packages drift apart again.
@@ -103,10 +93,19 @@ describe('CrowdSource client on the installed Oxy SDK', () => {
       merged: false,
     });
 
-    expect(requests.some((request) => request.path === '/auth/service-token')).toBe(true);
+    expect(
+      safetyFixture.calls.some((request) => request.path === '/auth/service-token/workload'),
+    ).toBe(true);
     const delivery = requests.find(
       (request) => request.method === 'POST' && request.path === '/v1/reports',
     );
-    expect(delivery?.authorization).toBe(`Bearer ${SERVICE_TOKEN}`);
+    expect(delivery?.authorization).toMatch(/^Bearer /);
+    if (!delivery?.authorization) throw new Error('Expected service authorization');
+    const claims = JSON.parse(
+      Buffer.from(delivery.authorization.slice(7).split('.')[1], 'base64url').toString(),
+    );
+    expect(claims.authority).toBe('first_party');
+    expect(claims.aud).toMatch(/^oxy-service:/);
+    expect(claims.scopes).toBeUndefined();
   });
 });
