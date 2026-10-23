@@ -72,33 +72,53 @@ export interface AppAlloClientOptions {
   supervised?: boolean;
 }
 
+export interface AppAlloClient extends AlloClient {
+  /** Final release by AlloRoot. Stopping/restarting the core client remains supported. */
+  dispose(): Promise<void>;
+}
+
 export async function createAppAlloClient({
   oxy,
   supervised = false,
-}: AppAlloClientOptions): Promise<AlloClient> {
-  const storage = await createStorage();
-  const media = createCallMedia();
-  const client = createAlloClient({
-    baseUrl: ALLO_PLATFORM_URL,
-    requireLiveConversationAccess: supervised,
-    appId: APP_ID,
-    platform: alloPlatform(),
-    displayName: deviceDisplayName(),
-    session: createSessionAdapter(oxy),
-    storage,
-    secrets: createSecrets(),
-    // The media half of a call. The SDK owns the state machine, the
-    // signalling and the fingerprint; this owns the peer connection and the
-    // microphone, and nothing else (ADR 0002, Decision 5).
-    media,
-    people,
-    logger: {
-      debug: (message, fields) => logger.debug(`[allo] ${message}`, fields),
-      info: (message, fields) => logger.info(`[allo] ${message}`, fields),
-      warn: (message, fields) => logger.warn(`[allo] ${message}`, fields),
-      error: (message, fields) => logger.error(`[allo] ${message}`, fields),
-    },
-  });
-  bindCallMedia(client, media);
-  return client;
+}: AppAlloClientOptions): Promise<AppAlloClient> {
+  // Bind before asynchronous storage setup so a switch cannot label B's client as A.
+  const session = createSessionAdapter(oxy, ALLO_PLATFORM_URL);
+  try {
+    const storage = await createStorage();
+    const media = createCallMedia();
+    const client = createAlloClient({
+      baseUrl: ALLO_PLATFORM_URL,
+      requireLiveConversationAccess: supervised,
+      appId: APP_ID,
+      platform: alloPlatform(),
+      displayName: deviceDisplayName(),
+      session,
+      storage,
+      secrets: createSecrets(),
+      // The media half of a call. The SDK owns the state machine, the
+      // signalling and the fingerprint; this owns the peer connection and the
+      // microphone, and nothing else (ADR 0002, Decision 5).
+      media,
+      people,
+      logger: {
+        debug: (message, fields) => logger.debug(`[allo] ${message}`, fields),
+        info: (message, fields) => logger.info(`[allo] ${message}`, fields),
+        warn: (message, fields) => logger.warn(`[allo] ${message}`, fields),
+        error: (message, fields) => logger.error(`[allo] ${message}`, fields),
+      },
+    });
+    bindCallMedia(client, media);
+    return Object.assign(client, {
+      async dispose() {
+        try {
+          await client.stop();
+        } finally {
+          session.dispose();
+        }
+      },
+    });
+  } catch (error) {
+    session.dispose();
+    throw error;
+  }
 }

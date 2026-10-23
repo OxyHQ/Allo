@@ -14,6 +14,9 @@ import type { Logger } from './util/logger';
 
 /** How the SDK reaches the Oxy session: a bearer token and the account it names. */
 export interface OxySessionAdapter {
+  /** Shared authenticated HTTP transport; when supplied, HTTP never reads a bearer here. */
+  authenticatedFetch?: typeof fetch;
+  /** Fresh, account-fenced bearer for each socket handshake (legacy hosts also use it for HTTP). */
   getAccessToken(): Promise<string | null>;
   getAccountId(): string | null;
   /** Called on any session change (sign-in, sign-out, account switch). Returns the unsubscribe. */

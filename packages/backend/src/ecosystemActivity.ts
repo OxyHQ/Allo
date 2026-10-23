@@ -1,7 +1,7 @@
 import { createEcosystemTraffic } from '@oxy.so/core/server';
 import type { RequestHandler } from 'express';
 
-import { canAuthenticateAsOxyService } from './config/oxyService';
+import { workloadCredentials } from './oxy';
 
 let activity: ReturnType<typeof createEcosystemTraffic> | undefined;
 
@@ -15,13 +15,11 @@ export function startEcosystemActivity(ready: () => boolean): void {
     console.warn('Ecosystem activity is disabled for allo');
     return;
   }
-  if (!canAuthenticateAsOxyService()) {
-    throw new Error('Ecosystem activity requires an attested Oxy workload identity');
-  }
   if (activity) return;
   activity = createEcosystemTraffic({
     service: 'allo',
     ready,
+    workloadCredentials,
   });
   activity.installFetch();
 }

@@ -1,34 +1,47 @@
-/**
- * The Oxy session, as the SDK wants to see it.
- *
- * `OxyProvider` is the session authority: the bearer token, and the account it
- * names, come from the `OxyServices` instance `useOxy()` hands out, and this
- * adapter reads them from that instance rather than from a copy. `subscribe`
- * is `session.onChange`, which fires on sign-in, sign-out, a silent refresh and
- * an account switch — every event the SDK needs to know about, because the
- * account id is decoded from the token and moves with it.
- */
+/** The provider owns bearer refresh; Allo retains its account and instance fences. */
 import type { OxySessionAdapter } from '@allo/core';
+import type { LinkedHttpClient } from '@oxy.so/core';
 
-/** The three members of `OxyServices.session` this adapter reads, so a test can hand in a fake. */
 export interface OxySessionSource {
   readonly session: {
-    readonly accessToken: string | null;
     readonly userId: string | null;
     onChange(listener: (accessToken: string | null) => void): () => void;
   };
+  createLinkedClient(config: {
+    baseURL: string;
+  }): Pick<LinkedHttpClient, 'fetch' | 'getAccessToken' | 'dispose'>;
 }
 
-export function createSessionAdapter(oxy: OxySessionSource): OxySessionAdapter {
+export function createSessionAdapter(
+  oxy: OxySessionSource,
+  baseURL: string,
+): OxySessionAdapter & { dispose(): void } {
+  const ownerAccountId = oxy.session.userId;
+  const linked = oxy.createLinkedClient({ baseURL });
+  let disposed = false;
+  const ownsSession = () =>
+    !disposed && ownerAccountId !== null && oxy.session.userId === ownerAccountId;
   return {
+    authenticatedFetch: async (input, init) => {
+      if (!ownsSession()) throw new Error('The Allo account session changed');
+      const response = await linked.fetch(input, init);
+      if (!ownsSession()) throw new Error('The Allo account session changed');
+      return response;
+    },
     async getAccessToken() {
-      return oxy.session.accessToken;
+      if (!ownsSession()) return null;
+      const token = await linked.getAccessToken(baseURL);
+      return ownsSession() ? token : null;
     },
     getAccountId() {
       return oxy.session.userId;
     },
     subscribe(cb) {
       return oxy.session.onChange(() => cb());
+    },
+    dispose() {
+      disposed = true;
+      linked.dispose();
     },
   };
 }

@@ -27,7 +27,8 @@ export interface Signer {
 export interface HttpClientOptions {
   baseUrl: string;
   fetch: typeof fetch;
-  getAccessToken(): Promise<string | null>;
+  /** Omit when fetch already owns authentication, refresh and account fences. */
+  getAccessToken?(): Promise<string | null>;
   now(): number;
   /** Called on a 403 `instance_revoked` so the instance manager can flip state. */
   onInstanceRevoked?: () => void;
@@ -53,10 +54,11 @@ export class HttpClient {
   constructor(private readonly options: HttpClientOptions) {}
 
   async request<T = void>(req: RequestOptions<T>): Promise<T> {
-    const token = await this.options.getAccessToken();
-    if (!token) throw new TransportError(401, 'unauthorized', 'no Oxy session');
+    const token = await this.options.getAccessToken?.();
+    if (this.options.getAccessToken && !token)
+      throw new TransportError(401, 'unauthorized', 'no Oxy session');
     const headers: Record<string, string> = {
-      authorization: `Bearer ${token}`,
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       accept: 'application/json',
       ...(req.headers ?? {}),
     };

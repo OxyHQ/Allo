@@ -41,10 +41,9 @@ import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { configurePeople } from './people';
 import { ConversationAccessState } from './ConversationAccessState';
-import type { AlloClient } from '@allo/core';
 import { AlloProvider, useAlloClient, useInstanceState } from '@allo/react';
 import { logger } from '@/utils/logger';
-import { createAppAlloClient } from './client';
+import { createAppAlloClient, type AppAlloClient } from './client';
 import { EnrollmentGate } from './EnrollmentGate';
 import { onPushPermissionGranted, registerPushToken } from './push';
 import { RestoreHistoryPrompt } from './RestoreHistoryPrompt';
@@ -53,7 +52,7 @@ import { signOutOfAllo } from './signOut';
 interface Held {
   key: string;
   accountId: string;
-  client: AlloClient;
+  client: AppAlloClient;
 }
 
 export function AlloRoot({ children }: { children: React.ReactNode }) {
@@ -89,7 +88,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       // Stopped in both cases — an account switch and a session that is not
       // there right now are the same thing to this device's keys.
     }
-    const stopped = stopTail.current.then(() => previous?.client.stop());
+    const stopped = stopTail.current.then(() => previous?.client.dispose());
     stopTail.current = stopped;
     if (accountId === null || key === null) {
       void stopped.catch((error) =>
@@ -103,7 +102,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       .then(() => createAppAlloClient({ oxy: oxyRef.current, supervised }))
       .then(async (next) => {
         if (cancelled) {
-          await next.stop();
+          await next.dispose();
           return;
         }
         held.current = { key, accountId, client: next };
@@ -126,7 +125,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
       const previous = held.current;
       held.current = null;
       void previous?.client
-        .stop()
+        .dispose()
         .catch((error) => logger.error('[allo] unmount could not stop the client', error));
     },
     [],

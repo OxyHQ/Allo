@@ -150,10 +150,11 @@ const server = Bun.serve({
   },
 });
 server.unref();
+export const fixtureWorkloadCredentials = async () => ({
+  AccessKeyId: 'AKIAALLOFIXTURE',
+  SecretAccessKey: 'fixture-signing-secret',
+});
 export const fixtureOxy = new OxyServer({
   baseURL: server.url.origin,
-  workloadCredentials: async () => ({
-    AccessKeyId: 'AKIAALLOFIXTURE',
-    SecretAccessKey: 'fixture-signing-secret',
-  }),
+  workloadCredentials: fixtureWorkloadCredentials,
 });

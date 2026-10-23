@@ -57,11 +57,30 @@ display name, and every view model carries account ids only. The design brief
 listed it as the resolver the SDK would call; the app resolves names itself
 for now.
 
+### Shared Oxy transport in the app
+
+The app's session adapter supplies `authenticatedFetch` from
+`oxy.createLinkedClient({ baseURL })`. HTTP retains Allo's exact body hash and
+instance signature, while Oxy owns bearer refresh and account/session fences.
+The adapter resolves `linked.getAccessToken(baseURL)` for every socket handshake;
+it never captures `session.accessToken`. An adapter belongs to the account that
+created it and refuses to lend that client's keys to another account.
+
+`AlloRoot` releases its app client with `dispose()`, which stops the core client
+and removes the linked transport subscription. A temporary session gap preserves
+all messaging keys. The core `stop()`/`start()` contract and explicit `reset()`
+remain unchanged. Legacy SDK hosts can still supply `getAccessToken` for HTTP;
+own frontends use the shared authenticated fetch.
+
+Release gate: this frontend requires the shared linked socket method in Oxy
+core 7.1. The server factories ship separately in the Allo and Homiio SDKs before
+their respective backends adopt them; no deployment may rely on local tarballs.
+
 ### The three adapters a host must provide
 
 | adapter | shape | what is to back it in Allo App |
 | --- | --- | --- |
-| `OxySessionAdapter` | `getAccessToken(): Promise<string \| null>`, `getAccountId(): string \| null`, `subscribe(cb): unsubscribe` | the Oxy session from `@oxy.so/services` |
+| `OxySessionAdapter` | `authenticatedFetch?: typeof fetch`, `getAccessToken(): Promise<string \| null>`, `getAccountId(): string \| null`, `subscribe(cb): unsubscribe` | the Oxy session from `@oxy.so/services` |
 | `StorageAdapter` | a byte key-value store: `get`, `set`, `delete`, `list(prefix)`, `batch(ops)` atomic | expo-sqlite on native, IndexedDB on web |
 | `SecretStore` | `get`, `set`, `delete` of named byte values | expo-secure-store on native, IndexedDB on web |
 
