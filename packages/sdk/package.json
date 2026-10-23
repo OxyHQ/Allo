@@ -12,9 +12,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "prepack": "bun run build",
-    "prepublishOnly": "bun run build"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@oxy.so/allo-contracts": "workspace:*"
