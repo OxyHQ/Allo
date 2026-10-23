@@ -96,6 +96,7 @@ jobs:
               - 'packages/shared-types/**'
               - 'packages/core/**'
               - 'packages/react/**'
+              - 'packages/sdk/**'
             backend:
               - *sdk
               - 'packages/backend/**'
@@ -199,7 +200,10 @@ jobs:
           DATABASE_DRIVER: bun-sql
         run: bun run --filter @allo/backend test
 
-  # The SDK packages the app and the backend integration test build on. They
+  # The SDK packages the app and the backend integration test build on, and the
+  # published @oxy.so/allo-sdk other apps open Allo with (its build is the
+  # root postinstall's, so `Install` typechecks it). The job keeps its name
+  # because branch protection requires it by that name. They
   # need no Postgres: @allo/core's e2e suite runs against its in-memory fake
   # server, which validates every request with the same zod contract the
   # backend validates with, so contract drift fails here before it fails there.
@@ -223,7 +227,7 @@ jobs:
         run: bun run --filter @allo/shared-types typecheck && bun run typecheck:core && bun run typecheck:react
 
       - name: Test SDK packages
-        run: bun run --filter @allo/shared-types test && bun run --filter @allo/core test && bun run --filter @allo/react test
+        run: bun run --filter @allo/shared-types test && bun run --filter @allo/core test && bun run --filter @allo/react test && bun run --filter @oxy.so/allo-sdk test
 
   frontend:
     name: Frontend typecheck
