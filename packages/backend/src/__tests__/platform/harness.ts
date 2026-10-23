@@ -29,7 +29,6 @@ import {
 import { createApp, type CreateAppDependencies } from '../../app';
 import { oxy } from '../../oxy';
 import { createMessagingAuth } from '../../middleware/messagingAuth';
-oxy.configureServiceAuth('allo-fixture-key', 'allo-fixture-secret');
 import {
   checkPostgresHealth,
   closePostgres,

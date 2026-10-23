@@ -39,7 +39,7 @@ const API_SECRET = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a3928';
 describe('ecosystem activity lifecycle', () => {
   beforeEach(() => {
     stubEnv('OXY_ECOSYSTEM_ACTIVITY_ENABLED', 'true');
-    stubEnv('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI', undefined);
+    stubEnv('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI', '/v2/credentials/fixture');
     stubEnv('AWS_CONTAINER_CREDENTIALS_FULL_URI', undefined);
     stubEnv('ALLO_OXY_SERVICE_API_KEY', API_KEY);
     stubEnv('ALLO_OXY_SERVICE_API_SECRET', API_SECRET);
@@ -84,9 +84,9 @@ describe('ecosystem activity lifecycle', () => {
     expect(publisher.installFetch).not.toHaveBeenCalled();
   });
 
-  it('refuses a partially provisioned publishing credential', () => {
-    stubEnv('ALLO_OXY_SERVICE_API_SECRET', '');
-    expect(() => startEcosystemActivity(() => true)).toThrow('ALLO_OXY_SERVICE_API_SECRET');
+  it('does not use a customer credential as workload identity', () => {
+    stubEnv('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI', undefined);
+    expect(() => startEcosystemActivity(() => true)).toThrow('attested Oxy workload identity');
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -108,10 +108,11 @@ describe('ecosystem activity lifecycle', () => {
     expect(publisher.installFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses to publish from a process with no identity of either kind', () => {
+  it('refuses to publish without workload identity', () => {
+    stubEnv('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI', undefined);
     stubEnv('ALLO_OXY_SERVICE_API_KEY', undefined);
     stubEnv('ALLO_OXY_SERVICE_API_SECRET', undefined);
-    expect(() => startEcosystemActivity(() => true)).toThrow('Oxy service identity');
+    expect(() => startEcosystemActivity(() => true)).toThrow('attested Oxy workload identity');
     expect(create).not.toHaveBeenCalled();
   });
 
