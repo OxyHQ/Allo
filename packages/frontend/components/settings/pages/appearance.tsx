@@ -9,6 +9,7 @@ import {
   SelectItem,
   SelectItemIndicator,
   SelectItemText,
+  SelectIcon,
   SelectTrigger,
   SelectValue,
 } from '@oxy.so/bloom/select';
@@ -105,6 +106,7 @@ export default function AppearanceSettingsScreen() {
                 >
                   <SelectTrigger label={t('settings.appearance.color')}>
                     <SelectValue />
+                    <SelectIcon />
                   </SelectTrigger>
                   <SelectContent
                     label={t('settings.appearance.color')}

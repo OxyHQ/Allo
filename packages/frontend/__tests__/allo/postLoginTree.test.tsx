@@ -61,7 +61,13 @@ const mockDirectory: Record<
 };
 jest.mock('@/lib/oxy', () => ({
   oxyServices: {
-    users: { getMany: async (ids: string[]) => ids.map((id) => mockDirectory[id]).filter(Boolean) },
+    users: {
+      lookupMany: async (ids: string[]) => ({
+        found: ids.map((id) => mockDirectory[id]).filter(Boolean),
+        missing: ids.filter((id) => !mockDirectory[id]),
+        failed: [],
+      }),
+    },
   },
 }));
 
