@@ -36,7 +36,7 @@ import { nativeCallBridge } from './nativeCallBridge';
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { configurePeople } from './people';
@@ -56,6 +56,16 @@ interface Held {
   client: AlloClient;
 }
 
+/** A `start()` that threw, tied to the client it belongs to so a newer client never shows it. */
+interface StartFailure {
+  client: AlloClient;
+  error: Error;
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
@@ -66,6 +76,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     personal && Boolean(supervision.data?.self && supervision.data.self.status !== 'ended');
   const key = accountId && known ? JSON.stringify([accountId, activeSessionId, supervised]) : null;
   const [current, setCurrent] = useState<Held | null>(null);
+  const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
   const held = useRef<Held | null>(null);
   const stopTail = useRef<Promise<void>>(Promise.resolve());
   // Read through a ref so a re-created services object does not rebuild the client.
@@ -111,8 +122,10 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
         try {
           await next.start();
         } catch (error) {
-          // The gate shows the last error through `useInstanceState`; nothing to throw at React.
+          // The gate draws it (`EnrollmentGate`'s start-failure screen); nothing to throw at React.
           logger.error('[allo] the client could not start', error);
+          if (held.current?.client === next)
+            setStartFailure({ client: next, error: asError(error) });
         }
       })
       .catch((error: unknown) => logger.error('[allo] the client could not be built', error));
@@ -131,6 +144,18 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  const retryStart = useCallback(async () => {
+    const client = held.current?.client;
+    if (!client) return;
+    setStartFailure(null);
+    try {
+      await client.start();
+    } catch (error) {
+      logger.error('[allo] the client could not start', error);
+      if (held.current?.client === client) setStartFailure({ client, error: asError(error) });
+    }
+  }, []);
 
   if (accountId === null) return <>{children}</>;
   if (!known)
@@ -154,6 +179,8 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
           onSignOut={() => {
             void signOutOfAllo(client, logout);
           }}
+          startFailure={startFailure?.client === client ? startFailure.error : undefined}
+          onRetryStart={retryStart}
         >
           {children}
           {/* Asked once of a fresh device whose account has a backup; never holds boot. */}
