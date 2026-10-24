@@ -60,3 +60,33 @@ describe('presenceLine', () => {
     expect(line(view({ online: true, lastSeenAt: ago(60 * 60_000) }))).toBe('presence.online');
   });
 });
+
+describe('presenceLine in the real copy', () => {
+  // The header has the avatar, the name, and three buttons beside it on a
+  // phone: "last seen 53 minutes ago" truncated to "last seen 53 minut…" on a
+  // Pixel 8a. The short forms fit, and "1 hours ago" is gone with them.
+  const en = require('../locales/en.json') as Record<string, string>;
+  const real = (key: string, options?: Record<string, unknown>) =>
+    (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name]));
+  const say = (presence: PresenceView) =>
+    presenceLine(presence, { t: real, locale: 'en-US', now: NOW });
+
+  it('is short enough for a phone header', () => {
+    expect(say(view({ lastSeenAt: ago(53 * 60_000) }))).toBe('last seen 53 min ago');
+    expect(say(view({ lastSeenAt: ago(60 * 60_000) }))).toBe('last seen 1 h ago');
+    expect(say(view({ lastSeenAt: ago(23 * 3_600_000) }))).toBe('last seen 23 h ago');
+    for (const ms of [3 * 60_000, 59 * 60_000, 5 * 3_600_000, 23.9 * 3_600_000]) {
+      expect((say(view({ lastSeenAt: ago(ms) })) ?? '').length).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it('keeps the short forms in every bundle', () => {
+    for (const locale of ['en', 'es', 'it']) {
+      const bundle = require(`../locales/${locale}.json`) as Record<string, string>;
+      for (const key of ['presence.lastSeen.minutes', 'presence.lastSeen.hours']) {
+        expect(bundle[key]).toContain('{{count}}');
+        expect(bundle[key].replace('{{count}}', '53').length).toBeLessThanOrEqual(20);
+      }
+    }
+  });
+});

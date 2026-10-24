@@ -80,3 +80,27 @@ export function planConversation(request: NewConversationRequest): PlannedConver
     name: isDirect || name === undefined || name === '' ? undefined : name,
   };
 }
+
+/**
+ * What `/new` was opened to do, read from its search params: start a
+ * conversation (the default), add people to `?addTo=<id>`, or pick one person
+ * to call (`?call=voice|video`, from the Calls page's floating action). Any
+ * other `call` value is not a call: a link cannot make the picker dial
+ * something it did not ask for.
+ */
+export type PickerMode =
+  | { kind: 'new' }
+  | { kind: 'add'; conversationId: string }
+  | { kind: 'call'; mode: 'voice' | 'video' };
+
+export function pickerModeFromParams(params: {
+  addTo?: string | string[];
+  call?: string | string[];
+}): PickerMode {
+  const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+  const addTo = first(params.addTo);
+  if (addTo) return { kind: 'add', conversationId: addTo };
+  const call = first(params.call);
+  if (call === 'voice' || call === 'video') return { kind: 'call', mode: call };
+  return { kind: 'new' };
+}

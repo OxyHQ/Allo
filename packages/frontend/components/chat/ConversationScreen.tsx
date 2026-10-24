@@ -24,6 +24,7 @@ import { RiInformationLine } from '@oxy.so/bloom/icons/RiInformationLine';
 import { RiMore2Line } from '@oxy.so/bloom/icons/RiMore2Line';
 import { RiPencilLine } from '@oxy.so/bloom/icons/RiPencilLine';
 import { RiPushpinLine } from '@oxy.so/bloom/icons/RiPushpinLine';
+import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
 import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { Screen, useScreenBack } from '@oxy.so/bloom/screen';
@@ -54,7 +55,7 @@ import {
   composerNotice,
   conversationAvatar,
   conversationFaces,
-  conversationTitle,
+  conversationHeaderTitle,
   firstUnreadId,
   pinnedMessages,
   previewText,
@@ -65,6 +66,7 @@ import { toUpload } from '@/lib/chat/upload';
 import { presenceDot, presenceLine } from '@/lib/presence';
 
 import { useChatPaneStore } from '@/stores/chatPaneStore';
+import { readDraft, useDraftStore } from '@/stores/draftStore';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
@@ -104,7 +106,9 @@ const WALLPAPER = {
  * `draft` is text to start the composer with (`/c/:id?text=`); it is only ever
  * put in the field, never sent. Taken on mount and kept here, above the read
  * gate, because the route drops it from the URL straight away while the gate
- * may not render the composer until later.
+ * may not render the composer until later. Without one, the composer opens with
+ * what was typed here and not sent (`stores/draftStore.ts`, in memory), and
+ * keeps that up to date as the field changes; sending empties it.
  */
 export function ConversationScreen({
   conversationId,
@@ -145,6 +149,17 @@ function AuthorizedConversationScreen({
   const view = useConversation(conversationId);
   const timeline = useTimeline(conversationId);
   const ctx = useChatContext(view?.memberAccountIds ?? []);
+  // What the composer opens with: a link's `?text=` when there is one (asked
+  // for just now), else whatever was typed here and not sent. Read once.
+  const me = ctx.me;
+  const [startDraft] = useState(() => draft || readDraft(me, conversationId));
+  const setDraft = useDraftStore((state) => state.setDraft);
+  const onDraftChange = useCallback(
+    (text: string) => {
+      if (me) setDraft(me, conversationId, text);
+    },
+    [conversationId, me, setDraft],
+  );
   const viewer = useRef<MediaViewerHandle>(null);
   const [target, setTarget] = useState<ComposerTarget | null>(null);
   // Searching filters the loaded history: this device has no other history to search.
@@ -477,6 +492,7 @@ function AuthorizedConversationScreen({
       </View>
     );
 
+  const toggleSearch = () => setSearch((current) => (current === null ? '' : null));
   const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
   /**
    * Opens the call screen, which is the ONE place that dials.
@@ -492,7 +508,7 @@ function AuthorizedConversationScreen({
     if (peers.length === 0) return;
     router.push(`/c/${conversationId}/call?mode=${mode}`);
   };
-  const title = conversationTitle(view, ctx);
+  const title = conversationHeaderTitle(view, ctx);
   const members = view.memberAccountIds.length;
   const otherPerson = other ? ctx.person(other) : undefined;
   const handle = otherPerson?.handle;
@@ -531,7 +547,9 @@ function AuthorizedConversationScreen({
           onPressVideoCall={() => startCall('video')}
           callLabel={t('calls.voice')}
           videoCallLabel={t('calls.video')}
-          onPressSearch={() => setSearch((current) => (current === null ? '' : null))}
+          // A phone's header is narrow: search goes in the menu, so the name and
+          // "last seen" keep the room. Beside the list the button stays.
+          onPressSearch={split ? toggleSearch : undefined}
           searchLabel={t('chat.info.search')}
           onPressHeader={openInfo}
           openInfoLabel={t('chat.info.open')}
@@ -540,6 +558,9 @@ function AuthorizedConversationScreen({
               label={t('chat.actions')}
               reactions={false}
               items={[
+                ...(split
+                  ? []
+                  : [{ id: 'search', label: t('chat.info.search'), icon: RiSearchLine }]),
                 { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
                 {
                   id: 'leave',
@@ -551,6 +572,7 @@ function AuthorizedConversationScreen({
               ]}
               onSelect={(action) => {
                 if (action === 'info') openInfo();
+                else if (action === 'search') toggleSearch();
                 else void confirmLeave();
               }}
             >
@@ -603,7 +625,8 @@ function AuthorizedConversationScreen({
         </ChatBackground>
         <View className="pb-safe">
           <Composer
-            initialDraft={draft}
+            initialDraft={startDraft}
+            onDraftChange={onDraftChange}
             target={target}
             onClearTarget={() => setTarget(null)}
             notice={notice?.text}

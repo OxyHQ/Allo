@@ -56,6 +56,13 @@ export interface Mentionable {
 interface ComposerProps {
   /** What the draft starts as, read on mount only. Seeding never sends: the reader does. */
   initialDraft?: string;
+  /**
+   * Told the field's text whenever it changes, so the screen can keep the
+   * draft across leaving and coming back. Not while editing a sent message:
+   * that text is the message's, not a draft, and a draft must never come back
+   * as a new message saying what an edit was going to say.
+   */
+  onDraftChange?: (text: string) => void;
   target: ComposerTarget | null;
   onClearTarget: () => void;
   /** Read-only, with this line in place of the input. */
@@ -132,6 +139,7 @@ function caretIn(field: TextInputInstance | null, text: string): number {
 
 export function Composer({
   initialDraft = '',
+  onDraftChange,
   target,
   onClearTarget,
   notice,
@@ -165,6 +173,17 @@ export function Composer({
     setShownTarget(target);
     if (target?.kind === 'edit') setValue(target.body);
   }
+
+  // Sending empties the field, so a sent draft is cleared here too; a failed
+  // send puts the text back, and with it the draft.
+  const editing = shownTarget?.kind === 'edit';
+  const draftChanged = useRef(onDraftChange);
+  useEffect(() => {
+    draftChanged.current = onDraftChange;
+  }, [onDraftChange]);
+  useEffect(() => {
+    if (!editing) draftChanged.current?.(value);
+  }, [editing, value]);
 
   const stopTyping = useCallback(() => {
     if (idleTimer.current) clearTimeout(idleTimer.current);
