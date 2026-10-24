@@ -142,6 +142,8 @@ bar. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
 - Every string through `t()`; bundles are flat dotted keys.
 - Navigate with literal paths so `__tests__/routes/navigationTargets.test.ts` can see them.
 - Every page is a Bloom `Screen`: its `PageHeader` in `header` (Back comes from `BloomProvider back`; a page under the tab pager has none), its content in `ScreenScrollView` (padding as `contentContainerClassName`, which the chrome footprint does not override), or `scroll="none"` when the content scrolls itself (the transcript, `ContactList`). The app action is the shell's `primaryAction`; a page's own would be `Screen primaryAction`. Pressing the page in front again is Bloom's reselect (`Screen reselect`).
+- Sheets, menus and confirms are Bloom surfaces: `confirm()`, `confirmWithSuppression()` (a confirm with a checkbox, as "also delete for them"), `alert()`, or `present()` for a panel of content, which closes itself with `surface.dismiss()`. One `<SurfaceHost />` in `AppProviders` renders them beneath i18n, the query client and the stickers (OxyProvider's own host steps aside). No raw `BottomSheet`, no app-owned modal or overlay: a full-screen view is a route.
+- Safe areas are NativeWind's safe-area classes on a View (`pt-safe`, `pb-safe`, `pt-safe-offset-6`), never `SafeAreaView` or `useSafeAreaInsets()` padding.
 - "Can the reader see it?" is Bloom's `useScreenVisible()` (the Screen in front and the app in the foreground), never `useIsFocused`, `useFocusEffect` or `AppState` per feature.
 
 ### Bloom navigation and settings

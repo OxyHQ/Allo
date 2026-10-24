@@ -1,10 +1,10 @@
-import { BottomSheet, type BottomSheetRef } from '@oxy.so/bloom/bottom-sheet';
 import { Button } from '@oxy.so/bloom/button';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiNotification3Line } from '@oxy.so/bloom/icons/RiNotification3Line';
+import { present, type SurfaceControls } from '@oxy.so/bloom/surfaces';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
@@ -14,26 +14,33 @@ import { hasNotificationPermission, requestNotificationPermissions } from '@/uti
 
 /**
  * Asks for notification permission once the app is on screen, if it has not
- * been granted. Native only; mounted by the root layout once the app is ready.
+ * been granted: a Bloom sheet on the app's one surface stack. Native only;
+ * mounted by the root layout once the app is ready.
  */
 export function NotificationPermissionGate() {
-  const { t } = useTranslation();
-  const theme = useTheme();
-  const sheet = useRef<BottomSheetRef>(null);
-  const [requesting, setRequesting] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
-    // Held back past the splash fade so the sheet is not the first thing that moves.
+    // Held back a moment so the sheet is not the first thing that moves.
     const timeout = setTimeout(async () => {
       const granted = await hasNotificationPermission();
-      if (!cancelled && !granted) sheet.current?.present();
+      if (cancelled || granted) return;
+      void present((surface) => <NotificationPermissionSheet surface={surface} />, {
+        placement: 'bottom',
+        contentPadding: 0,
+      });
     }, INITIALIZATION_TIMEOUT.SPLASH_FADE_DELAY);
     return () => {
       cancelled = true;
       clearTimeout(timeout);
     };
   }, []);
+  return null;
+}
+
+function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const [requesting, setRequesting] = useState(false);
 
   const enable = async () => {
     setRequesting(true);
@@ -42,40 +49,33 @@ export function NotificationPermissionGate() {
       if (await requestNotificationPermissions()) announcePushPermissionGranted();
     } finally {
       setRequesting(false);
-      sheet.current?.dismiss();
+      surface.dismiss();
     }
   };
 
   return (
-    <BottomSheet ref={sheet}>
-      <View style={styles.content}>
-        <IconCircle icon={RiNotification3Line} />
-        <View style={styles.copy}>
-          <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
-            {t('permission.notifications.title')}
-          </Text>
-          <Text
-            variant="body-regular"
-            style={[styles.centered, { color: theme.colors.textSecondary }]}
-          >
-            {t('permission.notifications.body')}
-          </Text>
-        </View>
-        <View style={styles.actions}>
-          <Button size="lg" loading={requesting} onPress={() => void enable()}>
-            {t('permission.notifications.enable')}
-          </Button>
-          <Button
-            size="lg"
-            onPress={() => sheet.current?.dismiss()}
-            tone="neutral"
-            appearance="outline"
-          >
-            {t('permission.notifications.later')}
-          </Button>
-        </View>
+    <View style={styles.content}>
+      <IconCircle icon={RiNotification3Line} />
+      <View style={styles.copy}>
+        <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
+          {t('permission.notifications.title')}
+        </Text>
+        <Text
+          variant="body-regular"
+          style={[styles.centered, { color: theme.colors.textSecondary }]}
+        >
+          {t('permission.notifications.body')}
+        </Text>
       </View>
-    </BottomSheet>
+      <View style={styles.actions}>
+        <Button size="lg" loading={requesting} onPress={() => void enable()}>
+          {t('permission.notifications.enable')}
+        </Button>
+        <Button size="lg" onPress={() => surface.dismiss()} tone="neutral" appearance="outline">
+          {t('permission.notifications.later')}
+        </Button>
+      </View>
+    </View>
   );
 }
 

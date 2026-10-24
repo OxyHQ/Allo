@@ -12,6 +12,8 @@
  */
 module.exports = {
   confirm: async () => true,
+  confirmWithSuppression: async ({ suppressed = false } = {}) => ({ confirmed: true, suppressed }),
+  SurfaceHost: () => null,
   alert: () => undefined,
   prompt: async () => null,
   present: () => undefined,
