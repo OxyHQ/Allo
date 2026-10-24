@@ -4,6 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useOxy } from '@oxy.so/services/ui/client';
 
+import { type SearchedUser, searchedUsersFrom } from '@/lib/people/directorySearch';
+
+export type { SearchedUser } from '@/lib/people/directorySearch';
+
 /**
  * FINDING A PERSON BY TYPING.
  *
@@ -13,13 +17,6 @@ import { useOxy } from '@oxy.so/services/ui/client';
  * a hook rather than copied so the two cannot drift apart into two different
  * ideas of when a search has started.
  */
-
-export interface SearchedUser {
-  readonly id: string;
-  readonly displayName: string;
-  readonly handle: string;
-  readonly avatar?: string;
-}
 
 /**
  * Below this, a search matches most of the directory and tells the reader
@@ -102,17 +99,10 @@ export function useUserSearch(): {
           handle: person.username ?? '',
         }));
       }
+      // Who can be messaged, in the directory's own relevance order
+      // (`lib/people/directorySearch.ts`).
       const response = await oxyServices.users.search(settledTerm, { limit: MAX_RESULTS });
-      return response.data.map((profile) => {
-        const handle =
-          profile.username ?? (typeof profile.handle === 'string' ? profile.handle : '');
-        return {
-          id: profile.id,
-          displayName: profile.name?.displayName || handle,
-          handle,
-          avatar: profile.avatar ?? undefined,
-        };
-      });
+      return searchedUsersFrom(response.data);
     },
     enabled,
     ...(supervised ? { staleTime: 0, refetchOnMount: 'always' as const } : {}),

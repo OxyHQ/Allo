@@ -33,7 +33,7 @@ never patched here.
 | `(chat)/(tabs)/index.tsx` | Phone: `ConversationList`. Wide: the empty detail pane |
 | `(chat)/c/[id]/index.tsx` | `ConversationScreen`; an account id opens (creates) the DM |
 | `(chat)/c/[id]/info.tsx` | `ConversationInfo` as a screen (phone) |
-| `(chat)/new.tsx` | People picker: DM, group, or `?addTo=<id>` to add members |
+| `(chat)/new.tsx` | People picker: DM, group, or `?addTo=<id>` to add members. A directory search, not an address book: one "People" section in the directory's relevance order (no A–Z), offering only accounts a conversation can have (`lib/people/directorySearch.ts`: no federated, agent or automated profiles) |
 | `(chat)/share.tsx` | `/share?text=<message>` (`allo://share?text=…`, `https://allo.you/share?text=…`): another app's "send" (Mention's on a post). Previews the message as a bubble, then recent conversations and a people search; sends via `messages.send`, a person through `useCreateConversation` (the DM). One destination opens it |
 | `(chat)/[username].tsx` | `/@handle` profile; otherwise 404 |
 | `(chat)/dm/[username].tsx` | `/dm/handle`: resolves the handle and replaces with `/c/<account id>` (the DM) |

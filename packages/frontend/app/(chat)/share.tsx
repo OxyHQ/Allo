@@ -14,6 +14,7 @@ import {
   type PersonSummary,
 } from '@oxy.so/bloom/chat-people';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
+import { Loading } from '@oxy.so/bloom/loading';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
 import { toast } from '@oxy.so/bloom/toast';
 import { PageHeader } from '@oxy.so/bloom/page-header';
@@ -245,6 +246,9 @@ export default function ShareRoute() {
         style={styles.list}
         sections={sections}
         showIndex={false}
+        // Not pinned: React Native's sticky headers are the suspect for rows
+        // laid out but not drawn on Android until a scroll (see `/new`).
+        stickyHeaders={false}
         header={
           <View style={styles.preview}>
             <MessageBubble direction="outgoing" text={text} tail />
@@ -261,7 +265,13 @@ export default function ShareRoute() {
           ) : undefined
         }
         emptyState={
-          search.searching ? undefined : (
+          search.searching ? (
+            <Loading
+              variant="spinner"
+              style={styles.searching}
+              accessibilityLabel={t('chat.new.searching')}
+            />
+          ) : (
             <ChatEmptyState
               title={
                 search.tooShort
@@ -282,6 +292,7 @@ const styles = StyleSheet.create({
   // 12, the gutter the conversation list's own search pill sits on.
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   list: { flex: 1, minHeight: 0 },
+  searching: { paddingVertical: 32 },
   preview: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12 },
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
   chips: { marginHorizontal: 8, marginBottom: 8 },
