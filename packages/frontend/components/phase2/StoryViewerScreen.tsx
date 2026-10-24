@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useStatuses, type StatusView } from '@allo/react';
 import { StoryViewer, type StoryItem } from '@oxy.so/bloom/chat-people';
+import { Screen } from '@oxy.so/bloom/screen';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted, Text } from '@oxy.so/bloom/typography';
 
@@ -11,7 +12,7 @@ import { useStatusMedia } from '@/lib/allo/useStatusMedia';
 import { firstUnseenIndex, statusAgeLabel, type StatusAuthor } from '@/lib/statuses';
 import { logger } from '@/utils/logger';
 
-interface StoryViewerOverlayProps {
+interface StoryViewerScreenProps {
   /** The authors the viewer walks through, in the order the row shows them. */
   authors: readonly StatusAuthor[];
   /** Which one opened it. */
@@ -20,7 +21,8 @@ interface StoryViewerOverlayProps {
 }
 
 /**
- * THE STATUS VIEWER, over the screen that opened it.
+ * THE STATUS VIEWER, a screen of its own (`/updates/:accountId`), pushed over
+ * whatever opened it so it has the whole height: no bottom bar, Back closes.
  *
  * Bloom's `StoryViewer` owns the chrome, the tap zones and the progress strip;
  * everything below is the app's half of the contract it documents. `index` is
@@ -40,9 +42,8 @@ interface StoryViewerOverlayProps {
  * viewer's name travels with that is the viewer's own setting, decided on the
  * server.
  */
-export function StoryViewerOverlay({ authors, startAccountId, onClose }: StoryViewerOverlayProps) {
+export function StoryViewerScreen({ authors, startAccountId, onClose }: StoryViewerScreenProps) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const statuses = useStatuses();
 
   const startIndex = Math.max(
@@ -115,12 +116,7 @@ export function StoryViewerOverlay({ authors, startAccountId, onClose }: StoryVi
   const who = person(author.accountId);
 
   return (
-    <View
-      style={[styles.root, { backgroundColor: theme.colors.background }]}
-      // The viewer is the whole screen while it is open: what is underneath is
-      // not reachable, and announcing it would read as a second page.
-      accessibilityViewIsModal
-    >
+    <Screen scroll="none">
       <Pressable
         style={styles.hold}
         onLongPress={() => setHeld(true)}
@@ -147,7 +143,7 @@ export function StoryViewerOverlay({ authors, startAccountId, onClose }: StoryVi
           }}
         />
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 
@@ -200,7 +196,6 @@ function SlideMedia({
 }
 
 const styles = StyleSheet.create({
-  root: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 20 },
   hold: { flex: 1 },
   media: { width: '100%', height: '100%' },
   blank: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },

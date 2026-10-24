@@ -40,6 +40,7 @@ never patched here.
 | `(chat)/(tabs)/calls.tsx` | Call history, and the banner an arriving call would use |
 | `(chat)/c/[id]/call.tsx` | The call itself: `IncomingCallScreen` while ringing, else `CallScreen` |
 | `(chat)/(tabs)/updates.tsx` | Status updates. `/updates`, not `/status`: Metro's dev server answers `/status` itself, so that route can never be opened while developing |
+| `(chat)/updates/[accountId].tsx` | The status viewer (Bloom's `StoryViewer`), pushed over the page that opened it so it has the whole height; Back closes it |
 | `(chat)/settings/*` | Appearance, language, privacy, devices, backup |
 | `(auth)/index.tsx` | Sign in with Oxy. A link opened while signed out is kept and followed after sign-in (`lib/navigation/usePendingHref.ts`) |
 

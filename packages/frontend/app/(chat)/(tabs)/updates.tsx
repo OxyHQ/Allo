@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
@@ -12,7 +12,6 @@ import { toast } from '@oxy.so/bloom/toast';
 import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
-import { StoryViewerOverlay } from '@/components/phase2/StoryViewerOverlay';
 import { useChatContext } from '@/hooks/useChatContext';
 import { readAttachmentBytes } from '@/lib/allo/attachmentBytes';
 import { pickMediaAttachments } from '@/lib/chat/attachments';
@@ -31,8 +30,8 @@ import { logger } from '@/utils/logger';
  * refreshed by URL while developing. The words on screen are still "Status".
  *
  * Bloom's `StoriesRow` at the top, then every person with updates as a row
- * with their own `StoryRing`, and `StoryViewer` over the whole screen once one
- * is opened. Adding your own goes through the app's existing picker
+ * with their own `StoryRing`; opening one pushes the viewer
+ * (`/updates/:accountId`). Adding your own goes through the app's existing picker
  * (`lib/chat/attachments.ts`) — the same one the composer uses.
  *
  * **What this posts is end-to-end encrypted** (ADR 0002): one ciphertext, a
@@ -50,16 +49,8 @@ export default function UpdatesScreen() {
   const { t } = useTranslation();
   const theme = useTheme();
   const { user } = useOxy();
+  const router = useRouter();
   const statuses = useStatuses();
-  // `/updates?story=<accountId>` opens straight into that person's update: the
-  // conversation list's ring links here rather than owning a viewer of its own.
-  const { story } = useLocalSearchParams<{ story?: string }>();
-  const [viewing, setViewing] = useState<string | null>(story ?? null);
-  const [openedFor, setOpenedFor] = useState(story);
-  if (story !== openedFor) {
-    setOpenedFor(story);
-    setViewing(story ?? null);
-  }
 
   const authors = useMemo(() => statusAuthors(statuses.all), [statuses.all]);
   const accountIds = useMemo(() => authors.map((author) => author.accountId), [authors]);
@@ -67,7 +58,7 @@ export default function UpdatesScreen() {
 
   // Opening is all the viewer needs; telling the author it was seen happens
   // there, as each update is actually advanced past.
-  const open = useCallback((accountId: string) => setViewing(accountId), []);
+  const open = useCallback((accountId: string) => router.push(`/updates/${accountId}`), [router]);
 
   const me = user?.id;
   const add = useCallback(async () => {
@@ -118,75 +109,66 @@ export default function UpdatesScreen() {
   );
 
   return (
-    <>
-      <Screen
-        header={
-          <PageHeader
-            title={t('stories.title')}
-            leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-          />
-        }
-      >
-        <ScreenScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerClassName="gap-4 px-4 pb-8"
-        >
-          <View style={styles.strip}>
-            <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
-          </View>
-
-          <View style={styles.list}>
-            <Text variant="caption-1-semibold" style={{ color: theme.colors.textSecondary }}>
-              {t('stories.recent')}
-            </Text>
-            {authors.length === 0 ? (
-              <Muted style={styles.empty}>{t('stories.empty')}</Muted>
-            ) : (
-              authors.map((author) => {
-                const who = person(author.accountId);
-                const name = author.mine
-                  ? t('stories.own')
-                  : (who?.displayName ?? t('stories.someone'));
-                return (
-                  <Item
-                    key={author.accountId}
-                    title={name}
-                    // i18next picks `stories.updateCount_one` or `_other` from `count`.
-                    subtitle={t('stories.updateCount', {
-                      count: author.statuses.length,
-                      age: statusAgeLabel(author.statuses[0].createdAt, now, t),
-                    })}
-                    leading={
-                      <StoryRing state={ringState(author)} size={40}>
-                        <Avatar source={who?.avatar} name={name} size={40} />
-                      </StoryRing>
-                    }
-                    onPress={() => open(author.accountId)}
-                    onLongPress={author.mine ? () => void remove(author.statuses[0].id) : undefined}
-                    accessibilityLabel={t('stories.openOf', { name })}
-                  />
-                );
-              })
-            )}
-          </View>
-
-          <Muted style={styles.expiry}>
-            {authors[0]?.mine
-              ? t('stories.yoursExpire', {
-                  remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
-                })
-              : t('stories.expiry')}
-          </Muted>
-        </ScreenScrollView>
-      </Screen>
-      {viewing === null ? null : (
-        <StoryViewerOverlay
-          authors={authors}
-          startAccountId={viewing}
-          onClose={() => setViewing(null)}
+    <Screen
+      header={
+        <PageHeader
+          title={t('stories.title')}
+          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
         />
-      )}
-    </>
+      }
+    >
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-4 px-4 pb-8"
+      >
+        <View style={styles.strip}>
+          <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
+        </View>
+
+        <View style={styles.list}>
+          <Text variant="caption-1-semibold" style={{ color: theme.colors.textSecondary }}>
+            {t('stories.recent')}
+          </Text>
+          {authors.length === 0 ? (
+            <Muted style={styles.empty}>{t('stories.empty')}</Muted>
+          ) : (
+            authors.map((author) => {
+              const who = person(author.accountId);
+              const name = author.mine
+                ? t('stories.own')
+                : (who?.displayName ?? t('stories.someone'));
+              return (
+                <Item
+                  key={author.accountId}
+                  title={name}
+                  // i18next picks `stories.updateCount_one` or `_other` from `count`.
+                  subtitle={t('stories.updateCount', {
+                    count: author.statuses.length,
+                    age: statusAgeLabel(author.statuses[0].createdAt, now, t),
+                  })}
+                  leading={
+                    <StoryRing state={ringState(author)} size={40}>
+                      <Avatar source={who?.avatar} name={name} size={40} />
+                    </StoryRing>
+                  }
+                  onPress={() => open(author.accountId)}
+                  onLongPress={author.mine ? () => void remove(author.statuses[0].id) : undefined}
+                  accessibilityLabel={t('stories.openOf', { name })}
+                />
+              );
+            })
+          )}
+        </View>
+
+        <Muted style={styles.expiry}>
+          {authors[0]?.mine
+            ? t('stories.yoursExpire', {
+                remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
+              })
+            : t('stories.expiry')}
+        </Muted>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 

@@ -192,7 +192,7 @@ export function ConversationList() {
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
   const me = user?.id;
   const openStory = useCallback(
-    (accountId: string) => router.push(`/updates?story=${accountId}`),
+    (accountId: string) => router.push(`/updates/${accountId}`),
     [router],
   );
   const openUpdates = useCallback(() => router.push('/updates'), [router]);
