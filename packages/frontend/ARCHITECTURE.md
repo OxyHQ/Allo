@@ -41,7 +41,7 @@ never patched here.
 | `(chat)/c/[id]/call.tsx` | The call itself: `IncomingCallScreen` while ringing, else `CallScreen` |
 | `(chat)/(tabs)/updates.tsx` | Status updates. `/updates`, not `/status`: Metro's dev server answers `/status` itself, so that route can never be opened while developing |
 | `(chat)/updates/[accountId].tsx` | The status viewer (Bloom's `StoryViewer`), pushed over the page that opened it so it has the whole height; Back closes it |
-| `(chat)/settings/*` | Appearance, language, privacy, devices, backup |
+| `(chat)/settings/*` | Appearance, language, privacy (online status, and `privacy/blocked`), devices, backup |
 | `(auth)/index.tsx` | Sign in with Oxy. A link opened while signed out is kept and followed after sign-in (`lib/navigation/usePendingHref.ts`) |
 
 ## The conversation
@@ -151,5 +151,7 @@ bar. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
 `NavigationTheme` uses Expo Router’s public theme provider to map Bloom tokens. Its transparent variant is scoped to AppShell’s detail navigator: the base owns that surface on web and native, including the navigator’s otherwise-grey Background wrapper. Individual routes do not paint another full-pane background.
 
 Settings pages compose Bloom `SettingsGeneralPage`, `SettingsSection`, `SettingsCard` and `SettingsRow`; they own neither a header nor a ScrollView. The modal owns responsive navigation, PageHeader and its viewport. Account/language operations close the modal before opening Services’ shared account flow. Backup keeps its existing route-removal guard and publishes only a pending boolean to the modal departure guard; the recovery phrase stays solely in BackupPanel memory.
+
+Privacy has exactly two settings, both enforced by the server: the online-status switch on the Privacy page and the Blocked profiles page (`privacy-blocked`, `components/settings/pages/privacy/blocked.tsx`). Profile visibility, restricted profiles and hidden words were removed because nothing acted on them; their backend columns remain until a `post`-phase migration drops them, and `lib/privacy/api.ts` neither reads nor writes them. A settings row is added only for something the app enforces.
 
 Native calling registers `@livekit/react-native` globals in `lib/calls/globals.native.ts`. Its required LiveKit client/WebRTC peers and both Expo config plugins are installed explicitly (https://docs.livekit.io/transport/sdk-platforms/expo/); do not install the second `react-native-webrtc` implementation alongside LiveKit’s fork. This corrects the previously undeclared native import without changing call signalling/media logic. Android export verifies bundling, not device permissions or an actual call.

@@ -45,7 +45,7 @@ import { useChatContext } from '@/hooks/useChatContext';
 import { usePerson } from '@/hooks/usePerson';
 import { conversationAvatar, conversationFaces, conversationTitle } from '@/lib/chat/model';
 import { report } from '@/lib/moderation/report';
-import { addModeratedUser } from '@/lib/privacy/api';
+import { blockUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
@@ -202,7 +202,7 @@ function AuthorizedConversationInfo({
     });
     if (!ok) return;
     try {
-      await addModeratedUser('blocks', other);
+      await blockUser(other);
       toast.success(t('settings.privacy.userBlocked'));
     } catch (error) {
       logger.error('[ConversationInfo] block failed', error);

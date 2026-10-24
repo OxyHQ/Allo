@@ -17,9 +17,6 @@ import Devices from './pages/devices';
 import Language from './pages/language';
 import Privacy from './pages/privacy';
 import Blocked from './pages/privacy/blocked';
-import HiddenWords from './pages/privacy/hidden-words';
-import ProfileVisibility from './pages/privacy/profile-visibility';
-import Restricted from './pages/privacy/restricted';
 
 export function AlloSettingsProvider({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -139,18 +136,6 @@ export function AlloSettingsProvider({ children }: { children: React.ReactNode }
           'privacy-blocked': {
             title: t('settings.privacy.blockedUsers'),
             content: <Blocked />,
-          },
-          'privacy-restricted': {
-            title: t('settings.privacy.restrictedProfiles'),
-            content: <Restricted />,
-          },
-          'privacy-hidden-words': {
-            title: t('settings.privacy.hiddenWords'),
-            content: <HiddenWords />,
-          },
-          'privacy-profile-visibility': {
-            title: t('settings.privacy.privateProfile'),
-            content: <ProfileVisibility />,
           },
         }}
       />

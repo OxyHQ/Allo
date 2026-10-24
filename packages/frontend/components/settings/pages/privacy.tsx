@@ -7,20 +7,20 @@ import { useTranslation } from 'react-i18next';
 import { useAlloSettings } from '../context';
 
 import { useMyPrivacySettings, useUpdatePrivacySettings } from '@/hooks/usePrivacySettings';
-import { profileVisibilityLabelKey } from '@/lib/privacy/labels';
 
 /**
- * WHAT ALLO CAN HONESTLY OFFER UNDER "PRIVACY".
+ * THE TWO PRIVACY SETTINGS ALLO ENFORCES, and nothing else.
  *
- * Five rows, shaped by what each one is: online status is ONE boolean, so it is
- * a switch here in the list; profile visibility is a choice of three, so it is
- * a chooser screen; blocked, restricted and hidden words are LISTS, each a
- * screen that can show, add and remove. Mention's feed fields that ride along
- * in the stored document (`allowTags`, `hide*Counts`) are named nowhere: Allo
- * has nothing for them to govern.
+ * Online status is ONE boolean, so it is a switch here in the list; blocked
+ * profiles is a LIST, a screen that can show, add and remove. Both are acted on
+ * by the server: the presence layer honours `showOnlineStatus` (and an account
+ * that hides its own sees nobody else's), and a block stops new direct
+ * messages, invitations and presence in both directions.
  *
- * Presence is enforced by the messaging presence layer. Restrictions and hidden
- * words retain their explicit limits in the account descriptions.
+ * Every other field the stored document carries (Mention's `allowTags` and
+ * `hide*Counts`, and the profile visibility, hidden words and restricted list
+ * Allo once showed) is named nowhere: nothing in Allo acts on it, and a row
+ * for it would be a promise the app does not keep.
  */
 export default function PrivacySettingsScreen() {
   const { t } = useTranslation();
@@ -44,16 +44,6 @@ export default function PrivacySettingsScreen() {
         description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}
       >
         <SettingsCard>
-          <SettingsRow label={t('settings.privacy.privateProfile')}>
-            <Button
-              onPress={() => settingsModal.open('privacy-profile-visibility')}
-              accessibilityLabel={t('settings.privacy.privateProfile')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t(profileVisibilityLabelKey(settings.profileVisibility))}
-            </Button>
-          </SettingsRow>
           <SettingsRow
             label={t('settings.privacy.showOnlineStatus')}
             description={t('settings.privacy.showOnlineStatusDesc')}
@@ -70,30 +60,10 @@ export default function PrivacySettingsScreen() {
               />
             }
           </SettingsRow>
-          <SettingsRow label={t('settings.privacy.restrictedProfiles')}>
-            <Button
-              onPress={() => settingsModal.open('privacy-restricted')}
-              accessibilityLabel={t('settings.privacy.restrictedProfiles')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('common.open')}
-            </Button>
-          </SettingsRow>
           <SettingsRow label={t('settings.privacy.blockedProfiles')}>
             <Button
               onPress={() => settingsModal.open('privacy-blocked')}
               accessibilityLabel={t('settings.privacy.blockedProfiles')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('common.open')}
-            </Button>
-          </SettingsRow>
-          <SettingsRow label={t('settings.privacy.hiddenWords')}>
-            <Button
-              onPress={() => settingsModal.open('privacy-hidden-words')}
-              accessibilityLabel={t('settings.privacy.hiddenWords')}
               tone="neutral"
               appearance="outline"
             >

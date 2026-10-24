@@ -5,14 +5,13 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import type { User } from '@oxy.so/core';
 
 import {
-  addModeratedUser,
+  blockUser,
   DEFAULT_PRIVACY_SETTINGS,
-  fetchModeratedUserIds,
+  fetchBlockedUserIds,
   fetchMyPrivacySettings,
-  removeModeratedUser,
+  unblockUser,
   updateMyPrivacySettings,
   type AlloPrivacySettings,
-  type ModerationList,
 } from '@/lib/privacy/api';
 
 /**
@@ -20,15 +19,14 @@ import {
  *
  * React Query rather than `useState` + `useEffect`, which is the house rule and
  * earns its keep here specifically: the privacy list draws the online-status
- * switch, and three sub-screens each write one field of the SAME document. A
+ * switch, and the blocked list is a second screen over the same account. A
  * query cache is what makes "toggle presence, open Blocked, come back" show the
- * value that was saved rather than a second fetch's idea of it — and what makes
- * the list update when a sub-screen writes, without either screen knowing the
- * other exists.
+ * value that was saved rather than a second fetch's idea of it, and what makes
+ * the blocked list update after a block or an unblock.
  *
  * The keys are exported because invalidation is the entire mechanism by which
- * that happens, and a key typed as a literal in four places is a key that will be
- * misspelled in one of them.
+ * that happens, and a key typed as a literal in several places is a key that
+ * will be misspelled in one of them.
  *
  * They carry the account, so an account switch never shows the previous
  * account's settings or lists, and their root is the app's own: `privacy` is
@@ -36,8 +34,7 @@ import {
  */
 export const privacyQueryKeys = {
   settings: (accountId: string | undefined) => ['alloPrivacy', accountId, 'settings'] as const,
-  moderated: (accountId: string | undefined, list: ModerationList) =>
-    ['alloPrivacy', accountId, 'moderated', list] as const,
+  blocked: (accountId: string | undefined) => ['alloPrivacy', accountId, 'blocked'] as const,
 };
 
 /**
@@ -68,7 +65,7 @@ export function useMyPrivacySettings(): {
 }
 
 /**
- * Writes one or more fields, showing the change before the server confirms it.
+ * Writes the setting, showing the change before the server confirms it.
  *
  * Optimistic because the only control that writes without leaving the screen is
  * a switch, and a switch that waits for a round trip before moving reads as
@@ -104,21 +101,21 @@ export function useUpdatePrivacySettings() {
 }
 
 /**
- * A person on one of the two moderation lists.
+ * A person on the blocked list.
  *
  * `handle` and `displayName` are absent when the account could not be resolved —
  * it was deleted, or it is not visible to this viewer. The row still draws, with
  * the id, because a person you cannot see is still a person you blocked and must
  * be able to unblock.
  */
-export interface ModeratedUser {
+export interface BlockedUser {
   readonly id: string;
   readonly displayName?: string;
   readonly handle?: string;
   readonly avatar?: string;
 }
 
-function toModeratedUser(user: User): ModeratedUser {
+function toBlockedUser(user: User): BlockedUser {
   const handle = typeof user.handle === 'string' ? user.handle : undefined;
   return {
     id: user.id,
@@ -129,7 +126,7 @@ function toModeratedUser(user: User): ModeratedUser {
 }
 
 /**
- * The people on a list, resolved from the ids the endpoint stores.
+ * The people this account has blocked, resolved from the ids the endpoint stores.
  *
  * Two queries rather than one because they invalidate on different events: the
  * ids change when the reader blocks somebody, the profiles change when somebody
@@ -141,17 +138,17 @@ function toModeratedUser(user: User): ModeratedUser {
  * dropped: silently shortening the list would tell the reader they had unblocked
  * somebody they had not.
  */
-export function useModeratedUsers(list: ModerationList): {
-  users: readonly ModeratedUser[];
+export function useBlockedUsers(): {
+  users: readonly BlockedUser[];
   loading: boolean;
   failed: boolean;
 } {
   const { oxyServices, user } = useOxy();
-  const listKey = privacyQueryKeys.moderated(user?.id, list);
+  const listKey = privacyQueryKeys.blocked(user?.id);
 
   const ids = useQuery({
     queryKey: listKey,
-    queryFn: () => fetchModeratedUserIds(list),
+    queryFn: fetchBlockedUserIds,
   });
 
   const idList = ids.data;
@@ -162,9 +159,9 @@ export function useModeratedUsers(list: ModerationList): {
     enabled: idList !== undefined && idList.length > 0,
   });
 
-  const users = useMemo<readonly ModeratedUser[]>(() => {
+  const users = useMemo<readonly BlockedUser[]>(() => {
     if (idList === undefined) return [];
-    const byId = new Map((profiles.data ?? []).map((user) => [user.id, toModeratedUser(user)]));
+    const byId = new Map((profiles.data ?? []).map((user) => [user.id, toBlockedUser(user)]));
     return idList.map((id) => byId.get(id) ?? { id });
   }, [idList, profiles.data]);
 
@@ -175,24 +172,24 @@ export function useModeratedUsers(list: ModerationList): {
   };
 }
 
-export function useAddModeratedUser(list: ModerationList) {
+export function useBlockUser() {
   const queryClient = useQueryClient();
   const { user } = useOxy();
   return useMutation({
-    mutationFn: (userId: string) => addModeratedUser(list, userId),
+    mutationFn: blockUser,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(user?.id, list) });
+      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(user?.id) });
     },
   });
 }
 
-export function useRemoveModeratedUser(list: ModerationList) {
+export function useUnblockUser() {
   const queryClient = useQueryClient();
   const { user } = useOxy();
   return useMutation({
-    mutationFn: (userId: string) => removeModeratedUser(list, userId),
+    mutationFn: unblockUser,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(user?.id, list) });
+      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(user?.id) });
     },
   });
 }
