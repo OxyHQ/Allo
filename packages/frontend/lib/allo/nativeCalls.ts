@@ -45,11 +45,22 @@ export function startNativeCalls(options: {
   let audioActive = false;
   const opened = new Set<string>();
   const bound = bridge.bind(accountId, instanceId);
+  // A bind that fails will fail the same way on every tick: report it once and
+  // stop polling rather than logging it every second for the life of the app.
+  bound.catch((error: unknown) => {
+    if (stopped) return;
+    clearInterval(timer);
+    options.report(error);
+  });
   async function tick() {
     if (stopped || busy) return;
     busy = true;
     try {
-      await bound;
+      try {
+        await bound;
+      } catch {
+        return; // reported once by the handler above
+      }
       if (stopped) return;
       const snapshot = await bridge.snapshot();
       if (stopped) return;
