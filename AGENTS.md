@@ -478,11 +478,12 @@ themes and no app colour tables.
 
 ## Dependency gotchas
 
-**Root `overrides` plus `resolutions` for the Oxy SDK.** `@oxy.so/services`
-declares `@oxy.so/core` as a peer. Without explicit root `overrides` AND
-`resolutions`, Bun may hoist a different core build inside the services package,
-giving type mismatches and runtime errors. The root `package.json` must carry
-BOTH entries pointing at the current target.
+**Keep the provider and its linked clients on one Oxy core major.** Pin each
+application's core directly and satisfy its services peer; inspect the installed
+resolution, not only the manifest. SDK-only releases may test core7 beside an
+application still on core6. Global core/contracts/protocol overrides must not
+force one major into the other. `packages/sdk/README.md` and `bun.lock` record
+the independent release boundary; the application changes majors separately.
 
 **`@react-native-community/netinfo`.** Root `overrides` plus `resolutions` pin it
 to an **exact version, not a range**; the frontend declares it as a direct

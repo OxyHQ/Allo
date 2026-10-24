@@ -11,8 +11,6 @@
   "overrides": {
     "@isaacs/brace-expansion": "^5.0.1",
     "@oxy.so/bloom": "15.0.0",
-    "@oxy.so/core": "6.14.0",
-    "@oxy.so/contracts": "5.7.0",
     "@oxy.so/services": "12.12.0",
     "@react-native-community/netinfo": "12.0.1",
     "@tanstack/query-core": "5.101.2",
@@ -20,15 +18,12 @@
     "expo-modules-core": "58.0.23",
     "lightningcss": "1.30.1",
     "@oxy.so/telemetry": "2.1.0",
-    "@oxy.so/protocol": "1.4.1",
     "@oxy.so/mcp": "1.1.0",
     "react-native-css": "3.1.0-rc.0"
   },
   "resolutions": {
     "@isaacs/brace-expansion": "^5.0.1",
     "@oxy.so/bloom": "15.0.0",
-    "@oxy.so/core": "6.14.0",
-    "@oxy.so/contracts": "5.7.0",
     "@oxy.so/services": "12.12.0",
     "@react-native-community/netinfo": "12.0.1",
     "@tanstack/query-core": "5.101.2",
@@ -36,7 +31,6 @@
     "expo-modules-core": "58.0.23",
     "lightningcss": "1.30.1",
     "@oxy.so/telemetry": "2.1.0",
-    "@oxy.so/protocol": "1.4.1",
     "@oxy.so/mcp": "1.1.0",
     "react-native-css": "3.1.0-rc.0"
   },
@@ -79,7 +73,8 @@
     "@types/node": "^24.9.2",
     "react-native-worklets": "0.13.0",
     "typescript": "~5.9.2",
-    "playwright": "1.64.1"
+    "playwright": "1.64.1",
+    "@oxy.so/protocol": "1.5.0"
   },
   "engines": {
     "node": ">=20.19.0",
