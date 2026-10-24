@@ -10,6 +10,7 @@ import 'react-native-reanimated';
 import '@/lib/immerSetup';
 
 import NetInfo from '@react-native-community/netinfo';
+import { useBackWithFallback } from '@oxy.so/bloom/panel-routing/expo-router';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { useAccountTheme, useOxy } from '@oxy.so/services/ui/client';
@@ -51,11 +52,15 @@ function resolveImage(ref: string, variant?: string): string | undefined {
  * Bloom. It keeps this device's last theme, so a cold start paints it at once;
  * the Oxy account's theme lands on top of it (`useAccountTheme` in
  * `RootStack`). Bloom's own words (Cancel, dates) follow the app's language.
+ * Every route screen's header offers Back: through the history, or to the
+ * chats when a link opened the screen with nothing beneath it.
  */
 function ThemeRoot({ children }: { children: ReactNode }) {
   const language = useAppLanguage();
+  const back = useBackWithFallback('/');
   return (
     <BloomProvider
+      back={back}
       fonts
       defaultMode="system"
       defaultColorPreset={DEFAULT_COLOR_PRESET}

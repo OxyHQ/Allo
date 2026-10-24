@@ -37,7 +37,7 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx'];
 const CHAT_PATH_PREFIXES = [
   'lib/allo/',
   'lib/chat/',
-  'app/(chat)/index.tsx',
+  'app/(chat)/(tabs)/index.tsx',
   'app/(chat)/new.tsx',
   'app/(chat)/c/',
   'app/(chat)/_layout.tsx',

@@ -35,7 +35,7 @@ jest.mock('@oxy.so/bloom/theme', () => ({
 jest.mock('@/components/phase2/NotConnectedNotice', () => ({ NotConnectedNotice: () => null }));
 jest.mock('@/components/calls/CallVideo', () => ({ CallVideo: () => null }));
 jest.mock('@/lib/allo/callMedia', () => ({ useCallMedia: () => ({ local: null, remote: [] }) }));
-jest.mock('@/components/shell/Page', () => ({ Page: () => null }));
+jest.mock('@oxy.so/bloom/page-header', () => ({ PageHeader: () => null }));
 jest.mock('@/hooks/useChatContext', () => ({
   useChatContext: () => ({ person: () => undefined }),
 }));

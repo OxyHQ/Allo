@@ -13,11 +13,12 @@ import {
 } from '@oxy.so/bloom/call-ui';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 
 import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
 import { CallVideo } from '@/components/calls/CallVideo';
 import { useCallMedia } from '@/lib/allo/callMedia';
-import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
 import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
 
@@ -152,13 +153,18 @@ export default function CallRoute() {
   // that has not loaded. Say so rather than drawing a call with nobody on it.
   if (!session && peerAccountIds.length === 0) {
     return (
-      <Page title={t('calls.title')}>
-        <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
-        <Muted>{t('calls.noParticipants')}</Muted>
-        <Button onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
-          {t('calls.title')}
-        </Button>
-      </Page>
+      <Screen header={<PageHeader title={t('calls.title')} />}>
+        <ScreenScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="gap-4 px-4 pb-8"
+        >
+          <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
+          <Muted>{t('calls.noParticipants')}</Muted>
+          <Button onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
+            {t('calls.title')}
+          </Button>
+        </ScreenScrollView>
+      </Screen>
     );
   }
 

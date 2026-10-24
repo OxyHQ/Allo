@@ -8,18 +8,18 @@ import { useConversation, useConversationActions } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { ChatSearchField } from '@oxy.so/bloom/chat-list';
 import {
-  CONTACT_ALPHABET,
   ContactList,
   NewGroupForm,
   SelectedChipsRow,
-  type ContactRowProps,
   type ContactSection,
   type PersonSummary,
 } from '@oxy.so/bloom/chat-people';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
+import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen } from '@oxy.so/bloom/screen';
 
-import { Page } from '@/components/shell/Page';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { logger } from '@/utils/logger';
@@ -37,43 +37,12 @@ function summaryOf(user: SearchedUser): PersonSummary {
 }
 
 /**
- * Which bucket of the rail a name falls in: its first letter, `#` for
- * everything else.
- *
- * Accents are folded first, so "Ángel" sits under A with every other Ángel
- * rather than alone at the bottom of the list under `#` — the rail is how a
- * reader finds a person, and a name they would spell with an A must be where
- * they look for it.
- */
-function sectionLetterOf(name: string): string {
-  const first = name.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').charAt(0).toUpperCase();
-  return first >= 'A' && first <= 'Z' ? first : '#';
-}
-
-/** The results as `ContactList` sections: one per first letter, A–Z then `#`, each sorted by name. */
-function contactSections(contacts: readonly ContactRowProps[]): ContactSection[] {
-  const buckets = new Map<string, ContactRowProps[]>();
-  for (const contact of contacts) {
-    const letter = sectionLetterOf(contact.name);
-    const bucket = buckets.get(letter);
-    if (bucket === undefined) buckets.set(letter, [contact]);
-    else bucket.push(contact);
-  }
-  return [...buckets.entries()]
-    .sort(([a], [b]) => CONTACT_ALPHABET.indexOf(a) - CONTACT_ALPHABET.indexOf(b))
-    .map(([letter, people]) => ({
-      letter,
-      contacts: [...people].sort((a, b) => a.name.localeCompare(b.name)),
-    }));
-}
-
-/**
  * `/new` — pick people and start talking: one person is a direct message,
  * several are a group with an optional name. `/new?addTo=<id>` is the same
  * picker adding people to an existing group.
  *
  * Every part of it is Bloom's: the search pill, `ContactList` for the results
- * (A–Z sections, pinned headings, the index rail, the empty state),
+ * (one "People" section and the empty state),
  * `SelectedChipsRow` while it is still one person, and `NewGroupForm` once it
  * is a group — that form is where the name and the picked people live, so the
  * chips step aside rather than saying the same thing twice.
@@ -138,21 +107,24 @@ export default function NewConversationRoute() {
   const naming = !adding && count > 1;
   const removeLabel = (who: string) => t('chat.new.removePerson', { name: who });
 
-  const sections = contactSections(
-    search.results
-      .filter((result) => !excluded.has(result.id))
-      .map((result) => {
-        const person = summaryOf(result);
-        return {
-          ...person,
-          size: 'sm' as const,
-          trailing: 'checkbox' as const,
-          selected: selected.has(person.id),
-          onSelectedChange: () => toggle(person),
-          onPress: () => toggle(person),
-        };
-      }),
-  );
+  // The directory's relevance order, untouched: Allo has no address book, so
+  // these are search results, not contacts to file under A–Z. One section, no
+  // index rail (`lib/people/directorySearch.ts` says who may appear at all).
+  const people = search.results
+    .filter((result) => !excluded.has(result.id))
+    .map((result) => {
+      const person = summaryOf(result);
+      return {
+        ...person,
+        size: 'sm' as const,
+        trailing: 'checkbox' as const,
+        selected: selected.has(person.id),
+        onSelectedChange: () => toggle(person),
+        onPress: () => toggle(person),
+      };
+    });
+  const sections: ContactSection[] =
+    people.length > 0 ? [{ letter: t('chat.new.people'), contacts: people }] : [];
 
   const submitLabel = adding
     ? t('chat.group.addMember')
@@ -162,27 +134,31 @@ export default function NewConversationRoute() {
 
   if (search.unavailable)
     return (
-      <Page title={t('chat.new.title')} back="always" scroll={false}>
+      <Screen scroll="none" header={<PageHeader title={t('chat.new.title')} />}>
         <ConversationAccessState state="unavailable" onRetry={search.retry} />
-      </Page>
+      </Screen>
     );
 
   return (
-    <Page
-      title={adding ? t('chat.group.addMember') : t('chat.new.title')}
-      back="always"
-      scroll={false}
-      actions={
-        <Button
-          size="sm"
-          disabled={count === 0}
-          loading={busy}
-          onPress={() => void submit()}
-          tone="accent"
-          appearance="solid"
-        >
-          {submitLabel}
-        </Button>
+    // The contact list scrolls itself, under the header the Screen reserves.
+    <Screen
+      scroll="none"
+      header={
+        <PageHeader
+          title={adding ? t('chat.group.addMember') : t('chat.new.title')}
+          actions={
+            <Button
+              size="sm"
+              disabled={count === 0}
+              loading={busy}
+              onPress={() => void submit()}
+              tone="accent"
+              appearance="solid"
+            >
+              {submitLabel}
+            </Button>
+          }
+        />
       }
     >
       <View style={styles.search}>
@@ -199,8 +175,12 @@ export default function NewConversationRoute() {
       <ContactList
         style={styles.list}
         sections={sections}
-        indexLetters={CONTACT_ALPHABET}
-        formatJumpLabel={(letter) => t('chat.new.jumpTo', { letter })}
+        showIndex={false}
+        // Not pinned. One section has nothing to pin, and a pinned heading is
+        // React Native's sticky header (zIndex 10 in the content container):
+        // the suspect for rows laid out but not drawn on Android until the
+        // list is scrolled (seen in a Pixel 8a release build).
+        stickyHeaders={false}
         header={
           naming ? (
             <NewGroupForm
@@ -227,7 +207,13 @@ export default function NewConversationRoute() {
           ) : undefined
         }
         emptyState={
-          search.searching ? undefined : (
+          search.searching ? (
+            <Loading
+              variant="spinner"
+              style={styles.searching}
+              accessibilityLabel={t('chat.new.searching')}
+            />
+          ) : (
             <ChatEmptyState
               title={
                 search.tooShort
@@ -240,7 +226,7 @@ export default function NewConversationRoute() {
           )
         }
       />
-    </Page>
+    </Screen>
   );
 }
 
@@ -248,6 +234,7 @@ const styles = StyleSheet.create({
   // 12, the gutter the conversation list's own search pill sits on.
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   list: { flex: 1, minHeight: 0 },
+  searching: { paddingVertical: 32 },
   form: { paddingTop: 4, paddingHorizontal: 12, paddingBottom: 12 },
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView, and
   // padding on a scroller is space the content slides under.

@@ -1,5 +1,5 @@
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
-import { useConversationActions, useSyncState } from '@allo/react';
+import { useAlloClient, useConversationActions, useSyncState } from '@allo/react';
 import { AliaAskProvider, useAskAgent } from '@alia.onl/sdk/ask';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
@@ -8,14 +8,13 @@ import {
   ChatList,
   ChatSearchField,
   ChatSearchResults,
-  NewChatButton,
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
-import { PageAction } from '@/components/shell/PageAction';
 import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
@@ -23,7 +22,7 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
@@ -60,6 +59,7 @@ export function ConversationList() {
   const theme = useTheme();
   const { t } = useTranslation();
   const sync = useSyncState();
+  const client = useAlloClient();
   const { leave, clearHistory } = useConversationActions();
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
@@ -192,47 +192,54 @@ export function ConversationList() {
   const open = useCallback((id: string) => router.push(`/c/${id}`), [router]);
   const me = user?.id;
   const openStory = useCallback(
-    (accountId: string) => router.push(`/updates?story=${accountId}`),
+    (accountId: string) => router.push(`/updates/${accountId}`),
     [router],
   );
   const openUpdates = useCallback(() => router.push('/updates'), [router]);
 
+  // Pressing Chats again: back to the top, then a fresh look at the server.
+  const reselect = useMemo(() => ({ refresh: () => client.conversations.refresh() }), [client]);
+
+  // The search, the folders and the stories are the list's header, so the
+  // whole screen scrolls as one. The new-conversation button is the app
+  // shell's floating action.
   const list = (
-    <View style={styles.root}>
-      <PageHeader
-        title={t('chat.title')}
-        safeArea={!split}
-        leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-        actions={!supervised ? <AskAliaButton label={t('chat.askAlia')} /> : undefined}
-      />
-      <View style={styles.search}>
-        <ChatSearchField
-          value={query}
-          onChangeText={setQuery}
-          onClear={() => setQuery('')}
-          placeholder={t('chat.search.placeholder')}
+    <Screen
+      reselect={reselect}
+      header={
+        <PageHeader
+          title={t('chat.title')}
+          // A top-level place, beside the conversation or under the bar: no Back.
+          onBack={null}
+          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
+          actions={!supervised ? <AskAliaButton label={t('chat.askAlia')} /> : undefined}
         />
-      </View>
-      {folders.length > 0 && (
-        <ChatFolderTabs
-          folders={folders}
-          value={folder}
-          onValueChange={setFolder}
-          accessibilityLabel={t('chat.folder.label')}
-          divider
-        />
-      )}
-      {!supervised && <HistoryTransferBanner />}
-      {sync === 'offline' && (
-        <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>
-          {t('chat.sync.offline')}
-        </Text>
-      )}
-      <ScrollView
-        style={styles.root}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
+      }
+    >
+      <ScreenScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="pb-6">
+        <View style={styles.search}>
+          <ChatSearchField
+            value={query}
+            onChangeText={setQuery}
+            onClear={() => setQuery('')}
+            placeholder={t('chat.search.placeholder')}
+          />
+        </View>
+        {folders.length > 0 && (
+          <ChatFolderTabs
+            folders={folders}
+            value={folder}
+            onValueChange={setFolder}
+            accessibilityLabel={t('chat.folder.label')}
+            divider
+          />
+        )}
+        {!supervised && <HistoryTransferBanner />}
+        {sync === 'offline' && (
+          <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>
+            {t('chat.sync.offline')}
+          </Text>
+        )}
         {searching ? (
           <ChatSearchResults
             query={query}
@@ -260,14 +267,8 @@ export function ConversationList() {
             }}
           />
         )}
-      </ScrollView>
-      <PageAction>
-        <NewChatButton
-          accessibilityLabel={t('chat.new.title')}
-          onPress={() => router.push('/new')}
-        />
-      </PageAction>
-    </View>
+      </ScreenScrollView>
+    </Screen>
   );
 
   // Mounted only in the signed-in tree: signed out, this route redirects to sign-in.
@@ -295,8 +296,6 @@ function AskAliaButton({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   notice: { paddingHorizontal: 16, paddingBottom: 8 },
-  content: { paddingBottom: 24 },
 });

@@ -5,9 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { useCallActions, usePresence } from '@allo/react';
 import { CallHistoryList, IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
 import { Muted } from '@oxy.so/bloom/typography';
+import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 
 import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
-import { Page } from '@/components/shell/Page';
 import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog } from '@/lib/calls/history';
@@ -99,49 +101,61 @@ export default function CallsScreen() {
   const callerPresence = usePresence(callerId ? [callerId] : []);
 
   return (
-    <Page title={t('calls.title')}>
-      <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
-
-      {arriving ? (
-        <IncomingCallBanner
-          name={caller?.displayName ?? someone}
-          avatar={caller?.avatar}
-          mode={session.mode}
-          status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
-          onAccept={() => {
-            void calls.answer().catch(reportCallError);
-            router.push({
-              pathname: '/c/[id]/call',
-              params: { id: session.conversationId, incomingCallId: session.id },
-            });
-          }}
-          onDecline={() => void calls.decline().catch(reportCallError)}
-          onPress={() =>
-            router.push({
-              pathname: '/c/[id]/call',
-              params: { id: session.conversationId, incomingCallId: session.id },
-            })
-          }
-          labels={{
-            accept: t('calls.control.accept'),
-            decline: t('calls.control.decline'),
-            voice: t('calls.incoming.voice'),
-            video: t('calls.incoming.video'),
-          }}
+    <Screen
+      header={
+        <PageHeader
+          title={t('calls.title')}
+          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
         />
-      ) : null}
+      }
+    >
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-4 px-4 pb-8"
+      >
+        <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
 
-      <CallHistoryList
-        sections={sections}
-        onItemPress={openConversation}
-        onCallBack={callBack}
-        labels={{
-          ...directionLabels,
-          callBack: (name: string) => t('calls.callBack', { name }),
-        }}
-        emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
-      />
-    </Page>
+        {arriving ? (
+          <IncomingCallBanner
+            name={caller?.displayName ?? someone}
+            avatar={caller?.avatar}
+            mode={session.mode}
+            status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
+            onAccept={() => {
+              void calls.answer().catch(reportCallError);
+              router.push({
+                pathname: '/c/[id]/call',
+                params: { id: session.conversationId, incomingCallId: session.id },
+              });
+            }}
+            onDecline={() => void calls.decline().catch(reportCallError)}
+            onPress={() =>
+              router.push({
+                pathname: '/c/[id]/call',
+                params: { id: session.conversationId, incomingCallId: session.id },
+              })
+            }
+            labels={{
+              accept: t('calls.control.accept'),
+              decline: t('calls.control.decline'),
+              voice: t('calls.incoming.voice'),
+              video: t('calls.incoming.video'),
+            }}
+          />
+        ) : null}
+
+        <CallHistoryList
+          sections={sections}
+          onItemPress={openConversation}
+          onCallBack={callBack}
+          labels={{
+            ...directionLabels,
+            callBack: (name: string) => t('calls.callBack', { name }),
+          }}
+          emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
+        />
+      </ScreenScrollView>
+    </Screen>
   );
 }
 

@@ -5,10 +5,11 @@ import { useConversation, useConversationActions } from '@allo/react';
 import { MemberList, type MemberListItem } from '@oxy.so/bloom/chat-people';
 import { toast } from '@oxy.so/bloom/toast';
 
-import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
 import { profileHref } from '@/lib/profile/handle';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { logger } from '@/utils/logger';
 
 /**
@@ -67,30 +68,32 @@ export default function MembersRoute() {
   );
 
   return (
-    <Page title={t('chat.details.participants')} back="always" scroll={false}>
-      <MemberList
-        members={members}
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={t('chat.new.search')}
-        onMemberPress={(accountId) => {
-          const href = profileHref(ctx.person(accountId)?.handle);
-          if (href) router.push(href);
-        }}
-        // Leaving is its own action, with its own confirmation: your row offers no removal.
-        onRemove={
-          canManage
-            ? (accountId) => (accountId === ctx.me ? undefined : void remove(accountId))
-            : undefined
-        }
-        onAddMembers={canManage ? () => router.push(`/new?addTo=${conversationId}`) : undefined}
-        addMembersLabel={t('chat.group.addMember')}
-        labels={{
-          remove: t('chat.group.removeMember'),
-          owner: t('chat.role.owner'),
-          admin: t('chat.role.admin'),
-        }}
-      />
-    </Page>
+    <Screen header={<PageHeader title={t('chat.details.participants')} />}>
+      <ScreenScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 pb-8">
+        <MemberList
+          members={members}
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t('chat.new.search')}
+          onMemberPress={(accountId) => {
+            const href = profileHref(ctx.person(accountId)?.handle);
+            if (href) router.push(href);
+          }}
+          // Leaving is its own action, with its own confirmation: your row offers no removal.
+          onRemove={
+            canManage
+              ? (accountId) => (accountId === ctx.me ? undefined : void remove(accountId))
+              : undefined
+          }
+          onAddMembers={canManage ? () => router.push(`/new?addTo=${conversationId}`) : undefined}
+          addMembersLabel={t('chat.group.addMember')}
+          labels={{
+            remove: t('chat.group.removeMember'),
+            owner: t('chat.role.owner'),
+            admin: t('chat.role.admin'),
+          }}
+        />
+      </ScreenScrollView>
+    </Screen>
   );
 }

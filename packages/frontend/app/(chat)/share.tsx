@@ -14,10 +14,12 @@ import {
   type PersonSummary,
 } from '@oxy.so/bloom/chat-people';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
+import { Loading } from '@oxy.so/bloom/loading';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
 import { toast } from '@oxy.so/bloom/toast';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen } from '@oxy.so/bloom/screen';
 
-import { Page } from '@/components/shell/Page';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch } from '@/hooks/useUserSearch';
@@ -193,29 +195,33 @@ export default function ShareRoute() {
 
   if (text.length === 0)
     return (
-      <Page title={t('share.title')} back="always" scroll={false}>
+      <Screen scroll="none" header={<PageHeader title={t('share.title')} />}>
         <View style={styles.empty}>
           <ChatEmptyState title={t('share.empty.title')} description={t('share.empty.body')} />
         </View>
-      </Page>
+      </Screen>
     );
 
   return (
-    <Page
-      title={t('share.title')}
-      back="always"
-      scroll={false}
-      actions={
-        <Button
-          size="sm"
-          disabled={picked.length === 0}
-          loading={busy}
-          onPress={() => void submit()}
-          tone="accent"
-          appearance="solid"
-        >
-          {t('share.send')}
-        </Button>
+    // The contact list scrolls itself, under the header the Screen reserves.
+    <Screen
+      scroll="none"
+      header={
+        <PageHeader
+          title={t('share.title')}
+          actions={
+            <Button
+              size="sm"
+              disabled={picked.length === 0}
+              loading={busy}
+              onPress={() => void submit()}
+              tone="accent"
+              appearance="solid"
+            >
+              {t('share.send')}
+            </Button>
+          }
+        />
       }
     >
       <View style={styles.search}>
@@ -240,6 +246,9 @@ export default function ShareRoute() {
         style={styles.list}
         sections={sections}
         showIndex={false}
+        // Not pinned: React Native's sticky headers are the suspect for rows
+        // laid out but not drawn on Android until a scroll (see `/new`).
+        stickyHeaders={false}
         header={
           <View style={styles.preview}>
             <MessageBubble direction="outgoing" text={text} tail />
@@ -256,7 +265,13 @@ export default function ShareRoute() {
           ) : undefined
         }
         emptyState={
-          search.searching ? undefined : (
+          search.searching ? (
+            <Loading
+              variant="spinner"
+              style={styles.searching}
+              accessibilityLabel={t('chat.new.searching')}
+            />
+          ) : (
             <ChatEmptyState
               title={
                 search.tooShort
@@ -269,7 +284,7 @@ export default function ShareRoute() {
           )
         }
       />
-    </Page>
+    </Screen>
   );
 }
 
@@ -277,6 +292,7 @@ const styles = StyleSheet.create({
   // 12, the gutter the conversation list's own search pill sits on.
   search: { paddingHorizontal: 12, paddingBottom: 8 },
   list: { flex: 1, minHeight: 0 },
+  searching: { paddingVertical: 32 },
   preview: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12 },
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
   chips: { marginHorizontal: 8, marginBottom: 8 },

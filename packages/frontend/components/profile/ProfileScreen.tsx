@@ -12,13 +12,14 @@ import { RiUserSearchLine } from '@oxy.so/bloom/icons/RiUserSearchLine';
 import * as Skeleton from '@oxy.so/bloom/skeleton';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
 import { ProfileIdentity } from '@/components/profile/ProfileIdentity';
-import { Page } from '@/components/shell/Page';
 import { useProfileData } from '@/hooks/useProfileData';
 
 /**
@@ -56,38 +57,43 @@ function SupervisedProfile({ handle }: { handle: string }) {
   });
   const person = query.isFetchedAfterMount && !query.isError ? query.data : undefined;
   return (
-    <Page title={t('supervision.conversation')}>
-      {query.isError ? (
-        <ConversationAccessState
-          state="unavailable"
-          onRetry={() => {
-            void query.refetch();
-          }}
-        />
-      ) : !query.isFetchedAfterMount ? (
-        <ConversationAccessState state="checking" />
-      ) : !person ? (
-        <ConversationAccessState state="blocked" />
-      ) : (
-        <>
-          <ProfileIdentity
-            displayName={person.displayName ?? person.username ?? ''}
-            handle={person.username ?? ''}
+    <Screen header={<PageHeader title={t('supervision.conversation')} />}>
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-4 px-4 pb-8"
+      >
+        {query.isError ? (
+          <ConversationAccessState
+            state="unavailable"
+            onRetry={() => {
+              void query.refetch();
+            }}
           />
-          {person.accountId !== user?.id ? (
-            <Button
-              onPress={() => {
-                void create({ participantIds: [person.accountId], name: undefined })
-                  .then((id) => router.push(`/c/${id}`))
-                  .catch(() => toast.error(t('chat.new.failed')));
-              }}
-            >
-              {t('profile.message')}
-            </Button>
-          ) : null}
-        </>
-      )}
-    </Page>
+        ) : !query.isFetchedAfterMount ? (
+          <ConversationAccessState state="checking" />
+        ) : !person ? (
+          <ConversationAccessState state="blocked" />
+        ) : (
+          <>
+            <ProfileIdentity
+              displayName={person.displayName ?? person.username ?? ''}
+              handle={person.username ?? ''}
+            />
+            {person.accountId !== user?.id ? (
+              <Button
+                onPress={() => {
+                  void create({ participantIds: [person.accountId], name: undefined })
+                    .then((id) => router.push(`/c/${id}`))
+                    .catch(() => toast.error(t('chat.new.failed')));
+                }}
+              >
+                {t('profile.message')}
+              </Button>
+            ) : null}
+          </>
+        )}
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
@@ -102,50 +108,55 @@ function OrdinaryProfile({ handle }: { handle: string }) {
   const isViewer = profile !== null && viewer?.id === profile.id;
 
   return (
-    <Page title={profile?.design.displayName || `@${handle}`}>
-      {loading ? (
-        <View style={styles.skeleton} accessibilityState={{ busy: true }}>
-          <Skeleton.Circle size={96} />
-          <Skeleton.Text style={styles.skeletonName} />
-          <Skeleton.Text style={styles.skeletonHandle} />
-        </View>
-      ) : profile === null ? (
-        <ChatEmptyState
-          illustration={<IconCircle icon={RiUserSearchLine} />}
-          title={notFound ? t('profile.notFound') : t('profile.loadFailed')}
-          description={notFound ? t('profile.notFoundSubtitle', { handle }) : undefined}
-        />
-      ) : (
-        <>
-          <ProfileIdentity
-            displayName={profile.design.displayName || profile.username}
-            handle={profile.username || handle}
-            avatar={profile.avatar}
-            verified={profile.verified}
+    <Screen header={<PageHeader title={profile?.design.displayName || `@${handle}`} />}>
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-4 px-4 pb-8"
+      >
+        {loading ? (
+          <View style={styles.skeleton} accessibilityState={{ busy: true }}>
+            <Skeleton.Circle size={96} />
+            <Skeleton.Text style={styles.skeletonName} />
+            <Skeleton.Text style={styles.skeletonHandle} />
+          </View>
+        ) : profile === null ? (
+          <ChatEmptyState
+            illustration={<IconCircle icon={RiUserSearchLine} />}
+            title={notFound ? t('profile.notFound') : t('profile.loadFailed')}
+            description={notFound ? t('profile.notFoundSubtitle', { handle }) : undefined}
           />
-          {isViewer ? null : (
-            <Button
-              size="lg"
-              leadingIcon={RiMessage2Line}
-              onPress={() => router.push(`/c/${profile.id}`)}
-              style={styles.message}
-            >
-              {t('profile.message')}
-            </Button>
-          )}
-          {profile.bio ? (
-            <Card radius="radius-16" style={styles.about} appearance="outline">
-              <Text variant="body-semibold" style={{ color: theme.colors.textSecondary }}>
-                {t('profile.about')}
-              </Text>
-              <Text variant="body-regular" selectable>
-                {profile.bio}
-              </Text>
-            </Card>
-          ) : null}
-        </>
-      )}
-    </Page>
+        ) : (
+          <>
+            <ProfileIdentity
+              displayName={profile.design.displayName || profile.username}
+              handle={profile.username || handle}
+              avatar={profile.avatar}
+              verified={profile.verified}
+            />
+            {isViewer ? null : (
+              <Button
+                size="lg"
+                leadingIcon={RiMessage2Line}
+                onPress={() => router.push(`/c/${profile.id}`)}
+                style={styles.message}
+              >
+                {t('profile.message')}
+              </Button>
+            )}
+            {profile.bio ? (
+              <Card radius="radius-16" style={styles.about} appearance="outline">
+                <Text variant="body-semibold" style={{ color: theme.colors.textSecondary }}>
+                  {t('profile.about')}
+                </Text>
+                <Text variant="body-regular" selectable>
+                  {profile.bio}
+                </Text>
+              </Card>
+            ) : null}
+          </>
+        )}
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
