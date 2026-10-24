@@ -77,7 +77,7 @@
   "calls.movePip": "Mover la ventana pequeña",
   "calls.mutedPerson": "{{name}}, con el micrófono silenciado",
   "calls.noParticipants": "Aquí no hay nadie a quien llamar.",
-  "calls.notice": "Un móvil con Allo cerrado todavía no sonará: la llamada llega a un dispositivo con la app abierta. El audio va directo entre los dos, y el relay para las llamadas que lo necesitan aún no está montado.",
+  "calls.cannotRingClosed": "Este teléfono no puede sonar con Allo cerrado. Mantén Allo abierto para recibir llamadas.",
   "calls.participants": "Participantes",
   "calls.slideToAnswer": "Desliza para responder",
   "calls.someone": "Alguien",

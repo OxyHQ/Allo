@@ -1,5 +1,6 @@
 import type { AlloClient } from '@allo/core';
 import {
+  callPushStore,
   startNativeCalls,
   type NativeCallBridge,
   type NativeCallEvent,
@@ -165,4 +166,23 @@ it('reports a bind that cannot succeed once, instead of every second', async () 
   expect(f.report).toHaveBeenCalledTimes(1);
   expect(f.bridge.snapshot).not.toHaveBeenCalled();
   f.stop();
+});
+it('tells the screens whether this phone can ring while Allo is closed', async () => {
+  const withToken = fixture([]);
+  await settle();
+  expect(callPushStore.get()).toBe('ready');
+  withToken.stop();
+  expect(callPushStore.get()).toBe('unknown');
+
+  const noToken = fixture([]);
+  noToken.bridge.snapshot.mockResolvedValue({ token: '', events: [], audioActive: false });
+  jest.advanceTimersByTime(1_000);
+  await settle();
+  expect(callPushStore.get()).toBe('unavailable');
+  noToken.stop();
+
+  const failedBind = fixture([], jest.fn().mockRejectedValue(new Error('no Firebase')));
+  await settle();
+  expect(callPushStore.get()).toBe('unavailable');
+  failedBind.stop();
 });

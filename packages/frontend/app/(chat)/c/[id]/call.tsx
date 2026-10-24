@@ -16,7 +16,7 @@ import { Muted } from '@oxy.so/bloom/typography';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 
-import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
+import { CallRingNotice } from '@/components/calls/CallRingNotice';
 import { CallVideo } from '@/components/calls/CallVideo';
 import { useCallMedia } from '@/lib/allo/callMedia';
 import { useChatContext } from '@/hooks/useChatContext';
@@ -158,7 +158,7 @@ export default function CallRoute() {
           keyboardShouldPersistTaps="handled"
           contentContainerClassName="gap-4 px-4 pb-8"
         >
-          <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
+          <CallRingNotice />
           <Muted>{t('calls.noParticipants')}</Muted>
           <Button onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
             {t('calls.title')}

@@ -9,7 +9,7 @@ import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { PageHeader } from '@oxy.so/bloom/page-header';
 import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 
-import { NotConnectedNotice } from '@/components/phase2/NotConnectedNotice';
+import { CallRingNotice } from '@/components/calls/CallRingNotice';
 import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog } from '@/lib/calls/history';
@@ -113,7 +113,7 @@ export default function CallsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-4 px-4 pb-8"
       >
-        <NotConnectedNotice>{t('calls.notice')}</NotConnectedNotice>
+        <CallRingNotice />
 
         {arriving ? (
           <IncomingCallBanner

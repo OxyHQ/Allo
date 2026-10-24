@@ -543,9 +543,17 @@ export class InstanceManager {
   // ---- trust ---------------------------------------------------------------
 
   /** Own instances (cached listing) that pass the chain check. */
-  trustedOwnInstances(): { trusted: ClientInstance[]; refused: Map<string, string> } {
+  trustedOwnInstances(): {
+    trusted: ClientInstance[];
+    refused: Map<string, string>;
+    inactive: Set<string>;
+  } {
     const verdict = verifyInstanceChain(this.own);
-    return { trusted: this.own.filter((i) => verdict.trusted.has(i.id)), refused: verdict.refused };
+    return {
+      trusted: this.own.filter((i) => verdict.trusted.has(i.id)),
+      refused: verdict.refused,
+      inactive: verdict.inactive,
+    };
   }
 
   /**
@@ -557,11 +565,11 @@ export class InstanceManager {
    */
   async trustedInstancesOf(
     accountId: string,
-  ): Promise<{ trusted: PublicInstance[]; refused: Map<string, string> }> {
+  ): Promise<{ trusted: PublicInstance[]; refused: Map<string, string>; inactive: Set<string> }> {
     if (accountId === this.deps.accountId) {
       await this.refresh();
       const own = this.trustedOwnInstances();
-      return { trusted: own.trusted.map(toPublic), refused: own.refused };
+      return { trusted: own.trusted.map(toPublic), refused: own.refused, inactive: own.inactive };
     }
     let res;
     try {
@@ -572,13 +580,14 @@ export class InstanceManager {
       });
     } catch (error) {
       if (error instanceof TransportError && error.status === 404)
-        return { trusted: [], refused: new Map() };
+        return { trusted: [], refused: new Map(), inactive: new Set() };
       throw error;
     }
     const verdict = verifyInstanceChain(res.instances);
     return {
       trusted: res.instances.filter((i) => verdict.trusted.has(i.id)),
       refused: verdict.refused,
+      inactive: verdict.inactive,
     };
   }
 

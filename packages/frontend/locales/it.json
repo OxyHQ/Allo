@@ -77,7 +77,7 @@
   "calls.movePip": "Sposta il riquadro piccolo",
   "calls.mutedPerson": "{{name}}, microfono disattivato",
   "calls.noParticipants": "Qui non c'è nessuno da chiamare.",
-  "calls.notice": "Un telefono con Allo chiuso non squillerà ancora: la chiamata raggiunge un dispositivo con l'app aperta. L'audio va da un capo all'altro, e il relay per le chiamate che ne hanno bisogno non è ancora configurato.",
+  "calls.cannotRingClosed": "Questo telefono non può squillare con Allo chiuso. Tieni Allo aperto per ricevere le chiamate.",
   "calls.participants": "Partecipanti",
   "calls.slideToAnswer": "Scorri per rispondere",
   "calls.someone": "Qualcuno",

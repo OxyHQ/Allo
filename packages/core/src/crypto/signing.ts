@@ -110,6 +110,12 @@ export interface ChainVerdict {
   trusted: Set<string>;
   /** Why each refused instance was refused; the caller may surface it. */
   refused: Map<string, string>;
+  /**
+   * The refused instances that are merely not active (revoked, pending) — a
+   * subset of `refused`. Only `refused.size - inactive.size` is a chain
+   * failure; counting a revoked device as one reads like a forged approval.
+   */
+  inactive: Set<string>;
 }
 
 /**
@@ -123,9 +129,14 @@ export interface ChainVerdict {
 export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
   const trusted = new Set<string>();
   const refused = new Map<string, string>();
+  const inactive = new Set<string>();
   const active = instances.filter((i) => i.status === 'active');
-  for (const i of instances) if (i.status !== 'active') refused.set(i.id, `status is ${i.status}`);
-  if (active.length === 0) return { trusted, refused };
+  for (const i of instances)
+    if (i.status !== 'active') {
+      refused.set(i.id, `status is ${i.status}`);
+      inactive.add(i.id);
+    }
+  if (active.length === 0) return { trusted, refused, inactive };
 
   const accountId = active[0].accountId;
   const ordered = [...active].sort((a, b) => {
@@ -261,5 +272,5 @@ export function verifyInstanceChain(instances: ChainInstance[]): ChainVerdict {
       );
     }
   }
-  return { trusted, refused };
+  return { trusted, refused, inactive };
 }

@@ -123,8 +123,8 @@ export default function NewConversationRoute() {
         onPress: () => toggle(person),
       };
     });
-  const sections: ContactSection[] =
-    people.length > 0 ? [{ letter: t('chat.new.people'), contacts: people }] : [];
+  // Search results in the directory's (relevance) order: one flat section.
+  const sections: ContactSection[] = people.length > 0 ? [{ letter: '', contacts: people }] : [];
 
   const submitLabel = adding
     ? t('chat.group.addMember')
@@ -175,12 +175,8 @@ export default function NewConversationRoute() {
       <ContactList
         style={styles.list}
         sections={sections}
-        showIndex={false}
-        // Not pinned. One section has nothing to pin, and a pinned heading is
-        // React Native's sticky header (zIndex 10 in the content container):
-        // the suspect for rows laid out but not drawn on Android until the
-        // list is scrolled (seen in a Pixel 8a release build).
-        stickyHeaders={false}
+        layout="flat"
+        flatLabel={t('chat.new.people')}
         header={
           naming ? (
             <NewGroupForm

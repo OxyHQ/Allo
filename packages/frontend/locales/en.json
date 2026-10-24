@@ -77,7 +77,7 @@
   "calls.movePip": "Move the small frame",
   "calls.mutedPerson": "{{name}}, muted",
   "calls.noParticipants": "There is nobody to call here.",
-  "calls.notice": "A phone with Allo closed will not ring yet: calls reach a device that has the app open. Audio is peer to peer, and the relay for calls that need one is not set up yet.",
+  "calls.cannotRingClosed": "This phone can't ring while Allo is closed. Keep Allo open to receive calls.",
   "calls.participants": "Participants",
   "calls.slideToAnswer": "Slide to answer",
   "calls.someone": "Someone",

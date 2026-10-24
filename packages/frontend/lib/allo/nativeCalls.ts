@@ -17,6 +17,29 @@ export interface NativeCallBridge {
   audio?(active: boolean): Promise<void>;
 }
 
+/**
+ * Whether this phone can ring while Allo is closed: `ready` once the native
+ * side holds a push token the server can ring, `unavailable` when it has none
+ * (no Firebase in the build, no Google Play services, a bind that failed),
+ * `unknown` until the first snapshot. Screens read it through
+ * `useCallPushState` instead of promising, or denying, a ring they cannot see.
+ */
+export type CallPushState = 'unknown' | 'ready' | 'unavailable';
+let callPushState: CallPushState = 'unknown';
+const callPushListeners = new Set<() => void>();
+function setCallPushState(next: CallPushState): void {
+  if (next === callPushState) return;
+  callPushState = next;
+  for (const listener of callPushListeners) listener();
+}
+export const callPushStore = {
+  get: (): CallPushState => callPushState,
+  subscribe(listener: () => void): () => void {
+    callPushListeners.add(listener);
+    return () => callPushListeners.delete(listener);
+  },
+};
+
 // A token belongs to one installation but accounts have different signers.
 // Serialize registration/retirement across controllers so a late old-account
 // registration cannot steal a token back after the new account claimed it.
@@ -50,6 +73,7 @@ export function startNativeCalls(options: {
   bound.catch((error: unknown) => {
     if (stopped) return;
     clearInterval(timer);
+    setCallPushState('unavailable');
     options.report(error);
   });
   async function tick() {
@@ -64,6 +88,7 @@ export function startNativeCalls(options: {
       if (stopped) return;
       const snapshot = await bridge.snapshot();
       if (stopped) return;
+      setCallPushState(snapshot.token ? 'ready' : 'unavailable');
       if (snapshot.audioActive !== audioActive) {
         audioActive = snapshot.audioActive;
         await bridge.audio?.(audioActive);
@@ -134,6 +159,7 @@ export function startNativeCalls(options: {
   return () => {
     stopped = true;
     clearInterval(timer);
+    setCallPushState('unknown');
     void bridge.audio?.(false).catch(options.report);
     // Clear the local binding immediately, even if the old bearer has gone.
     // Registering the token for the next instance also atomically retires the
