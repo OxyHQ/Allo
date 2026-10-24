@@ -15,11 +15,18 @@
  *   `usersStore`, which is what `resolve` fills.
  *
  * Lookups COALESCE: every id asked for in one tick goes out as one
- * `users.getMany`, so a group of thirty is one request, a list of two hundred
+ * `users.lookupMany`, so a group of thirty is one request, a list of two hundred
  * rows is one request, and a row asking twice is one entry. An id already in
  * the cache is not asked for again until its TTL passes, and an id that Oxy
- * does not answer (deleted, hidden) is remembered as unresolved for the same
+ * ANSWERED without (deleted, hidden) is remembered as unresolved for the same
  * TTL so the list does not ask for it on every render.
+ *
+ * A request that FAILED is not an answer. `users.lookupMany` keeps the two
+ * apart (`missing` vs `failed`); `getMany` did not, and one dropped request on
+ * a phone left a conversation's header and list row nameless, with a
+ * placeholder avatar, for five minutes. Failed ids are asked again by
+ * themselves, with a growing pause, because a screen that is already drawn
+ * may never render again to ask.
  */
 import type { PeopleDirectory, PersonInfo } from '@allo/core';
 import { oxyServices } from '@/lib/oxy';
@@ -40,8 +47,19 @@ export interface Person {
 
 /** How long "Oxy said nobody" is believed before being asked again. */
 const UNRESOLVED_TTL_MS = 5 * 60 * 1000;
+/** The first pause before a failed lookup is asked again; it doubles up to the cap. */
+const RETRY_FIRST_MS = 1_000;
+const RETRY_MAX_MS = 30_000;
 
-export type UsersLookup = (ids: string[]) => Promise<UserEntity[]>;
+/** One batch's three outcomes: answered, answered-without, and not answered at all. */
+export interface UsersLookupResult {
+  users: UserEntity[];
+  /** Oxy answered and these are not there: safe to remember as unresolved. */
+  missing: string[];
+  /** Their request failed: unknown, to be asked again. */
+  failed: string[];
+}
+export type UsersLookup = (ids: string[]) => Promise<UsersLookupResult>;
 
 export class PeopleResolver implements PeopleDirectory {
   private generation = 0;
@@ -49,6 +67,9 @@ export class PeopleResolver implements PeopleDirectory {
   private inFlight = new Map<string, Promise<void>>();
   private unresolvedAt = new Map<string, number>();
   private flushScheduled = false;
+  private retryAttempt = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryIds = new Set<string>();
 
   constructor(
     private readonly lookup: UsersLookup,
@@ -60,6 +81,10 @@ export class PeopleResolver implements PeopleDirectory {
     this.queued.clear();
     this.inFlight.clear();
     this.unresolvedAt.clear();
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.retryIds.clear();
+    this.retryAttempt = 0;
     useUsersStore.getState().clearAll();
   }
 
@@ -108,15 +133,13 @@ export class PeopleResolver implements PeopleDirectory {
     if (ids.length === 0) return Promise.resolve();
     const generation = this.generation;
     const request = this.lookup(ids)
-      .then((users) => {
+      .catch((): UsersLookupResult => ({ users: [], missing: [], failed: ids }))
+      .then(({ users, missing, failed }) => {
         if (generation !== this.generation) return;
         useUsersStore.getState().upsertMany(users);
-        const answered = new Set(users.map((u) => String(u.id)));
-        for (const id of ids) if (!answered.has(id)) this.unresolvedAt.set(id, this.now());
-      })
-      .catch(() => {
-        // A failed batch is not remembered: the next render asks again, which
-        // is the right behaviour for a network blip and harmless for anything else.
+        for (const id of missing) this.unresolvedAt.set(id, this.now());
+        if (failed.length > 0) this.scheduleRetry(failed);
+        else if (users.length > 0 || missing.length > 0) this.retryAttempt = 0;
       })
       .finally(() => {
         if (generation !== this.generation) return;
@@ -124,6 +147,22 @@ export class PeopleResolver implements PeopleDirectory {
       });
     for (const id of ids) this.inFlight.set(id, request);
     return request;
+  }
+
+  /** Asks again for ids whose request failed, after a pause that doubles each time. */
+  private scheduleRetry(ids: readonly string[]): void {
+    for (const id of ids) this.retryIds.add(id);
+    if (this.retryTimer) return;
+    const delay = Math.min(RETRY_FIRST_MS * 2 ** this.retryAttempt, RETRY_MAX_MS);
+    this.retryAttempt += 1;
+    const generation = this.generation;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (generation !== this.generation) return;
+      const again = [...this.retryIds];
+      this.retryIds.clear();
+      this.ensure(again);
+    }, delay);
   }
 }
 
@@ -155,8 +194,11 @@ export function configurePeople(mode: typeof directoryMode): void {
   people.clear();
 }
 export const people = new PeopleResolver(async (ids) => {
-  if (directoryMode === 'unknown') return [];
-  if (directoryMode === 'ordinary') return oxyServices.users.getMany(ids);
+  if (directoryMode === 'unknown') return { users: [], missing: [], failed: [] };
+  if (directoryMode === 'ordinary') {
+    const { found, missing, failed } = await oxyServices.users.lookupMany(ids);
+    return { users: found, missing, failed };
+  }
   const users: UserEntity[] = [];
   for (let offset = 0; offset < ids.length; offset += 100) {
     const response = await oxyServices.safety.people({
@@ -170,5 +212,9 @@ export const people = new PeopleResolver(async (ids) => {
       })),
     );
   }
-  return users;
+  // The supervised projection answers for every id it was asked about: an id
+  // it leaves out is one it will not show. A thrown batch is caught by the
+  // resolver and becomes `failed`.
+  const answered = new Set(users.map((user) => user.id));
+  return { users, missing: ids.filter((id) => !answered.has(id)), failed: [] };
 });
