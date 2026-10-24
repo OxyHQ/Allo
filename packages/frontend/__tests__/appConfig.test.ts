@@ -23,6 +23,7 @@ interface IntentFilter {
 
 interface ExpoConfig {
   android: { package: string; intentFilters: IntentFilter[] };
+  plugins: (string | [string, ...unknown[]] | unknown)[];
   ios: { bundleIdentifier: string; associatedDomains?: string[] };
 }
 
@@ -102,6 +103,15 @@ describe.each(PRODUCTION_BUILDS)('production app config (%j)', (env) => {
 
   it('associates the same host for iOS Universal Links', () => {
     expect(config.ios.associatedDomains).toEqual(['applinks:allo.you']);
+  });
+
+  // Release signing is `withOxySharedPermissions`' (services 13.4.0+, fail-closed on
+  // the Oxy ecosystem certificate). app-preset 5 removed `withOxyAndroidRelease`
+  // and THROWS when it is listed, so `expo prebuild` would die on it.
+  it('signs through withOxySharedPermissions and lists no removed app-preset plugin', () => {
+    const names = config.plugins.map((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin));
+    expect(names).toContain('@oxy.so/services/plugins/withOxySharedPermissions');
+    expect(names).not.toContain('@oxy.so/app-preset/plugin/withOxyAndroidRelease');
   });
 });
 
