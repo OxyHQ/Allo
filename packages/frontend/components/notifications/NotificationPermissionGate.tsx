@@ -24,9 +24,10 @@ export function NotificationPermissionGate() {
     const timeout = setTimeout(async () => {
       const granted = await hasNotificationPermission();
       if (cancelled || granted) return;
+      // Bloom's own content padding stays: the drag handle is drawn over the
+      // top of the content, and that padding is what keeps the bell clear of it.
       void present((surface) => <NotificationPermissionSheet surface={surface} />, {
         placement: 'bottom',
-        contentPadding: 0,
       });
     }, INITIALIZATION_TIMEOUT.SPLASH_FADE_DELAY);
     return () => {
@@ -80,13 +81,9 @@ function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) 
 }
 
 const styles = StyleSheet.create({
-  content: {
-    alignItems: 'center',
-    gap: 20,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
+  // The surface pads the sheet (20 on every side); this adds a little air
+  // under the drag handle before the bell.
+  content: { alignItems: 'center', gap: 20, paddingTop: 8, paddingBottom: 4 },
   copy: { gap: 6 },
   centered: { textAlign: 'center' },
   actions: { alignSelf: 'stretch', gap: 10 },
