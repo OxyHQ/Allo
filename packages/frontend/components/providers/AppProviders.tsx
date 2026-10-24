@@ -12,6 +12,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { OxyProvider } from '@oxy.so/services/ui/client';
 import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
+import { SurfaceHost } from '@oxy.so/bloom/surfaces';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
 import i18n, { setLanguage } from '@/lib/i18n';
@@ -64,11 +65,16 @@ export const AppProviders = memo(function AppProviders({ children }: AppProvider
           <StickersProvider client={stickersClient}>
             <I18nextProvider i18n={i18n}>
               <ErrorBoundary>
-                {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
-                        `PortalOutlet` mounted by the app, after the content they paint over.
-                        The inert boundary wraps everything but the outlet. */}
+                {/* Native portals (`AliaChatSheet`) render only into a `PortalOutlet`
+                    mounted by the app, after the content they paint over. The inert
+                    boundary wraps everything but the outlet and the surface host. */}
                 <PortalProvider>
                   <OverlayInertBoundary>{children}</OverlayInertBoundary>
+                  {/* Bloom's one surface stack (sheets, menus, confirm()). OxyProvider
+                      mounts its provider above these providers; this host takes the
+                      stack over, so a surface renders inside i18n, the query client
+                      and the stickers. */}
+                  <SurfaceHost />
                   <ConnectionStatusToasts />
                   <PortalOutlet />
                 </PortalProvider>

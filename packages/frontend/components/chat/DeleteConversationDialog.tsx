@@ -12,88 +12,35 @@
  * to delete their copy on one person's say-so, which is a different feature
  * with a different argument behind it.
  *
- * Bloom draws all of it. The confirm with a checkbox is not one of Bloom's
- * ready-made surfaces, so this presents its own content onto the SAME surface
- * stack through `present()` — stacked and dismissed like every other surface,
- * rather than a modal of its own invention.
+ * Bloom draws all of it: a confirm with a checkbox under its description is
+ * Bloom's `confirmWithSuppression`, whose checkbox says whatever its label
+ * says. A dismissal is a refusal, like every other surface.
  */
-import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Button } from '@oxy.so/bloom/button';
-import { Checkbox } from '@oxy.so/bloom/checkbox';
-import { present } from '@oxy.so/bloom/surfaces';
-import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
+import { confirmWithSuppression } from '@oxy.so/bloom/surfaces';
 
 export interface DeleteConversationAnswer {
   confirmed: boolean;
   forEveryone: boolean;
 }
 
-interface Props {
+interface DeleteConversationQuestion {
   title: string;
   description: string;
-  /** The checkbox label, already naming the person. Omitted in a group, where the choice is not offered. */
-  alsoForThemLabel?: string;
+  /** The checkbox label, already naming the person. */
+  alsoForThemLabel: string;
   confirmLabel: string;
   cancelLabel: string;
-  onAnswer: (answer: DeleteConversationAnswer) => void;
 }
 
-function DeleteConversationBody({
-  title,
-  description,
+/** Asks, and resolves what the person chose. */
+export async function askDeleteConversation({
   alsoForThemLabel,
-  confirmLabel,
-  cancelLabel,
-  onAnswer,
-}: Props) {
-  const theme = useTheme();
-  const [forEveryone, setForEveryone] = useState(false);
-  return (
-    <View style={styles.root}>
-      <Text variant="title-3-semibold" accessibilityRole="header">
-        {title}
-      </Text>
-      <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
-        {description}
-      </Text>
-      {alsoForThemLabel ? (
-        <Checkbox checked={forEveryone} onCheckedChange={setForEveryone} label={alsoForThemLabel} />
-      ) : null}
-      <View style={styles.actions}>
-        <Button
-          onPress={() => onAnswer({ confirmed: false, forEveryone: false })}
-          tone="neutral"
-          appearance="outline"
-        >
-          {cancelLabel}
-        </Button>
-        <Button
-          onPress={() => onAnswer({ confirmed: true, forEveryone })}
-          tone="danger"
-          appearance="solid"
-        >
-          {confirmLabel}
-        </Button>
-      </View>
-    </View>
-  );
+  ...question
+}: DeleteConversationQuestion): Promise<DeleteConversationAnswer> {
+  const { confirmed, suppressed } = await confirmWithSuppression({
+    ...question,
+    destructive: true,
+    suppressionLabel: alsoForThemLabel,
+  });
+  return { confirmed, forEveryone: confirmed && suppressed };
 }
-
-/** Presents the dialog and resolves what the person chose. A dismissal is a `false`, like every other surface. */
-export function askDeleteConversation(
-  options: Omit<Props, 'onAnswer'>,
-): Promise<DeleteConversationAnswer> {
-  return present<DeleteConversationAnswer>(
-    (surface) => (
-      <DeleteConversationBody {...options} onAnswer={(answer) => surface.dismiss(answer)} />
-    ),
-    { placement: { base: 'bottom', md: 'center' }, maxWidth: 420 },
-  ).then((answer) => answer ?? { confirmed: false, forEveryone: false });
-}
-
-const styles = StyleSheet.create({
-  root: { gap: 16 },
-  actions: { flexDirection: 'row', gap: 12, justifyContent: 'flex-end' },
-});

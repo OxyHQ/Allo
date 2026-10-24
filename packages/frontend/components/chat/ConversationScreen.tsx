@@ -34,7 +34,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   Composer,
@@ -139,7 +138,6 @@ function AuthorizedConversationScreen({
   const split = useSplitLayout();
   // Below the third column the info is a route of its own, so the press always lands somewhere.
   const infoBeside = useInfoPane();
-  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toggleInfo = useChatPaneStore((state) => state.toggleInfo);
   const sync = useSyncState();
@@ -503,7 +501,9 @@ function AuthorizedConversationScreen({
 
   return (
     <View style={styles.root}>
-      <View style={{ paddingTop: split ? 0 : insets.top }}>
+      {/* The header and the composer carry the safe area as padding: NativeWind's
+          safe-area classes, which read the same insets. */}
+      <View className="pt-safe">
         <ChatHeader
           title={title}
           marker={otherPerson?.verified ? 'verified' : undefined}
@@ -601,7 +601,7 @@ function AuthorizedConversationScreen({
             />
           )}
         </ChatBackground>
-        <View style={{ paddingBottom: split ? 0 : insets.bottom }}>
+        <View className="pb-safe">
           <Composer
             initialDraft={draft}
             target={target}
