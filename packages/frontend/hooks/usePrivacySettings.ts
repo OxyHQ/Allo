@@ -133,10 +133,11 @@ function toBlockedUser(user: User): BlockedUser {
  * renames themselves, and folding them together would refetch every profile on
  * every unblock.
  *
- * `users.getMany` and not `users.get` in a loop — one request per chunk rather
- * than one per row. Ids that resolve to nothing are kept as bare rows rather than
- * dropped: silently shortening the list would tell the reader they had unblocked
- * somebody they had not.
+ * `users.lookupMany` and not `users.get` in a loop — one request per chunk
+ * rather than one per row. Ids Oxy answers without are kept as bare rows rather
+ * than dropped: silently shortening the list would tell the reader they had
+ * unblocked somebody they had not. A chunk that FAILED fails the query, so React
+ * Query asks again instead of caching nameless rows as if they were the answer.
  */
 export function useBlockedUsers(): {
   users: readonly BlockedUser[];
@@ -155,7 +156,11 @@ export function useBlockedUsers(): {
 
   const profiles = useQuery({
     queryKey: [...listKey, 'profiles', idList ?? []] as const,
-    queryFn: () => oxyServices.users.getMany([...(idList ?? [])]),
+    queryFn: async () => {
+      const { found, failed, error } = await oxyServices.users.lookupMany([...(idList ?? [])]);
+      if (failed.length > 0) throw error ?? new Error('people lookup failed');
+      return found;
+    },
     enabled: idList !== undefined && idList.length > 0,
   });
 

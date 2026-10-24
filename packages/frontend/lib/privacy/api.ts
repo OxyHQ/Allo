@@ -15,7 +15,7 @@
  *
  * Blocks are NOT in that document. They are their own collection with their own
  * endpoint (`/profile/blocks`), which answers with a list of Oxy ACCOUNT IDS —
- * not handles. Turning those into people is `oxyServices.users.getMany`, one
+ * not handles. Turning those into people is `oxyServices.users.lookupMany`, one
  * request rather than one per row.
  *
  * ## Which client
