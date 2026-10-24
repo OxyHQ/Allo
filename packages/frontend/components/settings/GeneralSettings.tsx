@@ -31,7 +31,10 @@ export function GeneralSettings() {
     ? (typeof user.name === 'string' ? user.name : user.name?.displayName) || user.username
     : '';
   const ownProfile = profileHref(user?.username);
-  const build = Constants.expoConfig?.runtimeVersion;
+  // The commit a release was built from, inlined by @oxy.so/app-preset's
+  // Babel plugin; absent in development.
+  const buildId: string | undefined = process.env.OXY_BUILD_ID;
+  const build = buildId && buildId !== 'development' ? buildId.slice(0, 7) : undefined;
   const signOut = useCallback(async () => {
     const accepted = await confirm({
       title: t('settings.signOut'),
@@ -81,14 +84,14 @@ export function GeneralSettings() {
                   },
                   {
                     key: 'manage',
-                    label: t('settings.account.manage'),
+                    label: t('settings.account.oxyAccount'),
                     control: (
                       <Button
                         onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))}
                         tone="neutral"
                         appearance="outline"
                       >
-                        {t('settings.account.manage')}
+                        {t('settings.account.manageAction')}
                       </Button>
                     ),
                   },
@@ -170,7 +173,7 @@ export function GeneralSettings() {
                 rows: [
                   {
                     key: 'signout',
-                    label: t('settings.signOut'),
+                    label: t('settings.signOutOfDevice'),
                     control: (
                       <Button tone="danger" onPress={() => void signOut()} appearance="outline">
                         {t('settings.signOut')}

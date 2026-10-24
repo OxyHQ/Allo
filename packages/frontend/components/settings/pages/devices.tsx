@@ -139,14 +139,6 @@ export default function DevicesScreen() {
 
   return (
     <>
-      <Button
-        leadingIcon={RiRefreshLine}
-        onPress={() => void refreshAll()}
-        tone="neutral"
-        appearance="outline"
-      >
-        {t('devices.refresh')}
-      </Button>
       {pending.pending.length > 0 ? (
         <SettingsSection label={t('devices.waiting')}>
           <SettingsCard>
@@ -202,7 +194,16 @@ export default function DevicesScreen() {
         </SettingsSection>
       ) : null}
 
-      <SettingsSection label={t('devices.enrolled')}>
+      <SettingsSection
+        label={t('devices.enrolled')}
+        action={
+          <GlyphButton
+            icon={RiRefreshLine}
+            accessibilityLabel={t('devices.refresh')}
+            onPress={() => void refreshAll()}
+          />
+        }
+      >
         <SettingsCard>
           {!loaded && enrolled.length === 0 ? (
             <View style={styles.empty}>
@@ -268,9 +269,12 @@ function describeInstance(instance: InstanceView, t: Translate): string {
       : instance.status === 'pending'
         ? t('devices.status.pending')
         : t('devices.status.revoked');
-  const seen = instance.lastSeenAt
-    ? t('devices.lastSeen', { when: formatWhen(instance.lastSeenAt) })
-    : t('devices.neverSeen');
+  // This device is the one being looked at: it is here now, not "last seen".
+  const seen = instance.isThis
+    ? t('devices.hereNow')
+    : instance.lastSeenAt
+      ? t('devices.lastSeen', { when: formatWhen(instance.lastSeenAt) })
+      : t('devices.neverSeen');
   return `${platformLabel(instance.platform)} · ${status} · ${seen}`;
 }
 
