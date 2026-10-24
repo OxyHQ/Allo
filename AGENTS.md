@@ -489,7 +489,12 @@ the independent release boundary; the application changes majors separately.
 to an **exact version, not a range**; the frontend declares it as a direct
 dependency. Keep it exact.
 
-**Metro and the MLS engine.** `metro.config.js` aliases `crypto` (a Node-only
+**Metro and the MLS engine.** `metro.config.js` is the shared
+`createOxyMetroConfig` from `@oxy.so/app-preset/metro` (watch folders, block
+list, `.wasm`/`.woff2` assets, minifier, NativeWind and its complete
+`react-native` shim) with Allo's resolver wrapped over the preset's: it handles
+its own names first and hands everything else, `react-native` included, down
+unchanged. It aliases `crypto` (a Node-only
 fallback inside `@hpke/common`) to `metro/empty-module.js`, the optional `ts-mls`
 peers Allo does not install (`@hpke/ml-kem` and friends) to
 `metro/ts-mls-optional-peer.js`, and every `@hpke/*` package root to its ESM

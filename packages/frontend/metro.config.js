@@ -1,25 +1,25 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
-const path = require('path');
-const { getDefaultConfig } = require('expo/metro-config');
-const { withNativeWind } = require('nativewind/metro');
+//
+// The shared Oxy Metro config (`@oxy.so/app-preset/metro`): monorepo watch
+// folders and block list, symlink + package-exports resolution, the web-font
+// and `.wasm` asset extensions (Bloom's `.woff2` fonts on web; dotLottie's
+// renderer, which draws stickers on the web and is served from this origin by
+// `lib/chat/lottieWeb.web.ts`), the release minifier, NativeWind, the Bloom
+// single-instance rewrite and the complete `react-native` shim NativeWind needs
+// on React Native 0.88 (`AssetRegistry`; without it every `useFonts` fails and
+// an Android release renders a blank window). Allo adds only its own resolver
+// aliases on top, below.
+const path = require('node:path');
+const fs = require('node:fs');
+const { createOxyMetroConfig } = require('@oxy.so/app-preset/metro');
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(__dirname);
-
-// Register `.woff2` / `.woff` as Metro asset extensions so `@oxy.so/bloom`'s
-// web-only font-face injection (which imports the bundled font binaries from
-// `@oxy.so/bloom/lib/module/fonts/assets/`) resolves on `expo export --platform
-// web`. Without this, Metro's default `assetExts` (which doesn't include
-// `.woff2` or `.woff`) fails to load Bloom's font assets during the web bundle
-// pass. Native bundling is unaffected — Bloom's native code path is a no-op
-// stub that never imports `.woff2`/`.woff`.
-// `.wasm` too: dotLottie's renderer, which draws stickers on the web, is bundled
-// as an asset and served from this origin (`lib/chat/lottieWeb.web.ts`).
-for (const ext of ['woff2', 'woff', 'wasm']) {
-  if (!config.resolver.assetExts.includes(ext)) {
-    config.resolver.assetExts.push(ext);
-  }
-}
+const config = createOxyMetroConfig(__dirname, {
+  sharedTypesPackage: '@allo/shared-types',
+  // NativeWind (v5) entry. The preset keeps `inlineVariables: false` (Bloom's
+  // `BloomColorScope` token aliases resolve at runtime) and `inlineRem: 16`.
+  cssInput: './styles/global.css',
+});
 
 // ---------------------------------------------------------------------------
 // The MLS engine's imports Metro cannot otherwise resolve.
@@ -59,7 +59,7 @@ function hpkeEsmEntry(packageName) {
   try {
     const packageJson = require.resolve(`${packageName}/package.json`, { paths: [__dirname] });
     const entry = path.join(path.dirname(packageJson), 'esm', 'mod.js');
-    return require('fs').existsSync(entry) ? entry : null;
+    return fs.existsSync(entry) ? entry : null;
   } catch {
     return null;
   }
@@ -86,7 +86,11 @@ const HARNESS_ALIASES = HARNESS
     ])
   : new Map();
 
-const defaultResolveRequest = config.resolver.resolveRequest;
+// The preset's finished resolver (NativeWind, Bloom single instance, the
+// complete `react-native` shim). Allo's aliases run first and hand every other
+// request — `react-native` and `react-native-css/components` included —
+// down to it unchanged, as the preset requires of an app-level wrapper.
+const presetResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   const harnessAlias = HARNESS_ALIASES.get(moduleName);
@@ -114,15 +118,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     const entry = hpkeEsmEntry(packageName);
     if (entry) return { type: 'sourceFile', filePath: entry };
   }
-  return (defaultResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
+  return presetResolveRequest(context, moduleName, platform);
 };
 
-// Enable NativeWind (v5) CSS support. `inlineVariables: false` keeps CSS custom
-// properties as runtime variables (required so Bloom's `BloomColorScope` token
-// aliases resolve at runtime instead of being inlined at build time); `inlineRem`
-// pins the rem base to 16.
-module.exports = withNativeWind(config, {
-  input: './styles/global.css',
-  inlineRem: 16,
-  inlineVariables: false,
-});
+module.exports = config;
