@@ -10,6 +10,12 @@
  * between `start()` beginning and the instance existing, and renders the app
  * so the shell is on screen while the SDK opens its store.
  *
+ * Unless `start()` FAILED. Then the shell would be a lie: every screen is
+ * drawn, and every action ends in "client is not started". An Android build
+ * without the platform CSPRNG did exactly that — the conversation list
+ * rendered and "new chat" failed with no reason anywhere. A failed start
+ * renders its own screen, with the error and a retry.
+ *
  * The pending screen carries a SECOND way out, and it is not decoration.
  * "Waiting to be approved" assumes there is a device left that can approve,
  * and there need not be: a browser whose site data was cleared, a phone that
@@ -43,12 +49,30 @@ export interface EnrollmentGateProps {
   children: React.ReactNode;
   /** Signs the account out of Oxy; the pending screen offers it as the way to give up. */
   onSignOut?: () => void;
+  /** Why this client's `start()` failed; absent while it is starting or once it started. */
+  startFailure?: Error;
+  /** Runs `start()` again after a failure. */
+  onRetryStart?: () => Promise<void>;
 }
 
-export function EnrollmentGate({ children, onSignOut }: EnrollmentGateProps) {
+export function EnrollmentGate({
+  children,
+  onSignOut,
+  startFailure,
+  onRetryStart,
+}: EnrollmentGateProps) {
   const { state, instance, error } = useInstanceState();
   const client = useAlloClient();
 
+  if (startFailure && state === 'unregistered') {
+    return (
+      <StartFailedScreen
+        errorMessage={startFailure.message}
+        onRetry={onRetryStart}
+        onSignOut={onSignOut}
+      />
+    );
+  }
   if (state === 'pending-approval') {
     return (
       <PendingApprovalScreen
@@ -214,6 +238,48 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
       >
         {t('enrollment.revoked.startOver', 'Start over')}
       </Button>
+      {onSignOut ? (
+        <Button onPress={onSignOut} tone="accent" appearance="plain">
+          {t('settings.signOut', 'Sign out')}
+        </Button>
+      ) : null}
+    </GateFrame>
+  );
+}
+
+interface StartFailedScreenProps {
+  errorMessage: string;
+  onRetry?: () => Promise<void>;
+  onSignOut?: () => void;
+}
+
+export function StartFailedScreen({ errorMessage, onRetry, onSignOut }: StartFailedScreenProps) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <GateFrame
+      icon={<IconCircle icon={RiShieldLine} />}
+      title={t('enrollment.startFailed.title', "Allo couldn't start on this device")}
+      description={t(
+        'enrollment.startFailed.body',
+        'Encrypted messaging did not open, so nothing can be sent or read yet. Your messages are not affected. Try again, and if it keeps happening, update Allo.',
+      )}
+    >
+      <ErrorLine message={errorMessage} />
+      {onRetry ? (
+        <Button
+          size="lg"
+          loading={busy}
+          onPress={() => {
+            setBusy(true);
+            // The failure, if it happens again, comes back through `errorMessage`.
+            void onRetry().finally(() => setBusy(false));
+          }}
+        >
+          {t('enrollment.startFailed.retry', 'Try again')}
+        </Button>
+      ) : null}
       {onSignOut ? (
         <Button onPress={onSignOut} tone="accent" appearance="plain">
           {t('settings.signOut', 'Sign out')}

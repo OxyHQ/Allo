@@ -167,4 +167,60 @@ describe('EnrollmentGate', () => {
     expect(texts(renderer)).toContain('Start over');
     expect(texts(renderer)).not.toContain('THE APP');
   });
+
+  it('shows the start failure with a retry instead of an app that cannot act', async () => {
+    const server = createFakeAlloServer();
+    // The shape of the Android failure: the platform CSPRNG is missing, so the
+    // first thing `start()` needs throws.
+    const broken = new MemorySecrets();
+    broken.get = () => Promise.reject(new Error("Cannot find native module 'ExpoCrypto'"));
+    const client = createAlloClient({
+      baseUrl: server.baseUrl,
+      appId: 'allo',
+      platform: 'android',
+      displayName: 'Phone',
+      session: FakeSession.for('acc-gate-4'),
+      storage: new MemoryStorage(),
+      secrets: broken,
+      transport: { fetch: server.fetch, socketFactory: server.socketFactory },
+      syncIntervalMs: 60_000,
+      keyPackageTarget: 4,
+    });
+    const failure = await client.start().then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect(client.instance.state()).toBe('unregistered');
+
+    const retry = jest.fn(() => Promise.resolve());
+    let renderer: TestRenderer.ReactTestRenderer | undefined;
+    act(() => {
+      renderer = TestRenderer.create(
+        <BloomThemeProvider mode="light" fonts={false}>
+          <AlloProvider client={client}>
+            <EnrollmentGate startFailure={failure} onRetryStart={retry}>
+              <Text>THE APP</Text>
+            </EnrollmentGate>
+          </AlloProvider>
+        </BloomThemeProvider>,
+      );
+    });
+    if (!renderer) throw new Error('did not mount');
+    const shown = texts(renderer).join(' ');
+    expect(shown).toMatch(/couldn't start on this device/);
+    expect(shown).toMatch(/ExpoCrypto/);
+    expect(texts(renderer)).not.toContain('THE APP');
+
+    const button = renderer.root.findAll(
+      (node) =>
+        typeof node.props.onPress === 'function' &&
+        node.findAllByType(Text).some((t) => t.props.children === 'Try again'),
+    )[0];
+    await act(async () => {
+      button.props.onPress();
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+    renderer.unmount();
+  });
 });
