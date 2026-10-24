@@ -246,9 +246,6 @@ export default function ShareRoute() {
         style={styles.list}
         sections={sections}
         showIndex={false}
-        // Not pinned: React Native's sticky headers are the suspect for rows
-        // laid out but not drawn on Android until a scroll (see `/new`).
-        stickyHeaders={false}
         header={
           <View style={styles.preview}>
             <MessageBubble direction="outgoing" text={text} tail />

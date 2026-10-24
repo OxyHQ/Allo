@@ -243,11 +243,12 @@ export class Dispatcher {
   /** The chain verdict the engine asks for when admitting an external joiner: the account's trusted active instances and their enrolled keys. */
   private readonly admission: JoinerAdmission = {
     trustedInstancesOf: async (accountId) => {
-      const { trusted, refused } = await this.ctx.instance.trustedInstancesOf(accountId);
-      if (refused.size)
+      const { trusted, refused, inactive } = await this.ctx.instance.trustedInstancesOf(accountId);
+      const forged = refused.size - inactive.size;
+      if (forged)
         this.ctx.log.warn?.('instances refused by the approval chain', {
           accountId,
-          count: refused.size,
+          count: forged,
         });
       return trusted.map((i) => ({ id: i.id, signingPublicKey: i.signingPublicKey }));
     },

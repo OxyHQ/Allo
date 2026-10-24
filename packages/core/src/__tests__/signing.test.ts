@@ -149,6 +149,8 @@ describe('approval chain', () => {
     expect(verdict.refused.get('i9')).toBe('approver i-gone is not in the listing');
     expect(verdict.refused.get('i10')).toBe('approver i4 is refused');
     expect(verdict.refused.get('i11')).toBe('status is revoked');
+    // Only the revoked one is merely inactive; every other refusal is a chain failure.
+    expect([...verdict.inactive]).toEqual(['i11']);
   });
 
   it("an instance approved by a since-revoked approver stays trusted when the approver is in the listing (own account), and is refused when it is not (another account's active-only listing)", () => {

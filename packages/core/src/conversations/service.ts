@@ -569,11 +569,12 @@ export class ConversationsService {
   ): Promise<Array<{ instanceId: string; accountId: string }>> {
     const out: Array<{ instanceId: string; accountId: string }> = [];
     for (const accountId of accountIds) {
-      const { trusted, refused } = await this.ctx.instance.trustedInstancesOf(accountId);
-      if (refused.size)
+      const { trusted, refused, inactive } = await this.ctx.instance.trustedInstancesOf(accountId);
+      const forged = refused.size - inactive.size;
+      if (forged)
         this.ctx.log.warn?.('instances refused by the approval chain', {
           accountId,
-          count: refused.size,
+          count: forged,
         });
       for (const i of trusted)
         if (!exclude.has(i.id)) out.push({ instanceId: i.id, accountId: i.accountId });
@@ -965,7 +966,7 @@ export class ConversationsService {
           this.reachNextAt.set(key, now + REACH_THROTTLE_MS);
           if (nudged) this.reachRetried.delete(key);
           try {
-            const { trusted, refused } = await ctx.instance.trustedInstancesOf(accountId);
+            const { trusted, refused, inactive } = await ctx.instance.trustedInstancesOf(accountId);
             /**
              * A REVOKED instance is "refused" too, and saying so as a chain
              * failure is a lie that costs an evening: an account everybody
@@ -974,9 +975,7 @@ export class ConversationsService {
              * is forging approvals". So the two are counted apart, and the
              * chain one is the only one worth a warning.
              */
-            const forged = [...refused.values()].filter(
-              (why) => !why.startsWith('status is'),
-            ).length;
+            const forged = refused.size - inactive.size;
             if (forged)
               ctx.log.warn?.('instances refused by the approval chain', {
                 accountId,
@@ -990,7 +989,7 @@ export class ConversationsService {
                 conversationId,
                 accountId,
                 trusted: trusted.length,
-                revoked: refused.size - forged,
+                revoked: inactive.size,
                 forged,
               });
               continue;

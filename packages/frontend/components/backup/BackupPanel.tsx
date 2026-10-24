@@ -181,9 +181,12 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 : t('backup.status.never')
             }
           >
-            <SettingsValueField>
-              {status.enabled ? t('backup.status.events', { count: status.eventCount }) : undefined}
-            </SettingsValueField>
+            {/* A count only means something while backup is on; an empty field is not a value. */}
+            {status.enabled ? (
+              <SettingsValueField>
+                {t('backup.status.events', { count: status.eventCount })}
+              </SettingsValueField>
+            ) : null}
           </SettingsRow>
           <SettingsRow
             label={
@@ -193,7 +196,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                   ? t('backup.status.remoteExists')
                   : t('backup.status.remoteMissing')
             }
-          ></SettingsRow>
+          />
         </SettingsCard>
       </SettingsSection>
 
@@ -360,7 +363,7 @@ function formatWhen(iso: string): string {
 
 const styles = StyleSheet.create({
   root: { gap: 4 },
-  actions: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 16 },
   action: { flex: 1 },
   card: { padding: 16, gap: 10 },
   body: { fontSize: 14, lineHeight: 20 },

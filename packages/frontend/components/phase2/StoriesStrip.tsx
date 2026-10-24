@@ -60,6 +60,8 @@ export function StoriesStrip({ ownAccountId, onStoryPress, onOwnPress }: Stories
 
   const own = useMemo(
     () => ({
+      // The account's own name and picture; the caption under it is `labels.own`.
+      name: ownAccountId ? person(ownAccountId)?.displayName : undefined,
       avatar: ownAccountId ? person(ownAccountId)?.avatar : undefined,
       state: ringState(authors.find((author) => author.accountId === ownAccountId)),
     }),
