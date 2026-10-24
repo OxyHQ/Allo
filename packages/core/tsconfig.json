@@ -5,6 +5,9 @@
     "lib": ["ES2020", "DOM"],
     "declaration": true,
     "outDir": "./dist",
+    // Inside dist: deleting dist must also delete the build info, or tsc -p
+    // thinks it is up to date and emits nothing (a stale @allo/core shipped).
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
