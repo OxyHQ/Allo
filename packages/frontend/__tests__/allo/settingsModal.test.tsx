@@ -26,9 +26,6 @@ jest.mock('@/components/settings/pages/privacy', () => () => null);
 jest.mock('@/components/settings/pages/devices', () => () => null);
 jest.mock('@/components/settings/pages/backup', () => () => null);
 jest.mock('@/components/settings/pages/privacy/blocked', () => () => null);
-jest.mock('@/components/settings/pages/privacy/restricted', () => () => null);
-jest.mock('@/components/settings/pages/privacy/hidden-words', () => () => null);
-jest.mock('@/components/settings/pages/privacy/profile-visibility', () => () => null);
 
 let settings: AlloSettingsControl;
 function captureSettings(next: AlloSettingsControl) {

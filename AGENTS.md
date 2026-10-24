@@ -453,17 +453,25 @@ instance the fake server is made to list as an unapproved active root.
   profile here is who somebody is plus a button to talk to them, not a feed:
   `components/profile/ProfileIdentity.tsx` draws the person. A conversation's
   details are Bloom's `ChatInfoPanel` (`components/chat/info/ConversationInfo.tsx`).
-- **Privacy settings:** five rows, and the shapes differ on purpose — one switch
-  in the list (online status), one chooser screen (visibility), three list
-  screens (blocked, restricted, hidden words, the first two sharing
-  `components/settings/ModeratedUsersScreen.tsx`). The stored document
-  (`backend/src/models/UserSettings.ts`) still carries Mention's feed fields
-  (`allowTags`, `hide*Counts`); Allo names none of them. **`showOnlineStatus`
-  is the one setting the platform acts on**, and a block now cuts presence in
-  both directions (ADR 0002); `hiddenWords` and `Restrict` are still written
-  and never read, and blocks stop new direct messages and conversation invitations in both
-  directions. They preserve history and existing shared-group membership and messages.
-  Pair transaction locks serialize block changes with sends and invitations.
+- **Privacy settings:** two rows, and both are enforced — one switch in the
+  list (online status) and one list screen (blocked,
+  `components/settings/pages/privacy/blocked.tsx`). **`showOnlineStatus`** is
+  honoured by the presence layer (an account that hides its own presence sees
+  nobody else's), and **blocks** stop new direct messages and conversation
+  invitations in both directions and cut presence both ways (ADR 0002). They
+  preserve history and existing shared-group membership and messages. Pair
+  transaction locks serialize block changes with sends and invitations. Allo
+  shows no setting it does not enforce: profile visibility, restricted
+  profiles and hidden words were removed from the app because nothing read
+  them. **Their storage is left over**: the `user_settings` columns
+  `privacy_profile_visibility`, `privacy_hidden_words` and
+  `privacy_restricted_users`, and the `restricts` table with its
+  `/api/profile/restricts` routes, along with Mention's feed fields
+  (`allowTags`, `hide*Counts`), are still in the backend
+  (`db/schema/social.ts`, `utils/userSettings.ts`, `routes/profileSettings.ts`)
+  and nothing in the frontend reads or writes them (`lib/privacy/api.ts` sends
+  only `showOnlineStatus`, pinned by `__tests__/privacy/api.test.ts`).
+  Dropping them is a `post`-phase migration of its own.
 - **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
   dotted key per entry at the top level, not nested objects.
 

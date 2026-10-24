@@ -5,7 +5,7 @@
  * …) because `schema/social.ts` refuses to store four settings groups as opaque
  * `jsonb`. The API is NESTED, because that is what every client reads — `stores/appearanceStore.ts` reads
  * `appearance.primaryColor` and `profileCustomization.coverImage`,
- * `lib/privacy/api.ts` reads `privacy.hiddenWords`.
+ * `lib/privacy/api.ts` reads `privacy.showOnlineStatus`.
  *
  * So the flattening stops here. This module is the ONE place the two shapes meet:
  * {@link toUserSettingsDto} projects a row outward and

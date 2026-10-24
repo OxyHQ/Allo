@@ -4,15 +4,12 @@ import en from '@/locales/en.json';
 import es from '@/locales/es.json';
 import itIT from '@/locales/it.json';
 
-import { PROFILE_VISIBILITIES } from '@/lib/privacy/api';
-import { profileVisibilityDescriptionKey, profileVisibilityLabelKey } from '@/lib/privacy/labels';
-
 /**
  * That every string the privacy screens and the profile screen put on screen
  * exists in all three languages.
  *
  * Nothing here passes a `defaultValue`, so a missing key renders as its own
- * dotted identifier — a row reading `settings.privacy.hiddenWordDuplicate`. That
+ * dotted identifier — a row reading `settings.privacy.unblockUserConfirm`. That
  * is loud in English and invisible to whoever ships it, because English is the
  * one language that has the key.
  */
@@ -23,19 +20,15 @@ const LOCALES: readonly (readonly [string, Record<string, unknown>])[] = [
   ['it', itIT as Record<string, unknown>],
 ];
 
-/** Every key the five privacy surfaces and the profile screen ask for. */
+/** Every key the two privacy surfaces and the profile screen ask for. */
 const REQUIRED_KEYS: readonly string[] = [
   'settings.privacy.title',
   'settings.privacy.description',
   'settings.privacy.loadError',
   'settings.privacy.updateError',
-  'settings.privacy.privateProfile',
-  'settings.privacy.profileVisibilityUpdated',
   'settings.privacy.showOnlineStatus',
   'settings.privacy.showOnlineStatusDesc',
-  'settings.privacy.restrictedProfiles',
   'settings.privacy.blockedProfiles',
-  'settings.privacy.hiddenWords',
   'settings.privacy.add',
   'settings.privacy.searchTooShort',
   'settings.privacy.noUsersFound',
@@ -51,28 +44,6 @@ const REQUIRED_KEYS: readonly string[] = [
   'settings.privacy.failedToBlockUser',
   'settings.privacy.failedToUnblockUser',
   'settings.privacy.cannotBlockYourself',
-  'settings.privacy.restrictedUsers',
-  'settings.privacy.restrictedUsersDescription',
-  'settings.privacy.searchUsersToRestrict',
-  'settings.privacy.noRestrictedUsers',
-  'settings.privacy.unrestrict',
-  'settings.privacy.unrestrictUserConfirm',
-  'settings.privacy.userRestricted',
-  'settings.privacy.userUnrestricted',
-  'settings.privacy.failedToRestrictUser',
-  'settings.privacy.failedToUnrestrictUser',
-  'settings.privacy.cannotRestrictYourself',
-  'settings.privacy.hiddenWordsDescription',
-  'settings.privacy.noHiddenWords',
-  'settings.privacy.hiddenWordLabel',
-  'settings.privacy.hiddenWordPlaceholder',
-  'settings.privacy.hiddenWordAdded',
-  'settings.privacy.hiddenWordRemoved',
-  'settings.privacy.hiddenWordRemove',
-  'settings.privacy.hiddenWordRemoveConfirm',
-  'settings.privacy.hiddenWordEmpty',
-  'settings.privacy.hiddenWordTooLong',
-  'settings.privacy.hiddenWordDuplicate',
   'profile.about',
   'profile.message',
   'profile.notFound',
@@ -106,6 +77,40 @@ const REMOVED_KEYS: readonly string[] = [
   'settings.privacy.blockedUsersComingSoon',
   'settings.privacy.restrictedUsersComingSoon',
   'settings.privacy.hiddenWordsComingSoon',
+  // Profile visibility, restricted profiles and hidden words: stored, never
+  // enforced, so the rows went rather than promise what the app does not do.
+  'settings.privacy.privateProfile',
+  'settings.privacy.profileVisibilityUpdated',
+  'settings.privacy.public',
+  'settings.privacy.publicDescription',
+  'settings.privacy.followersOnly',
+  'settings.privacy.followersOnlyDescription',
+  'settings.privacy.private',
+  'settings.privacy.privateDescription',
+  'settings.privacy.restrictedProfiles',
+  'settings.privacy.restrictedUsers',
+  'settings.privacy.restrictedUsersDescription',
+  'settings.privacy.searchUsersToRestrict',
+  'settings.privacy.noRestrictedUsers',
+  'settings.privacy.unrestrict',
+  'settings.privacy.unrestrictUserConfirm',
+  'settings.privacy.userRestricted',
+  'settings.privacy.userUnrestricted',
+  'settings.privacy.failedToRestrictUser',
+  'settings.privacy.failedToUnrestrictUser',
+  'settings.privacy.cannotRestrictYourself',
+  'settings.privacy.hiddenWords',
+  'settings.privacy.hiddenWordsDescription',
+  'settings.privacy.noHiddenWords',
+  'settings.privacy.hiddenWordLabel',
+  'settings.privacy.hiddenWordPlaceholder',
+  'settings.privacy.hiddenWordAdded',
+  'settings.privacy.hiddenWordRemoved',
+  'settings.privacy.hiddenWordRemove',
+  'settings.privacy.hiddenWordRemoveConfirm',
+  'settings.privacy.hiddenWordEmpty',
+  'settings.privacy.hiddenWordTooLong',
+  'settings.privacy.hiddenWordDuplicate',
 ];
 
 /** Every placeholder a string interpolates, sorted so two can be compared. */
@@ -113,39 +118,17 @@ function placeholders(text: string): string[] {
   return [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).sort();
 }
 
-/**
- * Both keys for all three visibilities, derived rather than listed.
- *
- * `profileVisibilityLabelKey` is exhaustive over the type, so a fourth value
- * added to the backend's enum arrives here as a missing translation rather than
- * as a row labelled with its own identifier.
- */
-const VISIBILITY_KEYS: readonly string[] = PROFILE_VISIBILITIES.flatMap((visibility) => [
-  profileVisibilityLabelKey(visibility),
-  profileVisibilityDescriptionKey(visibility),
-]);
-
-describe('the privacy screens name three real visibilities', () => {
-  it('offers exactly what the backend accepts', () => {
-    expect([...PROFILE_VISIBILITIES]).toEqual(['public', 'followers_only', 'private']);
-  });
-
-  it('has a distinct label and description for each', () => {
-    expect(new Set(VISIBILITY_KEYS).size).toBe(VISIBILITY_KEYS.length);
-  });
-});
-
 for (const [name, bundle] of LOCALES) {
   describe(`the ${name} translations`, () => {
     it('has every string the privacy and profile screens ask for', () => {
-      const missing = [...REQUIRED_KEYS, ...VISIBILITY_KEYS].filter(
+      const missing = REQUIRED_KEYS.filter(
         (key) => typeof bundle[key] !== 'string' || (bundle[key] as string).length === 0,
       );
 
       expect(missing).toEqual([]);
     });
 
-    it('no longer carries the strings for rows Allo cannot have', () => {
+    it('no longer carries the strings for rows Allo does not have', () => {
       const remaining = REMOVED_KEYS.filter((key) => key in bundle);
 
       expect(remaining).toEqual([]);
@@ -155,7 +138,7 @@ for (const [name, bundle] of LOCALES) {
       const english = en as Record<string, unknown>;
       const mismatched: string[] = [];
 
-      for (const key of [...REQUIRED_KEYS, ...VISIBILITY_KEYS]) {
+      for (const key of REQUIRED_KEYS) {
         const source = english[key];
         const translated = bundle[key];
         if (typeof source !== 'string' || typeof translated !== 'string') continue;
@@ -167,7 +150,7 @@ for (const [name, bundle] of LOCALES) {
       expect(mismatched).toEqual([]);
     });
 
-    it('renders the two strings that interpolate', () => {
+    it('renders the string that interpolates', () => {
       const i18n = createInstance();
       void i18n.init({
         lng: name,
@@ -178,10 +161,6 @@ for (const [name, bundle] of LOCALES) {
       const handle = i18n.t('profile.notFoundSubtitle', { handle: 'alice' });
       expect(handle).not.toContain('{{');
       expect(handle).toContain('alice');
-
-      const word = i18n.t('settings.privacy.hiddenWordRemoveConfirm', { word: 'spoilers' });
-      expect(word).not.toContain('{{');
-      expect(word).toContain('spoilers');
     });
   });
 }
