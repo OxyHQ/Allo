@@ -501,6 +501,17 @@ Measured: the client bundle compiled and the SSR pass failed until the ESM
 mapping landed. Jest needs `ts-mls|@hpke` in `transformIgnorePatterns` for the
 same ESM reason.
 
+**Babel stays the bare preset.** `packages/frontend/babel.config.js` is only
+`@oxy.so/app-preset/babel`: in development that is exactly `babel-preset-expo`,
+which lets Expo's oxc transformer, Noxcturnal
+(`experiments.noxcturnalTransformWorker`, development only), bundle instead of
+Babel; production adds the preset's build-id inliner. One extra plugin or preset
+option sends every file back to Babel. `@/` resolves from `tsconfig.json`
+`paths` (Jest maps it in `moduleNameMapper`), and `babel-preset-expo` adds the
+worklets plugin and the `import.meta` transform itself. `LOG_EVENTS=<file>` on
+an `expo export` lists the files that fell back and why
+(`transform:noxcturnal:fallback`).
+
 **`bun.lock` regeneration.** Always run `bun install` from the **monorepo root**,
 never inside a package: a sub-package install can drop workspace resolution lines
 from `bun.lock` and break CI. The root `packageManager` is the one bun pin:
