@@ -18,8 +18,9 @@ import {
 } from '@oxy.so/bloom/chat-people';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { toast } from '@oxy.so/bloom/toast';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen } from '@oxy.so/bloom/screen';
 
-import { Page } from '@/components/shell/Page';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { logger } from '@/utils/logger';
@@ -162,27 +163,31 @@ export default function NewConversationRoute() {
 
   if (search.unavailable)
     return (
-      <Page title={t('chat.new.title')} back="always" scroll={false}>
+      <Screen scroll="none" header={<PageHeader title={t('chat.new.title')} />}>
         <ConversationAccessState state="unavailable" onRetry={search.retry} />
-      </Page>
+      </Screen>
     );
 
   return (
-    <Page
-      title={adding ? t('chat.group.addMember') : t('chat.new.title')}
-      back="always"
-      scroll={false}
-      actions={
-        <Button
-          size="sm"
-          disabled={count === 0}
-          loading={busy}
-          onPress={() => void submit()}
-          tone="accent"
-          appearance="solid"
-        >
-          {submitLabel}
-        </Button>
+    // The contact list scrolls itself, under the header the Screen reserves.
+    <Screen
+      scroll="none"
+      header={
+        <PageHeader
+          title={adding ? t('chat.group.addMember') : t('chat.new.title')}
+          actions={
+            <Button
+              size="sm"
+              disabled={count === 0}
+              loading={busy}
+              onPress={() => void submit()}
+              tone="accent"
+              appearance="solid"
+            >
+              {submitLabel}
+            </Button>
+          }
+        />
       }
     >
       <View style={styles.search}>
@@ -240,7 +245,7 @@ export default function NewConversationRoute() {
           )
         }
       />
-    </Page>
+    </Screen>
   );
 }
 

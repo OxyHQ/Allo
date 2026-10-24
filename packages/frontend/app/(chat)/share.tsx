@@ -16,8 +16,9 @@ import {
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
 import { toast } from '@oxy.so/bloom/toast';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen } from '@oxy.so/bloom/screen';
 
-import { Page } from '@/components/shell/Page';
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch } from '@/hooks/useUserSearch';
@@ -193,29 +194,33 @@ export default function ShareRoute() {
 
   if (text.length === 0)
     return (
-      <Page title={t('share.title')} back="always" scroll={false}>
+      <Screen scroll="none" header={<PageHeader title={t('share.title')} />}>
         <View style={styles.empty}>
           <ChatEmptyState title={t('share.empty.title')} description={t('share.empty.body')} />
         </View>
-      </Page>
+      </Screen>
     );
 
   return (
-    <Page
-      title={t('share.title')}
-      back="always"
-      scroll={false}
-      actions={
-        <Button
-          size="sm"
-          disabled={picked.length === 0}
-          loading={busy}
-          onPress={() => void submit()}
-          tone="accent"
-          appearance="solid"
-        >
-          {t('share.send')}
-        </Button>
+    // The contact list scrolls itself, under the header the Screen reserves.
+    <Screen
+      scroll="none"
+      header={
+        <PageHeader
+          title={t('share.title')}
+          actions={
+            <Button
+              size="sm"
+              disabled={picked.length === 0}
+              loading={busy}
+              onPress={() => void submit()}
+              tone="accent"
+              appearance="solid"
+            >
+              {t('share.send')}
+            </Button>
+          }
+        />
       }
     >
       <View style={styles.search}>
@@ -269,7 +274,7 @@ export default function ShareRoute() {
           )
         }
       />
-    </Page>
+    </Screen>
   );
 }
 

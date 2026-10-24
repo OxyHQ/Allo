@@ -28,17 +28,18 @@ never patched here.
 
 | Route | Screen |
 |---|---|
-| `(chat)/_layout.tsx` | Bloom `AppShell variant="split"` owns the viewport, rail/drawer, pane surfaces and resizing. From 768px, `ConversationList` sits beside the routed detail; below it, the detail slot holds the phone stack and the home route supplies the list. Existing lists own scrolling (`paneScroll={false}`). `ConversationInfo` is the optional third pane from 1100px. Settings routes bridge to `AlloSettingsProvider`/Bloom `SettingsModal` and never replace the conversation list. `CallPill` is mounted here, so a minimised call survives walking around |
-| `(chat)/index.tsx` | Phone: `ConversationList`. Wide: the empty detail pane |
+| `(chat)/_layout.tsx` | Bloom's `AppShell` over Allo's destinations (`components/navigation/AlloNavigation.tsx`, a Bloom `TabPagerProvider`): the shell draws the rail's rows, the phone's bottom bar (only while a page is in front) and the new-chat floating action from them; the rail's foot carries the own profile and Settings. From 768px, `ConversationList` sits beside the routed detail; below it, the detail slot holds the phone stack (`stackSceneLayout`, so a covered scene's Screens go inactive) and the chats page supplies the list. `ConversationInfo` is the optional third pane from 1100px. Settings routes bridge to `AlloSettingsProvider`/Bloom `SettingsModal` and never replace the conversation list. `CallPill` is mounted here, so a minimised call survives walking around |
+| `(chat)/(tabs)/_layout.tsx` | Bloom's `TabPagerLayout`: the three pages side by side, swiped between on a phone (`react-native-pager-view`), each kept mounted |
+| `(chat)/(tabs)/index.tsx` | Phone: `ConversationList`. Wide: the empty detail pane |
 | `(chat)/c/[id]/index.tsx` | `ConversationScreen`; an account id opens (creates) the DM |
 | `(chat)/c/[id]/info.tsx` | `ConversationInfo` as a screen (phone) |
 | `(chat)/new.tsx` | People picker: DM, group, or `?addTo=<id>` to add members |
 | `(chat)/share.tsx` | `/share?text=<message>` (`allo://share?text=…`, `https://allo.you/share?text=…`): another app's "send" (Mention's on a post). Previews the message as a bubble, then recent conversations and a people search; sends via `messages.send`, a person through `useCreateConversation` (the DM). One destination opens it |
 | `(chat)/[username].tsx` | `/@handle` profile; otherwise 404 |
 | `(chat)/dm/[username].tsx` | `/dm/handle`: resolves the handle and replaces with `/c/<account id>` (the DM) |
-| `(chat)/calls.tsx` | Call history, and the banner an arriving call would use |
+| `(chat)/(tabs)/calls.tsx` | Call history, and the banner an arriving call would use |
 | `(chat)/c/[id]/call.tsx` | The call itself: `IncomingCallScreen` while ringing, else `CallScreen` |
-| `(chat)/updates.tsx` | Status updates. `/updates`, not `/status`: Metro's dev server answers `/status` itself, so that route can never be opened while developing |
+| `(chat)/(tabs)/updates.tsx` | Status updates. `/updates`, not `/status`: Metro's dev server answers `/status` itself, so that route can never be opened while developing |
 | `(chat)/settings/*` | Appearance, language, privacy, devices, backup |
 | `(auth)/index.tsx` | Sign in with Oxy. A link opened while signed out is kept and followed after sign-in (`lib/navigation/usePendingHref.ts`) |
 
@@ -139,6 +140,8 @@ bar. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
 - No colour literals; `StyleSheet` with theme colours.
 - Every string through `t()`; bundles are flat dotted keys.
 - Navigate with literal paths so `__tests__/routes/navigationTargets.test.ts` can see them.
+- Every page is a Bloom `Screen`: its `PageHeader` in `header` (Back comes from `BloomProvider back`; a page under the tab pager has none), its content in `ScreenScrollView` (padding as `contentContainerClassName`, which the chrome footprint does not override), or `scroll="none"` when the content scrolls itself (the transcript, `ContactList`). The app action is the shell's `primaryAction`; a page's own would be `Screen primaryAction`. Pressing the page in front again is Bloom's reselect (`Screen reselect`).
+- "Can the reader see it?" is Bloom's `useScreenVisible()` (the Screen in front and the app in the foreground), never `useIsFocused`, `useFocusEffect` or `AppState` per feature.
 
 ### Bloom navigation and settings
 

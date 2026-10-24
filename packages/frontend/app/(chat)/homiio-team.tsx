@@ -5,8 +5,9 @@ import { useAlloClient } from '@allo/react';
 import { HomiioTeamClient } from '@oxy.so/homiio-sdk';
 import { Button } from '@oxy.so/bloom/button';
 import { Text } from '@oxy.so/bloom/typography';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { useTranslation } from 'react-i18next';
-import { Page } from '@/components/shell/Page';
 import { completeHomiioTeam } from '@/lib/homiio/team';
 
 export default function HomiioTeamRoute() {
@@ -55,25 +56,30 @@ export default function HomiioTeamRoute() {
     }
   };
   return (
-    <Page title={t('homiio.team.title')}>
-      <Text>
-        {t(
-          chosen === 'add'
-            ? 'homiio.team.addWarning'
-            : chosen === 'remove'
-              ? 'homiio.team.removeWarning'
-              : 'homiio.team.description',
-        )}
-      </Text>
-      {failed ? <Text>{t('homiio.team.retry')}</Text> : null}
-      <Button
-        disabled={!valid || busy}
-        onPress={() => {
-          void proceed();
-        }}
+    <Screen header={<PageHeader title={t('homiio.team.title')} />}>
+      <ScreenScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerClassName="gap-4 px-4 pb-8"
       >
-        {t(busy ? 'homiio.team.working' : 'homiio.team.continue')}
-      </Button>
-    </Page>
+        <Text>
+          {t(
+            chosen === 'add'
+              ? 'homiio.team.addWarning'
+              : chosen === 'remove'
+                ? 'homiio.team.removeWarning'
+                : 'homiio.team.description',
+          )}
+        </Text>
+        {failed ? <Text>{t('homiio.team.retry')}</Text> : null}
+        <Button
+          disabled={!valid || busy}
+          onPress={() => {
+            void proceed();
+          }}
+        >
+          {t(busy ? 'homiio.team.working' : 'homiio.team.continue')}
+        </Button>
+      </ScreenScrollView>
+    </Screen>
   );
 }

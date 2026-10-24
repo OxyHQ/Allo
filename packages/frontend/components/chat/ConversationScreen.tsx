@@ -1,6 +1,5 @@
 import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
-import { Page } from '@/components/shell/Page';
 import { useAlloClient } from '@allo/react';
 import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
 import {
@@ -26,6 +25,8 @@ import { RiMore2Line } from '@oxy.so/bloom/icons/RiMore2Line';
 import { RiPencilLine } from '@oxy.so/bloom/icons/RiPencilLine';
 import { RiPushpinLine } from '@oxy.so/bloom/icons/RiPushpinLine';
 import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, useScreenBack } from '@oxy.so/bloom/screen';
 import { toast } from '@oxy.so/bloom/toast';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -114,10 +115,14 @@ export function ConversationScreen({
   draft?: string;
 }) {
   const [initialDraft] = useState(draft);
+  // The transcript and the composer own their scrolling and the keyboard; the
+  // Screen is what tells everything below whether the reader can see it.
   return (
-    <ConversationReadGate conversationId={conversationId}>
-      <AuthorizedConversationScreen conversationId={conversationId} draft={initialDraft} />
-    </ConversationReadGate>
+    <Screen scroll="none">
+      <ConversationReadGate conversationId={conversationId}>
+        <AuthorizedConversationScreen conversationId={conversationId} draft={initialDraft} />
+      </ConversationReadGate>
+    </Screen>
   );
 }
 
@@ -130,6 +135,7 @@ function AuthorizedConversationScreen({
 }) {
   const client = useAlloClient();
   const router = useRouter();
+  const back = useScreenBack();
   const split = useSplitLayout();
   // Below the third column the info is a route of its own, so the press always lands somewhere.
   const infoBeside = useInfoPane();
@@ -462,14 +468,15 @@ function AuthorizedConversationScreen({
   if (!view) return null;
   if (view.access && view.access !== 'allowed')
     return (
-      <Page title={t('supervision.conversation')} scroll={false}>
+      <View style={styles.root}>
+        <PageHeader title={t('supervision.conversation')} onBack={split ? undefined : back} />
         <ConversationAccessState
           state={view.access}
           onRetry={() => {
             void client.conversations.refresh().catch(() => undefined);
           }}
         />
-      </Page>
+      </View>
     );
 
   const openInfo = () => (infoBeside ? toggleInfo() : router.push(`/c/${conversationId}/info`));
@@ -517,9 +524,8 @@ function AuthorizedConversationScreen({
           typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
           connecting={sync === 'offline'}
           connectingLabel={t('chat.connecting')}
-          onPressBack={
-            split ? undefined : () => (router.canGoBack() ? router.back() : router.replace('/'))
-          }
+          // Beside the list there is nothing to go back to on screen.
+          onPressBack={split ? undefined : back}
           backLabel={t('common.back')}
           onPressCall={() => startCall('voice')}
           onPressVideoCall={() => startCall('video')}

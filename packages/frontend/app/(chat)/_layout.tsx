@@ -1,14 +1,11 @@
-import { useTotalUnread } from '@allo/react';
 import { AppShell, AppShellPanel, AppShellPanels } from '@oxy.so/bloom/app-shell';
-import { RiChat3Fill } from '@oxy.so/bloom/icons/RiChat3Fill';
-import { RiChat3Line } from '@oxy.so/bloom/icons/RiChat3Line';
-import { RiPhoneFill } from '@oxy.so/bloom/icons/RiPhoneFill';
-import { RiPhoneLine } from '@oxy.so/bloom/icons/RiPhoneLine';
+import { RiChatNewLine } from '@oxy.so/bloom/icons/RiChatNewLine';
 import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
-import { RiSlideshow3Line } from '@oxy.so/bloom/icons/RiSlideshow3Line';
 import { RiUser3Fill } from '@oxy.so/bloom/icons/RiUser3Fill';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
+import { stackSceneLayout } from '@oxy.so/bloom/panel-routing/expo-router';
+import { useTabPager } from '@oxy.so/bloom/tab-pager';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { Slot, Stack, usePathname, useRouter } from 'expo-router';
@@ -16,11 +13,12 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
-import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { LogoIcon } from '@/assets/logo';
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
 import { ConversationList } from '@/components/chat/list/ConversationList';
+import { AlloNavigation } from '@/components/navigation/AlloNavigation';
 import { CallPill } from '@/components/phase2/CallPill';
+import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { AlloSettingsProvider } from '@/components/settings/AlloSettingsProvider';
 import { useAlloSettings } from '@/components/settings/context';
 import { SPLIT_FROM, useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
@@ -29,21 +27,24 @@ import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { conversationIdFromPath } from '@/utils/routeUtils';
 
 /**
- * The signed-in app. On a phone, a stack: the list, and each screen pushed over
- * it. From `SPLIT_FROM` up, the navigation rail flush against Bloom's
- * `AppShellPanels` layout — list pane, the route as the conversation pane, and a
- * conversation's info beside it once a third column fits.
+ * The signed-in app: Bloom's app shell over Allo's destinations
+ * (`AlloNavigation`). On a phone, a stack: the pages (chats, updates, calls)
+ * under Bloom's bottom bar, and each screen pushed over them. From `SPLIT_FROM`
+ * up, the navigation rail flush against Bloom's `AppShellPanels` layout — list
+ * pane, the route as the conversation pane, and a conversation's info beside it
+ * once a third column fits.
  */
 export default function ChatLayout() {
-  const split = useSplitLayout();
   return (
     // The pill draws nothing unless a call is minimised, and it lives here so a
     // minimised call survives walking around the app.
     <AlloSettingsProvider>
-      <View style={styles.app}>
-        <SplitShell split={split} />
-        <CallPill />
-      </View>
+      <AlloNavigation>
+        <View style={styles.app}>
+          <SplitShell split={useSplitLayout()} />
+          <CallPill />
+        </View>
+      </AlloNavigation>
     </AlloSettingsProvider>
   );
 }
@@ -56,7 +57,7 @@ function SplitShell({ split }: { split: boolean }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { user } = useOxy();
-  const unread = useTotalUnread();
+  const { activePage } = useTabPager();
   const infoBeside = useInfoPane();
   const infoOpen = useChatPaneStore((state) => state.infoOpen);
   const closeInfo = useChatPaneStore((state) => state.closeInfo);
@@ -64,44 +65,13 @@ function SplitShell({ split }: { split: boolean }) {
   const conversationId = conversationIdFromPath(pathname);
 
   const ownProfile = profileHref(user?.username);
-  const onProfile = Boolean(ownProfile) && pathname === ownProfile;
-  const selected = onProfile
-    ? 'profile'
-    : pathname.startsWith('/calls')
-      ? 'calls'
-      : pathname.startsWith('/updates')
-        ? 'updates'
-        : 'chats';
+  // The destination a pushed route belongs to: a conversation is a chat. On a
+  // page, Bloom selects the page itself.
+  const selected =
+    ownProfile && pathname === ownProfile ? 'profile' : conversationId ? 'index' : undefined;
 
-  // The rail carries navigation only (an account block belongs to the panel
-  // variant), so the person's own profile is a foot item rather than a card.
-  const items = useMemo(
-    () => [
-      {
-        key: 'chats',
-        label: t('chat.title'),
-        icon: RiChat3Line,
-        activeIcon: RiChat3Fill,
-        badge: unread > 0 ? unread : undefined,
-        onPress: () => router.push('/'),
-      },
-      {
-        key: 'calls',
-        label: t('calls.title'),
-        icon: RiPhoneLine,
-        activeIcon: RiPhoneFill,
-        onPress: () => router.push('/calls'),
-      },
-      {
-        key: 'updates',
-        label: t('stories.title'),
-        icon: RiSlideshow3Line,
-        onPress: () => router.push('/updates'),
-      },
-    ],
-    [router, t, unread],
-  );
-
+  // The rail's rows are the destinations; its foot carries the person's own
+  // profile (an account block belongs to the panel variant) and Settings.
   const secondaryItems = useMemo(
     () => [
       ...(ownProfile
@@ -134,6 +104,15 @@ function SplitShell({ split }: { split: boolean }) {
       scroll="fixed"
       header={null}
       navFrom={SPLIT_FROM}
+      // The bar's FAB and the rail's compose row: a new conversation.
+      primaryAction={{
+        icon: RiChatNewLine,
+        accessibilityLabel: t('chat.new.title'),
+        onPress: () => router.push('/new'),
+      }}
+      // The bar belongs to the pages; a conversation or a pushed screen has the
+      // whole height (and the composer the bottom edge).
+      bottomBar={activePage ? undefined : null}
       sidebar={{
         variant: 'rail',
         showSearch: false,
@@ -141,7 +120,6 @@ function SplitShell({ split }: { split: boolean }) {
           icon: <LogoIcon size={28} color={theme.colors.primary} />,
           accessibilityLabel: 'Allo',
         },
-        items,
         secondaryItems,
         selected,
       }}
@@ -171,6 +149,10 @@ function SplitShell({ split }: { split: boolean }) {
                   headerShown: false,
                   contentStyle: { backgroundColor: 'transparent' },
                 }}
+                // A covered scene's Screens go inactive (reselect, status bar,
+                // floating action and visibility yield to the one on top) and
+                // leave the accessibility tree.
+                screenLayout={stackSceneLayout}
               />
             )}
           </NavigationTheme>

@@ -164,6 +164,7 @@
         "react-native-css": "3.1.0-rc.0",
         "react-native-gesture-handler": "~3.3.0",
         "react-native-keyboard-controller": "1.22.7",
+        "react-native-pager-view": "9.0.7",
         "react-native-reanimated": "4.7.1",
         "react-native-safe-area-context": "~5.10.1",
         "react-native-screens": "~4.30.0",
@@ -2470,6 +2471,8 @@
     "react-native-keyboard-controller": ["react-native-keyboard-controller@1.22.7", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.2.1" }, "peerDependencies": { "react": "*", "react-native": "*", "react-native-reanimated": ">=3.0.0" } }, "sha512-IBR9z6Nl/iDLRfiv1zN9QQroOXAwYMugeAjVDb+CFbRBNC8fayXlHTBbshVcWc4j95Itsv+1/FgwfxKnIn1Vmg=="],
 
     "react-native-nitro-modules": ["react-native-nitro-modules@0.36.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-kBv/VvKqAmkXAvP1DxJMC9b/fRhh7JdSO4EUnPP46hJjrIFeFR8AwKm8mYaKZEuF014M/TVdv2vomVUW0umsQQ=="],
+
+    "react-native-pager-view": ["react-native-pager-view@9.0.7", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-71kLSrjZy8onJTXkoAWF/0UtInkF+xqmqudiV/axZe8PVGG+CK6jVdh8NYFJLKetQ6UQ9ScPNliagpvLBp1xkQ=="],
 
     "react-native-qrcode-svg": ["react-native-qrcode-svg@6.3.21", "", { "dependencies": { "prop-types": "^15.8.0", "qrcode": "^1.5.4", "text-encoding": "^0.7.0" }, "peerDependencies": { "react": "*", "react-native": ">=0.63.4", "react-native-svg": ">=14.0.0" } }, "sha512-6vcj4rcdpWedvphDR+NSJcudJykNuLgNGFwm2p4xYjR8RdyTzlrELKI5LkO4ANS9cQUbqsfkpippPv64Q2tUtA=="],
 

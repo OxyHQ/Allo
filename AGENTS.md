@@ -98,7 +98,7 @@ packages/
 
 The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
 chat-screen, message-bubble, message-media, chat-composer, chat-people) in
-Bloom's `AppShell` with `AppShellPanels`, which owns the Sidebar rail/drawer and pane surfaces; settings use Bloom's `SettingsModal`;
+Bloom's `AppShell` with `AppShellPanels`, which owns the Sidebar rail/drawer and pane surfaces, composed from the app's destinations (a Bloom `TabPagerProvider`: the rail's rows, the phone's bottom bar and pager, the new-chat floating action); every page is a Bloom `Screen`; settings use Bloom's `SettingsModal`;
 `packages/frontend/ARCHITECTURE.md` maps every screen.
 
 **Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),

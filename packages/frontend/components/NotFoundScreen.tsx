@@ -2,7 +2,7 @@ import { Button } from '@oxy.so/bloom/button';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiCompass3Line } from '@oxy.so/bloom/icons/RiCompass3Line';
-import { useTheme } from '@oxy.so/bloom/theme';
+import { Screen } from '@oxy.so/bloom/screen';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
@@ -11,26 +11,27 @@ import { StyleSheet, View } from 'react-native';
 export default function NotFoundScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const theme = useTheme();
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <ChatEmptyState
-        illustration={<IconCircle icon={RiCompass3Line} />}
-        title={t('notFound.title')}
-        description={t('notFound.description')}
-        action={
-          <View style={styles.actions}>
-            {router.canGoBack() ? (
-              <Button onPress={() => router.back()} tone="neutral" appearance="outline">
-                {t('notFound.goBack')}
-              </Button>
-            ) : null}
-            <Button onPress={() => router.replace('/')}>{t('notFound.goHome')}</Button>
-          </View>
-        }
-      />
-    </View>
+    <Screen scroll="none">
+      <View style={styles.root}>
+        <ChatEmptyState
+          illustration={<IconCircle icon={RiCompass3Line} />}
+          title={t('notFound.title')}
+          description={t('notFound.description')}
+          action={
+            <View style={styles.actions}>
+              {router.canGoBack() ? (
+                <Button onPress={() => router.back()} tone="neutral" appearance="outline">
+                  {t('notFound.goBack')}
+                </Button>
+              ) : null}
+              <Button onPress={() => router.replace('/')}>{t('notFound.goHome')}</Button>
+            </View>
+          }
+        />
+      </View>
+    </Screen>
   );
 }
 

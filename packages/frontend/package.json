@@ -24,7 +24,8 @@
     ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/$1",
-      "^@oxy\\.so/bloom/surfaces$": "<rootDir>/__mocks__/bloom-surfaces.js"
+      "^@oxy\\.so/bloom/surfaces$": "<rootDir>/__mocks__/bloom-surfaces.js",
+      "^@oxy\\.so/bloom/screen$": "<rootDir>/__mocks__/bloom-screen.js"
     }
   },
   "expo": {
@@ -109,6 +110,7 @@
     "react-native-css": "3.1.0-rc.0",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-keyboard-controller": "1.22.7",
+    "react-native-pager-view": "9.0.7",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",

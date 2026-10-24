@@ -13,12 +13,14 @@ import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { StoryViewerOverlay } from '@/components/phase2/StoryViewerOverlay';
-import { Page } from '@/components/shell/Page';
 import { useChatContext } from '@/hooks/useChatContext';
 import { readAttachmentBytes } from '@/lib/allo/attachmentBytes';
 import { pickMediaAttachments } from '@/lib/chat/attachments';
 import { ringState, statusAgeLabel, statusAuthors, statusRemainingLabel } from '@/lib/statuses';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
+import { PageHeader } from '@oxy.so/bloom/page-header';
+import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { logger } from '@/utils/logger';
 
 /**
@@ -117,54 +119,66 @@ export default function UpdatesScreen() {
 
   return (
     <>
-      <Page title={t('stories.title')}>
-        <View style={styles.strip}>
-          <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
-        </View>
+      <Screen
+        header={
+          <PageHeader
+            title={t('stories.title')}
+            leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
+          />
+        }
+      >
+        <ScreenScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="gap-4 px-4 pb-8"
+        >
+          <View style={styles.strip}>
+            <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
+          </View>
 
-        <View style={styles.list}>
-          <Text variant="caption-1-semibold" style={{ color: theme.colors.textSecondary }}>
-            {t('stories.recent')}
-          </Text>
-          {authors.length === 0 ? (
-            <Muted style={styles.empty}>{t('stories.empty')}</Muted>
-          ) : (
-            authors.map((author) => {
-              const who = person(author.accountId);
-              const name = author.mine
-                ? t('stories.own')
-                : (who?.displayName ?? t('stories.someone'));
-              return (
-                <Item
-                  key={author.accountId}
-                  title={name}
-                  // i18next picks `stories.updateCount_one` or `_other` from `count`.
-                  subtitle={t('stories.updateCount', {
-                    count: author.statuses.length,
-                    age: statusAgeLabel(author.statuses[0].createdAt, now, t),
-                  })}
-                  leading={
-                    <StoryRing state={ringState(author)} size={40}>
-                      <Avatar source={who?.avatar} name={name} size={40} />
-                    </StoryRing>
-                  }
-                  onPress={() => open(author.accountId)}
-                  onLongPress={author.mine ? () => void remove(author.statuses[0].id) : undefined}
-                  accessibilityLabel={t('stories.openOf', { name })}
-                />
-              );
-            })
-          )}
-        </View>
-
-        <Muted style={styles.expiry}>
-          {authors[0]?.mine
-            ? t('stories.yoursExpire', {
-                remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
+          <View style={styles.list}>
+            <Text variant="caption-1-semibold" style={{ color: theme.colors.textSecondary }}>
+              {t('stories.recent')}
+            </Text>
+            {authors.length === 0 ? (
+              <Muted style={styles.empty}>{t('stories.empty')}</Muted>
+            ) : (
+              authors.map((author) => {
+                const who = person(author.accountId);
+                const name = author.mine
+                  ? t('stories.own')
+                  : (who?.displayName ?? t('stories.someone'));
+                return (
+                  <Item
+                    key={author.accountId}
+                    title={name}
+                    // i18next picks `stories.updateCount_one` or `_other` from `count`.
+                    subtitle={t('stories.updateCount', {
+                      count: author.statuses.length,
+                      age: statusAgeLabel(author.statuses[0].createdAt, now, t),
+                    })}
+                    leading={
+                      <StoryRing state={ringState(author)} size={40}>
+                        <Avatar source={who?.avatar} name={name} size={40} />
+                      </StoryRing>
+                    }
+                    onPress={() => open(author.accountId)}
+                    onLongPress={author.mine ? () => void remove(author.statuses[0].id) : undefined}
+                    accessibilityLabel={t('stories.openOf', { name })}
+                  />
+                );
               })
-            : t('stories.expiry')}
-        </Muted>
-      </Page>
+            )}
+          </View>
+
+          <Muted style={styles.expiry}>
+            {authors[0]?.mine
+              ? t('stories.yoursExpire', {
+                  remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
+                })
+              : t('stories.expiry')}
+          </Muted>
+        </ScreenScrollView>
+      </Screen>
       {viewing === null ? null : (
         <StoryViewerOverlay
           authors={authors}
