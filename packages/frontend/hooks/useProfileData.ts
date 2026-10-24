@@ -1,10 +1,14 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useOxy } from '@oxy.so/services/ui/client';
 import type { User } from '@oxy.so/core';
 
-import { useAppearanceStore, type UserAppearance } from '@/stores/appearanceStore';
+import {
+  fetchProfileAppearance,
+  profileAppearanceQueryKey,
+  type ProfileAppearance,
+} from '@/lib/profile/appearance';
 import { getHttpStatus } from '@/utils/errors';
 
 /**
@@ -54,7 +58,10 @@ export const profileQueryKeys = {
 const PROFILE_STALE_TIME_MS = 5 * 60 * 1000;
 
 /** The display name, honouring the override the user set in Allo's own settings. */
-function computeDesign(profile: User, appearance: UserAppearance | undefined): ProfileDesign {
+function computeDesign(
+  profile: User,
+  appearance: ProfileAppearance | null | undefined,
+): ProfileDesign {
   const customization = appearance?.profileCustomization;
   return {
     displayName: customization?.displayName || profile.name?.displayName || profile.username || '',
@@ -88,23 +95,14 @@ export function useProfileData(username?: string): {
   const profile = query.data;
   const userId = profile?.id;
 
-  const appearance = useAppearanceStore((state) => (userId ? state.byUserId[userId] : undefined));
-  const loadForUser = useAppearanceStore((state) => state.loadForUser);
-
-  /**
-   * Allo's own customization for this account, which lives in a Zustand store
-   * outside React and is shared with `useAvatarShape` and the theme.
-   *
-   * An Effect because that is what synchronising with an external store is: the
-   * store caches per user id and ignores a repeat, so this settles after one
-   * request per profile. Putting the same document in the query cache as well
-   * would give the avatar shape and the cover photo two sources that disagree.
-   */
-  useEffect(() => {
-    if (userId) {
-      void loadForUser(userId);
-    }
-  }, [userId, loadForUser]);
+  // Allo's own customization (display name, cover). Decoration: a failed read
+  // draws the Oxy profile as it is.
+  const { data: appearance } = useQuery({
+    queryKey: profileAppearanceQueryKey(userId ?? ''),
+    queryFn: () => fetchProfileAppearance(userId ?? ''),
+    enabled: Boolean(userId),
+    staleTime: PROFILE_STALE_TIME_MS,
+  });
 
   const data = useMemo<ProfileData | null>(() => {
     if (!profile) return null;

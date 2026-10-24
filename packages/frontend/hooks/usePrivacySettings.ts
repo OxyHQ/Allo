@@ -29,11 +29,15 @@ import {
  * The keys are exported because invalidation is the entire mechanism by which
  * that happens, and a key typed as a literal in four places is a key that will be
  * misspelled in one of them.
+ *
+ * They carry the account, so an account switch never shows the previous
+ * account's settings or lists, and their root is the app's own: `privacy` is
+ * the SDK's, which it keeps on disk for the device.
  */
-
 export const privacyQueryKeys = {
-  settings: ['privacy', 'settings'] as const,
-  moderated: (list: ModerationList) => ['privacy', 'moderated', list] as const,
+  settings: (accountId: string | undefined) => ['alloPrivacy', accountId, 'settings'] as const,
+  moderated: (accountId: string | undefined, list: ModerationList) =>
+    ['alloPrivacy', accountId, 'moderated', list] as const,
 };
 
 /**
@@ -50,8 +54,9 @@ export function useMyPrivacySettings(): {
   saved: boolean;
   failed: boolean;
 } {
+  const { user } = useOxy();
   const query = useQuery({
-    queryKey: privacyQueryKeys.settings,
+    queryKey: privacyQueryKeys.settings(user?.id),
     queryFn: fetchMyPrivacySettings,
   });
 
@@ -73,13 +78,15 @@ export function useMyPrivacySettings(): {
  */
 export function useUpdatePrivacySettings() {
   const queryClient = useQueryClient();
+  const { user } = useOxy();
+  const key = privacyQueryKeys.settings(user?.id);
 
   return useMutation({
     mutationFn: (patch: Partial<AlloPrivacySettings>) => updateMyPrivacySettings(patch),
     onMutate: async (patch) => {
-      await queryClient.cancelQueries({ queryKey: privacyQueryKeys.settings });
-      const previous = queryClient.getQueryData<AlloPrivacySettings>(privacyQueryKeys.settings);
-      queryClient.setQueryData<AlloPrivacySettings>(privacyQueryKeys.settings, {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<AlloPrivacySettings>(key);
+      queryClient.setQueryData<AlloPrivacySettings>(key, {
         ...(previous ?? DEFAULT_PRIVACY_SETTINGS),
         ...patch,
       });
@@ -87,11 +94,11 @@ export function useUpdatePrivacySettings() {
     },
     onError: (_error, _patch, context) => {
       if (context?.previous !== undefined) {
-        queryClient.setQueryData(privacyQueryKeys.settings, context.previous);
+        queryClient.setQueryData(key, context.previous);
       }
     },
     onSuccess: (settings) => {
-      queryClient.setQueryData(privacyQueryKeys.settings, settings);
+      queryClient.setQueryData(key, settings);
     },
   });
 }
@@ -139,17 +146,18 @@ export function useModeratedUsers(list: ModerationList): {
   loading: boolean;
   failed: boolean;
 } {
-  const { oxyServices } = useOxy();
+  const { oxyServices, user } = useOxy();
+  const listKey = privacyQueryKeys.moderated(user?.id, list);
 
   const ids = useQuery({
-    queryKey: privacyQueryKeys.moderated(list),
+    queryKey: listKey,
     queryFn: () => fetchModeratedUserIds(list),
   });
 
   const idList = ids.data;
 
   const profiles = useQuery({
-    queryKey: ['privacy', 'moderated', list, 'profiles', idList ?? []] as const,
+    queryKey: [...listKey, 'profiles', idList ?? []] as const,
     queryFn: () => oxyServices.users.getMany([...(idList ?? [])]),
     enabled: idList !== undefined && idList.length > 0,
   });
@@ -169,20 +177,22 @@ export function useModeratedUsers(list: ModerationList): {
 
 export function useAddModeratedUser(list: ModerationList) {
   const queryClient = useQueryClient();
+  const { user } = useOxy();
   return useMutation({
     mutationFn: (userId: string) => addModeratedUser(list, userId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(list) });
+      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(user?.id, list) });
     },
   });
 }
 
 export function useRemoveModeratedUser(list: ModerationList) {
   const queryClient = useQueryClient();
+  const { user } = useOxy();
   return useMutation({
     mutationFn: (userId: string) => removeModeratedUser(list, userId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(list) });
+      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.moderated(user?.id, list) });
     },
   });
 }

@@ -469,12 +469,24 @@ instance the fake server is made to list as an unapproved active root.
 
 ## Theming
 
-Bloom's, and nothing else. `BloomProvider` in `app/_layout.tsx` takes `mode`
-and `colorPreset` from the account's appearance settings
-(`stores/appearanceStore.ts`, through `lib/theme.ts`, which maps a stored name
-Bloom does not know to Allo's `green`). Every colour is `useTheme().colors.*`
-from `@oxy.so/bloom/theme`; never a literal. There are no per-conversation
-themes and no app colour tables.
+Bloom's, and nothing else. `BloomProvider` in `app/_layout.tsx` keeps this
+device's last mode and colour (`persistKey`/`storage` from `lib/theme.ts`), so a
+cold start paints them at once, and the Oxy account's portable theme lands on
+top through the SDK's `useAccountTheme` (the colour always; the mode while
+Settings → Appearance → "Follow my Oxy account" is on, which
+`useAccountThemeControls` writes back to the account). Allo's green is the
+default for a signed-out visitor. Bloom owns the native status bar; the app
+renders no `StatusBar`. Every colour is `useTheme().colors.*` from
+`@oxy.so/bloom/theme`; never a literal. There are no per-conversation themes
+and no app colour tables.
+
+**OxyProvider owns the React Query client.** Do not wrap it in a second
+`QueryClientProvider`: the SDK's provider shadows it, so the outer client and
+its options were never used. App query keys carry the account
+(`user?.id`) and use roots of their own: `users` and `privacy` are the SDK's,
+which it keeps on disk for the device. Nothing on the chat path is persisted
+through React Query (the people layer stays in memory, like every other chat
+read outside `@allo/core`'s encrypted store).
 
 ## Dependency gotchas
 

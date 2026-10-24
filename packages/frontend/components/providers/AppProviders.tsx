@@ -4,14 +4,12 @@
  * Memoized to prevent unnecessary re-renders
  */
 
-import React, { memo, useMemo } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type React from 'react';
+import { memo } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { OxyProvider, useOxy } from '@oxy.so/services/ui/client';
-import { ImageResolverProvider, type ImageResolver } from '@oxy.so/bloom/image-resolver';
+import { OxyProvider } from '@oxy.so/services/ui/client';
 import { ConnectionStatusToasts } from '@oxy.so/bloom/connection-status';
 import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
 
@@ -36,28 +34,6 @@ configureLottieWeb();
 
 interface AppProvidersProps {
   children: React.ReactNode;
-  queryClient: QueryClient;
-}
-
-/**
- * App-wide media chokepoint for Bloom `Avatar`/image components.
- *
- * Registers a single `ImageResolverProvider` whose resolver turns an Oxy file
- * id (plus optional rendition variant) into the canonical Oxy media URL via
- * `oxyServices.assets.publicUrl` — the ONE place a media URL is built. Any
- * Bloom surface that renders `Avatar source={<fileId>} variant="thumb"` (e.g.
- * the sidebar `ProfileButton`) gets correctly-resolved media for free.
- */
-function MediaResolverProvider({ children }: { children: React.ReactNode }) {
-  const { oxyServices } = useOxy();
-  const resolver = useMemo<ImageResolver>(
-    () => (id: string, variant?: string) => {
-      if (!id) return undefined;
-      return oxyServices.assets.publicUrl(id, variant ?? 'thumb');
-    },
-    [oxyServices],
-  );
-  return <ImageResolverProvider value={resolver}>{children}</ImageResolverProvider>;
 }
 
 /**
@@ -65,47 +41,41 @@ function MediaResolverProvider({ children }: { children: React.ReactNode }) {
  * Separated from _layout.tsx for better testability
  * Memoized to prevent re-renders when props don't change
  */
-export const AppProviders = memo(function AppProviders({
-  children,
-  queryClient,
-}: AppProvidersProps) {
+export const AppProviders = memo(function AppProviders({ children }: AppProvidersProps) {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         {/* No KeyboardProvider here: OxyProvider mounts the one. A second one above it
             took the native keyboard events, so every keyboard hook under OxyProvider read
             a closed keyboard. */}
-        <QueryClientProvider client={queryClient}>
-          <OxyProvider
-            oxyServices={oxyServices}
-            clientId={OXY_CLIENT_ID}
-            language={{
-              supportedLocales: SUPPORTED_LANGUAGES,
-              fallbackLocale: DEFAULT_LANGUAGE,
-              onChange: setLanguage,
-              onError: (error, locale) =>
-                logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
-            }}
-          >
-            <StickersProvider client={stickersClient}>
-              <MediaResolverProvider>
-                <I18nextProvider i18n={i18n}>
-                  <ErrorBoundary>
-                    {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
+        {/* OxyProvider owns the app's React Query client; a second client
+            above it was shadowed and never used. */}
+        <OxyProvider
+          oxyServices={oxyServices}
+          clientId={OXY_CLIENT_ID}
+          language={{
+            supportedLocales: SUPPORTED_LANGUAGES,
+            fallbackLocale: DEFAULT_LANGUAGE,
+            onChange: setLanguage,
+            onError: (error, locale) =>
+              logger.error('Failed to follow the Oxy-resolved language', error, { locale }),
+          }}
+        >
+          <StickersProvider client={stickersClient}>
+            <I18nextProvider i18n={i18n}>
+              <ErrorBoundary>
+                {/* Native portals (Bloom sheets, `AliaChatSheet`) render only into a
                         `PortalOutlet` mounted by the app, after the content they paint over.
                         The inert boundary wraps everything but the outlet. */}
-                    <PortalProvider>
-                      <OverlayInertBoundary>{children}</OverlayInertBoundary>
-                      <ConnectionStatusToasts />
-                      <StatusBar style="auto" />
-                      <PortalOutlet />
-                    </PortalProvider>
-                  </ErrorBoundary>
-                </I18nextProvider>
-              </MediaResolverProvider>
-            </StickersProvider>
-          </OxyProvider>
-        </QueryClientProvider>
+                <PortalProvider>
+                  <OverlayInertBoundary>{children}</OverlayInertBoundary>
+                  <ConnectionStatusToasts />
+                  <PortalOutlet />
+                </PortalProvider>
+              </ErrorBoundary>
+            </I18nextProvider>
+          </StickersProvider>
+        </OxyProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

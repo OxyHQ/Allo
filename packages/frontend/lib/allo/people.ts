@@ -30,7 +30,7 @@ export interface Person {
   id: string;
   displayName: string;
   handle?: string;
-  /** An Oxy file id or an absolute URL. Resolve with `oxyServices.assets.publicUrl` when it is an id. */
+  /** An Oxy file id or an absolute URL. Bloom's image resolver draws either. */
   avatar?: string;
   /** What the person says about themselves on Oxy, when they have said anything. */
   bio?: string;

@@ -9,13 +9,11 @@
  */
 import type { ChatComposerAttachment, ChatComposerIcon } from '@oxy.so/bloom/chat-composer';
 import { formatRecordingTime } from '@oxy.so/bloom/chat-composer';
-import {
-  RiFileTextLine,
-  RiImageLine,
-  RiMic2Line,
-  RiMusic2Line,
-  RiVideoLine,
-} from '@oxy.so/bloom/icons';
+import { RiFileTextLine } from '@oxy.so/bloom/icons/RiFileTextLine';
+import { RiImageLine } from '@oxy.so/bloom/icons/RiImageLine';
+import { RiMic2Line } from '@oxy.so/bloom/icons/RiMic2Line';
+import { RiMusic2Line } from '@oxy.so/bloom/icons/RiMusic2Line';
+import { RiVideoLine } from '@oxy.so/bloom/icons/RiVideoLine';
 
 import type { AlloMediaKind, AlloOutgoingAttachment } from '@/lib/chat/attachments';
 

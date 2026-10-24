@@ -1,4 +1,3 @@
-import { useAvatarUrl } from '@/hooks/usePerson';
 import { signOutOfAllo } from '@/lib/allo/signOut';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
@@ -25,7 +24,6 @@ export function GeneralSettings() {
   const settings = useAlloSettings();
   const { user, logout, showBottomSheet } = useOxy();
   const client = useAlloClient();
-  const avatar = useAvatarUrl(user?.avatar ?? undefined);
   const notifications = useNotificationPermission();
   const conversationTones = useSoundStore((state) => state.conversationTones);
   const setConversationTones = useSoundStore((state) => state.setConversationTones);
@@ -68,7 +66,7 @@ export function GeneralSettings() {
                       <ContactRow
                         id={user.id}
                         name={name}
-                        avatar={avatar}
+                        avatar={user.avatar ?? undefined}
                         subtitle={user.username ? `@${user.username}` : undefined}
                         size="sm"
                         horizontalInset={0}

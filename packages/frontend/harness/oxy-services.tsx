@@ -3,7 +3,9 @@
  * `metro.config.js` and `README.md`). It stands in for the Oxy session so the
  * chat screens can be opened in a browser with no account and no backend.
  */
-import type React from 'react';
+import { APP_COLOR_PRESETS, useBloomTheme, type ThemeMode } from '@oxy.so/bloom/theme';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
 import { Pressable, Text } from 'react-native';
 
 export { useSupervision } from './supervision';
@@ -107,16 +109,38 @@ export function useOxy() {
   };
 }
 
-/** The account colour: the harness account has none, so Allo keeps its own green. */
-export function useAccountColor(): void {}
+/** The account theme: the harness account has none, so Allo keeps its own green. */
+export function useAccountTheme(): void {}
+
+/** Settings → Appearance: the mode stays on this device, there is no account to write to. */
+export function useAccountThemeControls() {
+  const { setMode } = useBloomTheme();
+  return {
+    source: 'app' as const,
+    changeThemeSource: () => undefined,
+    changeThemeMode: async (mode: ThemeMode) => setMode(mode),
+  };
+}
+
+/** Every colour, applied locally. */
+export function useAccountColorSave() {
+  const { colorPreset, setColorPreset } = useBloomTheme();
+  return {
+    colors: Object.keys(APP_COLOR_PRESETS),
+    value: colorPreset,
+    saveColor: async (name: typeof colorPreset) => setColorPreset(name),
+  };
+}
 
 /** What `@alia.onl/sdk/ask` reads: the harness has no private API to offer it. */
 export function useAuth() {
   return { canUsePrivateApi: false, signIn: async () => undefined };
 }
 
-export function OxyProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+/** Like the real provider, it owns the app's React Query client. */
+export function OxyProvider({ children }: { children: ReactNode }) {
+  const [client] = useState(() => new QueryClient());
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
 export function OxySignInButton() {

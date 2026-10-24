@@ -1,35 +1,17 @@
 import { Platform } from 'react-native';
 
-import { oxyServices } from '@/lib/oxy';
-import { useAppearanceStore } from '@/stores/appearanceStore';
 import { hasNotificationPermission, setupNotifications } from '@/utils/notifications';
 import { logger } from '@/utils/logger';
 import { initializeI18n } from './i18n';
 
-/** The app never waits longer than this for the network before it appears. */
-const STARTUP_TIMEOUT_MS = 2000;
-
 /**
- * Start-up, in the order the root layout runs it. Nothing here may keep the
- * app from appearing: each step logs its own failure and the app goes on.
+ * Start-up, in the order the root layout runs it. Only the bundled
+ * translations are waited for; nothing here waits on the network, and each
+ * step logs its own failure and the app goes on.
  */
 export const AppInitializer = {
   async initializeI18n(): Promise<void> {
     await initializeI18n();
-  },
-
-  /** The session and the appearance settings, raced against a hard timeout. */
-  async initializeApp(): Promise<void> {
-    const session = oxyServices.users.me().catch(() => {
-      // Not signed in yet: the auth screen handles it.
-    });
-    const appearance = oxyServices.session.accessToken
-      ? useAppearanceStore.getState().loadMySettings()
-      : Promise.resolve();
-    await Promise.race([
-      Promise.all([session, appearance]),
-      new Promise<void>((resolve) => setTimeout(resolve, STARTUP_TIMEOUT_MS)),
-    ]);
   },
 
   /** Work that can wait until the first screen is up. */
