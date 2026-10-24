@@ -36,7 +36,20 @@ object CallState {
     prefs(c).edit().putString("account", account).putString("instance", instance).commit()
     val manager = c.getSystemService(TelecomManager::class.java)
     manager.registerPhoneAccount(PhoneAccount.builder(handle(c), "Allo").setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED).build())
-    FirebaseMessaging.getInstance().token.addOnSuccessListener { token(c, it) }
+    // The FCM token is what lets the server ring this phone while Allo is
+    // closed. A build without google-services.json, or a phone without Google
+    // Play services, has no Firebase: binding still succeeds (Telecom and the
+    // durable action queue need no push), the token stays empty, and the SDK
+    // clears the server's call-push binding instead of failing every second.
+    if (com.google.firebase.FirebaseApp.getApps(c).isEmpty()) {
+      token(c, "")
+      return
+    }
+    runCatching {
+      FirebaseMessaging.getInstance().token
+        .addOnSuccessListener { token(c, it) }
+        .addOnFailureListener { token(c, "") }
+    }.onFailure { token(c, "") }
   }
   fun token(c: Context, value: String) { prefs(c).edit().putString("token", value).commit() }
   fun token(c: Context): String = prefs(c).getString("token", "") ?: ""

@@ -13,7 +13,10 @@ const event: NativeCallEvent = {
   instanceId: 'instance',
   expiresAt: new Date(Date.now() + 45_000).toISOString(),
 };
-function fixture(events: NativeCallEvent[] = [event]) {
+function fixture(
+  events: NativeCallEvent[] = [event],
+  bind = jest.fn().mockResolvedValue(undefined),
+) {
   const calls = {
     restoreIncoming: jest
       .fn()
@@ -34,7 +37,7 @@ function fixture(events: NativeCallEvent[] = [event]) {
     sync: { now: jest.fn().mockResolvedValue(undefined) },
   };
   const bridge = {
-    bind: jest.fn().mockResolvedValue(undefined),
+    bind,
     clear: jest.fn().mockResolvedValue(undefined),
     snapshot: jest.fn().mockResolvedValue({ token: 'token', events, audioActive: false }),
     acknowledge: jest.fn().mockResolvedValue(undefined),
@@ -146,4 +149,20 @@ it('serializes a late previous-account token claim, retirement, and the new acco
   expect(order).toEqual(['retire old', 'register new']);
   second.stop();
   await settle();
+});
+it('reports a bind that cannot succeed once, instead of every second', async () => {
+  // The shape of a build without Firebase (or a phone without Play services)
+  // before the native side learned to bind without it.
+  const f = fixture(
+    [event],
+    jest.fn().mockRejectedValue(new Error('Default FirebaseApp is not initialized')),
+  );
+  await settle();
+  for (let second = 0; second < 5; second++) {
+    jest.advanceTimersByTime(1_000);
+    await settle();
+  }
+  expect(f.report).toHaveBeenCalledTimes(1);
+  expect(f.bridge.snapshot).not.toHaveBeenCalled();
+  f.stop();
 });
