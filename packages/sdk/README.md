@@ -21,6 +21,7 @@ contracts6 dependencies are isolated from the applications' existing major
 versions. The applications adopt the new majors in their separate migration.
 
 The release removes global core/contracts/protocol overrides. Existing app
-core6.14/contracts5.7 remain pinned; protocol1.5.1 is selected explicitly for
-the SDK7 transport instead of forcing an incompatible older protocol. The lock
-keeps compatible existing application resolutions alongside the new SDK.
+core6.14/contracts5.7 remain pinned with compatible protocol1.5.0; the SDK
+selects protocol1.5.1 alongside core7/contracts6. This avoids shipping both
+contracts majors in the existing application bundle. The measured web export
+is 3,290,339 gzip bytes, within the unchanged 3,300,000-byte budget.
