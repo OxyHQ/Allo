@@ -94,6 +94,7 @@
     "react-native-css": "3.1.0-rc.0"
   },
   "patchedDependencies": {
-    "expo@58.0.19": "patches/expo@58.0.19.patch"
+    "expo@58.0.19": "patches/expo@58.0.19.patch",
+    "react-native-css@3.1.0-rc.0": "patches/react-native-css@3.1.0-rc.0.patch"
   }
 }
