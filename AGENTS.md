@@ -518,6 +518,17 @@ Measured: the client bundle compiled and the SSR pass failed until the ESM
 mapping landed. Jest needs `ts-mls|@hpke` in `transformIgnorePatterns` for the
 same ESM reason.
 
+**Android release signing is `@oxy.so/services/plugins/withOxySharedPermissions`'.**
+Since services 13.4.0 that plugin (which declares the Oxy signature permissions)
+also applies `withOxyReleaseSigning`: the `release` buildType is ALWAYS signed
+from the `OXY_UPLOAD_*` Gradle properties (`~/.gradle/gradle.properties` or
+`-P`, never the repo), and `oxyVerifyReleaseSigning` fails any release whose
+certificate is not the Oxy ecosystem one. There is no debug-key fallback; a
+debug build keeps Expo's debug key (no Oxy permissions) unless
+`OXY_UPLOAD_SIGN_DEBUG=true`. `@oxy.so/app-preset/plugin/withOxyAndroidRelease`
+was removed in app-preset 5 and throws if listed; `__tests__/appConfig.test.ts`
+keeps it out.
+
 **Babel stays the bare preset.** `packages/frontend/babel.config.js` is only
 `@oxy.so/app-preset/babel`: in development that is exactly `babel-preset-expo`,
 which lets Expo's oxc transformer, Noxcturnal
