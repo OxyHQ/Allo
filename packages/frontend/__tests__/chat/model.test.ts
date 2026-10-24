@@ -5,6 +5,7 @@ import {
   chatSummary,
   composerNotice,
   pinnedMessages,
+  conversationHeaderTitle,
   conversationTitle,
   deliveryStatus,
   firstUnreadId,
@@ -520,5 +521,39 @@ describe('pinnedMessages', () => {
 
   it('is empty when nothing is pinned, so the bar never draws', () => {
     expect(pinnedMessages([item(), item({ id: 'b' })], ctx)).toEqual([]);
+  });
+});
+
+describe('conversationHeaderTitle', () => {
+  // The header of a DM whose person the people layer has not answered for yet
+  // drew "last seen 53 minut…" under NOTHING. The header always has a title.
+  it('is the name once it is known', () => {
+    expect(conversationHeaderTitle(view(), ctx)).toBe('Alice');
+    expect(conversationHeaderTitle(view({ kind: 'group', title: 'Trip' }), ctx)).toBe('Trip');
+  });
+
+  it('falls back to the handle, then to "this person" — never empty, never an id', () => {
+    const handleOnly: ChatContext = {
+      ...ctx,
+      person: (id) => (id === 'acc-dana' ? { id, displayName: '', handle: 'dana' } : undefined),
+    };
+    expect(
+      conversationHeaderTitle(view({ memberAccountIds: ['acc-me', 'acc-dana'] }), handleOnly),
+    ).toBe('@dana');
+    const unknown = conversationHeaderTitle(
+      view({ memberAccountIds: ['acc-me', 'acc-unknown'] }),
+      ctx,
+    );
+    expect(unknown).toBe('chat.header.unnamedDm');
+    expect(unknown).not.toContain('acc-unknown');
+  });
+
+  it('calls a group nobody can be named in yet a group', () => {
+    expect(
+      conversationHeaderTitle(
+        view({ kind: 'group', memberAccountIds: ['acc-me', 'acc-unknown', 'acc-other'] }),
+        ctx,
+      ),
+    ).toBe('chat.header.unnamedGroup');
   });
 });

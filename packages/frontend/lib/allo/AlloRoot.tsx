@@ -36,9 +36,10 @@ import { nativeCallBridge } from './nativeCallBridge';
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
+import { useTransientRetry } from './transientRetry';
 import { configurePeople } from './people';
 import { ConversationAccessState } from './ConversationAccessState';
 import type { AlloClient } from '@allo/core';
@@ -74,6 +75,18 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   const known = !accountId || !personal || supervision.data !== undefined;
   const supervised =
     personal && Boolean(supervision.data?.self && supervision.data.self.status !== 'ended');
+  // A transient failure is asked again by itself before "cannot check access"
+  // is drawn, and the screen recovers by itself once the device is back online.
+  const supervisionFailure = useMemo(
+    () =>
+      supervision.isError ? { at: supervision.errorUpdatedAt, error: supervision.error } : null,
+    [supervision.isError, supervision.errorUpdatedAt, supervision.error],
+  );
+  const { refetch: refetchSupervision } = supervision;
+  const retrySupervision = useCallback(() => {
+    void refetchSupervision();
+  }, [refetchSupervision]);
+  const supervisionGaveUp = useTransientRetry(supervisionFailure, retrySupervision);
   const key = accountId && known ? JSON.stringify([accountId, activeSessionId, supervised]) : null;
   const [current, setCurrent] = useState<Held | null>(null);
   const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
@@ -161,10 +174,8 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   if (!known)
     return (
       <ConversationAccessState
-        state={supervision.isError ? 'unavailable' : 'checking'}
-        onRetry={() => {
-          void supervision.refetch();
-        }}
+        state={supervisionGaveUp ? 'unavailable' : 'checking'}
+        onRetry={retrySupervision}
       />
     );
   if (current === null || current.key !== key) return <ConversationAccessState state="checking" />;

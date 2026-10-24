@@ -1,5 +1,7 @@
 import { AppShell, AppShellPanel, AppShellPanels } from '@oxy.so/bloom/app-shell';
 import { RiChatNewLine } from '@oxy.so/bloom/icons/RiChatNewLine';
+import { RiImageAddLine } from '@oxy.so/bloom/icons/RiImageAddLine';
+import { RiPhoneLine } from '@oxy.so/bloom/icons/RiPhoneLine';
 import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
 import { RiUser3Fill } from '@oxy.so/bloom/icons/RiUser3Fill';
@@ -21,7 +23,9 @@ import { CallPill } from '@/components/phase2/CallPill';
 import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { AlloSettingsProvider } from '@/components/settings/AlloSettingsProvider';
 import { useAlloSettings } from '@/components/settings/context';
+import { usePostStatus } from '@/hooks/usePostStatus';
 import { SPLIT_FROM, useInfoPane, useSplitLayout } from '@/hooks/useSplitLayout';
+import { pageActionFor } from '@/lib/navigation/pageAction';
 import { profileHref } from '@/lib/profile/handle';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { conversationIdFromPath } from '@/utils/routeUtils';
@@ -96,6 +100,37 @@ function SplitShell({ split }: { split: boolean }) {
     [ownProfile, router, settings, t],
   );
 
+  const newChat = useMemo(
+    () => ({
+      label: t('chat.new.title'),
+      icon: RiChatNewLine,
+      onPress: () => router.push('/new'),
+    }),
+    [router, t],
+  );
+  const postStatus = usePostStatus();
+  const action = pageActionFor(activePage);
+  const primaryAction = useMemo(() => {
+    if (action === 'add-status')
+      return {
+        icon: RiImageAddLine,
+        accessibilityLabel: t('stories.add'),
+        onPress: () => void postStatus(),
+      };
+    if (action === 'new-call')
+      return {
+        icon: RiPhoneLine,
+        accessibilityLabel: t('calls.new.title'),
+        // Picks somebody, then pushes `/c/:id/call`, the one dialler.
+        onPress: () => router.push('/new?call=voice'),
+      };
+    return {
+      icon: RiChatNewLine,
+      accessibilityLabel: t('chat.new.title'),
+      onPress: () => router.push('/new'),
+    };
+  }, [action, postStatus, router, t]);
+
   return (
     <AppShell
       panels
@@ -104,15 +139,17 @@ function SplitShell({ split }: { split: boolean }) {
       scroll="fixed"
       header={null}
       navFrom={SPLIT_FROM}
-      // The bar's FAB and the rail's compose row: a new conversation.
-      primaryAction={{
-        icon: RiChatNewLine,
-        accessibilityLabel: t('chat.new.title'),
-        onPress: () => router.push('/new'),
-      }}
+      // The bar's FAB is the action of the page in front (`pageActionFor`).
+      primaryAction={primaryAction}
       // The bar belongs to the pages; a conversation or a pushed screen has the
       // whole height (and the composer the bottom edge).
       bottomBar={activePage ? undefined : null}
+      // The bar FLOATS over the page. Reserving its height left the pane
+      // short of the bottom edge and showed the shell's own background in the
+      // gap — a darker band across the whole width under the pill. Every page
+      // scrolls in a Bloom scroller (`ScreenScrollView`), which clears the bar
+      // by itself (`useBottomEdgeInset`), so the last row still scrolls clear.
+      reserveBottomBarSpace={false}
       sidebar={{
         variant: 'rail',
         showSearch: false,
@@ -122,6 +159,9 @@ function SplitShell({ split }: { split: boolean }) {
         },
         secondaryItems,
         selected,
+        // The rail's compose row stays "new chat" whatever page is in front:
+        // it is the app's action, not a page's.
+        primaryAction: newChat,
       }}
     >
       <AppShellPanels appearance="joined">

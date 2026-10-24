@@ -13,8 +13,7 @@ import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatContext } from '@/hooks/useChatContext';
-import { readAttachmentBytes } from '@/lib/allo/attachmentBytes';
-import { pickMediaAttachments } from '@/lib/chat/attachments';
+import { usePostStatus } from '@/hooks/usePostStatus';
 import { ringState, statusAgeLabel, statusAuthors, statusRemainingLabel } from '@/lib/statuses';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
@@ -31,8 +30,9 @@ import { logger } from '@/utils/logger';
  *
  * Bloom's `StoriesRow` at the top, then every person with updates as a row
  * with their own `StoryRing`; opening one pushes the viewer
- * (`/updates/:accountId`). Adding your own goes through the app's existing picker
- * (`lib/chat/attachments.ts`) — the same one the composer uses.
+ * (`/updates/:accountId`). Adding your own (the "My status" ring, or the
+ * floating action while this page is in front) is `usePostStatus`: the app's
+ * existing picker, the same one the composer uses.
  *
  * **What this posts is end-to-end encrypted** (ADR 0002): one ciphertext, a
  * key sealed to each recipient's devices, twenty-four hours. The audience is
@@ -61,31 +61,11 @@ export default function UpdatesScreen() {
   const open = useCallback((accountId: string) => router.push(`/updates/${accountId}`), [router]);
 
   const me = user?.id;
-  const add = useCallback(async () => {
-    if (!me) return;
-    try {
-      const picked = await pickMediaAttachments();
-      const first = picked[0];
-      if (!first) return;
-      await statuses.post({
-        kind: first.mimetype.startsWith('video/') ? 'video' : 'image',
-        media: {
-          bytes: await readAttachmentBytes(first.uri),
-          mime: first.mimetype,
-          width: first.width,
-          height: first.height,
-        },
-        // Everybody this device shares a conversation with. Narrowing that is
-        // its own screen and its own change; posting to nobody in particular
-        // is not a thing this offers.
-        audience: { mode: 'all', accountIds: [] },
-      });
-      toast.success(t('stories.added'));
-    } catch (error: unknown) {
-      logger.error('[updates] could not post', error);
-      toast.error(t('stories.addFailed'));
-    }
-  }, [me, statuses, t]);
+  // The same post the floating action makes while this page is in front.
+  const post = usePostStatus();
+  const add = useCallback(() => {
+    if (me) void post();
+  }, [me, post]);
 
   /** Taking one of yours down early. A long press, and a confirmation. */
   const remove = useCallback(

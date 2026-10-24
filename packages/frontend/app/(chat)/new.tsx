@@ -21,6 +21,7 @@ import { PageHeader } from '@oxy.so/bloom/page-header';
 import { Screen } from '@oxy.so/bloom/screen';
 
 import { useCreateConversation } from '@/hooks/useCreateConversation';
+import { pickerModeFromParams } from '@/lib/chat/newConversation';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { logger } from '@/utils/logger';
 
@@ -39,7 +40,8 @@ function summaryOf(user: SearchedUser): PersonSummary {
 /**
  * `/new` — pick people and start talking: one person is a direct message,
  * several are a group with an optional name. `/new?addTo=<id>` is the same
- * picker adding people to an existing group.
+ * picker adding people to an existing group, and `/new?call=voice` (the Calls
+ * page's floating action) the same search picking ONE person to call.
  *
  * Every part of it is Bloom's: the search pill, `ContactList` for the results
  * (one "People" section and the empty state),
@@ -48,7 +50,10 @@ function summaryOf(user: SearchedUser): PersonSummary {
  * chips step aside rather than saying the same thing twice.
  */
 export default function NewConversationRoute() {
-  const { addTo } = useLocalSearchParams<{ addTo?: string }>();
+  const params = useLocalSearchParams<{ addTo?: string; call?: string }>();
+  const pickerMode = pickerModeFromParams(params);
+  const addTo = pickerMode.kind === 'add' ? pickerMode.conversationId : undefined;
+  const callMode = pickerMode.kind === 'call' ? pickerMode.mode : undefined;
   const router = useRouter();
   const { t } = useTranslation();
   const { user } = useOxy();
@@ -101,6 +106,29 @@ export default function NewConversationRoute() {
     }
   }, [addMember, addTo, adding, create, name, router, selected, t]);
 
+  /**
+   * Call mode: one person, pressed once. The DM is opened (created if it is
+   * new — idempotent on the server) and the CALL ROUTE replaces this picker;
+   * the route is what dials (`/c/:id/call` is the app's one dialler), so
+   * nothing here calls `start`.
+   */
+  const call = useCallback(
+    async (person: PersonSummary) => {
+      if (!callMode || busy) return;
+      setBusy(true);
+      try {
+        const conversationId = await create({ participantIds: [person.id], name: undefined });
+        router.replace(`/c/${conversationId}/call?mode=${callMode}`);
+      } catch (error) {
+        logger.error('[NewCall] failed', error);
+        toast.error(t('calls.new.failed'));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, callMode, create, router, t],
+  );
+
   const picked = [...selected.values()];
   const count = picked.length;
   /** Two or more people are a group, and a group gets a name — but not when adding to one that exists. */
@@ -112,8 +140,18 @@ export default function NewConversationRoute() {
   // index rail (`lib/people/directorySearch.ts` says who may appear at all).
   const people = search.results
     .filter((result) => !excluded.has(result.id))
-    .map((result) => {
+    .map((result): ContactSection['contacts'][number] => {
       const person = summaryOf(result);
+      if (callMode)
+        return {
+          ...person,
+          size: 'sm' as const,
+          trailing: 'action' as const,
+          actionLabel: t('calls.new.action'),
+          onAction: () => void call(person),
+          onPress: () => void call(person),
+          disabled: busy,
+        };
       return {
         ...person,
         size: 'sm' as const,
@@ -145,18 +183,26 @@ export default function NewConversationRoute() {
       scroll="none"
       header={
         <PageHeader
-          title={adding ? t('chat.group.addMember') : t('chat.new.title')}
+          title={
+            callMode
+              ? t('calls.new.title')
+              : adding
+                ? t('chat.group.addMember')
+                : t('chat.new.title')
+          }
           actions={
-            <Button
-              size="sm"
-              disabled={count === 0}
-              loading={busy}
-              onPress={() => void submit()}
-              tone="accent"
-              appearance="solid"
-            >
-              {submitLabel}
-            </Button>
+            callMode ? undefined : (
+              <Button
+                size="sm"
+                disabled={count === 0}
+                loading={busy}
+                onPress={() => void submit()}
+                tone="accent"
+                appearance="solid"
+              >
+                {submitLabel}
+              </Button>
+            )
           }
         />
       }
@@ -178,7 +224,7 @@ export default function NewConversationRoute() {
         layout="flat"
         flatLabel={t('chat.new.people')}
         header={
-          naming ? (
+          callMode ? undefined : naming ? (
             <NewGroupForm
               style={styles.form}
               name={name}

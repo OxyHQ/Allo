@@ -32,6 +32,7 @@ import { nativeCallBridge } from './nativeCallBridge';
  */
 import type { AlloClient, ResetOutcome } from '@allo/core';
 import { logger } from '@/utils/logger';
+import { useDraftStore } from '@/stores/draftStore';
 import { clearPushToken } from './push';
 
 /** Signs out of Oxy. `useOxy().logout`, narrowed to what this needs. */
@@ -61,6 +62,8 @@ export async function signOutOfAllo(client: AlloClient, logout: Logout): Promise
     // on a device whose person has just left it.
     logger.error('[allo] resetting this device on sign-out failed', error);
   }
+  // Unsent text is plaintext of this person's messages; it leaves with them.
+  useDraftStore.getState().clearAll();
   await logout();
   return outcome;
 }

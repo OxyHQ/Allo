@@ -150,6 +150,24 @@ export function conversationTitle(view: ConversationView, ctx: ChatContext): str
     : shown.join(', ');
 }
 
+/**
+ * The conversation header's title, which is never empty. The list may wait
+ * with `''` while the people layer is out (its row has a preview to carry it);
+ * a header with only "last seen…" under nothing reads as a broken screen. So:
+ * the name, else the other person's handle, else "This person" / "Group" —
+ * and never an account id.
+ */
+export function conversationHeaderTitle(view: ConversationView, ctx: ChatContext): string {
+  const title = conversationTitle(view, ctx);
+  if (title) return title;
+  if (view.kind === 'dm') {
+    const other = others(view, ctx.me)[0];
+    const handle = other ? ctx.person(other)?.handle : undefined;
+    return handle ? `@${handle}` : ctx.t('chat.header.unnamedDm');
+  }
+  return ctx.t('chat.header.unnamedGroup');
+}
+
 /** A DM's avatar: the other person's Oxy file id or URL, which Bloom's image resolver loads. */
 export function conversationAvatar(view: ConversationView, ctx: ChatContext): string | undefined {
   if (view.kind !== 'dm') return undefined;
