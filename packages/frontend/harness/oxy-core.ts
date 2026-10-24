@@ -79,7 +79,11 @@ const client: Record<string, any> = noop({
     }),
   },
   users: noop(users),
-  assets: noop({ publicUrl: (id: string) => `https://i.pravatar.cc/200?u=${id}` }),
+  assets: noop({
+    publicUrl: (id: string) => `https://i.pravatar.cc/200?u=${id}`,
+    renderUrl: (ref: string) =>
+      ref.startsWith('http') ? ref : `https://i.pravatar.cc/200?u=${ref}`,
+  }),
   session: noop({
     accessToken: 'harness',
     userId: '6700000000000000000000a1',

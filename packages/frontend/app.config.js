@@ -230,14 +230,16 @@ module.exports = (_config) => {
           // DEVICE_SESSION, plus <queries> for the Commons/Accounts
           // providers, so cold boot can ask Commons for a signed identity
           // proof and share the device session (silent "Sign in with Oxy").
+          // Since services 13.4.0 it also owns release signing
+          // (`withOxyReleaseSigning`): the signature permissions are only granted
+          // to apps signed like Commons, so the release buildType is ALWAYS
+          // signed with the OXY_UPLOAD_* Gradle properties (never in the repo)
+          // and `oxyVerifyReleaseSigning` FAILS a release whose certificate is
+          // not the Oxy ecosystem one. There is no debug-key fallback any more.
+          // `@oxy.so/app-preset/plugin/withOxyAndroidRelease` was removed in
+          // app-preset 5 (listing it throws); its R8 `-optimize` swap is a no-op
+          // on SDK 58, whose template already generates that file.
           '@oxy.so/services/plugins/withOxySharedPermissions',
-          // Every Oxy app MUST be release-signed with the one shared Oxy ecosystem
-          // certificate: the signature permissions above are only granted to apps
-          // signed like Commons. This replaces Expo's debug signing of the release
-          // buildType with the OXY_UPLOAD_* Gradle properties (never in the repo;
-          // debug fallback without them, so verify the artefact's certificate) and
-          // swaps in proguard-android-optimize.txt.
-          '@oxy.so/app-preset/plugin/withOxyAndroidRelease',
         ];
 
         // Only include expo-notifications for native builds (android/ios).

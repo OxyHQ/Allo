@@ -4,6 +4,7 @@
  */
 
 import i18n, { changeLanguage, init as i18nInit, use as i18nUse } from 'i18next';
+import { useSyncExternalStore } from 'react';
 import { initReactI18next } from 'react-i18next';
 
 import enUS from '@/locales/en.json';
@@ -91,6 +92,30 @@ export async function initializeI18n(): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * The app's current language, re-rendering on every switch: what the root
+ * layout hands Bloom. A subscription to the i18next instance itself, because
+ * the root renders before `initializeI18n()` has bound react-i18next.
+ * `undefined` until the first language is set, which Bloom reads as the
+ * runtime's locale.
+ */
+export function useAppLanguage(): string | undefined {
+  return useSyncExternalStore(subscribeLanguage, readLanguage, readLanguage);
+}
+
+function subscribeLanguage(onChange: () => void): () => void {
+  i18n.on('initialized', onChange);
+  i18n.on('languageChanged', onChange);
+  return () => {
+    i18n.off('initialized', onChange);
+    i18n.off('languageChanged', onChange);
+  };
+}
+
+function readLanguage(): string | undefined {
+  return i18n.language || undefined;
 }
 
 export default i18n;

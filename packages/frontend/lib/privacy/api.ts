@@ -103,7 +103,7 @@ function toPrivacySettings(document: SettingsDocument | null | undefined): AlloP
  * `api.get` already unwraps one layer (its own `{ data }`), so what arrives here
  * is the parsed body — which has a `data` of its own, from
  * `sendSuccessResponse`. Unwrapped defensively rather than assumed, the same way
- * `stores/appearanceStore.ts` does it for the neighbouring fields.
+ * `lib/profile/appearance.ts` does it for the neighbouring fields.
  */
 function unwrapEnvelope(body: unknown): SettingsDocument | null {
   if (typeof body !== 'object' || body === null) return null;

@@ -13,14 +13,13 @@ import {
   SelectValue,
 } from '@oxy.so/bloom/select';
 import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
-import { COLOR_PRESET_REGISTRY } from '@oxy.so/bloom/theme';
+import { Switch } from '@oxy.so/bloom/switch';
+import { COLOR_PRESET_REGISTRY, useBloomTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
-import { useAccountColorSave } from '@oxy.so/services/ui/client';
-import { useCallback } from 'react';
+import { useAccountColorSave, useAccountThemeControls } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 
-import { THEME_MODES, themeModeFromSetting } from '@/lib/theme';
-import { useAppearanceStore, type AppearanceSettings } from '@/stores/appearanceStore';
+import { THEME_MODES } from '@/lib/theme';
 
 type Mode = (typeof THEME_MODES)[number];
 
@@ -31,30 +30,19 @@ const MODE_LABELS: Record<Mode, string> = {
 };
 
 /**
- * Light, dark or the system's, and the account colour. The mode lives in the
- * account's appearance settings, which `BloomProvider` reads; the colour is the
- * Oxy account's, shared by every Oxy app, and Oxy decides which ones it may wear.
+ * Light, dark or the system's, and the account colour. Both are the Oxy
+ * account's theme, shared by every Oxy app: the colour always, the mode while
+ * this device follows the account (the switch; off keeps the mode on this
+ * device only). Oxy decides which colours the account may wear.
  */
 export default function AppearanceSettingsScreen() {
   const { t } = useTranslation();
-  const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
-  const mode = themeModeFromSetting(appearance?.themeMode) as Mode;
+  const { mode: bloomMode } = useBloomTheme();
+  const mode: Mode = bloomMode === 'light' || bloomMode === 'dark' ? bloomMode : 'system';
+  const { source, changeThemeSource, changeThemeMode } = useAccountThemeControls();
   const { colors, value, saveColor } = useAccountColorSave();
   const presets = COLOR_PRESET_REGISTRY.filter((entry) => colors.includes(entry.name));
   const current = presets.find((entry) => entry.name === value);
-
-  const save = useCallback(
-    async (next: Partial<AppearanceSettings>) => {
-      const store = useAppearanceStore.getState();
-      // The store applies it optimistically and puts the old value back on failure.
-      const saved = await store.updateMySettings({
-        appearance: { themeMode: mode, ...next },
-      });
-      if (!saved && useAppearanceStore.getState().error)
-        toast.error(t('settings.appearance.saveError'));
-    },
-    [mode, t],
-  );
 
   return (
     <SettingsGeneralPage
@@ -63,6 +51,18 @@ export default function AppearanceSettingsScreen() {
           key: 'theme',
           rows: [
             {
+              key: 'sync',
+              label: t('settings.appearance.followAccount'),
+              description: t('settings.appearance.followAccountDescription'),
+              control: (
+                <Switch
+                  checked={source === 'account'}
+                  onCheckedChange={(on) => changeThemeSource(on ? 'account' : 'app')}
+                  accessibilityLabel={t('settings.appearance.followAccount')}
+                />
+              ),
+            },
+            {
               key: 'mode',
               label: t('settings.appearance.theme'),
               control: (
@@ -70,7 +70,11 @@ export default function AppearanceSettingsScreen() {
                   label={t('settings.appearance.theme')}
                   type="radio"
                   value={mode}
-                  onChange={(value) => void save({ themeMode: value as Mode })}
+                  onChange={(next) =>
+                    changeThemeMode(next as Mode).catch(() =>
+                      toast.error(t('settings.appearance.saveError')),
+                    )
+                  }
                 >
                   {THEME_MODES.map((value) => (
                     <SegmentedControlItem key={value} value={value}>

@@ -127,13 +127,15 @@ relay to use.
 
 ## Theme
 
-`BloomProvider` in `app/_layout.tsx`, controlled by the account's appearance
-settings (`stores/appearanceStore.ts` → `lib/theme.ts`): mode and a Bloom colour
-preset. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
+`BloomProvider` in `app/_layout.tsx` keeps the device's last theme
+(`lib/theme.ts`) and wears the Oxy account's (`useAccountTheme`; Settings →
+Appearance uses `useAccountThemeControls`). Bloom resolves every Oxy file id to
+a URL through the SDK's `assets.renderUrl` (`imageResolver`) and owns the status
+bar. Every colour is `useTheme().colors.*` from `@oxy.so/bloom/theme`.
 
 ## Rules
 
-- Import Bloom by subpath (`@oxy.so/bloom/chat-list`), never the root barrel.
+- Import Bloom by subpath (`@oxy.so/bloom/chat-list`, `@oxy.so/bloom/icons/RiImageLine`), never the root or the icon barrel: `check:bundle-imports` refuses a value import from either.
 - No colour literals; `StyleSheet` with theme colours.
 - Every string through `t()`; bundles are flat dotted keys.
 - Navigate with literal paths so `__tests__/routes/navigationTargets.test.ts` can see them.

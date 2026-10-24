@@ -1,23 +1,23 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
- * The appearance store asked for `profile/design/:userId`, a route the backend
+ * The profile appearance read asked for `profile/design/:userId`, a route the backend
  * has never had. It 404ed for every user on every render, and the catch around
  * it returned null — which is exactly what "this user has no custom appearance"
  * looks like, so nothing ever surfaced it. It reached production and stayed.
  *
  * A unit test cannot catch that: mock the client and a wrong URL passes. What
- * catches it is comparing the two sides, so this reads the store's calls and the
- * backend's routes and asserts every path the store asks for is one the backend
+ * catches it is comparing the two sides, so this reads the module's calls and the
+ * backend's routes and asserts every path it asks for is one the backend
  * serves.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
-const STORE = join(REPO_ROOT, 'packages/frontend/stores/appearanceStore.ts');
+const STORE = join(REPO_ROOT, 'packages/frontend/lib/profile/appearance.ts');
 const ROUTES = join(REPO_ROOT, 'packages/backend/src/routes/profileSettings.ts');
 
-/** Every `api.<verb>('profile/...')` the store performs, as a path. */
+/** Every `api.<verb>('profile/...')` the module performs, as a path. */
 function pathsTheStoreCalls(): string[] {
   const source = readFileSync(STORE, 'utf8');
   const calls = source.matchAll(/api\.\w+<[^>]*>\(\s*[`'"]([^`'"]+)[`'"]/g);
@@ -36,11 +36,11 @@ function normalise(path: string): string {
   return path.replace(/\$\{[^}]+\}/g, ':param').replace(/:[A-Za-z_]\w*/g, ':param');
 }
 
-describe('the appearance store only asks for routes that exist', () => {
+describe('the profile appearance read only asks for routes that exist', () => {
   it('finds calls and routes to compare', () => {
     // Guards the test itself: a regex that silently matches nothing would make
     // every assertion below vacuously true.
-    expect(pathsTheStoreCalls().length).toBeGreaterThanOrEqual(3);
+    expect(pathsTheStoreCalls().length).toBeGreaterThanOrEqual(1);
     expect(pathsTheBackendServes().length).toBeGreaterThanOrEqual(5);
   });
 

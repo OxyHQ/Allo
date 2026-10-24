@@ -12,23 +12,23 @@ import '@/lib/immerSetup';
 import NetInfo from '@react-native-community/netinfo';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
-import { useAccountColor, useOxy } from '@oxy.so/services/ui/client';
-import { QueryClient, focusManager, onlineManager } from '@tanstack/react-query';
+import { useAccountTheme, useOxy } from '@oxy.so/services/ui/client';
+import { focusManager, onlineManager } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import React, { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 
 import AppSplashScreen from '@/components/AppSplashScreen';
 import { NotificationPermissionGate } from '@/components/notifications/NotificationPermissionGate';
 import { NavigationTheme } from '@/components/providers/NavigationTheme';
 import { AppProviders } from '@/components/providers/AppProviders';
-import { QUERY_CLIENT_CONFIG } from '@/components/providers/constants';
 import { AlloRoot } from '@/lib/allo/AlloRoot';
 import { AppInitializer } from '@/lib/appInitializer';
+import { useAppLanguage } from '@/lib/i18n';
 import { usePendingHref } from '@/lib/navigation/usePendingHref';
 import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
-import { DEFAULT_COLOR_PRESET, themeModeFromSetting } from '@/lib/theme';
-import { useAppearanceStore } from '@/stores/appearanceStore';
+import { oxyServices } from '@/lib/oxy';
+import { DEFAULT_COLOR_PRESET, THEME_PERSIST_KEY, THEME_STORAGE } from '@/lib/theme';
 
 import '../styles/global.css';
 
@@ -39,16 +39,30 @@ preventNativeSplashAutoHide();
 const IS_WEB = Platform.OS === 'web';
 
 /**
- * Bloom. The mode follows the account's appearance settings; the colour is the
- * Oxy account's, applied by `useAccountColor` (Allo's green until it is known).
+ * An Oxy file id (or an absolute URL) as the URL to draw right now, for every
+ * Bloom `Avatar` and image: the SDK's `renderUrl` passes a URL through, reuses
+ * one it already resolved for this caller, and otherwise builds the public one.
+ */
+function resolveImage(ref: string, variant?: string): string | undefined {
+  return ref ? oxyServices.assets.renderUrl(ref, variant ?? 'thumb') : undefined;
+}
+
+/**
+ * Bloom. It keeps this device's last theme, so a cold start paints it at once;
+ * the Oxy account's theme lands on top of it (`useAccountTheme` in
+ * `RootStack`). Bloom's own words (Cancel, dates) follow the app's language.
  */
 function ThemeRoot({ children }: { children: ReactNode }) {
-  const appearance = useAppearanceStore((state) => state.mySettings?.appearance);
+  const language = useAppLanguage();
   return (
     <BloomProvider
       fonts
-      mode={themeModeFromSetting(appearance?.themeMode)}
+      defaultMode="system"
       defaultColorPreset={DEFAULT_COLOR_PRESET}
+      persistKey={THEME_PERSIST_KEY}
+      storage={THEME_STORAGE}
+      imageResolver={resolveImage}
+      locale={language}
       // Web shows its own splash while fonts load; native is still behind the OS splash.
       onFontsLoading={IS_WEB ? <AppSplashScreen /> : null}
     >
@@ -65,9 +79,9 @@ function ThemeRoot({ children }: { children: ReactNode }) {
 function RootStack() {
   const { user } = useOxy();
   const signedIn = Boolean(user);
-  // The Oxy account colour is the app's accent: applied once, below both the
-  // Oxy and Bloom providers.
-  useAccountColor();
+  // The Oxy account's theme: its colour always, its mode while this device
+  // follows the account. Applied once, below both the Oxy and Bloom providers.
+  useAccountTheme();
   usePendingHref(signedIn);
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -101,20 +115,17 @@ function useDeviceSignals() {
 }
 
 export default function RootLayout() {
-  const [queryClient] = useState(() => new QueryClient(QUERY_CLIENT_CONFIG));
-  const [initialized, setInitialized] = useState(false);
-  // Web fades its splash out before the app appears; native has no such splash.
-  const [splashFaded, setSplashFaded] = useState(!IS_WEB);
-  const ready = initialized && splashFaded;
+  const [ready, setReady] = useState(false);
 
   useDeviceSignals();
   useHideNativeSplashWhenReady(ready);
 
+  // Only the bundled translations are waited for. The session restores inside
+  // OxyProvider and the theme is Bloom's, so nothing here waits on the network.
   useEffect(() => {
-    AppInitializer.initializeI18n().catch((error) =>
-      console.error('Failed to initialize i18n:', error),
-    );
-    AppInitializer.initializeApp().finally(() => setInitialized(true));
+    AppInitializer.initializeI18n()
+      .catch((error) => console.error('Failed to initialize i18n:', error))
+      .finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
@@ -124,7 +135,7 @@ export default function RootLayout() {
   return (
     <ThemeRoot>
       {ready ? (
-        <AppProviders queryClient={queryClient}>
+        <AppProviders>
           {/* The messaging client lives under the Oxy provider and above every
               screen: `AlloRoot` builds it once the session names an account and
               gates the app on this device's enrollment. */}
@@ -136,7 +147,7 @@ export default function RootLayout() {
           </AlloRoot>
         </AppProviders>
       ) : IS_WEB ? (
-        <AppSplashScreen startFade={initialized} onFadeComplete={() => setSplashFaded(true)} />
+        <AppSplashScreen />
       ) : null}
     </ThemeRoot>
   );

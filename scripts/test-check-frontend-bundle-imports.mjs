@@ -29,4 +29,30 @@ if (broken.status !== 1 || !broken.stderr.includes('components/Bad.tsx:1')) {
   console.error(`FAIL: root-barrel import escaped the gate\n${broken.stdout}${broken.stderr}`);
   process.exit(1);
 }
+rmSync(join(fixture, 'components', 'Bad.tsx'));
+writeFileSync(
+  join(fixture, 'components', 'Glyphs.tsx'),
+  "import type { BloomIconComponent } from '@oxy.so/bloom/icons';\n" +
+    "import { RiImageLine } from '@oxy.so/bloom/icons/RiImageLine';\n",
+);
+const glyphs = run();
+if (glyphs.status !== 0) {
+  console.error(
+    `FAIL: a type-only or per-glyph Bloom import was rejected\n${glyphs.stdout}${glyphs.stderr}`,
+  );
+  process.exit(1);
+}
+
+writeFileSync(
+  join(fixture, 'components', 'Barrel.tsx'),
+  "import type { ChatComposerIcon } from '@oxy.so/bloom/chat-composer';\n" +
+    "import {\n  RiImageLine,\n  RiMic2Line,\n} from '@oxy.so/bloom/icons';\n",
+);
+const barrel = run();
+if (barrel.status !== 1 || !barrel.stderr.includes('components/Barrel.tsx:2')) {
+  console.error(
+    `FAIL: a Bloom icon-barrel import escaped the gate\n${barrel.stdout}${barrel.stderr}`,
+  );
+  process.exit(1);
+}
 console.log('Bundle-import gate mutations detected.');

@@ -92,7 +92,7 @@ export function useUserSearch(): {
   const enabled = settledTerm.length >= MIN_SEARCH_LENGTH;
 
   const query = useQuery({
-    queryKey: ['users', 'search', user?.id, activeSessionId, supervised, settledTerm] as const,
+    queryKey: ['peopleSearch', user?.id, activeSessionId, supervised, settledTerm] as const,
     queryFn: async (): Promise<readonly SearchedUser[]> => {
       if (supervised) {
         const response = await oxyServices.safety.people({ query: settledTerm });

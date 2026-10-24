@@ -387,6 +387,8 @@
   "settings.aboutallo.version": "Versione {{version}}",
   "settings.account.manage": "Gestisci il tuo account Oxy",
   "settings.appearance.color": "Colore",
+  "settings.appearance.followAccount": "Segui il mio account Oxy",
+  "settings.appearance.followAccountDescription": "Usa la modalità chiara o scura del tuo account Oxy su questo dispositivo e salva lì le modifiche.",
   "settings.appearance.colorSaveError": "Impossibile salvare il tuo colore",
   "settings.appearance.saveError": "Impossibile salvare l'aspetto",
   "settings.appearance.syncNote": "Viene salvato nel tuo account Oxy, quindi tutte le app Oxy usano lo stesso colore.",
