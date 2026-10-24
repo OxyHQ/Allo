@@ -67,14 +67,73 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+/** The last successful answer, and the account and session it was given for. */
+interface Answer {
+  session: string;
+  supervised: boolean;
+}
+
+/**
+ * Whether this account is supervised, as far as this device can say.
+ *
+ * `useSupervision()` hides its retained value after a FAILED fetch (ADR 0041
+ * in the Oxy repo: the Supervision screen must not keep showing private
+ * evidence after an authority error), so a re-check that fails — the app back
+ * in the foreground offline, a timeout — reads `data: undefined`, exactly like
+ * a session nobody has answered for yet. Taking that at face value stopped the
+ * client (a live call, the socket, sync), drew "checking" and built a NEW
+ * client once the next check landed.
+ *
+ * So the last successful answer is remembered for the account and session it
+ * was given for, and stands through a failed re-check until a NEW successful
+ * answer replaces it; only a changed value rebuilds the client (the key below).
+ * What stays fail-closed:
+ *
+ * - no answer yet for THIS account and session (first load, a switch, a new
+ *   session) is still unknown, and the app waits;
+ * - the memory is used only while the hook reports an error; pending data for
+ *   a session that came back is not the old answer (`sessionGap.test.tsx`);
+ * - the account going away forgets it, so a returning session is asked afresh;
+ * - an answer that now says "supervised" switches at once, because a fresh
+ *   answer always wins over the memory.
+ *
+ * Per-conversation access for a supervised account is not this: every
+ * transcript still asks the server before it opens (`ConversationReadGate`).
+ */
+function useSupervisionAnswer(
+  accountId: string | null,
+  activeSessionId: string | null | undefined,
+  personal: boolean,
+  supervision: { data?: { self?: { status: string } | null } | undefined; isError: boolean },
+): { known: boolean; supervised: boolean } {
+  const session = accountId === null ? null : JSON.stringify([accountId, activeSessionId ?? null]);
+  const fresh =
+    !personal || supervision.data === undefined
+      ? undefined
+      : Boolean(supervision.data.self && supervision.data.self.status !== 'ended');
+  const [last, setLast] = useState<Answer | null>(null);
+  // Stored during render, so the answer and the key agree in the same render.
+  if (session === null || !personal) {
+    if (last !== null) setLast(null);
+  } else if (fresh !== undefined && (last?.session !== session || last.supervised !== fresh)) {
+    setLast({ session, supervised: fresh });
+  }
+  if (accountId === null || !personal) return { known: true, supervised: false };
+  const remembered = supervision.isError && last?.session === session ? last.supervised : undefined;
+  const answer = fresh ?? remembered;
+  return { known: answer !== undefined, supervised: answer ?? false };
+}
+
 export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
   const supervision = useSupervision();
-  const personal = (user?.kind ?? 'personal') === 'personal';
-  const known = !accountId || !personal || supervision.data !== undefined;
-  const supervised =
-    personal && Boolean(supervision.data?.self && supervision.data.self.status !== 'ended');
+  const { known, supervised } = useSupervisionAnswer(
+    accountId,
+    activeSessionId,
+    (user?.kind ?? 'personal') === 'personal',
+    supervision,
+  );
   // A transient failure is asked again by itself before "cannot check access"
   // is drawn, and the screen recovers by itself once the device is back online.
   const supervisionFailure = useMemo(
