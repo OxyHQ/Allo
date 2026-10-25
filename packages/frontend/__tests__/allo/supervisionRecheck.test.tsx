@@ -46,7 +46,7 @@ interface MockClient {
   id: number;
   supervised: boolean;
   start: jest.Mock<Promise<void>, []>;
-  stop: jest.Mock<Promise<void>, []>;
+  dispose: jest.Mock<Promise<void>, []>;
 }
 const mockClients: MockClient[] = [];
 jest.mock('@/lib/allo/client', () => ({
@@ -56,7 +56,7 @@ jest.mock('@/lib/allo/client', () => ({
       id: mockClients.length + 1,
       supervised,
       start: jest.fn(async () => undefined),
-      stop: jest.fn(async () => undefined),
+      dispose: jest.fn(async () => undefined),
     };
     mockClients.push(client);
     return client;
@@ -157,7 +157,7 @@ describe('a supervision re-check', () => {
     await answer(answered(null));
     expect(shown()).toBe('app');
     expect(mockClients).toHaveLength(1);
-    expect(client.stop).not.toHaveBeenCalled();
+    expect(client.dispose).not.toHaveBeenCalled();
     expect(client.start).toHaveBeenCalledTimes(1);
   });
 
@@ -167,7 +167,7 @@ describe('a supervision re-check', () => {
     await answer(failed(1));
     expect(shown()).toBe('app');
     expect(mockClients).toHaveLength(1);
-    expect(mockClients[0].stop).not.toHaveBeenCalled();
+    expect(mockClients[0].dispose).not.toHaveBeenCalled();
   });
 
   it('that answers differently rebuilds the client in the new mode at once', async () => {
@@ -175,7 +175,7 @@ describe('a supervision re-check', () => {
     await answer(failed(1));
     await answer(answered({ status: 'active' }));
     expect(mockClients.map((c) => c.supervised)).toEqual([false, true]);
-    expect(mockClients[0].stop).toHaveBeenCalledTimes(1);
+    expect(mockClients[0].dispose).toHaveBeenCalledTimes(1);
     expect(shown()).toBe('app');
   });
 });
@@ -200,7 +200,7 @@ describe('without an answer for this account and session', () => {
     mockSession.activeSessionId = 's-2';
     await answer(failed(1));
     expect(shown()).toBe('access:checking');
-    expect(mockClients[0].stop).toHaveBeenCalledTimes(1);
+    expect(mockClients[0].dispose).toHaveBeenCalledTimes(1);
     expect(mockClients).toHaveLength(1);
   });
 
