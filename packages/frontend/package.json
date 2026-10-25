@@ -57,7 +57,7 @@
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/allo-contracts": "workspace:*",
     "@oxy.so/app-preset": "^5.0.0",
-    "@oxy.so/bloom": "15.50.3",
+    "@oxy.so/bloom": "15.50.4",
     "@oxy.so/core": "7.3.0",
     "@oxy.so/expo-splash": "^1.1.0",
     "@oxy.so/homiio-contracts": "0.2.0",
