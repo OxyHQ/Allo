@@ -11,6 +11,12 @@
  * unit, and a process killed halfway through must leave the previous unit
  * intact rather than a cursor that has moved past events that never landed.
  *
+ * Every WRITE goes through one queue. expo-sqlite's `withTransactionAsync` is
+ * not exclusive: on the one connection, a second batch begun while the first
+ * is open fails, and a lone write that lands meanwhile joins (and is rolled
+ * back with) somebody else's transaction. An edit sent while sync was writing
+ * failed exactly so on a Pixel 8a: "cannot commit - no transaction is active".
+ *
  * Nothing here may fall back to AsyncStorage. There is no "if SQLite is not
  * available" branch on purpose: a device without SQLite is a device this
  * adapter cannot serve, and a silent fallback to an unencrypted, unbatched key
@@ -45,7 +51,17 @@ export interface KvDatabase {
 }
 
 export class SqliteStorage implements StorageAdapter {
+  /** The tail of the write queue: each write starts once the one before it settled. */
+  private writes: Promise<unknown> = Promise.resolve();
+
   private constructor(private readonly db: KvDatabase) {}
+
+  /** Runs `task` after every write queued before it, whether those succeeded or not. */
+  private serialized<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.writes.then(task, task);
+    this.writes = run.catch(() => undefined);
+    return run;
+  }
 
   /** Opens (or creates) the table and answers an adapter over it. */
   static async open(db: KvDatabase): Promise<SqliteStorage> {
@@ -64,11 +80,13 @@ export class SqliteStorage implements StorageAdapter {
   }
 
   async set(key: string, value: Uint8Array): Promise<void> {
-    await this.db.runAsync('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [key, value]);
+    await this.serialized(() =>
+      this.db.runAsync('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)', [key, value]),
+    );
   }
 
   async delete(key: string): Promise<void> {
-    await this.db.runAsync('DELETE FROM kv WHERE key = ?', [key]);
+    await this.serialized(() => this.db.runAsync('DELETE FROM kv WHERE key = ?', [key]));
   }
 
   async list(prefix: string): Promise<string[]> {
@@ -81,6 +99,10 @@ export class SqliteStorage implements StorageAdapter {
 
   async batch(ops: StorageOp[]): Promise<void> {
     if (ops.length === 0) return;
+    await this.serialized(() => this.writeBatch(ops));
+  }
+
+  private async writeBatch(ops: StorageOp[]): Promise<void> {
     await this.db.withTransactionAsync(async () => {
       for (const op of ops) {
         if (op.type === 'set') {

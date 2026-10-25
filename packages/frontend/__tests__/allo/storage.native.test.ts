@@ -59,8 +59,14 @@ class FakeSqlite implements KvDatabase {
   }
 
   async withTransactionAsync(task: () => Promise<void>): Promise<void> {
+    // As SQLite does on one connection: expo-sqlite's transaction is not
+    // exclusive, and a second BEGIN while one is open fails.
+    if (this.depth > 0) throw new Error('cannot start a transaction within a transaction');
     const snapshot = new Map(this.rows);
     this.depth += 1;
+    // Yield, as the real bridge does between statements, so a concurrent
+    // caller gets the chance to interleave.
+    await Promise.resolve();
     try {
       await task();
     } catch (error) {
@@ -148,6 +154,42 @@ describe('SqliteStorage', () => {
     db.failOnKey = null;
     expect(await adapter.get('event/1')).toBeUndefined();
     expect(text(await adapter.get('cursor'))).toBe('before');
+  });
+
+  it('runs concurrent batches one after the other, never one inside another', async () => {
+    // An edit written while sync was writing failed on a Pixel 8a with
+    // "cannot commit - no transaction is active": two batches had shared one
+    // connection's transaction.
+    const { adapter } = await storage();
+    await Promise.all([
+      adapter.batch([{ type: 'set', key: 'a', value: bytes('1') }]),
+      adapter.batch([{ type: 'set', key: 'b', value: bytes('2') }]),
+      adapter.batch([{ type: 'set', key: 'c', value: bytes('3') }]),
+    ]);
+    expect(text(await adapter.get('a'))).toBe('1');
+    expect(text(await adapter.get('b'))).toBe('2');
+    expect(text(await adapter.get('c'))).toBe('3');
+  });
+
+  it('keeps a lone write out of a batch that is running', async () => {
+    // A write inside somebody else's transaction would be rolled back with it.
+    const { adapter, db } = await storage();
+    await Promise.all([
+      adapter.batch([{ type: 'set', key: 'a', value: bytes('1') }]),
+      adapter.set('b', bytes('2')),
+    ]);
+    const lone = db.calls.findIndex((c) => c.params[0] === 'b');
+    expect(db.depths[lone]).toBe(0);
+  });
+
+  it('keeps going after a batch that failed', async () => {
+    const { adapter, db } = await storage();
+    db.failOnKey = 'bad';
+    await Promise.allSettled([
+      adapter.batch([{ type: 'set', key: 'bad', value: bytes('x') }]),
+      adapter.batch([{ type: 'set', key: 'good', value: bytes('y') }]),
+    ]);
+    expect(text(await adapter.get('good'))).toBe('y');
   });
 
   it('opens no transaction for an empty batch', async () => {
