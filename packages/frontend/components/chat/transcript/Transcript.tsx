@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useRef, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -15,6 +15,8 @@ import {
   type MessageBubbleLabels,
   type MessageListItem,
 } from '@oxy.so/bloom/message-bubble';
+
+import { useFollowLatest } from './useFollowLatest';
 
 /** How far from the newest message the "scroll to latest" button appears. */
 const SCROLLED_UP_PX = 320;
@@ -50,17 +52,27 @@ export const Transcript = memo(function Transcript({
   const { t } = useTranslation();
   const scroller = useRef<ScrollViewInstance>(null);
   const [scrolledUp, setScrolledUp] = useState(false);
-  const atBottom = useRef(true);
+
+  const last = items[items.length - 1];
+  const newest = useMemo(
+    () => (last ? { id: last.id, own: last.direction === 'outgoing' } : undefined),
+    [last],
+  );
+  const scrollToEnd = useCallback((animated: boolean) => {
+    scroller.current?.scrollToEnd({ animated });
+  }, []);
+  const follow = useFollowLatest({ newest, scrollToEnd });
+  const followScroll = follow.onScroll;
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      followScroll(event);
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const fromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-      atBottom.current = fromBottom < 24;
       setScrolledUp(fromBottom > SCROLLED_UP_PX);
       if (!reachedStart && contentOffset.y < LOAD_OLDER_PX) onLoadOlder();
     },
-    [onLoadOlder, reachedStart],
+    [followScroll, onLoadOlder, reachedStart],
   );
 
   return (
@@ -74,11 +86,10 @@ export const Transcript = memo(function Transcript({
         scrollEventThrottle={64}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-        // A new message scrolls into view for a reader who was already at the
-        // end; one reading older messages stays where they are.
-        onContentSizeChange={() => {
-          if (atBottom.current) scroller.current?.scrollToEnd({ animated: false });
-        }}
+        // A new message scrolls into view for a reader following the end, and
+        // always for one this account sent; one reading older messages stays
+        // where they are (`useFollowLatest`).
+        {...follow.scrollProps}
       >
         <MessageList
           items={items}
@@ -94,7 +105,7 @@ export const Transcript = memo(function Transcript({
           visible={scrolledUp}
           unreadCount={unreadCount}
           accessibilityLabel={t('chat.scrollToLatest')}
-          onPress={() => scroller.current?.scrollToEnd({ animated: true })}
+          onPress={follow.jumpToEnd}
         />
       </View>
     </View>

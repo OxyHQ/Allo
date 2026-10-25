@@ -299,6 +299,11 @@ async function saveThumbnail(
  * standing still indoors. What is being shared is "the café on this corner",
  * not a survey marker.
  *
+ * The fix is given {@link POSITION_TIMEOUT_MS}. `getCurrentPositionAsync` has no
+ * deadline of its own, and a phone with location on but no fix to give
+ * (indoors, no network location provider) leaves it pending for good, with
+ * nothing on screen saying so.
+ *
  * The street address is a BEST EFFORT on top. `reverseGeocodeAsync` needs a
  * platform geocoder — the browser has none and throws — so a failure here drops
  * the line and keeps the place: the coordinates are the message, the address is
@@ -315,9 +320,10 @@ export async function pickPlace(): Promise<PickedPlace> {
     return { ok: false, reason: 'denied' };
   }
   try {
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    const position = await withDeadline(
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      POSITION_TIMEOUT_MS,
+    );
     const { latitude, longitude } = position.coords;
     return {
       ok: true,
@@ -327,6 +333,18 @@ export async function pickPlace(): Promise<PickedPlace> {
     logger.warn('[chat] the current position could not be read', error);
     return { ok: false, reason: 'unavailable' };
   }
+}
+
+/** How long {@link pickPlace} waits for a fix before saying it could not read one. */
+export const POSITION_TIMEOUT_MS = 20_000;
+
+/** `promise`, or a rejection once `ms` have passed without it settling. */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no position after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }
 
 /** Why {@link pickPlace} came back with nothing, when it did. */
