@@ -15,13 +15,11 @@ membership and operation checks remain the resource authorization contract.
 The root SDK import does not load Oxy; only the optional server entry requires
 `@oxy.so/core >=7 <8`.
 
-This SDK release precedes the backend migrations in Allo and Homiio, so neither
-backend depends on an unpublished sibling SDK. The SDK's development core7 and
-contracts6 dependencies are isolated from the applications' existing major
-versions. The applications adopt the new majors in their separate migration.
+SDK0.4 was published before the backend migrations in Allo and Homiio, so
+neither backend needed an unpublished sibling SDK. During that release the SDK
+and application majors were isolated instead of applying a global override.
 
-The release removes global core/contracts/protocol overrides. Existing app
-core6.14/contracts5.7 remain pinned with compatible protocol1.5.0; the SDK
-selects protocol1.5.1 alongside core7/contracts6. This avoids shipping both
-contracts majors in the existing application bundle. The measured web export
-is 3,290,339 gzip bytes, within the unchanged 3,300,000-byte budget.
+The runtime now uses core7.3/contracts6/protocol1.5.1 with services13.6, and the
+SDK's integration test uses the same core major. Provider and linked clients
+must continue resolving the same major; global overrides must not force a
+future independently released SDK into an incompatible application runtime.

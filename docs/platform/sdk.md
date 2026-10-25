@@ -57,11 +57,30 @@ display name, and every view model carries account ids only. The design brief
 listed it as the resolver the SDK would call; the app resolves names itself
 for now.
 
+### Shared Oxy transport in the app
+
+The app's session adapter supplies `authenticatedFetch` from
+`oxy.createLinkedClient({ baseURL })`. HTTP retains Allo's exact body hash and
+instance signature, while Oxy owns bearer refresh and account/session fences.
+The adapter resolves `linked.getAccessToken(baseURL)` for every socket handshake;
+it never captures `session.accessToken`. An adapter belongs to the account that
+created it and refuses to lend that client's keys to another account.
+
+`AlloRoot` releases its app client with `dispose()`, which stops the core client
+and removes the linked transport subscription. A temporary session gap preserves
+all messaging keys. The core `stop()`/`start()` contract and explicit `reset()`
+remain unchanged. Legacy SDK hosts can still supply `getAccessToken` for HTTP;
+own frontends use the shared authenticated fetch.
+
+Release gate: this frontend requires the shared linked socket method in Oxy
+core 7.1. The server factories ship separately in the Allo and Homiio SDKs before
+their respective backends adopt them; no deployment may rely on local tarballs.
+
 ### The three adapters a host must provide
 
 | adapter | shape | what is to back it in Allo App |
 | --- | --- | --- |
-| `OxySessionAdapter` | `getAccessToken(): Promise<string \| null>`, `getAccountId(): string \| null`, `subscribe(cb): unsubscribe` | the Oxy session from `@oxy.so/services` |
+| `OxySessionAdapter` | `authenticatedFetch?: typeof fetch`, `getAccessToken(): Promise<string \| null>`, `getAccountId(): string \| null`, `subscribe(cb): unsubscribe` | the Oxy session from `@oxy.so/services` |
 | `StorageAdapter` | a byte key-value store: `get`, `set`, `delete`, `list(prefix)`, `batch(ops)` atomic | expo-sqlite on native, IndexedDB on web |
 | `SecretStore` | `get`, `set`, `delete` of named byte values | expo-secure-store on native, IndexedDB on web |
 
@@ -390,3 +409,20 @@ granted a view of an Allo conversation. Until those exist, Mention's chat is
 an independent app space that happens to share the server and the SDK.
 
 Homiio team operations and retry guarantees are described in [Managed teams](./managed-teams.md).
+
+### Published workload transport adoption
+
+The application uses published core7.3/contracts6, the existing services13.6
+frontend, Homiio SDK0.2/contracts0.2.1 and CrowdSource SDK3.1/contracts1.1.1.
+No candidate tarball is part of the lockfile. Allo's own SDK0.4 was released
+separately before this runtime update. The frontend HTTP and socket adapter
+uses the current linked-client session; instance signatures, MLS epochs and
+team capabilities remain domain checks. Deploy Homiio's receiver first, then
+Allo; the verified legacy capability-read compatibility is documented in
+Homiio's `docs/first-party-team-rollout.md`.
+
+Validation on the published tree: 578 backend tests/51 files (two local worker
+processes), 122 core tests, eight public SDK tests and three session-adapter tests
+passed. Backend/frontend types and builds passed; all 51 exported pages load
+scripts and the export is within the current unchanged budgets (3,349,858 gzip
+bytes against 3,360,000). No production deployment is implied by these checks.

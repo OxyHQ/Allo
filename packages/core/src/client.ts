@@ -402,8 +402,13 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     const engine = await CryptoEngine.create(options.crypto);
     const http = new HttpClient({
       baseUrl: options.baseUrl.replace(/\/+$/, ''),
-      fetch: options.transport?.fetch ?? globalThis.fetch.bind(globalThis),
-      getAccessToken: () => options.session.getAccessToken(),
+      fetch:
+        options.session.authenticatedFetch ??
+        options.transport?.fetch ??
+        globalThis.fetch.bind(globalThis),
+      ...(options.session.authenticatedFetch
+        ? {}
+        : { getAccessToken: () => options.session.getAccessToken() }),
       now,
       onInstanceRevoked: () => ctx?.instance.markRevoked(),
     });

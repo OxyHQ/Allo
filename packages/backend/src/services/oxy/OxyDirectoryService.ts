@@ -20,9 +20,8 @@ import type { SearchProfilesResponse, User } from '@oxy.so/core';
  * all; `POST /users/by-ids` is `optionalUserOrServiceAuth` and returns the same
  * public payload to an anonymous caller; and an avatar URL is a pure string
  * built against the Oxy CDN with no network call in it. So this service works
- * with no provisioning step, and configuring a service credential
- * (`config/oxyService.ts`) only changes HOW the by-ids call authenticates, not
- * whether it works.
+ * anonymously. Own authenticated calls use the shared workload client in
+ * `oxy.ts`; no customer credential is a substitute for Allo's identity.
  *
  * ## Why it projects instead of forwarding
  *
