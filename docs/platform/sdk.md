@@ -409,3 +409,20 @@ granted a view of an Allo conversation. Until those exist, Mention's chat is
 an independent app space that happens to share the server and the SDK.
 
 Homiio team operations and retry guarantees are described in [Managed teams](./managed-teams.md).
+
+### Published workload transport adoption
+
+The application uses published core7.3/contracts6, the existing services13.6
+frontend, Homiio SDK0.2/contracts0.2.1 and CrowdSource SDK3.1/contracts1.1.1.
+No candidate tarball is part of the lockfile. Allo's own SDK0.4 was released
+separately before this runtime update. The frontend HTTP and socket adapter
+uses the current linked-client session; instance signatures, MLS epochs and
+team capabilities remain domain checks. Deploy Homiio's receiver first, then
+Allo; the verified legacy capability-read compatibility is documented in
+Homiio's `docs/first-party-team-rollout.md`.
+
+Validation on the published tree: 578 backend tests/51 files (two local worker
+processes), 122 core tests, eight public SDK tests and three session-adapter tests
+passed. Backend/frontend types and builds passed; all 51 exported pages load
+scripts and the export is within the current unchanged budgets (3,349,858 gzip
+bytes against 3,360,000). No production deployment is implied by these checks.

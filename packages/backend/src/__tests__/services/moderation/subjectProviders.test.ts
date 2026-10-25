@@ -113,6 +113,7 @@ describe('what the subject providers are allowed to reach', () => {
     '@crowdsource.you/core',
     '@oxy.so/core',
     '@oxy.so/core/server',
+    '@oxy.so/core/server/aws',
     '@oxy.so/db',
     'drizzle-orm',
     'drizzle-orm/pg-core',

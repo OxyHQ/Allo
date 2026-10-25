@@ -36,13 +36,7 @@ import { logger } from '../../utils/logger';
  * already behind the first.
  */
 
-/**
- * The client, or `undefined` where this process cannot authenticate as Allo.
- *
- * `undefined` rather than a throw: a local checkout can attest no task role and
- * has no configured workload provider, and a report filed there must still be STORED. The delivery
- * worker is what notices there is nowhere to send it.
- */
+/** Shared process workload provider; failed delivery remains retryable in the outbox. */
 export function getCrowdSourceClient(): CrowdSource | undefined {
   const config = crowdSourceConfig();
   return crowdSourceForOxyService({

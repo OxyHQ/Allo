@@ -58,7 +58,7 @@ interface Held {
 
 /** A `start()` that threw, tied to the client it belongs to so a newer client never shows it. */
 interface StartFailure {
-  client: AlloClient;
+  client: AppAlloClient;
   error: Error;
 }
 
