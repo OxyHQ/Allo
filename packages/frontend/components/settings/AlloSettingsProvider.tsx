@@ -7,7 +7,8 @@ import { RiTranslate2 } from '@oxy.so/bloom/icons/RiTranslate2';
 import { RiUploadCloud2Line } from '@oxy.so/bloom/icons/RiUploadCloud2Line';
 import { SettingsModal, type SettingsNavGroup } from '@oxy.so/bloom/settings-modal';
 import { toast } from '@oxy.so/bloom/toast';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlloSettingsContext } from './context';
 import { GeneralSettings } from './GeneralSettings';
@@ -56,14 +57,17 @@ export function AlloSettingsProvider({ children }: { children: React.ReactNode }
     phrasePending.current = pending;
   }, []);
   const value = useMemo(() => ({ open, close, setPhrasePending }), [open, close, setPhrasePending]);
+  // Two named groups. One group labelled "Settings" repeated the header above
+  // it word for word, and the first page, titled "Account", opened on an
+  // "Account" section: it is the general page (account, preferences, about).
   const groups: SettingsNavGroup[] = [
     {
-      label: t('settings.title'),
+      label: t('settings.sections.app'),
       items: [
         {
           key: 'general',
           page: 'general',
-          label: t('settings.sections.account'),
+          label: t('settings.sections.general'),
           icon: RiSettings3Line,
         },
         {
@@ -78,6 +82,11 @@ export function AlloSettingsProvider({ children }: { children: React.ReactNode }
           label: t('settings.preferences.language'),
           icon: RiTranslate2,
         },
+      ],
+    },
+    {
+      label: t('settings.sections.security'),
+      items: [
         {
           key: 'privacy',
           page: 'privacy',
@@ -119,7 +128,7 @@ export function AlloSettingsProvider({ children }: { children: React.ReactNode }
         }}
         pages={{
           general: {
-            title: t('settings.sections.account'),
+            title: t('settings.sections.general'),
             content: <GeneralSettings />,
           },
           appearance: {
