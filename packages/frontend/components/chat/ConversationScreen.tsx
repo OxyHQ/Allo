@@ -1,7 +1,7 @@
 import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useAlloClient } from '@allo/react';
-import type { ContactDraft, PlaceDraft, PollDraft, TimelineContent } from '@allo/core';
+import type { ContactDraft, PlaceDraft, PollDraft } from '@allo/core';
 import {
   useConversation,
   useConversationActions,
@@ -43,6 +43,7 @@ import {
 } from '@/components/chat/composer/Composer';
 import { MediaViewer, type MediaViewerHandle } from '@/components/chat/media/MediaViewer';
 import { hasMessageMedia, MessageMedia } from '@/components/chat/media/MessageMedia';
+import { messageMediaFit } from '@/lib/chat/mediaFit';
 import { stickerDraftOf } from '@/lib/chat/stickerRef';
 import type { Sticker } from '@oxy.so/stickers';
 import { Transcript } from '@/components/chat/transcript/Transcript';
@@ -82,13 +83,6 @@ interface MessageActions {
   /** A card that names an Oxy account: open the conversation with them. */
   messageAccount: (accountId: string) => void;
 }
-
-/** The content kinds whose bubble keeps its padding rather than letting the block bleed. */
-const INSET_MEDIA: ReadonlySet<TimelineContent['kind']> = new Set<TimelineContent['kind']>([
-  'poll',
-  'location',
-  'contact',
-]);
 
 /** A readable measure for a bubble once the conversation has a pane to itself. */
 const WIDE_BUBBLE_MAX_WIDTH = 560;
@@ -336,16 +330,7 @@ function AuthorizedConversationScreen({
                 onMessageAccount={actions.messageAccount}
               />
             ) : undefined,
-          // A photo bleeds to the bubble's radius; a poll, a place and a card
-          // are typography and keep its padding (Bloom 2.12.4).
-          // A sticker is its own shape and gets no bubble at all (Bloom 6.3's
-          // `bare`).
-          mediaFit:
-            content?.kind === 'sticker'
-              ? ('bare' as const)
-              : content && INSET_MEDIA.has(content.kind)
-                ? ('inset' as const)
-                : undefined,
+          mediaFit: messageMediaFit(content),
           onLongPress: content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
           onContextMenu:
             content && content.kind !== 'deleted' ? () => setMenuFor(row.id) : undefined,
