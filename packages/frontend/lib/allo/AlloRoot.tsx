@@ -127,15 +127,20 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
   const [accountTransition, setAccountTransition] = useState(0);
-  // Rebuild even when React batches an A -> B -> A bearer transition into one render.
+  const transitionRef = useRef(0);
+  // Rebuild even when React batches several bearer transitions into one render.
   useLayoutEffect(() => {
-    let previous = oxyServices.session.userId;
-    return oxyServices.session.onChange(() => {
-      const next = oxyServices.session.userId;
-      if (next !== null && previous !== null && next !== previous) {
-        setAccountTransition((revision) => revision + 1);
+    let previous = oxyServices.http.getSessionEpoch();
+    let hadToken = Boolean(oxyServices.session.accessToken);
+    return oxyServices.session.onChange((token) => {
+      const next = oxyServices.http.getSessionEpoch();
+      const hasToken = Boolean(token);
+      if (next !== previous || hadToken !== hasToken || (hasToken && !oxyServices.session.userId)) {
+        transitionRef.current += 1;
+        setAccountTransition(transitionRef.current);
       }
-      if (next !== null) previous = next;
+      previous = next;
+      hadToken = hasToken;
     });
   }, [oxyServices]);
   const supervision = useSupervision();
@@ -197,9 +202,10 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
     stopped
-      .then(() => createAppAlloClient({ oxy: oxyRef.current, accountId, supervised }))
-      .then(async (next) => {
-        if (cancelled) {
+      .then(async () => {
+        if (cancelled || transitionRef.current !== accountTransition) return;
+        const next = await createAppAlloClient({ oxy: oxyRef.current, accountId, supervised });
+        if (cancelled || transitionRef.current !== accountTransition) {
           await next.dispose();
           return;
         }
@@ -218,7 +224,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accountId, isLoading, key, known, supervised]);
+  }, [accountId, accountTransition, isLoading, key, known, supervised]);
 
   useEffect(
     () => () => {

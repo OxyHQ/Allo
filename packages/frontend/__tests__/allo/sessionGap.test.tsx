@@ -94,9 +94,14 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
 };
 const mockLogout = jest.fn();
 let mockBearerAccount: string | null = ACCOUNT;
+let mockEpoch = 0;
 const mockSessionListeners = new Set<(token: string | null) => void>();
 const mockOxyServices = {
+  http: { getSessionEpoch: () => mockEpoch },
   session: {
+    get accessToken() {
+      return mockBearerAccount ? 'synthetic-token' : null;
+    },
     get userId() {
       return mockBearerAccount;
     },
@@ -125,6 +130,30 @@ const registrations = () =>
     .length;
 
 describe('a session that goes away', () => {
+  it('rebuilds after a bearer gap even if the transport epoch stays unchanged', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const builtBefore = mockBuilt;
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    await act(async () => {
+      mockBearerAccount = null;
+      mockSessionListeners.forEach((listener) => listener(null));
+      mockBearerAccount = ACCOUNT;
+      mockSessionListeners.forEach((listener) => listener('restored-token'));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore + 1);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => tree!.unmount());
+  }, 30_000);
+
   it('rebuilds a client after A to B to A bearer changes batched into one render', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -139,8 +168,10 @@ describe('a session that goes away', () => {
     const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
     await act(async () => {
       mockBearerAccount = 'other-account';
+      mockEpoch += 1;
       mockSessionListeners.forEach((listener) => listener('other-token'));
       mockBearerAccount = ACCOUNT;
+      mockEpoch += 1;
       mockSessionListeners.forEach((listener) => listener('original-token'));
     });
     await settle();
