@@ -1,4 +1,4 @@
-import { AppShell, AppShellPanel, AppShellPanels } from '@oxy.so/bloom/app-shell';
+import { AppShell } from '@oxy.so/bloom/app-shell';
 import { RiChatNewLine } from '@oxy.so/bloom/icons/RiChatNewLine';
 import { RiImageAddLine } from '@oxy.so/bloom/icons/RiImageAddLine';
 import { RiPhoneLine } from '@oxy.so/bloom/icons/RiPhoneLine';
@@ -34,7 +34,7 @@ import { conversationIdFromPath } from '@/utils/routeUtils';
  * The signed-in app: Bloom's app shell over Allo's destinations
  * (`AlloNavigation`). On a phone, a stack: the pages (chats, updates, calls)
  * under Bloom's bottom bar, and each screen pushed over them. From `SPLIT_FROM`
- * up, the navigation rail flush against Bloom's `AppShellPanels` layout — list
+ * up, the navigation rail flush against Bloom's panel layout — list
  * pane, the route as the conversation pane, and a conversation's info beside it
  * once a third column fits.
  */
@@ -163,47 +163,63 @@ function SplitShell({ split }: { split: boolean }) {
         // it is the app's action, not a page's.
         primaryAction: newChat,
       }}
-    >
-      <AppShellPanels appearance="joined">
-        {split ? (
-          <AppShellPanel
-            key="list"
-            id="list"
-            width={listWidth}
-            onWidthChange={setListWidth}
-            minWidth={280}
-            maxWidth={520}
-            resizable
-            resizeLabel={t('chat.resize')}
-          >
-            <ConversationList />
-          </AppShellPanel>
-        ) : null}
-        <AppShellPanel key="detail" id="detail">
-          <NavigationTheme transparent>
-            {split ? (
-              <Slot />
-            ) : (
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: 'transparent' },
-                }}
-                // A covered scene's Screens go inactive (reselect, status bar,
-                // floating action and visibility yield to the one on top) and
-                // leave the accessibility tree.
-                screenLayout={stackSceneLayout}
-              />
-            )}
-          </NavigationTheme>
-        </AppShellPanel>
-        {conversationId && infoOpen && infoBeside ? (
-          <AppShellPanel key="info" id="info" width={320}>
-            <ConversationInfo conversationId={conversationId} variant="pane" onClose={closeInfo} />
-          </AppShellPanel>
-        ) : null}
-      </AppShellPanels>
-    </AppShell>
+      panelLayout={{
+        mode: 'split',
+        flow: 'bounded',
+        horizontalScroll: 'contained',
+        appearance: 'joined',
+        gap: 1,
+        panels: [
+          ...(split
+            ? [
+                {
+                  id: 'list',
+                  width: listWidth,
+                  onWidthChange: setListWidth,
+                  minWidth: 280,
+                  maxWidth: 520,
+                  resizable: true,
+                  resizeLabel: t('chat.resize'),
+                  content: <ConversationList />,
+                },
+              ]
+            : []),
+          {
+            id: 'detail',
+            content: (
+              <NavigationTheme transparent>
+                {split ? (
+                  <Slot />
+                ) : (
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: 'transparent' },
+                    }}
+                    screenLayout={stackSceneLayout}
+                  />
+                )}
+              </NavigationTheme>
+            ),
+          },
+          ...(conversationId && infoOpen && infoBeside
+            ? [
+                {
+                  id: 'info',
+                  width: 320,
+                  content: (
+                    <ConversationInfo
+                      conversationId={conversationId}
+                      variant="pane"
+                      onClose={closeInfo}
+                    />
+                  ),
+                },
+              ]
+            : []),
+        ],
+      }}
+    />
   );
 }
 
