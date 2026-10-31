@@ -91,7 +91,9 @@ function compiledAlloRoot(): typeof AlloRoot {
   }
   const compiledModule = { exports: {} as { AlloRoot: typeof AlloRoot } };
   const load = (id: string) => require(id.startsWith('./') ? `@/lib/allo/${id.slice(2)}` : id);
-  new Script(`(function(require, module, exports, setTimeout, clearTimeout) { ${code}\n})`, { filename }).runInThisContext()(
+  new Script(`(function(require, module, exports, setTimeout, clearTimeout) { ${code}\n})`, {
+    filename,
+  }).runInThisContext()(
     load,
     compiledModule,
     compiledModule.exports,
