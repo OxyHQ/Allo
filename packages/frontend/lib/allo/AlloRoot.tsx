@@ -204,7 +204,9 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     stopped
       .then(async () => {
         if (cancelled || transitionRef.current !== accountTransition) return;
-        const next = await createAppAlloClient({ oxy: oxyRef.current, accountId, supervised });
+        const oxy = oxyRef.current;
+        if (!oxy.session.accessToken || oxy.session.userId !== accountId) return;
+        const next = await createAppAlloClient({ oxy, accountId, supervised });
         if (cancelled || transitionRef.current !== accountTransition) {
           await next.dispose();
           return;
