@@ -10,19 +10,30 @@ export function ConversationAccessState({
   state,
   onRetry,
 }: {
-  state: 'checking' | 'blocked' | 'unavailable' | 'unsupported';
+  state: 'checking' | 'blocked' | 'unavailable' | 'unsupported' | 'session-unverified';
   onRetry?: () => void;
 }) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const { showBottomSheet } = useOxy();
   return (
-    <View style={styles.root} accessibilityState={{ busy: state === 'checking' }}>
+    <View
+      style={styles.root}
+      accessibilityState={{ busy: state === 'checking' }}
+      accessibilityRole={state === 'session-unverified' ? 'alert' : undefined}
+      accessibilityLiveRegion={state === 'session-unverified' ? 'polite' : undefined}
+    >
       <ChatEmptyState
         illustration={
           state === 'checking' ? <ActivityIndicator /> : <IconCircle icon={RiShieldLine} />
         }
-        title={t(`supervision.${state}.title`)}
-        description={t(`supervision.${state}.body`)}
+        title={t(
+          state === 'session-unverified'
+            ? 'session.unverified.title'
+            : `supervision.${state}.title`,
+        )}
+        description={t(
+          state === 'session-unverified' ? 'session.unverified.body' : `supervision.${state}.body`,
+        )}
       />
       {state === 'unavailable' && onRetry ? (
         <Button onPress={onRetry}>{t('error.boundary.retry')}</Button>

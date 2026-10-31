@@ -36,7 +36,15 @@ import { nativeCallBridge } from './nativeCallBridge';
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
 import type React from 'react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { useTransientRetry } from './transientRetry';
@@ -126,6 +134,15 @@ function useSupervisionAnswer(
 export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
+  const subscribeBearer = useCallback(
+    (notify: () => void) => oxyServices.session.onChange(notify),
+    [oxyServices],
+  );
+  const readBearer = useCallback(
+    () => JSON.stringify([Boolean(oxyServices.session.accessToken), oxyServices.session.userId]),
+    [oxyServices],
+  );
+  const bearer = useSyncExternalStore(subscribeBearer, readBearer, () => '[false,null]');
   const [accountTransition, setAccountTransition] = useState(0);
   const transitionRef = useRef(0);
   // Rebuild even when React batches several bearer transitions into one render.
@@ -166,6 +183,20 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     accountId && known
       ? JSON.stringify([accountId, activeSessionId, supervised, accountTransition])
       : null;
+  const needsBearer = accountId !== null && bearer !== JSON.stringify([true, accountId]);
+  const waitKey = needsBearer ? JSON.stringify([accountId, bearer]) : null;
+  const [wait, setWait] = useState<{ key: string | null; expired: boolean }>({
+    key: waitKey,
+    expired: false,
+  });
+  if (wait.key !== waitKey) setWait({ key: waitKey, expired: false });
+  useEffect(() => {
+    if (waitKey === null) return;
+    const timer = setTimeout(() => {
+      setWait((current) => (current.key === waitKey ? { key: waitKey, expired: true } : current));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [waitKey]);
   const [current, setCurrent] = useState<Held | null>(null);
   const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
   const held = useRef<Held | null>(null);
@@ -252,6 +283,12 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (accountId === null) return <>{children}</>;
+  if (needsBearer)
+    return (
+      <ConversationAccessState
+        state={wait.key === waitKey && wait.expired ? 'session-unverified' : 'checking'}
+      />
+    );
   if (!known)
     return (
       <ConversationAccessState

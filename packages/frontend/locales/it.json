@@ -389,6 +389,8 @@
   "settings.aboutallo.build": "Build",
   "settings.aboutallo.buildVersion": "Build di sviluppo",
   "settings.aboutallo.version": "Versione {{version}}",
+  "session.unverified.title": "Impossibile verificare la sessione",
+  "session.unverified.body": "Non è stato possibile verificare la tua sessione Oxy. I messaggi restano nascosti su questo dispositivo.",
   "settings.account.manageAction": "Gestisci",
   "settings.account.oxyAccount": "Account Oxy",
   "settings.appearance.color": "Colore",
