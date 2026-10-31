@@ -79,7 +79,13 @@ let mockSupervision: { data: { self: null } | undefined; isError: boolean } = {
   isError: false,
 };
 jest.mock('@/lib/allo/people', () => ({ configurePeople: jest.fn() }));
-jest.mock('@/lib/allo/ConversationAccessState', () => ({ ConversationAccessState: () => null }));
+jest.mock('@/lib/allo/ConversationAccessState', () => ({
+  ConversationAccessState: ({ state }: { state: string }) => {
+    const React = require('react');
+    const { Text } = require('react-native');
+    return React.createElement(Text, { testID: 'access-state' }, state);
+  },
+}));
 jest.mock('@/lib/allo/RestoreHistoryPrompt', () => ({ RestoreHistoryPrompt: () => null }));
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -94,13 +100,14 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
 };
 const mockLogout = jest.fn();
 let mockBearerAccount: string | null = ACCOUNT;
+let mockOpaque = false;
 let mockEpoch = 0;
 const mockSessionListeners = new Set<(token: string | null) => void>();
 const mockOxyServices = {
   http: { getSessionEpoch: () => mockEpoch },
   session: {
     get accessToken() {
-      return mockBearerAccount ? 'synthetic-token' : null;
+      return mockBearerAccount || mockOpaque ? 'synthetic-token' : null;
     },
     get userId() {
       return mockBearerAccount;
@@ -313,5 +320,53 @@ describe('a session that goes away', () => {
     await act(async () => {
       tree!.unmount();
     });
+  }, 30_000);
+
+  it('keeps device keys while an opaque bearer remains unverifiable and after recovery', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    const enrolled = await mockStorage.get(`allo/allo/${ACCOUNT}/self`);
+    expect(signingKey).toBeDefined();
+    expect(enrolled).toBeDefined();
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        mockBearerAccount = null;
+        mockOpaque = true;
+        mockEpoch += 1;
+        mockSessionListeners.forEach((listener) => listener('opaque-token'));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+      expect(tree!.root.findByProps({ testID: 'access-state' }).props.children).toBe(
+        'session-unverified',
+      );
+      expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+      expect(await mockStorage.get(`allo/allo/${ACCOUNT}/self`)).toEqual(enrolled);
+      await act(async () => {
+        mockOpaque = false;
+        mockBearerAccount = ACCOUNT;
+        mockEpoch += 1;
+        mockSessionListeners.forEach((listener) => listener('restored-token'));
+      });
+    } finally {
+      jest.useRealTimers();
+      mockOpaque = false;
+      mockBearerAccount = ACCOUNT;
+    }
+    await settle();
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    expect(await mockStorage.get(`allo/allo/${ACCOUNT}/self`)).toEqual(enrolled);
+    expect(mockServer.requestLog.some((entry) => entry.path.includes('/revoke'))).toBe(false);
+    await act(async () => tree!.unmount());
   }, 30_000);
 });

@@ -389,6 +389,8 @@
   "settings.aboutallo.build": "Build",
   "settings.aboutallo.buildVersion": "Development build",
   "settings.aboutallo.version": "Version {{version}}",
+  "session.unverified.title": "Can’t verify your session",
+  "session.unverified.body": "Your Oxy session could not be verified. Your messages remain hidden on this device.",
   "settings.account.manageAction": "Manage",
   "settings.account.oxyAccount": "Oxy account",
   "settings.appearance.color": "Colour",
