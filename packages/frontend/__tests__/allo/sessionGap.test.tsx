@@ -93,8 +93,26 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
   isLoading: false,
 };
 const mockLogout = jest.fn();
+let mockBearerAccount: string | null = ACCOUNT;
+let mockEpoch = 0;
+const mockSessionListeners = new Set<(token: string | null) => void>();
+const mockOxyServices = {
+  http: { getSessionEpoch: () => mockEpoch },
+  session: {
+    get accessToken() {
+      return mockBearerAccount ? 'synthetic-token' : null;
+    },
+    get userId() {
+      return mockBearerAccount;
+    },
+    onChange(listener: (token: string | null) => void) {
+      mockSessionListeners.add(listener);
+      return () => mockSessionListeners.delete(listener);
+    },
+  },
+};
 jest.mock('@oxy.so/services/ui/client', () => ({
-  useOxy: () => ({ ...mockSession, oxyServices: {}, logout: mockLogout }),
+  useOxy: () => ({ ...mockSession, oxyServices: mockOxyServices, logout: mockLogout }),
   useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
 }));
 
@@ -112,6 +130,113 @@ const registrations = () =>
     .length;
 
 describe('a session that goes away', () => {
+  it('does not construct an old client while an A to B to A update is awaiting commit', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    const builtBefore = mockBuilt;
+    let builtWhileUpdating = -1;
+    await act(async () => {
+      mockEpoch += 1;
+      mockBearerAccount = 'other-account';
+      mockSessionListeners.forEach((listener) => listener('other-token'));
+      mockEpoch += 1;
+      mockBearerAccount = ACCOUNT;
+      mockSessionListeners.forEach((listener) => listener('restored-token'));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      builtWhileUpdating = mockBuilt;
+    });
+    await settle();
+    await act(async () => tree!.unmount());
+    expect(builtWhileUpdating).toBe(builtBefore);
+  });
+
+  it('waits for a restored bearer before rebuilding and keeps the device key', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const builtBefore = mockBuilt;
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    await act(async () => {
+      mockBearerAccount = null;
+      mockSessionListeners.forEach((listener) => listener(null));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => {
+      mockBearerAccount = ACCOUNT;
+      mockSessionListeners.forEach((listener) => listener('restored-token'));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore + 1);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => tree!.unmount());
+  }, 30_000);
+
+  it('rebuilds after a bearer gap even if the transport epoch stays unchanged', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const builtBefore = mockBuilt;
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    await act(async () => {
+      mockBearerAccount = null;
+      mockSessionListeners.forEach((listener) => listener(null));
+      mockBearerAccount = ACCOUNT;
+      mockSessionListeners.forEach((listener) => listener('restored-token'));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore + 1);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => tree!.unmount());
+  }, 30_000);
+
+  it('rebuilds a client after A to B to A bearer changes batched into one render', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const builtBefore = mockBuilt;
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    await act(async () => {
+      mockBearerAccount = 'other-account';
+      mockEpoch += 1;
+      mockSessionListeners.forEach((listener) => listener('other-token'));
+      mockBearerAccount = ACCOUNT;
+      mockEpoch += 1;
+      mockSessionListeners.forEach((listener) => listener('original-token'));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore + 1);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => tree!.unmount());
+  }, 30_000);
+
   it('keeps this device enrolled and enrols nothing new when the session comes back', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {

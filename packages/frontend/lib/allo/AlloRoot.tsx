@@ -36,7 +36,7 @@ import { nativeCallBridge } from './nativeCallBridge';
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { useTransientRetry } from './transientRetry';
@@ -126,6 +126,23 @@ function useSupervisionAnswer(
 export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
+  const [accountTransition, setAccountTransition] = useState(0);
+  const transitionRef = useRef(0);
+  // Rebuild even when React batches several bearer transitions into one render.
+  useLayoutEffect(() => {
+    let previous = oxyServices.http.getSessionEpoch();
+    let hadToken = Boolean(oxyServices.session.accessToken);
+    return oxyServices.session.onChange((token) => {
+      const next = oxyServices.http.getSessionEpoch();
+      const hasToken = Boolean(token);
+      if (next !== previous || hadToken !== hasToken || (hasToken && !oxyServices.session.userId)) {
+        transitionRef.current += 1;
+        setAccountTransition(transitionRef.current);
+      }
+      previous = next;
+      hadToken = hasToken;
+    });
+  }, [oxyServices]);
   const supervision = useSupervision();
   const { known, supervised } = useSupervisionAnswer(
     accountId,
@@ -145,7 +162,10 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     void refetchSupervision();
   }, [refetchSupervision]);
   const supervisionGaveUp = useTransientRetry(supervisionFailure, retrySupervision);
-  const key = accountId && known ? JSON.stringify([accountId, activeSessionId, supervised]) : null;
+  const key =
+    accountId && known
+      ? JSON.stringify([accountId, activeSessionId, supervised, accountTransition])
+      : null;
   const [current, setCurrent] = useState<Held | null>(null);
   const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
   const held = useRef<Held | null>(null);
@@ -182,9 +202,12 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
     stopped
-      .then(() => createAppAlloClient({ oxy: oxyRef.current, supervised }))
-      .then(async (next) => {
-        if (cancelled) {
+      .then(async () => {
+        if (cancelled || transitionRef.current !== accountTransition) return;
+        const oxy = oxyRef.current;
+        if (!oxy.session.accessToken || oxy.session.userId !== accountId) return;
+        const next = await createAppAlloClient({ oxy, accountId, supervised });
+        if (cancelled || transitionRef.current !== accountTransition) {
           await next.dispose();
           return;
         }
@@ -203,7 +226,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accountId, isLoading, key, known, supervised]);
+  }, [accountId, accountTransition, isLoading, key, known, supervised]);
 
   useEffect(
     () => () => {

@@ -22,7 +22,7 @@ describe('Allo session adapter on the canonical shared transport', () => {
       expect(refresh).toHaveBeenCalledTimes(1);
       const b = fixtureToken('account-b', 3);
       oxy.session.setAccessToken(b);
-      expect(session.getAccountId()).toBe('account-b');
+      expect(session.getAccountId()).toBeNull();
       expect(await session.getAccessToken()).toBeNull();
       await expect(session.authenticatedFetch?.(`${baseURL}/v1/messages`)).rejects.toThrow(
         'account session changed',
@@ -30,7 +30,7 @@ describe('Allo session adapter on the canonical shared transport', () => {
       oxy.session.clear();
       expect(session.getAccountId()).toBeNull();
       expect(await session.getAccessToken()).toBeNull();
-      expect(observed).toEqual(['account-a', 'account-b', null]);
+      expect(observed).toEqual(['account-a', null, null]);
       stop();
       oxy.session.setAccessToken(fresh);
       expect(observed).toHaveLength(3);
@@ -51,7 +51,9 @@ describe('Allo session adapter on the canonical shared transport', () => {
     const createLinkedClient = jest.fn(() => linked);
     const session = createSessionAdapter(
       {
+        http: { getSessionEpoch: () => 0 },
         session: {
+          accessToken: 'synthetic',
           get userId() {
             return current;
           },
@@ -82,4 +84,148 @@ describe('Allo session adapter on the canonical shared transport', () => {
     session.dispose();
     expect(dispose).toHaveBeenCalledTimes(1);
   });
+});
+
+it('does not reactivate an old adapter after A to B to A without a React commit', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1', enableRetry: false });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    oxy.session.setAccessToken(fixtureToken('account-b', 1));
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+    await expect(session.authenticatedFetch?.(`${baseURL}/v1/messages`)).rejects.toThrow(
+      'account session changed',
+    );
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('retires the old adapter across temporary bearer loss and allows a new one', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  const token = fixtureToken('account-a', 1);
+  oxy.session.setAccessToken(token);
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    oxy.session.clear();
+    expect(session.getAccountId()).toBeNull();
+    oxy.session.setAccessToken(token);
+    expect(session.getAccountId()).toBeNull();
+    const restored = createSessionAdapter(oxy, baseURL);
+    try {
+      expect(restored.getAccountId()).toBe('account-a');
+      expect(await restored.getAccessToken()).toBe(token);
+    } finally {
+      restored.dispose();
+    }
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('does not reactivate an old adapter when the same account gets a different session', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  const newSession = `${Buffer.from('{"alg":"none"}').toString('base64url')}.${Buffer.from(JSON.stringify({ userId: 'account-a', sessionId: 'new-session', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.fixture`;
+  try {
+    oxy.session.setAccessToken(newSession);
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('does not reactivate an old adapter after an opaque token and return to A', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    oxy.session.setAccessToken('opaque-token');
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('retires the old adapter when a 401 clears the token without advancing the SDK epoch', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1', enableRetry: false });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const epoch = oxy.http.getSessionEpoch();
+  const session = createSessionAdapter(oxy, baseURL);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = jest.fn(async () => new Response(null, { status: 401 })) as typeof fetch;
+  try {
+    await oxy.http.get('/test', { retry: false, deduplicate: false }).catch(() => undefined);
+    expect(globalThis.fetch).toHaveBeenCalled();
+    expect(oxy.session.accessToken).toBeNull();
+    expect(oxy.http.getSessionEpoch()).toBe(epoch);
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(await session.getAccessToken()).toBeNull();
+    const restored = createSessionAdapter(oxy, baseURL);
+    try {
+      expect(restored.getAccountId()).toBe('account-a');
+    } finally {
+      restored.dispose();
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('does not bind a projected A client to an already installed B bearer', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-b', 1));
+  const session = createSessionAdapter(oxy, baseURL, 'account-a');
+  try {
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(await session.getAccessToken()).toBeNull();
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('rejects an old response after an A to B to A bearer transition', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  let release!: (response: Response) => void;
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = jest.fn(() => {
+    started();
+    return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+  }) as typeof fetch;
+  try {
+    if (!session.authenticatedFetch) throw new Error('authenticated fetch is unavailable');
+    const request = session.authenticatedFetch(`${baseURL}/v1/messages`);
+    await began;
+    oxy.session.setAccessToken(fixtureToken('account-b', 1));
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    release(new Response(null, { status: 204 }));
+    await expect(request).rejects.toThrow();
+  } finally {
+    globalThis.fetch = originalFetch;
+    session.dispose();
+    oxy.dispose();
+  }
 });
