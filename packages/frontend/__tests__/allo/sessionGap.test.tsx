@@ -93,8 +93,21 @@ const mockSession: { user: { id: string } | null; isLoading: boolean } = {
   isLoading: false,
 };
 const mockLogout = jest.fn();
+let mockBearerAccount: string | null = ACCOUNT;
+const mockSessionListeners = new Set<(token: string | null) => void>();
+const mockOxyServices = {
+  session: {
+    get userId() {
+      return mockBearerAccount;
+    },
+    onChange(listener: (token: string | null) => void) {
+      mockSessionListeners.add(listener);
+      return () => mockSessionListeners.delete(listener);
+    },
+  },
+};
 jest.mock('@oxy.so/services/ui/client', () => ({
-  useOxy: () => ({ ...mockSession, oxyServices: {}, logout: mockLogout }),
+  useOxy: () => ({ ...mockSession, oxyServices: mockOxyServices, logout: mockLogout }),
   useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
 }));
 
@@ -112,6 +125,30 @@ const registrations = () =>
     .length;
 
 describe('a session that goes away', () => {
+  it('rebuilds a client after A to B to A bearer changes batched into one render', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AlloRoot>
+          <Text>app</Text>
+        </AlloRoot>,
+      );
+    });
+    await settle();
+    const builtBefore = mockBuilt;
+    const signingKey = await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`);
+    await act(async () => {
+      mockBearerAccount = 'other-account';
+      mockSessionListeners.forEach((listener) => listener('other-token'));
+      mockBearerAccount = ACCOUNT;
+      mockSessionListeners.forEach((listener) => listener('original-token'));
+    });
+    await settle();
+    expect(mockBuilt).toBe(builtBefore + 1);
+    expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
+    await act(async () => tree!.unmount());
+  }, 30_000);
+
   it('keeps this device enrolled and enrols nothing new when the session comes back', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {

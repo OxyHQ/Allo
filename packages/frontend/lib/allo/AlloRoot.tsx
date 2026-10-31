@@ -36,7 +36,7 @@ import { nativeCallBridge } from './nativeCallBridge';
  * `docs/frontend-conventions.md`); the gate screens follow the same rule.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useOxy, useSupervision } from '@oxy.so/services/ui/client';
 import { MessagingSupervisionContext } from './MessagingSupervision';
 import { useTransientRetry } from './transientRetry';
@@ -126,6 +126,18 @@ function useSupervisionAnswer(
 export function AlloRoot({ children }: { children: React.ReactNode }) {
   const { user, isLoading, oxyServices, logout, activeSessionId } = useOxy();
   const accountId = user?.id ?? null;
+  const [accountTransition, setAccountTransition] = useState(0);
+  // Rebuild even when React batches an A -> B -> A bearer transition into one render.
+  useLayoutEffect(() => {
+    let previous = oxyServices.session.userId;
+    return oxyServices.session.onChange(() => {
+      const next = oxyServices.session.userId;
+      if (next !== null && previous !== null && next !== previous) {
+        setAccountTransition((revision) => revision + 1);
+      }
+      if (next !== null) previous = next;
+    });
+  }, [oxyServices]);
   const supervision = useSupervision();
   const { known, supervised } = useSupervisionAnswer(
     accountId,
@@ -145,7 +157,10 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
     void refetchSupervision();
   }, [refetchSupervision]);
   const supervisionGaveUp = useTransientRetry(supervisionFailure, retrySupervision);
-  const key = accountId && known ? JSON.stringify([accountId, activeSessionId, supervised]) : null;
+  const key =
+    accountId && known
+      ? JSON.stringify([accountId, activeSessionId, supervised, accountTransition])
+      : null;
   const [current, setCurrent] = useState<Held | null>(null);
   const [startFailure, setStartFailure] = useState<StartFailure | null>(null);
   const held = useRef<Held | null>(null);
@@ -182,7 +197,7 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
 
     let cancelled = false;
     stopped
-      .then(() => createAppAlloClient({ oxy: oxyRef.current, supervised }))
+      .then(() => createAppAlloClient({ oxy: oxyRef.current, accountId, supervised }))
       .then(async (next) => {
         if (cancelled) {
           await next.dispose();

@@ -15,12 +15,18 @@ export interface OxySessionSource {
 export function createSessionAdapter(
   oxy: OxySessionSource,
   baseURL: string,
+  ownerAccountId: string | null = oxy.session.userId,
 ): OxySessionAdapter & { dispose(): void } {
-  const ownerAccountId = oxy.session.userId;
   const linked = oxy.createLinkedClient({ baseURL });
   let disposed = false;
+  let retired = oxy.session.userId !== null && oxy.session.userId !== ownerAccountId;
+  const stopWatching = oxy.session.onChange(() => {
+    const accountId = oxy.session.userId;
+    // A missing bearer can be restored; a different known account retires this client.
+    if (accountId !== null && accountId !== ownerAccountId) retired = true;
+  });
   const ownsSession = () =>
-    !disposed && ownerAccountId !== null && oxy.session.userId === ownerAccountId;
+    !disposed && !retired && ownerAccountId !== null && oxy.session.userId === ownerAccountId;
   return {
     authenticatedFetch: async (input, init) => {
       if (!ownsSession()) throw new Error('The Allo account session changed');
@@ -34,13 +40,14 @@ export function createSessionAdapter(
       return ownsSession() ? token : null;
     },
     getAccountId() {
-      return oxy.session.userId;
+      return ownsSession() ? ownerAccountId : null;
     },
     subscribe(cb) {
       return oxy.session.onChange(() => cb());
     },
     dispose() {
       disposed = true;
+      stopWatching();
       linked.dispose();
     },
   };

@@ -69,6 +69,8 @@ export function deviceDisplayName(
 export interface AppAlloClientOptions {
   /** The `OxyServices` instance `useOxy()` provides: the session authority. */
   oxy: OxySessionSource;
+  /** Account whose projected session requested this client. */
+  accountId: string;
   supervised?: boolean;
 }
 
@@ -79,10 +81,11 @@ export interface AppAlloClient extends AlloClient {
 
 export async function createAppAlloClient({
   oxy,
+  accountId,
   supervised = false,
 }: AppAlloClientOptions): Promise<AppAlloClient> {
   // Bind before asynchronous storage setup so a switch cannot label B's client as A.
-  const session = createSessionAdapter(oxy, ALLO_PLATFORM_URL);
+  const session = createSessionAdapter(oxy, ALLO_PLATFORM_URL, accountId);
   try {
     const storage = await createStorage();
     const media = createCallMedia();

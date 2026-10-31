@@ -22,7 +22,7 @@ describe('Allo session adapter on the canonical shared transport', () => {
       expect(refresh).toHaveBeenCalledTimes(1);
       const b = fixtureToken('account-b', 3);
       oxy.session.setAccessToken(b);
-      expect(session.getAccountId()).toBe('account-b');
+      expect(session.getAccountId()).toBeNull();
       expect(await session.getAccessToken()).toBeNull();
       await expect(session.authenticatedFetch?.(`${baseURL}/v1/messages`)).rejects.toThrow(
         'account session changed',
@@ -30,7 +30,7 @@ describe('Allo session adapter on the canonical shared transport', () => {
       oxy.session.clear();
       expect(session.getAccountId()).toBeNull();
       expect(await session.getAccessToken()).toBeNull();
-      expect(observed).toEqual(['account-a', 'account-b', null]);
+      expect(observed).toEqual(['account-a', null, null]);
       stop();
       oxy.session.setAccessToken(fresh);
       expect(observed).toHaveLength(3);
@@ -82,4 +82,85 @@ describe('Allo session adapter on the canonical shared transport', () => {
     session.dispose();
     expect(dispose).toHaveBeenCalledTimes(1);
   });
+});
+
+it('does not reactivate an old adapter after A to B to A without a React commit', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    oxy.session.setAccessToken(fixtureToken('account-b', 1));
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+    await expect(session.authenticatedFetch?.(`${baseURL}/v1/messages`)).rejects.toThrow(
+      'account session changed',
+    );
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('preserves the adapter across a temporary loss and restoration of the same account', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  const token = fixtureToken('account-a', 1);
+  oxy.session.setAccessToken(token);
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    oxy.session.clear();
+    expect(session.getAccountId()).toBeNull();
+    oxy.session.setAccessToken(token);
+    expect(session.getAccountId()).toBe('account-a');
+    expect(await session.getAccessToken()).toBe(token);
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('does not bind a projected A client to an already installed B bearer', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-b', 1));
+  const session = createSessionAdapter(oxy, baseURL, 'account-a');
+  try {
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    expect(await session.getAccessToken()).toBeNull();
+  } finally {
+    session.dispose();
+    oxy.dispose();
+  }
+});
+
+it('rejects an old response after an A to B to A bearer transition', async () => {
+  const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1' });
+  oxy.session.setAccessToken(fixtureToken('account-a', 1));
+  const session = createSessionAdapter(oxy, baseURL);
+  let release!: (response: Response) => void;
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = jest.fn(() => {
+    started();
+    return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+  }) as typeof fetch;
+  try {
+    if (!session.authenticatedFetch) throw new Error('authenticated fetch is unavailable');
+    const request = session.authenticatedFetch(`${baseURL}/v1/messages`);
+    await began;
+    oxy.session.setAccessToken(fixtureToken('account-b', 1));
+    oxy.session.setAccessToken(fixtureToken('account-a', 2));
+    release(new Response(null, { status: 204 }));
+    await expect(request).rejects.toThrow();
+  } finally {
+    globalThis.fetch = originalFetch;
+    session.dispose();
+    oxy.dispose();
+  }
 });
