@@ -1,0 +1,72 @@
+name: Compare Allo frozen dependency upgrade
+on:
+  push:
+    branches: [codex/allo-services14-compare]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 3e70997fec4754b070b92718560d02de4517b717
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: b27a35dbd21149f0ea49e38ff013626da1d02d1b
+          path: candidate
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: candidate/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install exact frozen trees
+        run: |
+          (cd baseline && bun install --frozen-lockfile)
+          (cd candidate && bun install --frozen-lockfile)
+      - name: Compare complete Expo module selections
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { createRequire } from 'node:module';
+          import { dirname, join, resolve } from 'node:path';
+          function graph(name, platform) {
+            const repo = resolve(name), root = join(repo, 'packages/frontend');
+            const require = createRequire(join(root, 'package.json'));
+            const cli = join(dirname(require.resolve('expo-modules-autolinking/package.json')), 'bin/expo-modules-autolinking.js');
+            const result = JSON.parse(execFileSync(process.execPath, [cli, 'resolve', '--platform', platform, '--project-root', root, '--json'], { encoding: 'utf8' }));
+            if (!Array.isArray(result.modules)) throw new Error('Invalid Expo resolver result');
+            const groups = {};
+            for (const item of result.modules) {
+              if (item.packageName === '@oxy.so/services') item.packageVersion = '<services-version>';
+              (groups[item.packageName] ??= []).push(JSON.stringify(item).split(repo).join('<repo>'));
+            }
+            for (const entries of Object.values(groups)) entries.sort();
+            if (groups['@oxy.so/services']?.length !== 1) throw new Error('Services must resolve exactly once');
+            return groups;
+          }
+          for (const platform of ['android', 'apple']) {
+            const before = graph('baseline', platform), after = graph('candidate', platform);
+            const names = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+            const changed = names.filter(name => JSON.stringify(before[name]) !== JSON.stringify(after[name]));
+            console.log(JSON.stringify({platform, beforeCount: Object.values(before).flat().length, afterCount: Object.values(after).flat().length, changed}, null, 2));
+            for (const name of changed) console.log(JSON.stringify({platform, name, before: before[name], after: after[name]}));
+          }
+          NODE
+      - name: Build both exact trees
+        run: |
+          (cd baseline && bun run build:frontend && bun run check:web-export-html)
+          (cd candidate && bun run build:frontend && bun run check:web-export-html)
+      - name: Report and enforce unchanged budgets
+        run: |
+          status=0
+          echo 'BASELINE'
+          (cd baseline && bun run check:web-bundle-budget) || status=1
+          echo 'CANDIDATE'
+          (cd candidate && bun run check:web-bundle-budget) || status=1
+          exit "$status"
