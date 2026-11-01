@@ -16,28 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Check out candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - name: Check out base
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: baseline
           persist-credentials: false
-      - name: Check out candidate
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: candidate
-          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.3
+          bun-version-file: package.json
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install both frozen graphs
         run: |
           (cd baseline && bun install --frozen-lockfile)
-          (cd candidate && bun install --frozen-lockfile)
+          bun install --frozen-lockfile
       - name: Compare Expo selections on Android and Apple
         run: |
           node --input-type=module <<'NODE'
@@ -56,7 +55,7 @@ jobs:
           }
           for (const platform of ['android', 'apple']) {
             const before = inspect('baseline', platform);
-            const after = inspect('candidate', platform);
+            const after = inspect('.', platform);
             if (JSON.stringify(before) !== JSON.stringify(after)) {
               const removed = before.filter(item => !after.includes(item));
               const added = after.filter(item => !before.includes(item));
@@ -64,5 +63,10 @@ jobs:
               throw new Error(`Expo selections differ on ${platform}`);
             }
             console.log(`${platform}: ${before.length} selected module entries identical`);
+            for (const name of ['@oxy.so/services', 'expo-crypto']) {
+              const selected = after.map(item => JSON.parse(item)).filter(item => item.packageName === name);
+              if (selected.length !== 1) throw new Error(`Expected one ${name} on ${platform}`);
+              console.log(JSON.stringify({ platform, package: name, version: selected[0].packageVersion, projects: selected[0].projects, pods: selected[0].pods, modules: selected[0].modules }));
+            }
           }
           NODE
