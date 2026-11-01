@@ -157,7 +157,7 @@ it('does not reactivate an old adapter after an opaque token and return to A', a
   }
 });
 
-it('retires the old adapter when a 401 clears the token without advancing the SDK epoch', async () => {
+it('retires the old adapter when a 401 clears the token and advances the SDK epoch', async () => {
   const oxy = new OxyServices({ baseURL: 'http://127.0.0.1:1', enableRetry: false });
   oxy.session.setAccessToken(fixtureToken('account-a', 1));
   const epoch = oxy.http.getSessionEpoch();
@@ -168,7 +168,7 @@ it('retires the old adapter when a 401 clears the token without advancing the SD
     await oxy.http.get('/test', { retry: false, deduplicate: false }).catch(() => undefined);
     expect(globalThis.fetch).toHaveBeenCalled();
     expect(oxy.session.accessToken).toBeNull();
-    expect(oxy.http.getSessionEpoch()).toBe(epoch);
+    expect(oxy.http.getSessionEpoch()).toBeGreaterThan(epoch);
     oxy.session.setAccessToken(fixtureToken('account-a', 2));
     expect(await session.getAccessToken()).toBeNull();
     const restored = createSessionAdapter(oxy, baseURL);
@@ -181,6 +181,45 @@ it('retires the old adapter when a 401 clears the token without advancing the SD
     globalThis.fetch = originalFetch;
     session.dispose();
     oxy.dispose();
+  }
+});
+
+it('still retires an adapter after a token clear when the source epoch does not advance', async () => {
+  let bearer: string | null = fixtureToken('account-a', 1);
+  const listeners = new Set<(token: string | null) => void>();
+  const oxy = {
+    http: { getSessionEpoch: () => 1 },
+    session: {
+      get accessToken() {
+        return bearer;
+      },
+      get userId() {
+        return bearer ? 'account-a' : null;
+      },
+      onChange(listener: (token: string | null) => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    createLinkedClient: () => ({
+      fetch: globalThis.fetch,
+      getAccessToken: async () => {
+        if (!bearer) throw new Error('No active bearer');
+        return bearer;
+      },
+      dispose: () => undefined,
+    }),
+  };
+  const session = createSessionAdapter(oxy, baseURL);
+  try {
+    bearer = null;
+    for (const listener of listeners) listener(bearer);
+    bearer = fixtureToken('account-a', 2);
+    for (const listener of listeners) listener(bearer);
+    expect(session.getAccountId()).toBeNull();
+    expect(await session.getAccessToken()).toBeNull();
+  } finally {
+    session.dispose();
   }
 });
 
