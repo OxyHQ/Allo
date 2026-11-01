@@ -100,3 +100,37 @@ it('sends shared fresh HTTP authority with the unchanged instance signature and 
     server.stop(true);
   }
 });
+
+it('keeps the shared session usable when the backend reports a temporary authority outage', async () => {
+  const bearer = token(3600, 1);
+  const received: string[] = [];
+  let unavailable = true;
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(req) {
+      received.push(req.headers.get('authorization') ?? '');
+      return unavailable
+        ? Response.json({ code: 'SESSION_VALIDATION_ERROR', status: 503 }, { status: 503 })
+        : new Response(null, { status: 204 });
+    },
+  });
+  const oxy = new OxyServices({ baseURL: server.url.origin });
+  oxy.session.setAccessToken(bearer);
+  const linked = oxy.createLinkedClient({ baseURL: server.url.origin });
+  try {
+    const http = new HttpClient({ baseUrl: server.url.origin, fetch: linked.fetch, now: Date.now });
+    await expect(http.request({ method: 'GET', path: '/v1/action' })).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(oxy.session.accessToken).toBe(bearer);
+    expect(oxy.session.userId).toBe('alice');
+    unavailable = false;
+    await expect(http.request({ method: 'GET', path: '/v1/action' })).resolves.toBeUndefined();
+    expect(received).toEqual([`Bearer ${bearer}`, `Bearer ${bearer}`]);
+  } finally {
+    linked.dispose();
+    oxy.dispose();
+    server.stop(true);
+  }
+});
