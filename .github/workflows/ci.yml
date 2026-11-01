@@ -249,7 +249,24 @@ jobs:
           bun-version-file: package.json
 
       - name: Install
-        run: bun install
+        run: bun install --frozen-lockfile
+
+      - name: Verify Android device session module autolinking
+        run: |
+          node -e '
+            const { createRequire } = require("node:module");
+            const { resolve } = require("node:path");
+            const semver = require("semver");
+            const fromApp = createRequire(resolve("packages/frontend/package.json"));
+            const declared = fromApp("./package.json").dependencies?.["@oxy.so/services"];
+            const installed = fromApp("@oxy.so/services/package.json").version;
+            if (typeof declared !== "string" || !semver.validRange(declared) ||
+                !semver.valid(installed) || !semver.satisfies(installed, declared)) {
+              console.error("Installed Oxy Services does not satisfy the app declaration");
+              process.exit(1);
+            }
+          '
+          bun run oxy-doctor-expo-android --project-root=packages/frontend
 
       # KNOWN GAP, so nobody reads a green tick as more than it is: typed routes
       # are NOT covered here. `experiments.typedRoutes` is on, but the route
