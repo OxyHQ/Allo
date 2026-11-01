@@ -203,7 +203,10 @@ it('still retires an adapter after a token clear when the source epoch does not 
     },
     createLinkedClient: () => ({
       fetch: globalThis.fetch,
-      getAccessToken: async () => bearer,
+      getAccessToken: async () => {
+        if (!bearer) throw new Error('No active bearer');
+        return bearer;
+      },
       dispose: () => undefined,
     }),
   };
