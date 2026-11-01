@@ -14,7 +14,7 @@ import {
   type ConversationEvent,
 } from '@allo/shared-types';
 import type { Context } from '../context';
-import { InstanceNotActiveError, TransportError } from '../errors';
+import { InstanceNotActiveError, InvalidStateError, TransportError } from '../errors';
 import type { SyncState } from '../types';
 import { describeError } from '../util/logger';
 import { deferred } from '../util/async';
@@ -110,13 +110,22 @@ export class SyncEngine {
     }
     this.setState('syncing');
     if (ctx.options.requireLiveConversationAccess) await ctx.conversations.refreshFromServer();
+    const requestedCursors = new Set<string>();
     for (;;) {
+      const requestedCursor = ctx.model.cursor;
+      requestedCursors.add(requestedCursor);
       const page = await ctx.http.request({
         method: 'GET',
-        path: `/v1/sync?cursor=${encodeURIComponent(ctx.model.cursor)}&limit=${PAGE}`,
+        path: `/v1/sync?cursor=${encodeURIComponent(requestedCursor)}&limit=${PAGE}`,
         schema: syncResponseSchema,
         signer: ctx.signer,
       });
+      // An empty filtered page may legitimately advance. A `hasMore` page
+      // that points back into this walk cannot progress; reject it before any
+      // delivery, cursor write, or ack rather than reporting a completed sync.
+      if (page.hasMore && requestedCursors.has(page.nextCursor)) {
+        throw new InvalidStateError('sync returned a repeated continuation cursor');
+      }
       for (const delivery of page.deliveries) {
         await this.fillGap(delivery.event);
         const outcome = await this.dispatcher.dispatch(delivery.event, delivery.cursor);
