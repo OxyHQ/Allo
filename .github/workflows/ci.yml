@@ -266,7 +266,10 @@ jobs:
               process.exit(1);
             }
           '
-          bun run oxy-doctor-expo-android --project-root=packages/frontend
+          bun run oxy-doctor-expo-android --project-root=packages/frontend \
+            --require-source=SharedDeviceSessionPublish.kt \
+            --require-source=SharedDeviceSessionSweep.kt \
+            --require-source=OxyDeviceSessionStore.kt
 
       # KNOWN GAP, so nobody reads a green tick as more than it is: typed routes
       # are NOT covered here. `experiments.typedRoutes` is on, but the route
