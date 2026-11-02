@@ -68,7 +68,7 @@ export default function MembersRoute() {
   );
 
   return (
-    <Screen header={<PageHeader title={t('chat.details.participants')} />}>
+    <Screen scroll="content" header={<PageHeader title={t('chat.details.participants')} />}>
       <ScreenScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 pb-8">
         <MemberList
           members={members}

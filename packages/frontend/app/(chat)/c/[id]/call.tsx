@@ -153,7 +153,7 @@ export default function CallRoute() {
   // that has not loaded. Say so rather than drawing a call with nobody on it.
   if (!session && peerAccountIds.length === 0) {
     return (
-      <Screen header={<PageHeader title={t('calls.title')} />}>
+      <Screen scroll="content" header={<PageHeader title={t('calls.title')} />}>
         <ScreenScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerClassName="gap-4 px-4 pb-8"

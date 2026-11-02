@@ -90,6 +90,7 @@ export default function UpdatesScreen() {
 
   return (
     <Screen
+      scroll="content"
       header={
         <PageHeader
           title={t('stories.title')}
