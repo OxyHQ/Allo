@@ -56,7 +56,7 @@ export default function HomiioTeamRoute() {
     }
   };
   return (
-    <Screen header={<PageHeader title={t('homiio.team.title')} />}>
+    <Screen scroll="content" header={<PageHeader title={t('homiio.team.title')} />}>
       <ScreenScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-4 px-4 pb-8"

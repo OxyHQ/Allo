@@ -102,6 +102,7 @@ export default function CallsScreen() {
 
   return (
     <Screen
+      scroll="content"
       header={
         <PageHeader
           title={t('calls.title')}

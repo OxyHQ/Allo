@@ -57,7 +57,7 @@ function SupervisedProfile({ handle }: { handle: string }) {
   });
   const person = query.isFetchedAfterMount && !query.isError ? query.data : undefined;
   return (
-    <Screen header={<PageHeader title={t('supervision.conversation')} />}>
+    <Screen scroll="content" header={<PageHeader title={t('supervision.conversation')} />}>
       <ScreenScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-4 px-4 pb-8"
@@ -108,7 +108,10 @@ function OrdinaryProfile({ handle }: { handle: string }) {
   const isViewer = profile !== null && viewer?.id === profile.id;
 
   return (
-    <Screen header={<PageHeader title={profile?.design.displayName || `@${handle}`} />}>
+    <Screen
+      scroll="content"
+      header={<PageHeader title={profile?.design.displayName || `@${handle}`} />}
+    >
       <ScreenScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerClassName="gap-4 px-4 pb-8"

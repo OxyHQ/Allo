@@ -205,6 +205,7 @@ export function ConversationList() {
   // shell's floating action.
   const list = (
     <Screen
+      scroll="content"
       reselect={reselect}
       header={
         <PageHeader
