@@ -115,7 +115,14 @@ function pickUpdatableColumns(patch: UserSettingsPatch): UserSettingsPatch {
   return set;
 }
 
-async function readUserSettings(
+/**
+ * The stored row, or `null` when there is none. Never writes.
+ *
+ * This is the read for somebody ELSE's settings (`GET /api/profile/settings/:userId`):
+ * {@link ensureUserSettings} inserts, and a read about another account must not
+ * create a row in that account's name.
+ */
+export async function findUserSettings(
   db: AlloDatabase,
   oxyUserId: string,
 ): Promise<UserSettingsRow | null> {
@@ -127,21 +134,6 @@ async function readUserSettings(
   return rows[0] ?? null;
 }
 
-/**
- * The user's settings, creating a row of pure defaults if there is none.
- *
- * Read first, because a settings row usually already exists and the read is the
- * cheap path. The insert converges on `user_settings_oxy_user_id_key` rather
- * than trusting the read: two concurrent first requests from one user both see
- * nothing, and the unique constraint decides which one inserts. The loser
- * re-reads — `ON CONFLICT DO NOTHING` returns no row, and the winner's row is
- * committed by then — so both callers get the same settings and neither errors.
- *
- * Deliberately NOT `ON CONFLICT DO UPDATE`. That would return the row in both
- * branches and save a query, at the cost of writing a new tuple version on
- * every read of an existing row — moving `updated_at` and `xmin` for a call
- * that changed nothing.
- */
 /**
  * Which of these accounts publish their online status.
  *
@@ -202,11 +194,30 @@ export async function relayCallsOf(
   return new Set(rows.filter((row) => row.relay).map((row) => row.oxyUserId));
 }
 
+/**
+ * The CALLER's own settings, creating a row of pure defaults if there is none.
+ *
+ * Only ever called with the authenticated account's own id: creating a row is
+ * something an account does for itself. Reading another account goes through
+ * {@link findUserSettings}, which never writes.
+ *
+ * Read first, because a settings row usually already exists and the read is the
+ * cheap path. The insert converges on `user_settings_oxy_user_id_key` rather
+ * than trusting the read: two concurrent first requests from one user both see
+ * nothing, and the unique constraint decides which one inserts. The loser
+ * re-reads — `ON CONFLICT DO NOTHING` returns no row, and the winner's row is
+ * committed by then — so both callers get the same settings and neither errors.
+ *
+ * Deliberately NOT `ON CONFLICT DO UPDATE`. That would return the row in both
+ * branches and save a query, at the cost of writing a new tuple version on
+ * every read of an existing row — moving `updated_at` and `xmin` for a call
+ * that changed nothing.
+ */
 export async function ensureUserSettings(
   db: AlloDatabase,
   oxyUserId: string,
 ): Promise<UserSettingsRow> {
-  const existing = await readUserSettings(db, oxyUserId);
+  const existing = await findUserSettings(db, oxyUserId);
   if (existing) return existing;
 
   const inserted = await db
@@ -217,7 +228,7 @@ export async function ensureUserSettings(
   const created = inserted[0];
   if (created) return created;
 
-  const raced = await readUserSettings(db, oxyUserId);
+  const raced = await findUserSettings(db, oxyUserId);
   if (!raced) {
     throw new Error(
       'user_settings insert conflicted but no row was found — the unique constraint ' +

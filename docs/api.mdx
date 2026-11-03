@@ -80,7 +80,7 @@ Per-account settings document. There is no separate user record; these
 settings hang off the Oxy user id.
 
 - `GET /api/profile/settings/me`: the calling user's `UserSettings`.
-- `GET /api/profile/settings/:userId`: another user's public-facing settings, subject to their privacy flags.
+- `GET /api/profile/settings/:userId`: how another user's profile is drawn: `oxyUserId`, `profileHeaderImage` and `profileCustomization` (`displayName`, `coverImage`, `coverPhotoEnabled`, `minimalistMode`), every field optional. Never their privacy, security or appearance settings, and the read never creates a settings row; an account with no row answers an empty `profileCustomization`.
 - `PUT /api/profile/settings`: patch. Top-level keys are merged; nested objects are deep-merged.
 
 ```jsonc

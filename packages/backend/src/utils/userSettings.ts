@@ -8,7 +8,8 @@
  * `lib/privacy/api.ts` reads `privacy.showOnlineStatus`.
  *
  * So the flattening stops here. This module is the ONE place the two shapes meet:
- * {@link toUserSettingsDto} projects a row outward and
+ * {@link toUserSettingsDto} projects a row outward to its owner,
+ * {@link toPublicProfileAppearanceDto} projects the part anyone may see, and
  * {@link readUserSettingsPatch} reads a request inward. Splitting them across the
  * route and the repository is how one direction gains a field the other never
  * learns about.
@@ -80,7 +81,56 @@ function optional<K extends string>(key: K, value: string | null): { [P in K]?: 
     : ({ [key]: value } as { [P in K]?: string });
 }
 
-/** One stored row as the API has always presented it. */
+/**
+ * What ANOTHER account may read about a person: how their profile is drawn, and
+ * nothing else.
+ *
+ * `GET /api/profile/settings/:userId` serves this and only this. The full
+ * {@link UserSettingsDto} carries the owner's privacy lists (`hiddenWords`,
+ * `restrictedUsers`), their security switches and their theme, none of which is
+ * anybody else's business; it is reachable only through the owner's own routes.
+ * Written out field by field, like the full document, so a column added to the
+ * table cannot become public by being added to a shared shape.
+ *
+ * Every field is optional because a person who never saved settings has no row,
+ * and the honest projection of "no row" is "no customization" — the profile
+ * screen then draws the Oxy profile as it is.
+ */
+export interface PublicProfileAppearanceDto {
+  readonly oxyUserId: string;
+  readonly profileHeaderImage?: string;
+  readonly profileCustomization: {
+    coverPhotoEnabled?: boolean;
+    minimalistMode?: boolean;
+    displayName?: string;
+    coverImage?: string;
+  };
+}
+
+/** The profile customization group, shared by the owner's and the public projection. */
+function profileCustomizationOf(row: UserSettingsRow): UserSettingsDto['profileCustomization'] {
+  return {
+    coverPhotoEnabled: row.profileCoverPhotoEnabled,
+    minimalistMode: row.profileMinimalistMode,
+    ...optional('displayName', row.profileDisplayName),
+    ...optional('coverImage', row.profileCoverImage),
+  };
+}
+
+/** Another account's profile appearance, from their row or from its absence. */
+export function toPublicProfileAppearanceDto(
+  oxyUserId: string,
+  row: UserSettingsRow | null,
+): PublicProfileAppearanceDto {
+  if (!row) return { oxyUserId, profileCustomization: {} };
+  return {
+    oxyUserId: row.oxyUserId,
+    ...optional('profileHeaderImage', row.profileHeaderImage),
+    profileCustomization: profileCustomizationOf(row),
+  };
+}
+
+/** One stored row as the API has always presented it — to its OWNER only. */
 export function toUserSettingsDto(row: UserSettingsRow): UserSettingsDto {
   return {
     id: row.id,
@@ -105,12 +155,7 @@ export function toUserSettingsDto(row: UserSettingsRow): UserSettingsDto {
       hiddenWords: row.privacyHiddenWords,
       restrictedUsers: row.privacyRestrictedUsers,
     },
-    profileCustomization: {
-      coverPhotoEnabled: row.profileCoverPhotoEnabled,
-      minimalistMode: row.profileMinimalistMode,
-      ...optional('displayName', row.profileDisplayName),
-      ...optional('coverImage', row.profileCoverImage),
-    },
+    profileCustomization: profileCustomizationOf(row),
     security: {
       encryptionEnabled: row.securityEncryptionEnabled,
       peerToPeerEnabled: row.securityPeerToPeerEnabled,

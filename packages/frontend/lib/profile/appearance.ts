@@ -2,8 +2,9 @@ import { api } from '@/utils/api';
 
 /**
  * Allo's own customization of a person's profile (`/profile/settings/:userId`):
- * a display name override and the cover photo. The backend creates a default
- * document for anyone, so a 200 is the normal answer.
+ * a display name override and the cover photo. The backend answers the PUBLIC
+ * projection (`PublicProfileAppearanceDto`), never the person's settings, and a
+ * person who never saved any gets an empty `profileCustomization` — still a 200.
  */
 export interface ProfileAppearance {
   profileHeaderImage?: string;

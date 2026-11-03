@@ -21,12 +21,11 @@
  *   unmentioned setting is left alone.
  */
 
-import { Router, Response } from 'express';
+import { Router, type Response } from 'express';
 import {
-  requireOxyAuth as requireAuth,
   type OxyAuthRequest as AuthRequest,
+  getRequiredOxyUserId as getAuthenticatedUserId,
 } from '@oxy.so/core/server';
-import { getRequiredOxyUserId as getAuthenticatedUserId } from '@oxy.so/core/server';
 import { getDb } from '../db';
 import { blockUser, listBlockedUserIds, unblockUser } from '../db/social/blockRepository';
 import {
@@ -35,19 +34,24 @@ import {
   unrestrictUser,
 } from '../db/social/restrictRepository';
 import { deleteUserBehavior } from '../db/social/userBehaviorRepository';
-import { ensureUserSettings, updateUserSettings } from '../db/social/userSettingsRepository';
-import { readUserSettingsPatch, toUserSettingsDto } from '../utils/userSettings';
+import {
+  ensureUserSettings,
+  findUserSettings,
+  updateUserSettings,
+} from '../db/social/userSettingsRepository';
+import {
+  readUserSettingsPatch,
+  toPublicProfileAppearanceDto,
+  toUserSettingsDto,
+} from '../utils/userSettings';
 import { sendErrorResponse, sendSuccessResponse, validateRequired } from '../utils/apiHelpers';
 
 const router = Router();
 
-/**
- * Profile Settings API
- * All routes require authentication
- */
-
-// Apply auth middleware to all routes
-router.use(requireAuth);
+// Authentication is the `/api` mount's (`app.ts`: `app.use('/api', deps.auth, api)`),
+// so every handler here runs with a verified Oxy user and reads it with
+// `getAuthenticatedUserId`. A second gate on this router would be a second answer
+// to the same question.
 
 /**
  * GET /api/profile/settings/me
@@ -66,7 +70,13 @@ router.get('/settings/me', async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/profile/settings/:userId
- * Get settings by oxy user id
+ * How another person's profile is drawn — the public projection, never their settings.
+ *
+ * The profile screen (`frontend/lib/profile/appearance.ts`) is the reader: it
+ * wants the display-name override and the cover. The owner's privacy lists,
+ * security switches and theme stay behind `/settings/me`. The lookup never
+ * writes, so asking about an account cannot create a row in its name, and an
+ * account with no row answers the same empty projection as an id nobody holds.
  */
 router.get('/settings/:userId', async (req: AuthRequest, res: Response) => {
   try {
@@ -77,11 +87,16 @@ router.get('/settings/:userId', async (req: AuthRequest, res: Response) => {
       return sendErrorResponse(res, 400, 'Bad Request', validationError);
     }
 
-    const row = await ensureUserSettings(getDb(), userId);
-    return sendSuccessResponse(res, 200, toUserSettingsDto(row));
+    const row = await findUserSettings(getDb(), userId);
+    return sendSuccessResponse(res, 200, toPublicProfileAppearanceDto(userId, row));
   } catch (err) {
-    console.error('[ProfileSettings] Error fetching user settings:', err);
-    return sendErrorResponse(res, 500, 'Internal Server Error', 'Failed to fetch settings');
+    console.error('[ProfileSettings] Error fetching profile appearance:', err);
+    return sendErrorResponse(
+      res,
+      500,
+      'Internal Server Error',
+      'Failed to fetch profile appearance',
+    );
   }
 });
 
