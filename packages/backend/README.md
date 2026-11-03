@@ -334,8 +334,8 @@ TypeScript AST to keep it that way.
 - Returns: `UserSettings`
 
 #### GET /api/profile/settings/:userId
-- Get settings by oxy user id
-- Returns: `UserSettings`
+- How another user's profile is drawn (the public projection; never their settings, and never creates a row)
+- Returns: `PublicProfileAppearanceDto` (`utils/userSettings.ts`)
 
 #### PUT /api/profile/settings
 - Update current user's settings

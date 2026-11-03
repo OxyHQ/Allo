@@ -135,6 +135,76 @@ describe('GET /api/profile/settings/me', () => {
   });
 });
 
+describe('GET /api/profile/settings/:userId — another account', () => {
+  it("serves only the owner's profile appearance, never their privacy or security settings", async () => {
+    const owner = id('appearance-owner');
+    const viewer = id('appearance-viewer');
+    const app = appWithAuth();
+
+    await request(app)
+      .put('/api/profile/settings')
+      .set('x-test-user', owner)
+      .send({
+        appearance: { themeMode: 'dark', primaryColor: '#123456' },
+        profileHeaderImage: 'header-file',
+        profileCustomization: { displayName: 'Owner Name', coverImage: 'cover-file' },
+        privacy: { hiddenWords: ['secret-word'], restrictedUsers: ['someone-restricted'] },
+        security: { peerToPeerEnabled: false },
+      })
+      .expect(200);
+
+    const response = await request(app)
+      .get(`/api/profile/settings/${owner}`)
+      .set('x-test-user', viewer);
+
+    expect(response.status).toBe(200);
+    // The WHOLE document, so a field leaking back onto this route fails here.
+    expect(response.body.data).toEqual({
+      oxyUserId: owner,
+      profileHeaderImage: 'header-file',
+      profileCustomization: {
+        coverPhotoEnabled: true,
+        minimalistMode: false,
+        displayName: 'Owner Name',
+        coverImage: 'cover-file',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('secret-word');
+    expect(JSON.stringify(response.body)).not.toContain('someone-restricted');
+  });
+
+  it('creates no row for the account it is asked about', async () => {
+    const stranger = id('never-saved');
+
+    const response = await request(appWithAuth())
+      .get(`/api/profile/settings/${stranger}`)
+      .set('x-test-user', id('curious-viewer'));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ oxyUserId: stranger, profileCustomization: {} });
+    const rows = await getDb()
+      .select()
+      .from(schema.userSettings)
+      .where(eq(schema.userSettings.oxyUserId, stranger));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('answers the public projection even when the caller names their own id', async () => {
+    const user = id('self-by-id');
+    const app = appWithAuth();
+    await request(app)
+      .put('/api/profile/settings')
+      .set('x-test-user', user)
+      .send({ privacy: { hiddenWords: ['mine'] } })
+      .expect(200);
+
+    const byId = await request(app).get(`/api/profile/settings/${user}`).set('x-test-user', user);
+
+    // The full document has exactly one door, `/settings/me`.
+    expect(Object.keys(byId.body.data).sort()).toEqual(['oxyUserId', 'profileCustomization']);
+  });
+});
+
 describe('PUT /api/profile/settings', () => {
   it('patches only the columns named, across all four groups', async () => {
     const user = id('patch-user');
