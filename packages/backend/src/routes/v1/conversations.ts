@@ -21,7 +21,7 @@ import {
 import { getGroupInfo, putGroupInfo } from '../../services/platform/groupInfoService';
 import { asyncRoute } from './asyncRoute';
 import { parseBody, parseParam } from './validate';
-import { originalBearer } from '../../services/platform/messagingPolicy';
+import { verifiedBearer } from '../../services/platform/messagingPolicy';
 
 export function callerOf(req: Parameters<typeof getRequiredInstance>[0]): Caller {
   const me = getRequiredInstance(req);
@@ -29,7 +29,7 @@ export function callerOf(req: Parameters<typeof getRequiredInstance>[0]): Caller
     instanceId: me.id,
     accountId: me.accountId,
     appId: me.appId,
-    accessToken: originalBearer(req),
+    accessToken: verifiedBearer(req),
   };
 }
 

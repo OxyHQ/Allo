@@ -90,6 +90,8 @@ describe('what the subject providers are allowed to reach', () => {
    * about absence has to be checked against something.
    */
   const ALLOWED_FIRST_PARTY = [
+    /** Allo's Oxy application id and audience, which the one Oxy client is configured with. */
+    'config/oxyApplication.ts',
     /**
      * The reportable-type tuple, which `localOnlyTypes()` subtracts the registry
      * from. This module declares three tables, and one of them is `reports`. What

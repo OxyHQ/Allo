@@ -90,7 +90,7 @@ server.ts                       bootstrap only: env, Postgres, migration ledger,
 src/app.ts                      createApp(deps): pure HTTP assembly, middleware order, the one error handler
 src/runtimeApp.ts               the concrete deps (Oxy client, CORS, rate limit, auth, routers)
 src/runtime/                    health state, realtime seam, Socket.IO server, Redis adapter, shutdown, global handlers
-src/middleware/                 instanceAuth (Ed25519 request signature), oxySession, requestObservability
+src/middleware/                 instanceAuth (Ed25519 request signature), messagingAuth (the /v1 Oxy gates), requestObservability
 src/routes/v1/                  one router per contract file: instances, keyPackages, conversations, events, sync, blobs, history, backups
 src/routes/                     the kept /api routers: directory, profileSettings, reports, crowdSourceWebhook
 src/services/platform/          the rules: instances, key packages, conversations, events and sync, blobs, history offers, backups, wire projections
@@ -104,8 +104,8 @@ drizzle/                        generated migrations, one deploy-phase marker ea
 
 **Runtime.** `createApp(deps)` never listens, never opens Postgres, never
 creates a Socket.IO server and never starts a timer; tests build fakes for
-its deps. Middleware order is the contract: request observability, CORS,
-health routes, the raw-body routes (`/webhooks` and `POST /v1/blobs`) ahead of
+its deps. Middleware order is the contract: request observability, the
+shared security headers, CORS, health routes, the raw-body routes (`/webhooks` and `POST /v1/blobs`) ahead of
 `express.json({ verify })` which stashes the raw body for the signature,
 no-store headers, per-user rate limit, `/api` behind Oxy auth, `/v1` behind
 Oxy auth with the instance signature per route, a JSON 404, and one error
@@ -237,7 +237,9 @@ recipient's offer read and the owner's backup read) name them explicitly.
 
 ### Realtime
 
-Socket.IO namespace `/v1` on the same HTTP server (`runtime/socket.ts`). Two
+Socket.IO namespace `/v1` on the same HTTP server (`runtime/socket.ts`). It
+admits the browser origins the HTTP CORS does (`createOxySocketCors` over
+`APP_ORIGINS`), on polling and on the WebSocket handshake. Two
 handshake middlewares in order: `oxy.middleware.socket()`, then the instance
 signature over `handshake.auth` with the path fixed to `/socket` and an empty
 body, through the same function the HTTP middleware uses. A connected socket

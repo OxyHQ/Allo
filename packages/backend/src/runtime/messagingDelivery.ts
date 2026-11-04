@@ -30,6 +30,13 @@ const stringField = (payload: unknown, key: string): string | null =>
     ? Reflect.get(payload, key)
     : null;
 
+/**
+ * The ordinary-account gate a `history.offer` must still pass at delivery:
+ * opaque archives have no conversation coverage, so no supervised action
+ * applies. Built once; it re-asks Oxy on every delivery.
+ */
+const archiveSocketAuth = oxy.middleware.socket();
+
 export class MessagingDelivery {
   private pending: Notification[] = [];
   private scheduled = false;
@@ -163,9 +170,7 @@ export class MessagingDelivery {
           // Opaque archives have no conversation coverage. The canonical
           // ordinary-account gate must still hold at delivery, after queuing.
           const allowed = await new Promise<boolean>((resolve) => {
-            void oxy.middleware
-              .socket()(socket, (error) => resolve(!error))
-              .catch(() => resolve(false));
+            void archiveSocketAuth(socket, (error) => resolve(!error)).catch(() => resolve(false));
           });
           if (!allowed) continue;
         }

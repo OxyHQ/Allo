@@ -317,8 +317,12 @@ instance the fake server is made to list as an unapproved active root.
   answers the five Oxy lookups the app makes — `users.byUsername`,
   `users.get`, `users.getMany`, `users.search`, `assets.publicUrl` — so an
   app with no Oxy session can still draw a person. **The frontend still calls Oxy
-  directly**; this is the surface it moves to. Every underlying Oxy route is
-  public, so no service credential is needed, and the responses are a PROJECTION
+  directly**; this is the surface it moves to. Every underlying Oxy route
+  answers anybody; the one `OxyServer` (`src/oxy.ts`, `serviceIdentity:
+  'when-anonymous'`) asks with Allo's workload service token rather than
+  anonymously, `by-ids` uses `users.lookupMany` and answers 502 when Oxy could
+  not answer for an id (an outage is never "no such account"), and the
+  responses are a PROJECTION
   (`DirectoryUser` in `@allo/shared-types`) rather than the Oxy `User`, which
   carries `email`, `phone`, `address` and `birthday`.
 - **E2E encryption, sync, media, devices:** all `@allo/core`, reached through

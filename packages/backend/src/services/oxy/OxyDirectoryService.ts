@@ -1,5 +1,5 @@
 import type { DirectoryUser } from '@allo/shared-types';
-import type { SearchProfilesResponse, User } from '@oxy.so/core';
+import type { BatchLookup, SearchProfilesResponse, User } from '@oxy.so/core';
 
 /**
  * The five Oxy lookups the app makes today, moved behind this backend.
@@ -10,18 +10,18 @@ import type { SearchProfilesResponse, User } from '@oxy.so/core';
  * a screen, so a client that holds an Allo session and nothing else — an SDK
  * consumer that is not the Allo app — can still resolve who somebody is. These
  * five are the whole of what the app asks Oxy for: `users.byUsername`,
- * `users.get`, `users.getMany`, `users.search` and `assets.publicUrl`
+ * `users.get`, `users.getMany` (answered here with `users.lookupMany`, which
+ * tells a failure from an absence), `users.search` and `assets.publicUrl`
  * (avatars).
  *
- * ## Why no service credential is required
+ * ## Who it asks as
  *
- * All five underlying Oxy routes are public. `GET /profiles/username/:username`,
- * `GET /users/:userId` and `GET /profiles/search` carry no auth middleware at
- * all; `POST /users/by-ids` is `optionalUserOrServiceAuth` and returns the same
- * public payload to an anonymous caller; and an avatar URL is a pure string
- * built against the Oxy CDN with no network call in it. So this service works
- * anonymously. Own authenticated calls use the shared workload client in
- * `oxy.ts`; no customer credential is a substitute for Allo's identity.
+ * Itself. All five underlying Oxy routes answer the same public payload to
+ * anybody, so no person's session is needed, and the shared client in `oxy.ts`
+ * (`serviceIdentity: 'when-anonymous'`) sends them with Allo's workload service
+ * token: an anonymous read from this fleet would be charged to its shared NAT
+ * address and slowed down. An avatar URL is a pure string built against the
+ * Oxy CDN with no network call in it.
  *
  * ## Why it projects instead of forwarding
  *
@@ -42,7 +42,7 @@ export interface OxyDirectoryClient {
   readonly users: {
     byUsername(username: string, options?: { cache?: boolean }): Promise<User>;
     get(userId: string, options?: { cache?: boolean }): Promise<User>;
-    getMany(ids: string[]): Promise<User[]>;
+    lookupMany(ids: string[]): Promise<BatchLookup<User>>;
     search(
       query: string,
       pagination?: { limit?: number; offset?: number },
@@ -61,6 +61,17 @@ export interface OxyDirectoryClient {
  * asks for would silently double the bytes on every conversation row.
  */
 export const AVATAR_VARIANT = 'thumb';
+
+/**
+ * Oxy could not answer for some of what was asked. Never "no such account": the
+ * route maps it to 502, and the caller asks again.
+ */
+export class DirectoryUnavailableError extends Error {
+  constructor(operation: string, cause: unknown) {
+    super(`${operation}: Oxy did not answer for every requested account`, { cause });
+    this.name = 'DirectoryUnavailableError';
+  }
+}
 
 export interface OxyDirectoryService {
   profileByUsername(username: string): Promise<DirectoryUser>;
@@ -118,14 +129,19 @@ export function createOxyDirectoryService(client: OxyDirectoryClient): OxyDirect
 
     async usersByIds(ids: readonly string[]): Promise<DirectoryUser[]> {
       /**
-       * `users.getMany` deduplicates, chunks at 100 and drops a chunk that
-       * fails rather than the whole call, so the answer can legitimately be
-       * shorter than the request. The route says so; nothing here pads it back
-       * out with placeholders, because a placeholder is indistinguishable from
-       * a real answer at the point it is drawn.
+       * `lookupMany` sorts every id into found, missing (Oxy answered without
+       * it: a deleted or unknown account) and failed (its chunk never got an
+       * answer). Missing ids are simply absent from the result — the route
+       * says so, and nothing pads them out with placeholders. A failed id is
+       * NOT absent: answering without it would tell the app that a real
+       * person does not exist because Oxy blinked, so any failure fails the
+       * whole lookup and the route answers 502.
        */
-      const users = await client.users.getMany([...ids]);
-      return users.map((user) => toDirectoryUser(user, client));
+      const lookup = await client.users.lookupMany([...ids]);
+      if (lookup.failed.length > 0) {
+        throw new DirectoryUnavailableError('users.lookupMany', lookup.error);
+      }
+      return lookup.found.map((user) => toDirectoryUser(user, client));
     },
 
     async searchProfiles(

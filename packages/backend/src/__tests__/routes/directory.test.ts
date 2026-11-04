@@ -56,6 +56,8 @@ interface FakeClient extends OxyDirectoryClient {
 let failure: unknown;
 let searchResult: SearchProfilesResponse;
 let byIdsResult: User[];
+/** Ids whose chunk Oxy did not answer, as `users.lookupMany` reports them. */
+let byIdsFailed: string[];
 
 function fakeClient(): FakeClient {
   const calls: string[] = [];
@@ -76,10 +78,17 @@ function fakeClient(): FakeClient {
         refuseIfAsked();
         return oxyUser({ id: userId });
       }),
-      getMany: mock(async (ids: string[]) => {
-        calls.push(`users.getMany:${ids.join(',')}`);
+      lookupMany: mock(async (ids: string[]) => {
+        calls.push(`users.lookupMany:${ids.join(',')}`);
         refuseIfAsked();
-        return byIdsResult;
+        const failed = ids.filter((id) => byIdsFailed.includes(id));
+        const found = byIdsResult.filter((user) => !failed.includes(user.id));
+        return {
+          found,
+          missing: ids.filter((id) => !failed.includes(id) && !found.some((u) => u.id === id)),
+          failed,
+          ...(failed.length > 0 ? { error: new Error('chunk failed') } : {}),
+        };
       }),
       search: mock(async (query: string, pagination?: { limit?: number; offset?: number }) => {
         calls.push(`users.search:${query}:${pagination?.limit}:${pagination?.offset}`);
@@ -107,6 +116,7 @@ beforeEach(() => {
   failure = undefined;
   client = fakeClient();
   byIdsResult = [oxyUser(), oxyUser({ id: OTHER_USER_ID, username: 'lady' })];
+  byIdsFailed = [];
   searchResult = {
     data: [oxyUser()],
     pagination: { total: 1, limit: 20, offset: 0, hasMore: false },
@@ -273,6 +283,22 @@ describe('several accounts at once', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.users).toHaveLength(1);
+  });
+
+  it('answers 502, never a shorter list, when Oxy could not answer for an id', async () => {
+    /**
+     * A failed chunk is not an absence. Answering 200 without the account
+     * would tell the app that a real person does not exist because Oxy
+     * blinked — and the app would draw them as "Unknown".
+     */
+    byIdsFailed = [OTHER_USER_ID];
+
+    const response = await request(directoryApp())
+      .post('/api/directory/users/by-ids')
+      .send({ ids: [OXY_USER_ID, OTHER_USER_ID] });
+
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(response.body)).not.toContain(OXY_USER_ID);
   });
 
   it('is not shadowed by the by-id route', async () => {
