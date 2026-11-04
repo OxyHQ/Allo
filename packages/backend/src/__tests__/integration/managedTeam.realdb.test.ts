@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { TeamOperation } from '@oxy.so/homiio-sdk';
 import { alloTeamForOxyService } from '@oxy.so/allo-sdk/server';
+import { SERVICE_AUDIENCE as HOMIIO_SERVICE_AUDIENCE } from '@oxy.so/homiio-sdk/server';
 import { managedTeams, conversations } from '../../db/schema';
 import { fixtureOxy } from '../platform/oxySafetyFixture';
 import { Harness, stopAll, texts, waitForText, waitJoined, waitFor } from './harness';
@@ -19,6 +20,13 @@ beforeAll(async () => {
     const request = new Request(url, init);
     if (request.url === 'https://api.homiio.com/api/v1/team-chat/operations/read') {
       if (sourceOffline) throw new Error('source disconnected');
+      // Homiio requires a service token for its own audience on this read.
+      const bearer = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
+      const claims = JSON.parse(
+        Buffer.from(bearer.split('.')[1] ?? '', 'base64url').toString() || '{}',
+      );
+      if (claims.type !== 'service' || claims.aud !== HOMIIO_SERVICE_AUDIENCE)
+        return Response.json({ code: 'MISSING_TOKEN' }, { status: 401 });
       const id = (await request.json()).operationId;
       const entry = operations.get(id);
       if (!entry || request.headers.get('x-homiio-team-operation') !== entry.capability)
