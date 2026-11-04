@@ -364,6 +364,11 @@ jobs:
       - name: Biome
         run: bunx biome ci .
 
+      # Translation keys follow ADR 0055: nested identifier segments under a
+      # namespace, every locale shaped like English. Missing translations warn.
+      - name: Translation keys (ADR 0055)
+        run: bun run i18n:check
+
       - name: Expo ESLint (frontend)
         run: bun run --filter @allo/frontend lint
 
