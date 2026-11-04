@@ -161,6 +161,7 @@ export async function createPlatformHarness(
   const app = createApp({
     auth: fakeOxyAuth,
     v1Auth: [fakeOxyAuth, createMessagingAuth(oxy)],
+    serviceAuth: oxy.middleware.service(),
     instanceAuth: requireInstance({ getDb }),
     rateLimit: passThrough,
     cors: passThrough,

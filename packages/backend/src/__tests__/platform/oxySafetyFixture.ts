@@ -1,4 +1,6 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { OxyServer } from '@oxy.so/core/server';
+import { ALLO_SERVICE_AUDIENCE } from '../../config/oxyApplication';
 /** External authority fixture. The real published SDK performs transport/schema
  * validation; Allo never substitutes a policy evaluator in production. */
 import {
@@ -19,6 +21,49 @@ export function fixtureBearer(accountId: string): string {
     sessionId: `fixture-${accountId}`,
     exp: Math.floor(Date.now() / 1000) + 3600,
   });
+}
+/**
+ * Workload service tokens are shaped like Oxy's (EdDSA under a published kid,
+ * oxy ADR 0012), so `oxy.middleware.service()` verifies them for real: the
+ * public half is served at `/.well-known/jwks.json`, and every minted token is
+ * live in `/auth/resources/introspect`.
+ */
+const SERVICE_KID = 'allo-fixture-key';
+const serviceKeys = generateKeyPairSync('ed25519');
+const liveServiceTokens = new Map<string, Record<string, unknown>>();
+function serviceToken(audience: string): string {
+  const iat = Math.floor(Date.now() / 1000);
+  const claims = {
+    iat,
+    exp: iat + 300,
+    type: 'service',
+    iss: 'oxy-auth',
+    aud: audience,
+    tier: 'internal',
+    authority: 'first_party',
+    appId: 'allo-fixture',
+    appName: 'Allo',
+    credentialId: 'wl_allo_fixture',
+    ownerAccountId: 'allo-fixture-owner',
+    environment: 'development',
+  };
+  const header = Buffer.from(
+    JSON.stringify({ alg: 'EdDSA', typ: 'JWT', kid: SERVICE_KID }),
+  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  const signature = sign(null, Buffer.from(`${header}.${payload}`), serviceKeys.privateKey);
+  const signed = `${header}.${payload}.${signature.toString('base64url')}`;
+  liveServiceTokens.set(signed, {
+    active: true,
+    authority: 'first_party',
+    applicationId: claims.appId,
+    credentialId: claims.credentialId,
+    accountId: claims.ownerAccountId,
+    environment: claims.environment,
+    audience,
+    expiresAt: new Date(claims.exp * 1000).toISOString(),
+  });
+  return signed;
 }
 const actors = new Map<string, string>();
 export function registerFixtureActor(accountId: string): string {
@@ -79,19 +124,26 @@ const server = Bun.serve({
       return json({ nonce: 'allo-test-nonce' });
     if (path === '/auth/service-token/workload')
       return json({
-        token: token({
-          type: 'service',
-          appId: 'allo-fixture',
-          authority: 'first_party',
-          credentialId: 'wl_allo_fixture',
-          audience: body.audience,
-          aud: body.audience,
-          environment: 'development',
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        }),
-        expiresIn: 3600,
+        token: serviceToken(body.audience ?? 'oxy-api'),
+        expiresIn: 300,
         appName: 'Allo',
       });
+    if (path === '/.well-known/jwks.json')
+      return json({
+        keys: [
+          {
+            ...serviceKeys.publicKey.export({ format: 'jwk' }),
+            kid: SERVICE_KID,
+            alg: 'EdDSA',
+            use: 'sig',
+          },
+        ],
+      });
+    if (path === '/auth/resources/introspect') {
+      const receiver = req.headers.get('authorization')?.slice(7) ?? '';
+      if (!liveServiceTokens.has(receiver)) return json({ message: 'Unauthorized' }, 401);
+      return json(liveServiceTokens.get(body.token) ?? { active: false });
+    }
     if (path === '/users/by-ids')
       return json(
         (body.ids as string[])
@@ -166,4 +218,5 @@ export const fixtureWorkloadCredentials = async () => ({
 export const fixtureOxy = new OxyServer({
   baseURL: server.url.origin,
   workloadCredentials: fixtureWorkloadCredentials,
+  expectedAudience: ALLO_SERVICE_AUDIENCE,
 });

@@ -19,6 +19,7 @@
  *   7. no-store headers
  *   8. per-user rate limit
  *   9. `/api/*` behind Oxy auth (profile, reports, directory)
+ *      `/v1/team-access/*` behind an Oxy service token, plus the team capability
  *      `/v1/*` behind Oxy auth, instance signature per route
  *  10. JSON 404
  *  11. the one error handler: zod → 400 `validation_failed`, `AlloHttpError`
@@ -66,6 +67,12 @@ export interface CreateAppDependencies {
    * Defaults to `[auth]`, which is what a test double wants.
    */
   v1Auth?: RequestHandler[];
+  /**
+   * Oxy service-token auth for `/v1/team-access` (`oxy.middleware.service()`):
+   * the caller's transport identity. The team capability is still the
+   * resource grant; neither replaces the other.
+   */
+  serviceAuth: RequestHandler;
   /** The per-route instance signature check. */
   instanceAuth: RequestHandler;
   rateLimit: RequestHandler;
@@ -208,7 +215,7 @@ export function createApp(deps: CreateAppDependencies): Express {
   app.use('/api', deps.auth, api);
 
   app.get('/v1/openapi.json', (_req, res) => res.json(generateTeamOpenApi()));
-  app.use('/v1/team-access', createTeamAccessRoutes());
+  app.use('/v1/team-access', deps.serviceAuth, createTeamAccessRoutes());
   app.use(
     '/v1',
     ...(deps.v1Auth ?? [deps.auth]),
