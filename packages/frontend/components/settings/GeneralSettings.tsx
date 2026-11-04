@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
 import { useAlloClient } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { ContactRow } from '@oxy.so/bloom/chat-people';
+import { useHapticsSettingRow, useVideoAutoplaySettingRow } from '@oxy.so/bloom/preferences';
 import { SettingsGeneralPage, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { Switch } from '@oxy.so/bloom/switch';
@@ -27,6 +28,8 @@ export function GeneralSettings() {
   const notifications = useNotificationPermission();
   const conversationTones = useSoundStore((state) => state.conversationTones);
   const setConversationTones = useSoundStore((state) => state.setConversationTones);
+  const haptics = useHapticsSettingRow();
+  const autoplay = useVideoAutoplaySettingRow();
   const name = user
     ? (typeof user.name === 'string' ? user.name : user.name?.displayName) || user.username
     : '';
@@ -138,6 +141,8 @@ export function GeneralSettings() {
                 />
               ),
             },
+            haptics,
+            autoplay,
           ],
         },
         {
