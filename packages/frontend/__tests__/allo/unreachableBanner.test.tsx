@@ -26,11 +26,21 @@ import { transcriptItems, unreachableCopy } from '@/lib/chat/model';
  */
 
 jest.mock('react-i18next', () => {
-  const en: Record<string, string> = jest.requireActual('@/locales/en.json');
+  const en = jest.requireActual<Record<string, unknown>>('@/locales/en.json');
+  /** A dotted key read through the nested catalog, or the key itself when it is missing. */
+  const lookup = (key: string): string => {
+    const text = key
+      .split('.')
+      .reduce<unknown>(
+        (node, segment) => (node as Record<string, unknown> | undefined)?.[segment],
+        en,
+      );
+    return typeof text === 'string' ? text : key;
+  };
   return {
     useTranslation: () => ({
       t: (key: string, options?: Record<string, unknown>) =>
-        (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+        lookup(key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
           String(options?.[name] ?? ''),
         ),
       i18n: { language: 'en-US' },

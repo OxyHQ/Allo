@@ -14,10 +14,10 @@ import itIT from '@/locales/it.json';
  * one language that has the key.
  */
 
-const LOCALES: readonly (readonly [string, Record<string, unknown>])[] = [
-  ['en', en as Record<string, unknown>],
-  ['es', es as Record<string, unknown>],
-  ['it', itIT as Record<string, unknown>],
+const LOCALES: readonly (readonly [string, object])[] = [
+  ['en', en],
+  ['es', es],
+  ['it', itIT],
 ];
 
 /** Every key the two privacy surfaces and the profile screen ask for. */
@@ -113,6 +113,17 @@ const REMOVED_KEYS: readonly string[] = [
   'settings.privacy.hiddenWordDuplicate',
 ];
 
+/** A dotted key read through a nested catalog: the string, or `undefined` when it is missing. */
+function lookup(bundle: object, key: string): string | undefined {
+  const text = key
+    .split('.')
+    .reduce<unknown>(
+      (node, segment) => (node as Record<string, unknown> | undefined)?.[segment],
+      bundle,
+    );
+  return typeof text === 'string' ? text : undefined;
+}
+
 /** Every placeholder a string interpolates, sorted so two can be compared. */
 function placeholders(text: string): string[] {
   return [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]).sort();
@@ -121,27 +132,24 @@ function placeholders(text: string): string[] {
 for (const [name, bundle] of LOCALES) {
   describe(`the ${name} translations`, () => {
     it('has every string the privacy and profile screens ask for', () => {
-      const missing = REQUIRED_KEYS.filter(
-        (key) => typeof bundle[key] !== 'string' || (bundle[key] as string).length === 0,
-      );
+      const missing = REQUIRED_KEYS.filter((key) => !lookup(bundle, key));
 
       expect(missing).toEqual([]);
     });
 
     it('no longer carries the strings for rows Allo does not have', () => {
-      const remaining = REMOVED_KEYS.filter((key) => key in bundle);
+      const remaining = REMOVED_KEYS.filter((key) => lookup(bundle, key) !== undefined);
 
       expect(remaining).toEqual([]);
     });
 
     it('keeps every interpolation placeholder English uses', () => {
-      const english = en as Record<string, unknown>;
       const mismatched: string[] = [];
 
       for (const key of REQUIRED_KEYS) {
-        const source = english[key];
-        const translated = bundle[key];
-        if (typeof source !== 'string' || typeof translated !== 'string') continue;
+        const source = lookup(en, key);
+        const translated = lookup(bundle, key);
+        if (source === undefined || translated === undefined) continue;
         if (placeholders(translated).join() !== placeholders(source).join()) {
           mismatched.push(key);
         }

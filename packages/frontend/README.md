@@ -74,7 +74,7 @@ Push notifications go through the platform: see
 │   ├── allo/           # THE seam to the SDK: the only place a client is built (see below)
 │   ├── chat/           # Pure projections (SDK → Bloom shapes), formatting, pickers, uploads
 │   └── ...
-├── locales/            # i18n bundles (en, es, it), flat dotted keys
+├── locales/            # i18n bundles (en, es, it), nested keys
 ├── metro/              # Stub modules Metro is pointed at for the MLS engine (see metro.config.js)
 ├── plugins/            # Expo config plugins
 ├── stores/             # Zustand: the people cache, appearance, a few UI flags
