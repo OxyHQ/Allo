@@ -85,8 +85,8 @@
   },
   "dependencies": {
     "@oxy.so/bloom": "17.8.2",
-    "@oxy.so/contracts": "6.8.0",
-    "@oxy.so/core": "7.21.1",
+    "@oxy.so/contracts": "6.9.0",
+    "@oxy.so/core": "7.22.0",
     "@oxy.so/services": "14.3.7",
     "@react-native/js-polyfills": "^0.88.1",
     "@tanstack/query-async-storage-persister": "^5.101.2",
