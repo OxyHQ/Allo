@@ -2,9 +2,12 @@ import { afterAll, beforeAll, expect, it } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { TeamOperation } from '@oxy.so/homiio-sdk';
-import { AlloTeamAccessClient } from '@oxy.so/allo-sdk';
+import { alloTeamForOxyService } from '@oxy.so/allo-sdk/server';
 import { managedTeams, conversations } from '../../db/schema';
+import { fixtureOxy } from '../platform/oxySafetyFixture';
 import { Harness, stopAll, texts, waitForText, waitJoined, waitFor } from './harness';
+
+const team = alloTeamForOxyService(fixtureOxy);
 
 const h = new Harness();
 const operations = new Map<string, { value: TeamOperation; capability: string }>();
@@ -72,7 +75,7 @@ it('freezes through source failure and lost finalization, resumes same operation
       [memberId],
       create.access,
     );
-    const snapshot = await new AlloTeamAccessClient().snapshot(reference);
+    const snapshot = await team.snapshot(reference);
     expect(snapshot?.frozen).toBe(true);
     await waitJoined(member, group.id);
     await owner.client.messages.send(group.id, 'paused-before-finalization');
@@ -84,7 +87,7 @@ it('freezes through source failure and lost finalization, resumes same operation
     create.value.finalized = true;
     sourceOffline = true;
     await expect(owner.client.conversations.finishTeam(create.access)).rejects.toThrow();
-    expect((await new AlloTeamAccessClient().snapshot(reference))?.frozen).toBe(true);
+    expect((await team.snapshot(reference))?.frozen).toBe(true);
     sourceOffline = false;
     await owner.client.conversations.finishTeam(create.access);
     await owner.client.conversations.finishTeam(create.access); // lost response/replay
@@ -95,7 +98,7 @@ it('freezes through source failure and lost finalization, resumes same operation
     await owner.client.conversations.removeMember(group.id, memberId);
     const confirmed = await owner.client.conversations.confirmMembers(group.id, [ownerId]);
     expect(confirmed.epoch).toBeGreaterThan(snapshot!.epoch);
-    expect((await new AlloTeamAccessClient().snapshot(reference))?.frozen).toBe(true);
+    expect((await team.snapshot(reference))?.frozen).toBe(true);
     await expect(owner.client.conversations.finishTeam(remove.access)).rejects.toThrow();
     const resumed = await owner.client.conversations.prepareTeam(remove.access);
     expect(resumed?.operationId).toBe(remove.value.id);
@@ -147,9 +150,7 @@ it('rejects another owner, wrong capabilities and off-source additions; a leafle
       [leafless],
       create.access,
     );
-    expect(
-      await new AlloTeamAccessClient().snapshot(randomBytes(32).toString('base64url')),
-    ).toBeNull();
+    expect(await team.snapshot(randomBytes(32).toString('base64url'))).toBeNull();
     await expect(
       owner.client.conversations.prepareTeam({ ...create.access, operationCapability: 'wrong' }),
     ).rejects.toThrow();
@@ -164,9 +165,7 @@ it('rejects another owner, wrong capabilities and off-source additions; a leafle
     await owner.client.conversations.finishTeam(remove.access);
     await owner.client.conversations.addMember(group.id, strangerId);
     await owner.client.sync.flush();
-    expect((await new AlloTeamAccessClient().snapshot(reference))?.memberAccountIds).toEqual([
-      ownerId,
-    ]);
+    expect((await team.snapshot(reference))?.memberAccountIds).toEqual([ownerId]);
     const again = await owner.client.conversations.createGroupOnce(
       create.value.id,
       [leafless],
@@ -235,7 +234,7 @@ it('lost create and MLS replies retry one group and one accepted membership effe
     await owner.client.conversations.finishTeam(add.access);
     await waitJoined(member, group.id);
     await owner.client.sync.flush();
-    const afterRetry = await new AlloTeamAccessClient().snapshot(reference);
+    const afterRetry = await team.snapshot(reference);
     expect(afterRetry?.epoch).toBe(added.epoch);
     await owner.client.messages.send(group.id, 'after recovered add');
     await waitForText(member, group.id, 'after recovered add');
@@ -247,7 +246,7 @@ it('lost create and MLS replies retry one group and one accepted membership effe
     remove.value.finalized = true;
     await owner.client.conversations.finishTeam(remove.access);
     await owner.client.sync.flush();
-    expect((await new AlloTeamAccessClient().snapshot(reference))?.epoch).toBe(removed.epoch);
+    expect((await team.snapshot(reference))?.epoch).toBe(removed.epoch);
     expect(
       (
         await h.db
