@@ -48,51 +48,52 @@ class FakeTransaction implements KvIdbTransaction {
   }
 
   objectStore(): KvIdbStore {
-    const tx = this;
     const request = <T>(work: () => T): FakeRequest<T> => {
       const req = new FakeRequest<T>();
-      tx.pending += 1;
+      this.pending += 1;
       // Requests complete asynchronously, after the caller has attached handlers.
       queueMicrotask(() => {
-        if (tx.aborted) return;
+        if (this.aborted) return;
         try {
-          if (tx.db.failOnKey !== null && (work as { key?: string }).key === tx.db.failOnKey)
+          if (this.db.failOnKey !== null && (work as { key?: string }).key === this.db.failOnKey)
             throw new Error('disk full');
           req.result = work();
           req.onsuccess?.(undefined as never);
         } catch (error) {
           req.error = error;
-          tx.abort(error);
+          this.abort(error);
           req.onerror?.(undefined as never);
           return;
         }
-        tx.pending -= 1;
-        if (tx.pending === 0) queueMicrotask(() => tx.complete());
+        this.pending -= 1;
+        if (this.pending === 0) queueMicrotask(() => this.complete());
       });
       return req;
     };
     return {
       get: (key) =>
-        request(() => (tx.db.rows.has(key) ? new Uint8Array(tx.db.rows.get(key)!) : undefined)),
+        request(() => (this.db.rows.has(key) ? new Uint8Array(this.db.rows.get(key)!) : undefined)),
       put: (value, key) => {
-        if (tx.mode !== 'readwrite') throw new Error('read-only transaction');
+        if (this.mode !== 'readwrite') throw new Error('read-only transaction');
         const work = () => {
-          tx.db.rows.set(key, new Uint8Array(value as Uint8Array));
+          this.db.rows.set(key, new Uint8Array(value as Uint8Array));
           return key;
         };
         (work as { key?: string }).key = key;
         return request(work);
       },
       delete: (key) => {
-        if (tx.mode !== 'readwrite') throw new Error('read-only transaction');
+        if (this.mode !== 'readwrite') throw new Error('read-only transaction');
         return request(() => {
-          tx.db.rows.delete(key);
+          this.db.rows.delete(key);
           return undefined;
         });
       },
       getAllKeys: (range) => {
         const { lower, upper } = range as { lower: string; upper: string };
-        return request(() => [...tx.db.rows.keys()].filter((k) => k >= lower && k < upper).sort());
+        return request(() =>
+          [...this.db.rows.keys()].filter((k) => k >= lower && k < upper).sort(),
+        );
       },
     };
   }

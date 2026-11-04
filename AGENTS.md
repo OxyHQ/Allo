@@ -476,8 +476,11 @@ instance the fake server is made to list as an unapproved active root.
   and nothing in the frontend reads or writes them (`lib/privacy/api.ts` sends
   only `showOnlineStatus`, pinned by `__tests__/privacy/api.test.ts`).
   Dropping them is a `post`-phase migration of its own.
-- **i18n:** i18next with `locales/` (en, es, it). The bundles are FLAT: one
-  dotted key per entry at the top level, not nested objects.
+- **i18n:** i18next with `locales/` (en, es, it). Keys follow Oxy's convention
+  (oxy ADR 0055): `chat.sticker.unavailable` is stored as nested objects
+  (`{"chat":{"sticker":{"unavailable":"…"}}}`), never one flat dotted string,
+  and i18next's default `keySeparator` reads it. The first segment is a
+  namespace, and a key is never both a string and the prefix of another key.
 
 ## Theming
 

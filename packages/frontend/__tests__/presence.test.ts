@@ -6,6 +6,17 @@ import type { PresenceView } from '@allo/react';
 
 import { presenceDot, presenceLine } from '@/lib/presence';
 
+/** A dotted key read through a nested catalog: the string, or `undefined` when it is missing. */
+function lookup(bundle: object, key: string): string | undefined {
+  const text = key
+    .split('.')
+    .reduce<unknown>(
+      (node, segment) => (node as Record<string, unknown> | undefined)?.[segment],
+      bundle,
+    );
+  return typeof text === 'string' ? text : undefined;
+}
+
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 const t = (key: string, options?: Record<string, unknown>) =>
   options ? `${key}:${Object.values(options).join(',')}` : key;
@@ -65,9 +76,11 @@ describe('presenceLine in the real copy', () => {
   // The header has the avatar, the name, and three buttons beside it on a
   // phone: "last seen 53 minutes ago" truncated to "last seen 53 minut…" on a
   // Pixel 8a. The short forms fit, and "1 hours ago" is gone with them.
-  const en = require('../locales/en.json') as Record<string, string>;
+  const en = require('../locales/en.json') as object;
   const real = (key: string, options?: Record<string, unknown>) =>
-    (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name]));
+    (lookup(en, key) ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+      String(options?.[name]),
+    );
   const say = (presence: PresenceView) =>
     presenceLine(presence, { t: real, locale: 'en-US', now: NOW });
 
@@ -82,10 +95,11 @@ describe('presenceLine in the real copy', () => {
 
   it('keeps the short forms in every bundle', () => {
     for (const locale of ['en', 'es', 'it']) {
-      const bundle = require(`../locales/${locale}.json`) as Record<string, string>;
+      const bundle = require(`../locales/${locale}.json`) as object;
       for (const key of ['presence.lastSeen.minutes', 'presence.lastSeen.hours']) {
-        expect(bundle[key]).toContain('{{count}}');
-        expect(bundle[key].replace('{{count}}', '53').length).toBeLessThanOrEqual(20);
+        const text = lookup(bundle, key) ?? '';
+        expect(text).toContain('{{count}}');
+        expect(text.replace('{{count}}', '53').length).toBeLessThanOrEqual(20);
       }
     }
   });
