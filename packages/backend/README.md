@@ -235,9 +235,13 @@ scopes or application key fallbacks. A local process without workload identity
 still reads the directory anonymously; it cannot borrow Allo's authority with a
 customer API key.
 
-Team-operation and team-snapshot capabilities remain resource contracts: their
-membership, operation and version checks apply regardless of service identity.
-The public capability read contract also remains available to existing SDKs.
+`POST /v1/team-access/snapshot` is mounted behind `oxy.middleware.service()`:
+no service token is 401, a person's session is 403, and a token Oxy no longer
+confirms is 401 (503 while Oxy cannot answer). `@oxy.so/allo-sdk` 1.0.0's
+`alloTeamForOxyService(oxy)` is the only snapshot client and sends one on every
+read. Team-operation and team-snapshot capabilities remain resource contracts:
+their membership, operation and version checks apply on top of the service
+identity, never instead of it.
 
 ### Health
 
@@ -552,4 +556,3 @@ prepared CrowdSource and Homiio SDKs. Publish and pin the SDK server factories
 before deploying this backend: `@oxy.so/allo-sdk/server` and
 `@oxy.so/homiio-sdk/server` use canonical receiver audiences. Package candidates
 are validation artifacts only; no local tarball path belongs in the lockfile.
-Existing resource-capability readers remain compatible without a service bearer.

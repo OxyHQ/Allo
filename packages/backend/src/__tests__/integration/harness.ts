@@ -128,6 +128,7 @@ export class Harness {
     const app = createApp({
       auth: bearerAuth,
       v1Auth: [createMessagingAuth(fixtureOxy)],
+      serviceAuth: fixtureOxy.middleware.service(),
       instanceAuth: requireInstance({ getDb }),
       rateLimit: pass,
       cors: pass,

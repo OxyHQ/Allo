@@ -38,6 +38,7 @@ export function createRuntimeApp() {
   const app = createApp({
     auth: createOxyAuthMiddleware(oxy),
     v1Auth: [createMessagingAuth(oxy)],
+    serviceAuth: oxy.middleware.service(),
     instanceAuth: requireInstance(),
     rateLimit: createOxyRateLimit(oxy),
     cors: createOxyCors({ appOrigins: APP_ORIGINS }),

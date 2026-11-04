@@ -18,6 +18,7 @@ import {
   markRuntimeShuttingDown,
   resetRuntimeHealthState,
 } from '../../runtime/health';
+import { ALLO_SERVICE_AUDIENCE } from '../../config/oxyApplication';
 import { createMessagingAuth } from '../../middleware/messagingAuth';
 import { AlloHttpError } from '../../utils/httpErrors';
 import { logger } from '../../utils/logger';
@@ -39,6 +40,7 @@ function appWith(overrides: Partial<CreateAppDependencies> = {}, postgres = true
   };
   const app = createApp({
     auth: fakeOxyAuth,
+    serviceAuth: fixtureOxy.middleware.service(),
     instanceAuth,
     rateLimit: pass,
     cors: pass,
@@ -232,6 +234,46 @@ describe('the error envelope', () => {
       .set(USER_HEADER, 'acct-00000001')
       .set('x-request-id', 'bad id!');
     expect(minted.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+describe('the team snapshot read needs an Oxy service token AND the team capability', () => {
+  const snapshot = (app: express.Express) => request(app).post('/v1/team-access/snapshot');
+
+  it('refuses a caller without a service token before the capability is read', async () => {
+    safetyFixture.reset();
+    const { app } = appWith();
+    const anonymous = await snapshot(app).set('x-allo-team-capability', 'A'.repeat(43));
+    expect(anonymous.status).toBe(401);
+    const forged = await snapshot(app)
+      .set('Authorization', 'Bearer not-a-token')
+      .set('x-allo-team-capability', 'A'.repeat(43));
+    expect(forged.status).toBe(401);
+    // A person's session is not a service identity.
+    const person = await snapshot(app)
+      .set('Authorization', `Bearer ${registerFixtureActor('acct-00000001')}`)
+      .set('x-allo-team-capability', 'A'.repeat(43));
+    expect(person.status).toBe(403);
+    // A genuine service token minted for another receiver is not Allo's.
+    const elsewhere = await snapshot(app)
+      .set('Authorization', `Bearer ${await fixtureOxy.serviceTokenFor('oxy-api')}`)
+      .set('x-allo-team-capability', 'A'.repeat(43));
+    expect(elsewhere.status).toBe(401);
+  });
+
+  it('answers a service caller without a usable capability exactly as before: 404', async () => {
+    safetyFixture.reset();
+    const { app } = appWith();
+    const token = await fixtureOxy.serviceTokenFor(ALLO_SERVICE_AUDIENCE);
+    for (const capability of [undefined, 'too-short']) {
+      const call = snapshot(app).set('Authorization', `Bearer ${token}`);
+      const response = await (capability ? call.set('x-allo-team-capability', capability) : call);
+      expect(response.status).toBe(404);
+      expect(expectError(response.body)).toEqual({
+        code: 'not_found',
+        message: 'Team chat not found',
+      });
+    }
   });
 });
 

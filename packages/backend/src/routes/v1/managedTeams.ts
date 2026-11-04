@@ -13,7 +13,11 @@ import {
   finishTeam,
 } from '../../services/platform/managedTeamService';
 import { teamCapabilityHash, teamSnapshot } from '../../db/platform/managedTeamRepository';
-/** Header capability is a read grant only, never an Oxy identity or an MLS signer. */
+/**
+ * Mounted behind `oxy.middleware.service()` (`app.ts`): the caller's service
+ * token is its transport identity. The header capability is the resource
+ * grant, a read grant only, never an Oxy identity or an MLS signer.
+ */
 export function createTeamAccessRoutes(): Router {
   const router = Router();
   router.post(
