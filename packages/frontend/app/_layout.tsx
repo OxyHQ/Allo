@@ -9,8 +9,8 @@ import 'react-native-reanimated';
 // Enable immer's MapSet plugin before any zustand/immer store produces a Set draft
 import '@/lib/immerSetup';
 
-import NetInfo from '@react-native-community/netinfo';
 import { useBackWithFallback } from '@oxy.so/bloom/panel-routing/expo-router';
+import { useNetworkStatus } from '@oxy.so/bloom/connection-status';
 import { BloomProvider } from '@oxy.so/bloom/provider';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { useAccountTheme, useOxy } from '@oxy.so/services/ui/client';
@@ -27,7 +27,6 @@ import { AlloRoot } from '@/lib/allo/AlloRoot';
 import { AppInitializer } from '@/lib/appInitializer';
 import { useAppLanguage } from '@/lib/i18n';
 import { usePendingHref } from '@/lib/navigation/usePendingHref';
-import { startConnectionMonitoring } from '@/lib/network/connectionStatus';
 import { oxyServices } from '@/lib/oxy';
 import { DEFAULT_COLOR_PRESET, THEME_PERSIST_KEY, THEME_STORAGE } from '@/lib/theme';
 
@@ -103,19 +102,15 @@ function RootStack() {
 
 /** Keeps React Query's online and focus state in step with the device. */
 function useDeviceSignals() {
+  const { online } = useNetworkStatus();
   useEffect(() => {
-    const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
-      onlineManager.setOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
-    });
-    const stopMonitoring = startConnectionMonitoring();
+    onlineManager.setOnline(online);
+  }, [online]);
+  useEffect(() => {
     const appState = AppState.addEventListener('change', (status: AppStateStatus) => {
       focusManager.setFocused(status === 'active');
     });
-    return () => {
-      unsubscribeNetInfo();
-      stopMonitoring();
-      appState.remove();
-    };
+    return () => appState.remove();
   }, []);
 }
 
