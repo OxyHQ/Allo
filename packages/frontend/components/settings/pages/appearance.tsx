@@ -3,17 +3,7 @@ import {
   SegmentedControlItem,
   SegmentedControlItemText,
 } from '@oxy.so/bloom/segmented-control';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemIndicator,
-  SelectItemText,
-  SelectIcon,
-  SelectTrigger,
-  SelectValue,
-} from '@oxy.so/bloom/select';
-import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
+import { SettingsGeneralPage, SettingsSelect } from '@oxy.so/bloom/settings-modal';
 import { Switch } from '@oxy.so/bloom/switch';
 import { COLOR_PRESET_REGISTRY, useBloomTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -96,32 +86,19 @@ export default function AppearanceSettingsScreen() {
               label: t('settings.appearance.color'),
               description: current?.description,
               control: (
-                <Select
+                <SettingsSelect
+                  label={t('settings.appearance.color')}
                   value={value}
-                  onValueChange={(next) =>
-                    saveColor(next as typeof value).catch(() =>
+                  onChange={(next) =>
+                    saveColor(next).catch(() =>
                       toast.error(t('settings.appearance.colorSaveError')),
                     )
                   }
-                >
-                  <SelectTrigger label={t('settings.appearance.color')}>
-                    <SelectValue />
-                    <SelectIcon />
-                  </SelectTrigger>
-                  <SelectContent
-                    label={t('settings.appearance.color')}
-                    items={presets.map((entry) => ({
-                      value: entry.name,
-                      label: entry.displayName,
-                    }))}
-                    renderItem={(item) => (
-                      <SelectItem value={item.value} label={item.label}>
-                        <SelectItemText>{item.label}</SelectItemText>
-                        <SelectItemIndicator />
-                      </SelectItem>
-                    )}
-                  />
-                </Select>
+                  items={presets.map((entry) => ({
+                    value: entry.name,
+                    label: entry.displayName,
+                  }))}
+                />
               ),
             },
           ],
