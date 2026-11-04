@@ -20,13 +20,16 @@ import {
 import { validationFailed } from '../../utils/httpErrors';
 import { asyncRoute } from './asyncRoute';
 import { oxy } from '../../oxy';
+import { createV1OxyAuth } from '../../middleware/messagingAuth';
 import { parseBody, parseParam } from './validate';
 
 export function createHistoryRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
   // Opaque archives have no authoritative per-conversation coverage. Apply
   // ordinary-account authorization to each matched route, including case variants.
-  const archiveAuth = oxy.middleware.auth();
+  const archiveAuth = createV1OxyAuth(oxy, {
+    forbiddenMessage: 'History transfer is not available for this account.',
+  });
 
   // `me` before `:id`, so it is never read as an id.
   router.get(

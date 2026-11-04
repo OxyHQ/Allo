@@ -1,5 +1,5 @@
 import { oxy } from '../../oxy';
-import { AlloHttpError } from '../../utils/httpErrors';
+import { createV1OxyAuth } from '../../middleware/messagingAuth';
 import { callerOf } from './conversations';
 /**
  * Blobs. The READ lives with the other JSON routes; the UPLOAD is raw bytes
@@ -17,28 +17,20 @@ import { parseParam } from './validate';
 
 export function createBlobReadRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
+  // Existing adult capability reads remain supported; opaque archives are not a
+  // reviewed supervised action, so a blob the conversation cannot vouch for
+  // falls back to the ordinary-account gate. Oxy makes this decision live.
+  const archiveAuth = createV1OxyAuth(oxy, {
+    forbiddenMessage: 'This attachment is not available.',
+  });
   router.get(
     '/blobs/:id',
     deps.instanceAuth,
     asyncRoute(async (req, res) => {
       const id = parseParam(blobIdSchema, req.params.id, 'id');
       if (!(await blobMessagingAccess(id, callerOf(req)))) {
-        // Existing adult capability reads remain supported; opaque archives are
-        // not a reviewed supervised action. Oxy makes this decision live.
         await new Promise<void>((resolve, reject) => {
-          void oxy.middleware.auth({
-            onError: (error) =>
-              reject(
-                new AlloHttpError(
-                  error.status === 401
-                    ? 'unauthorized'
-                    : error.status === 403
-                      ? 'forbidden'
-                      : 'unavailable',
-                  'This attachment is not available.',
-                ),
-              ),
-          })(req, res, (error) => (error ? reject(error) : resolve()));
+          archiveAuth(req, res, (error?: unknown) => (error ? reject(error) : resolve()));
         });
       }
       const bytes = await downloadBlob(id);

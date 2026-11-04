@@ -13,6 +13,9 @@ import {
 import { AlloHttpError, forbidden, notFound, validationFailed } from '../../utils/httpErrors';
 import type { Caller } from './conversationService';
 
+/** Homiio's team operations, over the one `OxyServer`'s workload transport. */
+const homiioTeams = homiioTeamForOxyService(oxy);
+
 export interface ManagedTeamAuthorization {
   operation: TeamOperation;
   capabilityHash: string;
@@ -25,7 +28,7 @@ export async function authorizeTeamOperation(
 ): Promise<ManagedTeamAuthorization> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(teamCapability) || !operationCapability)
     throw validationFailed('Team capability is required');
-  const operation = await homiioTeamForOxyService(oxy).read(operationId, operationCapability);
+  const operation = await homiioTeams.read(operationId, operationCapability);
   const capabilityHash = teamCapabilityHash(teamCapability);
   if (
     operation.ownerAccountId !== caller.accountId ||

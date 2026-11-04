@@ -18,10 +18,11 @@ import {
   markRuntimeShuttingDown,
   resetRuntimeHealthState,
 } from '../../runtime/health';
-import { requireOxySession } from '../../middleware/oxySession';
+import { createMessagingAuth } from '../../middleware/messagingAuth';
 import { AlloHttpError } from '../../utils/httpErrors';
 import { logger } from '../../utils/logger';
 import { fakeOxyAuth, USER_HEADER } from './harness';
+import { fixtureOxy, registerFixtureActor, safetyFixture } from './oxySafetyFixture';
 
 const pass: express.RequestHandler = (_req, _res, next) => next();
 
@@ -170,31 +171,52 @@ describe('the error envelope', () => {
   });
 
   it("answers a missing or bad Oxy session on /v1 with the contract's unauthorized envelope", async () => {
-    // The production chain: optional auth (here: attaches a user only when the
-    // header is present, like a valid bearer) then `requireOxySession`.
-    const optional: express.RequestHandler = (req, _res, next) => {
-      const userId = req.get(USER_HEADER);
-      if (userId) Reflect.set(req, 'userId', userId);
-      next();
-    };
-    const { app } = appWith({ v1Auth: [optional, requireOxySession] });
+    // The production chain: `createMessagingAuth` (built once) over the real
+    // SDK, against the external Oxy fixture.
+    safetyFixture.reset();
+    const { app } = appWith({ v1Auth: [createMessagingAuth(fixtureOxy)] });
     const anonymous = await request(app).get('/v1/instances');
     expect(anonymous.status).toBe(401);
     expect(expectError(anonymous.body)).toEqual({
       code: 'unauthorized',
       message: 'An Oxy session is required',
     });
+    const forged = await request(app)
+      .get('/v1/instances')
+      .set('Authorization', 'Bearer not-a-token');
+    expect(forged.status).toBe(401);
+    expect(expectError(forged.body).code).toBe('unauthorized');
     const blob = await request(app)
       .post('/v1/blobs')
       .set('content-type', 'application/octet-stream')
       .send(Buffer.alloc(4));
     expect(blob.status).toBe(401);
     expect(expectError(blob.body).code).toBe('unauthorized');
-    // With a session the guard admits the request: it reaches the router and
+    // With a session the gate admits the request: it reaches the router and
     // falls through to the JSON 404 (this suite has no database to answer with).
-    const admitted = await request(app).get('/v1/nowhere').set(USER_HEADER, 'acct-00000001');
+    const bearer = registerFixtureActor('acct-00000001');
+    const admitted = await request(app)
+      .get('/v1/nowhere')
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(USER_HEADER, 'acct-00000001');
     expect(admitted.status).toBe(404);
     expect(expectError(admitted.body).code).toBe('not_found');
+    // An authority outage is 503 `unavailable`, never a refusal of the session.
+    safetyFixture.unavailable = true;
+    const outage = await request(app).get('/v1/nowhere').set('Authorization', `Bearer ${bearer}`);
+    expect(outage.status).toBe(503);
+    expect(expectError(outage.body).code).toBe('unavailable');
+    safetyFixture.reset();
+  });
+
+  it('sends the shared security headers on every answer', async () => {
+    const { app } = appWith();
+    for (const path of ['/health/live', '/v1/nowhere', '/']) {
+      const response = await request(app).get(path);
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['x-frame-options']).toBe('DENY');
+      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    }
   });
 
   it('sets no-store on API answers and echoes a request id', async () => {

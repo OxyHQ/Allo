@@ -12,14 +12,14 @@ import { logger } from '../utils/logger';
  * `GET /api/directory/*` — who somebody is, answered by this backend instead of
  * by Oxy directly.
  *
- * See `services/oxy/OxyDirectoryService.ts` for why these five exist and why
- * they need no service credential. This file is the boundary: it validates what
- * arrives, maps an upstream failure onto a status, and never lets an Oxy `User`
- * out unprojected.
+ * See `services/oxy/OxyDirectoryService.ts` for why these five exist and who
+ * they ask Oxy as. This file is the boundary: it validates what arrives, maps
+ * an upstream failure onto a status, and never lets an Oxy `User` out
+ * unprojected.
  *
  * ## Authenticated, deliberately, even though Oxy answers anonymously
  *
- * Every underlying Oxy route is public, so these could be too. They are not,
+ * Every underlying Oxy route answers anybody, so these could too. They do not,
  * because a public profile lookup on `api.allo.you` would be an unauthenticated
  * enumeration endpoint pointed at Oxy's whole user base with Allo's own IP
  * reputation in front of it. Mounted inside the authenticated router, the
@@ -52,8 +52,7 @@ const oxyUserIdSchema = z
 
 /**
  * The same ceiling `@oxy.so/core` chunks at, so one request here is one request
- * upstream. Asking for more would not fail — it would quietly become several
- * upstream calls, of which one can drop out.
+ * upstream, and it either answers for every id or fails as a whole.
  */
 const MAX_USERS_BY_IDS = 100;
 
@@ -108,9 +107,11 @@ function firstIssue(error: z.ZodError): string {
 /**
  * Turns an Oxy SDK failure into a status.
  *
- * A 404 upstream is a 404 here. Everything else is 502: the request was fine,
- * the dependency was not, and answering 500 would send the operator looking in
- * this codebase for a fault that is not in it.
+ * A 404 upstream is a 404 here. Everything else — including a batch Oxy did not
+ * answer for every id of (`DirectoryUnavailableError`) — is 502: the request was
+ * fine, the dependency was not, and answering 500 would send the operator
+ * looking in this codebase for a fault that is not in it. An outage is never a
+ * 404 or a short list: that would read as "no such account".
  */
 function respondToUpstreamFailure(res: Response, operation: string, error: unknown): Response {
   if (isOxyUserNotFound(error)) {
@@ -183,8 +184,10 @@ export function createDirectoryRoutes(options: DirectoryRoutesOptions): Router {
       const users = await service.usersByIds(parsed.data.ids);
       /**
        * Fewer users than ids is normal and is not an error: an id can name a
-       * deleted account. The caller maps by `id` — nothing is padded out with a
-       * placeholder, because a placeholder is indistinguishable from an answer.
+       * deleted account, and Oxy said so. The caller maps by `id` — nothing is
+       * padded out with a placeholder, because a placeholder is
+       * indistinguishable from an answer. An id Oxy could NOT answer for never
+       * reaches here: the service throws, and this is a 502.
        */
       return sendSuccessResponse(res, 200, { users });
     } catch (error) {

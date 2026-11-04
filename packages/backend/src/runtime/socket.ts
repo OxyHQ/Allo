@@ -29,6 +29,7 @@ import {
 
 import type http from 'node:http';
 import { Server as SocketIOServer, type Namespace, type Socket } from 'socket.io';
+import { createOxySocketCors } from '@oxy.so/core/server';
 import {
   EMPTY_BODY_SHA256_HEX,
   SOCKET_NAMESPACE,
@@ -108,20 +109,14 @@ export interface SocketRuntime {
 }
 
 export function createSocketServer(server: http.Server, deps: SocketServerDeps): SocketRuntime {
-  const origins = new Set(deps.appOrigins ?? APP_ORIGINS);
+  // The browsers `createOxyCors` admits over HTTP, on both transports: `cors`
+  // answers long-polling, `allowRequest` refuses a WebSocket handshake from any
+  // other browser origin (browsers apply no CORS to an upgrade).
   const io = new SocketIOServer(server, {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     maxHttpBufferSize: 64 * 1024,
-    cors: {
-      origin: (origin, callback) => {
-        callback(
-          null,
-          !origin || origins.has(origin) || /^https:\/\/([a-z0-9-]+\.)*oxy\.so$/i.test(origin),
-        );
-      },
-      credentials: true,
-    },
+    ...createOxySocketCors({ appOrigins: [...(deps.appOrigins ?? APP_ORIGINS)] }),
   });
 
   const namespace: V1Namespace = io.of(SOCKET_NAMESPACE);

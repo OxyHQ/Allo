@@ -16,13 +16,16 @@ import {
 } from '../../services/platform/backupService';
 import { asyncRoute } from './asyncRoute';
 import { oxy } from '../../oxy';
+import { createV1OxyAuth } from '../../middleware/messagingAuth';
 import { parseBody } from './validate';
 
 export function createBackupRoutes(deps: { instanceAuth: RequestHandler }): Router {
   const router = Router();
   // Opaque archives have no authoritative per-conversation coverage. Apply
   // ordinary-account authorization to each matched route, including case variants.
-  const archiveAuth = oxy.middleware.auth();
+  const archiveAuth = createV1OxyAuth(oxy, {
+    forbiddenMessage: 'Account backups are not available for this account.',
+  });
 
   router.put(
     '/accounts/me/backup',

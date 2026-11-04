@@ -31,6 +31,8 @@ export const safetyFixture = {
   revoked: new Set<string>(),
   blocked: new Set<string>(),
   contacts: new Set<string>(),
+  /** Accounts `POST /users/by-ids` knows; every other id is answered as absent. */
+  users: new Set<string>(),
   unavailable: false,
   enabled: true,
   calls: [] as { path: string; body: unknown }[],
@@ -42,6 +44,7 @@ export const safetyFixture = {
     this.revoked.clear();
     this.blocked.clear();
     this.contacts.clear();
+    this.users.clear();
     this.unavailable = false;
     this.enabled = true;
     this.calls = [];
@@ -89,6 +92,12 @@ const server = Bun.serve({
         expiresIn: 3600,
         appName: 'Allo',
       });
+    if (path === '/users/by-ids')
+      return json(
+        (body.ids as string[])
+          .filter((id) => safetyFixture.users.has(id))
+          .map((id) => ({ id, username: `user-${id.slice(-4)}`, name: { displayName: id } })),
+      );
     if (path.startsWith('/session/validate-header/'))
       return session(req.headers.get('authorization')?.slice(7) ?? '', false);
     if (path === '/safety/service/session') {

@@ -2,7 +2,7 @@ import {
   setInstanceCallPushToken,
   clearInstanceCallPushToken,
 } from '../../services/platform/instanceService';
-import { originalBearer, requireMessageAccess } from '../../services/platform/messagingPolicy';
+import { verifiedBearer, requireMessageAccess } from '../../services/platform/messagingPolicy';
 import { Router, type RequestHandler } from 'express';
 import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
@@ -56,7 +56,7 @@ export function createInstanceRoutes(deps: { instanceAuth: RequestHandler }): Ro
       const accountId = parseParam(accountIdSchema, req.params.accountId, 'accountId');
       const callerAccountId = getRequiredOxyUserId(req);
       await requireMessageAccess(
-        { accountId: callerAccountId, accessToken: originalBearer(req) },
+        { accountId: callerAccountId, accessToken: verifiedBearer(req) },
         `instances:${accountId}`,
         [callerAccountId, accountId],
       );

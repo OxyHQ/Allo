@@ -9,7 +9,8 @@
  *      the ALB and, once the hostname is proxied, Cloudflare in front of it
  *   1. request observability (request id + route template log)
  *   2. ecosystem activity observer (a no-op until boot starts it)
- *   3. CORS (`createOxyCors`, plus `APP_ORIGINS`)
+ *   3. security headers (`createOxySecurityHeaders`), then CORS
+ *      (`createOxyCors`, plus `APP_ORIGINS`; the socket shares the list)
  *   4. `/health/live`, `/health/ready`, `/api/health` (alias of ready)
  *   5. RAW-BODY routes, ahead of the JSON parser:
  *        `/webhooks` (CrowdSource verifies the bytes that arrived)
@@ -26,7 +27,7 @@
  */
 
 import { generateTeamOpenApi } from '@oxy.so/allo-contracts/dist/openapi';
-import { oxyTrustProxy } from '@oxy.so/core/server';
+import { createOxySecurityHeaders, oxyTrustProxy } from '@oxy.so/core/server';
 import express, {
   type ErrorRequestHandler,
   type Express,
@@ -45,7 +46,9 @@ import { logger } from './utils/logger';
 
 /**
  * Origins that are NOT covered by createOxyCors, which admits the Oxy apex
- * family (*.oxy.so) automatically and nothing else. `https://allo.you` is the
+ * family (https://oxy.so and one-label *.oxy.so) automatically and nothing
+ * else. The Socket.IO server admits the same list (`createOxySocketCors` in
+ * `runtime/socket.ts`). `https://allo.you` is the
  * product's own domain and has to be listed. Dropping it fails in the browser,
  * not at boot.
  */
@@ -163,6 +166,9 @@ export function createApp(deps: CreateAppDependencies): Express {
 
   app.use(requestObservability);
   if (deps.ecosystemActivity) app.use(deps.ecosystemActivity);
+  // The shared Helmet + CSP baseline. This API frames nothing, so the legacy
+  // header says the same as the baseline's `frame-ancestors 'none'`.
+  app.use(createOxySecurityHeaders({ helmet: { frameguard: { action: 'deny' } } }));
   app.use(deps.cors);
   app.use(healthRoutes(deps.checkPostgres));
 

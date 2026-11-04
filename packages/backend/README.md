@@ -203,7 +203,7 @@ a person through this backend rather than by calling Oxy itself.
 | --- | --- |
 | `GET /api/directory/profiles/username/:username` | `oxy.users.byUsername` |
 | `GET /api/directory/users/:userId` | `oxy.users.get` |
-| `POST /api/directory/users/by-ids` (`{ ids }`, max 100) | `oxy.users.getMany` |
+| `POST /api/directory/users/by-ids` (`{ ids }`, max 100) | `oxy.users.getMany` (answered with `users.lookupMany`) |
 | `GET /api/directory/profiles/search?query=&limit=&offset=` | `oxy.users.search` |
 | `GET /api/directory/assets/:fileId/url?variant=` | `oxy.assets.publicUrl` |
 
@@ -217,15 +217,23 @@ Each `DirectoryUser` already carries `avatarUrl`, so a place in the app that
 turns an avatar id into a URL becomes a field read rather than a request. The
 asset endpoint exists for an id that arrives from somewhere else.
 
-Authenticated, even though every underlying Oxy route is public: an
+Authenticated, even though every underlying Oxy route answers anybody: an
 unauthenticated profile lookup here would be an enumeration endpoint pointed at
 Oxy's whole user base with Allo's IP reputation in front of it.
 
-Public directory lookups work without service identity. Own service calls use
-`OxyServer` with an attested workload, registered environment and receiver audience
-(Oxy ADR 0049). There are no internal OAuth scopes or application key fallbacks.
-A local process without workload identity may use the public directory; it cannot
-borrow Allo's authority with a customer API key.
+The by-ids lookup answers the accounts Oxy found and leaves out the ones it
+said do not exist; when Oxy could not answer for an id at all, the route is a
+502, never a shorter list, so an outage is not drawn as "no such account".
+
+The one `OxyServer` (`src/oxy.ts`) authenticates as Allo's attested workload
+(Oxy ADR 0049) with `serviceIdentity: 'when-anonymous'`, so these session-less
+reads carry Allo's service token instead of going out anonymous (which oxy-api
+charges to the fleet's shared NAT address). It accepts service tokens for
+`oxy-service:<Allo's application id>` (`expectedAudience`, `src/config/oxyApplication.ts`),
+the audience `@oxy.so/allo-sdk/server` mints them for. There are no internal OAuth
+scopes or application key fallbacks. A local process without workload identity
+still reads the directory anonymously; it cannot borrow Allo's authority with a
+customer API key.
 
 Team-operation and team-snapshot capabilities remain resource contracts: their
 membership, operation and version checks apply regardless of service identity.

@@ -1,5 +1,6 @@
 /** Live Oxy authority over metadata only. No message bytes or cached policy decisions. */
 import type { Request } from 'express';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
 import {
   MESSAGE_ACCESS_MAX_RESOURCES,
   MESSAGE_ACCESS_MAX_PARTICIPANT_SLOTS,
@@ -24,11 +25,15 @@ export interface DeliveryResource extends MessagingResource {
   senderAccountId: string;
 }
 
-/** Called only after canonical auth; preserve the original proof, never mint an actor from an ID. */
-export function originalBearer(req: Pick<Request, 'get'>): string {
-  const value = req.get('Authorization');
-  if (!value?.startsWith('Bearer ') || value.length <= 7) throw unauthorized();
-  return value.slice(7);
+/**
+ * The bearer Oxy auth verified for this request, as the SDK left it on
+ * `req.accessToken` — the caller's original proof, forwarded to Oxy's policy
+ * reads, never an actor minted from an id and never re-read from the header.
+ */
+export function verifiedBearer(req: Request): string {
+  const { accessToken } = req as OxyAuthRequest;
+  if (!accessToken) throw unauthorized();
+  return accessToken;
 }
 
 export function uniqueParticipants(ids: readonly string[]): string[] {
