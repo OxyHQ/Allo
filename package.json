@@ -51,6 +51,7 @@
     "test:performance-gates": "bun ./scripts/test-check-frontend-bundle-imports.mjs && bun ./scripts/test-check-web-export-budget.mjs && bun ./scripts/test-check-web-export-html.mjs",
     "lint": "biome check . && bun run --filter @allo/frontend lint",
     "i18n:check": "oxy-doctor-i18n --ci",
+    "doctor:oxy": "oxy-doctor --ci",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "clean": "bun run --filter '*' clean && rm -rf node_modules",
