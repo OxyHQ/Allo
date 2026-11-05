@@ -31,10 +31,10 @@
  */
 
 /** `android.package` of the production app (`app.config.js`). */
-export const ANDROID_PACKAGE = 'com.allo.app';
+export const ANDROID_PACKAGE = 'you.allo.app';
 
 /** `ios.bundleIdentifier` of the production app (`app.config.js`). */
-export const IOS_BUNDLE_ID = 'com.allo.ios';
+export const IOS_BUNDLE_ID = 'you.allo.app';
 
 /**
  * The Oxy ecosystem release key (`CN=Oxy, OU=Oxy Ecosystem`, alias `oxy`). Every
@@ -49,7 +49,7 @@ export const OXY_RELEASE_CERT_SHA256 =
 /**
  * The React Native template DEBUG keystore (`CN=Android Debug`, password
  * `android`). Its private key ships inside countless npm packages, so trusting it
- * would let anyone sign a `com.allo.app` that owns our links. Refused even when
+ * would let anyone sign a `you.allo.app` that owns our links. Refused even when
  * configured.
  */
 export const PUBLIC_DEBUG_CERT_SHA256 =
