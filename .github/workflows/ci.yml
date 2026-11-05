@@ -290,6 +290,12 @@ jobs:
       # What covers routes instead is a test, and it runs in the job below:
       # __tests__/routes/navigationTargets.test.ts reads the routes off app/ and
       # the destinations out of the source and compares them.
+      # One copy of every package one version can serve and of every package
+      # that must be single (@oxy.so/*, react, expo, ...), Oxy releases inside
+      # their upgrade window, and the native peers @oxy.so/services requires.
+      - name: Oxy dependency health (oxy-doctor)
+        run: bun run doctor:oxy
+
       - name: Typecheck frontend
         run: bun run typecheck:frontend
 

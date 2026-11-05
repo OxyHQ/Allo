@@ -51,6 +51,7 @@
     "test:performance-gates": "bun ./scripts/test-check-frontend-bundle-imports.mjs && bun ./scripts/test-check-web-export-budget.mjs && bun ./scripts/test-check-web-export-html.mjs",
     "lint": "biome check . && bun run --filter @allo/frontend lint",
     "i18n:check": "oxy-doctor-i18n --ci",
+    "doctor:oxy": "oxy-doctor --ci",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "clean": "bun run --filter '*' clean && rm -rf node_modules",
@@ -71,8 +72,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@oxy.so/doctor": "1.6.1",
-    "@types/node": "^24.9.2",
+    "@oxy.so/doctor": "1.7.0",
+    "@types/node": "^24.19.2",
     "semver": "7.8.5",
     "react-native-worklets": "0.13.0",
     "typescript": "~5.9.2",
