@@ -21,7 +21,7 @@ workers_dev = false
 # replaced by these on the next `wrangler deploy`.
 #
 #   APPLE_TEAM_ID  The Apple Developer Team ID (10 characters, Membership
-#                  details) that signs `com.allo.ios`. Empty: the AASA answers a
+#                  details) that signs `you.allo.app`. Empty: the AASA answers a
 #                  JSON 404, because a guessed value publishes a wrong
 #                  association.
 #   ANDROID_EXTRA_SHA256_CERT_FINGERPRINTS

@@ -30,8 +30,8 @@ module.exports = (_config) => {
   // intentionally shared so deep-link plumbing keeps working — Android just shows
   // an app chooser when both are installed.
   const IS_DEV_VARIANT = process.env.APP_VARIANT === 'development';
-  const ANDROID_ID = IS_DEV_VARIANT ? 'com.allo.app.dev' : 'com.allo.app';
-  const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios';
+  // One id on both platforms: allo.you reversed, plus `.app`.
+  const APP_ID = IS_DEV_VARIANT ? 'you.allo.app.dev' : 'you.allo.app';
   const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo';
 
   // Allo's public Oxy client id (ApplicationCredential publicKey), the same
@@ -68,7 +68,7 @@ module.exports = (_config) => {
       },
       ios: {
         supportsTablet: true,
-        bundleIdentifier: IOS_ID,
+        bundleIdentifier: APP_ID,
         // Universal Links. iOS reads `https://allo.you/.well-known/apple-app-site-association`
         // (served by `worker/appAssociation.js`), which answers 404 until the
         // Apple Team ID is configured there.
@@ -82,7 +82,7 @@ module.exports = (_config) => {
         },
         permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
         // Must match google-services.json package_name
-        package: ANDROID_ID,
+        package: APP_ID,
         // Point to your google-services.json for FCM (only if file exists)
         ...(hasGoogleServices && { googleServicesFile: '../../google-services.json' }),
         // App Links. Every https host in an autoVerify filter is VERIFIED,

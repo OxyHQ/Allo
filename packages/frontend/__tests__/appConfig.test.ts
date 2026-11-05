@@ -22,6 +22,7 @@ interface IntentFilter {
 }
 
 interface ExpoConfig {
+  name: string;
   android: { package: string; intentFilters: IntentFilter[] };
   plugins: (string | [string, ...unknown[]] | unknown)[];
   ios: { bundleIdentifier: string; associatedDomains?: string[] };
@@ -75,8 +76,8 @@ describe.each(PRODUCTION_BUILDS)('production app config (%j)', (env) => {
   const config = loadAppConfig(env);
 
   it('is the production app', () => {
-    expect(config.android.package).toBe('com.allo.app');
-    expect(config.ios.bundleIdentifier).toBe('com.allo.ios');
+    expect(config.android.package).toBe('you.allo.app');
+    expect(config.ios.bundleIdentifier).toBe('you.allo.app');
   });
 
   it('names no localhost or other development host anywhere', () => {
@@ -119,7 +120,9 @@ describe('development variant', () => {
   const config = loadAppConfig({ APP_VARIANT: 'development' });
 
   it('is a separate app that also opens the local web server, outside the verified filter', () => {
-    expect(config.android.package).toBe('com.allo.app.dev');
+    expect(config.android.package).toBe('you.allo.app.dev');
+    expect(config.ios.bundleIdentifier).toBe('you.allo.app.dev');
+    expect(config.name).toBe('Allo (Dev)');
     expect(JSON.stringify(config)).toMatch(/localhost/);
     expect(verifiedHosts(config.android.intentFilters)).toEqual(['allo.you']);
     const verified = config.android.intentFilters.filter((filter) => filter.autoVerify);

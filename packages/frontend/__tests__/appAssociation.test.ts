@@ -51,7 +51,7 @@ describe('assetlinks.json', () => {
         relation: ['delegate_permission/common.handle_all_urls'],
         target: {
           namespace: 'android_app',
-          package_name: 'com.allo.app',
+          package_name: 'you.allo.app',
           sha256_cert_fingerprints: [OXY_RELEASE_CERT_SHA256],
         },
       },
@@ -100,7 +100,7 @@ describe('apple-app-site-association', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/json');
     const body = await response.json();
-    expect(body.applinks.details[0].appIDs).toEqual(['ABCDE12345.com.allo.ios']);
+    expect(body.applinks.details[0].appIDs).toEqual(['ABCDE12345.you.allo.app']);
     expect(body.applinks.details[0].components.at(-1)).toEqual({ '/': '/*' });
   });
 });
