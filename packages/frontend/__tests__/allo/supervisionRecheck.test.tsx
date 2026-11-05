@@ -88,7 +88,12 @@ let mockSupervision: Supervision = pending;
 const mockSession = { user: { id: 'acc-recheck', kind: 'personal' }, activeSessionId: 's-1' };
 const mockRefetch = jest.fn(async () => undefined);
 const mockOxyServices = {
-  session: { userId: 'acc-recheck', onChange: () => () => undefined },
+  http: { getSessionEpoch: () => 0 },
+  session: {
+    accessToken: 'synthetic-token',
+    userId: 'acc-recheck',
+    onChange: () => () => undefined,
+  },
 };
 jest.mock('@oxy.so/services/ui/client', () => ({
   useOxy: () => ({

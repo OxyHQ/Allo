@@ -58,6 +58,7 @@ const DIRECTORY = [
 ];
 
 const services = {
+  http: { getSessionEpoch: () => 0 },
   safety: {
     people: async (input: { accountIds?: string[]; query?: string }) => ({
       items: DIRECTORY.filter((person) =>
