@@ -1,5 +1,5 @@
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
-import { useAlloClient, useConversationActions, useSyncState } from '@allo/react';
+import { useAlloClient, useConversationActions, useSynced, useSyncState } from '@allo/react';
 import { AliaAskProvider, useAskAgent } from '@alia.onl/sdk/ask';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
@@ -59,6 +59,7 @@ export function ConversationList() {
   const theme = useTheme();
   const { t } = useTranslation();
   const sync = useSyncState();
+  const synced = useSynced();
   const client = useAlloClient();
   const { leave, clearHistory } = useConversationActions();
   const summaries = useChatSummaries();
@@ -255,7 +256,10 @@ export function ConversationList() {
               <StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />
             }
             selectedId={selectedId}
-            loading={summaries.length === 0 && sync === 'syncing'}
+            // Empty before the first sync is "not loaded yet": the store opens
+            // and the first sync runs before the list can say anything. An
+            // offline or failed start says so through `sync`, not a spinner.
+            loading={summaries.length === 0 && !synced && sync !== 'offline' && sync !== 'error'}
             onChatPress={open}
             onChatAction={(action, id) => {
               if (action === LEAVE) void confirmLeave(id);

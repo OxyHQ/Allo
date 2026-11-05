@@ -25,6 +25,13 @@ const PAGE = 200;
 export class SyncEngine {
   private readonly dispatcher: Dispatcher;
   private stateValue: SyncState = 'idle';
+  /**
+   * Whether a sync has completed since this engine started. `idle` cannot say
+   * it: the engine returns to `idle` after a sync without a live socket too.
+   * A screen needs it to tell "nothing yet" from "nothing": Allo's list said
+   * "no conversations yet" for seconds on a cold start while it loaded.
+   */
+  private syncedValue = false;
   private running: Promise<void> | null = null;
   private dirty = false;
   private waiters: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
@@ -36,6 +43,10 @@ export class SyncEngine {
 
   constructor(private readonly ctx: Context) {
     this.dispatcher = new Dispatcher(ctx);
+  }
+
+  get synced(): boolean {
+    return this.syncedValue;
   }
 
   get state(): SyncState {
@@ -139,6 +150,9 @@ export class SyncEngine {
       if (!page.hasMore) break;
     }
     await this.afterSync();
+    this.syncedValue = true;
+    // Emitted even when the state below does not change (`idle` to `idle`).
+    this.ctx.emitter.emit('sync');
     this.setState(ctx.realtime?.connected ? 'live' : 'idle');
   }
 

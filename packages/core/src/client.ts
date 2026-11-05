@@ -225,6 +225,11 @@ export interface AlloClient {
   };
   sync: {
     state(): SyncState;
+    /**
+     * Whether a sync has completed since `start()`. With `state()` it tells a
+     * screen "nothing loaded yet" from "nothing there". Topic `sync`.
+     */
+    synced(): boolean;
     now(): Promise<void>;
     /** Resolves once the outbox has drained. */
     flush(): Promise<void>;
@@ -660,6 +665,7 @@ export function createAlloClient(options: AlloClientOptions): AlloClient {
     },
     sync: {
       state: () => ctx?.sync.state ?? 'idle',
+      synced: () => ctx?.sync.synced ?? false,
       now: () => requireCtx().sync.now(),
       flush: () => requireCtx().outbox.idle(),
     },
