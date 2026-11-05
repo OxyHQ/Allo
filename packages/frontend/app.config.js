@@ -34,6 +34,12 @@ module.exports = (_config) => {
   const IOS_ID = IS_DEV_VARIANT ? 'com.allo.ios.dev' : 'com.allo.ios';
   const APP_NAME = IS_DEV_VARIANT ? 'Allo (Dev)' : 'Allo';
 
+  // Allo's public Oxy client id (ApplicationCredential publicKey), the same
+  // value `config.ts` hands the OxyProvider; Oxy Updates serves the manifest by it.
+  const OXY_CLIENT_ID =
+    process.env.EXPO_PUBLIC_OXY_CLIENT_ID ||
+    'oxy_dk_7b2fab6623e0ac753b38319664d4f0c6bb164e5fc219f60f';
+
   // The host whose https links open the app: the web app's own origin.
   const APP_LINK_HOST = 'allo.you';
 
@@ -240,6 +246,15 @@ module.exports = (_config) => {
           // app-preset 5 (listing it throws); its R8 `-optimize` swap is a no-op
           // on SDK 58, whose template already generates that file.
           '@oxy.so/services/plugins/withOxySharedPermissions',
+          // OTA updates from Oxy Updates (oxy-api), published on every push to
+          // main by `.github/workflows/publish-update.yml`, signed with the
+          // ecosystem certificate. Runtime version is the app `version`
+          // (appVersion policy): bump it for a native change, which is also
+          // what releases a new binary (`.github/workflows/android-release.yml`).
+          // It derives android.versionCode / ios.buildNumber from `version`
+          // too, so neither is kept here. The client id is the one
+          // `config.ts` gives the OxyProvider.
+          ['@oxy.so/app-preset/plugin/withOxyUpdates', { clientId: OXY_CLIENT_ID }],
         ];
 
         // Only include expo-notifications for native builds (android/ios).

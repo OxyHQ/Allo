@@ -33,6 +33,14 @@ with a warning (`src/runtime/migrationGate.ts`), because during the rollout the
 the other behaviour: every new task died on the pending `0005` (post), ECS
 rolled back, and the `post` one-shot never ran.
 
+**Native apps.** `android-release.yml` (oxy's reusable workflow, on `seldon`)
+builds and releases the signed AAB + APK as `android-v<version>` whenever
+`packages/frontend` `version` has no release yet; `publish-update.yml` publishes
+every other push to main as an OTA update (Oxy Updates, channel `production`,
+GitHub trusted publishing, no secret). `version` is the OTA runtime and the
+derived store build number (2.0.0 -> 2000000): bump it for a native change only.
+Both builds take their environment from eas.json's `production` `env`.
+
 ## Commands
 
 npm releases: merging a version bump to main publishes it (`release-packages.yml`, Oxy's
