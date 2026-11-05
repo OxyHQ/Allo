@@ -1,6 +1,6 @@
 {
   "cli": {
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -12,20 +12,16 @@
         "buildType": "apk"
       },
       "extends": "production",
-      "distribution": "internal",
-      "env": {
-        "API_URL": "https://api.allo.earth"
-      }
+      "distribution": "internal"
     },
     "production": {
       "node": "24.20.0",
       "env": {
-        "API_URL": "https://api.allo.earth"
+        "EXPO_PUBLIC_OXY_CLIENT_ID": "oxy_dk_7b2fab6623e0ac753b38319664d4f0c6bb164e5fc219f60f"
       },
       "android": {
-        "buildType": "apk" //apk or app-bundle
-      },
-      "autoIncrement": true
+        "buildType": "apk"
+      }
     },
     "staging": {
       "extends": "production",
