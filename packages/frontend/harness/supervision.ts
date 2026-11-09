@@ -3,11 +3,11 @@ import { useSyncExternalStore } from 'react';
 export type HarnessPolicy = 'allowed' | 'blocked' | 'unavailable';
 let policy: HarnessPolicy = 'allowed';
 const listeners = new Set<() => void>();
+const search = typeof window !== 'undefined' ? window.location?.search : undefined;
 export const supervisedHarness =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).has('harnessSupervised');
+  typeof search === 'string' && new URLSearchParams(search).has('harnessSupervised');
 export const harnessPolicy = () => policy;
-if (typeof window !== 'undefined')
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function')
   window.addEventListener('allo:harness-policy', (event) => {
     const value = (event as CustomEvent<unknown>).detail;
     if (value !== 'allowed' && value !== 'blocked' && value !== 'unavailable')
