@@ -1,4 +1,24 @@
 /* LOCAL HARNESS ONLY. */
+import { getRandomBytesRN } from '@oxy.so/protocol/random';
+
+// The production `@oxy.so/core` entry installs this Hermes primitive before
+// Allo's encrypted client initializes. The harness resolver replaces that
+// entry, so keep the same minimum platform contract here without loading Oxy
+// identity or session code.
+if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: {
+      getRandomValues<T extends ArrayBufferView>(array: T): T {
+        new Uint8Array(array.buffer, array.byteOffset, array.byteLength).set(
+          getRandomBytesRN(array.byteLength),
+        );
+        return array;
+      },
+    },
+  });
+}
+
 const PEOPLE: Record<
   string,
   {

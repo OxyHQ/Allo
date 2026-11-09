@@ -527,6 +527,7 @@ function AuthorizedConversationScreen({
           connectingLabel={t('chat.connecting')}
           // Beside the list there is nothing to go back to on screen.
           onPressBack={split ? undefined : back}
+          showBack={!split}
           backLabel={t('common.back')}
           onPressCall={() => startCall('voice')}
           onPressVideoCall={() => startCall('video')}
