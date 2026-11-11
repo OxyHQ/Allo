@@ -1,190 +1,72 @@
 # Allo
 
-Encrypted messaging. Expo/RN frontend plus an Express backend. Agent: `allo`.
-
-> Org-wide engineering standards (package manager, TypeScript, React, naming,
-> error handling, security, testing, git and PR conventions) live in
-> <https://github.com/OxyHQ/engineering>. This file carries only what is true of
-> Allo specifically. Versions are in `package.json`, never here.
-
-## Deployment
-
-Port `8080`, domain `api.allo.you`, ECR `oxy/allo`. Built from the `linux/arm64`
-Dockerfile in `packages/backend/`. `.github/workflows/deploy-aws.yml` is the only
-deployment. `server.ts` defaults to `4140` for local dev; ECS injects `PORT=8080`.
-
-**The deploy DOES apply migrations, in both phases.** `deploy-aws.yml` passes
-`RUN_MIGRATIONS: "true"` and two explicit commands — `--phase=pre` before the
-rollout and `--phase=post` after it — each a one-shot ECS task running
-`db:migrate --target-database=allo`. So merging a schema change ships it.
-(`deploy-ecs-image.sh:17` still defaults `RUN_MIGRATIONS` to `false`; that is the
-script's default for callers that do not set it, not this workflow's behaviour.)
-
-What this buys is the whole point of the `-- oxy:deploy-phase=` marker every
-generated `.sql` carries: `pre` is additive and lands while the OLD image is
-still serving, `post` drops and narrows and lands only once the new one has
-rolled. A migration whose marker is wrong is therefore applied at the wrong side
-of the rollout rather than merely mislabelled.
-
-**The boot gate knows the contract.** In production `server.ts` refuses to
-start while a `pre` migration is pending and tolerates a pending `post` one
-with a warning (`src/runtime/migrationGate.ts`), because during the rollout the
-`post` one-shot has not run yet by design. The first platform release measured
-the other behaviour: every new task died on the pending `0005` (post), ECS
-rolled back, and the `post` one-shot never ran.
-
-**Native apps.** `android-release.yml` (oxy's reusable workflow, on `seldon`)
-builds and releases the signed AAB + APK as `android-v<version>` whenever
-`packages/frontend` `version` has no release yet; `publish-update.yml` publishes
-every other push to main as an OTA update (Oxy Updates, channel `production`,
-GitHub trusted publishing, no secret). `version` is the OTA runtime and the
-derived store build number (2.0.0 -> 2000000): bump it for a native change only.
-Both builds take their environment from eas.json's `production` `env`.
+Encrypted messaging: Expo / React Native frontend, Express + Postgres backend, MLS-based `@allo/core` SDK. Agent: `allo`.
 
 ## Commands
 
-npm releases: merging a version bump to main publishes it (`release-packages.yml`, Oxy's
-shared workflow, OIDC, once CI passed on that commit); a package's gates are CI. Never publish
-from a laptop — `~/Oxy/docs/npm-releases.md`.
-
 ```bash
-bun run dev                 # All packages dev mode
-bun run dev:frontend        # Frontend only (Expo tunnel)
-bun run dev:backend         # Backend only
-bun run build               # Build all three packages
-bun run typecheck           # Backend then frontend, no emit
-bun run test                # Test all
-bun run clean               # Clean everything
+bun install                 # postinstall builds contracts, SDK, shared-types, core, react
+bun run dev                 # all packages (dev:frontend / dev:backend for one)
+bun run build               # all packages
+bun run typecheck           # backend, core, react, frontend; no emit
+bun run test                # all packages
+bun run lint                # biome check . plus the frontend's expo lint
+bun run lint:fix            # Biome safe fixes; `bun run format` formats
+bun run doctor:oxy          # Oxy dependency checks (also `i18n:check`)
 ```
 
-**Biome formats and lints the whole repository** (`biome.jsonc` at the root,
-single quotes, width 100). `bun run lint` is `biome check .` plus the frontend's
-`expo lint .`; `bun run lint:fix` applies Biome's safe fixes and `bun run format`
-formats. The frontend keeps a MINIMAL `eslint.config.js` holding only what Biome
-cannot do — `eslint-plugin-expo`'s `no-env-var-destructuring`,
-`no-dynamic-env-var` and `use-dom-exports` (Metro inlines `EXPO_PUBLIC_*` only
-from a literal `process.env.X` read; anything else is silently `undefined`) —
-and `eslint-plugin-react-hooks` v7's React Compiler rules, all at `error`
-(`rules-of-hooks` and `exhaustive-deps` stay with Biome). Do
-not grow it back into a second linter: a new guard goes in `biome.jsonc`, as the
-`expo-video` `VideoView` import restriction did (`noRestrictedImports`, scoped to
-`packages/frontend/**`). The rules set to `"warn"` in `biome.jsonc` are a baseline
-of pre-existing violations to tighten, not a statement that they are fine. CI
-runs `biome ci .` and the Expo ESLint in the `lint` job. `.git-blame-ignore-revs`
-lists the mass-format commit (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
+Backend tests need a local Postgres and nothing else; see
+[`packages/backend/README.md`](packages/backend/README.md).
 
-CI (`.github/workflows/ci.yml`) runs on every PR: backend typecheck plus `bun test`
-against a real Postgres service container, and frontend typecheck plus `jest`.
-Running the backend suite locally needs a Postgres server and nothing else — the
-`*.realdb.test.ts` suites each create their own throwaway, fully-migrated
-database on it. `packages/backend/README.md` has the commands.
+## Map
 
-**`tsc` cannot check a route, and generating the types does not help either.**
-`.expo/types/router.d.ts` is generated by `expo start` / `expo export` and
-gitignored, so on a fresh checkout every `router.push()` argument degrades to
-`string`. Generating it locally used to catch a bad route; since
-`app/(chat)/[username].tsx` exists it no longer does, because a dynamic segment
-at the root of a group emits `` `/${SingleRoutePart<T>}` `` into the href union
-and that collapses to `` `/${string}` `` — which every path satisfies. Measured
-both ways: with the file present `tsc` accepts
-`router.push('/definitely/not/a/route')`, with it moved aside `tsc` rejects it.
-Mention's profile route has the same shape and the same consequence.
-`__tests__/routes/navigationTargets.test.ts` is the replacement: it reads the
-routes off `app/` and the destinations out of the source, runs in CI, and depends
-on no generated file. Add a navigation helper that does not produce a literal at
-the call site and it becomes invisible to that test — cover it where it is built,
-as `lib/profile/handle.ts` is.
+- Agent rules by area: [`docs/agent-rules/`](docs/agent-rules/), one file per topic (see Docs below).
+- Product and API docs: [`docs/index.mdx`](docs/index.mdx), [`docs/architecture.mdx`](docs/architecture.mdx), [`docs/platform/`](docs/platform/), ADRs in [`docs/adr/`](docs/adr/).
+- Screens: [`packages/frontend/ARCHITECTURE.md`](packages/frontend/ARCHITECTURE.md). Schema decisions: [`packages/backend/src/db/schema/CONVENTIONS.md`](packages/backend/src/db/schema/CONVENTIONS.md).
+- Packages: `packages/{frontend,backend,shared-types,core,react,contracts,sdk}`; workspace ids are `@allo/<name>`.
 
-## Architecture
+## Conventions that differ from defaults
 
-```
-packages/
-  frontend/       @allo/frontend      Expo / React Native / NativeWind
-  backend/        @allo/backend       Express / drizzle / Socket.io
-  shared-types/   @allo/shared-types  TypeScript type definitions
-```
+- Biome is the only formatter and linter; add a new guard to `biome.jsonc`, never grow `packages/frontend/eslint.config.js` (it holds only what Biome cannot do).
+- Build UI only from Bloom (`@oxy.so/bloom/<subpath>`, icons from `@oxy.so/bloom/icons`); a missing piece is fixed in Bloom and released, never hand-built here.
+- Colours come from `useTheme().colors.*`, never literals. Do not add a second `QueryClientProvider`; `OxyProvider` owns it.
+- Row ids are `text` in two shapes (uuid v7 and 24-char hex): never validate an id against one shape. Id-shape rule: [postgres-and-drizzle](https://github.com/OxyHQ/oxy/blob/main/docs/postgres-and-drizzle.md).
+- Postgres is the only store; routes go through `db/<domain>/` repositories and never build SQL.
+- `oxy.middleware.auth()` takes a token only from a header starting with exactly `"Bearer "`.
+- Read `EXPO_PUBLIC_*` only as a literal `process.env.X`; Metro inlines nothing else (enforced by the Expo ESLint in `lint`).
+- Bump `packages/frontend` `version` only for a native change: it is the OTA runtime and store build number.
 
-The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
-chat-screen, message-bubble, message-media, chat-composer, chat-people) in
-Bloom's `AppShell` with `AppShellPanels`, which owns the Sidebar rail/drawer and pane surfaces, composed from the app's destinations (a Bloom `TabPagerProvider`: the rail's rows, the phone's bottom bar and pager, the new-chat floating action); every page is a Bloom `Screen`; settings use Bloom's `SettingsModal`;
-`packages/frontend/ARCHITECTURE.md` maps every screen.
+## Boundaries
 
-**Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),
-not the conversation list (`ChatList`), not the picker (`ContactList`), not one
-icon — every glyph comes from `@oxy.so/bloom/icons`, and the app's only drawing
-of its own is Allo's logotype, which is what `Sidebar.logo` is for. When Bloom
-is missing a piece or gets one wrong, it is fixed IN BLOOM, released, and
-consumed: 2.12.1 (a bubble holding controls is not a `<button>`) and 2.12.2
-(`RiChatNewLine`, so the new-chat action stops wearing the compose-a-document
-mark) both came out of building these screens. Import Bloom by subpath only.
+- Never publish to npm from a laptop; merging a version bump to main publishes it ([npm-releases](https://github.com/OxyHQ/oxy/blob/main/docs/npm-releases.md)).
+- Never edit a generated migration `.sql` without keeping its `-- oxy:deploy-phase=` marker correct: `pre` is additive, `post` drops or narrows, and the deploy applies both around the rollout.
+- Never assert an exact order for rows written within one millisecond in tests; space the writes.
+- Ask first before changing the chat transport, MLS or key handling: read [`docs/agent-rules/the-allo-platform.md`](docs/agent-rules/the-allo-platform.md).
 
-**The chat screens can be opened without an account.** `ALLO_HARNESS=1 expo
-start --web` swaps the Oxy session and the Allo client for in-memory stand-ins
-(`packages/frontend/harness/`, resolved only under that flag) seeded with a DM,
-a group, a picture, a document, a voice note and a link, so the UI is looked at
-in a browser and compared with Bloom's own stories rather than assumed. Jest
-cannot do this job: rendering a Bloom chat screen there dies in reanimated 4's
-native worklets, so component coverage stays at the data-path level.
+## Testing
 
-NativeWind is on a **prerelease** (a `5.0.0-preview` tag), paired with Tailwind
-v4 and `react-native-css` v3, and is there only for Bloom's design tokens: the
-app's own components use `StyleSheet` with theme colours. Check the exact tag in
-`packages/frontend/package.json` before blaming your own code.
+- Backend change: `bun run typecheck` then the targeted `bun test` file; DB code uses the `*.realdb.test.ts` pattern (each creates its own database).
+- Frontend change: typecheck plus `jest`; navigation changes also run `__tests__/routes/navigationTargets.test.ts` because `tsc` cannot check routes.
+- Done means `bun run lint`, `bun run typecheck` and `bun run test` pass. CI runs the same in `.github/workflows/ci.yml`.
 
-## Data storage: PostgreSQL, and nothing else
+## PRs and commits
 
-`DATABASE_URL` is REQUIRED to boot (`server.ts`) and every route, worker and
-sweep reads Postgres. There is no second store to choose between.
+- Branch from `main`, one concern per PR, squash-merge with `gh pr merge <n> --squash`. Allo has no merge queue.
+- Org-wide git, PR, naming and security standards: [OxyHQ/engineering](https://github.com/OxyHQ/engineering/blob/main/AGENTS.md).
 
-Schema is `db/schema/` (one file per domain) and the binding decisions — naming,
-primary keys, closed value sets, the `jsonb` register, the hook →
-constraint map — are in `db/schema/CONVENTIONS.md`. Read it before touching a
-table. Repositories are `db/<domain>/`; routes go through them and never build
-SQL themselves. The migrator and the test setup are in
-`packages/backend/README.md`.
+## Secrets
 
-**Row ids are `text` and come in TWO shapes.** New rows carry a uuid v7; older
-rows carry a 24-character hex id, verbatim. So nothing may assume a format — a
-hex-shaped validator would reject every new row, and a uuid-shaped one every
-older row.
+`DATABASE_URL` and signing keys come from the environment / GitHub secrets and ECS task config. Never print or commit them. Android release signing uses `OXY_UPLOAD_*` Gradle properties, never the repo.
 
-**Sub-millisecond creation order is not a property this schema has.**
-`@oxy.so/db`'s `createdAt` is `date_trunc('milliseconds', now())`, and the uuid v7
-tiebreak below it does not encode order within a millisecond. A test asserting an
-exact sequence for rows written in a tight loop is asserting the generator's
-luck; space the writes across milliseconds or assert only at the resolution the
-schema guarantees. Measured: one such assertion in `social.realdb.test.ts` failed
-4 runs in 8 before it was spaced.
+## Docs
 
-## The Allo platform
+Moved-out rules, read before changing the area:
 
-The chat transport was replaced, not extended. The decision and the design are Full rules: [`docs/agent-rules/the-allo-platform.md`](docs/agent-rules/the-allo-platform.md) (moved verbatim; read before changing this area).
+- [`deployment.md`](docs/agent-rules/deployment.md): ECS deploy, migrations phases, boot gate, Android and OTA releases.
+- [`tooling-and-ci.md`](docs/agent-rules/tooling-and-ci.md): Biome and ESLint split, CI, why `tsc` cannot check routes.
+- [`frontend-architecture.md`](docs/agent-rules/frontend-architecture.md): Bloom-first screens, harness mode, NativeWind, theming, React Query.
+- [`data-storage.md`](docs/agent-rules/data-storage.md): Postgres, id shapes, creation-order caveat.
+- [`the-allo-platform.md`](docs/agent-rules/the-allo-platform.md), [`key-features.md`](docs/agent-rules/key-features.md), [`dependency-gotchas.md`](docs/agent-rules/dependency-gotchas.md).
+- Oxy-wide: [lint-and-format](https://github.com/OxyHQ/oxy/blob/main/docs/engineering/lint-and-format.md), [build-and-runtime-traps](https://github.com/OxyHQ/oxy/blob/main/docs/engineering/build-and-runtime-traps.md), [gate-writing](https://github.com/OxyHQ/oxy/blob/main/docs/engineering/gate-writing.md), [Bloom app conventions](https://github.com/OxyHQ/Bloom/blob/main/docs/app-conventions.mdx).
 
-## Key features
-
-`oxy.middleware.auth()` only from a header beginning with the exact string `"Bearer "`. Full rules: [`docs/agent-rules/key-features.md`](docs/agent-rules/key-features.md) (moved verbatim; read before changing this area).
-
-## Theming
-
-Bloom's, and nothing else. `BloomProvider` in `app/_layout.tsx` keeps this
-device's last mode and colour (`persistKey`/`storage` from `lib/theme.ts`), so a
-cold start paints them at once, and the Oxy account's portable theme lands on
-top through the SDK's `useAccountTheme` (the colour always; the mode while
-Settings → Appearance → "Follow my Oxy account" is on, which
-`useAccountThemeControls` writes back to the account). Allo's green is the
-default for a signed-out visitor. Bloom owns the native status bar; the app
-renders no `StatusBar`. Every colour is `useTheme().colors.*` from
-`@oxy.so/bloom/theme`; never a literal. There are no per-conversation themes
-and no app colour tables.
-
-**OxyProvider owns the React Query client.** Do not wrap it in a second
-`QueryClientProvider`: the SDK's provider shadows it, so the outer client and
-its options were never used. App query keys carry the account
-(`user?.id`) and use roots of their own: `users` and `privacy` are the SDK's,
-which it keeps on disk for the device. Nothing on the chat path is persisted
-through React Query (the people layer stays in memory, like every other chat
-read outside `@allo/core`'s encrypted store).
-
-## Dependency gotchas
-
-application's core directly and satisfy its services peer; inspect the installed Full rules: [`docs/agent-rules/dependency-gotchas.md`](docs/agent-rules/dependency-gotchas.md) (moved verbatim; read before changing this area).
+Owner: OxyHQ (CODEOWNERS). Last reviewed: 2026-11-11.
