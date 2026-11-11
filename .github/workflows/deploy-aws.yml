@@ -194,8 +194,10 @@ jobs:
       # smoke builds and boots this same recipe on every PR that touches it.
       - name: Refuse unreviewed image build inputs
         id: reviewed
-        run: python3 -B .github/scripts/reviewed-image.py guard --recipe allo
-
+        uses: OxyHQ/oxy/.github/actions/reviewed-image@main
+        with:
+          phase: guard
+          recipe: allo
       - name: Build and push (linux/arm64)
         id: build
         env:
