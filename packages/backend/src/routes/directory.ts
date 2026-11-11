@@ -1,11 +1,11 @@
 import { Router, type Response } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
+import { isLiveEntityId } from '@oxy.so/db';
 import * as z from 'zod';
 
 import type { OxyDirectoryService } from '../services/oxy/OxyDirectoryService';
 import { sendErrorResponse, sendSuccessResponse } from '../utils/apiHelpers';
 import { getErrorMessage, isOxyUserNotFound } from '../utils/oxyUserDisplay';
-import { isOxyUserId } from '../utils/oxyUserId';
 import { logger } from '../utils/logger';
 
 /**
@@ -28,10 +28,10 @@ import { logger } from '../utils/logger';
  * ## Why an id is refused rather than passed through
  *
  * `GET /users/:userId` on Oxy also accepts a public key, and `resolveUserId`
- * there maps it. Allo has never had one: every id it holds is a 24-character
- * ObjectId, checked with `isOxyUserId` — the one place that shape is written
- * down — rather than with a second regular expression that could come to a
- * different conclusion.
+ * there maps it. Allo has never had one: every id it holds is an Oxy account id,
+ * a legacy 24-character ObjectId or a uuid v7, checked with `isLiveEntityId` from
+ * `@oxy.so/db` — the one place those two shapes are written down — rather than
+ * with a second regular expression that could come to a different conclusion.
  */
 
 /** Oxy handles. Bounded, and without the `@` — see `lib/profile/handle.ts`. */
@@ -45,10 +45,7 @@ const usernameSchema = z
     'must be a bare handle: letters, digits, dot, underscore and hyphen, and no leading @',
   );
 
-const oxyUserIdSchema = z
-  .string()
-  .trim()
-  .refine(isOxyUserId, 'must be a 24-character hexadecimal Oxy account id');
+const oxyUserIdSchema = z.string().trim().refine(isLiveEntityId, 'must be an Oxy account id');
 
 /**
  * The same ceiling `@oxy.so/core` chunks at, so one request here is one request

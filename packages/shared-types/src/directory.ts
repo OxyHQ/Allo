@@ -27,7 +27,7 @@
 
 /** One person, as Allo describes them. */
 export interface DirectoryUser {
-  /** The Oxy account id. A 24-character hexadecimal ObjectId. */
+  /** The Oxy account id: a legacy 24-character ObjectId or a uuid v7. */
   id: string;
   /** The handle, without the `@`. */
   username: string;

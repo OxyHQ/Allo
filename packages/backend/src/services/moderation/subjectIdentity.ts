@@ -31,7 +31,7 @@
 /**
  * The longest identifier Allo will take a report about.
  *
- * An Oxy account id is 24 bytes and a handle is bounded at 64 by the directory,
+ * An Oxy account id is at most 36 bytes and a handle is bounded at 64 by the directory,
  * so nothing legitimate comes close to 255. The bound exists because an
  * unresolvable identifier is deliberately STORED rather than refused, so
  * untrusted bytes reach the database by design and the only question is how
@@ -57,7 +57,7 @@ export const MAX_REPORTED_IDENTIFIER_BYTES = 255;
  * Control characters and whitespace, neither of which appears in any identifier
  * Allo can legitimately receive.
  *
- * An Oxy account id is hexadecimal and a handle is letters, digits, dot,
+ * An Oxy account id is hexadecimal (with hyphens when a uuid) and a handle is letters, digits, dot,
  * underscore and hyphen. So this rejects nothing real, and it refuses the shapes
  * that make an identifier act like something other than an identifier: a
  * newline in a value that reaches a log line and a URL path, a `\0` that

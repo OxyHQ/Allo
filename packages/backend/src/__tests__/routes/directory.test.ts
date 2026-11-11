@@ -21,6 +21,7 @@ import {
  */
 
 const OXY_USER_ID = '507f1f77bcf86cd799439011';
+const UUID_V7_USER_ID = '0192f4c8-7b1e-7a3d-8c5f-2e9d4b6a1c70';
 const OTHER_USER_ID = '507f191e810c19729de860ea';
 const AVATAR_ID = '65f0c1a2b3c4d5e6f7a8b9c0';
 const CLOUD_ORIGIN = 'https://cloud.oxy.so';
@@ -246,14 +247,26 @@ describe('an account by id', () => {
     expect(response.body.data.id).toBe(OXY_USER_ID);
   });
 
+  it('accepts both account id shapes: a legacy ObjectId and a uuid v7', async () => {
+    for (const id of [OXY_USER_ID, UUID_V7_USER_ID]) {
+      byIdsResult = [oxyUser({ id })];
+      const single = await request(directoryApp()).get(`/api/directory/users/${id}`);
+      const batch = await request(directoryApp())
+        .post('/api/directory/users/by-ids')
+        .send({ ids: [id] });
+      expect(single.status).toBe(200);
+      expect(batch.status).toBe(200);
+    }
+  });
+
   it('refuses anything that is not an Oxy account id', async () => {
     /**
      * Oxy's own route also accepts a public key, which Allo has never had. The
-     * shape is checked with `isOxyUserId`, the one place it is written down, so
+     * shape is checked with `isLiveEntityId`, the one place it is written down, so
      * no second expression can come to a different conclusion about the same
      * string.
      */
-    for (const candidate of ['nate', 'oxy_dk_abcdef', OXY_USER_ID.toUpperCase(), '507f1f77']) {
+    for (const candidate of ['nate', 'oxy_dk_abcdef', '507f1f77']) {
       const response = await request(directoryApp()).get(`/api/directory/users/${candidate}`);
       expect(response.status).toBe(400);
     }
