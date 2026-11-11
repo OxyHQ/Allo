@@ -1,32 +1,18 @@
 name: Refresh build cache
 
-# Weekly, rebuild the production image(s) with NO cache and write the fresh
-# layers into the same GitHub Actions cache scope deploy-aws.yml reads.
-#
-# The deploy reuses cached layers, so without this an `apt-get`/`apk` layer
-# would stay as old as the last time its inputs changed and stop picking up OS
-# security patches. This job re-runs every step, then overwrites the scope; the
-# next real deploy builds on those fresh layers. The base image is pinned by
-# digest in the Dockerfile, so `--pull` does NOT move it: a patched base arrives
-# only through a reviewed digest bump (`reviewed-image.py pin`).
-#
-# It builds only: no AWS credentials, no ECR push, no deploy. It runs on the
-# default branch (schedule) or a dispatch from main, so it writes main's cache,
-# which only main-branch deploys read; no pull_request workflow writes a scope
-# (CI's image smoke reads it and never writes it).
-#
-# It writes the scope the deploy reads, so it builds only what the deploy would:
-# the same `reviewed-image.py guard --recipe allo` runs first, and the
-# Dockerfile, context and labels come from its outputs, as in deploy-aws.yml.
-# Same platform too, so the layers it writes are the ones the deploy looks up.
+# Weekly, rebuild the production image with NO cache and write the fresh layers
+# into the GitHub Actions cache scope deploy-aws.yml reads, so the deploy's cached
+# layers stop pinning an old `apt-get`/`apk` result and pick up OS security
+# patches. Builds only: no AWS credentials, no push, no deploy. It runs on main
+# (schedule or a dispatch from main) and writes main's cache.
+# OxyHQ/oxy .github/workflows/refresh-app-image-cache.yml.
 
 on:
   schedule:
     - cron: '37 3 * * 1'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: refresh-build-cache
@@ -34,42 +20,11 @@ concurrency:
 
 jobs:
   refresh:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # `--cache-to type=gha` needs the Actions runtime token and cache URL,
-      # which GitHub gives to JavaScript actions and NOT to `run:` steps.
-      - name: Expose the Actions cache to buildx
-        uses: crazy-max/ghaction-github-runtime@v4
-
-      # Unreviewed inputs stop here, before anything is built or cached.
-      - name: Refuse unreviewed image build inputs
-        id: reviewed
-        run: python3 -B .github/scripts/reviewed-image.py guard --recipe allo
-
-      # No output: the result lives only in the exported cache. A failed export
-      # fails the job, since writing the cache is the whole point.
-      - name: Rebuild the allo image from scratch into the cache
-        env:
-          DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
-          CONTEXT: ${{ steps.reviewed.outputs.context }}
-          SOURCE_TREE: ${{ steps.reviewed.outputs.source_tree }}
-          BUILD_INPUTS_SHA256: ${{ steps.reviewed.outputs.build_inputs_sha256 }}
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            --no-cache \
-            --pull \
-            --cache-to type=gha,scope=allo,mode=max \
-            -f "$DOCKERFILE" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "io.oxy.source.tree=$SOURCE_TREE" \
-            --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
-            "$CONTEXT"
+    permissions:
+      contents: read
+    uses: OxyHQ/oxy/.github/workflows/refresh-app-image-cache.yml@main
+    with:
+      targets: >-
+        [
+          {"name": "allo", "scope": "allo", "recipe": "allo"}
+        ]

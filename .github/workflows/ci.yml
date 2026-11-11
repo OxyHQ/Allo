@@ -390,15 +390,11 @@ jobs:
       # mismatch, so catching it here is what stops a merge from stranding
       # main undeployable. It lives in this job because this job has no
       # path filter: it runs on every pull request and `CI complete` fails
-      # with it. The fixture tests run first so a green check means the gate
-      # can fail, not that it stopped looking.
-      - name: Prove the reviewed-image gate can fail
-        run: python3 -B -m unittest discover -s .github/scripts -p test_reviewed_image.py
-      - name: Prove the base-image digest bump works on fixtures
-        run: python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
+      # with it. The gate's fixture tests run in OxyHQ/oxy's CI.
       - name: Verify the production image's build inputs are reviewed
-        run: python3 -B .github/scripts/reviewed-image.py check
-
+        uses: OxyHQ/oxy/.github/actions/reviewed-image@main
+        with:
+          phase: check
   # Builds the production image exactly as deploy-aws.yml does (the reviewed
   # Dockerfile and context from `guard`, linux/arm64 on an arm64 runner), then
   # boots it. The deploy is the only other place this image is built, and it
@@ -453,8 +449,10 @@ jobs:
       # Dockerfile, context and label values below are its outputs.
       - name: Refuse unreviewed image build inputs
         id: reviewed
-        run: python3 -B .github/scripts/reviewed-image.py guard --recipe allo
-
+        uses: OxyHQ/oxy/.github/actions/reviewed-image@main
+        with:
+          phase: guard
+          recipe: allo
       - name: Build the production image (linux/arm64, loaded, not pushed)
         env:
           DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
