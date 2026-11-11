@@ -33,7 +33,7 @@ same ESM reason.
 **Android release signing is `@oxy.so/services/plugins/withOxySharedPermissions`'.**
 Since services 13.4.0 that plugin (which declares the Oxy signature permissions)
 also applies `withOxyReleaseSigning`: the `release` buildType is ALWAYS signed
-from the `OXY_UPLOAD_*` Gradle properties (`~/.gradle/gradle.properties` or
+from the `OXY_UPLOAD_*` Gradle properties (`gradle.properties` in the Gradle user home, or
 `-P`, never the repo), and `oxyVerifyReleaseSigning` fails any release whose
 certificate is not the Oxy ecosystem one. There is no debug-key fallback; a
 debug build keeps Expo's debug key (no Oxy permissions) unless
