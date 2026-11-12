@@ -57,7 +57,7 @@
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/allo-contracts": "workspace:*",
     "@oxy.so/app-preset": "^6.6.0",
-    "@oxy.so/bloom": "17.21.0",
+    "@oxy.so/bloom": "17.26.0",
     "@oxy.so/core": "7.48.0",
     "@oxy.so/expo-splash": "^1.1.0",
     "@oxy.so/homiio-contracts": "0.2.2",
@@ -122,7 +122,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@oxy.so/ship": "2.0.0",
+    "@oxy.so/ship": "2.0.1",
     "@react-native/jest-preset": "0.88.1",
     "@tailwindcss/postcss": "4.3.2",
     "@types/jest": "30.0.0",
