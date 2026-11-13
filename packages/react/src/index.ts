@@ -29,7 +29,7 @@ export { useMediaFile, type MediaFile, type MediaFileStatus } from './hooks/useM
 export { useCall, useCallActions, useCallHistory, type CallActions } from './hooks/useCall';
 export { usePresence, type Presence } from './hooks/usePresence';
 export { useStatuses, type Statuses } from './hooks/useStatuses';
-export { useSyncState } from './hooks/useSyncState';
+export { useSyncState, useSynced } from './hooks/useSyncState';
 export { useAlloErrors } from './hooks/useAlloErrors';
 export { useHistoryTransfer, type HistoryTransfer } from './hooks/useHistoryTransfer';
 export { useBackup, type Backup } from './hooks/useBackup';
