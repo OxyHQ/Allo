@@ -133,7 +133,7 @@ export function useAccountColorSave() {
   };
 }
 
-/** What `@alia.onl/sdk/ask` reads: the harness has no private API to offer it. */
+/** What `@gemies/sdk/ask` reads: the harness has no private API to offer it. */
 export function useAuth() {
   return { canUsePrivateApi: false, signIn: async () => undefined };
 }

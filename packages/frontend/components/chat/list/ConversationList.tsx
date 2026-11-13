@@ -1,7 +1,7 @@
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { useAlloClient, useConversationActions, useSyncState } from '@allo/react';
-import { AliaAskProvider, useAskAgent } from '@alia.onl/sdk/ask';
-import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
+import { GemieAskProvider, useAskGemie } from '@gemies/sdk/ask';
+import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
   ChatFolderTabs,
@@ -273,24 +273,24 @@ export function ConversationList() {
   );
 
   // Mounted only in the signed-in tree: signed out, this route redirects to sign-in.
-  // From `@alia.onl/sdk/ask`, whose sheet (the same chat, with its voice call) is
+  // From `@gemies/sdk/ask`, whose sheet (the same chat, with its voice call) is
   // loaded on the first ask instead of riding in the web entry bundle.
   return supervised ? (
     list
   ) : (
-    <AliaAskProvider
+    <GemieAskProvider
       clientContext={t('chat.aliaClientContext', { unread })}
       welcomeSuggestions={aliaWelcomeSuggestions}
     >
       {list}
-    </AliaAskProvider>
+    </GemieAskProvider>
   );
 }
 
 function AskAliaButton({ label }: { label: string }) {
-  const { ask } = useAskAgent();
+  const { ask } = useAskGemie();
   return (
-    <Button size="sm" appearance="outline" leadingIcon={AliaAvatarIcon} onPress={() => ask()}>
+    <Button size="sm" appearance="outline" leadingIcon={GemieAvatarIcon} onPress={() => ask()}>
       {label}
     </Button>
   );
