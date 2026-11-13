@@ -3,7 +3,9 @@ import type { OxySessionAdapter } from '@allo/core';
 import type { LinkedHttpClient } from '@oxy.so/core';
 
 export interface OxySessionSource {
+  readonly http: { getSessionEpoch(): number };
   readonly session: {
+    readonly accessToken: string | null;
     readonly userId: string | null;
     onChange(listener: (accessToken: string | null) => void): () => void;
   };
@@ -17,16 +19,25 @@ export function createSessionAdapter(
   baseURL: string,
   ownerAccountId: string | null = oxy.session.userId,
 ): OxySessionAdapter & { dispose(): void } {
+  const ownerEpoch = oxy.http.getSessionEpoch();
   const linked = oxy.createLinkedClient({ baseURL });
   let disposed = false;
-  let retired = oxy.session.userId !== null && oxy.session.userId !== ownerAccountId;
-  const stopWatching = oxy.session.onChange(() => {
-    const accountId = oxy.session.userId;
-    // A missing bearer can be restored; a different known account retires this client.
-    if (accountId !== null && accountId !== ownerAccountId) retired = true;
+  let retired = !oxy.session.accessToken || oxy.session.userId !== ownerAccountId;
+  const stopWatching = oxy.session.onChange((token) => {
+    if (
+      !token ||
+      oxy.http.getSessionEpoch() !== ownerEpoch ||
+      oxy.session.userId !== ownerAccountId
+    ) {
+      retired = true;
+    }
   });
   const ownsSession = () =>
-    !disposed && !retired && ownerAccountId !== null && oxy.session.userId === ownerAccountId;
+    !disposed &&
+    !retired &&
+    ownerAccountId !== null &&
+    ownerEpoch === oxy.http.getSessionEpoch() &&
+    oxy.session.userId === ownerAccountId;
   return {
     authenticatedFetch: async (input, init) => {
       if (!ownsSession()) throw new Error('The Allo account session changed');
