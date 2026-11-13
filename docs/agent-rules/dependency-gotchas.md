@@ -42,15 +42,18 @@ was removed in app-preset 5 and throws if listed; `__tests__/appConfig.test.ts`
 keeps it out.
 
 **Babel stays the bare preset.** `packages/frontend/babel.config.js` is only
-`@oxy.so/app-preset/babel`: in development that is exactly `babel-preset-expo`,
-which lets Expo's oxc transformer, Noxcturnal
-(`experiments.noxcturnalTransformWorker`, development only), bundle instead of
-Babel; production adds the preset's build-id inliner. One extra plugin or preset
-option sends every file back to Babel. `@/` resolves from `tsconfig.json`
-`paths` (Jest maps it in `moduleNameMapper`), and `babel-preset-expo` adds the
-worklets plugin and the `import.meta` transform itself. `LOG_EVENTS=<file>` on
-an `expo export` lists the files that fell back and why
-(`transform:noxcturnal:fallback`).
+`@oxy.so/app-preset/babel`: in development that is exactly `babel-preset-expo`;
+production adds the preset's build-id inliner. `@/` resolves from
+`tsconfig.json` `paths` (Jest maps it in `moduleNameMapper`), and
+`babel-preset-expo` adds the worklets plugin and the `import.meta` transform
+itself. Noxcturnal, Expo's oxc transformer
+(`experiments.noxcturnalTransformWorker`), stays off: noxcturnal 0.1.11 to
+0.1.13 miscompile `@tanstack/query-core`'s `QueriesObserver` on web (the
+temporary holding the lowered constructor's return value reuses `_result`, the
+name of the `#result` private key), so every `useQueries` throws "attempted to
+use private field on non-instance" in development. Development and production
+both bundle with Babel; turn it back on only with a release that compiles that
+class correctly.
 
 **`bun.lock` regeneration.** Always run `bun install` from the **monorepo root**,
 never inside a package: a sub-package install can drop workspace resolution lines
