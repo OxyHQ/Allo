@@ -65,7 +65,7 @@ export const AppProviders = memo(function AppProviders({ children }: AppProvider
           <StickersProvider client={stickersClient}>
             <I18nextProvider i18n={i18n}>
               <ErrorBoundary>
-                {/* Native portals (`AliaChatSheet`) render only into a `PortalOutlet`
+                {/* Native portals (`GemieChatSheet`) render only into a `PortalOutlet`
                     mounted by the app, after the content they paint over. The inert
                     boundary wraps everything but the outlet and the surface host. */}
                 <PortalProvider>

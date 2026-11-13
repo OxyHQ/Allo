@@ -17,6 +17,7 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "resolver": "react-native-reanimated/jest/resolver.js",
     "transformIgnorePatterns": [
       "/node_modules/(?!(.pnpm|@noble|ts-mls|@hpke|@oxy\\.so|@scure|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation))",
       "/node_modules/react-native-reanimated/plugin/",
@@ -43,13 +44,13 @@
     }
   },
   "dependencies": {
-    "@alia.onl/sdk": "22.10.1",
     "@allo/core": "workspace:*",
     "@allo/react": "workspace:*",
     "@allo/shared-types": "workspace:*",
     "@bitdrift/react-native": "^0.12.12",
     "@config-plugins/react-native-webrtc": "^15.0.2",
     "@expo/app-integrity": "~58.0.2",
+    "@gemies/sdk": "3.0.0",
     "@livekit/react-native": "3.0.0",
     "@livekit/react-native-expo-plugin": "^1.0.2",
     "@livekit/react-native-webrtc": "144.2.0",
@@ -57,12 +58,12 @@
     "@lottiefiles/dotlottie-web": "0.80.0",
     "@oxy.so/allo-contracts": "workspace:*",
     "@oxy.so/app-preset": "^6.6.0",
-    "@oxy.so/bloom": "17.21.0",
+    "@oxy.so/bloom": "20.0.0",
     "@oxy.so/core": "7.48.0",
     "@oxy.so/expo-splash": "^1.1.0",
     "@oxy.so/homiio-contracts": "0.2.2",
     "@oxy.so/homiio-sdk": "1.0.0",
-    "@oxy.so/services": "14.19.0",
+    "@oxy.so/services": "14.19.1",
     "@oxy.so/stickers": "^0.2.2",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/netinfo": "12.0.1",
