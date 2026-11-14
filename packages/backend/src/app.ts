@@ -8,7 +8,7 @@
  *   0. `trust proxy` = `oxyTrustProxy`, so `req.ip` is the real client behind
  *      the ALB and, once the hostname is proxied, Cloudflare in front of it
  *   1. request observability (request id + route template log)
- *   2. ecosystem activity observer (a no-op until boot starts it)
+ *   2. ecosystem activity observer (absent from a test app; boot supplies it)
  *   3. security headers (`createOxySecurityHeaders`), then CORS
  *      (`createOxyCors`, plus `APP_ORIGINS`; the socket shares the list)
  *   4. `/health/live`, `/health/ready`, `/api/health` (alias of ready)
@@ -77,7 +77,7 @@ export interface CreateAppDependencies {
   instanceAuth: RequestHandler;
   rateLimit: RequestHandler;
   cors: RequestHandler;
-  /** Observes traffic for the Oxy ecosystem dashboard; identity when disabled. */
+  /** Observes traffic for the Oxy ecosystem dashboard; `bootServer` passes the shared handle's `observeHttp`, which is inert where the process does not publish. */
   ecosystemActivity?: RequestHandler;
   /** `/webhooks/*` — mounted raw. */
   webhooks: Router;
