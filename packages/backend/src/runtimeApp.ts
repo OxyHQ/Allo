@@ -5,6 +5,7 @@
  * result; `server.ts` listens.
  */
 
+import type { RequestHandler } from 'express';
 import { createOxyAuthMiddleware, createOxyCors, createOxyRateLimit } from '@oxy.so/core/server';
 import { APP_ORIGINS, createApp } from './app';
 import { setIceConfig } from './config/iceRuntime';
@@ -12,7 +13,6 @@ import { readLiveKitConfig } from './config/livekit';
 import { setLiveKitConfig } from './config/sfuRuntime';
 import { readIceConfig } from './config/turn';
 import { checkPostgresHealth } from './db';
-import { ecosystemActivityMiddleware } from './ecosystemActivity';
 import { requireInstance } from './middleware/instanceAuth';
 import { createMessagingAuth } from './middleware/messagingAuth';
 import { oxy } from './oxy';
@@ -23,7 +23,7 @@ import reportsRoutes from './routes/reports';
 import { createOxyDirectoryService } from './services/oxy/OxyDirectoryService';
 import { blobMaxBytes } from './services/platform/blobService';
 
-export function createRuntimeApp() {
+export function createRuntimeApp(deps: { ecosystemActivity?: RequestHandler } = {}) {
   /**
    * The media configuration is read HERE, once, so a half-configured relay or
    * SFU fails the boot rather than the first call — which is what both config
@@ -42,7 +42,7 @@ export function createRuntimeApp() {
     instanceAuth: requireInstance(),
     rateLimit: createOxyRateLimit(oxy),
     cors: createOxyCors({ appOrigins: APP_ORIGINS }),
-    ecosystemActivity: ecosystemActivityMiddleware,
+    ecosystemActivity: deps.ecosystemActivity,
     webhooks: createCrowdSourceWebhookRoutes(),
     api: {
       profile: profileSettingsRoutes,

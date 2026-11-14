@@ -14,9 +14,9 @@
  * dotenv call here. The image ships no `.env`; ECS injects the environment.
  */
 
+import { startEcosystemTraffic } from '@oxy.so/core/server';
 import http from 'node:http';
 import { join } from 'node:path';
-import { startEcosystemActivity, stopEcosystemActivity } from './src/ecosystemActivity';
 import {
   checkPostgresHealth,
   closePostgres,
@@ -44,6 +44,7 @@ import {
 } from './src/runtime/presenceStore';
 import { setIceConfig } from './src/config/iceRuntime';
 import { readIceConfig } from './src/config/turn';
+import { workloadCredentials } from './src/oxy';
 import { createRuntimeApp } from './src/runtimeApp';
 import {
   startModerationOutboxDispatcher,
@@ -74,7 +75,13 @@ function validateEnvironment(): { databaseUrl: string; port: number } {
   return { databaseUrl: url, port };
 }
 
-const { app, oxy } = createRuntimeApp();
+/** `server.ts` is the entry point, never imported by a test: the publisher starts with the process. */
+const traffic = startEcosystemTraffic({
+  service: 'allo',
+  ready: () => server.listening,
+  workloadCredentials,
+});
+const { app, oxy } = createRuntimeApp({ ecosystemActivity: traffic.observeHttp });
 const server = http.createServer(app);
 
 let presenceHub: { stop(): void } | null = null;
@@ -120,7 +127,6 @@ export async function bootServer(): Promise<void> {
     setRealtime(sockets.realtime);
     await attachSocketRedisAdapter(sockets.io);
 
-    startEcosystemActivity(() => server.listening);
     startExpirySweep(getDb(), logger);
     startModerationOutboxDispatcher();
     startDeliveryWorker({ db });
@@ -132,7 +138,7 @@ export async function bootServer(): Promise<void> {
       io: sockets.io,
       stopWorkers,
       closePostgres,
-      stopActivity: stopEcosystemActivity,
+      stopActivity: () => traffic.stop(),
     });
 
     await new Promise<void>((resolve) => server.listen(env.port, resolve));

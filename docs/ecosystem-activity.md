@@ -4,13 +4,19 @@ The backend publishes aggregate traffic and its infrastructure heartbeat to the
 Oxy API, which broadcasts changes to the website dashboard. Collection runs in
 the service process regardless of whether somebody opens the dashboard.
 
-Enable with `OXY_ECOSYSTEM_ACTIVITY_ENABLED=true` and `AWS_REGION`. The shared
-SDK uses the same temporary AWS role provider as Allo's `OxyServer`: ECS task
-identity or an authenticated local SSO/assumed role. Oxy verifies its registered
-application and environment (ADR 0049); no activity key or internal scopes apply.
-Invalid activation values fail at boot. Missing or revoked workload authority
-is reported by the publisher with bounded retry backoff. Disabled collection
-emits a warning and must not be interpreted as zero traffic.
+`bootServer` starts it with one call, `startEcosystemTraffic` from
+`@oxy.so/core/server`, and awaits its `stop()` on shutdown. `OXY_ECOSYSTEM_ACTIVITY_ENABLED`
+is `true` or `false` (anything else fails boot) and wins; unset, it publishes
+wherever `AWS_REGION` is set. Production sets both explicitly (`true`). Once it
+should publish, a missing region fails boot. The shared SDK uses the same temporary
+AWS role provider as Allo's `OxyServer`: ECS task identity or an authenticated
+local SSO/assumed role. Oxy verifies its registered application and environment
+(ADR 0049); no activity key or internal scopes apply. Missing or revoked
+workload authority is reported by the publisher with bounded retry backoff.
+Where it does not publish nothing is emitted, which must not be interpreted as
+zero traffic. A development shell with `AWS_REGION` set and the flag unset
+publishes; set `OXY_ECOSYSTEM_ACTIVITY_ENABLED=false` (the `.env.example`
+default) to keep it off.
 
 HTTP middleware is mounted before body parsers and routers, including public
 routes, webhooks, failures and authenticated internal calls. Outgoing fetch and
