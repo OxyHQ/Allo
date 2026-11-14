@@ -253,7 +253,7 @@
     "@isaacs/brace-expansion": "^5.0.1",
     "@oxy.so/bloom": "21.4.0",
     "@oxy.so/services": "14.21.0",
-    "@oxy.so/telemetry": "2.1.0",
+    "@oxy.so/telemetry": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "@tanstack/query-core": "5.101.2",
     "expo-modules-core": "58.0.30",
@@ -880,7 +880,7 @@
 
     "@oxy.so/stickers": ["@oxy.so/stickers@0.2.3", "", { "dependencies": { "@oxy.so/contracts": "^7.0.0" }, "peerDependencies": { "@tanstack/react-query": "^5.0.0", "react": ">=18" }, "optionalPeers": ["@tanstack/react-query", "react"] }, "sha512-4dXsWgk56VaG667C8apnMmxIa+yAhKAsGXRGlfCTJdjsouhjXMlvQ4w/4CcSUBOFRU9jxvYQ/l2hIj5GX8fUCA=="],
 
-    "@oxy.so/telemetry": ["@oxy.so/telemetry@2.1.0", "", {}, "sha512-YxI/7XQLFf+WglPzUndec4LItM9cSJNsA67UZRLPj4w4mw38+bYNhV9hw/aOqXx4MXCD4Yk8CJ9mwcW72uAnwA=="],
+    "@oxy.so/telemetry": ["@oxy.so/telemetry@2.2.0", "", {}, "sha512-OfQVuxFSDa2epBed5m58nxuXzebcZeTln86AiFIoJosQ9zJDYKalTST6TM9eprOEyHmJIIkqGoVG67ejQXr4ig=="],
 
     "@paralleldrive/cuid2": ["@paralleldrive/cuid2@2.3.1", "", { "dependencies": { "@noble/hashes": "^1.1.5" } }, "sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw=="],
 
