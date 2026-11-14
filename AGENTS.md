@@ -33,6 +33,7 @@ Backend tests need a local Postgres and nothing else; see
 - Row ids are `text` in two shapes (uuid v7 and 24-char hex): never validate an id against one shape. Id-shape rule: [postgres-and-drizzle](https://github.com/OxyHQ/oxy/blob/main/docs/postgres-and-drizzle.md).
 - Postgres is the only store; routes go through `db/<domain>/` repositories and never build SQL.
 - `oxy.middleware.auth()` takes a token only from a header starting with exactly `"Bearer "`.
+- First-party never asks people for permissions: this app acts for a person with `actingFor` on what oxy's first-party registry declares (oxy ADR 0066); permissions, scopes and consent are only for third parties.
 - Read `EXPO_PUBLIC_*` only as a literal `process.env.X`; Metro inlines nothing else (enforced by the Expo ESLint in `lint`).
 - Bump `packages/frontend` `version` only for a native change: it is the OTA runtime and store build number.
 
