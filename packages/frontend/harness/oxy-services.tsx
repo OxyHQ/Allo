@@ -10,6 +10,19 @@ import { Pressable, Text } from 'react-native';
 
 export { useSupervision } from './supervision';
 
+// Opt in to the real SDK sheet with an empty, local-only account. No bearer is
+// ever issued; the linked client below cannot contact a server or write data.
+const askAliaHarness =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).has('harnessAskAlia');
+const appAssertion = {
+  getAppAssertion: async () => null,
+  getAppAssertionHeaders: async () => ({}),
+};
+export function useAppAssertion() {
+  return appAssertion;
+}
+
 export const HARNESS_ME = {
   id: '6700000000000000000000a1',
   username: 'nate',
@@ -58,6 +71,29 @@ const DIRECTORY = [
 ];
 
 const services = {
+  createLinkedClient: () => ({
+    client: {
+      getSessionEpoch: () => 0,
+      addTokenChangeListener: () => () => undefined,
+      requestAuthenticatedResponse: async ({ method, url }: { method: string; url: string }) => {
+        if (!askAliaHarness || method !== 'GET') {
+          throw new Error('The Alia harness permits only local read fixtures.');
+        }
+        const path = url.split('?')[0];
+        const data =
+          path === '/v1/conversations'
+            ? { conversations: [], hasMore: false, nextCursor: null }
+            : path === '/mcp/installed'
+              ? { servers: [] }
+              : undefined;
+        return Response.json(data ?? { message: 'No local fixture for this request.' }, {
+          status: data ? 200 : 404,
+        });
+      },
+    },
+    getAccessToken: async () => null,
+    dispose: () => undefined,
+  }),
   http: { getSessionEpoch: () => 0 },
   safety: {
     people: async (input: { accountIds?: string[]; query?: string }) => ({
@@ -102,6 +138,9 @@ export function useOxy() {
   return {
     user: HARNESS_ME,
     isLoading: false,
+    isAuthenticated: askAliaHarness,
+    canUsePrivateApi: askAliaHarness,
+    isAccountCacheReady: askAliaHarness,
     oxyServices: services,
     logout: async () => undefined,
     currentLanguage: 'en-US',
@@ -133,9 +172,9 @@ export function useAccountColorSave() {
   };
 }
 
-/** What `@gemies/sdk/ask` reads: the harness has no private API to offer it. */
+/** Open the SDK only when the explicit local fixture is requested. */
 export function useAuth() {
-  return { canUsePrivateApi: false, signIn: async () => undefined };
+  return { canUsePrivateApi: askAliaHarness, signIn: async () => undefined };
 }
 
 /** Like the real provider, it owns the app's React Query client. */

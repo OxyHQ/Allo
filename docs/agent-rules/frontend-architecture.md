@@ -9,13 +9,13 @@ packages/
   shared-types/   @allo/shared-types  TypeScript type definitions
 ```
 
-The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` chat-list,
+The frontend UI is **Bloom's messaging family** (`@oxy.so/bloom` list, chat-list,
 chat-screen, message-bubble, message-media, chat-composer, chat-people) in
 Bloom's `AppShell` with `AppShellPanels`, which owns the Sidebar rail/drawer and pane surfaces, composed from the app's destinations (a Bloom `TabPagerProvider`: the rail's rows, the phone's bottom bar and pager, the new-chat floating action); every page is a Bloom `Screen`; settings use Bloom's `SettingsModal`;
 `packages/frontend/ARCHITECTURE.md` maps every screen.
 
 **Nothing is hand-built that Bloom has.** Not the transcript (`MessageList`),
-not the conversation list (`ChatList`), not the picker (`ContactList`), not one
+not the conversation list (`List` with conversation data), not the picker (`List` with person data), not one
 icon — every glyph comes from `@oxy.so/bloom/icons`, and the app's only drawing
 of its own is Allo's logotype, which is what `Sidebar.logo` is for. When Bloom
 is missing a piece or gets one wrong, it is fixed IN BLOOM, released, and

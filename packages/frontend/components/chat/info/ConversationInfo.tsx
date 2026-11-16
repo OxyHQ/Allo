@@ -1,7 +1,7 @@
 import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useConversation, useConversationActions, useTimeline } from '@allo/react';
-import { GroupAvatar } from '@oxy.so/bloom/chat-list';
+import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
 import {
   ChatInfoPanel,
   type ChatInfoAction,
@@ -22,7 +22,7 @@ import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
 import { RiSpamLine } from '@oxy.so/bloom/icons/RiSpamLine';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
-import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -343,7 +343,15 @@ function AuthorizedConversationInfo({
       onClose={onClose}
       closeLabel={t('common.close')}
       coverSource={cover || undefined}
-      avatar={faces ? <GroupAvatar faces={faces} size={96} /> : undefined}
+      avatar={
+        faces ? (
+          <AvatarGroup
+            layout="conversation"
+            items={faces.map((face) => ({ ...face, uri: face.source }))}
+            size={96}
+          />
+        ) : undefined
+      }
       avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
       name={title}
       handle={
@@ -356,9 +364,9 @@ function AuthorizedConversationInfo({
       bio={isGroup ? undefined : person?.bio}
       settingsTitle={t('chat.info.settingsTitle')}
       settings={
-        <SettingsListGroup variant="filled">
+        <GroupedSection variant="filled">
           {canManage ? (
-            <SettingsListItem
+            <GroupedSectionItem
               title={t('chat.group.name')}
               icon={<RiUserLine {...icon} />}
               showChevron={false}
@@ -379,13 +387,13 @@ function AuthorizedConversationInfo({
               }
             />
           ) : null}
-          <SettingsListItem
+          <GroupedSectionItem
             title={t('chat.info.encryption')}
             value={t('chat.info.encryptionValue')}
             icon={<RiLock2Line {...icon} />}
             showChevron={false}
           />
-        </SettingsListGroup>
+        </GroupedSection>
       }
       tabs={tabs}
       members={isGroup ? members : undefined}

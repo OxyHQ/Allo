@@ -6,13 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient, useConversations } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
-import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
-import {
-  ContactList,
-  SelectedChipsRow,
-  type ContactSection,
-  type PersonSummary,
-} from '@oxy.so/bloom/chat-people';
+import { ChatSearchField } from '@oxy.so/bloom/chat-list';
+import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
+import { List, type ListEntry, type ListSection } from '@oxy.so/bloom/list';
+import { SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { Loading } from '@oxy.so/bloom/loading';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
@@ -141,14 +138,13 @@ export default function ShareRoute() {
   }, [client, create, router, selected, t, text]);
 
   const term = search.term.trim().toLocaleLowerCase();
-  const row = (target: Target, avatarSlot?: React.ReactNode) => ({
-    ...target.summary,
+  const row = (target: Target, leading?: React.ReactNode): ListEntry => ({
+    person: target.summary,
     id: target.key,
-    avatarSlot,
-    size: 'sm' as const,
-    trailing: 'checkbox' as const,
-    selected: selected.has(target.key),
-    onSelectedChange: () => toggle(target),
+    leading,
+    checked: selected.has(target.key),
+    onCheckedChange: () => toggle(target),
+    selecting: true,
     onPress: () => toggle(target),
   });
 
@@ -165,7 +161,11 @@ export default function ShareRoute() {
           summary: { id: chat.id, name: chat.name, avatar: chat.avatar },
         },
         chat.faces && chat.faces.length > 1 ? (
-          <GroupAvatar faces={chat.faces} size={36} />
+          <AvatarGroup
+            layout="conversation"
+            items={chat.faces.map((face) => ({ ...face, uri: face.source }))}
+            size={36}
+          />
         ) : undefined,
       ),
     );
@@ -186,9 +186,9 @@ export default function ShareRoute() {
       }),
     );
 
-  const sections: ContactSection[] = [
-    ...(recent.length > 0 ? [{ letter: t('share.recent'), contacts: recent }] : []),
-    ...(people.length > 0 ? [{ letter: t('share.people'), contacts: people }] : []),
+  const sections: ListSection[] = [
+    ...(recent.length > 0 ? [{ id: 'recent', title: t('share.recent'), items: recent }] : []),
+    ...(people.length > 0 ? [{ id: 'people', title: t('share.people'), items: people }] : []),
   ];
 
   const picked = [...selected.values()];
@@ -211,7 +211,6 @@ export default function ShareRoute() {
           title={t('share.title')}
           actions={
             <Button
-              size="sm"
               disabled={picked.length === 0}
               loading={busy}
               onPress={() => void submit()}
@@ -242,10 +241,11 @@ export default function ShareRoute() {
           formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
         />
       ) : null}
-      <ContactList
+      <List
+        testID="share-targets"
         style={styles.list}
         sections={sections}
-        showIndex={false}
+        scrollable
         header={
           <View style={styles.preview}>
             <MessageBubble direction="outgoing" text={text} tail />
@@ -261,7 +261,7 @@ export default function ShareRoute() {
             </View>
           ) : undefined
         }
-        emptyState={
+        empty={
           search.searching ? (
             <Loading
               variant="spinner"

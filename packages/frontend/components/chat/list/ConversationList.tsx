@@ -5,12 +5,13 @@ import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import {
   ChatFolderTabs,
-  ChatList,
   ChatSearchField,
   ChatSearchResults,
   type ChatSummary,
 } from '@oxy.so/bloom/chat-list';
 import { Button } from '@oxy.so/bloom/button';
+import { List, ListSelectionBar } from '@oxy.so/bloom/list';
+import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
 import { PageHeader } from '@oxy.so/bloom/page-header';
@@ -46,7 +47,7 @@ const LEAVE = 'leave';
 const DELETE = 'delete';
 
 /**
- * Every conversation, newest first — Bloom's `ChatList`, with the search field
+ * Every conversation, newest first — Bloom's `List`, with the search field
  * as its header the way Bloom's own conversations screen composes it. The whole
  * screen on a phone; the list pane beside the open conversation on a wide one.
  */
@@ -64,6 +65,7 @@ export function ConversationList() {
   const summaries = useChatSummaries();
   const [query, setQuery] = useState('');
   const [folder, setFolder] = useState('all');
+  const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(new Set());
 
   const selectedId = split ? (conversationIdFromPath(pathname) ?? undefined) : undefined;
   const searching = query.trim().length > 0;
@@ -100,6 +102,17 @@ export function ConversationList() {
         })),
     [folder, summaries, t],
   );
+
+  const checkedChats = chats.filter((chat) => checkedIds.has(chat.id));
+  const singleChecked = checkedChats.length === 1 ? checkedChats[0] : undefined;
+  const setChecked = useCallback((id: string, checked: boolean) => {
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   const unread = useMemo(
     () => summaries.reduce((total, chat) => total + ((chat.unreadCount ?? 0) > 0 ? 1 : 0), 0),
@@ -146,6 +159,7 @@ export function ConversationList() {
       if (!ok) return;
       try {
         await leave(id);
+        setChecked(id, false);
         toast.success(t('chat.leave.done'));
         if (selectedId === id) router.replace('/');
       } catch (error) {
@@ -153,7 +167,7 @@ export function ConversationList() {
         toast.error(t('chat.leave.failed'));
       }
     },
-    [leave, router, selectedId, t],
+    [leave, router, selectedId, setChecked, t],
   );
 
   const confirmDelete = useCallback(
@@ -170,6 +184,7 @@ export function ConversationList() {
       if (!answer.confirmed) return;
       try {
         await clearHistory(id, { forEveryone: answer.forEveryone });
+        setChecked(id, false);
         toast.success(t('chat.delete.done'));
         if (selectedId === id) router.replace('/');
       } catch (error) {
@@ -177,7 +192,7 @@ export function ConversationList() {
         toast.error(t('chat.delete.failed'));
       }
     },
-    [clearHistory, router, selectedId, summaries, t],
+    [clearHistory, router, selectedId, setChecked, summaries, t],
   );
 
   const aliaWelcomeSuggestions = useMemo(
@@ -213,7 +228,30 @@ export function ConversationList() {
           // A top-level place, beside the conversation or under the bar: no Back.
           onBack={null}
           leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-          actions={!supervised ? <AskAliaButton label={t('chat.askAlia')} /> : undefined}
+          actions={
+            !supervised && checkedChats.length === 0 ? (
+              <AskAliaButton label={t('chat.askAlia')} />
+            ) : undefined
+          }
+          accessory={
+            checkedChats.length > 0 ? (
+              <ListSelectionBar
+                testID="conversation-selection"
+                count={checkedChats.length}
+                total={chats.length}
+                onClear={() => setCheckedIds(new Set())}
+                onSelectAll={(checked) =>
+                  setCheckedIds(new Set(checked ? chats.map((chat) => chat.id) : []))
+                }
+                actions={singleChecked?.swipeActions?.right}
+                onAction={(action) => {
+                  if (!singleChecked) return;
+                  if (action === LEAVE) void confirmLeave(singleChecked.id);
+                  if (action === DELETE) void confirmDelete(singleChecked.id);
+                }}
+              />
+            ) : undefined
+          }
         />
       }
     >
@@ -221,7 +259,10 @@ export function ConversationList() {
         <View style={styles.search}>
           <ChatSearchField
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(value) => {
+              setQuery(value);
+              setCheckedIds(new Set());
+            }}
             onClear={() => setQuery('')}
             placeholder={t('chat.search.placeholder')}
           />
@@ -230,7 +271,10 @@ export function ConversationList() {
           <ChatFolderTabs
             folders={folders}
             value={folder}
-            onValueChange={setFolder}
+            onValueChange={(value) => {
+              setFolder(value);
+              setCheckedIds(new Set());
+            }}
             accessibilityLabel={t('chat.folder.label')}
             divider
           />
@@ -249,23 +293,34 @@ export function ConversationList() {
             labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
           />
         ) : (
-          <ChatList
-            chats={chats}
+          <List
+            testID="conversation-list"
+            items={chats.map((chat) => ({
+              id: chat.id,
+              conversation: chat,
+              active: chat.id === selectedId,
+              checked: checkedIds.has(chat.id),
+              onCheckedChange: (checked) => setChecked(chat.id, checked),
+              selecting: checkedChats.length > 0,
+              onPress: () => open(chat.id),
+              swipeActions: chat.swipeActions,
+              actions: chat.swipeActions?.right,
+              onAction: (action) => {
+                if (action === LEAVE) void confirmLeave(chat.id);
+                if (action === DELETE) void confirmDelete(chat.id);
+              },
+            }))}
             // Where Bloom's own list puts the stories row.
             header={
               <StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />
             }
-            selectedId={selectedId}
             loading={summaries.length === 0 && sync === 'syncing'}
-            onChatPress={open}
-            onChatAction={(action, id) => {
-              if (action === LEAVE) void confirmLeave(id);
-              if (action === DELETE) void confirmDelete(id);
-            }}
-            labels={{
-              emptyTitle: t('chat.empty.title'),
-              emptyDescription: t('chat.empty.description'),
-            }}
+            empty={
+              <ChatEmptyState
+                title={t('chat.empty.title')}
+                description={t('chat.empty.description')}
+              />
+            }
           />
         )}
       </ScreenScrollView>
@@ -290,7 +345,7 @@ export function ConversationList() {
 function AskAliaButton({ label }: { label: string }) {
   const { ask } = useAskGemie();
   return (
-    <Button size="sm" appearance="outline" leadingIcon={GemieAvatarIcon} onPress={() => ask()}>
+    <Button appearance="outline" leadingIcon={GemieAvatarIcon} onPress={() => ask()}>
       {label}
     </Button>
   );

@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { MediaView, TimelineItemView } from '@allo/core';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { messageEntities } from '@oxy.so/bloom/message-bubble';
 import { DocumentGrid, SharedMediaGrid } from '@oxy.so/bloom/message-media';
-import { Item } from '@oxy.so/bloom/item';
+import { List } from '@oxy.so/bloom/list';
 
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 
@@ -180,9 +180,14 @@ export function SharedLinks({ items }: { items: readonly TimelineItemView[] }) {
 
   return (
     <View style={styles.pane}>
-      {links.map((link) => (
-        <Item key={link.id} title={link.url} onPress={() => void Linking.openURL(link.url)} />
-      ))}
+      <List
+        items={links.map((link) => ({
+          id: link.id,
+          title: link.url,
+          role: 'link',
+          onPress: () => void Linking.openURL(link.url),
+        }))}
+      />
     </View>
   );
 }

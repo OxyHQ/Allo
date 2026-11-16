@@ -3,7 +3,8 @@ import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { useAlloClient } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
-import { ContactRow } from '@oxy.so/bloom/chat-people';
+import { ListItem } from '@oxy.so/bloom/list';
+import { RiArrowRightSLine } from '@oxy.so/bloom/icons/RiArrowRightSLine';
 import { useHapticsSettingRow, useVideoAutoplaySettingRow } from '@oxy.so/bloom/preferences';
 import { SettingsGeneralPage, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { confirm } from '@oxy.so/bloom/surfaces';
@@ -69,14 +70,13 @@ export function GeneralSettings() {
                     key: 'identity',
                     label: t('profile.view'),
                     control: (
-                      <ContactRow
-                        id={user.id}
-                        name={name}
-                        avatar={user.avatar ?? undefined}
-                        subtitle={user.username ? `@${user.username}` : undefined}
-                        size="sm"
-                        horizontalInset={0}
-                        trailing={ownProfile ? 'chevron' : 'none'}
+                      <ListItem
+                        person={{
+                          name,
+                          avatar: user.avatar ?? undefined,
+                          subtitle: user.username ? `@${user.username}` : undefined,
+                        }}
+                        trailing={ownProfile ? <RiArrowRightSLine /> : undefined}
                         onPress={
                           ownProfile
                             ? () => settings.close(() => router.push(ownProfile))

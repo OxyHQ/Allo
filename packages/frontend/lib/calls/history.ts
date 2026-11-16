@@ -3,7 +3,7 @@
  *
  * The log is not a store: it IS the `call_log` messages in the conversations,
  * read through `@allo/core` and projected here into the rows Bloom's
- * `CallHistoryList` draws. Pure apart from the one hook, and `callHistorySections`
+ * `List` draws. Pure apart from the one hook, and `callHistorySections`
  * takes `now`, so a test can hold the clock still.
  *
  * Separate from `session.ts` because they are different things: that file is
@@ -93,7 +93,7 @@ export interface CallHistoryCopy {
 /**
  * The log as Bloom's day-headed sections.
  *
- * Every string a `CallHistoryRow` draws is decided here: the day heading, the
+ * Every string a `ListItem` draws is decided here: the day heading, the
  * second line and the direction word. Bloom formats nothing, because what
  * "yesterday" means needs a locale and a timezone a component does not have.
  * The second line is the clock time and, for a call that connected, how long it
@@ -102,7 +102,7 @@ export interface CallHistoryCopy {
 export function callHistorySections(
   entries: readonly CallLogEntry[],
   copy: CallHistoryCopy,
-): CallHistorySection[] {
+): (CallHistorySection & { id: string })[] {
   const sections: { id: string; title: string; items: CallHistoryItem[] }[] = [];
   for (const entry of [...entries].sort((a, b) => b.at - a.at)) {
     const at = new Date(entry.at);
