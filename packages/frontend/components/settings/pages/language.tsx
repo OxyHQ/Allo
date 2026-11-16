@@ -1,5 +1,6 @@
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { Button } from '@oxy.so/bloom/button';
-import { SettingsCard, SettingsRow, SettingsSection } from '@oxy.so/bloom/settings-modal';
+import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { getNativeLanguageName } from '@oxy.so/core';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
@@ -20,13 +21,15 @@ export default function LanguageSettingsScreen() {
   const selected = currentLanguages.length > 0 ? currentLanguages : [currentLanguage];
 
   return (
-    <>
-      <SettingsSection label={t('settings.language.selectLanguage')}>
-        <SettingsCard>
-          <SettingsRow
-            label={t('settings.preferences.language')}
-            description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
-          >
+    <SettingsSection label={t('settings.language.selectLanguage')}>
+      <GroupedSection>
+        <GroupedSectionItem
+          titleNumberOfLines={0}
+          descriptionLines={0}
+          wrapControl
+          title={t('settings.preferences.language')}
+          description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
+          rightElement={
             <Button
               onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
               accessibilityLabel={t('settings.preferences.language')}
@@ -35,9 +38,9 @@ export default function LanguageSettingsScreen() {
             >
               {t('common.open')}
             </Button>
-          </SettingsRow>
-        </SettingsCard>
-      </SettingsSection>
-    </>
+          }
+        />
+      </GroupedSection>
+    </SettingsSection>
   );
 }

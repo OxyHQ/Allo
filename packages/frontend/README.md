@@ -96,6 +96,12 @@ with no backend and no sign-in, which is how the UI is reviewed against
 tool: without that environment variable not one of those files is resolved, and
 nothing in `app/`, `components/` or `lib/` imports them.
 
+For the real Ask Alia sheet, open `?harnessAskAlia=1` on the initial URL. Its
+linked client serves empty local read fixtures, rejects writes and issues no
+access token. Use this for open, input and dismiss checks only; block external
+HTTP and WebSocket requests in the browser runner. This does not exercise Alia's
+backend or message sending.
+
 ## The messaging seam: `lib/allo/`
 
 Screens and components never import `@allo/core` for a value; they use the

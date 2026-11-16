@@ -45,6 +45,11 @@ const PEOPLE: Record<
 const users = {
   me: async () => PEOPLE['6700000000000000000000a1'],
   getMany: async (ids: string[]) => ids.map((id) => PEOPLE[id]).filter(Boolean),
+  lookupMany: async (ids: string[]) => ({
+    found: ids.map((id) => PEOPLE[id]).filter(Boolean),
+    missing: ids.filter((id) => !PEOPLE[id]),
+    failed: [],
+  }),
   byUsername: async (handle: string) =>
     PEOPLE[`acc-${handle}`] ?? PEOPLE['6700000000000000000000a2'],
   search: async () => ({ data: Object.values(PEOPLE) }),
@@ -102,4 +107,11 @@ export class OxyServices {
 
 export function getNativeLanguageName(code: string): string {
   return code;
+}
+
+export function getAccountDisplayName(account: {
+  name?: { displayName?: string };
+  username?: string;
+}): string {
+  return account.name?.displayName ?? account.username ?? '';
 }

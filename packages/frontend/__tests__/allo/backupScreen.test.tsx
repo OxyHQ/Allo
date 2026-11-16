@@ -78,18 +78,33 @@ jest.mock('@oxy.so/bloom/settings-modal', () => {
   return {
     SettingsSection: ({ label, children }: { label?: string; children: React.ReactNode }) =>
       ReactModule.createElement(ReactNative.View, null, text(label), children),
-    SettingsCard: ReactNative.View,
     SettingsValueField: ReactNative.Text,
-    SettingsRow: ({
-      label,
+  };
+});
+
+jest.mock('@oxy.so/bloom/grouped-section', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  const ReactModule = jest.requireActual<typeof import('react')>('react');
+  const text = (value?: string) =>
+    value ? ReactModule.createElement(ReactNative.Text, null, value) : null;
+  return {
+    GroupedSection: ReactNative.View,
+    GroupedSectionItem: ({
+      title,
       description,
-      children,
+      rightElement,
     }: {
-      label: string;
+      title: string;
       description?: string;
-      children?: React.ReactNode;
+      rightElement?: React.ReactNode;
     }) =>
-      ReactModule.createElement(ReactNative.View, null, text(label), text(description), children),
+      ReactModule.createElement(
+        ReactNative.View,
+        null,
+        text(title),
+        text(description),
+        rightElement,
+      ),
   };
 });
 

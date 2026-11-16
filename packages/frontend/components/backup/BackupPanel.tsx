@@ -1,13 +1,9 @@
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { Checkbox } from '@oxy.so/bloom/checkbox';
 import { RecoveryPhraseError, useBackup } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
-import {
-  SettingsCard,
-  SettingsRow,
-  SettingsSection,
-  SettingsValueField,
-} from '@oxy.so/bloom/settings-modal';
+import { SettingsSection, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { Textarea } from '@oxy.so/bloom/textarea';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -170,9 +166,12 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
   return (
     <View style={styles.root}>
       <SettingsSection label={t('backup.section.status')} description={t('backup.explain')}>
-        <SettingsCard>
-          <SettingsRow
-            label={status.enabled ? t('backup.status.on') : t('backup.status.off')}
+        <GroupedSection>
+          <GroupedSectionItem
+            titleNumberOfLines={0}
+            descriptionLines={0}
+            wrapControl
+            title={status.enabled ? t('backup.status.on') : t('backup.status.off')}
             description={
               status.lastBackupAt
                 ? t('backup.status.lastBackup', {
@@ -180,16 +179,20 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                   })
                 : t('backup.status.never')
             }
-          >
-            {/* A count only means something while backup is on; an empty field is not a value. */}
-            {status.enabled ? (
-              <SettingsValueField>
-                {t('backup.status.events', { count: status.eventCount })}
-              </SettingsValueField>
-            ) : null}
-          </SettingsRow>
-          <SettingsRow
-            label={
+            rightElement={
+              /* A count only means something while backup is on; an empty field is not a value. */
+              status.enabled ? (
+                <SettingsValueField>
+                  {t('backup.status.events', { count: status.eventCount })}
+                </SettingsValueField>
+              ) : null
+            }
+          />
+          <GroupedSectionItem
+            titleNumberOfLines={0}
+            descriptionLines={0}
+            wrapControl
+            title={
               status.remote === null
                 ? t('backup.status.remoteUnknown')
                 : status.remote.exists
@@ -197,7 +200,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                   : t('backup.status.remoteMissing')
             }
           />
-        </SettingsCard>
+        </GroupedSection>
       </SettingsSection>
 
       <View style={styles.actions}>
@@ -243,7 +246,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
 
       {phrase !== null ? (
         <SettingsSection label={t('backup.phrase.title')}>
-          <SettingsCard>
+          <GroupedSection>
             <View style={styles.card} testID="backup-phrase">
               <Text style={[styles.body, { color: theme.colors.text }]}>
                 {t('backup.phrase.body')}
@@ -290,13 +293,13 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 {t('common.done')}
               </Button>
             </View>
-          </SettingsCard>
+          </GroupedSection>
         </SettingsSection>
       ) : null}
 
       {showRestore ? (
         <SettingsSection label={t('backup.restore.title')}>
-          <SettingsCard>
+          <GroupedSection>
             <View style={styles.card} testID="backup-restore-section">
               <Text style={[styles.body, { color: theme.colors.text }]}>
                 {t('backup.restore.body')}
@@ -345,7 +348,7 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
                 {t('backup.restore.button')}
               </Button>
             </View>
-          </SettingsCard>
+          </GroupedSection>
         </SettingsSection>
       ) : null}
     </View>

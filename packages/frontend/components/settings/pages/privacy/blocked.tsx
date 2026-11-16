@@ -1,8 +1,9 @@
-import { GlyphButton } from '@oxy.so/bloom/button';
-import { ContactRow } from '@oxy.so/bloom/chat-people';
+import { Card } from '@oxy.so/bloom/card';
+import { Button } from '@oxy.so/bloom/button';
+import { List } from '@oxy.so/bloom/list';
 import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
 import { Search } from '@oxy.so/bloom/search';
-import { SettingsCard, SettingsSection } from '@oxy.so/bloom/settings-modal';
+import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Muted } from '@oxy.so/bloom/typography';
@@ -117,19 +118,21 @@ export default function BlockedUsersScreen() {
           note('settings.privacy.noUsersFound')
         ) : (
           <SettingsSection>
-            <SettingsCard>
-              {searchResults.map((candidate) => (
-                <ContactRow
-                  key={candidate.id}
-                  id={candidate.id}
-                  name={candidate.displayName}
-                  avatar={candidate.avatar}
-                  subtitle={`@${candidate.handle}`}
-                  actionLabel={t('settings.privacy.add')}
-                  onAction={() => add(candidate)}
-                />
-              ))}
-            </SettingsCard>
+            <Card>
+              <List
+                items={searchResults.map((candidate) => ({
+                  id: candidate.id,
+                  person: {
+                    name: candidate.displayName,
+                    avatar: candidate.avatar,
+                    subtitle: `@${candidate.handle}`,
+                    actionLabel: t('settings.privacy.add'),
+                    onAction: () => add(candidate),
+                  },
+                  disabled: addUser.isPending,
+                }))}
+              />
+            </Card>
           </SettingsSection>
         )
       ) : loading ? (
@@ -148,26 +151,29 @@ export default function BlockedUsersScreen() {
           label={t('settings.privacy.blockedUsers')}
           description={t('settings.privacy.blockedUsersDescription')}
         >
-          <SettingsCard>
-            {users.map((user) => (
-              <ContactRow
-                key={user.id}
-                id={user.id}
-                name={user.displayName ?? t('settings.privacy.unknownAccount')}
-                avatar={user.avatar}
-                subtitle={user.handle ? `@${user.handle}` : user.id}
-                trailingSlot={
-                  <GlyphButton
+          <Card>
+            <List
+              items={users.map((user) => ({
+                id: user.id,
+                person: {
+                  name: user.displayName ?? t('settings.privacy.unknownAccount'),
+                  avatar: user.avatar,
+                  subtitle: user.handle ? `@${user.handle}` : user.id,
+                },
+                trailing: (
+                  <Button
+                    iconOnly
+                    appearance="plain"
                     icon={RiCloseCircleLine}
-                    color={theme.colors.error}
+                    tone="danger"
                     accessibilityLabel={t('settings.privacy.unblock')}
                     disabled={removeUser.isPending}
                     onPress={() => void remove(user)}
                   />
-                }
-              />
-            ))}
-          </SettingsCard>
+                ),
+              }))}
+            />
+          </Card>
         </SettingsSection>
       )}
     </>

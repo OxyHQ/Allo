@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallActions, usePresence } from '@allo/react';
-import { CallHistoryList, IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
+import { IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
+import { List } from '@oxy.so/bloom/list';
 import { Muted } from '@oxy.so/bloom/typography';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { PageHeader } from '@oxy.so/bloom/page-header';
@@ -18,7 +19,7 @@ import { reportCallError, useCallSession } from '@/lib/calls/session';
 /**
  * `/calls` — THE CALL LOG.
  *
- * Bloom's `CallHistoryList` in day sections, with the incoming banner above it
+ * Bloom's `List` in day sections, with the incoming banner above it
  * when a call is arriving. Every string the rows draw is decided in
  * `lib/calls/history.ts`; the list formats nothing. The minimised-call pill is
  * not drawn here — `app/(chat)/_layout.tsx` mounts one for the whole app.
@@ -145,15 +146,25 @@ export default function CallsScreen() {
           />
         ) : null}
 
-        <CallHistoryList
-          sections={sections}
-          onItemPress={openConversation}
-          onCallBack={callBack}
-          labels={{
-            ...directionLabels,
-            callBack: (name: string) => t('calls.callBack', { name }),
-          }}
-          emptyState={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
+        <List
+          testID="call-history"
+          sections={sections.map((section) => ({
+            id: section.id,
+            title: section.title,
+            items: section.items.map((entry) => ({
+              id: entry.id,
+              call: {
+                ...entry,
+                onCallBack: () => callBack(entry.id),
+                labels: {
+                  ...directionLabels,
+                  callBack: (name: string) => t('calls.callBack', { name }),
+                },
+              },
+              onPress: () => openConversation(entry.id),
+            })),
+          }))}
+          empty={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
         />
       </ScreenScrollView>
     </Screen>

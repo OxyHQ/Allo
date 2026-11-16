@@ -1,12 +1,11 @@
 import type { PollDraft } from '@allo/core';
-import { Button, GlyphButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
 import { Dialog } from '@oxy.so/bloom/dialog';
 import { RiAddLine } from '@oxy.so/bloom/icons/RiAddLine';
 import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
-import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { Switch } from '@oxy.so/bloom/switch';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -50,7 +49,6 @@ const BODY_MAX_HEIGHT = 340;
 
 export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState<readonly string[]>(POLL_INITIAL_OPTIONS);
   const [multiple, setMultiple] = useState(false);
@@ -134,9 +132,11 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
                 smallest poll the SDK accepts, so the control goes away rather
                 than refusing the press. */}
             {options.length > POLL_MIN_OPTIONS ? (
-              <GlyphButton
+              <Button
+                iconOnly
+                appearance="plain"
                 icon={RiCloseCircleLine}
-                color={theme.colors.textSecondary}
+                tone="neutral"
                 accessibilityLabel={t('poll.compose.removeOption', { index: index + 1 })}
                 onPress={() => removeOption(index)}
               />
@@ -150,8 +150,8 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
           </Button>
         ) : null}
 
-        <SettingsListGroup>
-          <SettingsListItem
+        <GroupedSection>
+          <GroupedSectionItem
             title={t('poll.compose.multiple')}
             description={t('poll.compose.multipleDescription')}
             showChevron={false}
@@ -163,7 +163,7 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
               />
             }
           />
-          <SettingsListItem
+          <GroupedSectionItem
             title={t('poll.compose.anonymous')}
             description={t('poll.compose.anonymousDescription')}
             showChevron={false}
@@ -175,7 +175,7 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
               />
             }
           />
-        </SettingsListGroup>
+        </GroupedSection>
       </ScrollView>
     </Dialog>
   );

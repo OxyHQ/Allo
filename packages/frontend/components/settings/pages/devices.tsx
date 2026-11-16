@@ -1,13 +1,14 @@
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import {
   useOwnInstances,
   usePendingEnrollments,
   type InstanceView,
   type PendingEnrollmentView,
 } from '@allo/react';
-import { Button, GlyphButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiRefreshLine } from '@oxy.so/bloom/icons/RiRefreshLine';
-import { SettingsCard, SettingsRow, SettingsSection } from '@oxy.so/bloom/settings-modal';
+import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Muted, Text } from '@oxy.so/bloom/typography';
@@ -141,7 +142,7 @@ export default function DevicesScreen() {
     <>
       {pending.pending.length > 0 ? (
         <SettingsSection label={t('devices.waiting')}>
-          <SettingsCard>
+          <GroupedSection>
             {pending.pending.map((enrollment) => {
               const busy = busyId === enrollment.instance.id;
               return (
@@ -190,21 +191,23 @@ export default function DevicesScreen() {
                 </View>
               );
             })}
-          </SettingsCard>
+          </GroupedSection>
         </SettingsSection>
       ) : null}
 
       <SettingsSection
         label={t('devices.enrolled')}
         action={
-          <GlyphButton
+          <Button
+            iconOnly
+            appearance="plain"
             icon={RiRefreshLine}
             accessibilityLabel={t('devices.refresh')}
             onPress={() => void refreshAll()}
           />
         }
       >
-        <SettingsCard>
+        <GroupedSection>
           {!loaded && enrolled.length === 0 ? (
             <View style={styles.empty}>
               <ActivityIndicator color={theme.colors.primary} />
@@ -217,31 +220,37 @@ export default function DevicesScreen() {
             enrolled.map((instance) => {
               const removable = !instance.isThis && instance.status !== 'revoked';
               return (
-                <SettingsRow
+                <GroupedSectionItem
+                  titleNumberOfLines={0}
+                  descriptionLines={0}
+                  wrapControl
                   key={instance.id}
-                  label={
+                  title={
                     instance.isThis
                       ? t('devices.thisDevice', { name: instance.displayName })
                       : instance.displayName
                   }
                   description={describeInstance(instance, t)}
-                >
-                  {!removable ? undefined : busyId === instance.id ? (
-                    <ActivityIndicator color={theme.colors.error} />
-                  ) : (
-                    <GlyphButton
-                      icon={RiDeleteBinLine}
-                      color={theme.colors.error}
-                      disabled={busyId !== null}
-                      accessibilityLabel={t('devices.remove')}
-                      onPress={() => void revoke(instance)}
-                    />
-                  )}
-                </SettingsRow>
+                  rightElement={
+                    !removable ? undefined : busyId === instance.id ? (
+                      <ActivityIndicator color={theme.colors.error} />
+                    ) : (
+                      <Button
+                        iconOnly
+                        appearance="plain"
+                        icon={RiDeleteBinLine}
+                        tone="danger"
+                        disabled={busyId !== null}
+                        accessibilityLabel={t('devices.remove')}
+                        onPress={() => void revoke(instance)}
+                      />
+                    )
+                  }
+                />
               );
             })
           )}
-        </SettingsCard>
+        </GroupedSection>
       </SettingsSection>
     </>
   );

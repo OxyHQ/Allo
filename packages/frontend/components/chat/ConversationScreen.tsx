@@ -10,7 +10,8 @@ import {
   useTimeline,
 } from '@allo/react';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import { ChatSearchField, GroupAvatar } from '@oxy.so/bloom/chat-list';
+import { ChatSearchField } from '@oxy.so/bloom/chat-list';
+import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
 import {
   ChatBackground,
   ChatEmptyState,
@@ -509,7 +510,15 @@ function AuthorizedConversationScreen({
           title={title}
           marker={otherPerson?.verified ? 'verified' : undefined}
           markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
-          avatar={faces ? <GroupAvatar faces={faces} size={40} /> : undefined}
+          avatar={
+            faces ? (
+              <AvatarGroup
+                layout="conversation"
+                items={faces.map((face) => ({ ...face, uri: face.source }))}
+                size={40}
+              />
+            ) : undefined
+          }
           avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
           avatarName={title}
           status={
@@ -527,6 +536,7 @@ function AuthorizedConversationScreen({
           connectingLabel={t('chat.connecting')}
           // Beside the list there is nothing to go back to on screen.
           onPressBack={split ? undefined : back}
+          showBack={!split}
           backLabel={t('common.back')}
           onPressCall={() => startCall('voice')}
           onPressVideoCall={() => startCall('video')}

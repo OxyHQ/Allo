@@ -22,7 +22,7 @@ interface StoriesStripProps {
  * It is its own component rather than part of the updates screen because the
  * conversation list is the other place it belongs, and it is drawn in both:
  * `/updates` puts it above the list of updates, and `ConversationList` hands it
- * to `ChatList` as the `header`.
+ * to `List` as the `header`.
  *
  * Bloom decides the order (unseen first, a stable sort) and the geometry; this
  * decides who is in it, what their ring is, and the words. Names come through

@@ -1,5 +1,5 @@
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -7,13 +7,8 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
 import { Button } from '@oxy.so/bloom/button';
 import { ChatSearchField } from '@oxy.so/bloom/chat-list';
-import {
-  ContactList,
-  NewGroupForm,
-  SelectedChipsRow,
-  type ContactSection,
-  type PersonSummary,
-} from '@oxy.so/bloom/chat-people';
+import { NewGroupForm, SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
+import { List, type ListEntry } from '@oxy.so/bloom/list';
 import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
@@ -43,7 +38,7 @@ function summaryOf(user: SearchedUser): PersonSummary {
  * picker adding people to an existing group, and `/new?call=voice` (the Calls
  * page's floating action) the same search picking ONE person to call.
  *
- * Every part of it is Bloom's: the search pill, `ContactList` for the results
+ * Every part of it is Bloom's: the search pill, `List` for the results
  * (one "People" section and the empty state),
  * `SelectedChipsRow` while it is still one person, and `NewGroupForm` once it
  * is a group — that form is where the name and the picked people live, so the
@@ -140,29 +135,28 @@ export default function NewConversationRoute() {
   // index rail (`lib/people/directorySearch.ts` says who may appear at all).
   const people = search.results
     .filter((result) => !excluded.has(result.id))
-    .map((result): ContactSection['contacts'][number] => {
+    .map((result): ListEntry => {
       const person = summaryOf(result);
       if (callMode)
         return {
-          ...person,
-          size: 'sm' as const,
-          trailing: 'action' as const,
-          actionLabel: t('calls.new.action'),
-          onAction: () => void call(person),
+          id: person.id,
+          person: {
+            ...person,
+            actionLabel: t('calls.new.action'),
+            onAction: () => void call(person),
+          },
           onPress: () => void call(person),
           disabled: busy,
         };
       return {
-        ...person,
-        size: 'sm' as const,
-        trailing: 'checkbox' as const,
-        selected: selected.has(person.id),
-        onSelectedChange: () => toggle(person),
+        id: person.id,
+        person,
+        checked: selected.has(person.id),
+        onCheckedChange: () => toggle(person),
+        selecting: true,
         onPress: () => toggle(person),
       };
     });
-  // Search results in the directory's (relevance) order: one flat section.
-  const sections: ContactSection[] = people.length > 0 ? [{ letter: '', contacts: people }] : [];
 
   const submitLabel = adding
     ? t('chat.group.addMember')
@@ -193,7 +187,6 @@ export default function NewConversationRoute() {
           actions={
             callMode ? undefined : (
               <Button
-                size="sm"
                 disabled={count === 0}
                 loading={busy}
                 onPress={() => void submit()}
@@ -218,11 +211,11 @@ export default function NewConversationRoute() {
           autoFocus
         />
       </View>
-      <ContactList
+      <List
+        testID="people-picker"
         style={styles.list}
-        sections={sections}
-        layout="flat"
-        flatLabel={t('chat.new.people')}
+        scrollable
+        sections={[{ id: 'people', title: t('chat.new.people'), items: people }]}
         header={
           callMode ? undefined : naming ? (
             <NewGroupForm
@@ -248,7 +241,7 @@ export default function NewConversationRoute() {
             />
           ) : undefined
         }
-        emptyState={
+        empty={
           search.searching ? (
             <Loading
               variant="spinner"

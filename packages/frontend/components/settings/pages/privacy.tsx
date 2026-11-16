@@ -1,5 +1,6 @@
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { Button } from '@oxy.so/bloom/button';
-import { SettingsCard, SettingsRow, SettingsSection } from '@oxy.so/bloom/settings-modal';
+import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
 import { useCallback } from 'react';
@@ -39,28 +40,34 @@ export default function PrivacySettingsScreen() {
   );
 
   return (
-    <>
-      <SettingsSection
-        description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}
-      >
-        <SettingsCard>
-          <SettingsRow
-            label={t('settings.privacy.showOnlineStatus')}
-            description={t('settings.privacy.showOnlineStatusDesc')}
-          >
-            {
-              <Switch
-                checked={settings.showOnlineStatus}
-                onCheckedChange={onToggleOnlineStatus}
-                // Until the stored value arrives the switch shows the schema
-                // default; writing from there would save a choice never made.
-                disabled={!saved}
-                accessibilityLabel={t('settings.privacy.showOnlineStatus')}
-                testID="online-status-switch"
-              />
-            }
-          </SettingsRow>
-          <SettingsRow label={t('settings.privacy.blockedProfiles')}>
+    <SettingsSection
+      description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}
+    >
+      <GroupedSection>
+        <GroupedSectionItem
+          titleNumberOfLines={0}
+          descriptionLines={0}
+          wrapControl
+          title={t('settings.privacy.showOnlineStatus')}
+          description={t('settings.privacy.showOnlineStatusDesc')}
+          rightElement={
+            <Switch
+              checked={settings.showOnlineStatus}
+              onCheckedChange={onToggleOnlineStatus}
+              // Until the stored value arrives the switch shows the schema
+              // default; writing from there would save a choice never made.
+              disabled={!saved}
+              accessibilityLabel={t('settings.privacy.showOnlineStatus')}
+              testID="online-status-switch"
+            />
+          }
+        />
+        <GroupedSectionItem
+          titleNumberOfLines={0}
+          descriptionLines={0}
+          wrapControl
+          title={t('settings.privacy.blockedProfiles')}
+          rightElement={
             <Button
               onPress={() => settingsModal.open('privacy-blocked')}
               accessibilityLabel={t('settings.privacy.blockedProfiles')}
@@ -69,9 +76,9 @@ export default function PrivacySettingsScreen() {
             >
               {t('common.open')}
             </Button>
-          </SettingsRow>
-        </SettingsCard>
-      </SettingsSection>
-    </>
+          }
+        />
+      </GroupedSection>
+    </SettingsSection>
   );
 }

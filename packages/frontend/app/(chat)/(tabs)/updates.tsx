@@ -6,10 +6,9 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
 import { Avatar } from '@oxy.so/bloom/avatar';
 import { StoryRing } from '@oxy.so/bloom/chat-indicators';
-import { Item } from '@oxy.so/bloom/item';
-import { useTheme } from '@oxy.so/bloom/theme';
+import { List } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
-import { Muted, Text } from '@oxy.so/bloom/typography';
+import { Muted } from '@oxy.so/bloom/typography';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatContext } from '@/hooks/useChatContext';
@@ -47,7 +46,6 @@ import { logger } from '@/utils/logger';
  */
 export default function UpdatesScreen() {
   const { t } = useTranslation();
-  const theme = useTheme();
   const { user } = useOxy();
   const router = useRouter();
   const statuses = useStatuses();
@@ -106,40 +104,37 @@ export default function UpdatesScreen() {
           <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
         </View>
 
-        <View style={styles.list}>
-          <Text variant="caption-1-semibold" style={{ color: theme.colors.textSecondary }}>
-            {t('stories.recent')}
-          </Text>
-          {authors.length === 0 ? (
-            <Muted style={styles.empty}>{t('stories.empty')}</Muted>
-          ) : (
-            authors.map((author) => {
-              const who = person(author.accountId);
-              const name = author.mine
-                ? t('stories.own')
-                : (who?.displayName ?? t('stories.someone'));
-              return (
-                <Item
-                  key={author.accountId}
-                  title={name}
-                  // i18next picks `stories.updateCount_one` or `_other` from `count`.
-                  subtitle={t('stories.updateCount', {
+        <List
+          sections={[
+            {
+              id: 'recent',
+              title: t('stories.recent'),
+              items: authors.map((author) => {
+                const who = person(author.accountId);
+                const name = author.mine
+                  ? t('stories.own')
+                  : (who?.displayName ?? t('stories.someone'));
+                return {
+                  id: author.accountId,
+                  title: name,
+                  supporting: t('stories.updateCount', {
                     count: author.statuses.length,
                     age: statusAgeLabel(author.statuses[0].createdAt, now, t),
-                  })}
-                  leading={
-                    <StoryRing state={ringState(author)} size={40}>
-                      <Avatar source={who?.avatar} name={name} size={40} />
+                  }),
+                  leading: (
+                    <StoryRing state={ringState(author)} size={36}>
+                      <Avatar source={who?.avatar} name={name} size={36} />
                     </StoryRing>
-                  }
-                  onPress={() => open(author.accountId)}
-                  onLongPress={author.mine ? () => void remove(author.statuses[0].id) : undefined}
-                  accessibilityLabel={t('stories.openOf', { name })}
-                />
-              );
-            })
-          )}
-        </View>
+                  ),
+                  onPress: () => open(author.accountId),
+                  onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
+                  label: t('stories.openOf', { name }),
+                };
+              }),
+            },
+          ]}
+          empty={<Muted style={styles.empty}>{t('stories.empty')}</Muted>}
+        />
 
         <Muted style={styles.expiry}>
           {authors[0]?.mine
@@ -155,7 +150,6 @@ export default function UpdatesScreen() {
 
 const styles = StyleSheet.create({
   strip: { marginHorizontal: -16 },
-  list: { gap: 4 },
   empty: { paddingVertical: 16 },
   expiry: { paddingTop: 8 },
 });
