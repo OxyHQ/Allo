@@ -35,8 +35,8 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3",
-    "@oxy.so/core": "7.52.0",
-    "@oxy.so/contracts": "7.2.0",
+    "@oxy.so/core": "7.55.0",
+    "@oxy.so/contracts": "7.5.0",
     "@oxy.so/protocol": "1.11.1"
   },
   "peerDependencies": {
