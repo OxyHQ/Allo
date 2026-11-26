@@ -5,9 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient, useConversations } from '@allo/react';
-import { List, type ListEntry, type ListSection } from '@oxy.so/bloom/list';
+import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
+import type { ListEntry, ListSection } from '@oxy.so/bloom/list';
 import { SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { Loading } from '@oxy.so/bloom/loading';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
 import { toast } from '@oxy.so/bloom/toast';
 
@@ -18,16 +18,16 @@ import { shareTextFromParam } from '@/lib/chat/shareText';
 import { logger } from '@/utils/logger';
 
 import {
-  AvatarGroup as LAvatarGroup,
   Button as LButton,
   ChatEmptyState as LChatEmptyState,
   ChatSearchField as LChatSearchField,
   Embed,
   Group,
   Header,
+  Loading,
+  SectionedList,
   Text,
   VStack,
-  toElement,
 } from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
@@ -168,13 +168,14 @@ export default screen(function ShareRoute() {
           id: chat.id,
           summary: { id: chat.id, name: chat.name, avatar: chat.avatar },
         },
-        chat.faces && chat.faces.length > 1
-          ? toElement(
-              LAvatarGroup(chat.faces.map((face) => ({ ...face, uri: face.source })))
-                .layout('conversation')
-                .size('lg'),
-            )
-          : undefined,
+        chat.faces && chat.faces.length > 1 ? (
+          // A row's slot takes an element: Bloom's AvatarGroup itself, no language root per row.
+          <AvatarGroup
+            layout="conversation"
+            items={chat.faces.map((face) => ({ ...face, uri: face.source }))}
+            size={36}
+          />
+        ) : undefined,
       ),
     );
 
@@ -222,64 +223,51 @@ export default screen(function ShareRoute() {
     )
       .padding('horizontal', 'md')
       .padding('bottom', 'sm'),
-    Embed(
-      picked.length > 0 ? (
-        <SelectedChipsRow
-          style={styles.chips}
-          people={picked.map((target) => ({ ...target.summary, id: target.key }))}
-          onRemove={remove}
-          formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
-        />
-      ) : null,
-    ),
-    Embed(
-      <List
-        testID="share-targets"
-        style={styles.list}
-        sections={sections}
-        scrollable
-        header={toElement(
-          VStack(Embed(<MessageBubble direction="outgoing" text={text} tail />))
-            .padding('horizontal', 'md')
-            .padding('top', 'xs')
-            .padding('bottom', 'md'),
-        )}
-        footer={
-          search.unavailable
-            ? toElement(
-                VStack(
-                  LChatEmptyState({ title: t('share.searchFailed') }),
-                  LButton(Text(t('error.boundary.retry')))
-                    .size('sm')
-                    .onPress(search.retry),
-                )
-                  .padding('vertical', 'lg')
-                  .align('center')
-                  .spacing('md'),
-              )
-            : undefined
-        }
-        empty={
-          search.searching ? (
-            <Loading
-              variant="spinner"
-              style={styles.searching}
-              accessibilityLabel={t('chat.new.searching')}
-            />
-          ) : (
-            toElement(
-              LChatEmptyState({
-                title: search.tooShort
-                  ? t('chat.new.tooShort')
-                  : search.term
-                    ? t('chat.new.noResults')
-                    : t('chat.new.hint'),
-              }),
+    picked.length > 0
+      ? Embed(
+          <SelectedChipsRow
+            style={styles.chips}
+            people={picked.map((target) => ({ ...target.summary, id: target.key }))}
+            onRemove={remove}
+            formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
+          />,
+        )
+      : null,
+    SectionedList(sections)
+      .testID('share-targets')
+      .scrollable()
+      .headerContent(
+        VStack(Embed(<MessageBubble direction="outgoing" text={text} tail />))
+          .padding('horizontal', 'md')
+          .padding('top', 'xs')
+          .padding('bottom', 'md'),
+      )
+      .footerContent(
+        search.unavailable
+          ? VStack(
+              LChatEmptyState({ title: t('share.searchFailed') }),
+              LButton(Text(t('error.boundary.retry')))
+                .size('sm')
+                .onPress(search.retry),
             )
-          )
-        }
-      />,
-    ),
+              .padding('vertical', 'lg')
+              .align('center')
+              .spacing('md')
+          : undefined,
+      )
+      .emptyState(
+        search.searching
+          ? Loading().style('spinner').label(t('chat.new.searching')).padding('vertical', '3xl')
+          : LChatEmptyState({
+              title: search.tooShort
+                ? t('chat.new.tooShort')
+                : search.term
+                  ? t('chat.new.noResults')
+                  : t('chat.new.hint'),
+            }),
+      )
+      .frame({ minHeight: 'none' })
+      .grow(),
   )
     .screenScroll('none')
     .header(
@@ -297,9 +285,6 @@ export default screen(function ShareRoute() {
 });
 
 const styles = StyleSheet.create({
-  list: { flex: 1, minHeight: 0 },
-  searching: { paddingVertical: 32 },
-
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
   chips: { marginHorizontal: 8, marginBottom: 8 },
 });

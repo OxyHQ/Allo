@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useConversation, useConversationActions } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
+import { Badge } from '@oxy.so/bloom/badge';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { toast } from '@oxy.so/bloom/toast';
@@ -13,13 +13,13 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
 import {
-  Badge as LBadge,
-  Embed,
+  Button as LButton,
   Header,
+  Icon,
   List as LList,
   ScrollView,
   Search as LSearch,
-  toElement,
+  Text,
 } from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
@@ -107,7 +107,8 @@ export default screen(function MembersRoute() {
               actionLabel: t('chat.group.removeMember'),
             },
             onPress: href ? () => router.push(href) : undefined,
-            trailing: role ? toElement(LBadge(role)) : undefined,
+            // A row's slot takes an element: Bloom's Badge itself, no language root per row.
+            trailing: role ? <Badge content={role} /> : undefined,
             actions: canRemove
               ? [
                   {
@@ -124,16 +125,11 @@ export default screen(function MembersRoute() {
     )
       .testID('conversation-members')
       .headerContent(
-        Embed(
-          canManage ? (
-            <Button
-              icon={RiUserAddLine}
-              onPress={() => router.push(`/new?addTo=${conversationId}`)}
-            >
-              {t('chat.group.addMember')}
-            </Button>
-          ) : undefined,
-        ),
+        canManage
+          ? LButton(Icon(RiUserAddLine), Text(t('chat.group.addMember'))).onPress(() =>
+              router.push(`/new?addTo=${conversationId}`),
+            )
+          : undefined,
       ),
   )
     .keyboardTaps('handled')
