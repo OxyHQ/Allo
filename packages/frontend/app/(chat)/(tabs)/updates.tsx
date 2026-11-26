@@ -3,7 +3,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
-import { StoryRing } from '@oxy.so/bloom/chat-indicators';
 import { toast } from '@oxy.so/bloom/toast';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
@@ -20,6 +19,7 @@ import {
   Header,
   ScrollView,
   SectionedList,
+  StoryRing,
   Text,
   VStack,
   toElement,
@@ -111,10 +111,11 @@ export default screen(function UpdatesScreen() {
               count: author.statuses.length,
               age: statusAgeLabel(author.statuses[0].createdAt, now, t),
             }),
-            leading: (
-              <StoryRing state={ringState(author)} size={36}>
-                {toElement(LAvatar(who?.avatar, { name: name }).size('lg'))}
-              </StoryRing>
+            leading: toElement(
+              StoryRing(LAvatar(who?.avatar, { name: name }).size('lg'), {
+                state: ringState(author),
+                size: '36',
+              }),
             ),
             onPress: () => open(author.accountId),
             onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
