@@ -1,14 +1,12 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient, useConversations } from '@allo/react';
 import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
 import type { ListEntry, ListSection } from '@oxy.so/bloom/list';
-import { SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { MessageBubble } from '@oxy.so/bloom/message-bubble';
+import type { PersonSummary } from '@oxy.so/bloom/chat-people';
 import { toast } from '@oxy.so/bloom/toast';
 
 import { useChatSummaries } from '@/hooks/useChatSummaries';
@@ -21,11 +19,12 @@ import {
   Button as LButton,
   ChatEmptyState as LChatEmptyState,
   ChatSearchField as LChatSearchField,
-  Embed,
   Group,
   Header,
   Loading,
+  MessageBubble as LMessageBubble,
   SectionedList,
+  SelectedChipsRow as LSelectedChipsRow,
   Text,
   VStack,
 } from '@oxy.so/bloom-language';
@@ -224,20 +223,22 @@ export default screen(function ShareRoute() {
       .padding('horizontal', 'md')
       .padding('bottom', 'sm'),
     picked.length > 0
-      ? Embed(
-          <SelectedChipsRow
-            style={styles.chips}
-            people={picked.map((target) => ({ ...target.summary, id: target.key }))}
-            onRemove={remove}
-            formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
-          />,
+      ? // Margin, not padding: the scroll layout is a horizontal ScrollView.
+        LSelectedChipsRow(
+          picked.map((target) => ({ ...target.summary, id: target.key })),
+          {
+            onRemove: remove,
+            formatRemoveLabel: (name) => t('chat.new.removePerson', { name }),
+          },
         )
+          .margin('horizontal', 'sm')
+          .margin('bottom', 'sm')
       : null,
     SectionedList(sections)
       .testID('share-targets')
       .scrollable()
       .headerContent(
-        VStack(Embed(<MessageBubble direction="outgoing" text={text} tail />))
+        VStack(LMessageBubble('outgoing', text).tail())
           .padding('horizontal', 'md')
           .padding('top', 'xs')
           .padding('bottom', 'md'),
@@ -282,9 +283,4 @@ export default screen(function ShareRoute() {
         )
         .inPage(),
     );
-});
-
-const styles = StyleSheet.create({
-  // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
-  chips: { marginHorizontal: 8, marginBottom: 8 },
 });
