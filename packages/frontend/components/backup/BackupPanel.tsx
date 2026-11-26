@@ -14,6 +14,7 @@ import {
   recoveryPhraseWordCount,
 } from '@/lib/allo/recoveryPhrase';
 import { getErrorMessage } from '@/utils/errors';
+import { formatWhen } from '@/utils/formatWhen';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
@@ -344,15 +345,6 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
         : null,
     ).spacing('xs'),
   );
-}
-
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 }
 
 const styles = StyleSheet.create({

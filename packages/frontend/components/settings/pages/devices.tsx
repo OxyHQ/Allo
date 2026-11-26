@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 
 import { getErrorMessage } from '@/utils/errors';
+import { formatWhen } from '@/utils/formatWhen';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
@@ -287,15 +288,6 @@ function describeInstance(instance: InstanceView, t: Translate): string {
       ? t('devices.lastSeen', { when: formatWhen(instance.lastSeenAt) })
       : t('devices.neverSeen');
   return `${platformLabel(instance.platform)} · ${status} · ${seen}`;
-}
-
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 }
 
 const styles = StyleSheet.create({
