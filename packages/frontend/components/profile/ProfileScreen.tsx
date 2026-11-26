@@ -6,7 +6,6 @@ import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { RiMessage2Line } from '@oxy.so/bloom/icons/RiMessage2Line';
 import { RiUserSearchLine } from '@oxy.so/bloom/icons/RiUserSearchLine';
 import * as Skeleton from '@oxy.so/bloom/skeleton';
-import { Text } from '@oxy.so/bloom/typography';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +25,6 @@ import {
   ScrollView,
   Text as LText,
   VStack,
-  toElement,
 } from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
@@ -65,36 +63,32 @@ const SupervisedProfile = screen(function SupervisedProfile({ handle }: { handle
   });
   const person = query.isFetchedAfterMount && !query.isError ? query.data : undefined;
   return ScrollView(
-    Embed(
-      query.isError ? (
-        <ConversationAccessState
-          state="unavailable"
-          onRetry={() => {
-            void query.refetch();
-          }}
-        />
-      ) : !query.isFetchedAfterMount ? (
-        <ConversationAccessState state="checking" />
-      ) : !person ? (
-        <ConversationAccessState state="blocked" />
-      ) : (
-        <>
-          <ProfileIdentity
-            displayName={person.displayName ?? person.username ?? ''}
-            handle={person.username ?? ''}
-          />
-          {person.accountId !== user?.id
-            ? toElement(
-                LButton(LText(t('profile.message'))).onPress(() => {
-                  void create({ participantIds: [person.accountId], name: undefined })
-                    .then((id) => router.push(`/c/${id}`))
-                    .catch(() => toast.error(t('chat.new.failed')));
-                }),
-              )
-            : null}
-        </>
-      ),
-    ),
+    query.isError
+      ? Embed(
+          <ConversationAccessState
+            state="unavailable"
+            onRetry={() => {
+              void query.refetch();
+            }}
+          />,
+        )
+      : !query.isFetchedAfterMount
+        ? Embed(<ConversationAccessState state="checking" />)
+        : !person
+          ? Embed(<ConversationAccessState state="blocked" />)
+          : Embed(
+              <ProfileIdentity
+                displayName={person.displayName ?? person.username ?? ''}
+                handle={person.username ?? ''}
+              />,
+            ),
+    person && person.accountId !== user?.id
+      ? LButton(LText(t('profile.message'))).onPress(() => {
+          void create({ participantIds: [person.accountId], name: undefined })
+            .then((id) => router.push(`/c/${id}`))
+            .catch(() => toast.error(t('chat.new.failed')));
+        })
+      : null,
   )
     .keyboardTaps('handled')
     .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
@@ -110,65 +104,51 @@ const OrdinaryProfile = screen(function OrdinaryProfile({ handle }: { handle: st
 
   // By id, not handle: a handle can change under a URL typed a moment earlier.
   const isViewer = profile !== null && viewer?.id === profile.id;
+  // The profile once it has loaded: what the button and the card below the identity read.
+  const shown = loading ? null : profile;
 
   return ScrollView(
-    Embed(
-      loading ? (
-        toElement(
-          VStack(
-            Embed(<Skeleton.Circle size={96} />),
-            Embed(<Skeleton.Text style={styles.skeletonName} />),
-            Embed(<Skeleton.Text style={styles.skeletonHandle} />),
-          )
-            .padding('top', 'sm')
-            .align('center')
-            .spacing('md')
-            .accessibilityState({ busy: true }),
+    loading
+      ? VStack(
+          Embed(<Skeleton.Circle size={96} />),
+          Embed(<Skeleton.Text style={styles.skeletonName} />),
+          Embed(<Skeleton.Text style={styles.skeletonHandle} />),
         )
-      ) : profile === null ? (
-        toElement(
-          LChatEmptyState({
+          .padding('top', 'sm')
+          .align('center')
+          .spacing('md')
+          .accessibilityState({ busy: true })
+      : profile === null
+        ? LChatEmptyState({
             title: notFound ? t('profile.notFound') : t('profile.loadFailed'),
             description: notFound ? t('profile.notFoundSubtitle', { handle }) : undefined,
             illustration: LIconCircle(RiUserSearchLine),
-          }),
+          })
+        : Embed(
+            <ProfileIdentity
+              displayName={profile.design.displayName || profile.username}
+              handle={profile.username || handle}
+              avatar={profile.avatar}
+              verified={profile.verified}
+            />,
+          ),
+    shown && !isViewer
+      ? LButton(Icon(RiMessage2Line), LText(t('profile.message')))
+          .size('lg')
+          .onPress(() => router.push(`/c/${shown.id}`))
+          .frame({ minWidth: '200' })
+          .alignSelf('center')
+      : null,
+    shown?.bio
+      ? LCard(
+          LText(t('profile.about')).foreground('muted').font('body').weight('semibold'),
+          LText(shown.bio).font('body').selectable(),
         )
-      ) : (
-        <>
-          <ProfileIdentity
-            displayName={profile.design.displayName || profile.username}
-            handle={profile.username || handle}
-            avatar={profile.avatar}
-            verified={profile.verified}
-          />
-          {isViewer
-            ? null
-            : toElement(
-                LButton(Icon(RiMessage2Line), LText(t('profile.message')))
-                  .size('lg')
-                  .onPress(() => router.push(`/c/${profile.id}`))
-                  .frame({ minWidth: '200' })
-                  .alignSelf('center'),
-              )}
-          {profile.bio
-            ? toElement(
-                LCard(
-                  LText(t('profile.about')).foreground('muted').font('body').weight('semibold'),
-                  Embed(
-                    <Text variant="body-regular" selectable>
-                      {profile.bio}
-                    </Text>,
-                  ),
-                )
-                  .radius('lg')
-                  .style('outline')
-                  .padding('all', 'lg')
-                  .spacing('6'),
-              )
-            : null}
-        </>
-      ),
-    ),
+          .radius('lg')
+          .style('outline')
+          .padding('all', 'lg')
+          .spacing('6')
+      : null,
   )
     .keyboardTaps('handled')
     .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
