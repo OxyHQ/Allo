@@ -6,8 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
 import { NewGroupForm, SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { List, type ListEntry } from '@oxy.so/bloom/list';
-import { Loading } from '@oxy.so/bloom/loading';
+import type { ListEntry } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
 
 import { useCreateConversation } from '@/hooks/useCreateConversation';
@@ -22,9 +21,10 @@ import {
   Embed,
   Group,
   Header,
+  Loading,
+  SectionedList,
   Text,
   VStack,
-  toElement,
 } from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
@@ -188,58 +188,53 @@ export default screen(function NewConversationRoute() {
     )
       .padding('horizontal', 'md')
       .padding('bottom', 'sm'),
-    Embed(
-      <List
-        testID="people-picker"
-        style={styles.list}
-        scrollable
-        sections={[{ id: 'people', title: t('chat.new.people'), items: people }]}
-        header={
-          callMode ? undefined : naming ? (
-            <NewGroupForm
-              style={styles.form}
-              name={name}
-              onNameChange={setName}
-              nameMaxLength={GROUP_NAME_MAX}
-              members={picked}
-              onRemoveMember={remove}
-              labels={{
-                name: t('chat.group.name'),
-                namePlaceholder: t('chat.new.groupNamePlaceholder'),
-                members: (of) => t('chat.new.selected', { count: of }),
-                remove: removeLabel,
-              }}
-            />
-          ) : count > 0 ? (
-            <SelectedChipsRow
-              style={styles.chips}
-              people={picked}
-              onRemove={remove}
-              formatRemoveLabel={removeLabel}
-            />
-          ) : undefined
-        }
-        empty={
-          search.searching ? (
-            <Loading
-              variant="spinner"
-              style={styles.searching}
-              accessibilityLabel={t('chat.new.searching')}
-            />
-          ) : (
-            toElement(
-              LChatEmptyState({
-                title: search.tooShort
-                  ? t('chat.new.tooShort')
-                  : search.term
-                    ? t('chat.new.noResults')
-                    : t('chat.new.hint'),
-              }),
-            )
-          )
-        }
-      />,
-    ),
+    SectionedList([{ id: 'people', title: t('chat.new.people'), items: people }])
+      .testID('people-picker')
+      .scrollable()
+      .headerContent(
+        callMode
+          ? undefined
+          : naming
+            ? Embed(
+                <NewGroupForm
+                  style={styles.form}
+                  name={name}
+                  onNameChange={setName}
+                  nameMaxLength={GROUP_NAME_MAX}
+                  members={picked}
+                  onRemoveMember={remove}
+                  labels={{
+                    name: t('chat.group.name'),
+                    namePlaceholder: t('chat.new.groupNamePlaceholder'),
+                    members: (of) => t('chat.new.selected', { count: of }),
+                    remove: removeLabel,
+                  }}
+                />,
+              )
+            : count > 0
+              ? Embed(
+                  <SelectedChipsRow
+                    style={styles.chips}
+                    people={picked}
+                    onRemove={remove}
+                    formatRemoveLabel={removeLabel}
+                  />,
+                )
+              : undefined,
+      )
+      .emptyState(
+        search.searching
+          ? Loading().style('spinner').label(t('chat.new.searching')).padding('vertical', '3xl')
+          : LChatEmptyState({
+              title: search.tooShort
+                ? t('chat.new.tooShort')
+                : search.term
+                  ? t('chat.new.noResults')
+                  : t('chat.new.hint'),
+            }),
+      )
+      .frame({ minHeight: 'none' })
+      .grow(),
   )
     .screenScroll('none')
     .header(
@@ -247,26 +242,20 @@ export default screen(function NewConversationRoute() {
         callMode ? t('calls.new.title') : adding ? t('chat.group.addMember') : t('chat.new.title'),
       )
         .toolbar(
-          Embed(
-            callMode
-              ? undefined
-              : toElement(
-                  LButton(Text(submitLabel))
-                    .disabled(count === 0)
-                    .loading(busy)
-                    .onPress(() => void submit())
-                    .tint('accent')
-                    .style('solid'),
-                ),
-          ),
+          callMode
+            ? null
+            : LButton(Text(submitLabel))
+                .disabled(count === 0)
+                .loading(busy)
+                .onPress(() => void submit())
+                .tint('accent')
+                .style('solid'),
         )
         .inPage(),
     );
 });
 
 const styles = StyleSheet.create({
-  list: { flex: 1, minHeight: 0 },
-  searching: { paddingVertical: 32 },
   form: { paddingTop: 4, paddingHorizontal: 12, paddingBottom: 12 },
 
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView, and
