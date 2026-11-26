@@ -1,10 +1,7 @@
 import { RiNotification3Line } from '@oxy.so/bloom/icons/RiNotification3Line';
 import { present, type SurfaceControls } from '@oxy.so/bloom/surfaces';
-import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet } from 'react-native';
 
 import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { INITIALIZATION_TIMEOUT } from '@/lib/constants';
@@ -12,9 +9,8 @@ import { hasNotificationPermission, requestNotificationPermissions } from '@/uti
 
 import {
   Button as LButton,
-  Embed,
   IconCircle as LIconCircle,
-  Text as LText,
+  Text,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
@@ -47,7 +43,6 @@ export function NotificationPermissionGate() {
 
 function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const [requesting, setRequesting] = useState(false);
 
   const enable = async () => {
@@ -65,26 +60,22 @@ function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) 
     VStack(
       LIconCircle(RiNotification3Line),
       VStack(
-        Embed(
-          <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
-            {t('permission.notifications.title')}
-          </Text>,
-        ),
-        Embed(
-          <Text
-            variant="body-regular"
-            style={[styles.centered, { color: theme.colors.textSecondary }]}
-          >
-            {t('permission.notifications.body')}
-          </Text>,
-        ),
+        Text(t('permission.notifications.title'))
+          .font('title-3')
+          .weight('semibold')
+          .role('header')
+          .textAlign('center'),
+        Text(t('permission.notifications.body'))
+          .font('body')
+          .foreground('muted')
+          .textAlign('center'),
       ).spacing('6'),
       VStack(
-        LButton(LText(t('permission.notifications.enable')))
+        LButton(Text(t('permission.notifications.enable')))
           .size('lg')
           .loading(requesting)
           .onPress(() => void enable()),
-        LButton(LText(t('permission.notifications.later')))
+        LButton(Text(t('permission.notifications.later')))
           .size('lg')
           .onPress(() => surface.dismiss())
           .tint('neutral')
@@ -99,7 +90,3 @@ function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) 
       .spacing('xl'),
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { textAlign: 'center' },
-});

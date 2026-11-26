@@ -5,14 +5,13 @@ import { useStatuses, type StatusView } from '@allo/react';
 import { StoryViewer, type StoryItem } from '@oxy.so/bloom/chat-people';
 import { Screen } from '@oxy.so/bloom/screen';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { Muted, Text } from '@oxy.so/bloom/typography';
 
 import { useChatContext } from '@/hooks/useChatContext';
 import { useStatusMedia } from '@/lib/allo/useStatusMedia';
 import { firstUnseenIndex, statusAgeLabel, type StatusAuthor } from '@/lib/statuses';
 import { logger } from '@/utils/logger';
 
-import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
+import { Embed, Text, VStack, toElement } from '@oxy.so/bloom-language';
 
 interface StoryViewerScreenProps {
   /** The authors the viewer walks through, in the order the row shows them. */
@@ -167,13 +166,7 @@ function SlideMedia({
 
   if (!status.hasMedia) {
     return toElement(
-      VStack(
-        Embed(
-          <Text variant="title-2-semibold" style={styles.words}>
-            {status.caption}
-          </Text>,
-        ),
-      )
+      VStack(Text(status.caption).font('title-2').weight('semibold').textAlign('center'))
         .padding('all', '3xl')
         .background('surface')
         .align('center')
@@ -183,7 +176,7 @@ function SlideMedia({
   }
   if (!uri) {
     return toElement(
-      VStack(Embed(<Muted style={styles.blankText}>{label}</Muted>))
+      VStack(Text(label).textStyle('muted').textAlign('center'))
         .padding('all', '3xl')
         .background('surface')
         .align('center')
@@ -198,15 +191,8 @@ function SlideMedia({
       ),
       Embed(
         status.caption ? (
-          <View
-            style={[
-              styles.caption,
-              { backgroundColor: theme.colors.overlay ?? 'rgba(0,0,0,0.45)' },
-            ]}
-          >
-            <Text variant="body-regular" style={styles.captionText}>
-              {status.caption}
-            </Text>
+          <View style={[styles.caption, { backgroundColor: theme.colors.overlay }]}>
+            {toElement(Text(status.caption).font('body').textAlign('center'))}
           </View>
         ) : null,
       ),
@@ -217,8 +203,5 @@ function SlideMedia({
 const styles = StyleSheet.create({
   hold: { flex: 1 },
   media: { width: '100%', height: '100%' },
-  blankText: { textAlign: 'center' },
-  words: { textAlign: 'center' },
   caption: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16 },
-  captionText: { textAlign: 'center' },
 });
