@@ -3,11 +3,9 @@ import {
   type ErrorBoundaryFallbackContext,
 } from '@oxy.so/bloom/error-boundary';
 import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
-import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
 import { useCallback, type ErrorInfo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, ScrollView, StyleSheet } from 'react-native';
+import { Platform, ScrollView } from 'react-native';
 
 import { logger } from '@/utils/logger';
 
@@ -81,26 +79,18 @@ function AppCrashFallback({
   showDetails,
 }: ErrorBoundaryFallbackContext & { showDetails: boolean }) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const canReload = Platform.OS === 'web' && retryCount >= RELOAD_AFTER_RETRIES;
 
   return toElement(
     VStack(
       VStack(
         LIconCircle(RiErrorWarningLine),
-        Embed(
-          <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
-            {t('error.boundary.title')}
-          </Text>,
-        ),
-        Embed(
-          <Text
-            variant="body-regular"
-            style={[styles.centered, { color: theme.colors.textSecondary }]}
-          >
-            {t('error.boundary.message')}
-          </Text>,
-        ),
+        LText(t('error.boundary.title'))
+          .font('title-2')
+          .weight('semibold')
+          .role('header')
+          .textAlign('center'),
+        LText(t('error.boundary.message')).font('body').foreground('muted').textAlign('center'),
         HStack(
           LButton(LText(t('error.boundary.retry'))).onPress(retry),
           canReload
@@ -117,14 +107,12 @@ function AppCrashFallback({
           ? LCard(
               Embed(
                 <ScrollView>
-                  <Text
-                    variant="caption-1-regular"
-                    selectable
-                    style={{ color: theme.colors.textSecondary }}
-                  >
-                    {error.toString()}
-                    {errorInfo?.componentStack ?? ''}
-                  </Text>
+                  {toElement(
+                    LText(error.toString(), errorInfo?.componentStack ?? '')
+                      .font('caption-1')
+                      .foreground('muted')
+                      .selectable(),
+                  )}
                 </ScrollView>,
               ),
             )
@@ -173,7 +161,3 @@ export function FeatureErrorBoundary({
     </BloomErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  centered: { textAlign: 'center' },
-});

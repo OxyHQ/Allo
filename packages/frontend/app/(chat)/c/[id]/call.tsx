@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
@@ -10,7 +9,6 @@ import {
   IncomingCallScreen,
   type GroupCallParticipant,
 } from '@oxy.so/bloom/call-ui';
-import { Muted } from '@oxy.so/bloom/typography';
 import { Screen } from '@oxy.so/bloom/screen';
 
 import { CallRingNotice } from '@/components/calls/CallRingNotice';
@@ -181,11 +179,9 @@ export default function CallRoute() {
   if (!session) {
     return toElement(
       VStack(
-        Embed(
-          <Muted style={styles.centred}>
-            {t(incomingCallId ? 'calls.status.ended' : 'calls.starting')}
-          </Muted>,
-        ),
+        Text(t(incomingCallId ? 'calls.status.ended' : 'calls.starting'))
+          .textStyle('muted')
+          .textAlign('center'),
       )
         .background('background')
         .align('center')
@@ -323,7 +319,3 @@ export default function CallRoute() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  centred: { textAlign: 'center' },
-});
