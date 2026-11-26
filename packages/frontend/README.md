@@ -205,11 +205,6 @@ EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
 # The ONE build variant app.config.js reads: 'development' builds the dev app
 # (its own app id, plus the localhost link host); unset is the production app.
 APP_VARIANT=
-
-# Optional third-party keys; empty string when unset
-EXPO_PUBLIC_KLIPY_APP_KEY=
-EXPO_PUBLIC_STRIPE_LINK_PLUS=
-EXPO_PUBLIC_STRIPE_LINK_FILE=
 ```
 
 `EXPO_PUBLIC_WS_URL`, `EXPO_PUBLIC_POSTHOG_KEY` and `EXPO_PUBLIC_BITDRIFT_KEY`

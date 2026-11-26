@@ -7,6 +7,7 @@
 import type React from 'react';
 import { memo } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { OxyProvider } from '@oxy.so/services/ui/client';
@@ -45,7 +46,7 @@ interface AppProvidersProps {
 export const AppProviders = memo(function AppProviders({ children }: AppProvidersProps) {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={styles.root}>
         {/* No KeyboardProvider here: OxyProvider mounts the one. A second one above it
             took the native keyboard events, so every keyboard hook under OxyProvider read
             a closed keyboard. */}
@@ -85,4 +86,8 @@ export const AppProviders = memo(function AppProviders({ children }: AppProvider
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
+});
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
 });
