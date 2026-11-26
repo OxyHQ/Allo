@@ -71,7 +71,6 @@ import {
   ChatSearchField as LChatSearchField,
   Embed,
   Header,
-  MessageContextMenu as LMessageContextMenu,
   PinnedMessageBar as LPinnedMessageBar,
   VStack,
   toElement,
@@ -658,39 +657,44 @@ function AuthorizedConversationScreen({
       )),
       // One menu for the screen: Bloom draws a dropdown on the web and a sheet
       // on a phone, and a message opens it through its own long press.
-      LMessageContextMenu(MENU_ANCHOR, menuItems, {
-        label: t('message.actions'),
-        reactions: menuSource && menuSource.sendState !== 'failed' ? undefined : false,
-        selectedReaction: menuSource?.reactions.find(
-          (reaction) => ctx.me && reaction.accountIds.includes(ctx.me),
-        )?.key,
-        onSelectReaction: (emoji) => {
-          if (menuFor) actions.react(menuFor, emoji);
-          setMenuFor(null);
-        },
-        onSelect: (action) => {
-          const id = menuFor;
-          setMenuFor(null);
-          if (!id) return;
-          if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
-          else if (action === 'reply') actions.reply(id);
-          else if (action === 'edit') actions.edit(id);
-          else if (action === 'delete') actions.remove(id);
-          else if (action === 'copy') {
-            const source = sources.get(id);
-            if (source?.content.kind === 'text') {
-              void Clipboard.setStringAsync(source.content.body).then(() =>
-                toast.success(t('message.copied')),
-              );
-            }
+      Embed((render) => (
+        <MessageContextMenu
+          open={menuFor !== null}
+          onOpenChange={(open) => {
+            if (!open) setMenuFor(null);
+          }}
+          label={t('message.actions')}
+          items={menuItems}
+          reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
+          selectedReaction={
+            menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))
+              ?.key
           }
-        },
-      }).presented([
-        menuFor !== null,
-        (open) => {
-          if (!open) setMenuFor(null);
-        },
-      ]),
+          onSelectReaction={(emoji) => {
+            if (menuFor) actions.react(menuFor, emoji);
+            setMenuFor(null);
+          }}
+          onSelect={(action) => {
+            const id = menuFor;
+            setMenuFor(null);
+            if (!id) return;
+            if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
+            else if (action === 'reply') actions.reply(id);
+            else if (action === 'edit') actions.edit(id);
+            else if (action === 'delete') actions.remove(id);
+            else if (action === 'copy') {
+              const source = sources.get(id);
+              if (source?.content.kind === 'text') {
+                void Clipboard.setStringAsync(source.content.body).then(() =>
+                  toast.success(t('message.copied')),
+                );
+              }
+            }
+          }}
+        >
+          {render(MENU_ANCHOR)}
+        </MessageContextMenu>
+      )),
       Embed(<MediaViewer ref={viewer} />),
     )
       .frame({ minHeight: 'none' })
