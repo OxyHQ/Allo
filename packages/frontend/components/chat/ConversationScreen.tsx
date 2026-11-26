@@ -10,7 +10,6 @@ import {
   useTimeline,
 } from '@allo/react';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import { ChatBackground } from '@oxy.so/bloom/chat-screen';
 import { RiArrowGoBackLine } from '@oxy.so/bloom/icons/RiArrowGoBackLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
@@ -66,6 +65,7 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
   AvatarGroup as LAvatarGroup,
+  ChatBackground as LChatBackground,
   ChatEmptyState as LChatEmptyState,
   ChatHeader as LChatHeader,
   ChatSearchField as LChatSearchField,
@@ -604,28 +604,32 @@ function AuthorizedConversationScreen({
         : null,
       Embed((render) => (
         <KeyboardAvoidingView behavior="padding" style={styles.root}>
-          <ChatBackground variant="pattern" patternImage={WALLPAPER} style={styles.root}>
-            {matches.length === 0 && search !== null ? (
-              render(LChatEmptyState({ title: t('chat.search.empty') }))
-            ) : items.length === 0 && timeline.reachedStart ? (
-              render(
-                LChatEmptyState({
-                  description: t('chat.empty.conversation'),
-                  notice: t('chat.e2ee'),
-                }),
-              )
-            ) : (
-              <Transcript
-                items={listItems}
-                isGroup={isGroup}
-                typing={timeline.typing}
-                unreadCount={view.unreadCount}
-                reachedStart={timeline.reachedStart}
-                onLoadOlder={onLoadOlder}
-                labels={bubbleLabels}
-              />
-            )}
-          </ChatBackground>
+          {render(
+            LChatBackground(
+              matches.length === 0 && search !== null
+                ? LChatEmptyState({ title: t('chat.search.empty') })
+                : items.length === 0 && timeline.reachedStart
+                  ? LChatEmptyState({
+                      description: t('chat.empty.conversation'),
+                      notice: t('chat.e2ee'),
+                    })
+                  : Embed(
+                      <Transcript
+                        items={listItems}
+                        isGroup={isGroup}
+                        typing={timeline.typing}
+                        unreadCount={view.unreadCount}
+                        reachedStart={timeline.reachedStart}
+                        onLoadOlder={onLoadOlder}
+                        labels={bubbleLabels}
+                      />,
+                    ),
+              { patternImage: WALLPAPER },
+            )
+              .style('pattern')
+              .frame({ minHeight: 'none' })
+              .grow(),
+          )}
           {render(
             VStack(
               Embed(
