@@ -26,7 +26,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import {
@@ -512,16 +512,16 @@ function AuthorizedConversationScreen({
 
   return toElement(
     VStack(
-      /* The header and the composer carry the safe area as padding: NativeWind's
-            safe-area classes, which read the same insets. */ Embed(
-        <View className="pt-safe">
+      // The header and the composer carry the safe area as padding.
+      VStack(
+        Embed((render) => (
           <ChatHeader
             title={title}
             marker={otherPerson?.verified ? 'verified' : undefined}
             markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
             avatar={
               faces
-                ? toElement(
+                ? render(
                     LAvatarGroup(faces.map((face) => ({ ...face, uri: face.source })))
                       .layout('conversation')
                       .size('xl'),
@@ -585,8 +585,8 @@ function AuthorizedConversationScreen({
             )}
             divider
           />
-        </View>,
-      ),
+        )),
+      ).safeAreaPadding('top'),
       Embed(
         pins.length > 0 && !pinsHidden && (
           <PinnedMessageBar
@@ -612,13 +612,13 @@ function AuthorizedConversationScreen({
             .padding('horizontal', 'md')
             .padding('vertical', 'sm')
         : null,
-      Embed(
+      Embed((render) => (
         <KeyboardAvoidingView behavior="padding" style={styles.root}>
           <ChatBackground variant="pattern" patternImage={WALLPAPER} style={styles.root}>
             {matches.length === 0 && search !== null ? (
-              toElement(LChatEmptyState({ title: t('chat.search.empty') }))
+              render(LChatEmptyState({ title: t('chat.search.empty') }))
             ) : items.length === 0 && timeline.reachedStart ? (
-              toElement(
+              render(
                 LChatEmptyState({
                   description: t('chat.empty.conversation'),
                   notice: t('chat.e2ee'),
@@ -636,30 +636,35 @@ function AuthorizedConversationScreen({
               />
             )}
           </ChatBackground>
-          <View className="pb-safe">
-            <Composer
-              initialDraft={startDraft}
-              onDraftChange={onDraftChange}
-              target={target}
-              onClearTarget={() => setTarget(null)}
-              notice={notice?.text}
-              noticeBusy={notice?.busy}
-              noticeError={notice?.error}
-              note={unreachable?.banner}
-              mentionables={mentionables}
-              onSendText={sendText}
-              onSendAttachments={sendAttachments}
-              onSendPoll={onSendPoll}
-              onSendPlace={onSendPlace}
-              onSendContact={onSendContact}
-              onSendSticker={onSendSticker}
-              onTyping={onTyping}
-            />
-          </View>
-        </KeyboardAvoidingView>,
-      ),
-      /* One menu for the screen: Bloom draws a dropdown on the web and a sheet
-            on a phone, and a message opens it through its own long press. */ Embed(
+          {render(
+            VStack(
+              Embed(
+                <Composer
+                  initialDraft={startDraft}
+                  onDraftChange={onDraftChange}
+                  target={target}
+                  onClearTarget={() => setTarget(null)}
+                  notice={notice?.text}
+                  noticeBusy={notice?.busy}
+                  noticeError={notice?.error}
+                  note={unreachable?.banner}
+                  mentionables={mentionables}
+                  onSendText={sendText}
+                  onSendAttachments={sendAttachments}
+                  onSendPoll={onSendPoll}
+                  onSendPlace={onSendPlace}
+                  onSendContact={onSendContact}
+                  onSendSticker={onSendSticker}
+                  onTyping={onTyping}
+                />,
+              ),
+            ).safeAreaPadding('bottom'),
+          )}
+        </KeyboardAvoidingView>
+      )),
+      // One menu for the screen: Bloom draws a dropdown on the web and a sheet
+      // on a phone, and a message opens it through its own long press.
+      Embed((render) => (
         <MessageContextMenu
           open={menuFor !== null}
           onOpenChange={(open) => {
@@ -694,9 +699,9 @@ function AuthorizedConversationScreen({
             }
           }}
         >
-          <View style={styles.menuAnchor} />
-        </MessageContextMenu>,
-      ),
+          {render(MENU_ANCHOR)}
+        </MessageContextMenu>
+      )),
       Embed(<MediaViewer ref={viewer} />),
     )
       .frame({ minHeight: 'none' })
@@ -704,7 +709,11 @@ function AuthorizedConversationScreen({
   );
 }
 
+/** Where the message menu opens from: a point near the composer, for Bloom's dropdown to hang off. */
+const MENU_ANCHOR = VStack()
+  .position({ left: '2xl', bottom: '96' })
+  .frame({ width: 'none', height: 'none' });
+
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
-  menuAnchor: { position: 'absolute', left: 24, bottom: 96, height: 0, width: 0 },
 });
