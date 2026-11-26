@@ -252,7 +252,10 @@ jobs:
 
   # backend's hosted twin in the Seldon race: the same name, env, services and steps.
   backend-hosted:
-    name: Backend typecheck + tests
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'Backend typecheck + tests' || 'Backend typecheck + tests (seldon twin, off)' }}
     needs: [changes, race]
     if: ${{ !cancelled() && needs.race.outputs.race == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
@@ -267,7 +270,10 @@ jobs:
   # backend's rescue: reruns it hosted when its Seldon lane failed (the house
   # network drops connections); a genuine failure fails again.
   backend-rescue:
-    name: Backend typecheck + tests
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'Backend typecheck + tests' || 'Backend typecheck + tests (seldon rescue, off)' }}
     needs: [changes, backend]
     if: ${{ !cancelled() && needs.backend.result == 'failure' && vars.CI_SELDON_RACE == 'true' && github.run_attempt == 1 && (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
@@ -312,7 +318,10 @@ jobs:
 
   # sdk's hosted twin in the Seldon race: the same name and steps.
   sdk-hosted:
-    name: SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react)
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react)' || 'SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react) (seldon twin, off)' }}
     needs: [changes, race]
     if: ${{ !cancelled() && needs.race.outputs.race == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.sdk == 'true') }}
     runs-on: ubuntu-latest
@@ -325,7 +334,10 @@ jobs:
   # sdk's rescue: reruns it hosted when its Seldon lane failed (the house
   # network drops connections); a genuine failure fails again.
   sdk-rescue:
-    name: SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react)
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react)' || 'SDK typecheck + tests (@allo/shared-types, @allo/core, @allo/react) (seldon rescue, off)' }}
     needs: [changes, sdk]
     if: ${{ !cancelled() && needs.sdk.result == 'failure' && vars.CI_SELDON_RACE == 'true' && github.run_attempt == 1 && (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
@@ -445,7 +457,10 @@ jobs:
 
   # frontend's hosted twin in the Seldon race: the same name and steps.
   frontend-hosted:
-    name: Frontend typecheck
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'Frontend typecheck' || 'Frontend typecheck (seldon twin, off)' }}
     needs: [changes, race]
     if: ${{ !cancelled() && needs.race.outputs.race == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
@@ -458,7 +473,10 @@ jobs:
   # frontend's rescue: reruns it hosted when its Seldon lane failed (the house
   # network drops connections); a genuine failure fails again.
   frontend-rescue:
-    name: Frontend typecheck
+    # The real job's name only while the race is on: a skipped twin or rescue
+    # sharing it would become that name's newest check run and could mask a
+    # failed required check.
+    name: ${{ vars.CI_SELDON_RACE == 'true' && 'Frontend typecheck' || 'Frontend typecheck (seldon rescue, off)' }}
     needs: [changes, frontend]
     if: ${{ !cancelled() && needs.frontend.result == 'failure' && vars.CI_SELDON_RACE == 'true' && github.run_attempt == 1 && (github.event_name == 'pull_request' || github.event_name == 'merge_group') && !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
