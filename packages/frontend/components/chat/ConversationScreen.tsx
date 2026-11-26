@@ -10,7 +10,7 @@ import {
   useTimeline,
 } from '@allo/react';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import { ChatBackground, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
+import { ChatBackground } from '@oxy.so/bloom/chat-screen';
 import { RiArrowGoBackLine } from '@oxy.so/bloom/icons/RiArrowGoBackLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
@@ -67,9 +67,12 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 import {
   AvatarGroup as LAvatarGroup,
   ChatEmptyState as LChatEmptyState,
+  ChatHeader as LChatHeader,
   ChatSearchField as LChatSearchField,
   Embed,
   Header,
+  MessageContextMenu as LMessageContextMenu,
+  PinnedMessageBar as LPinnedMessageBar,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
@@ -514,93 +517,80 @@ function AuthorizedConversationScreen({
     VStack(
       // The header and the composer carry the safe area as padding.
       VStack(
-        Embed((render) => (
-          <ChatHeader
-            title={title}
-            marker={otherPerson?.verified ? 'verified' : undefined}
-            markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
-            avatar={
-              faces
-                ? render(
-                    LAvatarGroup(faces.map((face) => ({ ...face, uri: face.source })))
-                      .layout('conversation')
-                      .size('xl'),
-                  )
-                : undefined
-            }
-            avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
-            avatarName={title}
-            status={
-              isGroup
-                ? t('chat.members', { count: members })
-                : // Presence when there is any, the handle when there is not: a
-                  // header that says nothing is worse than one that says who.
-                  ((other
-                    ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now })
-                    : undefined) ?? (handle ? `@${handle}` : undefined))
-            }
-            presence={other ? presenceDot(presence.of(other)) : undefined}
-            typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
-            connecting={sync === 'offline'}
-            connectingLabel={t('chat.connecting')}
-            // Beside the list there is nothing to go back to on screen.
-            onPressBack={split ? undefined : back}
-            showBack={!split}
-            backLabel={t('common.back')}
-            onPressCall={() => startCall('voice')}
-            onPressVideoCall={() => startCall('video')}
-            callLabel={t('calls.voice')}
-            videoCallLabel={t('calls.video')}
-            // A phone's header is narrow: search goes in the menu, so the name and
-            // "last seen" keep the room. Beside the list the button stays.
-            onPressSearch={split ? toggleSearch : undefined}
-            searchLabel={t('chat.info.search')}
-            onPressHeader={openInfo}
-            openInfoLabel={t('chat.info.open')}
-            renderMore={() => (
-              <MessageContextMenu
-                label={t('chat.actions')}
-                reactions={false}
-                items={[
-                  ...(split
-                    ? []
-                    : [{ id: 'search', label: t('chat.info.search'), icon: RiSearchLine }]),
-                  { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
-                  {
-                    id: 'leave',
-                    label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-                    icon: RiDeleteBinLine,
-                    variant: 'destructive',
-                    separated: true,
-                  },
-                ]}
-                onSelect={(action) => {
-                  if (action === 'info') openInfo();
-                  else if (action === 'search') toggleSearch();
-                  else void confirmLeave();
-                }}
-              >
-                <ComposerIconButton icon={RiMore2Line} accessibilityLabel={t('chat.actions')} />
-              </MessageContextMenu>
-            )}
-            divider
-          />
-        )),
+        LChatHeader(title, {
+          marker: otherPerson?.verified ? 'verified' : undefined,
+          markerLabel: otherPerson?.verified ? t('profile.verified') : undefined,
+          avatar: faces
+            ? LAvatarGroup(faces.map((face) => ({ ...face, uri: face.source })))
+                .layout('conversation')
+                .size('xl')
+            : undefined,
+          avatarSource: faces ? undefined : conversationAvatar(view, ctx),
+          avatarName: title,
+          status: isGroup
+            ? t('chat.members', { count: members })
+            : // Presence when there is any, the handle when there is not: a
+              // header that says nothing is worse than one that says who.
+              ((other
+                ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now })
+                : undefined) ?? (handle ? `@${handle}` : undefined)),
+          presence: other ? presenceDot(presence.of(other)) : undefined,
+          typingLabel: timeline.typing ? t('chat.typing.someone') : undefined,
+          connecting: sync === 'offline',
+          connectingLabel: t('chat.connecting'),
+          // Beside the list there is nothing to go back to on screen.
+          onPressBack: split ? undefined : back,
+          showBack: !split,
+          backLabel: t('common.back'),
+          onPressCall: () => startCall('voice'),
+          onPressVideoCall: () => startCall('video'),
+          callLabel: t('calls.voice'),
+          videoCallLabel: t('calls.video'),
+          // A phone's header is narrow: search goes in the menu, so the name and
+          // "last seen" keep the room. Beside the list the button stays.
+          onPressSearch: split ? toggleSearch : undefined,
+          searchLabel: t('chat.info.search'),
+          onPressHeader: openInfo,
+          openInfoLabel: t('chat.info.open'),
+          // Bloom calls this itself, so it returns an element (no language slot takes a render function).
+          renderMore: () => (
+            <MessageContextMenu
+              label={t('chat.actions')}
+              reactions={false}
+              items={[
+                ...(split
+                  ? []
+                  : [{ id: 'search', label: t('chat.info.search'), icon: RiSearchLine }]),
+                { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
+                {
+                  id: 'leave',
+                  label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
+                  icon: RiDeleteBinLine,
+                  variant: 'destructive',
+                  separated: true,
+                },
+              ]}
+              onSelect={(action) => {
+                if (action === 'info') openInfo();
+                else if (action === 'search') toggleSearch();
+                else void confirmLeave();
+              }}
+            >
+              <ComposerIconButton icon={RiMore2Line} accessibilityLabel={t('chat.actions')} />
+            </MessageContextMenu>
+          ),
+        }).dividers(),
       ).safeAreaPadding('top'),
-      Embed(
-        pins.length > 0 && !pinsHidden && (
-          <PinnedMessageBar
-            pins={pins}
-            index={pinIndex}
-            onPressPin={(_pin, index) => setPinIndex(index + 1 >= pins.length ? 0 : index + 1)}
-            onDismiss={() => setPinsHidden(true)}
-            dismissLabel={t('common.close')}
-            formatTitle={(index, total) =>
-              total > 1 ? t('chat.pinned.numbered', { index: index + 1 }) : t('chat.pinned.one')
-            }
-          />
-        ),
-      ),
+      pins.length > 0 && !pinsHidden
+        ? LPinnedMessageBar(pins, {
+            index: pinIndex,
+            onPressPin: (_pin, index) => setPinIndex(index + 1 >= pins.length ? 0 : index + 1),
+            onDismiss: () => setPinsHidden(true),
+            dismissLabel: t('common.close'),
+            formatTitle: (index, total) =>
+              total > 1 ? t('chat.pinned.numbered', { index: index + 1 }) : t('chat.pinned.one'),
+          })
+        : null,
       search !== null
         ? VStack(
             LChatSearchField([search, setSearch], {
@@ -664,44 +654,39 @@ function AuthorizedConversationScreen({
       )),
       // One menu for the screen: Bloom draws a dropdown on the web and a sheet
       // on a phone, and a message opens it through its own long press.
-      Embed((render) => (
-        <MessageContextMenu
-          open={menuFor !== null}
-          onOpenChange={(open) => {
-            if (!open) setMenuFor(null);
-          }}
-          label={t('message.actions')}
-          items={menuItems}
-          reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
-          selectedReaction={
-            menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))
-              ?.key
-          }
-          onSelectReaction={(emoji) => {
-            if (menuFor) actions.react(menuFor, emoji);
-            setMenuFor(null);
-          }}
-          onSelect={(action) => {
-            const id = menuFor;
-            setMenuFor(null);
-            if (!id) return;
-            if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
-            else if (action === 'reply') actions.reply(id);
-            else if (action === 'edit') actions.edit(id);
-            else if (action === 'delete') actions.remove(id);
-            else if (action === 'copy') {
-              const source = sources.get(id);
-              if (source?.content.kind === 'text') {
-                void Clipboard.setStringAsync(source.content.body).then(() =>
-                  toast.success(t('message.copied')),
-                );
-              }
+      LMessageContextMenu(MENU_ANCHOR, menuItems, {
+        label: t('message.actions'),
+        reactions: menuSource && menuSource.sendState !== 'failed' ? undefined : false,
+        selectedReaction: menuSource?.reactions.find(
+          (reaction) => ctx.me && reaction.accountIds.includes(ctx.me),
+        )?.key,
+        onSelectReaction: (emoji) => {
+          if (menuFor) actions.react(menuFor, emoji);
+          setMenuFor(null);
+        },
+        onSelect: (action) => {
+          const id = menuFor;
+          setMenuFor(null);
+          if (!id) return;
+          if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
+          else if (action === 'reply') actions.reply(id);
+          else if (action === 'edit') actions.edit(id);
+          else if (action === 'delete') actions.remove(id);
+          else if (action === 'copy') {
+            const source = sources.get(id);
+            if (source?.content.kind === 'text') {
+              void Clipboard.setStringAsync(source.content.body).then(() =>
+                toast.success(t('message.copied')),
+              );
             }
-          }}
-        >
-          {render(MENU_ANCHOR)}
-        </MessageContextMenu>
-      )),
+          }
+        },
+      }).presented([
+        menuFor !== null,
+        (open) => {
+          if (!open) setMenuFor(null);
+        },
+      ]),
       Embed(<MediaViewer ref={viewer} />),
     )
       .frame({ minHeight: 'none' })
