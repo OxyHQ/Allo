@@ -17,19 +17,11 @@ import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
-import {
-  Button,
-  Card,
-  Embed,
-  Group,
-  Icon,
-  List,
-  Search,
-  SettingsSection,
-  Text,
-  VStack,
-  toElement,
-} from '@oxy.so/bloom-language';
+import { Button, Embed, Group, Icon, Text, VStack, toElement } from '@oxy.so/bloom-language';
+import { Card } from '@oxy.so/bloom-language/containers';
+import { Search } from '@oxy.so/bloom-language/inputs';
+import { List } from '@oxy.so/bloom-language/list';
+import { SettingsSection } from '@oxy.so/bloom-language/settings';
 
 /**
  * THE PEOPLE THIS ACCOUNT HAS BLOCKED: see who is on the list, put somebody on

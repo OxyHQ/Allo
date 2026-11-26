@@ -65,16 +65,18 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
   AvatarGroup as LAvatarGroup,
+  Embed,
+  Header,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import {
   ChatBackground as LChatBackground,
   ChatEmptyState as LChatEmptyState,
   ChatHeader as LChatHeader,
   ChatSearchField as LChatSearchField,
-  Embed,
-  Header,
   PinnedMessageBar as LPinnedMessageBar,
-  VStack,
-  toElement,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/chat';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /** What this screen does to a message it is pointed at. */

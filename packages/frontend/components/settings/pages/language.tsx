@@ -3,14 +3,12 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 import { useAlloSettings } from '../context';
 
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
 import {
-  Button as LButton,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
-  SettingsSection as LSettingsSection,
-  Text,
-  toElement,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/containers';
+import { SettingsSection as LSettingsSection } from '@oxy.so/bloom-language/settings';
 
 /**
  * The UI language is an Oxy-account concern, not Allo's: Oxy resolves it

@@ -20,19 +20,23 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
   Button as LButton,
-  Checkbox as LCheckbox,
   Embed,
-  GroupedSection as LGroupedSection,
-  GroupedSectionItem as LGroupedSectionItem,
   Group,
   HStack,
   Icon,
-  SettingsSection as LSettingsSection,
-  SettingsValue,
   Text as LText,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
+import { Checkbox as LCheckbox } from '@oxy.so/bloom-language/inputs';
+import {
+  SettingsSection as LSettingsSection,
+  SettingsValue,
+} from '@oxy.so/bloom-language/settings';
 
 /**
  * ENCRYPTED BACKUP AND RECOVERY, as one panel over the SDK's `backup` topic.

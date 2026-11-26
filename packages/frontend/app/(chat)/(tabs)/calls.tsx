@@ -10,14 +10,9 @@ import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog } from '@/lib/calls/history';
 import { reportCallError, useCallSession } from '@/lib/calls/session';
-import {
-  Embed,
-  Header,
-  IncomingCallBanner,
-  ScrollView,
-  SectionedList,
-  Text,
-} from '@oxy.so/bloom-language';
+import { Embed, Header, ScrollView, Text } from '@oxy.so/bloom-language';
+import { IncomingCallBanner } from '@oxy.so/bloom-language/call-ui';
+import { SectionedList } from '@oxy.so/bloom-language/list';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**

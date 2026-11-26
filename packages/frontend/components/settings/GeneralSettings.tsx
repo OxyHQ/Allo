@@ -18,7 +18,9 @@ import { useSoundStore } from '@/stores/soundStore';
 import { useAlloSettings } from './context';
 import { useNotificationPermission } from './use-notification-permission';
 
-import { Button as LButton, SettingsValue, Text, Toggle, toElement } from '@oxy.so/bloom-language';
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
+import { Toggle } from '@oxy.so/bloom-language/inputs';
+import { SettingsValue } from '@oxy.so/bloom-language/settings';
 
 export function GeneralSettings() {
   const { t } = useTranslation();

@@ -15,18 +15,22 @@ import { logger } from '@/utils/logger';
 
 import {
   Button as LButton,
-  ChatEmptyState as LChatEmptyState,
-  ChatSearchField as LChatSearchField,
   Embed,
   Group,
   Header,
   Loading,
-  NewGroupForm as LNewGroupForm,
-  SectionedList,
-  SelectedChipsRow as LSelectedChipsRow,
   Text,
   VStack,
 } from '@oxy.so/bloom-language';
+import {
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+} from '@oxy.so/bloom-language/chat';
+import {
+  NewGroupForm as LNewGroupForm,
+  SelectedChipsRow as LSelectedChipsRow,
+} from '@oxy.so/bloom-language/chat-people';
+import { SectionedList } from '@oxy.so/bloom-language/list';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /** The group name's hard limit AND the counter's denominator — `NewGroupForm` takes one number for both. */

@@ -14,7 +14,7 @@
       },
       "devDependencies": {
         "@biomejs/biome": "2.5.15",
-        "@oxy.so/doctor": "1.10.0",
+        "@oxy.so/doctor": "1.10.1",
         "@oxy.so/protocol": "1.11.1",
         "@types/node": "^24.19.2",
         "playwright": "1.64.1",
@@ -113,7 +113,7 @@
         "@oxy.so/app-preset": "6.9.1",
         "@oxy.so/bloom": "23.9.1",
         "@oxy.so/bloom-data": "0.1.2",
-        "@oxy.so/bloom-language": "1.7.0",
+        "@oxy.so/bloom-language": "2.0.0",
         "@oxy.so/bloom-lens": "1.2.0",
         "@oxy.so/core": "7.55.0",
         "@oxy.so/expo-splash": "^1.1.0",
@@ -855,7 +855,7 @@
 
     "@oxy.so/bloom-data": ["@oxy.so/bloom-data@0.1.2", "", { "peerDependencies": { "react": ">=19.0.0" } }, "sha512-9Ja6weKfKEULgZCOgHSPIDnjcwdDj49OxiG9nPx3XM2A97752mYhvttHdR+qtWpk3HIRkQ57YEfEijeiEOq8WA=="],
 
-    "@oxy.so/bloom-language": ["@oxy.so/bloom-language@1.7.0", "", { "peerDependencies": { "@expo/ui": ">=58.0.0", "@oxy.so/bloom": ">=23.9.1", "expo": "*", "expo-blur": "*", "expo-glass-effect": ">=58.0.0", "expo-router": ">=58.0.0", "react": ">=19.0.0", "react-native": ">=0.81.0", "react-native-reanimated": ">=4.6.0", "react-native-safe-area-context": ">=5.0.0" }, "optionalPeers": ["@expo/ui", "expo", "expo-blur", "expo-glass-effect", "expo-router"] }, "sha512-L88VptsGenGyBGNr37BSxaj3Dpx2Ea3CBmgd4RQiNVVb51hxQ4UncyD8fpL5ypMAKOlNfp72BoLmU4cCgHMF3g=="],
+    "@oxy.so/bloom-language": ["@oxy.so/bloom-language@2.0.0", "", { "peerDependencies": { "@expo/ui": ">=58.0.0", "@oxy.so/bloom": ">=23.9.1", "expo": "*", "expo-blur": "*", "expo-glass-effect": ">=58.0.0", "expo-router": ">=58.0.0", "react": ">=19.0.0", "react-native": ">=0.81.0", "react-native-reanimated": ">=4.6.0", "react-native-safe-area-context": ">=5.0.0" }, "optionalPeers": ["@expo/ui", "expo", "expo-blur", "expo-glass-effect", "expo-router"] }, "sha512-ONNPPHI/uQ/tOMrrBvtVkTwt4fAorUfgRbq6Yfbe5MuJPJgwQPzhg42rDA1yt2SLwEaY0vXhzWDzu6THmgpQbg=="],
 
     "@oxy.so/bloom-language-compiler": ["@oxy.so/bloom-language-compiler@1.6.0", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.31" }, "optionalDependencies": { "@oxy.so/bloom-language-compiler-darwin-arm64": "1.6.0", "@oxy.so/bloom-language-compiler-darwin-x64": "1.6.0", "@oxy.so/bloom-language-compiler-linux-arm64-gnu": "1.6.0", "@oxy.so/bloom-language-compiler-linux-x64-gnu": "1.6.0", "@oxy.so/bloom-language-compiler-wasm32-wasi": "1.6.0", "@oxy.so/bloom-language-compiler-win32-x64-msvc": "1.6.0" }, "peerDependencies": { "metro-source-map": ">=0.83.0" }, "bin": { "bloom-lang-dts": "js/dts.js" } }, "sha512-Sk85vnRwGAoClUcB7USmqIcXA5UoMVqelMz5KrQY88wc2hLIAsCQ/jQh8nT5m7BodeROCo0LA4qcug2fkSvepQ=="],
 
@@ -879,7 +879,7 @@
 
     "@oxy.so/db": ["@oxy.so/db@1.5.0", "", { "peerDependencies": { "drizzle-orm": "^0.45.2", "postgres": "^3.4.9" }, "bin": { "oxy-db-rebase-migrations": "dist/cjs/bin/rebase-migrations.js", "oxy-db-check-migration-locks": "dist/cjs/bin/check-migration-locks.js" } }, "sha512-oCJ6LMbwleGFhbSGaKXc38IYQm2Zm9luaN2zi5fqojirPPXUDUpFey01Eo/zMUKgmlzEHMGE53IOY0BrE8qp1A=="],
 
-    "@oxy.so/doctor": ["@oxy.so/doctor@1.10.0", "", { "dependencies": { "semver": "^7.7.4" }, "bin": { "oxy-doctor": "src/cli.mjs", "oxy-doctor-i18n": "src/i18n-cli.mjs", "oxy-doctor-web-budget": "src/web-budget-cli.mjs", "oxy-emulator-preflight": "src/emulator-preflight.mjs", "oxy-doctor-expo-android": "src/expo-android.mjs" } }, "sha512-+aYJgb7g1P33rw/CYRYtjF68uYVBsPBBFhniSva4k9Y5ZqQGukaZJfACLGBgSv7tSLVpnaXKO/5LM9z71ItmfQ=="],
+    "@oxy.so/doctor": ["@oxy.so/doctor@1.10.1", "", { "dependencies": { "semver": "^7.7.4" }, "bin": { "oxy-doctor": "src/cli.mjs", "oxy-doctor-i18n": "src/i18n-cli.mjs", "oxy-doctor-web-budget": "src/web-budget-cli.mjs", "oxy-emulator-preflight": "src/emulator-preflight.mjs", "oxy-doctor-expo-android": "src/expo-android.mjs" } }, "sha512-sJsq18/1zOP01hQzQeWlJpEatt9TvPbuCBw3pdm+DA/gyxAYL3ehCjq8LohOoBRQwPEHQckF0B8ewoI/NPcCEw=="],
 
     "@oxy.so/expo-splash": ["@oxy.so/expo-splash@1.1.0", "", { "dependencies": { "@expo/image-utils": ">=0.7.0", "xml2js": "^0.6.2" }, "peerDependencies": { "expo": ">=51.0.0", "expo-splash-screen": ">=0.27.0", "react": ">=18.0.0", "react-native": ">=0.74.0" } }, "sha512-oLlRHLc0pzEIsujaPiOOAJqrAXo41pNxT4zN3WxkvwU0VNWj8AQ+h+KxPPvSmWqnck1F/pCUfFYAfftHtp4ATw=="],
 

@@ -46,14 +46,12 @@ import { blockUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { Embed, Icon, toElement } from '@oxy.so/bloom-language';
+import { ChatInfoPanel as LChatInfoPanel } from '@oxy.so/bloom-language/chat';
 import {
-  ChatInfoPanel as LChatInfoPanel,
-  Embed,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
-  Icon,
-  toElement,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/containers';
 
 interface ConversationInfoProps {
   conversationId: string;

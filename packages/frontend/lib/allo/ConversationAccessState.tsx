@@ -3,15 +3,8 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator } from 'react-native';
 
-import {
-  Button,
-  ChatEmptyState,
-  Embed,
-  IconCircle,
-  Text,
-  VStack,
-  toElement,
-} from '@oxy.so/bloom-language';
+import { Button, Embed, IconCircle, Text, VStack, toElement } from '@oxy.so/bloom-language';
+import { ChatEmptyState } from '@oxy.so/bloom-language/chat';
 
 export function ConversationAccessState({
   state,

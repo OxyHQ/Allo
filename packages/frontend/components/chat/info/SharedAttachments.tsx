@@ -7,13 +7,9 @@ import { DocumentGrid, SharedMediaGrid } from '@oxy.so/bloom/message-media';
 
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 
-import {
-  ChatEmptyState as LChatEmptyState,
-  Embed,
-  List as LList,
-  VStack,
-  toElement,
-} from '@oxy.so/bloom-language';
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
+import { ChatEmptyState as LChatEmptyState } from '@oxy.so/bloom-language/chat';
+import { List as LList } from '@oxy.so/bloom-language/list';
 
 /** How many attachments a tab draws before it stops decrypting thumbnails. */
 const LIMIT = 30;

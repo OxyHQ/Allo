@@ -18,12 +18,12 @@ import {
   Embed,
   Header,
   ScrollView,
-  SectionedList,
-  StoryRing,
   Text,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import { StoryRing } from '@oxy.so/bloom-language/chat';
+import { SectionedList } from '@oxy.so/bloom-language/list';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**

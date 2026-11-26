@@ -16,8 +16,6 @@ import { useProfileData } from '@/hooks/useProfileData';
 
 import {
   Button as LButton,
-  Card as LCard,
-  ChatEmptyState as LChatEmptyState,
   Embed,
   Header,
   Icon,
@@ -27,6 +25,8 @@ import {
   Text as LText,
   VStack,
 } from '@oxy.so/bloom-language';
+import { ChatEmptyState as LChatEmptyState } from '@oxy.so/bloom-language/chat';
+import { Card as LCard } from '@oxy.so/bloom-language/containers';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**

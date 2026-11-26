@@ -5,15 +5,13 @@ import { useAlloSettings } from '../context';
 
 import { useMyPrivacySettings, useUpdatePrivacySettings } from '@/hooks/usePrivacySettings';
 
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
 import {
-  Button as LButton,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
-  SettingsSection as LSettingsSection,
-  Text,
-  Toggle,
-  toElement,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/containers';
+import { Toggle } from '@oxy.so/bloom-language/inputs';
+import { SettingsSection as LSettingsSection } from '@oxy.so/bloom-language/settings';
 
 /**
  * THE TWO PRIVACY SETTINGS ALLO ENFORCES, and nothing else.

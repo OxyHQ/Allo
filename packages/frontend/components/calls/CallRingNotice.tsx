@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Platform } from 'react-native';
 import { callPushStore } from '@/lib/allo/nativeCalls';
 
-import { Admonition as LAdmonition, Text, toElement } from '@oxy.so/bloom-language';
+import { Text, toElement } from '@oxy.so/bloom-language';
+import { Admonition as LAdmonition } from '@oxy.so/bloom-language/containers';
 
 /**
  * The one thing the calls screens owe a reader about ringing: drawn only on a

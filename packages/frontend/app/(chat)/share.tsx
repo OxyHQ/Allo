@@ -15,19 +15,14 @@ import { useUserSearch } from '@/hooks/useUserSearch';
 import { shareTextFromParam } from '@/lib/chat/shareText';
 import { logger } from '@/utils/logger';
 
+import { Button as LButton, Group, Header, Loading, Text, VStack } from '@oxy.so/bloom-language';
 import {
-  Button as LButton,
   ChatEmptyState as LChatEmptyState,
   ChatSearchField as LChatSearchField,
-  Group,
-  Header,
-  Loading,
-  MessageBubble as LMessageBubble,
-  SectionedList,
-  SelectedChipsRow as LSelectedChipsRow,
-  Text,
-  VStack,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/chat';
+import { SelectedChipsRow as LSelectedChipsRow } from '@oxy.so/bloom-language/chat-people';
+import { SectionedList } from '@oxy.so/bloom-language/list';
+import { MessageBubble as LMessageBubble } from '@oxy.so/bloom-language/message-bubble';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /** Rows of the "Recent" section before anything is typed. */

@@ -17,19 +17,20 @@ import {
 
 import {
   Button,
-  Dialog as LDialog,
   Embed,
   Group,
-  GroupedSection as LGroupedSection,
-  GroupedSectionItem as LGroupedSectionItem,
   HStack,
   Icon,
   Text,
-  TextField,
-  Toggle,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
+import { TextField, Toggle } from '@oxy.so/bloom-language/inputs';
+import { Dialog as LDialog } from '@oxy.so/bloom-language/overlays';
 
 /**
  * WRITING A POLL.

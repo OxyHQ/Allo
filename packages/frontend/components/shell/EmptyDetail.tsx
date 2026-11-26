@@ -1,4 +1,5 @@
-import { ChatEmptyState as LChatEmptyState, VStack } from '@oxy.so/bloom-language';
+import { VStack } from '@oxy.so/bloom-language';
+import { ChatEmptyState as LChatEmptyState } from '@oxy.so/bloom-language/chat';
 import { screen } from '@oxy.so/bloom-language/router';
 
 interface EmptyDetailProps {

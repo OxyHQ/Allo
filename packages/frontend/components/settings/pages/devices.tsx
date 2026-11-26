@@ -22,15 +22,14 @@ import {
   Button,
   Embed,
   Group,
-  GroupedSection,
-  GroupedSectionItem,
   HStack,
   Icon,
-  SettingsSection,
   Text,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom-language/containers';
+import { SettingsSection } from '@oxy.so/bloom-language/settings';
 
 type Translate = ReturnType<typeof useTranslation>['t'];
 

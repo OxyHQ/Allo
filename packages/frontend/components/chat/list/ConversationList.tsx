@@ -25,20 +25,22 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
   Button as LButton,
-  ChatEmptyState as LChatEmptyState,
-  ChatFolderTabs as LChatFolderTabs,
-  ChatSearchField as LChatSearchField,
-  ChatSearchResults as LChatSearchResults,
   Embed,
   Header,
   Icon,
-  List as LList,
   ScrollView,
   Text as LText,
   VStack,
   toElement,
   view,
 } from '@oxy.so/bloom-language';
+import {
+  ChatEmptyState as LChatEmptyState,
+  ChatFolderTabs as LChatFolderTabs,
+  ChatSearchField as LChatSearchField,
+  ChatSearchResults as LChatSearchResults,
+} from '@oxy.so/bloom-language/chat';
+import { List as LList } from '@oxy.so/bloom-language/list';
 
 /**
  * What the swipe offers, and it is not the same thing in both cases.

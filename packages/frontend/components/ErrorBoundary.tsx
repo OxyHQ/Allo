@@ -8,15 +8,14 @@ import { logger } from '@/utils/logger';
 
 import {
   Button as LButton,
-  Card as LCard,
   Embed,
-  ErrorBoundary as LErrorBoundary,
   HStack,
   IconCircle as LIconCircle,
   Text as LText,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import { Card as LCard, ErrorBoundary as LErrorBoundary } from '@oxy.so/bloom-language/containers';
 
 /**
  * The catching machinery (getDerivedStateFromError, componentDidCatch, the

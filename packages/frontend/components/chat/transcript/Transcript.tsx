@@ -11,15 +11,12 @@ import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message
 
 import { useFollowLatest } from './useFollowLatest';
 
+import { Embed, Group, VStack, toElement } from '@oxy.so/bloom-language';
+import { ScrollToBottomButton as LScrollToBottomButton } from '@oxy.so/bloom-language/chat';
 import {
-  Embed,
-  Group,
   MessageList as LMessageList,
-  ScrollToBottomButton as LScrollToBottomButton,
   TypingBubble as LTypingBubble,
-  VStack,
-  toElement,
-} from '@oxy.so/bloom-language';
+} from '@oxy.so/bloom-language/message-bubble';
 
 /** How far from the newest message the "scroll to latest" button appears. */
 const SCROLLED_UP_PX = 320;

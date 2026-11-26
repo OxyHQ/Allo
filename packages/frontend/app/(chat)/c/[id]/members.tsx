@@ -12,15 +12,9 @@ import { profileHref } from '@/lib/profile/handle';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { logger } from '@/utils/logger';
 
-import {
-  Button as LButton,
-  Header,
-  Icon,
-  List as LList,
-  ScrollView,
-  Search as LSearch,
-  Text,
-} from '@oxy.so/bloom-language';
+import { Button as LButton, Header, Icon, ScrollView, Text } from '@oxy.so/bloom-language';
+import { Search as LSearch } from '@oxy.so/bloom-language/inputs';
+import { List as LList } from '@oxy.so/bloom-language/list';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**

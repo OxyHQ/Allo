@@ -35,13 +35,13 @@ import { logger } from '@/utils/logger';
 
 import {
   Button as LButton,
-  Card as LCard,
   HStack,
   IconCircle as LIconCircle,
   Text as LText,
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import { Card as LCard } from '@oxy.so/bloom-language/containers';
 
 export function RestoreHistoryPrompt() {
   const client = useAlloClient();

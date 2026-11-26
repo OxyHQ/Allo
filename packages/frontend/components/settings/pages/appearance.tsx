@@ -5,13 +5,9 @@ import { useAccountColorSave, useAccountThemeControls } from '@oxy.so/services/u
 import { useTranslation } from 'react-i18next';
 import { THEME_MODES } from '@/lib/theme';
 
-import {
-  Option,
-  Segmented,
-  SettingsSelect as LSettingsSelect,
-  Toggle,
-  toElement,
-} from '@oxy.so/bloom-language';
+import { toElement } from '@oxy.so/bloom-language';
+import { Option, Segmented, Toggle } from '@oxy.so/bloom-language/inputs';
+import { SettingsSelect as LSettingsSelect } from '@oxy.so/bloom-language/settings';
 
 type Mode = (typeof THEME_MODES)[number];
 

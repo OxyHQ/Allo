@@ -3,12 +3,12 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   Button as LButton,
-  ChatEmptyState as LChatEmptyState,
   HStack,
   IconCircle as LIconCircle,
   Text,
   VStack,
 } from '@oxy.so/bloom-language';
+import { ChatEmptyState as LChatEmptyState } from '@oxy.so/bloom-language/chat';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /** A path that names nothing: say so, and offer the way back and the way home. */

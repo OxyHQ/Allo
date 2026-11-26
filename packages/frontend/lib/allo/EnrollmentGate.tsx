@@ -44,7 +44,6 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
   Button,
-  Card,
   type Child,
   Embed,
   IconCircle,
@@ -52,6 +51,7 @@ import {
   VStack,
   toElement,
 } from '@oxy.so/bloom-language';
+import { Card } from '@oxy.so/bloom-language/containers';
 
 export interface EnrollmentGateProps {
   children: React.ReactNode;
