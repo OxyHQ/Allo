@@ -1,7 +1,4 @@
-import {
-  ErrorBoundary as BloomErrorBoundary,
-  type ErrorBoundaryFallbackContext,
-} from '@oxy.so/bloom/error-boundary';
+import type { ErrorBoundaryFallbackContext } from '@oxy.so/bloom/error-boundary';
 import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
 import { useCallback, type ErrorInfo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +10,7 @@ import {
   Button as LButton,
   Card as LCard,
   Embed,
+  ErrorBoundary as LErrorBoundary,
   HStack,
   IconCircle as LIconCircle,
   Text as LText,
@@ -55,18 +53,15 @@ export default function ErrorBoundary({
     [onError],
   );
 
-  return (
-    <BloomErrorBoundary
-      fallback={
-        fallback ??
-        ((context: ErrorBoundaryFallbackContext) => (
-          <AppCrashFallback {...context} showDetails={showDetails} />
-        ))
-      }
-      onError={handleError}
-    >
-      {children}
-    </BloomErrorBoundary>
+  return toElement(
+    LErrorBoundary(Embed(children))
+      .fallback(
+        fallback !== undefined && fallback !== null
+          ? Embed(fallback)
+          : (context: ErrorBoundaryFallbackContext) =>
+              Embed(<AppCrashFallback {...context} showDetails={showDetails} />),
+      )
+      .onError(handleError),
   );
 }
 
@@ -150,14 +145,11 @@ export function FeatureErrorBoundary({
   featureName: string;
 }) {
   const { t } = useTranslation();
-  return (
-    <BloomErrorBoundary
-      title={t('error.feature.title', { feature: featureName })}
-      message={t('error.feature.message')}
-      retryLabel={t('error.boundary.retry')}
-      onError={(error) => logger.error(`[${featureName}] Error`, error)}
-    >
-      {children}
-    </BloomErrorBoundary>
+  return toElement(
+    LErrorBoundary(Embed(children))
+      .title(t('error.feature.title', { feature: featureName }))
+      .message(t('error.feature.message'))
+      .retryLabel(t('error.boundary.retry'))
+      .onError((error) => logger.error(`[${featureName}] Error`, error)),
   );
 }
