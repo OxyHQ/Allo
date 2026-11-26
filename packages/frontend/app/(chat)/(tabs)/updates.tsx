@@ -1,13 +1,10 @@
 import { useCallback, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
 import { StoryRing } from '@oxy.so/bloom/chat-indicators';
-import { List } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
-import { Muted } from '@oxy.so/bloom/typography';
 
 import { StoriesStrip } from '@/components/phase2/StoriesStrip';
 import { useChatContext } from '@/hooks/useChatContext';
@@ -17,7 +14,16 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { logger } from '@/utils/logger';
 
-import { Avatar as LAvatar, Embed, Header, ScrollView, toElement } from '@oxy.so/bloom-language';
+import {
+  Avatar as LAvatar,
+  Embed,
+  Header,
+  ScrollView,
+  SectionedList,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**
@@ -87,53 +93,45 @@ export default screen(function UpdatesScreen() {
   );
 
   return ScrollView(
-    Embed(
-      <View style={styles.strip}>
-        <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
-      </View>,
+    VStack(Embed(<StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />)).margin(
+      'horizontal',
+      '-lg',
     ),
-    Embed(
-      <List
-        sections={[
-          {
-            id: 'recent',
-            title: t('stories.recent'),
-            items: authors.map((author) => {
-              const who = person(author.accountId);
-              const name = author.mine
-                ? t('stories.own')
-                : (who?.displayName ?? t('stories.someone'));
-              return {
-                id: author.accountId,
-                title: name,
-                supporting: t('stories.updateCount', {
-                  count: author.statuses.length,
-                  age: statusAgeLabel(author.statuses[0].createdAt, now, t),
-                }),
-                leading: (
-                  <StoryRing state={ringState(author)} size={36}>
-                    {toElement(LAvatar(who?.avatar, { name: name }).size('lg'))}
-                  </StoryRing>
-                ),
-                onPress: () => open(author.accountId),
-                onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
-                label: t('stories.openOf', { name }),
-              };
+    SectionedList([
+      {
+        id: 'recent',
+        title: t('stories.recent'),
+        items: authors.map((author) => {
+          const who = person(author.accountId);
+          const name = author.mine ? t('stories.own') : (who?.displayName ?? t('stories.someone'));
+          return {
+            id: author.accountId,
+            title: name,
+            supporting: t('stories.updateCount', {
+              count: author.statuses.length,
+              age: statusAgeLabel(author.statuses[0].createdAt, now, t),
             }),
-          },
-        ]}
-        empty={<Muted style={styles.empty}>{t('stories.empty')}</Muted>}
-      />,
-    ),
-    Embed(
-      <Muted style={styles.expiry}>
-        {authors[0]?.mine
-          ? t('stories.yoursExpire', {
-              remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
-            })
-          : t('stories.expiry')}
-      </Muted>,
-    ),
+            leading: (
+              <StoryRing state={ringState(author)} size={36}>
+                {toElement(LAvatar(who?.avatar, { name: name }).size('lg'))}
+              </StoryRing>
+            ),
+            onPress: () => open(author.accountId),
+            onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
+            label: t('stories.openOf', { name }),
+          };
+        }),
+      },
+    ]).emptyState(Text(t('stories.empty')).textStyle('muted').padding('vertical', 'lg')),
+    Text(
+      authors[0]?.mine
+        ? t('stories.yoursExpire', {
+            remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
+          })
+        : t('stories.expiry'),
+    )
+      .textStyle('muted')
+      .padding('top', 'sm'),
   )
     .keyboardTaps('handled')
     .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
@@ -143,10 +141,4 @@ export default screen(function UpdatesScreen() {
         .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
         .inPage(),
     );
-});
-
-const styles = StyleSheet.create({
-  strip: { marginHorizontal: -16 },
-  empty: { paddingVertical: 16 },
-  expiry: { paddingTop: 8 },
 });

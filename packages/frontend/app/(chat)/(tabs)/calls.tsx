@@ -1,11 +1,8 @@
 import { useCallback, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useCallActions, usePresence } from '@allo/react';
-import { IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
-import { List } from '@oxy.so/bloom/list';
-import { Muted } from '@oxy.so/bloom/typography';
+import type { CallDirection } from '@oxy.so/bloom/call-ui';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { CallRingNotice } from '@/components/calls/CallRingNotice';
 import { presenceDot } from '@/lib/presence';
@@ -13,7 +10,14 @@ import { presenceDot } from '@/lib/presence';
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog } from '@/lib/calls/history';
 import { reportCallError, useCallSession } from '@/lib/calls/session';
-import { Embed, Header, ScrollView } from '@oxy.so/bloom-language';
+import {
+  Embed,
+  Header,
+  IncomingCallBanner,
+  ScrollView,
+  SectionedList,
+  Text,
+} from '@oxy.so/bloom-language';
 import { screen } from '@oxy.so/bloom-language/router';
 
 /**
@@ -103,58 +107,55 @@ export default screen(function CallsScreen() {
 
   return ScrollView(
     Embed(<CallRingNotice />),
-    Embed(
-      arriving ? (
-        <IncomingCallBanner
-          name={caller?.displayName ?? someone}
-          avatar={caller?.avatar}
-          mode={session.mode}
-          status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
-          onAccept={() => {
+    arriving
+      ? IncomingCallBanner(caller?.displayName ?? someone, {
+          avatar: caller?.avatar,
+          status: callerId ? presenceDot(callerPresence.of(callerId)) : undefined,
+          onAccept: () => {
             void calls.answer().catch(reportCallError);
             router.push({
               pathname: '/c/[id]/call',
               params: { id: session.conversationId, incomingCallId: session.id },
             });
-          }}
-          onDecline={() => void calls.decline().catch(reportCallError)}
-          onPress={() =>
-            router.push({
-              pathname: '/c/[id]/call',
-              params: { id: session.conversationId, incomingCallId: session.id },
-            })
-          }
-          labels={{
+          },
+          onDecline: () => void calls.decline().catch(reportCallError),
+          labels: {
             accept: t('calls.control.accept'),
             decline: t('calls.control.decline'),
             voice: t('calls.incoming.voice'),
             video: t('calls.incoming.video'),
-          }}
-        />
-      ) : null,
-    ),
-    Embed(
-      <List
-        testID="call-history"
-        sections={sections.map((section) => ({
-          id: section.id,
-          title: section.title,
-          items: section.items.map((entry) => ({
-            id: entry.id,
-            call: {
-              ...entry,
-              onCallBack: () => callBack(entry.id),
-              labels: {
-                ...directionLabels,
-                callBack: (name: string) => t('calls.callBack', { name }),
-              },
+          },
+        })
+          .style(session.mode)
+          .onPress(() =>
+            router.push({
+              pathname: '/c/[id]/call',
+              params: { id: session.conversationId, incomingCallId: session.id },
+            }),
+          )
+      : null,
+    SectionedList(
+      sections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        items: section.items.map((entry) => ({
+          id: entry.id,
+          call: {
+            ...entry,
+            onCallBack: () => callBack(entry.id),
+            labels: {
+              ...directionLabels,
+              callBack: (name: string) => t('calls.callBack', { name }),
             },
-            onPress: () => openConversation(entry.id),
-          })),
-        }))}
-        empty={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
-      />,
-    ),
+          },
+          onPress: () => openConversation(entry.id),
+        })),
+      })),
+    )
+      .testID('call-history')
+      .emptyState(
+        Text(t('calls.empty')).textStyle('muted').padding('vertical', '2xl').textAlign('center'),
+      ),
   )
     .keyboardTaps('handled')
     .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
@@ -164,8 +165,4 @@ export default screen(function CallsScreen() {
         .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
         .inPage(),
     );
-});
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 24, textAlign: 'center' },
 });
