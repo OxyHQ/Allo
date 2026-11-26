@@ -52,7 +52,6 @@ Push notifications go through the platform: see
 - TypeScript
 - Bloom UI (`@oxy.so/bloom`) — every component and the theme; imported by subpath only
 - The Bloom language (`@oxy.so/bloom-language`) and its compiler for the app's views
-- NativeWind 5 (preview) with `tailwindcss` 4.3, only for the Oxy SDK's `className` screens
 - Zustand (state management)
 - i18next (internationalization)
 - Expo Router (file-based routing)
@@ -79,7 +78,7 @@ Push notifications go through the platform: see
 ├── metro/              # Stub modules Metro is pointed at for the MLS engine (see metro.config.js)
 ├── plugins/            # Expo config plugins
 ├── stores/             # Zustand: the people cache, appearance, a few UI flags
-├── styles/global.css   # Tailwind + Bloom design tokens, for the Oxy SDK's classes
+├── styles/global.css   # the web's document font and element reset (plain CSS)
 ├── utils/              # API client, storage, logging, alerts, routes
 ├── __mocks__/ __tests__/
 ├── app.config.js       # Expo app configuration

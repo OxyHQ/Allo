@@ -15,8 +15,8 @@ dependency. Keep it exact.
 
 **Metro and the MLS engine.** `metro.config.js` is the shared
 `createOxyMetroConfig` from `@oxy.so/app-preset/metro` (watch folders, block
-list, `.wasm`/`.woff2` assets, minifier, NativeWind and its complete
-`react-native` shim) with Allo's resolver wrapped over the preset's: it handles
+list, `.wasm`/`.woff2` assets, minifier, the Bloom single-instance rewrite)
+and the Bloom language compiler, with Allo's resolver wrapped over the preset's: it handles
 its own names first and hands everything else, `react-native` included, down
 unchanged. It aliases `crypto` (a Node-only
 fallback inside `@hpke/common`) to `metro/empty-module.js`, the optional `ts-mls`

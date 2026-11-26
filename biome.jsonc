@@ -39,7 +39,6 @@
     }
   },
   "json": { "formatter": { "trailingCommas": "none" } },
-  "css": { "parser": { "tailwindDirectives": true } },
   "assist": { "enabled": true, "actions": { "source": { "organizeImports": "off" } } },
   "linter": {
     "enabled": true,
