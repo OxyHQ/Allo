@@ -5,11 +5,11 @@ import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { RiMessage2Line } from '@oxy.so/bloom/icons/RiMessage2Line';
 import { RiUserSearchLine } from '@oxy.so/bloom/icons/RiUserSearchLine';
-import * as Skeleton from '@oxy.so/bloom/skeleton';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet } from 'react-native';
+import * as BloomSkeleton from '@oxy.so/bloom/skeleton';
 
 import { ProfileIdentity } from '@/components/profile/ProfileIdentity';
 import { useProfileData } from '@/hooks/useProfileData';
@@ -23,6 +23,7 @@ import {
   Icon,
   IconCircle as LIconCircle,
   ScrollView,
+  Skeleton,
   Text as LText,
   VStack,
 } from '@oxy.so/bloom-language';
@@ -110,9 +111,10 @@ const OrdinaryProfile = screen(function OrdinaryProfile({ handle }: { handle: st
   return ScrollView(
     loading
       ? VStack(
-          Embed(<Skeleton.Circle size={96} />),
-          Embed(<Skeleton.Text style={styles.skeletonName} />),
-          Embed(<Skeleton.Text style={styles.skeletonHandle} />),
+          Skeleton('circle').frame({ width: '96', height: '96' }),
+          // A 26pt line: the language's leading tokens have no 26px, and an app's are ratios.
+          Embed(<BloomSkeleton.Text style={styles.skeletonName} />),
+          Skeleton('text').frame({ width: '120' }).leading('20px'),
         )
           .padding('top', 'sm')
           .align('center')
@@ -158,7 +160,6 @@ const OrdinaryProfile = screen(function OrdinaryProfile({ handle }: { handle: st
 
 const styles = StyleSheet.create({
   skeletonName: { width: 180, lineHeight: 26 },
-  skeletonHandle: { width: 120, lineHeight: 20 },
 });
 
 export default ProfileScreen;
