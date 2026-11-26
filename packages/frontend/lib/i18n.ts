@@ -20,13 +20,6 @@ const i18nResources = {
   'it-IT': { translation: itIT },
 } as const;
 
-export interface I18nConfig {
-  resources: typeof i18nResources;
-  lng: string;
-  fallbackLng: string;
-  interpolation: { escapeValue: boolean };
-}
-
 /**
  * Switches the app's UI language. This is the `onChange` target for
  * `OxyProvider`'s `language` config: Oxy resolves WHICH locale (the account's

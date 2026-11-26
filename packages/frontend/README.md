@@ -51,7 +51,7 @@ Push notifications go through the platform: see
 - [Expo](https://expo.dev/) SDK 57 & React Native 0.86 (React 19.2)
 - TypeScript
 - Bloom UI (`@oxy.so/bloom`) — every component and the theme; imported by subpath only
-- NativeWind 5 (preview) with `tailwindcss` 4.3, only for Bloom's design tokens
+- The Bloom language (`@oxy.so/bloom-language`) and its compiler for the app's views
 - Zustand (state management)
 - i18next (internationalization)
 - Expo Router (file-based routing)
@@ -78,7 +78,7 @@ Push notifications go through the platform: see
 ├── metro/              # Stub modules Metro is pointed at for the MLS engine (see metro.config.js)
 ├── plugins/            # Expo config plugins
 ├── stores/             # Zustand: the people cache, appearance, a few UI flags
-├── styles/global.css   # Tailwind + Bloom design tokens
+├── styles/global.css   # the web's document font and element reset (plain CSS)
 ├── utils/              # API client, storage, logging, alerts, routes
 ├── __mocks__/ __tests__/
 ├── app.config.js       # Expo app configuration
@@ -205,11 +205,6 @@ EXPO_PUBLIC_OXY_CLIENT_ID=your_oxy_client_id
 # The ONE build variant app.config.js reads: 'development' builds the dev app
 # (its own app id, plus the localhost link host); unset is the production app.
 APP_VARIANT=
-
-# Optional third-party keys; empty string when unset
-EXPO_PUBLIC_KLIPY_APP_KEY=
-EXPO_PUBLIC_STRIPE_LINK_PLUS=
-EXPO_PUBLIC_STRIPE_LINK_FILE=
 ```
 
 `EXPO_PUBLIC_WS_URL`, `EXPO_PUBLIC_POSTHOG_KEY` and `EXPO_PUBLIC_BITDRIFT_KEY`

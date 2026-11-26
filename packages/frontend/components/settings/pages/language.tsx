@@ -1,10 +1,14 @@
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
-import { Button } from '@oxy.so/bloom/button';
-import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { getNativeLanguageName } from '@oxy.so/core';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
 import { useAlloSettings } from '../context';
+
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
+import { SettingsSection as LSettingsSection } from '@oxy.so/bloom-language/settings';
 
 /**
  * The UI language is an Oxy-account concern, not Allo's: Oxy resolves it
@@ -20,27 +24,23 @@ export default function LanguageSettingsScreen() {
   // The same fallback `LanguageSelectorScreen` uses: account locales, else the resolved one.
   const selected = currentLanguages.length > 0 ? currentLanguages : [currentLanguage];
 
-  return (
-    <SettingsSection label={t('settings.language.selectLanguage')}>
-      <GroupedSection>
-        <GroupedSectionItem
-          titleNumberOfLines={0}
-          descriptionLines={0}
-          wrapControl
-          title={t('settings.preferences.language')}
-          description={selected.map((code) => getNativeLanguageName(code)).join(', ')}
-          rightElement={
-            <Button
-              onPress={() => settings.close(() => showBottomSheet?.('LanguageSelector'))}
-              accessibilityLabel={t('settings.preferences.language')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('common.open')}
-            </Button>
-          }
-        />
-      </GroupedSection>
-    </SettingsSection>
+  return toElement(
+    LSettingsSection(
+      t('settings.language.selectLanguage'),
+      LGroupedSection(
+        LGroupedSectionItem(t('settings.preferences.language'))
+          .lines(0)
+          .descriptionLines(0)
+          .wrapControl()
+          .description(selected.map((code) => getNativeLanguageName(code)).join(', '))
+          .trailing(
+            LButton(Text(t('common.open')))
+              .onPress(() => settings.close(() => showBottomSheet?.('LanguageSelector')))
+              .label(t('settings.preferences.language'))
+              .tint('neutral')
+              .style('outline'),
+          ),
+      ),
+    ),
   );
 }

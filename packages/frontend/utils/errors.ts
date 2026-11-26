@@ -62,9 +62,3 @@ export function getErrorMessage(error: unknown): string | undefined {
 
   return undefined;
 }
-
-/** True when the error message indicates a user-cancelled/closed auth flow. */
-export function isAuthCancellation(error: unknown): boolean {
-  const message = getErrorMessage(error)?.toLowerCase() ?? '';
-  return message.includes('cancelled') || message.includes('closed');
-}

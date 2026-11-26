@@ -31,19 +31,27 @@
  * called with suspense off, and every string has an inline default.
  */
 import { useAlloClient, useInstanceState } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { Card } from '@oxy.so/bloom/card';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiShieldLine } from '@oxy.so/bloom/icons/RiShieldLine';
 import { RiSmartphoneLine } from '@oxy.so/bloom/icons/RiSmartphoneLine';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
-import React, { useCallback, useState, type ReactNode } from 'react';
+import type React from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button,
+  type Child,
+  Embed,
+  IconCircle,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { Card } from '@oxy.so/bloom-language/containers';
 
 export interface EnrollmentGateProps {
   children: React.ReactNode;
@@ -144,55 +152,50 @@ export function PendingApprovalScreen({
     }
   }, [onReclaim, t]);
 
-  return (
-    <GateFrame
-      icon={<IconCircle icon={RiSmartphoneLine} />}
-      title={t('enrollment.pending.title', 'Approve this device')}
-      description={t(
+  return toElement(
+    gateFrame(
+      IconCircle(RiSmartphoneLine),
+      t('enrollment.pending.title', 'Approve this device'),
+      t(
         'enrollment.pending.body',
         'Open Allo on a device that is already signed in, go to Settings, then Devices, and approve this one. That device shows a verification code for it; check the device name matches before you approve.',
-      )}
-    >
-      {deviceName || fingerprint ? (
-        <Card radius="radius-16" style={styles.codeCard} appearance="subtle">
-          {deviceName ? (
-            <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
-              {deviceName}
-            </Text>
-          ) : null}
-          {fingerprint ? (
-            <Text
-              variant="title-1-semibold"
-              style={styles.fingerprint}
-              accessibilityLabel={t('enrollment.fingerprint', 'Verification code')}
-              selectable
-            >
-              {fingerprint}
-            </Text>
-          ) : null}
-        </Card>
-      ) : null}
-      <ActivityIndicator color={theme.colors.primary} />
-      {errorMessage ? <ErrorLine message={errorMessage} /> : null}
-      {failure ? <ErrorLine message={failure} /> : null}
-      {onReclaim ? (
-        <Button
-          loading={reclaiming}
-          onPress={() => {
-            void reclaim();
-          }}
-          tone="neutral"
-          appearance="outline"
-        >
-          {t('enrollment.reclaim.action', 'Use this device instead')}
-        </Button>
-      ) : null}
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
-    </GateFrame>
+      ),
+      deviceName || fingerprint
+        ? Card(
+            deviceName ? Text(deviceName).foreground('muted').font('body').weight('medium') : null,
+            fingerprint
+              ? Text(fingerprint)
+                  .font('title-1')
+                  .weight('semibold')
+                  .tracking('2px')
+                  .monospacedDigit()
+                  .textAlign('center')
+                  .selectable()
+                  .label(t('enrollment.fingerprint', 'Verification code'))
+              : null,
+          )
+            .radius('lg')
+            .style('subtle')
+            .padding('vertical', 'lg')
+            .padding('horizontal', 'xl')
+            .alignSelf('stretch')
+            .align('center')
+            .spacing('xs')
+        : null,
+      Embed(<ActivityIndicator color={theme.colors.primary} />),
+      errorMessage ? errorLine(errorMessage) : null,
+      failure ? errorLine(failure) : null,
+      onReclaim
+        ? Button(Text(t('enrollment.reclaim.action', 'Use this device instead')))
+            .loading(reclaiming)
+            .onPress(() => {
+              void reclaim();
+            })
+            .tint('neutral')
+            .style('outline')
+        : null,
+      onSignOut ? signOutButton(t('settings.signOut', 'Sign out'), onSignOut) : null,
+    ),
   );
 }
 
@@ -219,31 +222,23 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
     }
   }, [onStartOver]);
 
-  return (
-    <GateFrame
-      icon={<IconCircle icon={RiShieldLine} />}
-      title={t('enrollment.revoked.title', 'This device was removed')}
-      description={t(
+  return toElement(
+    gateFrame(
+      IconCircle(RiShieldLine),
+      t('enrollment.revoked.title', 'This device was removed'),
+      t(
         'enrollment.revoked.body',
         'Another of your devices removed this one from your account. Its keys are gone. You can start over, which enrols it again as a new device.',
-      )}
-    >
-      {failure ? <ErrorLine message={failure} /> : null}
-      <Button
-        size="lg"
-        loading={busy}
-        onPress={() => {
+      ),
+      failure ? errorLine(failure) : null,
+      Button(Text(t('enrollment.revoked.startOver', 'Start over')))
+        .size('lg')
+        .loading(busy)
+        .onPress(() => {
           void startOver();
-        }}
-      >
-        {t('enrollment.revoked.startOver', 'Start over')}
-      </Button>
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
-    </GateFrame>
+        }),
+      onSignOut ? signOutButton(t('settings.signOut', 'Sign out'), onSignOut) : null,
+    ),
   );
 }
 
@@ -257,35 +252,27 @@ export function StartFailedScreen({ errorMessage, onRetry, onSignOut }: StartFai
   const { t } = useTranslation(undefined, { useSuspense: false });
   const [busy, setBusy] = useState(false);
 
-  return (
-    <GateFrame
-      icon={<IconCircle icon={RiShieldLine} />}
-      title={t('enrollment.startFailed.title', "Allo couldn't start on this device")}
-      description={t(
+  return toElement(
+    gateFrame(
+      IconCircle(RiShieldLine),
+      t('enrollment.startFailed.title', "Allo couldn't start on this device"),
+      t(
         'enrollment.startFailed.body',
         'Encrypted messaging did not open, so nothing can be sent or read yet. Your messages are not affected. Try again, and if it keeps happening, update Allo.',
-      )}
-    >
-      <ErrorLine message={errorMessage} />
-      {onRetry ? (
-        <Button
-          size="lg"
-          loading={busy}
-          onPress={() => {
-            setBusy(true);
-            // The failure, if it happens again, comes back through `errorMessage`.
-            void onRetry().finally(() => setBusy(false));
-          }}
-        >
-          {t('enrollment.startFailed.retry', 'Try again')}
-        </Button>
-      ) : null}
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
-    </GateFrame>
+      ),
+      errorLine(errorMessage),
+      onRetry
+        ? Button(Text(t('enrollment.startFailed.retry', 'Try again')))
+            .size('lg')
+            .loading(busy)
+            .onPress(() => {
+              setBusy(true);
+              // The failure, if it happens again, comes back through `errorMessage`.
+              void onRetry().finally(() => setBusy(false));
+            })
+        : null,
+      onSignOut ? signOutButton(t('settings.signOut', 'Sign out'), onSignOut) : null,
+    ),
   );
 }
 
@@ -294,59 +281,30 @@ export function StartFailedScreen({ errorMessage, onRetry, onSignOut }: StartFai
  * about it. Drawn from primitives rather than a chat-screen empty state, which
  * would pull the animation runtime into the boot path for a static page.
  */
-function GateFrame({
-  icon,
-  title,
-  description,
-  children,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  const theme = useTheme();
-  return (
-    <View
-      style={[styles.root, { backgroundColor: theme.colors.background }]}
-      accessibilityRole="summary"
-    >
-      <View style={styles.column}>
-        {icon}
-        <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
-          {title}
-        </Text>
-        <Text
-          variant="body-regular"
-          style={[styles.centered, { color: theme.colors.textSecondary }]}
-        >
-          {description}
-        </Text>
-        {children}
-      </View>
-    </View>
-  );
+function gateFrame(icon: Child, title: string, description: string, ...actions: Child[]) {
+  return VStack(
+    VStack(
+      icon,
+      Text(title).font('title-2').weight('semibold').role('header').textAlign('center'),
+      Text(description).font('body').foreground('muted').textAlign('center'),
+      ...actions,
+    )
+      .frame({ width: 'full', maxWidth: '400' })
+      .align('center')
+      .spacing('lg'),
+  )
+    .padding('all', '2xl')
+    .background('background')
+    .align('center')
+    .justify('center')
+    .grow()
+    .role('summary');
 }
 
-function ErrorLine({ message }: { message: string }) {
-  const theme = useTheme();
-  return (
-    <Text variant="body-2-regular" style={[styles.centered, { color: theme.colors.error }]}>
-      {message}
-    </Text>
-  );
+function errorLine(message: string) {
+  return Text(message).font('body-2').foreground('error').textAlign('center');
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  column: { alignItems: 'center', gap: 16, width: '100%', maxWidth: 400 },
-  codeCard: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  fingerprint: { letterSpacing: 2, fontVariant: ['tabular-nums'], textAlign: 'center' },
-  centered: { textAlign: 'center' },
-});
+function signOutButton(label: string, onSignOut: () => void) {
+  return Button(Text(label)).onPress(onSignOut).tint('accent').style('plain');
+}

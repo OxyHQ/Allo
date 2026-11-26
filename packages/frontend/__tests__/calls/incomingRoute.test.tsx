@@ -28,10 +28,17 @@ jest.mock('@oxy.so/bloom/call-ui', () => ({
   GroupCallGrid: () => null,
 }));
 jest.mock('@oxy.so/bloom/button', () => ({ Button: () => null }));
-jest.mock('@oxy.so/bloom/typography', () => ({ Muted: () => null }));
-jest.mock('@oxy.so/bloom/theme', () => ({
-  useTheme: () => ({ colors: { background: 'transparent' } }),
+jest.mock('@oxy.so/bloom/typography', () => ({
+  ...jest.requireActual('@oxy.so/bloom/typography'),
+  Muted: () => null,
 }));
+jest.mock('@oxy.so/bloom/theme', () => {
+  const theme = { colors: { background: 'transparent' } };
+  return {
+    useTheme: () => theme,
+    readThemePaint: () => ({ theme, paint: theme.colors }),
+  };
+});
 jest.mock('@/components/calls/CallRingNotice', () => ({ CallRingNotice: () => null }));
 jest.mock('@/components/calls/CallVideo', () => ({ CallVideo: () => null }));
 jest.mock('@/lib/allo/callMedia', () => ({ useCallMedia: () => ({ local: null, remote: [] }) }));

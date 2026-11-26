@@ -1,18 +1,21 @@
-import { Button } from '@oxy.so/bloom/button';
-import { Card } from '@oxy.so/bloom/card';
-import {
-  ErrorBoundary as BloomErrorBoundary,
-  type ErrorBoundaryFallbackContext,
-} from '@oxy.so/bloom/error-boundary';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
+import type { ErrorBoundaryFallbackContext } from '@oxy.so/bloom/error-boundary';
 import { RiErrorWarningLine } from '@oxy.so/bloom/icons/RiErrorWarningLine';
-import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
 import { useCallback, type ErrorInfo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView } from 'react-native';
 
 import { logger } from '@/utils/logger';
+
+import {
+  Button as LButton,
+  Embed,
+  HStack,
+  IconCircle as LIconCircle,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { Card as LCard, ErrorBoundary as LErrorBoundary } from '@oxy.so/bloom-language/containers';
 
 /**
  * The catching machinery (getDerivedStateFromError, componentDidCatch, the
@@ -49,18 +52,15 @@ export default function ErrorBoundary({
     [onError],
   );
 
-  return (
-    <BloomErrorBoundary
-      fallback={
-        fallback ??
-        ((context: ErrorBoundaryFallbackContext) => (
-          <AppCrashFallback {...context} showDetails={showDetails} />
-        ))
-      }
-      onError={handleError}
-    >
-      {children}
-    </BloomErrorBoundary>
+  return toElement(
+    LErrorBoundary(Embed(children))
+      .fallback(
+        fallback !== undefined && fallback !== null
+          ? Embed(fallback)
+          : (context: ErrorBoundaryFallbackContext) =>
+              Embed(<AppCrashFallback {...context} showDetails={showDetails} />),
+      )
+      .onError(handleError),
   );
 }
 
@@ -73,46 +73,58 @@ function AppCrashFallback({
   showDetails,
 }: ErrorBoundaryFallbackContext & { showDetails: boolean }) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const canReload = Platform.OS === 'web' && retryCount >= RELOAD_AFTER_RETRIES;
 
-  return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.column}>
-        <IconCircle icon={RiErrorWarningLine} />
-        <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
-          {t('error.boundary.title')}
-        </Text>
-        <Text
-          variant="body-regular"
-          style={[styles.centered, { color: theme.colors.textSecondary }]}
-        >
-          {t('error.boundary.message')}
-        </Text>
-        <View style={styles.actions}>
-          <Button onPress={retry}>{t('error.boundary.retry')}</Button>
-          {canReload ? (
-            <Button onPress={() => window.location.reload()} tone="neutral" appearance="outline">
-              {t('error.boundary.reload')}
-            </Button>
-          ) : null}
-        </View>
-        {__DEV__ || showDetails ? (
-          <Card style={styles.details} appearance="subtle">
-            <ScrollView>
-              <Text
-                variant="caption-1-regular"
-                selectable
-                style={{ color: theme.colors.textSecondary }}
-              >
-                {error.toString()}
-                {errorInfo?.componentStack ?? ''}
-              </Text>
-            </ScrollView>
-          </Card>
-        ) : null}
-      </View>
-    </View>
+  return toElement(
+    VStack(
+      VStack(
+        LIconCircle(RiErrorWarningLine),
+        LText(t('error.boundary.title'))
+          .font('title-2')
+          .weight('semibold')
+          .role('header')
+          .textAlign('center'),
+        LText(t('error.boundary.message')).font('body').foreground('muted').textAlign('center'),
+        HStack(
+          LButton(LText(t('error.boundary.retry'))).onPress(retry),
+          canReload
+            ? LButton(LText(t('error.boundary.reload')))
+                .onPress(() => window.location.reload())
+                .tint('neutral')
+                .style('outline')
+            : null,
+        )
+          .wrap()
+          .justify('center')
+          .spacing('sm'),
+        __DEV__ || showDetails
+          ? LCard(
+              Embed(
+                <ScrollView>
+                  {toElement(
+                    LText(error.toString(), errorInfo?.componentStack ?? '')
+                      .font('caption-1')
+                      .foreground('muted')
+                      .selectable(),
+                  )}
+                </ScrollView>,
+              ),
+            )
+              .style('subtle')
+              .padding('all', 'md')
+              .frame({ maxHeight: '200' })
+              .alignSelf('stretch')
+          : null,
+      )
+        .frame({ width: 'full', maxWidth: '480' })
+        .align('center')
+        .spacing('lg'),
+    )
+      .padding('all', '2xl')
+      .background('background')
+      .align('center')
+      .justify('center')
+      .grow(),
   );
 }
 
@@ -132,22 +144,11 @@ export function FeatureErrorBoundary({
   featureName: string;
 }) {
   const { t } = useTranslation();
-  return (
-    <BloomErrorBoundary
-      title={t('error.feature.title', { feature: featureName })}
-      message={t('error.feature.message')}
-      retryLabel={t('error.boundary.retry')}
-      onError={(error) => logger.error(`[${featureName}] Error`, error)}
-    >
-      {children}
-    </BloomErrorBoundary>
+  return toElement(
+    LErrorBoundary(Embed(children))
+      .title(t('error.feature.title', { feature: featureName }))
+      .message(t('error.feature.message'))
+      .retryLabel(t('error.boundary.retry'))
+      .onError((error) => logger.error(`[${featureName}] Error`, error)),
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  column: { alignItems: 'center', gap: 16, width: '100%', maxWidth: 480 },
-  centered: { textAlign: 'center' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  details: { alignSelf: 'stretch', maxHeight: 200, padding: 12 },
-});

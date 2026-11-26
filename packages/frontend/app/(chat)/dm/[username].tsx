@@ -1,5 +1,4 @@
-import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@oxy.so/bloom/theme';
 
@@ -7,6 +6,8 @@ import NotFoundScreen from '@/components/NotFoundScreen';
 import { ProfileScreen } from '@/components/profile/ProfileScreen';
 import { useProfileData } from '@/hooks/useProfileData';
 import { handleFromDirectMessageSegment } from '@/lib/profile/handle';
+
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
 
 /**
  * `/dm/alice` — the conversation with a person, by HANDLE.
@@ -26,13 +27,11 @@ export default function DirectMessageRoute() {
   if (handle === null) return <NotFoundScreen />;
   if (profile) return <Redirect href={`/c/${profile.id}`} />;
   if (!loading) return <ProfileScreen handle={handle} />;
-  return (
-    <View style={[styles.pending, { backgroundColor: theme.colors.background }]}>
-      <ActivityIndicator color={theme.colors.primary} />
-    </View>
+  return toElement(
+    VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+      .background('background')
+      .align('center')
+      .justify('center')
+      .grow(),
   );
 }
-
-const styles = StyleSheet.create({
-  pending: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});

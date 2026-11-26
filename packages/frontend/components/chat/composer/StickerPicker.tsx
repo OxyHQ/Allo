@@ -1,16 +1,4 @@
-/**
- * The "Stickers" tab of the composer's picker.
- *
- * Shows the packs this Oxy account has installed — the same picker in every
- * Oxy app, since the installed list lives in Oxy — as a grid per pack, and
- * sends a sticker on tap. With nothing installed it shows the shop instead, so
- * the first pack is one tap away. Stills only, not animations: a grid of
- * dozens of Lottie players is the one thing a picker must not cost.
- */
-import { Button } from '@oxy.so/bloom/button';
-import { PressableScale } from '@oxy.so/bloom/pressable-scale';
 import { Sticker as StickerTile } from '@oxy.so/bloom/sticker';
-import { Text } from '@oxy.so/bloom/typography';
 import type { Sticker } from '@oxy.so/stickers';
 import {
   useInstallStickerPack,
@@ -18,7 +6,17 @@ import {
   useStickerShop,
 } from '@oxy.so/stickers/react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
+
+import {
+  Button as LButton,
+  Embed,
+  Group,
+  HStack,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /** Four 72px tiles fit the 324px picker panel with its gaps. */
 const TILE = 72;
@@ -33,31 +31,41 @@ export function StickerPicker({
   const { t } = useTranslation();
   const installed = useInstalledStickerPacks();
 
-  if (installed.isLoading) return <View style={{ height }} />;
+  if (installed.isLoading) return toElement(VStack().frame({ height: height }));
 
   const packs = installed.data ?? [];
   if (packs.length === 0) return <StickerShop height={height} />;
 
-  return (
-    <ScrollView style={{ height }} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
-      {packs.map((pack) => (
-        <View key={pack.id} style={{ gap: 6 }}>
-          <Text variant="body-2-medium">{pack.title}</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-            {pack.stickers.map((sticker) => (
-              <PressableScale
-                key={sticker.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${sticker.emoji[0] ?? ''} ${t('chat.attachment.sticker')}`.trim()}
-                onPress={() => onSelect(sticker)}
-              >
-                <StickerTile fallback={sticker.fallback.url} size={TILE} decorative />
-              </PressableScale>
-            ))}
-          </View>
-        </View>
-      ))}
-    </ScrollView>
+  return toElement(
+    Embed((render) => (
+      <ScrollView style={{ height }} contentContainerStyle={styles.packs}>
+        {render(
+          Group(
+            ...packs.map((pack) =>
+              VStack(
+                LText(pack.title).font('body-2').weight('medium'),
+                HStack(
+                  ...pack.stickers.map((sticker) =>
+                    VStack(
+                      Embed(<StickerTile fallback={sticker.fallback.url} size={TILE} decorative />),
+                    )
+                      .role('button')
+                      .label(`${sticker.emoji[0] ?? ''} ${t('chat.attachment.sticker')}`.trim())
+                      .onPress(() => onSelect(sticker))
+                      .pressScale()
+                      .id(sticker.id),
+                  ),
+                )
+                  .wrap()
+                  .spacing('xs'),
+              )
+                .spacing('6')
+                .id(pack.id),
+            ),
+          ),
+        )}
+      </ScrollView>
+    )),
   );
 }
 
@@ -67,27 +75,36 @@ function StickerShop({ height }: { height: number }) {
   const shop = useStickerShop({ limit: 24 });
   const install = useInstallStickerPack();
 
-  return (
-    <ScrollView style={{ height }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
-      <Text variant="body-2-regular">{t('composer.stickers.empty')}</Text>
-      {(shop.data?.items ?? []).map((pack) => (
-        <View key={pack.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {pack.cover ? (
-            <StickerTile fallback={pack.cover.fallback.url} size={48} decorative />
-          ) : null}
-          <Text variant="body-medium" style={{ flex: 1 }} numberOfLines={1}>
-            {pack.title}
-          </Text>
-          <Button
-            size="sm"
-            appearance="subtle"
-            loading={install.isPending && install.variables === pack.id}
-            onPress={() => install.mutate(pack.id)}
-          >
-            {t('composer.stickers.add')}
-          </Button>
-        </View>
-      ))}
-    </ScrollView>
+  return toElement(
+    Embed((render) => (
+      <ScrollView style={{ height }} contentContainerStyle={styles.shop}>
+        {render(
+          Group(
+            LText(t('composer.stickers.empty')).font('body-2'),
+            ...(shop.data?.items ?? []).map((pack) =>
+              HStack(
+                pack.cover
+                  ? Embed(<StickerTile fallback={pack.cover.fallback.url} size={48} decorative />)
+                  : null,
+                LText(pack.title).grow().font('body').weight('medium').lines(1),
+                LButton(LText(t('composer.stickers.add')))
+                  .size('sm')
+                  .style('subtle')
+                  .loading(install.isPending && install.variables === pack.id)
+                  .onPress(() => install.mutate(pack.id)),
+              )
+                .align('center')
+                .spacing('10')
+                .id(pack.id),
+            ),
+          ),
+        )}
+      </ScrollView>
+    )),
   );
 }
+
+const styles = StyleSheet.create({
+  packs: { gap: 12, paddingBottom: 8 },
+  shop: { gap: 10, paddingBottom: 8 },
+});

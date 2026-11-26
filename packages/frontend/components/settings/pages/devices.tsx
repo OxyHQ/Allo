@@ -1,24 +1,35 @@
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import {
   useOwnInstances,
   usePendingEnrollments,
   type InstanceView,
   type PendingEnrollmentView,
 } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiRefreshLine } from '@oxy.so/bloom/icons/RiRefreshLine';
-import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
-import { Muted, Text } from '@oxy.so/bloom/typography';
+import { Text as BloomText } from '@oxy.so/bloom/typography';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 
 import { getErrorMessage } from '@/utils/errors';
+import { formatWhen } from '@/utils/formatWhen';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button,
+  Embed,
+  Group,
+  HStack,
+  Icon,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom-language/containers';
+import { SettingsSection } from '@oxy.so/bloom-language/settings';
 
 type Translate = ReturnType<typeof useTranslation>['t'];
 
@@ -138,121 +149,112 @@ export default function DevicesScreen() {
     [own.instances],
   );
 
-  return (
-    <>
-      {pending.pending.length > 0 ? (
-        <SettingsSection label={t('devices.waiting')}>
-          <GroupedSection>
-            {pending.pending.map((enrollment) => {
-              const busy = busyId === enrollment.instance.id;
-              return (
-                <View key={enrollment.instance.id} style={styles.pending}>
-                  <Text style={[styles.pendingTitle, { color: theme.colors.text }]}>
-                    {enrollment.instance.displayName}
-                  </Text>
-                  <Muted>
-                    {`${platformLabel(enrollment.instance.platform)} · ${t('devices.requestedAt', { when: formatWhen(enrollment.instance.createdAt) })}`}
-                  </Muted>
-                  <Muted>{t('devices.compareCode')}</Muted>
-                  <Text
-                    style={[
-                      styles.fingerprint,
-                      {
-                        color: theme.colors.text,
-                        backgroundColor: theme.colors.backgroundSecondary,
-                      },
-                    ]}
-                    accessibilityLabel={t('enrollment.fingerprint')}
-                    selectable
-                  >
-                    {enrollment.fingerprint}
-                  </Text>
-                  <View style={styles.actions}>
-                    <Button
-                      style={styles.action}
-                      disabled={busyId !== null}
-                      onPress={() => void reject(enrollment)}
-                      tone="neutral"
-                      appearance="outline"
+  return toElement(
+    Group(
+      pending.pending.length > 0
+        ? SettingsSection(
+            t('devices.waiting'),
+            GroupedSection(
+              ...pending.pending.map((enrollment) => {
+                const busy = busyId === enrollment.instance.id;
+                return VStack(
+                  Text(enrollment.instance.displayName)
+                    .weight('semibold')
+                    .font('16')
+                    .foreground('foreground'),
+                  Text(
+                    `${platformLabel(enrollment.instance.platform)} · ${t('devices.requestedAt', { when: formatWhen(enrollment.instance.createdAt) })}`,
+                  ).textStyle('muted'),
+                  Text(t('devices.compareCode')).textStyle('muted'),
+                  Embed(
+                    <BloomText
+                      style={[
+                        styles.fingerprint,
+                        {
+                          color: theme.colors.text,
+                          backgroundColor: theme.colors.backgroundSecondary,
+                        },
+                      ]}
+                      accessibilityLabel={t('enrollment.fingerprint')}
+                      selectable
                     >
-                      {t('devices.reject')}
-                    </Button>
-                    <Button
-                      style={styles.action}
-                      loading={busy}
-                      disabled={busyId !== null && !busy}
-                      onPress={() => void approve(enrollment)}
-                      tone="accent"
-                      appearance="solid"
-                    >
-                      {t('devices.approve')}
-                    </Button>
-                  </View>
-                </View>
-              );
-            })}
-          </GroupedSection>
-        </SettingsSection>
-      ) : null}
-
-      <SettingsSection
-        label={t('devices.enrolled')}
-        action={
-          <Button
-            iconOnly
-            appearance="plain"
-            icon={RiRefreshLine}
-            accessibilityLabel={t('devices.refresh')}
-            onPress={() => void refreshAll()}
-          />
-        }
-      >
-        <GroupedSection>
-          {!loaded && enrolled.length === 0 ? (
-            <View style={styles.empty}>
-              <ActivityIndicator color={theme.colors.primary} />
-            </View>
-          ) : enrolled.length === 0 ? (
-            <View style={styles.empty}>
-              <Muted>{t('devices.none')}</Muted>
-            </View>
-          ) : (
-            enrolled.map((instance) => {
-              const removable = !instance.isThis && instance.status !== 'revoked';
-              return (
-                <GroupedSectionItem
-                  titleNumberOfLines={0}
-                  descriptionLines={0}
-                  wrapControl
-                  key={instance.id}
-                  title={
-                    instance.isThis
-                      ? t('devices.thisDevice', { name: instance.displayName })
-                      : instance.displayName
-                  }
-                  description={describeInstance(instance, t)}
-                  rightElement={
-                    !removable ? undefined : busyId === instance.id ? (
-                      <ActivityIndicator color={theme.colors.error} />
-                    ) : (
-                      <Button
-                        iconOnly
-                        appearance="plain"
-                        icon={RiDeleteBinLine}
-                        tone="danger"
-                        disabled={busyId !== null}
-                        accessibilityLabel={t('devices.remove')}
-                        onPress={() => void revoke(instance)}
-                      />
+                      {enrollment.fingerprint}
+                    </BloomText>,
+                  ),
+                  HStack(
+                    Button(Text(t('devices.reject')))
+                      .disabled(busyId !== null)
+                      .onPress(() => void reject(enrollment))
+                      .tint('neutral')
+                      .style('outline')
+                      .grow(),
+                    Button(Text(t('devices.approve')))
+                      .loading(busy)
+                      .disabled(busyId !== null && !busy)
+                      .onPress(() => void approve(enrollment))
+                      .tint('accent')
+                      .style('solid')
+                      .grow(),
+                  ).spacing('md'),
+                )
+                  .padding('all', 'lg')
+                  .spacing('6')
+                  .id(enrollment.instance.id);
+              }),
+            ),
+          )
+        : null,
+      SettingsSection(
+        t('devices.enrolled'),
+        GroupedSection(
+          !loaded && enrolled.length === 0
+            ? VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+                .padding('vertical', '2xl')
+                .align('center')
+            : enrolled.length === 0
+              ? VStack(Text(t('devices.none')).textStyle('muted'))
+                  .padding('vertical', '2xl')
+                  .align('center')
+              : // A row keeps its device as its key (a GroupedSectionItem takes no `.id()`).
+                Embed(
+                  enrolled.map((instance) => {
+                    const removable = !instance.isThis && instance.status !== 'revoked';
+                    const row = GroupedSectionItem(
+                      instance.isThis
+                        ? t('devices.thisDevice', { name: instance.displayName })
+                        : instance.displayName,
                     )
-                  }
-                />
-              );
-            })
-          )}
-        </GroupedSection>
-      </SettingsSection>
-    </>
+                      .lines(0)
+                      .descriptionLines(0)
+                      .wrapControl()
+                      .description(describeInstance(instance, t));
+                    return toElement(
+                      removable
+                        ? row.trailing(
+                            busyId === instance.id
+                              ? Embed(<ActivityIndicator color={theme.colors.error} />)
+                              : Button(Icon(RiDeleteBinLine))
+                                  .label(t('devices.remove'))
+                                  .shape('circle')
+                                  .style('plain')
+                                  .tint('danger')
+                                  .disabled(busyId !== null)
+                                  .onPress(() => void revoke(instance)),
+                          )
+                        : row,
+                      instance.id,
+                    );
+                  }),
+                ),
+        ),
+      ).trailing(
+        Button(Icon(RiRefreshLine))
+          .label(t('devices.refresh'))
+          .shape('circle')
+          .style('plain')
+          .onPress(() => void refreshAll()),
+      ),
+    ),
   );
 }
 
@@ -287,18 +289,7 @@ function describeInstance(instance: InstanceView, t: Translate): string {
   return `${platformLabel(instance.platform)} · ${status} · ${seen}`;
 }
 
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
 const styles = StyleSheet.create({
-  pending: { padding: 16, gap: 6 },
-  pendingTitle: { fontSize: 16, fontWeight: '600' },
   fingerprint: {
     marginVertical: 6,
     paddingVertical: 12,
@@ -315,7 +306,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     overflow: 'hidden',
   },
-  actions: { flexDirection: 'row', gap: 12 },
-  action: { flex: 1 },
-  empty: { paddingVertical: 24, alignItems: 'center' },
 });

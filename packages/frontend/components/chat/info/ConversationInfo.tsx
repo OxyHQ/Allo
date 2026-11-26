@@ -2,12 +2,11 @@ import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useConversation, useConversationActions, useTimeline } from '@allo/react';
 import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
-import {
-  ChatInfoPanel,
-  type ChatInfoAction,
-  type ChatInfoPanelVariant,
-  type ChatInfoTab,
-  type ChatMember,
+import type {
+  ChatInfoAction,
+  ChatInfoPanelVariant,
+  ChatInfoTab,
+  ChatMember,
 } from '@oxy.so/bloom/chat-screen';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiDoorOpenLine } from '@oxy.so/bloom/icons/RiDoorOpenLine';
@@ -22,16 +21,14 @@ import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
 import { RiSpamLine } from '@oxy.so/bloom/icons/RiSpamLine';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
-
 import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
+
 import {
   countLinks,
   countOf,
@@ -49,6 +46,12 @@ import { blockUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import { Embed, Icon, toElement } from '@oxy.so/bloom-language';
+import { ChatInfoPanel as LChatInfoPanel } from '@oxy.so/bloom-language/chat';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
 
 interface ConversationInfoProps {
   conversationId: string;
@@ -84,7 +87,6 @@ function AuthorizedConversationInfo({
   onSearch,
 }: ConversationInfoProps) {
   const router = useRouter();
-  const theme = useTheme();
   const { t } = useTranslation();
   const view = useConversation(conversationId);
   const { items } = useTimeline(conversationId);
@@ -235,7 +237,6 @@ function AuthorizedConversationInfo({
 
   const title = conversationTitle(view, ctx);
   const faces = conversationFaces(view, ctx);
-  const icon = { width: 20, height: 20, fill: theme.colors.textSecondary };
 
   const actions: ChatInfoAction[] = [
     ...(other
@@ -336,78 +337,72 @@ function AuthorizedConversationInfo({
         },
   ];
 
-  return (
-    <ChatInfoPanel
-      variant={variant}
-      title={isGroup ? t('chat.details.groupInfo') : t('chat.details.contactInfo')}
-      onClose={onClose}
-      closeLabel={t('common.close')}
-      coverSource={cover || undefined}
-      avatar={
-        faces ? (
-          <AvatarGroup
-            layout="conversation"
-            items={faces.map((face) => ({ ...face, uri: face.source }))}
-            size={96}
-          />
-        ) : undefined
-      }
-      avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
-      name={title}
-      handle={
-        isGroup
-          ? t('chat.members', { count: view.memberAccountIds.length })
-          : person?.handle
-            ? `@${person.handle}`
-            : undefined
-      }
-      bio={isGroup ? undefined : person?.bio}
-      settingsTitle={t('chat.info.settingsTitle')}
-      settings={
-        <GroupedSection variant="filled">
-          {canManage ? (
-            <GroupedSectionItem
-              title={t('chat.group.name')}
-              icon={<RiUserLine {...icon} />}
-              showChevron={false}
-              rightElement={
-                <View style={styles.rename}>
-                  <TextFieldInput
-                    label={t('chat.group.name')}
-                    placeholder={null}
-                    value={name}
-                    onChangeText={setName}
-                    onBlur={() => void saveName()}
-                    onSubmitEditing={() => void saveName()}
-                    returnKeyType="done"
-                    maxLength={128}
-                    size="sm"
-                  />
-                </View>
-              }
-            />
-          ) : null}
-          <GroupedSectionItem
-            title={t('chat.info.encryption')}
-            value={t('chat.info.encryptionValue')}
-            icon={<RiLock2Line {...icon} />}
-            showChevron={false}
-          />
-        </GroupedSection>
-      }
-      tabs={tabs}
-      members={isGroup ? members : undefined}
-      membersTitle={t('chat.details.participants')}
-      memberSearch={isGroup && view.memberAccountIds.length >= 8}
-      memberQuery={memberQuery}
-      onMemberQueryChange={setMemberQuery}
-      onPressMember={(member) => openProfile(member.id)}
-      roleLabels={{ owner: t('chat.role.owner'), admin: t('chat.role.admin') }}
-      onAddMember={canManage ? () => router.push(`/new?addTo=${view.id}`) : undefined}
-      addMemberLabel={t('chat.group.addMember')}
-      actions={actions}
-      destructiveActions={destructiveActions}
-    />
+  return toElement(
+    LChatInfoPanel({
+      title: isGroup ? t('chat.details.groupInfo') : t('chat.details.contactInfo'),
+      onClose,
+      closeLabel: t('common.close'),
+      coverSource: cover || undefined,
+      // Bloom's 96 has no avatar rung in the language.
+      avatar: faces
+        ? Embed(
+            <AvatarGroup
+              layout="conversation"
+              items={faces.map((face) => ({ ...face, uri: face.source }))}
+              size={96}
+            />,
+          )
+        : undefined,
+      avatarSource: faces ? undefined : conversationAvatar(view, ctx),
+      name: title,
+      handle: isGroup
+        ? t('chat.members', { count: view.memberAccountIds.length })
+        : person?.handle
+          ? `@${person.handle}`
+          : undefined,
+      bio: isGroup ? undefined : person?.bio,
+      settingsTitle: t('chat.info.settingsTitle'),
+      settings: LGroupedSection(
+        canManage
+          ? LGroupedSectionItem(t('chat.group.name'))
+              .leadingView(Icon(RiUserLine).size('md').foreground('muted'))
+              .chevron(false)
+              .trailing(
+                Embed(
+                  <View style={styles.rename}>
+                    <TextFieldInput
+                      label={t('chat.group.name')}
+                      placeholder={null}
+                      value={name}
+                      onChangeText={setName}
+                      onBlur={() => void saveName()}
+                      onSubmitEditing={() => void saveName()}
+                      returnKeyType="done"
+                      maxLength={128}
+                      size="sm"
+                    />
+                  </View>,
+                ),
+              )
+          : null,
+        LGroupedSectionItem(t('chat.info.encryption'))
+          .value(t('chat.info.encryptionValue'))
+          .leadingView(Icon(RiLock2Line).size('md').foreground('muted'))
+          .chevron(false),
+      ).style('filled'),
+      tabs,
+      members: isGroup ? members : undefined,
+      membersTitle: t('chat.details.participants'),
+      memberSearch: isGroup && view.memberAccountIds.length >= 8,
+      onPressMember: (member) => openProfile(member.id),
+      roleLabels: { owner: t('chat.role.owner'), admin: t('chat.role.admin') },
+      onAddMember: canManage ? () => router.push(`/new?addTo=${view.id}`) : undefined,
+      addMemberLabel: t('chat.group.addMember'),
+      actions,
+      destructiveActions,
+    })
+      .style(variant)
+      .memberQuery([memberQuery, setMemberQuery]),
   );
 }
 

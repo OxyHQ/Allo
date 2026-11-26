@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { hasNotificationPermission, setupNotifications } from '@/utils/notifications';
+import { setupNotifications } from '@/utils/notifications';
 import { logger } from '@/utils/logger';
 import { initializeI18n } from './i18n';
 
@@ -19,7 +19,6 @@ export const AppInitializer = {
     if (Platform.OS === 'web') return;
     try {
       await setupNotifications();
-      await hasNotificationPermission();
     } catch (error) {
       logger.warn('[AppInitializer] notifications setup failed', error);
     }

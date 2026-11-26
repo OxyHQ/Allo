@@ -30,6 +30,8 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
       {/* Live E2EE media has no transcript track; never upload call audio for captions. */}
       {/* biome-ignore lint/a11y/useMediaCaption: live encrypted call audio has no caption source */}
       <audio ref={ref} autoPlay />
+      {/* Bloom JSX: the language's `.onPress()` takes the handler as a call in render, which the
+          React Compiler reads as the ref being read while rendering (react-hooks/refs). */}
       {blocked ? (
         <Button
           onPress={() => {

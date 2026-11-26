@@ -3,27 +3,16 @@ import { useAlloClient, useConversationActions, useSyncState } from '@allo/react
 import { GemieAskProvider, useAskGemie } from '@gemies/sdk/ask';
 import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
-import {
-  ChatFolderTabs,
-  ChatSearchField,
-  ChatSearchResults,
-  type ChatSummary,
-} from '@oxy.so/bloom/chat-list';
-import { Button } from '@oxy.so/bloom/button';
-import { List, ListSelectionBar } from '@oxy.so/bloom/list';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
+import type { ChatSummary } from '@oxy.so/bloom/chat-list';
+import { ListSelectionBar } from '@oxy.so/bloom/list';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
-import { useTheme } from '@oxy.so/bloom/theme';
+import { Screen } from '@oxy.so/bloom/screen';
 import { toast } from '@oxy.so/bloom/toast';
-import { Text } from '@oxy.so/bloom/typography';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { usePathname, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
 
 import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
 import { HistoryTransferBanner } from '@/components/conversation/HistoryTransferBanner';
@@ -33,6 +22,25 @@ import { useSplitLayout } from '@/hooks/useSplitLayout';
 import { logger } from '@/utils/logger';
 import { conversationIdFromPath } from '@/utils/routeUtils';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button as LButton,
+  Embed,
+  Header,
+  Icon,
+  ScrollView,
+  Text as LText,
+  VStack,
+  toElement,
+  view,
+} from '@oxy.so/bloom-language';
+import {
+  ChatEmptyState as LChatEmptyState,
+  ChatFolderTabs as LChatFolderTabs,
+  ChatSearchField as LChatSearchField,
+  ChatSearchResults as LChatSearchResults,
+} from '@oxy.so/bloom-language/chat';
+import { List as LList } from '@oxy.so/bloom-language/list';
 
 /**
  * What the swipe offers, and it is not the same thing in both cases.
@@ -57,7 +65,6 @@ export function ConversationList() {
   const pathname = usePathname();
   const { user } = useOxy();
   const split = useSplitLayout();
-  const theme = useTheme();
   const { t } = useTranslation();
   const sync = useSyncState();
   const client = useAlloClient();
@@ -222,108 +229,117 @@ export function ConversationList() {
     <Screen
       scroll="content"
       reselect={reselect}
-      header={
-        <PageHeader
-          title={t('chat.title')}
-          // A top-level place, beside the conversation or under the bar: no Back.
-          onBack={null}
-          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-          actions={
-            !supervised && checkedChats.length === 0 ? (
-              <AskAliaButton label={t('chat.askAlia')} />
-            ) : undefined
-          }
-          accessory={
-            checkedChats.length > 0 ? (
-              <ListSelectionBar
-                testID="conversation-selection"
-                count={checkedChats.length}
-                total={chats.length}
-                onClear={() => setCheckedIds(new Set())}
-                onSelectAll={(checked) =>
-                  setCheckedIds(new Set(checked ? chats.map((chat) => chat.id) : []))
-                }
-                actions={singleChecked?.swipeActions?.right}
-                onAction={(action) => {
-                  if (!singleChecked) return;
-                  if (action === LEAVE) void confirmLeave(singleChecked.id);
-                  if (action === DELETE) void confirmDelete(singleChecked.id);
-                }}
-              />
-            ) : undefined
-          }
-        />
-      }
+      header={toElement(
+        Header(t('chat.title'))
+          .onBack(null)
+          .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
+          .toolbar(
+            !supervised && checkedChats.length === 0
+              ? AskAliaButton({ label: t('chat.askAlia') })
+              : null,
+          )
+          .accessory(
+            Embed(
+              checkedChats.length > 0 ? (
+                <ListSelectionBar
+                  testID="conversation-selection"
+                  count={checkedChats.length}
+                  total={chats.length}
+                  onClear={() => setCheckedIds(new Set())}
+                  onSelectAll={(checked) =>
+                    setCheckedIds(new Set(checked ? chats.map((chat) => chat.id) : []))
+                  }
+                  actions={singleChecked?.swipeActions?.right}
+                  onAction={(action) => {
+                    if (!singleChecked) return;
+                    if (action === LEAVE) void confirmLeave(singleChecked.id);
+                    if (action === DELETE) void confirmDelete(singleChecked.id);
+                  }}
+                />
+              ) : undefined,
+            ),
+          )
+          .inPage(),
+      )}
     >
-      <ScreenScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="pb-6">
-        <View style={styles.search}>
-          <ChatSearchField
-            value={query}
-            onChangeText={(value) => {
-              setQuery(value);
-              setCheckedIds(new Set());
-            }}
-            onClear={() => setQuery('')}
-            placeholder={t('chat.search.placeholder')}
-          />
-        </View>
-        {folders.length > 0 && (
-          <ChatFolderTabs
-            folders={folders}
-            value={folder}
-            onValueChange={(value) => {
-              setFolder(value);
-              setCheckedIds(new Set());
-            }}
-            accessibilityLabel={t('chat.folder.label')}
-            divider
-          />
-        )}
-        {!supervised && <HistoryTransferBanner />}
-        {sync === 'offline' && (
-          <Text style={[styles.notice, { color: theme.colors.textSecondary }]}>
-            {t('chat.sync.offline')}
-          </Text>
-        )}
-        {searching ? (
-          <ChatSearchResults
-            query={query}
-            results={results}
-            onResultPress={open}
-            labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
-          />
-        ) : (
-          <List
-            testID="conversation-list"
-            items={chats.map((chat) => ({
-              id: chat.id,
-              conversation: chat,
-              active: chat.id === selectedId,
-              checked: checkedIds.has(chat.id),
-              onCheckedChange: (checked) => setChecked(chat.id, checked),
-              selecting: checkedChats.length > 0,
-              onPress: () => open(chat.id),
-              swipeActions: chat.swipeActions,
-              actions: chat.swipeActions?.right,
-              onAction: (action) => {
-                if (action === LEAVE) void confirmLeave(chat.id);
-                if (action === DELETE) void confirmDelete(chat.id);
-              },
-            }))}
-            // Where Bloom's own list puts the stories row.
-            header={
-              <StoriesStrip ownAccountId={me} onStoryPress={openStory} onOwnPress={openUpdates} />
-            }
-            loading={summaries.length === 0 && sync === 'syncing'}
-            empty={
-              <ChatEmptyState
-                title={t('chat.empty.title')}
-                description={t('chat.empty.description')}
-              />
-            }
-          />
-        )}
-      </ScreenScrollView>
+      {toElement(
+        ScrollView(
+          VStack(
+            LChatSearchField(
+              [
+                query,
+                (value) => {
+                  setQuery(value);
+                  setCheckedIds(new Set());
+                },
+              ],
+              { placeholder: t('chat.search.placeholder'), onClear: () => setQuery('') },
+            ),
+          )
+            .padding('horizontal', 'md')
+            .padding('bottom', 'sm'),
+          folders.length > 0
+            ? LChatFolderTabs(folders)
+                .value([
+                  folder,
+                  (value) => {
+                    setFolder(value);
+                    setCheckedIds(new Set());
+                  },
+                ])
+                .label(t('chat.folder.label'))
+                .dividers()
+            : null,
+          Embed(!supervised && <HistoryTransferBanner />),
+          sync === 'offline'
+            ? LText(t('chat.sync.offline'))
+                .padding('horizontal', 'lg')
+                .padding('bottom', 'sm')
+                .foreground('muted')
+            : null,
+          searching
+            ? LChatSearchResults(query, results, {
+                onResultPress: open,
+                labels: { chat: t('chat.title'), empty: t('chat.search.empty') },
+              })
+            : LList(
+                chats.map((chat) => ({
+                  id: chat.id,
+                  conversation: chat,
+                  active: chat.id === selectedId,
+                  checked: checkedIds.has(chat.id),
+                  onCheckedChange: (checked) => setChecked(chat.id, checked),
+                  selecting: checkedChats.length > 0,
+                  onPress: () => open(chat.id),
+                  swipeActions: chat.swipeActions,
+                  actions: chat.swipeActions?.right,
+                  onAction: (action) => {
+                    if (action === LEAVE) void confirmLeave(chat.id);
+                    if (action === DELETE) void confirmDelete(chat.id);
+                  },
+                })),
+              )
+                .testID('conversation-list')
+                .headerContent(
+                  Embed(
+                    <StoriesStrip
+                      ownAccountId={me}
+                      onStoryPress={openStory}
+                      onOwnPress={openUpdates}
+                    />,
+                  ),
+                )
+                .loading(summaries.length === 0 && sync === 'syncing')
+                .emptyState(
+                  LChatEmptyState({
+                    title: t('chat.empty.title'),
+                    description: t('chat.empty.description'),
+                  }),
+                ),
+        )
+          .keyboardTaps('handled')
+          .contentView((v) => v.padding('bottom', '2xl')),
+      )}
     </Screen>
   );
 
@@ -342,16 +358,9 @@ export function ConversationList() {
   );
 }
 
-function AskAliaButton({ label }: { label: string }) {
+const AskAliaButton = view(function AskAliaButton({ label }: { label: string }) {
   const { ask } = useAskGemie();
-  return (
-    <Button appearance="outline" leadingIcon={GemieAvatarIcon} onPress={() => ask()}>
-      {label}
-    </Button>
-  );
-}
-
-const styles = StyleSheet.create({
-  search: { paddingHorizontal: 12, paddingBottom: 8 },
-  notice: { paddingHorizontal: 16, paddingBottom: 8 },
+  return LButton(Icon(GemieAvatarIcon), LText(label))
+    .onPress(() => ask())
+    .style('outline');
 });

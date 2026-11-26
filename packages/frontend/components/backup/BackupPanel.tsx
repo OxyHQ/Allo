@@ -1,13 +1,9 @@
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
-import { Checkbox } from '@oxy.so/bloom/checkbox';
 import { RecoveryPhraseError, useBackup } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
-import { SettingsSection, SettingsValueField } from '@oxy.so/bloom/settings-modal';
 import { Textarea } from '@oxy.so/bloom/textarea';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
-import { Muted, Text } from '@oxy.so/bloom/typography';
+import { Text } from '@oxy.so/bloom/typography';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
@@ -18,8 +14,29 @@ import {
   recoveryPhraseWordCount,
 } from '@/lib/allo/recoveryPhrase';
 import { getErrorMessage } from '@/utils/errors';
+import { formatWhen } from '@/utils/formatWhen';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button as LButton,
+  Embed,
+  Group,
+  HStack,
+  Icon,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
+import { Checkbox as LCheckbox } from '@oxy.so/bloom-language/inputs';
+import {
+  SettingsSection as LSettingsSection,
+  SettingsValue,
+} from '@oxy.so/bloom-language/settings';
 
 /**
  * ENCRYPTED BACKUP AND RECOVERY, as one panel over the SDK's `backup` topic.
@@ -163,214 +180,178 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
   const typedWords = recoveryPhraseWordCount(restoreInput);
   const showRestore = status.remote?.exists === true && !status.enabled;
 
-  return (
-    <View style={styles.root}>
-      <SettingsSection label={t('backup.section.status')} description={t('backup.explain')}>
-        <GroupedSection>
-          <GroupedSectionItem
-            titleNumberOfLines={0}
-            descriptionLines={0}
-            wrapControl
-            title={status.enabled ? t('backup.status.on') : t('backup.status.off')}
-            description={
+  return toElement(
+    VStack(
+      LSettingsSection(
+        t('backup.section.status'),
+        LGroupedSection(
+          LGroupedSectionItem(status.enabled ? t('backup.status.on') : t('backup.status.off'))
+            .lines(0)
+            .descriptionLines(0)
+            .wrapControl()
+            .description(
               status.lastBackupAt
                 ? t('backup.status.lastBackup', {
                     when: formatWhen(status.lastBackupAt),
                   })
-                : t('backup.status.never')
-            }
-            rightElement={
-              /* A count only means something while backup is on; an empty field is not a value. */
-              status.enabled ? (
-                <SettingsValueField>
-                  {t('backup.status.events', { count: status.eventCount })}
-                </SettingsValueField>
-              ) : null
-            }
-          />
-          <GroupedSectionItem
-            titleNumberOfLines={0}
-            descriptionLines={0}
-            wrapControl
-            title={
-              status.remote === null
-                ? t('backup.status.remoteUnknown')
-                : status.remote.exists
-                  ? t('backup.status.remoteExists')
-                  : t('backup.status.remoteMissing')
-            }
-          />
-        </GroupedSection>
-      </SettingsSection>
-
-      <View style={styles.actions}>
-        {status.enabled ? (
-          <>
-            <Button
-              testID="backup-refresh"
-              style={styles.action}
-              loading={action === 'refresh' || (action === null && status.busy)}
-              disabled={busy}
-              onPress={() => void backUpNow()}
-              tone="accent"
-              appearance="solid"
-            >
-              {t('backup.backUpNow')}
-            </Button>
-            <Button
-              testID="backup-disable"
-              style={styles.action}
-              loading={action === 'disable'}
-              disabled={busy}
-              onPress={() => void turnOff()}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('backup.turnOff')}
-            </Button>
-          </>
-        ) : (
-          <Button
-            testID="backup-enable"
-            style={styles.action}
-            loading={action === 'enable'}
-            disabled={busy || phrasePending}
-            onPress={() => void turnOn()}
-            tone="accent"
-            appearance="solid"
-          >
-            {t('backup.turnOn')}
-          </Button>
-        )}
-      </View>
-
-      {phrase !== null ? (
-        <SettingsSection label={t('backup.phrase.title')}>
-          <GroupedSection>
-            <View style={styles.card} testID="backup-phrase">
-              <Text style={[styles.body, { color: theme.colors.text }]}>
-                {t('backup.phrase.body')}
-              </Text>
-              <View style={styles.grid} accessibilityLabel={t('backup.phrase.title')}>
-                {words.map((word, index) => (
-                  <View key={`${index}-${word}`} style={styles.cell}>
-                    <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>
-                      {index + 1}
-                    </Text>
-                    <Text
-                      style={[styles.cellWord, { color: theme.colors.text }]}
-                      testID={`backup-word-${index + 1}`}
-                      selectable
-                    >
-                      {word}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              <Button
-                testID="backup-copy"
-                leadingIcon={RiFileCopyLine}
-                onPress={() => void copyPhrase()}
-                tone="neutral"
-                appearance="outline"
-              >
-                {t('backup.phrase.copy')}
-              </Button>
-              <Checkbox
-                testID="backup-confirm"
-                checked={wroteDown}
-                onCheckedChange={setWroteDown}
-                label={t('backup.phrase.confirm')}
-              />
-              {!wroteDown ? <Muted>{t('backup.phrase.mustConfirm')}</Muted> : null}
-              <Button
-                testID="backup-done"
-                disabled={!wroteDown}
-                onPress={dismissPhrase}
-                tone="accent"
-                appearance="solid"
-              >
-                {t('common.done')}
-              </Button>
-            </View>
-          </GroupedSection>
-        </SettingsSection>
-      ) : null}
-
-      {showRestore ? (
-        <SettingsSection label={t('backup.restore.title')}>
-          <GroupedSection>
-            <View style={styles.card} testID="backup-restore-section">
-              <Text style={[styles.body, { color: theme.colors.text }]}>
-                {t('backup.restore.body')}
-              </Text>
-              <Textarea
-                testID="backup-restore-input"
-                accessibilityLabel={t('backup.restore.title')}
-                placeholder={t('backup.restore.placeholder')}
-                value={restoreInput}
-                onChangeText={(value) => {
-                  setRestoreInput(value.toLowerCase());
-                  if (restoreError !== null) setRestoreError(null);
-                }}
-                isInvalid={restoreError !== null}
-                rows={3}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                spellCheck={false}
-                textContentType="none"
-                disabled={action === 'restore'}
-              />
-              <Muted>
-                {t('backup.restore.count', {
-                  count: typedWords,
-                  total: RECOVERY_PHRASE_WORDS,
-                })}
-              </Muted>
-              {restoreError !== null ? (
-                <Text
-                  style={[styles.error, { color: theme.colors.error }]}
-                  testID="backup-restore-error"
-                  accessibilityLiveRegion="polite"
-                >
-                  {restoreError}
-                </Text>
-              ) : null}
-              <Button
-                testID="backup-restore"
-                loading={action === 'restore'}
-                disabled={busy || typedWords !== RECOVERY_PHRASE_WORDS}
-                onPress={() => void runRestore()}
-                tone="accent"
-                appearance="solid"
-              >
-                {t('backup.restore.button')}
-              </Button>
-            </View>
-          </GroupedSection>
-        </SettingsSection>
-      ) : null}
-    </View>
+                : t('backup.status.never'),
+            )
+            .trailing(
+              status.enabled
+                ? SettingsValue(t('backup.status.events', { count: status.eventCount }))
+                : null,
+            ),
+          LGroupedSectionItem(
+            status.remote === null
+              ? t('backup.status.remoteUnknown')
+              : status.remote.exists
+                ? t('backup.status.remoteExists')
+                : t('backup.status.remoteMissing'),
+          )
+            .lines(0)
+            .descriptionLines(0)
+            .wrapControl(),
+        ),
+      ).description(t('backup.explain')),
+      HStack(
+        status.enabled
+          ? Group(
+              LButton(LText(t('backup.backUpNow')))
+                .testID('backup-refresh')
+                .loading(action === 'refresh' || (action === null && status.busy))
+                .disabled(busy)
+                .onPress(() => void backUpNow())
+                .tint('accent')
+                .style('solid')
+                .grow(),
+              LButton(LText(t('backup.turnOff')))
+                .testID('backup-disable')
+                .loading(action === 'disable')
+                .disabled(busy)
+                .onPress(() => void turnOff())
+                .tint('neutral')
+                .style('outline')
+                .grow(),
+            )
+          : LButton(LText(t('backup.turnOn')))
+              .testID('backup-enable')
+              .loading(action === 'enable')
+              .disabled(busy || phrasePending)
+              .onPress(() => void turnOn())
+              .tint('accent')
+              .style('solid')
+              .grow(),
+      )
+        .spacing('md')
+        .margin('top', 'md')
+        .margin('bottom', 'lg'),
+      phrase !== null
+        ? LSettingsSection(
+            t('backup.phrase.title'),
+            LGroupedSection(
+              VStack(
+                LText(t('backup.phrase.body')).font('14').leading('20px').foreground('foreground'),
+                HStack(
+                  Embed(
+                    words.map((word, index) => (
+                      <View key={`${index}-${word}`} style={styles.cell}>
+                        <Text style={[styles.cellIndex, { color: theme.colors.textTertiary }]}>
+                          {index + 1}
+                        </Text>
+                        <Text
+                          style={[styles.cellWord, { color: theme.colors.text }]}
+                          testID={`backup-word-${index + 1}`}
+                          selectable
+                        >
+                          {word}
+                        </Text>
+                      </View>
+                    )),
+                  ),
+                )
+                  .wrap()
+                  .margin('vertical', 'xs')
+                  .label(t('backup.phrase.title')),
+                LButton(Icon(RiFileCopyLine), LText(t('backup.phrase.copy')))
+                  .testID('backup-copy')
+                  .onPress(() => void copyPhrase())
+                  .tint('neutral')
+                  .style('outline'),
+                LCheckbox([wroteDown, setWroteDown], t('backup.phrase.confirm')).testID(
+                  'backup-confirm',
+                ),
+                !wroteDown ? LText(t('backup.phrase.mustConfirm')).textStyle('muted') : null,
+                LButton(LText(t('common.done')))
+                  .testID('backup-done')
+                  .disabled(!wroteDown)
+                  .onPress(dismissPhrase)
+                  .tint('accent')
+                  .style('solid'),
+              )
+                .padding('all', 'lg')
+                .spacing('10')
+                .testID('backup-phrase'),
+            ),
+          )
+        : null,
+      showRestore
+        ? LSettingsSection(
+            t('backup.restore.title'),
+            LGroupedSection(
+              VStack(
+                LText(t('backup.restore.body')).font('14').leading('20px').foreground('foreground'),
+                Embed(
+                  <Textarea
+                    testID="backup-restore-input"
+                    accessibilityLabel={t('backup.restore.title')}
+                    placeholder={t('backup.restore.placeholder')}
+                    value={restoreInput}
+                    onChangeText={(value) => {
+                      setRestoreInput(value.toLowerCase());
+                      if (restoreError !== null) setRestoreError(null);
+                    }}
+                    isInvalid={restoreError !== null}
+                    rows={3}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    spellCheck={false}
+                    textContentType="none"
+                    disabled={action === 'restore'}
+                  />,
+                ),
+                LText(
+                  t('backup.restore.count', {
+                    count: typedWords,
+                    total: RECOVERY_PHRASE_WORDS,
+                  }),
+                ).textStyle('muted'),
+                restoreError !== null
+                  ? LText(restoreError)
+                      .font('sm')
+                      .foreground('error')
+                      .testID('backup-restore-error')
+                      .liveRegion('polite')
+                  : null,
+                LButton(LText(t('backup.restore.button')))
+                  .testID('backup-restore')
+                  .loading(action === 'restore')
+                  .disabled(busy || typedWords !== RECOVERY_PHRASE_WORDS)
+                  .onPress(() => void runRestore())
+                  .tint('accent')
+                  .style('solid'),
+              )
+                .padding('all', 'lg')
+                .spacing('10')
+                .testID('backup-restore-section'),
+            ),
+          )
+        : null,
+    ).spacing('xs'),
   );
 }
 
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
 const styles = StyleSheet.create({
-  root: { gap: 4 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 16 },
-  action: { flex: 1 },
-  card: { padding: 16, gap: 10 },
-  body: { fontSize: 14, lineHeight: 20 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 },
   cell: {
     width: '33.333%',
     flexDirection: 'row',
@@ -379,12 +360,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
   },
+
   cellIndex: {
     fontSize: 12,
     fontVariant: ['tabular-nums'],
     minWidth: 16,
     textAlign: 'right',
   },
+
   cellWord: { fontSize: 16, fontWeight: '600' },
-  error: { fontSize: 13 },
 });

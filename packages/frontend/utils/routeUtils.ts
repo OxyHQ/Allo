@@ -14,8 +14,3 @@ const CONVERSATION = /^\/c\/([^/]+)(\/info)?$/;
 export function conversationIdFromPath(pathname: string | null | undefined): string | null {
   return pathname?.match(CONVERSATION)?.[1] ?? null;
 }
-
-/** Whether a path is inside settings, where the list pane holds the settings menu. */
-export function isSettingsPath(pathname: string | null | undefined): boolean {
-  return pathname === ROUTES.SETTINGS || Boolean(pathname?.startsWith(`${ROUTES.SETTINGS}/`));
-}

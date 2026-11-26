@@ -25,19 +25,23 @@
  * suspense off and every string has an inline default.
  */
 import { useAlloClient, useBackup, useConversations, useInstanceState } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { Card } from '@oxy.so/bloom/card';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiHistoryLine } from '@oxy.so/bloom/icons/RiHistoryLine';
-import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
 
 import { useRestorePromptStore } from '@/stores/restorePromptStore';
 import { logger } from '@/utils/logger';
+
+import {
+  Button as LButton,
+  HStack,
+  IconCircle as LIconCircle,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { Card as LCard } from '@oxy.so/bloom-language/containers';
 
 export function RestoreHistoryPrompt() {
   const client = useAlloClient();
@@ -92,57 +96,59 @@ interface RestoreHistoryCardProps {
 
 export function RestoreHistoryCard({ onRestore, onNotNow }: RestoreHistoryCardProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
-  const theme = useTheme();
-  return (
-    <View style={styles.host} pointerEvents="box-none">
-      <View style={styles.frame} accessibilityRole="alert" testID="restore-prompt">
-        <Card elevation="m" radius="radius-20" style={styles.card} appearance="solid">
-          <View style={styles.heading}>
-            <IconCircle icon={RiHistoryLine} size="lg" />
-            <View style={styles.copy}>
-              <Text variant="headline-semibold">
-                {t('restorePrompt.title', 'Restore your history?')}
-              </Text>
-              <Text variant="body-regular" style={{ color: theme.colors.textSecondary }}>
-                {t(
+  return toElement(
+    VStack(
+      VStack(
+        LCard(
+          HStack(
+            LIconCircle(RiHistoryLine).size('lg'),
+            VStack(
+              LText(t('restorePrompt.title', 'Restore your history?'))
+                .font('headline')
+                .weight('semibold'),
+              LText(
+                t(
                   'restorePrompt.body',
                   'This account has an encrypted backup. Enter your recovery phrase to bring your conversations to this device.',
-                )}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.actions}>
-            <Button
-              onPress={onNotNow}
-              testID="restore-prompt-not-now"
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('restorePrompt.notNow', 'Not now')}
-            </Button>
-            <Button onPress={onRestore} testID="restore-prompt-restore">
-              {t('restorePrompt.restore', 'Restore')}
-            </Button>
-          </View>
-        </Card>
-      </View>
-    </View>
+                ),
+              )
+                .foreground('muted')
+                .font('body'),
+            )
+              .spacing('xs')
+              .grow(),
+          )
+            .spacing('md')
+            .align('start'),
+          HStack(
+            LButton(LText(t('restorePrompt.notNow', 'Not now')))
+              .onPress(onNotNow)
+              .testID('restore-prompt-not-now')
+              .tint('neutral')
+              .style('outline'),
+            LButton(LText(t('restorePrompt.restore', 'Restore')))
+              .onPress(onRestore)
+              .testID('restore-prompt-restore'),
+          )
+            .justify('end')
+            .spacing('sm'),
+        )
+          .elevation('m')
+          .radius('xl')
+          .style('solid')
+          .padding('all', 'lg')
+          .spacing('lg'),
+      )
+        .frame({ width: 'full', maxWidth: '480' })
+        .role('alert')
+        .testID('restore-prompt'),
+    )
+      .padding('top', 'lg')
+      .padding('left', 'lg')
+      .padding('right', 'lg')
+      .padding('bottom', '96')
+      .align('center')
+      .position({ left: 'none', right: 'none', bottom: 'none' })
+      .allowsHitTesting('children'),
   );
 }
-
-const styles = StyleSheet.create({
-  host: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 16,
-    paddingBottom: 96,
-    alignItems: 'center',
-  },
-  frame: { width: '100%', maxWidth: 480 },
-  card: { padding: 16, gap: 16 },
-  heading: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  copy: { flex: 1, gap: 4 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-});

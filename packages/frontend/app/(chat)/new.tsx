@@ -1,24 +1,37 @@
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { ChatSearchField } from '@oxy.so/bloom/chat-list';
-import { NewGroupForm, SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { List, type ListEntry } from '@oxy.so/bloom/list';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { Loading } from '@oxy.so/bloom/loading';
+import type { PersonSummary } from '@oxy.so/bloom/chat-people';
+import type { ListEntry } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen } from '@oxy.so/bloom/screen';
 
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { pickerModeFromParams } from '@/lib/chat/newConversation';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { logger } from '@/utils/logger';
+
+import {
+  Button as LButton,
+  Embed,
+  Group,
+  Header,
+  Loading,
+  Text,
+  VStack,
+} from '@oxy.so/bloom-language';
+import {
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+} from '@oxy.so/bloom-language/chat';
+import {
+  NewGroupForm as LNewGroupForm,
+  SelectedChipsRow as LSelectedChipsRow,
+} from '@oxy.so/bloom-language/chat-people';
+import { SectionedList } from '@oxy.so/bloom-language/list';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /** The group name's hard limit AND the counter's denominator — `NewGroupForm` takes one number for both. */
 const GROUP_NAME_MAX = 64;
@@ -44,7 +57,7 @@ function summaryOf(user: SearchedUser): PersonSummary {
  * is a group — that form is where the name and the picked people live, so the
  * chips step aside rather than saying the same thing twice.
  */
-export default function NewConversationRoute() {
+export default screen(function NewConversationRoute() {
   const params = useLocalSearchParams<{ addTo?: string; call?: string }>();
   const pickerMode = pickerModeFromParams(params);
   const addTo = pickerMode.kind === 'add' ? pickerMode.conversationId : undefined;
@@ -165,113 +178,79 @@ export default function NewConversationRoute() {
       : t('chat.new.start');
 
   if (search.unavailable)
-    return (
-      <Screen scroll="none" header={<PageHeader title={t('chat.new.title')} />}>
-        <ConversationAccessState state="unavailable" onRetry={search.retry} />
-      </Screen>
+    return Embed(<ConversationAccessState state="unavailable" onRetry={search.retry} />)
+      .screenScroll('none')
+      .header(Header(t('chat.new.title')).inPage());
+
+  return Group(
+    VStack(
+      LChatSearchField([search.term, search.setTerm], {
+        placeholder: t('chat.new.search'),
+        clearLabel: t('chat.new.clearSearch'),
+        onClear: search.clear,
+        autoFocus: true,
+      }).label(t('chat.new.search')),
+    )
+      .padding('horizontal', 'md')
+      .padding('bottom', 'sm'),
+    SectionedList([{ id: 'people', title: t('chat.new.people'), items: people }])
+      .testID('people-picker')
+      .scrollable()
+      .headerContent(
+        callMode
+          ? undefined
+          : naming
+            ? LNewGroupForm([name, setName], {
+                nameMaxLength: GROUP_NAME_MAX,
+                members: picked,
+                onRemoveMember: remove,
+                labels: {
+                  name: t('chat.group.name'),
+                  namePlaceholder: t('chat.new.groupNamePlaceholder'),
+                  members: (of) => t('chat.new.selected', { count: of }),
+                  remove: removeLabel,
+                },
+              })
+                .padding('top', 'xs')
+                .padding('horizontal', 'md')
+                .padding('bottom', 'md')
+            : count > 0
+              ? // Margin, not padding: the scroll layout is a horizontal ScrollView, and
+                // padding on a scroller is space the content slides under.
+                LSelectedChipsRow(picked, { onRemove: remove, formatRemoveLabel: removeLabel })
+                  .margin('horizontal', 'sm')
+                  .margin('bottom', 'sm')
+              : undefined,
+      )
+      .emptyState(
+        search.searching
+          ? Loading().style('spinner').label(t('chat.new.searching')).padding('vertical', '3xl')
+          : LChatEmptyState({
+              title: search.tooShort
+                ? t('chat.new.tooShort')
+                : search.term
+                  ? t('chat.new.noResults')
+                  : t('chat.new.hint'),
+            }),
+      )
+      .frame({ minHeight: 'none' })
+      .grow(),
+  )
+    .screenScroll('none')
+    .header(
+      Header(
+        callMode ? t('calls.new.title') : adding ? t('chat.group.addMember') : t('chat.new.title'),
+      )
+        .toolbar(
+          callMode
+            ? null
+            : LButton(Text(submitLabel))
+                .disabled(count === 0)
+                .loading(busy)
+                .onPress(() => void submit())
+                .tint('accent')
+                .style('solid'),
+        )
+        .inPage(),
     );
-
-  return (
-    // The contact list scrolls itself, under the header the Screen reserves.
-    <Screen
-      scroll="none"
-      header={
-        <PageHeader
-          title={
-            callMode
-              ? t('calls.new.title')
-              : adding
-                ? t('chat.group.addMember')
-                : t('chat.new.title')
-          }
-          actions={
-            callMode ? undefined : (
-              <Button
-                disabled={count === 0}
-                loading={busy}
-                onPress={() => void submit()}
-                tone="accent"
-                appearance="solid"
-              >
-                {submitLabel}
-              </Button>
-            )
-          }
-        />
-      }
-    >
-      <View style={styles.search}>
-        <ChatSearchField
-          value={search.term}
-          onChangeText={search.setTerm}
-          onClear={search.clear}
-          placeholder={t('chat.new.search')}
-          accessibilityLabel={t('chat.new.search')}
-          clearLabel={t('chat.new.clearSearch')}
-          autoFocus
-        />
-      </View>
-      <List
-        testID="people-picker"
-        style={styles.list}
-        scrollable
-        sections={[{ id: 'people', title: t('chat.new.people'), items: people }]}
-        header={
-          callMode ? undefined : naming ? (
-            <NewGroupForm
-              style={styles.form}
-              name={name}
-              onNameChange={setName}
-              nameMaxLength={GROUP_NAME_MAX}
-              members={picked}
-              onRemoveMember={remove}
-              labels={{
-                name: t('chat.group.name'),
-                namePlaceholder: t('chat.new.groupNamePlaceholder'),
-                members: (of) => t('chat.new.selected', { count: of }),
-                remove: removeLabel,
-              }}
-            />
-          ) : count > 0 ? (
-            <SelectedChipsRow
-              style={styles.chips}
-              people={picked}
-              onRemove={remove}
-              formatRemoveLabel={removeLabel}
-            />
-          ) : undefined
-        }
-        empty={
-          search.searching ? (
-            <Loading
-              variant="spinner"
-              style={styles.searching}
-              accessibilityLabel={t('chat.new.searching')}
-            />
-          ) : (
-            <ChatEmptyState
-              title={
-                search.tooShort
-                  ? t('chat.new.tooShort')
-                  : search.term
-                    ? t('chat.new.noResults')
-                    : t('chat.new.hint')
-              }
-            />
-          )
-        }
-      />
-    </Screen>
-  );
-}
-
-const styles = StyleSheet.create({
-  // 12, the gutter the conversation list's own search pill sits on.
-  search: { paddingHorizontal: 12, paddingBottom: 8 },
-  list: { flex: 1, minHeight: 0 },
-  searching: { paddingVertical: 32 },
-  form: { paddingTop: 4, paddingHorizontal: 12, paddingBottom: 12 },
-  // MARGIN, not padding: the scroll layout is a horizontal ScrollView, and
-  // padding on a scroller is space the content slides under.
-  chips: { marginHorizontal: 8, marginBottom: 8 },
 });

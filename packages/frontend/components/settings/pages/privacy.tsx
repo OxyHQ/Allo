@@ -1,13 +1,17 @@
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
-import { Button } from '@oxy.so/bloom/button';
-import { SettingsSection } from '@oxy.so/bloom/settings-modal';
-import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAlloSettings } from '../context';
 
 import { useMyPrivacySettings, useUpdatePrivacySettings } from '@/hooks/usePrivacySettings';
+
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
+import {
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+} from '@oxy.so/bloom-language/containers';
+import { Toggle } from '@oxy.so/bloom-language/inputs';
+import { SettingsSection as LSettingsSection } from '@oxy.so/bloom-language/settings';
 
 /**
  * THE TWO PRIVACY SETTINGS ALLO ENFORCES, and nothing else.
@@ -39,46 +43,33 @@ export default function PrivacySettingsScreen() {
     [t, updateSettings],
   );
 
-  return (
-    <SettingsSection
-      description={failed ? t('settings.privacy.loadError') : t('settings.privacy.description')}
-    >
-      <GroupedSection>
-        <GroupedSectionItem
-          titleNumberOfLines={0}
-          descriptionLines={0}
-          wrapControl
-          title={t('settings.privacy.showOnlineStatus')}
-          description={t('settings.privacy.showOnlineStatusDesc')}
-          rightElement={
-            <Switch
-              checked={settings.showOnlineStatus}
-              onCheckedChange={onToggleOnlineStatus}
-              // Until the stored value arrives the switch shows the schema
-              // default; writing from there would save a choice never made.
-              disabled={!saved}
-              accessibilityLabel={t('settings.privacy.showOnlineStatus')}
-              testID="online-status-switch"
-            />
-          }
-        />
-        <GroupedSectionItem
-          titleNumberOfLines={0}
-          descriptionLines={0}
-          wrapControl
-          title={t('settings.privacy.blockedProfiles')}
-          rightElement={
-            <Button
-              onPress={() => settingsModal.open('privacy-blocked')}
-              accessibilityLabel={t('settings.privacy.blockedProfiles')}
-              tone="neutral"
-              appearance="outline"
-            >
-              {t('common.open')}
-            </Button>
-          }
-        />
-      </GroupedSection>
-    </SettingsSection>
+  return toElement(
+    LSettingsSection(
+      undefined,
+      LGroupedSection(
+        LGroupedSectionItem(t('settings.privacy.showOnlineStatus'))
+          .lines(0)
+          .descriptionLines(0)
+          .wrapControl()
+          .description(t('settings.privacy.showOnlineStatusDesc'))
+          .trailing(
+            Toggle([settings.showOnlineStatus, onToggleOnlineStatus])
+              .disabled(!saved)
+              .label(t('settings.privacy.showOnlineStatus'))
+              .testID('online-status-switch'),
+          ),
+        LGroupedSectionItem(t('settings.privacy.blockedProfiles'))
+          .lines(0)
+          .descriptionLines(0)
+          .wrapControl()
+          .trailing(
+            LButton(Text(t('common.open')))
+              .onPress(() => settingsModal.open('privacy-blocked'))
+              .label(t('settings.privacy.blockedProfiles'))
+              .tint('neutral')
+              .style('outline'),
+          ),
+      ),
+    ).description(failed ? t('settings.privacy.loadError') : t('settings.privacy.description')),
   );
 }

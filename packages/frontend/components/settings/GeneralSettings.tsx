@@ -2,13 +2,11 @@ import { signOutOfAllo } from '@/lib/allo/signOut';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { useAlloClient } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
 import { ListItem } from '@oxy.so/bloom/list';
 import { RiArrowRightSLine } from '@oxy.so/bloom/icons/RiArrowRightSLine';
 import { useHapticsSettingRow, useVideoAutoplaySettingRow } from '@oxy.so/bloom/preferences';
-import { SettingsGeneralPage, SettingsValueField } from '@oxy.so/bloom/settings-modal';
+import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
 import { confirm } from '@oxy.so/bloom/surfaces';
-import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
 import { useOxy } from '@oxy.so/services/ui/client';
 import Constants from 'expo-constants';
@@ -19,6 +17,10 @@ import { Platform } from 'react-native';
 import { useSoundStore } from '@/stores/soundStore';
 import { useAlloSettings } from './context';
 import { useNotificationPermission } from './use-notification-permission';
+
+import { Button as LButton, Text, toElement } from '@oxy.so/bloom-language';
+import { Toggle } from '@oxy.so/bloom-language/inputs';
+import { SettingsValue } from '@oxy.so/bloom-language/settings';
 
 export function GeneralSettings() {
   const { t } = useTranslation();
@@ -88,14 +90,11 @@ export function GeneralSettings() {
                   {
                     key: 'manage',
                     label: t('settings.account.oxyAccount'),
-                    control: (
-                      <Button
-                        onPress={() => settings.close(() => showBottomSheet?.('ManageAccount'))}
-                        tone="neutral"
-                        appearance="outline"
-                      >
-                        {t('settings.account.manageAction')}
-                      </Button>
+                    control: toElement(
+                      LButton(Text(t('settings.account.manageAction')))
+                        .onPress(() => settings.close(() => showBottomSheet?.('ManageAccount')))
+                        .tint('neutral')
+                        .style('outline'),
                     ),
                   },
                 ],
@@ -116,15 +115,18 @@ export function GeneralSettings() {
                         ? t('settings.notifications.allow')
                         : undefined,
                     control:
-                      notifications.granted === false ? (
-                        <Button onPress={notifications.request} tone="neutral" appearance="outline">
-                          {t('settings.notifications.allow')}
-                        </Button>
-                      ) : (
-                        <SettingsValueField>
-                          {notifications.granted === null ? '' : t('settings.notifications.on')}
-                        </SettingsValueField>
-                      ),
+                      notifications.granted === false
+                        ? toElement(
+                            LButton(Text(t('settings.notifications.allow')))
+                              .onPress(notifications.request)
+                              .tint('neutral')
+                              .style('outline'),
+                          )
+                        : toElement(
+                            SettingsValue(
+                              notifications.granted === null ? '' : t('settings.notifications.on'),
+                            ),
+                          ),
                   },
                 ]
               : []),
@@ -132,13 +134,10 @@ export function GeneralSettings() {
               key: 'tones',
               label: t('settings.preferences.conversationTones'),
               description: t('settings.preferences.conversationTonesDesc'),
-              control: (
-                <Switch
-                  checked={conversationTones}
-                  onCheckedChange={setConversationTones}
-                  accessibilityLabel={t('settings.preferences.conversationTones')}
-                  testID="conversation-tones-switch"
-                />
+              control: toElement(
+                Toggle([conversationTones, setConversationTones])
+                  .label(t('settings.preferences.conversationTones'))
+                  .testID('conversation-tones-switch'),
               ),
             },
             haptics,
@@ -152,21 +151,21 @@ export function GeneralSettings() {
             {
               key: 'version',
               label: t('settings.aboutallo.appName'),
-              control: (
-                <SettingsValueField>
-                  {t('settings.aboutallo.version', {
+              control: toElement(
+                SettingsValue(
+                  t('settings.aboutallo.version', {
                     version: Constants.expoConfig?.version ?? '',
-                  })}
-                </SettingsValueField>
+                  }),
+                ),
               ),
             },
             {
               key: 'build',
               label: t('settings.aboutallo.build'),
-              control: (
-                <SettingsValueField muted>
-                  {typeof build === 'string' ? build : t('settings.aboutallo.buildVersion')}
-                </SettingsValueField>
+              control: toElement(
+                SettingsValue(
+                  typeof build === 'string' ? build : t('settings.aboutallo.buildVersion'),
+                ).muted(),
               ),
             },
           ],
@@ -179,10 +178,11 @@ export function GeneralSettings() {
                   {
                     key: 'signout',
                     label: t('settings.signOutOfDevice'),
-                    control: (
-                      <Button tone="danger" onPress={() => void signOut()} appearance="outline">
-                        {t('settings.signOut')}
-                      </Button>
+                    control: toElement(
+                      LButton(Text(t('settings.signOut')))
+                        .tint('danger')
+                        .onPress(() => void signOut())
+                        .style('outline'),
                     ),
                   },
                 ],

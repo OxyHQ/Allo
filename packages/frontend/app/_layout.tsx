@@ -30,6 +30,7 @@ import { usePendingHref } from '@/lib/navigation/usePendingHref';
 import { oxyServices } from '@/lib/oxy';
 import { DEFAULT_COLOR_PRESET, THEME_PERSIST_KEY, THEME_STORAGE } from '@/lib/theme';
 
+// The web's document font and element reset (plain CSS; a no-op on native).
 import '../styles/global.css';
 
 // NATIVE ONLY: hold the OS splash until init has run; `useHideNativeSplashWhenReady`

@@ -26,12 +26,11 @@ export function CallVideo({
       playsInline
       muted
       aria-label={label}
-      style={{
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-        transform: mirror ? 'scaleX(-1)' : undefined,
-      }}
+      style={mirror ? MIRRORED : PLAIN}
     />
   );
 }
+
+const PLAIN = { width: '100%', height: '100%', objectFit: 'cover' } as const;
+/** The local camera, drawn as a mirror is. */
+const MIRRORED = { ...PLAIN, transform: 'scaleX(-1)' } as const;

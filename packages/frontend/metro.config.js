@@ -4,11 +4,10 @@
 // folders and block list, symlink + package-exports resolution, the web-font
 // and `.wasm` asset extensions (Bloom's `.woff2` fonts on web; dotLottie's
 // renderer, which draws stickers on the web and is served from this origin by
-// `lib/chat/lottieWeb.web.ts`), the release minifier, NativeWind, the Bloom
-// single-instance rewrite and the complete `react-native` shim NativeWind needs
-// on React Native 0.88 (`AssetRegistry`; without it every `useFonts` fails and
-// an Android release renders a blank window). Allo adds only its own resolver
-// aliases on top, below.
+// `lib/chat/lottieWeb.web.ts`), the release minifier and the Bloom
+// single-instance rewrite. With no `nativewind` in package.json, app-preset
+// 6.9+ applies no NativeWind or react-native-css wrapper. Allo adds only its own
+// resolver aliases on top, below.
 const path = require('node:path');
 const fs = require('node:fs');
 const { createOxyMetroConfig } = require('@oxy.so/app-preset/metro');
@@ -16,9 +15,6 @@ const { createOxyMetroConfig } = require('@oxy.so/app-preset/metro');
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = createOxyMetroConfig(__dirname, {
   sharedTypesPackage: '@allo/shared-types',
-  // NativeWind (v5) entry. The preset keeps `inlineVariables: false` (Bloom's
-  // `BloomColorScope` token aliases resolve at runtime) and `inlineRem: 16`.
-  cssInput: './styles/global.css',
 });
 
 // ---------------------------------------------------------------------------
@@ -81,15 +77,15 @@ const HARNESS = process.env.ALLO_HARNESS === '1';
 const HARNESS_ALIASES = HARNESS
   ? new Map([
       ['@oxy.so/services/ui/client', path.resolve(__dirname, 'harness/oxy-services.tsx')],
+      ['@oxy.so/services/runtime', path.resolve(__dirname, 'harness/oxy-runtime.ts')],
       ['@oxy.so/core', path.resolve(__dirname, 'harness/oxy-core.ts')],
       ['@/lib/allo/client', path.resolve(__dirname, 'harness/client.ts')],
     ])
   : new Map();
 
-// The preset's finished resolver (NativeWind, Bloom single instance, the
-// complete `react-native` shim). Allo's aliases run first and hand every other
-// request — `react-native` and `react-native-css/components` included —
-// down to it unchanged, as the preset requires of an app-level wrapper.
+// The preset's finished resolver (Bloom single instance). Allo's aliases run
+// first and hand every other request down to it unchanged, as the preset
+// requires of an app-level wrapper.
 const presetResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
@@ -121,4 +117,9 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return presetResolveRequest(context, moduleName, platform);
 };
 
-module.exports = config;
+// The Bloom language compiler (`@oxy.so/bloom-language-compiler`): a pre-pass in
+// front of the preset's transform worker (Expo's), so the Babel config stays
+// Expo's default. It checks every chain against the
+// language spec, hoists static chains and marks `view()` bodies `"use memo"`.
+// Modules that never import `@oxy.so/bloom-language` pass through unchanged.
+module.exports = require('@oxy.so/bloom-language-compiler/metro').withBloomLanguage(config);

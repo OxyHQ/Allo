@@ -25,8 +25,9 @@ export function useSupervision() {
     harnessPolicy,
   );
   return {
-    data: { self: supervisedHarness ? { status: 'active' } : null },
-    isError: false,
-    refetch: async () => undefined,
+    value: { self: supervisedHarness ? { status: 'active' } : null },
+    status: 'success' as const,
+    error: null,
+    refresh: async () => undefined,
   };
 }

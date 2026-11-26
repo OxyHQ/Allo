@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import type {
@@ -22,15 +22,15 @@ import {
   type MessageTone,
 } from '@oxy.so/bloom/message-media';
 import { toast } from '@oxy.so/bloom/toast';
-import { Text } from '@oxy.so/bloom/typography';
 import { useSticker } from '@oxy.so/stickers/react';
-import { View } from 'react-native';
-
+import { StyleSheet, View } from 'react-native';
 import { useMediaUri } from '@/lib/allo/useMediaUri';
+
 import { openPlace, placeLabel } from '@/lib/chat/place';
 import { shareAttachment } from '@/lib/chat/shareAttachment';
 import { isSentSticker } from '@/lib/chat/stickerRef';
 import { logger } from '@/utils/logger';
+import { Text as LText, VStack, toElement } from '@oxy.so/bloom-language';
 
 /**
  * The content kinds that fill a bubble's media slot. Everything else is text
@@ -112,12 +112,12 @@ function StickerBubble({ sticker: ref, tone }: { sticker: StickerView; tone: Mes
     ? `${ref.emoji} ${t('chat.attachment.sticker')}`
     : t('chat.attachment.sticker');
 
-  if (isLoading) return <View style={{ width: STICKER_SIZE, height: STICKER_SIZE }} />;
+  if (isLoading) return <View style={styles.stickerPlaceholder} />;
   if (!isSentSticker(sticker, ref)) {
-    return (
-      <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-        <Text variant="body-regular">{t('chat.sticker.unavailable', { label })}</Text>
-      </View>
+    return toElement(
+      VStack(LText(t('chat.sticker.unavailable', { label })).font('body'))
+        .padding('horizontal', 'md')
+        .padding('vertical', 'sm'),
     );
   }
   return (
@@ -392,3 +392,7 @@ function FileMedia({ media, tone }: Omit<MediaProps, 'onOpen'>) {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  stickerPlaceholder: { width: STICKER_SIZE, height: STICKER_SIZE },
+});

@@ -1,27 +1,29 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient, useConversations } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { ChatSearchField } from '@oxy.so/bloom/chat-list';
 import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
-import { List, type ListEntry, type ListSection } from '@oxy.so/bloom/list';
-import { SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { Loading } from '@oxy.so/bloom/loading';
-import { MessageBubble } from '@oxy.so/bloom/message-bubble';
+import type { ListEntry, ListSection } from '@oxy.so/bloom/list';
+import type { PersonSummary } from '@oxy.so/bloom/chat-people';
 import { toast } from '@oxy.so/bloom/toast';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen } from '@oxy.so/bloom/screen';
 
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { shareTextFromParam } from '@/lib/chat/shareText';
 import { logger } from '@/utils/logger';
+
+import { Button as LButton, Group, Header, Loading, Text, VStack } from '@oxy.so/bloom-language';
+import {
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+} from '@oxy.so/bloom-language/chat';
+import { SelectedChipsRow as LSelectedChipsRow } from '@oxy.so/bloom-language/chat-people';
+import { SectionedList } from '@oxy.so/bloom-language/list';
+import { MessageBubble as LMessageBubble } from '@oxy.so/bloom-language/message-bubble';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /** Rows of the "Recent" section before anything is typed. */
 const RECENT_LIMIT = 20;
@@ -53,7 +55,7 @@ interface Target {
  * `useTimeline().send` makes. One destination opens it; several go back to the
  * list, where every row shows the message went.
  */
-export default function ShareRoute() {
+export default screen(function ShareRoute() {
   const params = useLocalSearchParams<{ text?: string | string[] }>();
   const text = shareTextFromParam(params.text);
   const router = useRouter();
@@ -161,6 +163,7 @@ export default function ShareRoute() {
           summary: { id: chat.id, name: chat.name, avatar: chat.avatar },
         },
         chat.faces && chat.faces.length > 1 ? (
+          // A row's slot takes an element: Bloom's AvatarGroup itself, no language root per row.
           <AvatarGroup
             layout="conversation"
             items={chat.faces.map((face) => ({ ...face, uri: face.source }))}
@@ -194,105 +197,85 @@ export default function ShareRoute() {
   const picked = [...selected.values()];
 
   if (text.length === 0)
-    return (
-      <Screen scroll="none" header={<PageHeader title={t('share.title')} />}>
-        <View style={styles.empty}>
-          <ChatEmptyState title={t('share.empty.title')} description={t('share.empty.body')} />
-        </View>
-      </Screen>
+    return VStack(
+      LChatEmptyState({ title: t('share.empty.title'), description: t('share.empty.body') }),
+    )
+      .padding('all', '2xl')
+      .align('center')
+      .justify('center')
+      .grow()
+      .screenScroll('none')
+      .header(Header(t('share.title')).inPage());
+
+  return Group(
+    VStack(
+      LChatSearchField([search.term, search.setTerm], {
+        placeholder: t('share.search'),
+        clearLabel: t('chat.new.clearSearch'),
+        onClear: search.clear,
+      }).label(t('share.search')),
+    )
+      .padding('horizontal', 'md')
+      .padding('bottom', 'sm'),
+    picked.length > 0
+      ? // Margin, not padding: the scroll layout is a horizontal ScrollView.
+        LSelectedChipsRow(
+          picked.map((target) => ({ ...target.summary, id: target.key })),
+          {
+            onRemove: remove,
+            formatRemoveLabel: (name) => t('chat.new.removePerson', { name }),
+          },
+        )
+          .margin('horizontal', 'sm')
+          .margin('bottom', 'sm')
+      : null,
+    SectionedList(sections)
+      .testID('share-targets')
+      .scrollable()
+      .headerContent(
+        VStack(LMessageBubble('outgoing', text).tail())
+          .padding('horizontal', 'md')
+          .padding('top', 'xs')
+          .padding('bottom', 'md'),
+      )
+      .footerContent(
+        search.unavailable
+          ? VStack(
+              LChatEmptyState({ title: t('share.searchFailed') }),
+              LButton(Text(t('error.boundary.retry')))
+                .size('sm')
+                .onPress(search.retry),
+            )
+              .padding('vertical', 'lg')
+              .align('center')
+              .spacing('md')
+          : undefined,
+      )
+      .emptyState(
+        search.searching
+          ? Loading().style('spinner').label(t('chat.new.searching')).padding('vertical', '3xl')
+          : LChatEmptyState({
+              title: search.tooShort
+                ? t('chat.new.tooShort')
+                : search.term
+                  ? t('chat.new.noResults')
+                  : t('chat.new.hint'),
+            }),
+      )
+      .frame({ minHeight: 'none' })
+      .grow(),
+  )
+    .screenScroll('none')
+    .header(
+      Header(t('share.title'))
+        .toolbar(
+          LButton(Text(t('share.send')))
+            .disabled(picked.length === 0)
+            .loading(busy)
+            .onPress(() => void submit())
+            .tint('accent')
+            .style('solid'),
+        )
+        .inPage(),
     );
-
-  return (
-    // The contact list scrolls itself, under the header the Screen reserves.
-    <Screen
-      scroll="none"
-      header={
-        <PageHeader
-          title={t('share.title')}
-          actions={
-            <Button
-              disabled={picked.length === 0}
-              loading={busy}
-              onPress={() => void submit()}
-              tone="accent"
-              appearance="solid"
-            >
-              {t('share.send')}
-            </Button>
-          }
-        />
-      }
-    >
-      <View style={styles.search}>
-        <ChatSearchField
-          value={search.term}
-          onChangeText={search.setTerm}
-          onClear={search.clear}
-          placeholder={t('share.search')}
-          accessibilityLabel={t('share.search')}
-          clearLabel={t('chat.new.clearSearch')}
-        />
-      </View>
-      {picked.length > 0 ? (
-        <SelectedChipsRow
-          style={styles.chips}
-          people={picked.map((target) => ({ ...target.summary, id: target.key }))}
-          onRemove={remove}
-          formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
-        />
-      ) : null}
-      <List
-        testID="share-targets"
-        style={styles.list}
-        sections={sections}
-        scrollable
-        header={
-          <View style={styles.preview}>
-            <MessageBubble direction="outgoing" text={text} tail />
-          </View>
-        }
-        footer={
-          search.unavailable ? (
-            <View style={styles.notice}>
-              <ChatEmptyState title={t('share.searchFailed')} />
-              <Button size="sm" onPress={search.retry}>
-                {t('error.boundary.retry')}
-              </Button>
-            </View>
-          ) : undefined
-        }
-        empty={
-          search.searching ? (
-            <Loading
-              variant="spinner"
-              style={styles.searching}
-              accessibilityLabel={t('chat.new.searching')}
-            />
-          ) : (
-            <ChatEmptyState
-              title={
-                search.tooShort
-                  ? t('chat.new.tooShort')
-                  : search.term
-                    ? t('chat.new.noResults')
-                    : t('chat.new.hint')
-              }
-            />
-          )
-        }
-      />
-    </Screen>
-  );
-}
-
-const styles = StyleSheet.create({
-  // 12, the gutter the conversation list's own search pill sits on.
-  search: { paddingHorizontal: 12, paddingBottom: 8 },
-  list: { flex: 1, minHeight: 0 },
-  searching: { paddingVertical: 32 },
-  preview: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12 },
-  // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
-  chips: { marginHorizontal: 8, marginBottom: 8 },
-  notice: { alignItems: 'center', gap: 12, paddingVertical: 16 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 });

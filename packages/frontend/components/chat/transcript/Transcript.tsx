@@ -1,22 +1,22 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
-  View,
   type NativeScrollEvent,
   type ScrollViewInstance,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ScrollToBottomButton } from '@oxy.so/bloom/chat-screen';
-import {
-  MessageList,
-  TypingBubble,
-  type MessageBubbleLabels,
-  type MessageListItem,
-} from '@oxy.so/bloom/message-bubble';
+import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
 
 import { useFollowLatest } from './useFollowLatest';
+
+import { Embed, Group, VStack, toElement } from '@oxy.so/bloom-language';
+import { ScrollToBottomButton as LScrollToBottomButton } from '@oxy.so/bloom-language/chat';
+import {
+  MessageList as LMessageList,
+  TypingBubble as LTypingBubble,
+} from '@oxy.so/bloom-language/message-bubble';
 
 /** How far from the newest message the "scroll to latest" button appears. */
 const SCROLLED_UP_PX = 320;
@@ -75,45 +75,50 @@ export const Transcript = memo(function Transcript({
     [followScroll, onLoadOlder, reachedStart],
   );
 
-  return (
-    <View style={styles.root}>
-      <ScrollView
-        ref={scroller}
-        style={styles.root}
-        // A short history sits at the BOTTOM, where a conversation starts from.
-        contentContainerStyle={styles.content}
-        onScroll={onScroll}
-        scrollEventThrottle={64}
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-        // A new message scrolls into view for a reader following the end, and
-        // always for one this account sent; one reading older messages stays
-        // where they are (`useFollowLatest`).
-        {...follow.scrollProps}
-      >
-        <MessageList
-          items={items}
-          showAvatars={isGroup}
-          showSenderNames={isGroup}
-          unreadLabel={t('chat.unreadMessages')}
-          labels={labels}
-        />
-        {typing ? <TypingBubble label={t('chat.typing.someone')} /> : null}
-      </ScrollView>
-      <View style={styles.floating} pointerEvents="box-none">
-        <ScrollToBottomButton
-          visible={scrolledUp}
-          unreadCount={unreadCount}
-          accessibilityLabel={t('chat.scrollToLatest')}
-          onPress={follow.jumpToEnd}
-        />
-      </View>
-    </View>
+  return toElement(
+    VStack(
+      Embed((render) => (
+        <ScrollView
+          ref={scroller}
+          style={styles.root}
+          // A short history sits at the BOTTOM, where a conversation starts from.
+          contentContainerStyle={styles.content}
+          onScroll={onScroll}
+          scrollEventThrottle={64}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          // A new message scrolls into view for a reader following the end, and
+          // always for one this account sent; one reading older messages stays
+          // where they are (`useFollowLatest`).
+          {...follow.scrollProps}
+        >
+          {render(
+            Group(
+              LMessageList(items, {
+                showAvatars: isGroup,
+                showSenderNames: isGroup,
+                unreadLabel: t('chat.unreadMessages'),
+                labels,
+              }),
+              typing ? LTypingBubble().label(t('chat.typing.someone')) : null,
+            ),
+          )}
+        </ScrollView>
+      )),
+      VStack(
+        LScrollToBottomButton({ visible: scrolledUp, unreadCount })
+          .label(t('chat.scrollToLatest'))
+          .onPress(follow.jumpToEnd),
+      )
+        .position({ right: 'lg', bottom: 'lg' })
+        .allowsHitTesting('children'),
+    )
+      .frame({ minHeight: 'none' })
+      .grow(),
   );
 });
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   content: { flexGrow: 1, justifyContent: 'flex-end' },
-  floating: { position: 'absolute', right: 16, bottom: 16 },
 });
