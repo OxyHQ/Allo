@@ -23,7 +23,7 @@ import {
 } from '@oxy.so/bloom/message-media';
 import { toast } from '@oxy.so/bloom/toast';
 import { useSticker } from '@oxy.so/stickers/react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useMediaUri } from '@/lib/allo/useMediaUri';
 
 import { openPlace, placeLabel } from '@/lib/chat/place';
@@ -112,7 +112,7 @@ function StickerBubble({ sticker: ref, tone }: { sticker: StickerView; tone: Mes
     ? `${ref.emoji} ${t('chat.attachment.sticker')}`
     : t('chat.attachment.sticker');
 
-  if (isLoading) return <View style={{ width: STICKER_SIZE, height: STICKER_SIZE }} />;
+  if (isLoading) return <View style={styles.stickerPlaceholder} />;
   if (!isSentSticker(sticker, ref)) {
     return toElement(
       VStack(LText(t('chat.sticker.unavailable', { label })).font('body'))
@@ -392,3 +392,7 @@ function FileMedia({ media, tone }: Omit<MediaProps, 'onOpen'>) {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  stickerPlaceholder: { width: STICKER_SIZE, height: STICKER_SIZE },
+});
