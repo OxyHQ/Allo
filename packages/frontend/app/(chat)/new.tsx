@@ -1,11 +1,10 @@
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useCallback, useState } from 'react';
-import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
-import { NewGroupForm, SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
+import type { PersonSummary } from '@oxy.so/bloom/chat-people';
 import type { ListEntry } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
 
@@ -22,7 +21,9 @@ import {
   Group,
   Header,
   Loading,
+  NewGroupForm as LNewGroupForm,
   SectionedList,
+  SelectedChipsRow as LSelectedChipsRow,
   Text,
   VStack,
 } from '@oxy.so/bloom-language';
@@ -195,31 +196,26 @@ export default screen(function NewConversationRoute() {
         callMode
           ? undefined
           : naming
-            ? Embed(
-                <NewGroupForm
-                  style={styles.form}
-                  name={name}
-                  onNameChange={setName}
-                  nameMaxLength={GROUP_NAME_MAX}
-                  members={picked}
-                  onRemoveMember={remove}
-                  labels={{
-                    name: t('chat.group.name'),
-                    namePlaceholder: t('chat.new.groupNamePlaceholder'),
-                    members: (of) => t('chat.new.selected', { count: of }),
-                    remove: removeLabel,
-                  }}
-                />,
-              )
+            ? LNewGroupForm([name, setName], {
+                nameMaxLength: GROUP_NAME_MAX,
+                members: picked,
+                onRemoveMember: remove,
+                labels: {
+                  name: t('chat.group.name'),
+                  namePlaceholder: t('chat.new.groupNamePlaceholder'),
+                  members: (of) => t('chat.new.selected', { count: of }),
+                  remove: removeLabel,
+                },
+              })
+                .padding('top', 'xs')
+                .padding('horizontal', 'md')
+                .padding('bottom', 'md')
             : count > 0
-              ? Embed(
-                  <SelectedChipsRow
-                    style={styles.chips}
-                    people={picked}
-                    onRemove={remove}
-                    formatRemoveLabel={removeLabel}
-                  />,
-                )
+              ? // Margin, not padding: the scroll layout is a horizontal ScrollView, and
+                // padding on a scroller is space the content slides under.
+                LSelectedChipsRow(picked, { onRemove: remove, formatRemoveLabel: removeLabel })
+                  .margin('horizontal', 'sm')
+                  .margin('bottom', 'sm')
               : undefined,
       )
       .emptyState(
@@ -253,12 +249,4 @@ export default screen(function NewConversationRoute() {
         )
         .inPage(),
     );
-});
-
-const styles = StyleSheet.create({
-  form: { paddingTop: 4, paddingHorizontal: 12, paddingBottom: 12 },
-
-  // MARGIN, not padding: the scroll layout is a horizontal ScrollView, and
-  // padding on a scroller is space the content slides under.
-  chips: { marginHorizontal: 8, marginBottom: 8 },
 });

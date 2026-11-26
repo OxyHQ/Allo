@@ -3,7 +3,7 @@ import { useAlloClient, useConversationActions, useSyncState } from '@allo/react
 import { GemieAskProvider, useAskGemie } from '@gemies/sdk/ask';
 import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
-import { ChatFolderTabs, ChatSearchResults, type ChatSummary } from '@oxy.so/bloom/chat-list';
+import type { ChatSummary } from '@oxy.so/bloom/chat-list';
 import { ListSelectionBar } from '@oxy.so/bloom/list';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
@@ -26,7 +26,9 @@ import { confirm } from '@oxy.so/bloom/surfaces';
 import {
   Button as LButton,
   ChatEmptyState as LChatEmptyState,
+  ChatFolderTabs as LChatFolderTabs,
   ChatSearchField as LChatSearchField,
+  ChatSearchResults as LChatSearchResults,
   Embed,
   Header,
   Icon,
@@ -274,20 +276,18 @@ export function ConversationList() {
           )
             .padding('horizontal', 'md')
             .padding('bottom', 'sm'),
-          Embed(
-            folders.length > 0 && (
-              <ChatFolderTabs
-                folders={folders}
-                value={folder}
-                onValueChange={(value) => {
-                  setFolder(value);
-                  setCheckedIds(new Set());
-                }}
-                accessibilityLabel={t('chat.folder.label')}
-                divider
-              />
-            ),
-          ),
+          folders.length > 0
+            ? LChatFolderTabs(folders)
+                .value([
+                  folder,
+                  (value) => {
+                    setFolder(value);
+                    setCheckedIds(new Set());
+                  },
+                ])
+                .label(t('chat.folder.label'))
+                .dividers()
+            : null,
           Embed(!supervised && <HistoryTransferBanner />),
           sync === 'offline'
             ? LText(t('chat.sync.offline'))
@@ -296,14 +296,10 @@ export function ConversationList() {
                 .foreground('muted')
             : null,
           searching
-            ? Embed(
-                <ChatSearchResults
-                  query={query}
-                  results={results}
-                  onResultPress={open}
-                  labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
-                />,
-              )
+            ? LChatSearchResults(query, results, {
+                onResultPress: open,
+                labels: { chat: t('chat.title'), empty: t('chat.search.empty') },
+              })
             : LList(
                 chats.map((chat) => ({
                   id: chat.id,

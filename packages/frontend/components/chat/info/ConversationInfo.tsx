@@ -2,12 +2,11 @@ import { ConversationReadGate } from '@/lib/allo/ConversationReadGate';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useConversation, useConversationActions, useTimeline } from '@allo/react';
 import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
-import {
-  ChatInfoPanel,
-  type ChatInfoAction,
-  type ChatInfoPanelVariant,
-  type ChatInfoTab,
-  type ChatMember,
+import type {
+  ChatInfoAction,
+  ChatInfoPanelVariant,
+  ChatInfoTab,
+  ChatMember,
 } from '@oxy.so/bloom/chat-screen';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiDoorOpenLine } from '@oxy.so/bloom/icons/RiDoorOpenLine';
@@ -48,6 +47,7 @@ import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import {
+  ChatInfoPanel as LChatInfoPanel,
   Embed,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
@@ -339,76 +339,72 @@ function AuthorizedConversationInfo({
         },
   ];
 
-  return (
-    <ChatInfoPanel
-      variant={variant}
-      title={isGroup ? t('chat.details.groupInfo') : t('chat.details.contactInfo')}
-      onClose={onClose}
-      closeLabel={t('common.close')}
-      coverSource={cover || undefined}
-      avatar={
-        faces ? (
-          <AvatarGroup
-            layout="conversation"
-            items={faces.map((face) => ({ ...face, uri: face.source }))}
-            size={96}
-          />
-        ) : undefined
-      }
-      avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
-      name={title}
-      handle={
-        isGroup
-          ? t('chat.members', { count: view.memberAccountIds.length })
-          : person?.handle
-            ? `@${person.handle}`
-            : undefined
-      }
-      bio={isGroup ? undefined : person?.bio}
-      settingsTitle={t('chat.info.settingsTitle')}
-      settings={toElement(
-        LGroupedSection(
-          canManage
-            ? LGroupedSectionItem(t('chat.group.name'))
-                .leadingView(Icon(RiUserLine).size('md').foreground('muted'))
-                .chevron(false)
-                .trailing(
-                  Embed(
-                    <View style={styles.rename}>
-                      <TextFieldInput
-                        label={t('chat.group.name')}
-                        placeholder={null}
-                        value={name}
-                        onChangeText={setName}
-                        onBlur={() => void saveName()}
-                        onSubmitEditing={() => void saveName()}
-                        returnKeyType="done"
-                        maxLength={128}
-                        size="sm"
-                      />
-                    </View>,
-                  ),
-                )
-            : null,
-          LGroupedSectionItem(t('chat.info.encryption'))
-            .value(t('chat.info.encryptionValue'))
-            .leadingView(Icon(RiLock2Line).size('md').foreground('muted'))
-            .chevron(false),
-        ).style('filled'),
-      )}
-      tabs={tabs}
-      members={isGroup ? members : undefined}
-      membersTitle={t('chat.details.participants')}
-      memberSearch={isGroup && view.memberAccountIds.length >= 8}
-      memberQuery={memberQuery}
-      onMemberQueryChange={setMemberQuery}
-      onPressMember={(member) => openProfile(member.id)}
-      roleLabels={{ owner: t('chat.role.owner'), admin: t('chat.role.admin') }}
-      onAddMember={canManage ? () => router.push(`/new?addTo=${view.id}`) : undefined}
-      addMemberLabel={t('chat.group.addMember')}
-      actions={actions}
-      destructiveActions={destructiveActions}
-    />
+  return toElement(
+    LChatInfoPanel({
+      title: isGroup ? t('chat.details.groupInfo') : t('chat.details.contactInfo'),
+      onClose,
+      closeLabel: t('common.close'),
+      coverSource: cover || undefined,
+      // Bloom's 96 has no avatar rung in the language.
+      avatar: faces
+        ? Embed(
+            <AvatarGroup
+              layout="conversation"
+              items={faces.map((face) => ({ ...face, uri: face.source }))}
+              size={96}
+            />,
+          )
+        : undefined,
+      avatarSource: faces ? undefined : conversationAvatar(view, ctx),
+      name: title,
+      handle: isGroup
+        ? t('chat.members', { count: view.memberAccountIds.length })
+        : person?.handle
+          ? `@${person.handle}`
+          : undefined,
+      bio: isGroup ? undefined : person?.bio,
+      settingsTitle: t('chat.info.settingsTitle'),
+      settings: LGroupedSection(
+        canManage
+          ? LGroupedSectionItem(t('chat.group.name'))
+              .leadingView(Icon(RiUserLine).size('md').foreground('muted'))
+              .chevron(false)
+              .trailing(
+                Embed(
+                  <View style={styles.rename}>
+                    <TextFieldInput
+                      label={t('chat.group.name')}
+                      placeholder={null}
+                      value={name}
+                      onChangeText={setName}
+                      onBlur={() => void saveName()}
+                      onSubmitEditing={() => void saveName()}
+                      returnKeyType="done"
+                      maxLength={128}
+                      size="sm"
+                    />
+                  </View>,
+                ),
+              )
+          : null,
+        LGroupedSectionItem(t('chat.info.encryption'))
+          .value(t('chat.info.encryptionValue'))
+          .leadingView(Icon(RiLock2Line).size('md').foreground('muted'))
+          .chevron(false),
+      ).style('filled'),
+      tabs,
+      members: isGroup ? members : undefined,
+      membersTitle: t('chat.details.participants'),
+      memberSearch: isGroup && view.memberAccountIds.length >= 8,
+      onPressMember: (member) => openProfile(member.id),
+      roleLabels: { owner: t('chat.role.owner'), admin: t('chat.role.admin') },
+      onAddMember: canManage ? () => router.push(`/new?addTo=${view.id}`) : undefined,
+      addMemberLabel: t('chat.group.addMember'),
+      actions,
+      destructiveActions,
+    })
+      .style(variant)
+      .memberQuery([memberQuery, setMemberQuery]),
   );
 }
 
