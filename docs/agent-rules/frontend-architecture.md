@@ -4,7 +4,7 @@ Moved verbatim from the root `AGENTS.md`; the rules below are unchanged and bind
 
 ```
 packages/
-  frontend/       @allo/frontend      Expo / React Native / NativeWind
+  frontend/       @allo/frontend      Expo / React Native / Bloom language
   backend/        @allo/backend       Express / drizzle / Socket.io
   shared-types/   @allo/shared-types  TypeScript type definitions
 ```
@@ -31,10 +31,19 @@ in a browser and compared with Bloom's own stories rather than assumed. Jest
 cannot do this job: rendering a Bloom chat screen there dies in reanimated 4's
 native worklets, so component coverage stays at the data-path level.
 
-NativeWind is on a **prerelease** (a `5.0.0-preview` tag), paired with Tailwind
-v4 and `react-native-css` v3, and is there only for Bloom's design tokens: the
-app's own components use `StyleSheet` with theme colours. Check the exact tag in
-`packages/frontend/package.json` before blaming your own code.
+The app's UI is written in the **Bloom language** (`@oxy.so/bloom-language`):
+views are chains of modifiers over Bloom tokens, placed in JSX with
+`toElement()`, and what the language cannot draw yet stays Bloom JSX (with
+`StyleSheet` and theme colours). The language compiler runs in front of Metro
+and Jest (`metro.config.js`, `jest.config.js`) and rejects a wrong modifier or
+token at build time. Allo's own code has no `className`.
+
+NativeWind (a `5.0.0` prerelease, with Tailwind v4 and `react-native-css` v3) is
+there only for the Oxy SDK, whose screens (`@oxy.so/services` 14) still style
+with `className`; app-preset's `BloomNativeWindTheme` in `app/_layout.tsx` hands
+them Bloom's tokens on native. It goes when the SDK no longer needs it
+(services 15). Check the exact tag in `packages/frontend/package.json` before
+blaming your own code.
 
 Bloom's, and nothing else. `BloomProvider` in `app/_layout.tsx` keeps this
 device's last mode and colour (`persistKey`/`storage` from `lib/theme.ts`), so a

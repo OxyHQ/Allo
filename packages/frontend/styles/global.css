@@ -4,11 +4,5 @@
 @import "nativewind/theme";
 @import "@oxy.so/bloom/design-tokens/theme.css";
 
-@source "../app/**/*.{js,jsx,ts,tsx}";
-@source "../components/**/*.{js,jsx,ts,tsx}";
-@source "../lib/**/*.{js,jsx,ts,tsx}";
-@source "../hooks/**/*.{js,jsx,ts,tsx}";
-@source "../stores/**/*.{js,jsx,ts,tsx}";
-@source "../utils/**/*.{js,jsx,ts,tsx}";
 @source "../../../node_modules/@oxy.so/services/lib/**/*.{js,jsx}";
 @source "../../../node_modules/@oxy.so/bloom/lib/**/*.{js,jsx}";
