@@ -80,6 +80,24 @@ interface Answer {
   supervised: boolean;
 }
 
+const failureStamps = new WeakMap<object, number>();
+let lastFailureStamp = 0;
+
+/**
+ * A number for one failed read, the same for the same failure: a read that fails
+ * again fails with a new error, so a repeat is counted (`CheckFailure.at`).
+ */
+function failureStamp(error: unknown): number {
+  if (!error || typeof error !== 'object') return lastFailureStamp;
+  let stamp = failureStamps.get(error);
+  if (stamp === undefined) {
+    lastFailureStamp += 1;
+    stamp = lastFailureStamp;
+    failureStamps.set(error, stamp);
+  }
+  return stamp;
+}
+
 /**
  * Whether this account is supervised, as far as this device can say.
  *
@@ -111,13 +129,13 @@ function useSupervisionAnswer(
   accountId: string | null,
   activeSessionId: string | null | undefined,
   personal: boolean,
-  supervision: { data?: { self?: { status: string } | null } | undefined; isError: boolean },
+  supervision: { value?: { self?: { status: string } | null } | undefined; status: string },
 ): { known: boolean; supervised: boolean } {
   const session = accountId === null ? null : JSON.stringify([accountId, activeSessionId ?? null]);
   const fresh =
-    !personal || supervision.data === undefined
+    !personal || supervision.value === undefined
       ? undefined
-      : Boolean(supervision.data.self && supervision.data.self.status !== 'ended');
+      : Boolean(supervision.value.self && supervision.value.self.status !== 'ended');
   const [last, setLast] = useState<Answer | null>(null);
   // Stored during render, so the answer and the key agree in the same render.
   if (session === null || !personal) {
@@ -126,7 +144,8 @@ function useSupervisionAnswer(
     setLast({ session, supervised: fresh });
   }
   if (accountId === null || !personal) return { known: true, supervised: false };
-  const remembered = supervision.isError && last?.session === session ? last.supervised : undefined;
+  const remembered =
+    supervision.status === 'error' && last?.session === session ? last.supervised : undefined;
   const answer = fresh ?? remembered;
   return { known: answer !== undefined, supervised: answer ?? false };
 }
@@ -171,13 +190,15 @@ export function AlloRoot({ children }: { children: React.ReactNode }) {
   // is drawn, and the screen recovers by itself once the device is back online.
   const supervisionFailure = useMemo(
     () =>
-      supervision.isError ? { at: supervision.errorUpdatedAt, error: supervision.error } : null,
-    [supervision.isError, supervision.errorUpdatedAt, supervision.error],
+      supervision.status === 'error'
+        ? { at: failureStamp(supervision.error), error: supervision.error }
+        : null,
+    [supervision.status, supervision.error],
   );
-  const { refetch: refetchSupervision } = supervision;
+  const { refresh: refreshSupervision } = supervision;
   const retrySupervision = useCallback(() => {
-    void refetchSupervision();
-  }, [refetchSupervision]);
+    void refreshSupervision();
+  }, [refreshSupervision]);
   const supervisionGaveUp = useTransientRetry(supervisionFailure, retrySupervision);
   const key =
     accountId && known

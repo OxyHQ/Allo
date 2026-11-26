@@ -64,29 +64,26 @@ jest.mock('@/lib/allo/client', () => ({
 }));
 
 type Supervision = {
-  data: { self: { status: string } | null } | undefined;
-  isError: boolean;
+  value: { self: { status: string } | null } | undefined;
+  status: 'loading' | 'success' | 'error';
   error: unknown;
-  errorUpdatedAt: number;
 };
-const offline = Object.assign(new Error('offline'), { status: 0 });
 const answered = (self: { status: string } | null): Supervision => ({
-  data: { self },
-  isError: false,
+  value: { self },
+  status: 'success',
   error: null,
-  errorUpdatedAt: 0,
 });
-const failed = (at: number): Supervision => ({
-  data: undefined,
-  isError: true,
-  error: offline,
-  errorUpdatedAt: at,
+/** A failed read: each one fails with its own error, as bloom-data's reads do. */
+const failed = (_attempt: number): Supervision => ({
+  value: undefined,
+  status: 'error',
+  error: Object.assign(new Error('offline'), { status: 0 }),
 });
-const pending: Supervision = { data: undefined, isError: false, error: null, errorUpdatedAt: 0 };
+const pending: Supervision = { value: undefined, status: 'loading', error: null };
 
 let mockSupervision: Supervision = pending;
 const mockSession = { user: { id: 'acc-recheck', kind: 'personal' }, activeSessionId: 's-1' };
-const mockRefetch = jest.fn(async () => undefined);
+const mockRefresh = jest.fn(async () => undefined);
 const mockOxyServices = {
   http: { getSessionEpoch: () => 0 },
   session: {
@@ -102,7 +99,7 @@ jest.mock('@oxy.so/services/ui/client', () => ({
     oxyServices: mockOxyServices,
     logout: jest.fn(),
   }),
-  useSupervision: () => ({ ...mockSupervision, refetch: mockRefetch }),
+  useSupervision: () => ({ ...mockSupervision, refresh: mockRefresh }),
 }));
 
 const { AlloRoot } = require('@/lib/allo/AlloRoot') as typeof import('@/lib/allo/AlloRoot');
@@ -133,7 +130,7 @@ async function answer(next: Supervision) {
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
   mockClients.length = 0;
-  mockRefetch.mockClear();
+  mockRefresh.mockClear();
   mockSupervision = pending;
   mockSession.user = { id: 'acc-recheck', kind: 'personal' };
   mockSession.activeSessionId = 's-1';
@@ -160,7 +157,7 @@ describe('a supervision re-check', () => {
     await act(async () => {
       jest.advanceTimersByTime(1_000);
     });
-    expect(mockRefetch).toHaveBeenCalled();
+    expect(mockRefresh).toHaveBeenCalled();
     await answer(failed(2));
     await answer(failed(3));
     await answer(failed(4));

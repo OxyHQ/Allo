@@ -74,9 +74,9 @@ jest.mock('@/lib/allo/push', () => ({
   clearPushToken: async () => undefined,
   onPushPermissionGranted: () => () => undefined,
 }));
-let mockSupervision: { data: { self: null } | undefined; isError: boolean } = {
-  data: { self: null },
-  isError: false,
+let mockSupervision: { value: { self: null } | undefined; status: string } = {
+  value: { self: null },
+  status: 'success',
 };
 jest.mock('@/lib/allo/people', () => ({ configurePeople: jest.fn() }));
 jest.mock('@/lib/allo/ConversationAccessState', () => ({
@@ -120,7 +120,7 @@ const mockOxyServices = {
 };
 jest.mock('@oxy.so/services/ui/client', () => ({
   useOxy: () => ({ ...mockSession, oxyServices: mockOxyServices, logout: mockLogout }),
-  useSupervision: () => ({ ...mockSupervision, refetch: jest.fn() }),
+  useSupervision: () => ({ ...mockSupervision, error: null, refresh: jest.fn() }),
 }));
 
 // Imported after the mocks, the way jest requires.
@@ -296,7 +296,7 @@ describe('a session that goes away', () => {
     // Cached success metadata is not permission: until the new observer returns
     // current-session data the previous transcript tree is removed.
     await act(async () => {
-      mockSupervision = { data: undefined, isError: false };
+      mockSupervision = { value: undefined, status: 'loading' };
       tree!.update(
         <AlloRoot>
           <Text>private app</Text>
@@ -307,7 +307,7 @@ describe('a session that goes away', () => {
     await settle();
     expect(await mockSecrets.get(`allo.instance-key.${ACCOUNT}.allo`)).toEqual(signingKey);
     await act(async () => {
-      mockSupervision = { data: { self: null }, isError: false };
+      mockSupervision = { value: { self: null }, status: 'success' };
       tree!.update(
         <AlloRoot>
           <Text>private app</Text>

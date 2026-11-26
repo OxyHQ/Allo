@@ -13,6 +13,19 @@ import {
   updateMyPrivacySettings,
   type AlloPrivacySettings,
 } from '@/lib/privacy/api';
+import { accountQueryCache } from '@/lib/query/queryClient';
+
+/**
+ * A write runs only for the account it was started for: a paused write never
+ * resumes under the next account's session. Its callbacks check
+ * `accountQueryCache.isActive(account)` too, so a late answer never lands in
+ * the next account's cache.
+ */
+function runFor<R>(account: string | undefined, request: () => Promise<R>): Promise<R> {
+  return accountQueryCache.isActive(account)
+    ? request()
+    : Promise.reject(new Error('The account changed before this write ran.'));
+}
 
 /**
  * READING AND WRITING THIS ACCOUNT'S PRIVACY SETTINGS.
@@ -78,24 +91,29 @@ export function useUpdatePrivacySettings() {
   const { user } = useOxy();
   const key = privacyQueryKeys.settings(user?.id);
 
+  const account = user?.id;
+
   return useMutation({
-    mutationFn: (patch: Partial<AlloPrivacySettings>) => updateMyPrivacySettings(patch),
+    mutationFn: (patch: Partial<AlloPrivacySettings>) =>
+      runFor(account, () => updateMyPrivacySettings(patch)),
     onMutate: async (patch) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<AlloPrivacySettings>(key);
-      queryClient.setQueryData<AlloPrivacySettings>(key, {
-        ...(previous ?? DEFAULT_PRIVACY_SETTINGS),
-        ...patch,
-      });
+      if (accountQueryCache.isActive(account)) {
+        queryClient.setQueryData<AlloPrivacySettings>(key, {
+          ...(previous ?? DEFAULT_PRIVACY_SETTINGS),
+          ...patch,
+        });
+      }
       return { previous };
     },
     onError: (_error, _patch, context) => {
-      if (context?.previous !== undefined) {
+      if (context?.previous !== undefined && accountQueryCache.isActive(account)) {
         queryClient.setQueryData(key, context.previous);
       }
     },
     onSuccess: (settings) => {
-      queryClient.setQueryData(key, settings);
+      if (accountQueryCache.isActive(account)) queryClient.setQueryData(key, settings);
     },
   });
 }
@@ -180,10 +198,13 @@ export function useBlockedUsers(): {
 export function useBlockUser() {
   const queryClient = useQueryClient();
   const { user } = useOxy();
+  const account = user?.id;
   return useMutation({
-    mutationFn: blockUser,
+    mutationFn: (userId: string) => runFor(account, () => blockUser(userId)),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(user?.id) });
+      if (accountQueryCache.isActive(account)) {
+        void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(account) });
+      }
     },
   });
 }
@@ -191,10 +212,13 @@ export function useBlockUser() {
 export function useUnblockUser() {
   const queryClient = useQueryClient();
   const { user } = useOxy();
+  const account = user?.id;
   return useMutation({
-    mutationFn: unblockUser,
+    mutationFn: (userId: string) => runFor(account, () => unblockUser(userId)),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(user?.id) });
+      if (accountQueryCache.isActive(account)) {
+        void queryClient.invalidateQueries({ queryKey: privacyQueryKeys.blocked(account) });
+      }
     },
   });
 }

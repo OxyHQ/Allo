@@ -20,9 +20,10 @@ jest.mock('@oxy.so/services/ui/client', () => ({
     logout: mockLogout,
   }),
   useSupervision: () => ({
-    data: mockSupervisionReady ? { self: null } : undefined,
-    isError: false,
-    refetch: jest.fn(),
+    value: mockSupervisionReady ? { self: null } : undefined,
+    status: mockSupervisionReady ? 'success' : 'loading',
+    error: null,
+    refresh: jest.fn(),
   }),
 }));
 jest.mock('@/components/calls/CallNotice', () => ({ CallNotice: () => null }));

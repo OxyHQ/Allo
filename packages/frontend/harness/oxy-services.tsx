@@ -4,8 +4,7 @@
  * chat screens can be opened in a browser with no account and no backend.
  */
 import { APP_COLOR_PRESETS, useBloomTheme, type ThemeMode } from '@oxy.so/bloom/theme';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable } from 'react-native';
 
 import { RawText, toElement } from '@oxy.so/bloom-language';
@@ -142,7 +141,6 @@ export function useOxy() {
     isLoading: false,
     isAuthenticated: askAliaHarness,
     canUsePrivateApi: askAliaHarness,
-    isAccountCacheReady: askAliaHarness,
     oxyServices: services,
     logout: async () => undefined,
     currentLanguage: 'en-US',
@@ -179,10 +177,9 @@ export function useAuth() {
   return { canUsePrivateApi: askAliaHarness, signIn: async () => undefined };
 }
 
-/** Like the real provider, it owns the app's React Query client. */
+/** Like the real provider since Services 15, it holds no React Query client (the app mounts its own). */
 export function OxyProvider({ children }: { children: ReactNode }) {
-  const [client] = useState(() => new QueryClient());
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return <>{children}</>;
 }
 
 export function OxySignInButton() {
