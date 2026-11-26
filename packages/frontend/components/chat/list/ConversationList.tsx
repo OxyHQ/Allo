@@ -4,7 +4,6 @@ import { GemieAskProvider, useAskGemie } from '@gemies/sdk/ask';
 import { GemieAvatarIcon } from '@gemies/sdk/avatar';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
 import { ChatFolderTabs, ChatSearchResults, type ChatSummary } from '@oxy.so/bloom/chat-list';
-import { Button } from '@oxy.so/bloom/button';
 import { ListSelectionBar } from '@oxy.so/bloom/list';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiLogoutBoxRLine } from '@oxy.so/bloom/icons/RiLogoutBoxRLine';
@@ -25,15 +24,18 @@ import { conversationIdFromPath } from '@/utils/routeUtils';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
 import {
+  Button as LButton,
   ChatEmptyState as LChatEmptyState,
   ChatSearchField as LChatSearchField,
   Embed,
   Header,
+  Icon,
   List as LList,
   ScrollView,
   Text as LText,
   VStack,
   toElement,
+  view,
 } from '@oxy.so/bloom-language';
 
 /**
@@ -228,11 +230,9 @@ export function ConversationList() {
           .onBack(null)
           .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
           .toolbar(
-            Embed(
-              !supervised && checkedChats.length === 0 ? (
-                <AskAliaButton label={t('chat.askAlia')} />
-              ) : undefined,
-            ),
+            !supervised && checkedChats.length === 0
+              ? AskAliaButton({ label: t('chat.askAlia') })
+              : null,
           )
           .accessory(
             Embed(
@@ -295,53 +295,49 @@ export function ConversationList() {
                 .padding('bottom', 'sm')
                 .foreground('muted')
             : null,
-          Embed(
-            searching ? (
-              <ChatSearchResults
-                query={query}
-                results={results}
-                onResultPress={open}
-                labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
-              />
-            ) : (
-              toElement(
-                LList(
-                  chats.map((chat) => ({
-                    id: chat.id,
-                    conversation: chat,
-                    active: chat.id === selectedId,
-                    checked: checkedIds.has(chat.id),
-                    onCheckedChange: (checked) => setChecked(chat.id, checked),
-                    selecting: checkedChats.length > 0,
-                    onPress: () => open(chat.id),
-                    swipeActions: chat.swipeActions,
-                    actions: chat.swipeActions?.right,
-                    onAction: (action) => {
-                      if (action === LEAVE) void confirmLeave(chat.id);
-                      if (action === DELETE) void confirmDelete(chat.id);
-                    },
-                  })),
-                )
-                  .testID('conversation-list')
-                  .headerContent(
-                    Embed(
-                      <StoriesStrip
-                        ownAccountId={me}
-                        onStoryPress={openStory}
-                        onOwnPress={openUpdates}
-                      />,
-                    ),
-                  )
-                  .loading(summaries.length === 0 && sync === 'syncing')
-                  .emptyState(
-                    LChatEmptyState({
-                      title: t('chat.empty.title'),
-                      description: t('chat.empty.description'),
-                    }),
-                  ),
+          searching
+            ? Embed(
+                <ChatSearchResults
+                  query={query}
+                  results={results}
+                  onResultPress={open}
+                  labels={{ chat: t('chat.title'), empty: t('chat.search.empty') }}
+                />,
               )
-            ),
-          ),
+            : LList(
+                chats.map((chat) => ({
+                  id: chat.id,
+                  conversation: chat,
+                  active: chat.id === selectedId,
+                  checked: checkedIds.has(chat.id),
+                  onCheckedChange: (checked) => setChecked(chat.id, checked),
+                  selecting: checkedChats.length > 0,
+                  onPress: () => open(chat.id),
+                  swipeActions: chat.swipeActions,
+                  actions: chat.swipeActions?.right,
+                  onAction: (action) => {
+                    if (action === LEAVE) void confirmLeave(chat.id);
+                    if (action === DELETE) void confirmDelete(chat.id);
+                  },
+                })),
+              )
+                .testID('conversation-list')
+                .headerContent(
+                  Embed(
+                    <StoriesStrip
+                      ownAccountId={me}
+                      onStoryPress={openStory}
+                      onOwnPress={openUpdates}
+                    />,
+                  ),
+                )
+                .loading(summaries.length === 0 && sync === 'syncing')
+                .emptyState(
+                  LChatEmptyState({
+                    title: t('chat.empty.title'),
+                    description: t('chat.empty.description'),
+                  }),
+                ),
         )
           .keyboardTaps('handled')
           .contentView((v) => v.padding('bottom', '2xl')),
@@ -364,11 +360,9 @@ export function ConversationList() {
   );
 }
 
-function AskAliaButton({ label }: { label: string }) {
+const AskAliaButton = view(function AskAliaButton({ label }: { label: string }) {
   const { ask } = useAskGemie();
-  return (
-    <Button appearance="outline" leadingIcon={GemieAvatarIcon} onPress={() => ask()}>
-      {label}
-    </Button>
-  );
-}
+  return LButton(Icon(GemieAvatarIcon), LText(label))
+    .onPress(() => ask())
+    .style('outline');
+});

@@ -23,6 +23,7 @@ import {
   Embed,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
+  Group,
   HStack,
   Icon,
   SettingsSection as LSettingsSection,
@@ -208,43 +209,33 @@ export function BackupPanel({ onPhrasePending }: BackupPanelProps) {
         ),
       ).description(t('backup.explain')),
       HStack(
-        Embed(
-          status.enabled ? (
-            <>
-              {toElement(
-                LButton(LText(t('backup.backUpNow')))
-                  .testID('backup-refresh')
-                  .loading(action === 'refresh' || (action === null && status.busy))
-                  .disabled(busy)
-                  .onPress(() => void backUpNow())
-                  .tint('accent')
-                  .style('solid')
-                  .grow(),
-              )}
-              {toElement(
-                LButton(LText(t('backup.turnOff')))
-                  .testID('backup-disable')
-                  .loading(action === 'disable')
-                  .disabled(busy)
-                  .onPress(() => void turnOff())
-                  .tint('neutral')
-                  .style('outline')
-                  .grow(),
-              )}
-            </>
-          ) : (
-            toElement(
-              LButton(LText(t('backup.turnOn')))
-                .testID('backup-enable')
-                .loading(action === 'enable')
-                .disabled(busy || phrasePending)
-                .onPress(() => void turnOn())
+        status.enabled
+          ? Group(
+              LButton(LText(t('backup.backUpNow')))
+                .testID('backup-refresh')
+                .loading(action === 'refresh' || (action === null && status.busy))
+                .disabled(busy)
+                .onPress(() => void backUpNow())
                 .tint('accent')
                 .style('solid')
                 .grow(),
+              LButton(LText(t('backup.turnOff')))
+                .testID('backup-disable')
+                .loading(action === 'disable')
+                .disabled(busy)
+                .onPress(() => void turnOff())
+                .tint('neutral')
+                .style('outline')
+                .grow(),
             )
-          ),
-        ),
+          : LButton(LText(t('backup.turnOn')))
+              .testID('backup-enable')
+              .loading(action === 'enable')
+              .disabled(busy || phrasePending)
+              .onPress(() => void turnOn())
+              .tint('accent')
+              .style('solid')
+              .grow(),
       )
         .spacing('md')
         .margin('top', 'md')

@@ -6,11 +6,12 @@ import {
   useStickerShop,
 } from '@oxy.so/stickers/react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import {
   Button as LButton,
   Embed,
+  Group,
   HStack,
   Text as LText,
   VStack,
@@ -35,35 +36,36 @@ export function StickerPicker({
   const packs = installed.data ?? [];
   if (packs.length === 0) return <StickerShop height={height} />;
 
-  return (
-    <ScrollView style={{ height }} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
-      {packs.map((pack) =>
-        toElement(
-          VStack(
-            LText(pack.title).font('body-2').weight('medium'),
-            HStack(
-              Embed(
-                pack.stickers.map((sticker) =>
-                  toElement(
+  return toElement(
+    Embed((render) => (
+      <ScrollView style={{ height }} contentContainerStyle={styles.packs}>
+        {render(
+          Group(
+            ...packs.map((pack) =>
+              VStack(
+                LText(pack.title).font('body-2').weight('medium'),
+                HStack(
+                  ...pack.stickers.map((sticker) =>
                     VStack(
                       Embed(<StickerTile fallback={sticker.fallback.url} size={TILE} decorative />),
                     )
                       .role('button')
                       .label(`${sticker.emoji[0] ?? ''} ${t('chat.attachment.sticker')}`.trim())
                       .onPress(() => onSelect(sticker))
-                      .pressScale(),
-                    sticker.id,
+                      .pressScale()
+                      .id(sticker.id),
                   ),
-                ),
-              ),
-            )
-              .wrap()
-              .spacing('xs'),
-          ).spacing('6'),
-          pack.id,
-        ),
-      )}
-    </ScrollView>
+                )
+                  .wrap()
+                  .spacing('xs'),
+              )
+                .spacing('6')
+                .id(pack.id),
+            ),
+          ),
+        )}
+      </ScrollView>
+    )),
   );
 }
 
@@ -73,29 +75,36 @@ function StickerShop({ height }: { height: number }) {
   const shop = useStickerShop({ limit: 24 });
   const install = useInstallStickerPack();
 
-  return (
-    <ScrollView style={{ height }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
-      {toElement(LText(t('composer.stickers.empty')).font('body-2'))}
-      {(shop.data?.items ?? []).map((pack) =>
-        toElement(
-          HStack(
-            Embed(
-              pack.cover ? (
-                <StickerTile fallback={pack.cover.fallback.url} size={48} decorative />
-              ) : null,
+  return toElement(
+    Embed((render) => (
+      <ScrollView style={{ height }} contentContainerStyle={styles.shop}>
+        {render(
+          Group(
+            LText(t('composer.stickers.empty')).font('body-2'),
+            ...(shop.data?.items ?? []).map((pack) =>
+              HStack(
+                pack.cover
+                  ? Embed(<StickerTile fallback={pack.cover.fallback.url} size={48} decorative />)
+                  : null,
+                LText(pack.title).grow().font('body').weight('medium').lines(1),
+                LButton(LText(t('composer.stickers.add')))
+                  .size('sm')
+                  .style('subtle')
+                  .loading(install.isPending && install.variables === pack.id)
+                  .onPress(() => install.mutate(pack.id)),
+              )
+                .align('center')
+                .spacing('10')
+                .id(pack.id),
             ),
-            LText(pack.title).grow().font('body').weight('medium').lines(1),
-            LButton(LText(t('composer.stickers.add')))
-              .size('sm')
-              .style('subtle')
-              .loading(install.isPending && install.variables === pack.id)
-              .onPress(() => install.mutate(pack.id)),
-          )
-            .align('center')
-            .spacing('10'),
-          pack.id,
-        ),
-      )}
-    </ScrollView>
+          ),
+        )}
+      </ScrollView>
+    )),
   );
 }
+
+const styles = StyleSheet.create({
+  packs: { gap: 12, paddingBottom: 8 },
+  shop: { gap: 10, paddingBottom: 8 },
+});

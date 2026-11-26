@@ -1,5 +1,4 @@
 import type { PollDraft } from '@allo/core';
-import { Button } from '@oxy.so/bloom/button';
 import { RiAddLine } from '@oxy.so/bloom/icons/RiAddLine';
 import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
 import { useCallback, useState } from 'react';
@@ -17,11 +16,15 @@ import {
 } from '@/lib/chat/poll';
 
 import {
+  Button,
   Dialog as LDialog,
   Embed,
+  Group,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
   HStack,
+  Icon,
+  Text,
   TextField,
   Toggle,
   VStack,
@@ -99,74 +102,67 @@ export function PollComposer({ open, onClose, onSend }: PollComposerProps) {
 
   return toElement(
     LDialog(
-      Embed(
+      Embed((render) => (
         <ScrollView
           style={styles.body}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
-          {toElement(
-            TextField([question, setQuestion], t('poll.compose.question'))
-              .placeholder(t('poll.compose.questionPlaceholder'))
-              .maxLength(POLL_QUESTION_MAX_LENGTH)
-              .multiline(),
-          )}
-
-          {options.map((option, index) =>
-            toElement(
-              HStack(
-                VStack(
-                  TextField(
-                    [option, (value) => setOption(index, value)],
-                    t('poll.compose.option', { index: index + 1 }),
+          {render(
+            Group(
+              TextField([question, setQuestion], t('poll.compose.question'))
+                .placeholder(t('poll.compose.questionPlaceholder'))
+                .maxLength(POLL_QUESTION_MAX_LENGTH)
+                .multiline(),
+              ...options.map((option, index) =>
+                HStack(
+                  VStack(
+                    TextField(
+                      [option, (value) => setOption(index, value)],
+                      t('poll.compose.option', { index: index + 1 }),
+                    )
+                      .placeholder(t('poll.compose.optionPlaceholder'))
+                      .maxLength(POLL_OPTION_MAX_LENGTH)
+                      .submitLabel('next'),
                   )
-                    .placeholder(t('poll.compose.optionPlaceholder'))
-                    .maxLength(POLL_OPTION_MAX_LENGTH)
-                    .submitLabel('next'),
+                    .flex('grow')
+                    .shrink('normal'),
+                  // Below the floor there is nothing to remove: two options are the
+                  // smallest poll the SDK accepts, so the control goes away rather
+                  // than refusing the press.
+                  options.length > POLL_MIN_OPTIONS
+                    ? Button(Icon(RiCloseCircleLine))
+                        .label(t('poll.compose.removeOption', { index: index + 1 }))
+                        .onPress(() => removeOption(index))
+                        .tint('neutral')
+                        .style('plain')
+                        .shape('circle')
+                    : null,
                 )
-                  .flex('grow')
-                  .shrink('normal'),
-                /* Below the floor there is nothing to remove: two options are the
-                      smallest poll the SDK accepts, so the control goes away rather
-                      than refusing the press. */ Embed(
-                  options.length > POLL_MIN_OPTIONS ? (
-                    <Button
-                      iconOnly
-                      appearance="plain"
-                      icon={RiCloseCircleLine}
-                      tone="neutral"
-                      accessibilityLabel={t('poll.compose.removeOption', { index: index + 1 })}
-                      onPress={() => removeOption(index)}
-                    />
-                  ) : null,
-                ),
-              )
-                .align('center')
-                .spacing('xs'),
-              index,
+                  .align('center')
+                  .spacing('xs')
+                  .id(index),
+              ),
+              options.length < POLL_MAX_OPTIONS
+                ? Button(Icon(RiAddLine), Text(t('poll.compose.addOption')))
+                    .onPress(addOption)
+                    .tint('accent')
+                    .style('plain')
+                : null,
+              LGroupedSection(
+                LGroupedSectionItem(t('poll.compose.multiple'))
+                  .description(t('poll.compose.multipleDescription'))
+                  .chevron(false)
+                  .trailing(Toggle([multiple, setMultiple]).label(t('poll.compose.multiple'))),
+                LGroupedSectionItem(t('poll.compose.anonymous'))
+                  .description(t('poll.compose.anonymousDescription'))
+                  .chevron(false)
+                  .trailing(Toggle([anonymous, setAnonymous]).label(t('poll.compose.anonymous'))),
+              ),
             ),
           )}
-
-          {options.length < POLL_MAX_OPTIONS ? (
-            <Button icon={RiAddLine} onPress={addOption} tone="accent" appearance="plain">
-              {t('poll.compose.addOption')}
-            </Button>
-          ) : null}
-
-          {toElement(
-            LGroupedSection(
-              LGroupedSectionItem(t('poll.compose.multiple'))
-                .description(t('poll.compose.multipleDescription'))
-                .chevron(false)
-                .trailing(Toggle([multiple, setMultiple]).label(t('poll.compose.multiple'))),
-              LGroupedSectionItem(t('poll.compose.anonymous'))
-                .description(t('poll.compose.anonymousDescription'))
-                .chevron(false)
-                .trailing(Toggle([anonymous, setAnonymous]).label(t('poll.compose.anonymous'))),
-            ),
-          )}
-        </ScrollView>,
-      ),
+        </ScrollView>
+      )),
     )
       .presentAt('bottom', { md: 'center' })
       .title(t('poll.compose.title'))
