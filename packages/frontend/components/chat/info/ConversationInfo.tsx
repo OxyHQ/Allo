@@ -23,7 +23,6 @@ import { RiSpamLine } from '@oxy.so/bloom/icons/RiSpamLine';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -52,6 +51,7 @@ import {
   Embed,
   GroupedSection as LGroupedSection,
   GroupedSectionItem as LGroupedSectionItem,
+  Icon,
   toElement,
 } from '@oxy.so/bloom-language';
 
@@ -89,7 +89,6 @@ function AuthorizedConversationInfo({
   onSearch,
 }: ConversationInfoProps) {
   const router = useRouter();
-  const theme = useTheme();
   const { t } = useTranslation();
   const view = useConversation(conversationId);
   const { items } = useTimeline(conversationId);
@@ -240,7 +239,6 @@ function AuthorizedConversationInfo({
 
   const title = conversationTitle(view, ctx);
   const faces = conversationFaces(view, ctx);
-  const icon = { width: 20, height: 20, fill: theme.colors.textSecondary };
 
   const actions: ChatInfoAction[] = [
     ...(other
@@ -372,7 +370,7 @@ function AuthorizedConversationInfo({
         LGroupedSection(
           canManage
             ? LGroupedSectionItem(t('chat.group.name'))
-                .leadingView(Embed(<RiUserLine {...icon} />))
+                .leadingView(Icon(RiUserLine).size('md').foreground('muted'))
                 .chevron(false)
                 .trailing(
                   Embed(
@@ -394,7 +392,7 @@ function AuthorizedConversationInfo({
             : null,
           LGroupedSectionItem(t('chat.info.encryption'))
             .value(t('chat.info.encryptionValue'))
-            .leadingView(Embed(<RiLock2Line {...icon} />))
+            .leadingView(Icon(RiLock2Line).size('md').foreground('muted'))
             .chevron(false),
         ).style('filled'),
       )}
