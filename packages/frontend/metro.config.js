@@ -121,4 +121,9 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return presetResolveRequest(context, moduleName, platform);
 };
 
-module.exports = config;
+// The Bloom language compiler (`@oxy.so/bloom-language-compiler`): a pre-pass in
+// front of the transform worker above (react-native-css's, which wraps Expo's),
+// so the Babel config stays Expo's default. It checks every chain against the
+// language spec, hoists static chains and marks `view()` bodies `"use memo"`.
+// Modules that never import `@oxy.so/bloom-language` pass through unchanged.
+module.exports = require('@oxy.so/bloom-language-compiler/metro').withBloomLanguage(config);

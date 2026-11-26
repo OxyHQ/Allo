@@ -12,6 +12,7 @@ import '@/lib/immerSetup';
 import { useBackWithFallback } from '@oxy.so/bloom/panel-routing/expo-router';
 import { useNetworkStatus } from '@oxy.so/bloom/connection-status';
 import { BloomProvider } from '@oxy.so/bloom/provider';
+import { BloomNativeWindTheme } from '@oxy.so/app-preset/nativewind-theme';
 import { preventNativeSplashAutoHide, useHideNativeSplashWhenReady } from '@oxy.so/expo-splash';
 import { useAccountTheme, useOxy } from '@oxy.so/services/ui/client';
 import { focusManager, onlineManager } from '@tanstack/react-query';
@@ -70,7 +71,10 @@ function ThemeRoot({ children }: { children: ReactNode }) {
       // Web shows its own splash while fonts load; native is still behind the OS splash.
       onFontsLoading={IS_WEB ? <AppSplashScreen /> : null}
     >
-      {children}
+      {/* Bloom styles without NativeWind. The classes NativeWind still draws (the
+          Oxy SDK's screens) read Bloom's tokens through this on native: the
+          theme's, and each colour scope's inside it. */}
+      <BloomNativeWindTheme>{children}</BloomNativeWindTheme>
     </BloomProvider>
   );
 }
