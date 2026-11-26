@@ -8,7 +8,7 @@ interface EmptyDetailProps {
 
 /** The detail pane before anything is chosen in the list beside it. */
 export const EmptyDetail = screen(function EmptyDetail({ title, description }: EmptyDetailProps) {
-  return VStack(LChatEmptyState({ title: title, description: description }))
+  return VStack(LChatEmptyState({ title, description }))
     .padding('all', '2xl')
     .align('center')
     .justify('center')
