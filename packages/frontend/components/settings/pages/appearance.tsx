@@ -1,16 +1,17 @@
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-  SegmentedControlItemText,
-} from '@oxy.so/bloom/segmented-control';
-import { SettingsGeneralPage, SettingsSelect } from '@oxy.so/bloom/settings-modal';
-import { Switch } from '@oxy.so/bloom/switch';
+import { SettingsGeneralPage } from '@oxy.so/bloom/settings-modal';
 import { COLOR_PRESET_REGISTRY, useBloomTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { useAccountColorSave, useAccountThemeControls } from '@oxy.so/services/ui/client';
 import { useTranslation } from 'react-i18next';
-
 import { THEME_MODES } from '@/lib/theme';
+
+import {
+  Option,
+  Segmented,
+  SettingsSelect as LSettingsSelect,
+  Toggle,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 type Mode = (typeof THEME_MODES)[number];
 
@@ -45,34 +46,27 @@ export default function AppearanceSettingsScreen() {
               key: 'sync',
               label: t('settings.appearance.followAccount'),
               description: t('settings.appearance.followAccountDescription'),
-              control: (
-                <Switch
-                  checked={source === 'account'}
-                  onCheckedChange={(on) => changeThemeSource(on ? 'account' : 'app')}
-                  accessibilityLabel={t('settings.appearance.followAccount')}
-                />
+              control: toElement(
+                Toggle([
+                  source === 'account',
+                  (on) => changeThemeSource(on ? 'account' : 'app'),
+                ]).label(t('settings.appearance.followAccount')),
               ),
             },
             {
               key: 'mode',
               label: t('settings.appearance.theme'),
-              control: (
-                <SegmentedControl
-                  label={t('settings.appearance.theme')}
-                  type="radio"
-                  value={mode}
-                  onChange={(next) =>
-                    changeThemeMode(next as Mode).catch(() =>
-                      toast.error(t('settings.appearance.saveError')),
-                    )
-                  }
-                >
-                  {THEME_MODES.map((value) => (
-                    <SegmentedControlItem key={value} value={value}>
-                      <SegmentedControlItemText>{t(MODE_LABELS[value])}</SegmentedControlItemText>
-                    </SegmentedControlItem>
-                  ))}
-                </SegmentedControl>
+              control: toElement(
+                Segmented(
+                  [
+                    mode,
+                    (next) =>
+                      changeThemeMode(next as Mode).catch(() =>
+                        toast.error(t('settings.appearance.saveError')),
+                      ),
+                  ],
+                  THEME_MODES.map((value) => Option(value, t(MODE_LABELS[value]))),
+                ).label(t('settings.appearance.theme')),
               ),
             },
           ],
@@ -85,20 +79,21 @@ export default function AppearanceSettingsScreen() {
               key: 'preset',
               label: t('settings.appearance.color'),
               description: current?.description,
-              control: (
-                <SettingsSelect
-                  label={t('settings.appearance.color')}
-                  value={value}
-                  onChange={(next) =>
-                    saveColor(next).catch(() =>
-                      toast.error(t('settings.appearance.colorSaveError')),
-                    )
-                  }
-                  items={presets.map((entry) => ({
+              control: toElement(
+                LSettingsSelect(
+                  t('settings.appearance.color'),
+                  [
+                    value,
+                    (next) =>
+                      saveColor(next).catch(() =>
+                        toast.error(t('settings.appearance.colorSaveError')),
+                      ),
+                  ],
+                  presets.map((entry) => ({
                     value: entry.name,
                     label: entry.displayName,
-                  }))}
-                />
+                  })),
+                ),
               ),
             },
           ],

@@ -1,26 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useCallActions, useConversation } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
 import {
   CallScreen,
   GroupCallGrid,
   IncomingCallScreen,
   type GroupCallParticipant,
 } from '@oxy.so/bloom/call-ui';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { Muted } from '@oxy.so/bloom/typography';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
+import { Screen } from '@oxy.so/bloom/screen';
 
 import { CallRingNotice } from '@/components/calls/CallRingNotice';
 import { CallVideo } from '@/components/calls/CallVideo';
 import { useCallMedia } from '@/lib/allo/callMedia';
 import { useChatContext } from '@/hooks/useChatContext';
 import { reportCallError, useCallDuration, useCallSession, useCallUi } from '@/lib/calls/session';
+
+import {
+  Button as LButton,
+  Embed,
+  Header,
+  ScrollView,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /**
  * `/c/:id/call` — THE CALL ITSELF.
@@ -50,7 +57,6 @@ export default function CallRoute() {
   }>();
   const { t } = useTranslation();
   const router = useRouter();
-  const theme = useTheme();
   const { user } = useOxy();
   const conversation = useConversation(id ?? '');
   const session = useCallSession();
@@ -153,28 +159,38 @@ export default function CallRoute() {
   // that has not loaded. Say so rather than drawing a call with nobody on it.
   if (!session && peerAccountIds.length === 0) {
     return (
-      <Screen scroll="content" header={<PageHeader title={t('calls.title')} />}>
-        <ScreenScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerClassName="gap-4 px-4 pb-8"
-        >
-          <CallRingNotice />
-          <Muted>{t('calls.noParticipants')}</Muted>
-          <Button onPress={() => router.push('/calls')} tone="neutral" appearance="outline">
-            {t('calls.title')}
-          </Button>
-        </ScreenScrollView>
+      <Screen scroll="content" header={toElement(Header(t('calls.title')).inPage())}>
+        {toElement(
+          ScrollView(
+            Embed(<CallRingNotice />),
+            Text(t('calls.noParticipants')).textStyle('muted'),
+            LButton(Text(t('calls.title')))
+              .onPress(() => router.push('/calls'))
+              .tint('neutral')
+              .style('outline'),
+          )
+            .keyboardTaps('handled')
+            .contentView((v) =>
+              v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'),
+            ),
+        )}
       </Screen>
     );
   }
 
   if (!session) {
-    return (
-      <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <Muted style={styles.centred}>
-          {t(incomingCallId ? 'calls.status.ended' : 'calls.starting')}
-        </Muted>
-      </View>
+    return toElement(
+      VStack(
+        Embed(
+          <Muted style={styles.centred}>
+            {t(incomingCallId ? 'calls.status.ended' : 'calls.starting')}
+          </Muted>,
+        ),
+      )
+        .background('background')
+        .align('center')
+        .justify('center')
+        .grow(),
     );
   }
 
@@ -227,7 +243,7 @@ export default function CallRoute() {
       .some((track) => track.readyState === 'live' && !track.muted) ? (
     <CallVideo stream={media.remote[0].stream} label={title} />
   ) : (
-    <Muted>{stageNotice}</Muted>
+    toElement(Text(stageNotice).textStyle('muted'))
   );
 
   /**
@@ -309,6 +325,5 @@ export default function CallRoute() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   centred: { textAlign: 'center' },
 });

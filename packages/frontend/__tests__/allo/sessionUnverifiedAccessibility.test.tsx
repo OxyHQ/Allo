@@ -32,6 +32,15 @@ jest.mock('@oxy.so/bloom/chat-screen', () => ({
 jest.mock('@oxy.so/bloom/icon-circle', () => ({ IconCircle: () => null }));
 jest.mock('@oxy.so/bloom/icons/RiShieldLine', () => ({ RiShieldLine: () => null }));
 jest.mock('@oxy.so/bloom/button', () => ({ Button: () => null }));
+// The state is drawn in the Bloom language, which reads the theme's paint.
+jest.mock('@oxy.so/bloom/theme', () => {
+  const theme = { isDark: false, colors: {} };
+  return {
+    ...jest.requireActual('@oxy.so/bloom/theme'),
+    useTheme: () => theme,
+    readThemePaint: () => ({ theme, paint: theme.colors }),
+  };
+});
 
 const { ConversationAccessState } =
   require('@/lib/allo/ConversationAccessState') as typeof import('@/lib/allo/ConversationAccessState');

@@ -6,7 +6,9 @@
 import { APP_COLOR_PRESETS, useBloomTheme, type ThemeMode } from '@oxy.so/bloom/theme';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable } from 'react-native';
+
+import { RawText, toElement } from '@oxy.so/bloom-language';
 
 export { useSupervision } from './supervision';
 
@@ -184,9 +186,5 @@ export function OxyProvider({ children }: { children: ReactNode }) {
 }
 
 export function OxySignInButton() {
-  return (
-    <Pressable>
-      <Text>Continue with Oxy</Text>
-    </Pressable>
-  );
+  return <Pressable>{toElement(RawText('Continue with Oxy'))}</Pressable>;
 }

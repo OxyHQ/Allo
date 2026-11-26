@@ -24,8 +24,8 @@ import { BackupPanel } from '@/components/backup/BackupPanel';
  * and strings from them, and presses and types through them, and nothing else.
  */
 
-jest.mock('@oxy.so/bloom/theme', () => ({
-  useTheme: () => ({
+jest.mock('@oxy.so/bloom/theme', () => {
+  const theme = {
     isDark: false,
     colors: {
       background: '#fff',
@@ -39,8 +39,12 @@ jest.mock('@oxy.so/bloom/theme', () => ({
       error: '#c00',
       success: '#080',
     },
-  }),
-}));
+  };
+  return {
+    useTheme: () => theme,
+    readThemePaint: () => ({ theme, paint: theme.colors }),
+  };
+});
 
 /** The English bundle, interpolated: what a person reading English sees. */
 jest.mock('react-i18next', () => {
@@ -67,7 +71,11 @@ jest.mock('react-i18next', () => {
 
 jest.mock('@oxy.so/bloom/typography', () => {
   const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
-  return { Text: ReactNative.Text, Muted: ReactNative.Text };
+  return {
+    ...jest.requireActual('@oxy.so/bloom/typography'),
+    Text: ReactNative.Text,
+    Muted: ReactNative.Text,
+  };
 });
 
 jest.mock('@oxy.so/bloom/settings-modal', () => {

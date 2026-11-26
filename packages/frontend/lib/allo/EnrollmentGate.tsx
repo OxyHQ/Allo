@@ -31,19 +31,26 @@
  * called with suspense off, and every string has an inline default.
  */
 import { useAlloClient, useInstanceState } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { Card } from '@oxy.so/bloom/card';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiShieldLine } from '@oxy.so/bloom/icons/RiShieldLine';
 import { RiSmartphoneLine } from '@oxy.so/bloom/icons/RiSmartphoneLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
 import React, { useCallback, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button as LButton,
+  Card as LCard,
+  Embed,
+  IconCircle as LIconCircle,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 export interface EnrollmentGateProps {
   children: React.ReactNode;
@@ -146,52 +153,63 @@ export function PendingApprovalScreen({
 
   return (
     <GateFrame
-      icon={<IconCircle icon={RiSmartphoneLine} />}
+      icon={toElement(LIconCircle(RiSmartphoneLine))}
       title={t('enrollment.pending.title', 'Approve this device')}
       description={t(
         'enrollment.pending.body',
         'Open Allo on a device that is already signed in, go to Settings, then Devices, and approve this one. That device shows a verification code for it; check the device name matches before you approve.',
       )}
     >
-      {deviceName || fingerprint ? (
-        <Card radius="radius-16" style={styles.codeCard} appearance="subtle">
-          {deviceName ? (
-            <Text variant="body-medium" style={{ color: theme.colors.textSecondary }}>
-              {deviceName}
-            </Text>
-          ) : null}
-          {fingerprint ? (
-            <Text
-              variant="title-1-semibold"
-              style={styles.fingerprint}
-              accessibilityLabel={t('enrollment.fingerprint', 'Verification code')}
-              selectable
-            >
-              {fingerprint}
-            </Text>
-          ) : null}
-        </Card>
-      ) : null}
+      {deviceName || fingerprint
+        ? toElement(
+            LCard(
+              deviceName
+                ? LText(deviceName).foreground('muted').font('body').weight('medium')
+                : null,
+              Embed(
+                fingerprint ? (
+                  <Text
+                    variant="title-1-semibold"
+                    style={styles.fingerprint}
+                    accessibilityLabel={t('enrollment.fingerprint', 'Verification code')}
+                    selectable
+                  >
+                    {fingerprint}
+                  </Text>
+                ) : null,
+              ),
+            )
+              .radius('lg')
+              .style('subtle')
+              .padding('vertical', 'lg')
+              .padding('horizontal', 'xl')
+              .alignSelf('stretch')
+              .align('center')
+              .spacing('xs'),
+          )
+        : null}
       <ActivityIndicator color={theme.colors.primary} />
       {errorMessage ? <ErrorLine message={errorMessage} /> : null}
       {failure ? <ErrorLine message={failure} /> : null}
-      {onReclaim ? (
-        <Button
-          loading={reclaiming}
-          onPress={() => {
-            void reclaim();
-          }}
-          tone="neutral"
-          appearance="outline"
-        >
-          {t('enrollment.reclaim.action', 'Use this device instead')}
-        </Button>
-      ) : null}
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
+      {onReclaim
+        ? toElement(
+            LButton(LText(t('enrollment.reclaim.action', 'Use this device instead')))
+              .loading(reclaiming)
+              .onPress(() => {
+                void reclaim();
+              })
+              .tint('neutral')
+              .style('outline'),
+          )
+        : null}
+      {onSignOut
+        ? toElement(
+            LButton(LText(t('settings.signOut', 'Sign out')))
+              .onPress(onSignOut)
+              .tint('accent')
+              .style('plain'),
+          )
+        : null}
     </GateFrame>
   );
 }
@@ -221,7 +239,7 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
 
   return (
     <GateFrame
-      icon={<IconCircle icon={RiShieldLine} />}
+      icon={toElement(LIconCircle(RiShieldLine))}
       title={t('enrollment.revoked.title', 'This device was removed')}
       description={t(
         'enrollment.revoked.body',
@@ -229,20 +247,22 @@ export function RevokedScreen({ onStartOver, onSignOut }: RevokedScreenProps) {
       )}
     >
       {failure ? <ErrorLine message={failure} /> : null}
-      <Button
-        size="lg"
-        loading={busy}
-        onPress={() => {
-          void startOver();
-        }}
-      >
-        {t('enrollment.revoked.startOver', 'Start over')}
-      </Button>
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
+      {toElement(
+        LButton(LText(t('enrollment.revoked.startOver', 'Start over')))
+          .size('lg')
+          .loading(busy)
+          .onPress(() => {
+            void startOver();
+          }),
+      )}
+      {onSignOut
+        ? toElement(
+            LButton(LText(t('settings.signOut', 'Sign out')))
+              .onPress(onSignOut)
+              .tint('accent')
+              .style('plain'),
+          )
+        : null}
     </GateFrame>
   );
 }
@@ -259,7 +279,7 @@ export function StartFailedScreen({ errorMessage, onRetry, onSignOut }: StartFai
 
   return (
     <GateFrame
-      icon={<IconCircle icon={RiShieldLine} />}
+      icon={toElement(LIconCircle(RiShieldLine))}
       title={t('enrollment.startFailed.title', "Allo couldn't start on this device")}
       description={t(
         'enrollment.startFailed.body',
@@ -267,24 +287,26 @@ export function StartFailedScreen({ errorMessage, onRetry, onSignOut }: StartFai
       )}
     >
       <ErrorLine message={errorMessage} />
-      {onRetry ? (
-        <Button
-          size="lg"
-          loading={busy}
-          onPress={() => {
-            setBusy(true);
-            // The failure, if it happens again, comes back through `errorMessage`.
-            void onRetry().finally(() => setBusy(false));
-          }}
-        >
-          {t('enrollment.startFailed.retry', 'Try again')}
-        </Button>
-      ) : null}
-      {onSignOut ? (
-        <Button onPress={onSignOut} tone="accent" appearance="plain">
-          {t('settings.signOut', 'Sign out')}
-        </Button>
-      ) : null}
+      {onRetry
+        ? toElement(
+            LButton(LText(t('enrollment.startFailed.retry', 'Try again')))
+              .size('lg')
+              .loading(busy)
+              .onPress(() => {
+                setBusy(true);
+                // The failure, if it happens again, comes back through `errorMessage`.
+                void onRetry().finally(() => setBusy(false));
+              }),
+          )
+        : null}
+      {onSignOut
+        ? toElement(
+            LButton(LText(t('settings.signOut', 'Sign out')))
+              .onPress(onSignOut)
+              .tint('accent')
+              .style('plain'),
+          )
+        : null}
     </GateFrame>
   );
 }
@@ -306,25 +328,35 @@ function GateFrame({
   children: ReactNode;
 }) {
   const theme = useTheme();
-  return (
-    <View
-      style={[styles.root, { backgroundColor: theme.colors.background }]}
-      accessibilityRole="summary"
-    >
-      <View style={styles.column}>
-        {icon}
-        <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
-          {title}
-        </Text>
-        <Text
-          variant="body-regular"
-          style={[styles.centered, { color: theme.colors.textSecondary }]}
-        >
-          {description}
-        </Text>
-        {children}
-      </View>
-    </View>
+  return toElement(
+    VStack(
+      VStack(
+        Embed(icon),
+        Embed(
+          <Text variant="title-2-semibold" accessibilityRole="header" style={styles.centered}>
+            {title}
+          </Text>,
+        ),
+        Embed(
+          <Text
+            variant="body-regular"
+            style={[styles.centered, { color: theme.colors.textSecondary }]}
+          >
+            {description}
+          </Text>,
+        ),
+        Embed(children),
+      )
+        .frame({ width: 'full', maxWidth: '400' })
+        .align('center')
+        .spacing('lg'),
+    )
+      .padding('all', '2xl')
+      .background('background')
+      .align('center')
+      .justify('center')
+      .grow()
+      .role('summary'),
   );
 }
 
@@ -338,15 +370,6 @@ function ErrorLine({ message }: { message: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  column: { alignItems: 'center', gap: 16, width: '100%', maxWidth: 400 },
-  codeCard: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
   fingerprint: { letterSpacing: 2, fontVariant: ['tabular-nums'], textAlign: 'center' },
   centered: { textAlign: 'center' },
 });

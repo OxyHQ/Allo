@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useStatuses } from '@allo/react';
-import { Avatar } from '@oxy.so/bloom/avatar';
 import { StoryRing } from '@oxy.so/bloom/chat-indicators';
 import { List } from '@oxy.so/bloom/list';
 import { toast } from '@oxy.so/bloom/toast';
@@ -16,9 +15,10 @@ import { usePostStatus } from '@/hooks/usePostStatus';
 import { ringState, statusAgeLabel, statusAuthors, statusRemainingLabel } from '@/lib/statuses';
 import { confirm } from '@oxy.so/bloom/surfaces';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { logger } from '@/utils/logger';
+
+import { Avatar as LAvatar, Embed, Header, ScrollView, toElement } from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /**
  * `/updates` — STATUS UPDATES.
@@ -44,7 +44,7 @@ import { logger } from '@/utils/logger';
  * platform, and a field that accepts one and drops it is the lie this screen
  * is written to avoid.
  */
-export default function UpdatesScreen() {
+export default screen(function UpdatesScreen() {
   const { t } = useTranslation();
   const { user } = useOxy();
   const router = useRouter();
@@ -86,67 +86,64 @@ export default function UpdatesScreen() {
     [statuses, t],
   );
 
-  return (
-    <Screen
-      scroll="content"
-      header={
-        <PageHeader
-          title={t('stories.title')}
-          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
-        />
-      }
-    >
-      <ScreenScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="gap-4 px-4 pb-8"
-      >
-        <View style={styles.strip}>
-          <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
-        </View>
-
-        <List
-          sections={[
-            {
-              id: 'recent',
-              title: t('stories.recent'),
-              items: authors.map((author) => {
-                const who = person(author.accountId);
-                const name = author.mine
-                  ? t('stories.own')
-                  : (who?.displayName ?? t('stories.someone'));
-                return {
-                  id: author.accountId,
-                  title: name,
-                  supporting: t('stories.updateCount', {
-                    count: author.statuses.length,
-                    age: statusAgeLabel(author.statuses[0].createdAt, now, t),
-                  }),
-                  leading: (
-                    <StoryRing state={ringState(author)} size={36}>
-                      <Avatar source={who?.avatar} name={name} size={36} />
-                    </StoryRing>
-                  ),
-                  onPress: () => open(author.accountId),
-                  onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
-                  label: t('stories.openOf', { name }),
-                };
-              }),
-            },
-          ]}
-          empty={<Muted style={styles.empty}>{t('stories.empty')}</Muted>}
-        />
-
-        <Muted style={styles.expiry}>
-          {authors[0]?.mine
-            ? t('stories.yoursExpire', {
-                remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
-              })
-            : t('stories.expiry')}
-        </Muted>
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+  return ScrollView(
+    Embed(
+      <View style={styles.strip}>
+        <StoriesStrip ownAccountId={me} onStoryPress={open} onOwnPress={add} />
+      </View>,
+    ),
+    Embed(
+      <List
+        sections={[
+          {
+            id: 'recent',
+            title: t('stories.recent'),
+            items: authors.map((author) => {
+              const who = person(author.accountId);
+              const name = author.mine
+                ? t('stories.own')
+                : (who?.displayName ?? t('stories.someone'));
+              return {
+                id: author.accountId,
+                title: name,
+                supporting: t('stories.updateCount', {
+                  count: author.statuses.length,
+                  age: statusAgeLabel(author.statuses[0].createdAt, now, t),
+                }),
+                leading: (
+                  <StoryRing state={ringState(author)} size={36}>
+                    {toElement(LAvatar(who?.avatar, { name: name }).size('lg'))}
+                  </StoryRing>
+                ),
+                onPress: () => open(author.accountId),
+                onLongPress: author.mine ? () => void remove(author.statuses[0].id) : undefined,
+                label: t('stories.openOf', { name }),
+              };
+            }),
+          },
+        ]}
+        empty={<Muted style={styles.empty}>{t('stories.empty')}</Muted>}
+      />,
+    ),
+    Embed(
+      <Muted style={styles.expiry}>
+        {authors[0]?.mine
+          ? t('stories.yoursExpire', {
+              remaining: statusRemainingLabel(authors[0].statuses[0].expiresAt, now, t),
+            })
+          : t('stories.expiry')}
+      </Muted>,
+    ),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
+    .screenScroll('content')
+    .header(
+      Header(t('stories.title'))
+        .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
+        .inPage(),
+    );
+});
 
 const styles = StyleSheet.create({
   strip: { marginHorizontal: -16 },

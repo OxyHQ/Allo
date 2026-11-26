@@ -1,8 +1,9 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Avatar } from '@oxy.so/bloom/avatar';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
+
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
 
 export interface ProfileIdentityProps {
   /** The name, already resolved. Never a handle with an `@` on it. */
@@ -22,28 +23,43 @@ export function ProfileIdentity({
   verified = false,
 }: ProfileIdentityProps) {
   const theme = useTheme();
-  return (
-    <View style={styles.root}>
-      <Avatar source={avatar} name={displayName} size={96} verified={verified} alt={displayName} />
-      <View style={styles.names}>
-        <Text variant="title-2-semibold" style={styles.centered}>
-          {displayName}
-        </Text>
-        {handle ? (
-          <Text
-            variant="body-regular"
-            style={[styles.centered, { color: theme.colors.textSecondary }]}
-          >
-            @{handle}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+  return toElement(
+    VStack(
+      Embed(
+        <Avatar
+          source={avatar}
+          name={displayName}
+          size={96}
+          verified={verified}
+          alt={displayName}
+        />,
+      ),
+      VStack(
+        Embed(
+          <Text variant="title-2-semibold" style={styles.centered}>
+            {displayName}
+          </Text>,
+        ),
+        Embed(
+          handle ? (
+            <Text
+              variant="body-regular"
+              style={[styles.centered, { color: theme.colors.textSecondary }]}
+            >
+              @{handle}
+            </Text>
+          ) : null,
+        ),
+      )
+        .align('center')
+        .spacing('2xs'),
+    )
+      .padding('top', 'sm')
+      .align('center')
+      .spacing('md'),
   );
 }
 
 const styles = StyleSheet.create({
-  root: { alignItems: 'center', gap: 12, paddingTop: 8 },
-  names: { alignItems: 'center', gap: 2 },
   centered: { textAlign: 'center' },
 });

@@ -1,24 +1,32 @@
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useConversation, useConversationActions } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { ChatSearchField } from '@oxy.so/bloom/chat-list';
 import { NewGroupForm, SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
 import { List, type ListEntry } from '@oxy.so/bloom/list';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen } from '@oxy.so/bloom/screen';
 
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { pickerModeFromParams } from '@/lib/chat/newConversation';
 import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { logger } from '@/utils/logger';
+
+import {
+  Button as LButton,
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+  Embed,
+  Group,
+  Header,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /** The group name's hard limit AND the counter's denominator — `NewGroupForm` takes one number for both. */
 const GROUP_NAME_MAX = 64;
@@ -44,7 +52,7 @@ function summaryOf(user: SearchedUser): PersonSummary {
  * is a group — that form is where the name and the picked people live, so the
  * chips step aside rather than saying the same thing twice.
  */
-export default function NewConversationRoute() {
+export default screen(function NewConversationRoute() {
   const params = useLocalSearchParams<{ addTo?: string; call?: string }>();
   const pickerMode = pickerModeFromParams(params);
   const addTo = pickerMode.kind === 'add' ? pickerMode.conversationId : undefined;
@@ -165,52 +173,22 @@ export default function NewConversationRoute() {
       : t('chat.new.start');
 
   if (search.unavailable)
-    return (
-      <Screen scroll="none" header={<PageHeader title={t('chat.new.title')} />}>
-        <ConversationAccessState state="unavailable" onRetry={search.retry} />
-      </Screen>
-    );
+    return Embed(<ConversationAccessState state="unavailable" onRetry={search.retry} />)
+      .screenScroll('none')
+      .header(Header(t('chat.new.title')).inPage());
 
-  return (
-    // The contact list scrolls itself, under the header the Screen reserves.
-    <Screen
-      scroll="none"
-      header={
-        <PageHeader
-          title={
-            callMode
-              ? t('calls.new.title')
-              : adding
-                ? t('chat.group.addMember')
-                : t('chat.new.title')
-          }
-          actions={
-            callMode ? undefined : (
-              <Button
-                disabled={count === 0}
-                loading={busy}
-                onPress={() => void submit()}
-                tone="accent"
-                appearance="solid"
-              >
-                {submitLabel}
-              </Button>
-            )
-          }
-        />
-      }
-    >
-      <View style={styles.search}>
-        <ChatSearchField
-          value={search.term}
-          onChangeText={search.setTerm}
-          onClear={search.clear}
-          placeholder={t('chat.new.search')}
-          accessibilityLabel={t('chat.new.search')}
-          clearLabel={t('chat.new.clearSearch')}
-          autoFocus
-        />
-      </View>
+  return Group(
+    VStack(
+      LChatSearchField([search.term, search.setTerm], {
+        placeholder: t('chat.new.search'),
+        clearLabel: t('chat.new.clearSearch'),
+        onClear: search.clear,
+        autoFocus: true,
+      }).label(t('chat.new.search')),
+    )
+      .padding('horizontal', 'md')
+      .padding('bottom', 'sm'),
+    Embed(
       <List
         testID="people-picker"
         style={styles.list}
@@ -249,28 +227,48 @@ export default function NewConversationRoute() {
               accessibilityLabel={t('chat.new.searching')}
             />
           ) : (
-            <ChatEmptyState
-              title={
-                search.tooShort
+            toElement(
+              LChatEmptyState({
+                title: search.tooShort
                   ? t('chat.new.tooShort')
                   : search.term
                     ? t('chat.new.noResults')
-                    : t('chat.new.hint')
-              }
-            />
+                    : t('chat.new.hint'),
+              }),
+            )
           )
         }
-      />
-    </Screen>
-  );
-}
+      />,
+    ),
+  )
+    .screenScroll('none')
+    .header(
+      Header(
+        callMode ? t('calls.new.title') : adding ? t('chat.group.addMember') : t('chat.new.title'),
+      )
+        .toolbar(
+          Embed(
+            callMode
+              ? undefined
+              : toElement(
+                  LButton(Text(submitLabel))
+                    .disabled(count === 0)
+                    .loading(busy)
+                    .onPress(() => void submit())
+                    .tint('accent')
+                    .style('solid'),
+                ),
+          ),
+        )
+        .inPage(),
+    );
+});
 
 const styles = StyleSheet.create({
-  // 12, the gutter the conversation list's own search pill sits on.
-  search: { paddingHorizontal: 12, paddingBottom: 8 },
   list: { flex: 1, minHeight: 0 },
   searching: { paddingVertical: 32 },
   form: { paddingTop: 4, paddingHorizontal: 12, paddingBottom: 12 },
+
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView, and
   // padding on a scroller is space the content slides under.
   chips: { marginHorizontal: 8, marginBottom: 8 },

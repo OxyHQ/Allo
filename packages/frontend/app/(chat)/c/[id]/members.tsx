@@ -2,10 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useConversation, useConversationActions } from '@allo/react';
-import { List } from '@oxy.so/bloom/list';
-import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
-import { Search } from '@oxy.so/bloom/search';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { toast } from '@oxy.so/bloom/toast';
@@ -13,9 +10,18 @@ import { toast } from '@oxy.so/bloom/toast';
 import { useChatContext } from '@/hooks/useChatContext';
 import { profileHref } from '@/lib/profile/handle';
 import { confirm } from '@oxy.so/bloom/surfaces';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { logger } from '@/utils/logger';
+
+import {
+  Badge as LBadge,
+  Embed,
+  Header,
+  List as LList,
+  ScrollView,
+  Search as LSearch,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /**
  * `/c/:id/members` — the roster an owner or admin manages.
@@ -24,7 +30,7 @@ import { logger } from '@/utils/logger';
  * different act with a different confirmation, so it has its own screen, on
  * Bloom's `List` with its shared person rows and actions.
  */
-export default function MembersRoute() {
+export default screen(function MembersRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -72,67 +78,66 @@ export default function MembersRoute() {
     [conversationId, removeMember, t],
   );
 
-  return (
-    <Screen scroll="content" header={<PageHeader title={t('chat.details.participants')} />}>
-      <ScreenScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 pb-8">
-        <Search
-          label={t('chat.new.search')}
-          value={search}
-          onChangeText={setSearch}
-          onClearText={() => setSearch('')}
-        />
-        <List
-          testID="conversation-members"
-          header={
-            canManage ? (
-              <Button
-                icon={RiUserAddLine}
-                onPress={() => router.push(`/new?addTo=${conversationId}`)}
-              >
-                {t('chat.group.addMember')}
-              </Button>
-            ) : undefined
-          }
-          items={members
-            .filter((member) =>
-              `${member.name} ${member.subtitle ?? ''}`
-                .toLocaleLowerCase()
-                .includes(search.trim().toLocaleLowerCase()),
-            )
-            .map((member) => {
-              // Leaving has its own confirmation; your row never offers removal.
-              const canRemove = canManage && member.id !== ctx.me;
-              const href = profileHref(ctx.person(member.id)?.handle);
-              const role =
-                member.role === 'owner'
-                  ? t('chat.role.owner')
-                  : member.role === 'admin'
-                    ? t('chat.role.admin')
-                    : undefined;
-              return {
-                id: member.id,
-                person: {
-                  ...member,
-                  onAction: canRemove ? () => void remove(member.id) : undefined,
-                  actionLabel: t('chat.group.removeMember'),
-                },
-                onPress: href ? () => router.push(href) : undefined,
-                trailing: role ? <Badge content={role} /> : undefined,
-                actions: canRemove
-                  ? [
-                      {
-                        key: 'remove',
-                        label: t('chat.group.removeMember'),
-                        icon: RiDeleteBinLine,
-                        tone: 'negative' as const,
-                      },
-                    ]
-                  : undefined,
-                onAction: canRemove ? () => void remove(member.id) : undefined,
-              };
-            })}
-        />
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+  return ScrollView(
+    LSearch([search, setSearch])
+      .label(t('chat.new.search'))
+      .onClearText(() => setSearch('')),
+    LList(
+      members
+        .filter((member) =>
+          `${member.name} ${member.subtitle ?? ''}`
+            .toLocaleLowerCase()
+            .includes(search.trim().toLocaleLowerCase()),
+        )
+        .map((member) => {
+          // Leaving has its own confirmation; your row never offers removal.
+          const canRemove = canManage && member.id !== ctx.me;
+          const href = profileHref(ctx.person(member.id)?.handle);
+          const role =
+            member.role === 'owner'
+              ? t('chat.role.owner')
+              : member.role === 'admin'
+                ? t('chat.role.admin')
+                : undefined;
+          return {
+            id: member.id,
+            person: {
+              ...member,
+              onAction: canRemove ? () => void remove(member.id) : undefined,
+              actionLabel: t('chat.group.removeMember'),
+            },
+            onPress: href ? () => router.push(href) : undefined,
+            trailing: role ? toElement(LBadge(role)) : undefined,
+            actions: canRemove
+              ? [
+                  {
+                    key: 'remove',
+                    label: t('chat.group.removeMember'),
+                    icon: RiDeleteBinLine,
+                    tone: 'negative' as const,
+                  },
+                ]
+              : undefined,
+            onAction: canRemove ? () => void remove(member.id) : undefined,
+          };
+        }),
+    )
+      .testID('conversation-members')
+      .headerContent(
+        Embed(
+          canManage ? (
+            <Button
+              icon={RiUserAddLine}
+              onPress={() => router.push(`/new?addTo=${conversationId}`)}
+            >
+              {t('chat.group.addMember')}
+            </Button>
+          ) : undefined,
+        ),
+      ),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl'))
+    .screenScroll('content')
+    .header(Header(t('chat.details.participants')).inPage());
+});

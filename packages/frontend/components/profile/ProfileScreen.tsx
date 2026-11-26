@@ -3,24 +3,32 @@ import { useQuery } from '@tanstack/react-query';
 import { useMessagingSupervision } from '@/lib/allo/MessagingSupervision';
 import { ConversationAccessState } from '@/lib/allo/ConversationAccessState';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
-import { Button } from '@oxy.so/bloom/button';
-import { Card } from '@oxy.so/bloom/card';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiMessage2Line } from '@oxy.so/bloom/icons/RiMessage2Line';
 import { RiUserSearchLine } from '@oxy.so/bloom/icons/RiUserSearchLine';
 import * as Skeleton from '@oxy.so/bloom/skeleton';
-import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { ProfileIdentity } from '@/components/profile/ProfileIdentity';
 import { useProfileData } from '@/hooks/useProfileData';
+
+import {
+  Button as LButton,
+  Card as LCard,
+  ChatEmptyState as LChatEmptyState,
+  Embed,
+  Header,
+  Icon,
+  IconCircle as LIconCircle,
+  ScrollView,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /**
  * A PERSON, in a messenger: who they are and a button to talk to them. No
@@ -38,7 +46,7 @@ export function ProfileScreen({ handle }: { handle: string }) {
   );
 }
 
-function SupervisedProfile({ handle }: { handle: string }) {
+const SupervisedProfile = screen(function SupervisedProfile({ handle }: { handle: string }) {
   const { t } = useTranslation();
   const { oxyServices, user, activeSessionId } = useOxy();
   const router = useRouter();
@@ -56,50 +64,46 @@ function SupervisedProfile({ handle }: { handle: string }) {
     },
   });
   const person = query.isFetchedAfterMount && !query.isError ? query.data : undefined;
-  return (
-    <Screen scroll="content" header={<PageHeader title={t('supervision.conversation')} />}>
-      <ScreenScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="gap-4 px-4 pb-8"
-      >
-        {query.isError ? (
-          <ConversationAccessState
-            state="unavailable"
-            onRetry={() => {
-              void query.refetch();
-            }}
+  return ScrollView(
+    Embed(
+      query.isError ? (
+        <ConversationAccessState
+          state="unavailable"
+          onRetry={() => {
+            void query.refetch();
+          }}
+        />
+      ) : !query.isFetchedAfterMount ? (
+        <ConversationAccessState state="checking" />
+      ) : !person ? (
+        <ConversationAccessState state="blocked" />
+      ) : (
+        <>
+          <ProfileIdentity
+            displayName={person.displayName ?? person.username ?? ''}
+            handle={person.username ?? ''}
           />
-        ) : !query.isFetchedAfterMount ? (
-          <ConversationAccessState state="checking" />
-        ) : !person ? (
-          <ConversationAccessState state="blocked" />
-        ) : (
-          <>
-            <ProfileIdentity
-              displayName={person.displayName ?? person.username ?? ''}
-              handle={person.username ?? ''}
-            />
-            {person.accountId !== user?.id ? (
-              <Button
-                onPress={() => {
+          {person.accountId !== user?.id
+            ? toElement(
+                LButton(LText(t('profile.message'))).onPress(() => {
                   void create({ participantIds: [person.accountId], name: undefined })
                     .then((id) => router.push(`/c/${id}`))
                     .catch(() => toast.error(t('chat.new.failed')));
-                }}
-              >
-                {t('profile.message')}
-              </Button>
-            ) : null}
-          </>
-        )}
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+                }),
+              )
+            : null}
+        </>
+      ),
+    ),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
+    .screenScroll('content')
+    .header(Header(t('supervision.conversation')).inPage());
+});
 
-function OrdinaryProfile({ handle }: { handle: string }) {
+const OrdinaryProfile = screen(function OrdinaryProfile({ handle }: { handle: string }) {
   const { t } = useTranslation();
-  const theme = useTheme();
   const router = useRouter();
   const { user: viewer } = useOxy();
   const { data: profile, loading, notFound } = useProfileData(handle);
@@ -107,68 +111,74 @@ function OrdinaryProfile({ handle }: { handle: string }) {
   // By id, not handle: a handle can change under a URL typed a moment earlier.
   const isViewer = profile !== null && viewer?.id === profile.id;
 
-  return (
-    <Screen
-      scroll="content"
-      header={<PageHeader title={profile?.design.displayName || `@${handle}`} />}
-    >
-      <ScreenScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="gap-4 px-4 pb-8"
-      >
-        {loading ? (
-          <View style={styles.skeleton} accessibilityState={{ busy: true }}>
-            <Skeleton.Circle size={96} />
-            <Skeleton.Text style={styles.skeletonName} />
-            <Skeleton.Text style={styles.skeletonHandle} />
-          </View>
-        ) : profile === null ? (
-          <ChatEmptyState
-            illustration={<IconCircle icon={RiUserSearchLine} />}
-            title={notFound ? t('profile.notFound') : t('profile.loadFailed')}
-            description={notFound ? t('profile.notFoundSubtitle', { handle }) : undefined}
+  return ScrollView(
+    Embed(
+      loading ? (
+        toElement(
+          VStack(
+            Embed(<Skeleton.Circle size={96} />),
+            Embed(<Skeleton.Text style={styles.skeletonName} />),
+            Embed(<Skeleton.Text style={styles.skeletonHandle} />),
+          )
+            .padding('top', 'sm')
+            .align('center')
+            .spacing('md')
+            .accessibilityState({ busy: true }),
+        )
+      ) : profile === null ? (
+        toElement(
+          LChatEmptyState({
+            title: notFound ? t('profile.notFound') : t('profile.loadFailed'),
+            description: notFound ? t('profile.notFoundSubtitle', { handle }) : undefined,
+            illustration: LIconCircle(RiUserSearchLine),
+          }),
+        )
+      ) : (
+        <>
+          <ProfileIdentity
+            displayName={profile.design.displayName || profile.username}
+            handle={profile.username || handle}
+            avatar={profile.avatar}
+            verified={profile.verified}
           />
-        ) : (
-          <>
-            <ProfileIdentity
-              displayName={profile.design.displayName || profile.username}
-              handle={profile.username || handle}
-              avatar={profile.avatar}
-              verified={profile.verified}
-            />
-            {isViewer ? null : (
-              <Button
-                size="lg"
-                leadingIcon={RiMessage2Line}
-                onPress={() => router.push(`/c/${profile.id}`)}
-                style={styles.message}
-              >
-                {t('profile.message')}
-              </Button>
-            )}
-            {profile.bio ? (
-              <Card radius="radius-16" style={styles.about} appearance="outline">
-                <Text variant="body-semibold" style={{ color: theme.colors.textSecondary }}>
-                  {t('profile.about')}
-                </Text>
-                <Text variant="body-regular" selectable>
-                  {profile.bio}
-                </Text>
-              </Card>
-            ) : null}
-          </>
-        )}
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+          {isViewer
+            ? null
+            : toElement(
+                LButton(Icon(RiMessage2Line), LText(t('profile.message')))
+                  .size('lg')
+                  .onPress(() => router.push(`/c/${profile.id}`))
+                  .frame({ minWidth: '200' })
+                  .alignSelf('center'),
+              )}
+          {profile.bio
+            ? toElement(
+                LCard(
+                  LText(t('profile.about')).foreground('muted').font('body').weight('semibold'),
+                  Embed(
+                    <Text variant="body-regular" selectable>
+                      {profile.bio}
+                    </Text>,
+                  ),
+                )
+                  .radius('lg')
+                  .style('outline')
+                  .padding('all', 'lg')
+                  .spacing('6'),
+              )
+            : null}
+        </>
+      ),
+    ),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
+    .screenScroll('content')
+    .header(Header(profile?.design.displayName || `@${handle}`).inPage());
+});
 
 const styles = StyleSheet.create({
-  skeleton: { alignItems: 'center', gap: 12, paddingTop: 8 },
   skeletonName: { width: 180, lineHeight: 26 },
   skeletonHandle: { width: 120, lineHeight: 20 },
-  message: { alignSelf: 'center', minWidth: 200 },
-  about: { padding: 16, gap: 6 },
 });
 
 export default ProfileScreen;

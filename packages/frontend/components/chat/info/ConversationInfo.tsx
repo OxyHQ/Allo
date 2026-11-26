@@ -22,7 +22,6 @@ import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
 import { RiSpamLine } from '@oxy.so/bloom/icons/RiSpamLine';
 import { RiUserAddLine } from '@oxy.so/bloom/icons/RiUserAddLine';
 import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import { TextFieldInput } from '@oxy.so/bloom/text-field';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
@@ -30,8 +29,8 @@ import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
-
 import { askDeleteConversation } from '@/components/chat/DeleteConversationDialog';
+
 import {
   countLinks,
   countOf,
@@ -49,6 +48,12 @@ import { blockUser } from '@/lib/privacy/api';
 import { profileHref } from '@/lib/profile/handle';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+import {
+  Embed,
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 interface ConversationInfoProps {
   conversationId: string;
@@ -363,38 +368,36 @@ function AuthorizedConversationInfo({
       }
       bio={isGroup ? undefined : person?.bio}
       settingsTitle={t('chat.info.settingsTitle')}
-      settings={
-        <GroupedSection variant="filled">
-          {canManage ? (
-            <GroupedSectionItem
-              title={t('chat.group.name')}
-              icon={<RiUserLine {...icon} />}
-              showChevron={false}
-              rightElement={
-                <View style={styles.rename}>
-                  <TextFieldInput
-                    label={t('chat.group.name')}
-                    placeholder={null}
-                    value={name}
-                    onChangeText={setName}
-                    onBlur={() => void saveName()}
-                    onSubmitEditing={() => void saveName()}
-                    returnKeyType="done"
-                    maxLength={128}
-                    size="sm"
-                  />
-                </View>
-              }
-            />
-          ) : null}
-          <GroupedSectionItem
-            title={t('chat.info.encryption')}
-            value={t('chat.info.encryptionValue')}
-            icon={<RiLock2Line {...icon} />}
-            showChevron={false}
-          />
-        </GroupedSection>
-      }
+      settings={toElement(
+        LGroupedSection(
+          canManage
+            ? LGroupedSectionItem(t('chat.group.name'))
+                .leadingView(Embed(<RiUserLine {...icon} />))
+                .chevron(false)
+                .trailing(
+                  Embed(
+                    <View style={styles.rename}>
+                      <TextFieldInput
+                        label={t('chat.group.name')}
+                        placeholder={null}
+                        value={name}
+                        onChangeText={setName}
+                        onBlur={() => void saveName()}
+                        onSubmitEditing={() => void saveName()}
+                        returnKeyType="done"
+                        maxLength={128}
+                        size="sm"
+                      />
+                    </View>,
+                  ),
+                )
+            : null,
+          LGroupedSectionItem(t('chat.info.encryption'))
+            .value(t('chat.info.encryptionValue'))
+            .leadingView(Embed(<RiLock2Line {...icon} />))
+            .chevron(false),
+        ).style('filled'),
+      )}
       tabs={tabs}
       members={isGroup ? members : undefined}
       membersTitle={t('chat.details.participants')}

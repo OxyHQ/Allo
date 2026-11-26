@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useStatuses, type StatusView } from '@allo/react';
@@ -11,6 +11,8 @@ import { useChatContext } from '@/hooks/useChatContext';
 import { useStatusMedia } from '@/lib/allo/useStatusMedia';
 import { firstUnseenIndex, statusAgeLabel, type StatusAuthor } from '@/lib/statuses';
 import { logger } from '@/utils/logger';
+
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
 
 interface StoryViewerScreenProps {
   /** The authors the viewer walks through, in the order the row shows them. */
@@ -164,41 +166,57 @@ function SlideMedia({
   const { uri } = useStatusMedia(status.hasMedia ? status.id : undefined, active);
 
   if (!status.hasMedia) {
-    return (
-      <View style={[styles.blank, { backgroundColor: theme.colors.backgroundSecondary }]}>
-        <Text variant="title-2-semibold" style={styles.words}>
-          {status.caption}
-        </Text>
-      </View>
+    return toElement(
+      VStack(
+        Embed(
+          <Text variant="title-2-semibold" style={styles.words}>
+            {status.caption}
+          </Text>,
+        ),
+      )
+        .padding('all', '3xl')
+        .background('surface')
+        .align('center')
+        .justify('center')
+        .grow(),
     );
   }
   if (!uri) {
-    return (
-      <View style={[styles.blank, { backgroundColor: theme.colors.backgroundSecondary }]}>
-        <Muted style={styles.blankText}>{label}</Muted>
-      </View>
+    return toElement(
+      VStack(Embed(<Muted style={styles.blankText}>{label}</Muted>))
+        .padding('all', '3xl')
+        .background('surface')
+        .align('center')
+        .justify('center')
+        .grow(),
     );
   }
-  return (
-    <View style={styles.media}>
-      <Image source={{ uri }} style={styles.media} resizeMode="contain" accessible={false} />
-      {status.caption ? (
-        <View
-          style={[styles.caption, { backgroundColor: theme.colors.overlay ?? 'rgba(0,0,0,0.45)' }]}
-        >
-          <Text variant="body-regular" style={styles.captionText}>
-            {status.caption}
-          </Text>
-        </View>
-      ) : null}
-    </View>
+  return toElement(
+    VStack(
+      Embed(
+        <Image source={{ uri }} style={styles.media} resizeMode="contain" accessible={false} />,
+      ),
+      Embed(
+        status.caption ? (
+          <View
+            style={[
+              styles.caption,
+              { backgroundColor: theme.colors.overlay ?? 'rgba(0,0,0,0.45)' },
+            ]}
+          >
+            <Text variant="body-regular" style={styles.captionText}>
+              {status.caption}
+            </Text>
+          </View>
+        ) : null,
+      ),
+    ).frame({ width: 'full', height: 'full' }),
   );
 }
 
 const styles = StyleSheet.create({
   hold: { flex: 1 },
   media: { width: '100%', height: '100%' },
-  blank: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   blankText: { textAlign: 'center' },
   words: { textAlign: 'center' },
   caption: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16 },

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
@@ -11,6 +11,8 @@ import { EmptyDetail } from '@/components/shell/EmptyDetail';
 import { shareTextFromParam } from '@/lib/chat/shareText';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
 
 /**
  * `/c/:id` — a conversation id, or an Oxy account id to talk to.
@@ -84,13 +86,10 @@ export default function ConversationRoute() {
   if (known) return <ConversationScreen key={known.id} conversationId={known.id} draft={draft} />;
   if (isSelf) return <EmptyDetail title={t('chat.open.self')} />;
   if (failed) return <EmptyDetail title={failed} />;
-  return (
-    <View style={styles.pending}>
-      <ActivityIndicator color={theme.colors.primary} />
-    </View>
+  return toElement(
+    VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+      .align('center')
+      .justify('center')
+      .grow(),
   );
 }
-
-const styles = StyleSheet.create({
-  pending: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});

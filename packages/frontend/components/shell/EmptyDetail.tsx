@@ -1,6 +1,5 @@
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { Screen } from '@oxy.so/bloom/screen';
-import { StyleSheet, View } from 'react-native';
+import { ChatEmptyState as LChatEmptyState, VStack } from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 interface EmptyDetailProps {
   title: string;
@@ -8,16 +7,12 @@ interface EmptyDetailProps {
 }
 
 /** The detail pane before anything is chosen in the list beside it. */
-export function EmptyDetail({ title, description }: EmptyDetailProps) {
-  return (
-    <Screen scroll="none">
-      <View style={styles.root}>
-        <ChatEmptyState title={title} description={description} />
-      </View>
-    </Screen>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+export const EmptyDetail = screen(function EmptyDetail({ title, description }: EmptyDetailProps) {
+  return VStack(LChatEmptyState({ title: title, description: description }))
+    .padding('all', '2xl')
+    .align('center')
+    .justify('center')
+    .grow()
+    .header(false)
+    .screenScroll('none');
 });

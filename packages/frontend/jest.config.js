@@ -23,5 +23,9 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
     '^@oxy\\.so/bloom/surfaces$': '<rootDir>/__mocks__/bloom-surfaces.js',
     '^@oxy\\.so/bloom/screen$': '<rootDir>/__mocks__/bloom-screen.js',
+    // Gesture Handler installs its UI-runtime bindings on a timer, which asks
+    // Worklets for a UI runtime Jest does not have; its web module is the no-op.
+    '^\\./installUIRuntimeBindings$':
+      '<rootDir>/../../node_modules/react-native-gesture-handler/src/handlers/gestures/installUIRuntimeBindings.web.ts',
   },
 };

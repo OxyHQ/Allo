@@ -10,14 +10,7 @@ import {
   useTimeline,
 } from '@allo/react';
 import { ComposerIconButton, MessageContextMenu } from '@oxy.so/bloom/chat-composer';
-import { ChatSearchField } from '@oxy.so/bloom/chat-list';
-import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
-import {
-  ChatBackground,
-  ChatEmptyState,
-  ChatHeader,
-  PinnedMessageBar,
-} from '@oxy.so/bloom/chat-screen';
+import { ChatBackground, ChatHeader, PinnedMessageBar } from '@oxy.so/bloom/chat-screen';
 import { RiArrowGoBackLine } from '@oxy.so/bloom/icons/RiArrowGoBackLine';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiFileCopyLine } from '@oxy.so/bloom/icons/RiFileCopyLine';
@@ -27,8 +20,7 @@ import { RiPencilLine } from '@oxy.so/bloom/icons/RiPencilLine';
 import { RiPushpinLine } from '@oxy.so/bloom/icons/RiPushpinLine';
 import { RiSearchLine } from '@oxy.so/bloom/icons/RiSearchLine';
 import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, useScreenBack } from '@oxy.so/bloom/screen';
+import { useScreenBack } from '@oxy.so/bloom/screen';
 import { toast } from '@oxy.so/bloom/toast';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -72,6 +64,17 @@ import { readDraft, useDraftStore } from '@/stores/draftStore';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
 
+import {
+  AvatarGroup as LAvatarGroup,
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+  Embed,
+  Header,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
+
 /** What this screen does to a message it is pointed at. */
 interface MessageActions {
   reply: (id: string) => void;
@@ -105,7 +108,7 @@ const WALLPAPER = {
  * what was typed here and not sent (`stores/draftStore.ts`, in memory), and
  * keeps that up to date as the field changes; sending empties it.
  */
-export function ConversationScreen({
+export const ConversationScreen = screen(function ConversationScreen({
   conversationId,
   draft = '',
 }: {
@@ -115,14 +118,14 @@ export function ConversationScreen({
   const [initialDraft] = useState(draft);
   // The transcript and the composer own their scrolling and the keyboard; the
   // Screen is what tells everything below whether the reader can see it.
-  return (
-    <Screen scroll="none">
-      <ConversationReadGate conversationId={conversationId}>
-        <AuthorizedConversationScreen conversationId={conversationId} draft={initialDraft} />
-      </ConversationReadGate>
-    </Screen>
-  );
-}
+  return Embed(
+    <ConversationReadGate conversationId={conversationId}>
+      <AuthorizedConversationScreen conversationId={conversationId} draft={initialDraft} />
+    </ConversationReadGate>,
+  )
+    .header(false)
+    .screenScroll('none');
+});
 
 function AuthorizedConversationScreen({
   conversationId,
@@ -466,16 +469,22 @@ function AuthorizedConversationScreen({
 
   if (!view) return null;
   if (view.access && view.access !== 'allowed')
-    return (
-      <View style={styles.root}>
-        <PageHeader title={t('supervision.conversation')} onBack={split ? undefined : back} />
-        <ConversationAccessState
-          state={view.access}
-          onRetry={() => {
-            void client.conversations.refresh().catch(() => undefined);
-          }}
-        />
-      </View>
+    return toElement(
+      VStack(
+        Header(t('supervision.conversation'))
+          .onBack(split ? undefined : back)
+          .inPage(),
+        Embed(
+          <ConversationAccessState
+            state={view.access}
+            onRetry={() => {
+              void client.conversations.refresh().catch(() => undefined);
+            }}
+          />,
+        ),
+      )
+        .frame({ minHeight: 'none' })
+        .grow(),
     );
 
   const toggleSearch = () => setSearch((current) => (current === null ? '' : null));
@@ -501,189 +510,201 @@ function AuthorizedConversationScreen({
   const faces = conversationFaces(view, ctx);
   const notice = composerNotice(view, t);
 
-  return (
-    <View style={styles.root}>
-      {/* The header and the composer carry the safe area as padding: NativeWind's
-          safe-area classes, which read the same insets. */}
-      <View className="pt-safe">
-        <ChatHeader
-          title={title}
-          marker={otherPerson?.verified ? 'verified' : undefined}
-          markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
-          avatar={
-            faces ? (
-              <AvatarGroup
-                layout="conversation"
-                items={faces.map((face) => ({ ...face, uri: face.source }))}
-                size={40}
-              />
-            ) : undefined
-          }
-          avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
-          avatarName={title}
-          status={
-            isGroup
-              ? t('chat.members', { count: members })
-              : // Presence when there is any, the handle when there is not: a
-                // header that says nothing is worse than one that says who.
-                ((other
-                  ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now })
-                  : undefined) ?? (handle ? `@${handle}` : undefined))
-          }
-          presence={other ? presenceDot(presence.of(other)) : undefined}
-          typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
-          connecting={sync === 'offline'}
-          connectingLabel={t('chat.connecting')}
-          // Beside the list there is nothing to go back to on screen.
-          onPressBack={split ? undefined : back}
-          showBack={!split}
-          backLabel={t('common.back')}
-          onPressCall={() => startCall('voice')}
-          onPressVideoCall={() => startCall('video')}
-          callLabel={t('calls.voice')}
-          videoCallLabel={t('calls.video')}
-          // A phone's header is narrow: search goes in the menu, so the name and
-          // "last seen" keep the room. Beside the list the button stays.
-          onPressSearch={split ? toggleSearch : undefined}
-          searchLabel={t('chat.info.search')}
-          onPressHeader={openInfo}
-          openInfoLabel={t('chat.info.open')}
-          renderMore={() => (
-            <MessageContextMenu
-              label={t('chat.actions')}
-              reactions={false}
-              items={[
-                ...(split
-                  ? []
-                  : [{ id: 'search', label: t('chat.info.search'), icon: RiSearchLine }]),
-                { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
-                {
-                  id: 'leave',
-                  label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
-                  icon: RiDeleteBinLine,
-                  variant: 'destructive',
-                  separated: true,
-                },
-              ]}
-              onSelect={(action) => {
-                if (action === 'info') openInfo();
-                else if (action === 'search') toggleSearch();
-                else void confirmLeave();
-              }}
-            >
-              <ComposerIconButton icon={RiMore2Line} accessibilityLabel={t('chat.actions')} />
-            </MessageContextMenu>
-          )}
-          divider
-        />
-      </View>
-      {pins.length > 0 && !pinsHidden && (
-        <PinnedMessageBar
-          pins={pins}
-          index={pinIndex}
-          onPressPin={(_pin, index) => setPinIndex(index + 1 >= pins.length ? 0 : index + 1)}
-          onDismiss={() => setPinsHidden(true)}
-          dismissLabel={t('common.close')}
-          formatTitle={(index, total) =>
-            total > 1 ? t('chat.pinned.numbered', { index: index + 1 }) : t('chat.pinned.one')
-          }
-        />
-      )}
-      {search !== null && (
-        <View style={styles.search}>
-          <ChatSearchField
-            value={search}
-            onChangeText={setSearch}
-            onClear={() => setSearch(null)}
-            placeholder={t('chat.search.inConversation')}
-            autoFocus
-          />
-        </View>
-      )}
-      <KeyboardAvoidingView behavior="padding" style={styles.root}>
-        <ChatBackground variant="pattern" patternImage={WALLPAPER} style={styles.root}>
-          {matches.length === 0 && search !== null ? (
-            <ChatEmptyState title={t('chat.search.empty')} />
-          ) : items.length === 0 && timeline.reachedStart ? (
-            <ChatEmptyState description={t('chat.empty.conversation')} notice={t('chat.e2ee')} />
-          ) : (
-            <Transcript
-              items={listItems}
-              isGroup={isGroup}
-              typing={timeline.typing}
-              unreadCount={view.unreadCount}
-              reachedStart={timeline.reachedStart}
-              onLoadOlder={onLoadOlder}
-              labels={bubbleLabels}
-            />
-          )}
-        </ChatBackground>
-        <View className="pb-safe">
-          <Composer
-            initialDraft={startDraft}
-            onDraftChange={onDraftChange}
-            target={target}
-            onClearTarget={() => setTarget(null)}
-            notice={notice?.text}
-            noticeBusy={notice?.busy}
-            noticeError={notice?.error}
-            note={unreachable?.banner}
-            mentionables={mentionables}
-            onSendText={sendText}
-            onSendAttachments={sendAttachments}
-            onSendPoll={onSendPoll}
-            onSendPlace={onSendPlace}
-            onSendContact={onSendContact}
-            onSendSticker={onSendSticker}
-            onTyping={onTyping}
-          />
-        </View>
-      </KeyboardAvoidingView>
-      {/* One menu for the screen: Bloom draws a dropdown on the web and a sheet
-          on a phone, and a message opens it through its own long press. */}
-      <MessageContextMenu
-        open={menuFor !== null}
-        onOpenChange={(open) => {
-          if (!open) setMenuFor(null);
-        }}
-        label={t('message.actions')}
-        items={menuItems}
-        reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
-        selectedReaction={
-          menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))
-            ?.key
-        }
-        onSelectReaction={(emoji) => {
-          if (menuFor) actions.react(menuFor, emoji);
-          setMenuFor(null);
-        }}
-        onSelect={(action) => {
-          const id = menuFor;
-          setMenuFor(null);
-          if (!id) return;
-          if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
-          else if (action === 'reply') actions.reply(id);
-          else if (action === 'edit') actions.edit(id);
-          else if (action === 'delete') actions.remove(id);
-          else if (action === 'copy') {
-            const source = sources.get(id);
-            if (source?.content.kind === 'text') {
-              void Clipboard.setStringAsync(source.content.body).then(() =>
-                toast.success(t('message.copied')),
-              );
+  return toElement(
+    VStack(
+      /* The header and the composer carry the safe area as padding: NativeWind's
+            safe-area classes, which read the same insets. */ Embed(
+        <View className="pt-safe">
+          <ChatHeader
+            title={title}
+            marker={otherPerson?.verified ? 'verified' : undefined}
+            markerLabel={otherPerson?.verified ? t('profile.verified') : undefined}
+            avatar={
+              faces
+                ? toElement(
+                    LAvatarGroup(faces.map((face) => ({ ...face, uri: face.source })))
+                      .layout('conversation')
+                      .size('xl'),
+                  )
+                : undefined
             }
+            avatarSource={faces ? undefined : conversationAvatar(view, ctx)}
+            avatarName={title}
+            status={
+              isGroup
+                ? t('chat.members', { count: members })
+                : // Presence when there is any, the handle when there is not: a
+                  // header that says nothing is worse than one that says who.
+                  ((other
+                    ? presenceLine(presence.of(other), { t, locale: ctx.locale, now: ctx.now })
+                    : undefined) ?? (handle ? `@${handle}` : undefined))
+            }
+            presence={other ? presenceDot(presence.of(other)) : undefined}
+            typingLabel={timeline.typing ? t('chat.typing.someone') : undefined}
+            connecting={sync === 'offline'}
+            connectingLabel={t('chat.connecting')}
+            // Beside the list there is nothing to go back to on screen.
+            onPressBack={split ? undefined : back}
+            showBack={!split}
+            backLabel={t('common.back')}
+            onPressCall={() => startCall('voice')}
+            onPressVideoCall={() => startCall('video')}
+            callLabel={t('calls.voice')}
+            videoCallLabel={t('calls.video')}
+            // A phone's header is narrow: search goes in the menu, so the name and
+            // "last seen" keep the room. Beside the list the button stays.
+            onPressSearch={split ? toggleSearch : undefined}
+            searchLabel={t('chat.info.search')}
+            onPressHeader={openInfo}
+            openInfoLabel={t('chat.info.open')}
+            renderMore={() => (
+              <MessageContextMenu
+                label={t('chat.actions')}
+                reactions={false}
+                items={[
+                  ...(split
+                    ? []
+                    : [{ id: 'search', label: t('chat.info.search'), icon: RiSearchLine }]),
+                  { id: 'info', label: t('chat.info.open'), icon: RiInformationLine },
+                  {
+                    id: 'leave',
+                    label: isGroup ? t('chat.leave.group') : t('chat.leave.conversation'),
+                    icon: RiDeleteBinLine,
+                    variant: 'destructive',
+                    separated: true,
+                  },
+                ]}
+                onSelect={(action) => {
+                  if (action === 'info') openInfo();
+                  else if (action === 'search') toggleSearch();
+                  else void confirmLeave();
+                }}
+              >
+                <ComposerIconButton icon={RiMore2Line} accessibilityLabel={t('chat.actions')} />
+              </MessageContextMenu>
+            )}
+            divider
+          />
+        </View>,
+      ),
+      Embed(
+        pins.length > 0 && !pinsHidden && (
+          <PinnedMessageBar
+            pins={pins}
+            index={pinIndex}
+            onPressPin={(_pin, index) => setPinIndex(index + 1 >= pins.length ? 0 : index + 1)}
+            onDismiss={() => setPinsHidden(true)}
+            dismissLabel={t('common.close')}
+            formatTitle={(index, total) =>
+              total > 1 ? t('chat.pinned.numbered', { index: index + 1 }) : t('chat.pinned.one')
+            }
+          />
+        ),
+      ),
+      search !== null
+        ? VStack(
+            LChatSearchField([search, setSearch], {
+              placeholder: t('chat.search.inConversation'),
+              onClear: () => setSearch(null),
+              autoFocus: true,
+            }),
+          )
+            .padding('horizontal', 'md')
+            .padding('vertical', 'sm')
+        : null,
+      Embed(
+        <KeyboardAvoidingView behavior="padding" style={styles.root}>
+          <ChatBackground variant="pattern" patternImage={WALLPAPER} style={styles.root}>
+            {matches.length === 0 && search !== null ? (
+              toElement(LChatEmptyState({ title: t('chat.search.empty') }))
+            ) : items.length === 0 && timeline.reachedStart ? (
+              toElement(
+                LChatEmptyState({
+                  description: t('chat.empty.conversation'),
+                  notice: t('chat.e2ee'),
+                }),
+              )
+            ) : (
+              <Transcript
+                items={listItems}
+                isGroup={isGroup}
+                typing={timeline.typing}
+                unreadCount={view.unreadCount}
+                reachedStart={timeline.reachedStart}
+                onLoadOlder={onLoadOlder}
+                labels={bubbleLabels}
+              />
+            )}
+          </ChatBackground>
+          <View className="pb-safe">
+            <Composer
+              initialDraft={startDraft}
+              onDraftChange={onDraftChange}
+              target={target}
+              onClearTarget={() => setTarget(null)}
+              notice={notice?.text}
+              noticeBusy={notice?.busy}
+              noticeError={notice?.error}
+              note={unreachable?.banner}
+              mentionables={mentionables}
+              onSendText={sendText}
+              onSendAttachments={sendAttachments}
+              onSendPoll={onSendPoll}
+              onSendPlace={onSendPlace}
+              onSendContact={onSendContact}
+              onSendSticker={onSendSticker}
+              onTyping={onTyping}
+            />
+          </View>
+        </KeyboardAvoidingView>,
+      ),
+      /* One menu for the screen: Bloom draws a dropdown on the web and a sheet
+            on a phone, and a message opens it through its own long press. */ Embed(
+        <MessageContextMenu
+          open={menuFor !== null}
+          onOpenChange={(open) => {
+            if (!open) setMenuFor(null);
+          }}
+          label={t('message.actions')}
+          items={menuItems}
+          reactions={menuSource && menuSource.sendState !== 'failed' ? undefined : false}
+          selectedReaction={
+            menuSource?.reactions.find((reaction) => ctx.me && reaction.accountIds.includes(ctx.me))
+              ?.key
           }
-        }}
-      >
-        <View style={styles.menuAnchor} />
-      </MessageContextMenu>
-      <MediaViewer ref={viewer} />
-    </View>
+          onSelectReaction={(emoji) => {
+            if (menuFor) actions.react(menuFor, emoji);
+            setMenuFor(null);
+          }}
+          onSelect={(action) => {
+            const id = menuFor;
+            setMenuFor(null);
+            if (!id) return;
+            if (action === 'pin' || action === 'unpin') actions.pin(id, action === 'pin');
+            else if (action === 'reply') actions.reply(id);
+            else if (action === 'edit') actions.edit(id);
+            else if (action === 'delete') actions.remove(id);
+            else if (action === 'copy') {
+              const source = sources.get(id);
+              if (source?.content.kind === 'text') {
+                void Clipboard.setStringAsync(source.content.body).then(() =>
+                  toast.success(t('message.copied')),
+                );
+              }
+            }
+          }}
+        >
+          <View style={styles.menuAnchor} />
+        </MessageContextMenu>,
+      ),
+      Embed(<MediaViewer ref={viewer} />),
+    )
+      .frame({ minHeight: 'none' })
+      .grow(),
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
-  search: { paddingHorizontal: 12, paddingVertical: 8 },
   menuAnchor: { position: 'absolute', left: 24, bottom: 96, height: 0, width: 0 },
 });

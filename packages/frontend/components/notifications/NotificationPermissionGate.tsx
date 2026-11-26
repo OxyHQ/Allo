@@ -1,16 +1,23 @@
-import { Button } from '@oxy.so/bloom/button';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiNotification3Line } from '@oxy.so/bloom/icons/RiNotification3Line';
 import { present, type SurfaceControls } from '@oxy.so/bloom/surfaces';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Text } from '@oxy.so/bloom/typography';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { announcePushPermissionGranted } from '@/lib/allo/push';
 import { INITIALIZATION_TIMEOUT } from '@/lib/constants';
 import { hasNotificationPermission, requestNotificationPermissions } from '@/utils/notifications';
+
+import {
+  Button as LButton,
+  Embed,
+  IconCircle as LIconCircle,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /**
  * Asks for notification permission once the app is on screen, if it has not
@@ -54,37 +61,45 @@ function NotificationPermissionSheet({ surface }: { surface: SurfaceControls }) 
     }
   };
 
-  return (
-    <View style={styles.content}>
-      <IconCircle icon={RiNotification3Line} />
-      <View style={styles.copy}>
-        <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
-          {t('permission.notifications.title')}
-        </Text>
-        <Text
-          variant="body-regular"
-          style={[styles.centered, { color: theme.colors.textSecondary }]}
-        >
-          {t('permission.notifications.body')}
-        </Text>
-      </View>
-      <View style={styles.actions}>
-        <Button size="lg" loading={requesting} onPress={() => void enable()}>
-          {t('permission.notifications.enable')}
-        </Button>
-        <Button size="lg" onPress={() => surface.dismiss()} tone="neutral" appearance="outline">
-          {t('permission.notifications.later')}
-        </Button>
-      </View>
-    </View>
+  return toElement(
+    VStack(
+      LIconCircle(RiNotification3Line),
+      VStack(
+        Embed(
+          <Text variant="title-3-semibold" accessibilityRole="header" style={styles.centered}>
+            {t('permission.notifications.title')}
+          </Text>,
+        ),
+        Embed(
+          <Text
+            variant="body-regular"
+            style={[styles.centered, { color: theme.colors.textSecondary }]}
+          >
+            {t('permission.notifications.body')}
+          </Text>,
+        ),
+      ).spacing('6'),
+      VStack(
+        LButton(LText(t('permission.notifications.enable')))
+          .size('lg')
+          .loading(requesting)
+          .onPress(() => void enable()),
+        LButton(LText(t('permission.notifications.later')))
+          .size('lg')
+          .onPress(() => surface.dismiss())
+          .tint('neutral')
+          .style('outline'),
+      )
+        .alignSelf('stretch')
+        .spacing('10'),
+    )
+      .padding('top', 'sm')
+      .padding('bottom', 'xs')
+      .align('center')
+      .spacing('xl'),
   );
 }
 
 const styles = StyleSheet.create({
-  // The surface pads the sheet (20 on every side); this adds a little air
-  // under the drag handle before the bell.
-  content: { alignItems: 'center', gap: 20, paddingTop: 8, paddingBottom: 4 },
-  copy: { gap: 6 },
   centered: { textAlign: 'center' },
-  actions: { alignSelf: 'stretch', gap: 10 },
 });

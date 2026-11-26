@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useHistoryTransfer, useOwnInstances } from '@allo/react';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { Text } from '@oxy.so/bloom/typography';
+import { Text as LText, toElement } from '@oxy.so/bloom-language';
 
 /**
  * "Receiving history from <device>" — drawn above the conversation list while
@@ -52,13 +52,14 @@ export function HistoryTransferBanner() {
       testID="history-transfer-banner"
     >
       <ActivityIndicator size="small" color={theme.colors.primarySubtleForeground} />
-      <Text
-        variant="caption-1-medium"
-        numberOfLines={1}
-        style={[styles.text, { color: theme.colors.primarySubtleForeground }]}
-      >
-        {text}
-      </Text>
+      {toElement(
+        LText(text)
+          .shrink('normal')
+          .foreground('primaryText')
+          .font('caption-1')
+          .weight('medium')
+          .lines(1),
+      )}
     </View>
   );
 }
@@ -72,5 +73,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  text: { flexShrink: 1 },
 });

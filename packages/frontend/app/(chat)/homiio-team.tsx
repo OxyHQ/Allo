@@ -3,14 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient } from '@allo/react';
 import { HomiioTeamClient } from '@oxy.so/homiio-sdk';
-import { Button } from '@oxy.so/bloom/button';
-import { Text } from '@oxy.so/bloom/typography';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
 import { useTranslation } from 'react-i18next';
 import { completeHomiioTeam } from '@/lib/homiio/team';
 
-export default function HomiioTeamRoute() {
+import { Button as LButton, Header, ScrollView, Text as LText } from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
+
+export default screen(function HomiioTeamRoute() {
   const { caseId, action, accountId } = useLocalSearchParams<{
     caseId?: string;
     action?: string;
@@ -55,31 +54,25 @@ export default function HomiioTeamRoute() {
       setBusy(false);
     }
   };
-  return (
-    <Screen scroll="content" header={<PageHeader title={t('homiio.team.title')} />}>
-      <ScreenScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="gap-4 px-4 pb-8"
-      >
-        <Text>
-          {t(
-            chosen === 'add'
-              ? 'homiio.team.addWarning'
-              : chosen === 'remove'
-                ? 'homiio.team.removeWarning'
-                : 'homiio.team.description',
-          )}
-        </Text>
-        {failed ? <Text>{t('homiio.team.retry')}</Text> : null}
-        <Button
-          disabled={!valid || busy}
-          onPress={() => {
-            void proceed();
-          }}
-        >
-          {t(busy ? 'homiio.team.working' : 'homiio.team.continue')}
-        </Button>
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+  return ScrollView(
+    LText(
+      t(
+        chosen === 'add'
+          ? 'homiio.team.addWarning'
+          : chosen === 'remove'
+            ? 'homiio.team.removeWarning'
+            : 'homiio.team.description',
+      ),
+    ),
+    failed ? LText(t('homiio.team.retry')) : null,
+    LButton(LText(t(busy ? 'homiio.team.working' : 'homiio.team.continue')))
+      .disabled(!valid || busy)
+      .onPress(() => {
+        void proceed();
+      }),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
+    .screenScroll('content')
+    .header(Header(t('homiio.team.title')).inPage());
+});

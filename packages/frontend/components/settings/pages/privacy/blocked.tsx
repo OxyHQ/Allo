@@ -1,16 +1,12 @@
-import { Card } from '@oxy.so/bloom/card';
 import { Button } from '@oxy.so/bloom/button';
-import { List } from '@oxy.so/bloom/list';
 import { RiCloseCircleLine } from '@oxy.so/bloom/icons/RiCloseCircleLine';
-import { Search } from '@oxy.so/bloom/search';
-import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
 import { Muted } from '@oxy.so/bloom/typography';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 
 import {
   useBlockedUsers,
@@ -22,6 +18,16 @@ import { useUserSearch, type SearchedUser } from '@/hooks/useUserSearch';
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Card as LCard,
+  Embed,
+  List as LList,
+  Search as LSearch,
+  SettingsSection as LSettingsSection,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /**
  * THE PEOPLE THIS ACCOUNT HAS BLOCKED: see who is on the list, put somebody on
@@ -98,89 +104,96 @@ export default function BlockedUsersScreen() {
 
   return (
     <>
-      <Search
-        label={t('settings.privacy.searchUsersToBlock')}
-        value={search.term}
-        onChangeText={search.setTerm}
-        onClearText={search.clear}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-
-      {isSearching ? (
-        search.tooShort ? (
-          note('settings.privacy.searchTooShort')
-        ) : search.searching ? (
-          <View style={styles.centred}>
-            <ActivityIndicator color={theme.colors.primary} />
-          </View>
-        ) : searchResults.length === 0 ? (
-          note('settings.privacy.noUsersFound')
-        ) : (
-          <SettingsSection>
-            <Card>
-              <List
-                items={searchResults.map((candidate) => ({
-                  id: candidate.id,
-                  person: {
-                    name: candidate.displayName,
-                    avatar: candidate.avatar,
-                    subtitle: `@${candidate.handle}`,
-                    actionLabel: t('settings.privacy.add'),
-                    onAction: () => add(candidate),
-                  },
-                  disabled: addUser.isPending,
-                }))}
-              />
-            </Card>
-          </SettingsSection>
-        )
-      ) : loading ? (
-        <View style={styles.centred}>
-          <ActivityIndicator color={theme.colors.primary} />
-        </View>
-      ) : failed ? (
-        note('settings.privacy.loadError')
-      ) : users.length === 0 ? (
-        <View style={styles.centred}>
-          {note('settings.privacy.noBlockedUsers')}
-          {note('settings.privacy.blockedUsersDescription')}
-        </View>
-      ) : (
-        <SettingsSection
-          label={t('settings.privacy.blockedUsers')}
-          description={t('settings.privacy.blockedUsersDescription')}
-        >
-          <Card>
-            <List
-              items={users.map((user) => ({
-                id: user.id,
-                person: {
-                  name: user.displayName ?? t('settings.privacy.unknownAccount'),
-                  avatar: user.avatar,
-                  subtitle: user.handle ? `@${user.handle}` : user.id,
-                },
-                trailing: (
-                  <Button
-                    iconOnly
-                    appearance="plain"
-                    icon={RiCloseCircleLine}
-                    tone="danger"
-                    accessibilityLabel={t('settings.privacy.unblock')}
-                    disabled={removeUser.isPending}
-                    onPress={() => void remove(user)}
-                  />
-                ),
-              }))}
-            />
-          </Card>
-        </SettingsSection>
+      {toElement(
+        LSearch([search.term, search.setTerm])
+          .label(t('settings.privacy.searchUsersToBlock'))
+          .onClearText(search.clear)
+          .autocapitalize('none')
+          .autocorrect(false),
       )}
+      {isSearching
+        ? search.tooShort
+          ? note('settings.privacy.searchTooShort')
+          : search.searching
+            ? toElement(
+                VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+                  .padding('vertical', '2xl')
+                  .align('center')
+                  .spacing('6'),
+              )
+            : searchResults.length === 0
+              ? note('settings.privacy.noUsersFound')
+              : toElement(
+                  LSettingsSection(
+                    undefined,
+                    LCard(
+                      LList(
+                        searchResults.map((candidate) => ({
+                          id: candidate.id,
+                          person: {
+                            name: candidate.displayName,
+                            avatar: candidate.avatar,
+                            subtitle: `@${candidate.handle}`,
+                            actionLabel: t('settings.privacy.add'),
+                            onAction: () => add(candidate),
+                          },
+                          disabled: addUser.isPending,
+                        })),
+                      ),
+                    ),
+                  ),
+                )
+        : loading
+          ? toElement(
+              VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+                .padding('vertical', '2xl')
+                .align('center')
+                .spacing('6'),
+            )
+          : failed
+            ? note('settings.privacy.loadError')
+            : users.length === 0
+              ? toElement(
+                  VStack(
+                    Embed(note('settings.privacy.noBlockedUsers')),
+                    Embed(note('settings.privacy.blockedUsersDescription')),
+                  )
+                    .padding('vertical', '2xl')
+                    .align('center')
+                    .spacing('6'),
+                )
+              : toElement(
+                  LSettingsSection(
+                    t('settings.privacy.blockedUsers'),
+                    LCard(
+                      LList(
+                        users.map((user) => ({
+                          id: user.id,
+                          person: {
+                            name: user.displayName ?? t('settings.privacy.unknownAccount'),
+                            avatar: user.avatar,
+                            subtitle: user.handle ? `@${user.handle}` : user.id,
+                          },
+                          trailing: (
+                            <Button
+                              iconOnly
+                              appearance="plain"
+                              icon={RiCloseCircleLine}
+                              tone="danger"
+                              accessibilityLabel={t('settings.privacy.unblock')}
+                              disabled={removeUser.isPending}
+                              onPress={() => void remove(user)}
+                            />
+                          ),
+                        })),
+                      ),
+                    ),
+                  ).description(t('settings.privacy.blockedUsersDescription')),
+                )}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  centred: { alignItems: 'center', paddingVertical: 24, gap: 6 },
   note: { textAlign: 'center', paddingVertical: 12 },
 });

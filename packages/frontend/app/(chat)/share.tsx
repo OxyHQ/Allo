@@ -1,27 +1,35 @@
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useOxy } from '@oxy.so/services/ui/client';
 import { useAlloClient, useConversations } from '@allo/react';
-import { Button } from '@oxy.so/bloom/button';
-import { ChatSearchField } from '@oxy.so/bloom/chat-list';
-import { AvatarGroup } from '@oxy.so/bloom/avatar-group';
 import { List, type ListEntry, type ListSection } from '@oxy.so/bloom/list';
 import { SelectedChipsRow, type PersonSummary } from '@oxy.so/bloom/chat-people';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { Loading } from '@oxy.so/bloom/loading';
 import { MessageBubble } from '@oxy.so/bloom/message-bubble';
 import { toast } from '@oxy.so/bloom/toast';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen } from '@oxy.so/bloom/screen';
 
 import { useChatSummaries } from '@/hooks/useChatSummaries';
 import { useCreateConversation } from '@/hooks/useCreateConversation';
 import { useUserSearch } from '@/hooks/useUserSearch';
 import { shareTextFromParam } from '@/lib/chat/shareText';
 import { logger } from '@/utils/logger';
+
+import {
+  AvatarGroup as LAvatarGroup,
+  Button as LButton,
+  ChatEmptyState as LChatEmptyState,
+  ChatSearchField as LChatSearchField,
+  Embed,
+  Group,
+  Header,
+  Text,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /** Rows of the "Recent" section before anything is typed. */
 const RECENT_LIMIT = 20;
@@ -53,7 +61,7 @@ interface Target {
  * `useTimeline().send` makes. One destination opens it; several go back to the
  * list, where every row shows the message went.
  */
-export default function ShareRoute() {
+export default screen(function ShareRoute() {
   const params = useLocalSearchParams<{ text?: string | string[] }>();
   const text = shareTextFromParam(params.text);
   const router = useRouter();
@@ -160,13 +168,13 @@ export default function ShareRoute() {
           id: chat.id,
           summary: { id: chat.id, name: chat.name, avatar: chat.avatar },
         },
-        chat.faces && chat.faces.length > 1 ? (
-          <AvatarGroup
-            layout="conversation"
-            items={chat.faces.map((face) => ({ ...face, uri: face.source }))}
-            size={36}
-          />
-        ) : undefined,
+        chat.faces && chat.faces.length > 1
+          ? toElement(
+              LAvatarGroup(chat.faces.map((face) => ({ ...face, uri: face.source })))
+                .layout('conversation')
+                .size('lg'),
+            )
+          : undefined,
       ),
     );
 
@@ -194,72 +202,62 @@ export default function ShareRoute() {
   const picked = [...selected.values()];
 
   if (text.length === 0)
-    return (
-      <Screen scroll="none" header={<PageHeader title={t('share.title')} />}>
-        <View style={styles.empty}>
-          <ChatEmptyState title={t('share.empty.title')} description={t('share.empty.body')} />
-        </View>
-      </Screen>
-    );
+    return VStack(
+      LChatEmptyState({ title: t('share.empty.title'), description: t('share.empty.body') }),
+    )
+      .padding('all', '2xl')
+      .align('center')
+      .justify('center')
+      .grow()
+      .screenScroll('none')
+      .header(Header(t('share.title')).inPage());
 
-  return (
-    // The contact list scrolls itself, under the header the Screen reserves.
-    <Screen
-      scroll="none"
-      header={
-        <PageHeader
-          title={t('share.title')}
-          actions={
-            <Button
-              disabled={picked.length === 0}
-              loading={busy}
-              onPress={() => void submit()}
-              tone="accent"
-              appearance="solid"
-            >
-              {t('share.send')}
-            </Button>
-          }
-        />
-      }
-    >
-      <View style={styles.search}>
-        <ChatSearchField
-          value={search.term}
-          onChangeText={search.setTerm}
-          onClear={search.clear}
-          placeholder={t('share.search')}
-          accessibilityLabel={t('share.search')}
-          clearLabel={t('chat.new.clearSearch')}
-        />
-      </View>
-      {picked.length > 0 ? (
+  return Group(
+    VStack(
+      LChatSearchField([search.term, search.setTerm], {
+        placeholder: t('share.search'),
+        clearLabel: t('chat.new.clearSearch'),
+        onClear: search.clear,
+      }).label(t('share.search')),
+    )
+      .padding('horizontal', 'md')
+      .padding('bottom', 'sm'),
+    Embed(
+      picked.length > 0 ? (
         <SelectedChipsRow
           style={styles.chips}
           people={picked.map((target) => ({ ...target.summary, id: target.key }))}
           onRemove={remove}
           formatRemoveLabel={(name) => t('chat.new.removePerson', { name })}
         />
-      ) : null}
+      ) : null,
+    ),
+    Embed(
       <List
         testID="share-targets"
         style={styles.list}
         sections={sections}
         scrollable
-        header={
-          <View style={styles.preview}>
-            <MessageBubble direction="outgoing" text={text} tail />
-          </View>
-        }
+        header={toElement(
+          VStack(Embed(<MessageBubble direction="outgoing" text={text} tail />))
+            .padding('horizontal', 'md')
+            .padding('top', 'xs')
+            .padding('bottom', 'md'),
+        )}
         footer={
-          search.unavailable ? (
-            <View style={styles.notice}>
-              <ChatEmptyState title={t('share.searchFailed')} />
-              <Button size="sm" onPress={search.retry}>
-                {t('error.boundary.retry')}
-              </Button>
-            </View>
-          ) : undefined
+          search.unavailable
+            ? toElement(
+                VStack(
+                  LChatEmptyState({ title: t('share.searchFailed') }),
+                  LButton(Text(t('error.boundary.retry')))
+                    .size('sm')
+                    .onPress(search.retry),
+                )
+                  .padding('vertical', 'lg')
+                  .align('center')
+                  .spacing('md'),
+              )
+            : undefined
         }
         empty={
           search.searching ? (
@@ -269,30 +267,39 @@ export default function ShareRoute() {
               accessibilityLabel={t('chat.new.searching')}
             />
           ) : (
-            <ChatEmptyState
-              title={
-                search.tooShort
+            toElement(
+              LChatEmptyState({
+                title: search.tooShort
                   ? t('chat.new.tooShort')
                   : search.term
                     ? t('chat.new.noResults')
-                    : t('chat.new.hint')
-              }
-            />
+                    : t('chat.new.hint'),
+              }),
+            )
           )
         }
-      />
-    </Screen>
-  );
-}
+      />,
+    ),
+  )
+    .screenScroll('none')
+    .header(
+      Header(t('share.title'))
+        .toolbar(
+          LButton(Text(t('share.send')))
+            .disabled(picked.length === 0)
+            .loading(busy)
+            .onPress(() => void submit())
+            .tint('accent')
+            .style('solid'),
+        )
+        .inPage(),
+    );
+});
 
 const styles = StyleSheet.create({
-  // 12, the gutter the conversation list's own search pill sits on.
-  search: { paddingHorizontal: 12, paddingBottom: 8 },
   list: { flex: 1, minHeight: 0 },
   searching: { paddingVertical: 32 },
-  preview: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12 },
+
   // MARGIN, not padding: the scroll layout is a horizontal ScrollView.
   chips: { marginHorizontal: 8, marginBottom: 8 },
-  notice: { alignItems: 'center', gap: 12, paddingVertical: 16 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 });

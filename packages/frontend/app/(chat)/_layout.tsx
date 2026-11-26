@@ -13,7 +13,6 @@ import { useOxy } from '@oxy.so/services/ui/client';
 import { Slot, Stack, usePathname, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
 
 import { LogoIcon } from '@/assets/logo';
 import { ConversationInfo } from '@/components/chat/info/ConversationInfo';
@@ -30,6 +29,8 @@ import { profileHref } from '@/lib/profile/handle';
 import { useChatPaneStore } from '@/stores/chatPaneStore';
 import { conversationIdFromPath } from '@/utils/routeUtils';
 
+import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
+
 /**
  * The signed-in app: Bloom's app shell over Allo's destinations
  * (`AlloNavigation`). On a phone, a stack: the pages (chats, updates, calls)
@@ -44,10 +45,11 @@ export default function ChatLayout() {
     // minimised call survives walking around the app.
     <AlloSettingsProvider>
       <AlloNavigation>
-        <View style={styles.app}>
-          <SplitShell split={useSplitLayout()} />
-          <CallPill />
-        </View>
+        {toElement(
+          VStack(Embed(<SplitShell split={useSplitLayout()} />), Embed(<CallPill />))
+            .frame({ minHeight: 'none' })
+            .grow(),
+        )}
       </AlloNavigation>
     </AlloSettingsProvider>
   );
@@ -206,7 +208,3 @@ function SplitShell({ split }: { split: boolean }) {
     </AppShell>
   );
 }
-
-const styles = StyleSheet.create({
-  app: { flex: 1, minHeight: 0 },
-});

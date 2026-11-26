@@ -7,14 +7,14 @@ import { IncomingCallBanner, type CallDirection } from '@oxy.so/bloom/call-ui';
 import { List } from '@oxy.so/bloom/list';
 import { Muted } from '@oxy.so/bloom/typography';
 import { AppShellMenuButton } from '@oxy.so/bloom/app-shell';
-import { PageHeader } from '@oxy.so/bloom/page-header';
-import { Screen, ScreenScrollView } from '@oxy.so/bloom/screen';
-
 import { CallRingNotice } from '@/components/calls/CallRingNotice';
 import { presenceDot } from '@/lib/presence';
+
 import { useChatContext } from '@/hooks/useChatContext';
 import { callHistorySections, useCallLog } from '@/lib/calls/history';
 import { reportCallError, useCallSession } from '@/lib/calls/session';
+import { Embed, Header, ScrollView } from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /**
  * `/calls` — THE CALL LOG.
@@ -29,7 +29,7 @@ import { reportCallError, useCallSession } from '@/lib/calls/session';
  * and also dialled placed two calls per press, which is the bug #172 was meant
  * to end and this row was the half of it that got missed.
  */
-export default function CallsScreen() {
+export default screen(function CallsScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const log = useCallLog();
@@ -101,75 +101,70 @@ export default function CallsScreen() {
   const caller = person(callerId ?? '');
   const callerPresence = usePresence(callerId ? [callerId] : []);
 
-  return (
-    <Screen
-      scroll="content"
-      header={
-        <PageHeader
-          title={t('calls.title')}
-          leading={<AppShellMenuButton accessibilityLabel={t('navigation.open')} />}
+  return ScrollView(
+    Embed(<CallRingNotice />),
+    Embed(
+      arriving ? (
+        <IncomingCallBanner
+          name={caller?.displayName ?? someone}
+          avatar={caller?.avatar}
+          mode={session.mode}
+          status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
+          onAccept={() => {
+            void calls.answer().catch(reportCallError);
+            router.push({
+              pathname: '/c/[id]/call',
+              params: { id: session.conversationId, incomingCallId: session.id },
+            });
+          }}
+          onDecline={() => void calls.decline().catch(reportCallError)}
+          onPress={() =>
+            router.push({
+              pathname: '/c/[id]/call',
+              params: { id: session.conversationId, incomingCallId: session.id },
+            })
+          }
+          labels={{
+            accept: t('calls.control.accept'),
+            decline: t('calls.control.decline'),
+            voice: t('calls.incoming.voice'),
+            video: t('calls.incoming.video'),
+          }}
         />
-      }
-    >
-      <ScreenScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="gap-4 px-4 pb-8"
-      >
-        <CallRingNotice />
-
-        {arriving ? (
-          <IncomingCallBanner
-            name={caller?.displayName ?? someone}
-            avatar={caller?.avatar}
-            mode={session.mode}
-            status={callerId ? presenceDot(callerPresence.of(callerId)) : undefined}
-            onAccept={() => {
-              void calls.answer().catch(reportCallError);
-              router.push({
-                pathname: '/c/[id]/call',
-                params: { id: session.conversationId, incomingCallId: session.id },
-              });
-            }}
-            onDecline={() => void calls.decline().catch(reportCallError)}
-            onPress={() =>
-              router.push({
-                pathname: '/c/[id]/call',
-                params: { id: session.conversationId, incomingCallId: session.id },
-              })
-            }
-            labels={{
-              accept: t('calls.control.accept'),
-              decline: t('calls.control.decline'),
-              voice: t('calls.incoming.voice'),
-              video: t('calls.incoming.video'),
-            }}
-          />
-        ) : null}
-
-        <List
-          testID="call-history"
-          sections={sections.map((section) => ({
-            id: section.id,
-            title: section.title,
-            items: section.items.map((entry) => ({
-              id: entry.id,
-              call: {
-                ...entry,
-                onCallBack: () => callBack(entry.id),
-                labels: {
-                  ...directionLabels,
-                  callBack: (name: string) => t('calls.callBack', { name }),
-                },
+      ) : null,
+    ),
+    Embed(
+      <List
+        testID="call-history"
+        sections={sections.map((section) => ({
+          id: section.id,
+          title: section.title,
+          items: section.items.map((entry) => ({
+            id: entry.id,
+            call: {
+              ...entry,
+              onCallBack: () => callBack(entry.id),
+              labels: {
+                ...directionLabels,
+                callBack: (name: string) => t('calls.callBack', { name }),
               },
-              onPress: () => openConversation(entry.id),
-            })),
-          }))}
-          empty={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
-        />
-      </ScreenScrollView>
-    </Screen>
-  );
-}
+            },
+            onPress: () => openConversation(entry.id),
+          })),
+        }))}
+        empty={<Muted style={styles.empty}>{t('calls.empty')}</Muted>}
+      />,
+    ),
+  )
+    .keyboardTaps('handled')
+    .contentView((v) => v.padding('horizontal', 'lg').padding('bottom', '3xl').spacing('lg'))
+    .screenScroll('content')
+    .header(
+      Header(t('calls.title'))
+        .toolbarLeading(Embed(<AppShellMenuButton accessibilityLabel={t('navigation.open')} />))
+        .inPage(),
+    );
+});
 
 const styles = StyleSheet.create({
   empty: { paddingVertical: 24, textAlign: 'center' },

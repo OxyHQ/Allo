@@ -1,4 +1,3 @@
-import { GroupedSection, GroupedSectionItem } from '@oxy.so/bloom/grouped-section';
 import {
   useOwnInstances,
   usePendingEnrollments,
@@ -8,17 +7,28 @@ import {
 import { Button } from '@oxy.so/bloom/button';
 import { RiDeleteBinLine } from '@oxy.so/bloom/icons/RiDeleteBinLine';
 import { RiRefreshLine } from '@oxy.so/bloom/icons/RiRefreshLine';
-import { SettingsSection } from '@oxy.so/bloom/settings-modal';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { toast } from '@oxy.so/bloom/toast';
-import { Muted, Text } from '@oxy.so/bloom/typography';
+import { Text } from '@oxy.so/bloom/typography';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 
 import { getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { confirm } from '@oxy.so/bloom/surfaces';
+
+import {
+  Button as LButton,
+  Embed,
+  GroupedSection as LGroupedSection,
+  GroupedSectionItem as LGroupedSectionItem,
+  HStack,
+  SettingsSection as LSettingsSection,
+  Text as LText,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 type Translate = ReturnType<typeof useTranslation>['t'];
 
@@ -140,118 +150,128 @@ export default function DevicesScreen() {
 
   return (
     <>
-      {pending.pending.length > 0 ? (
-        <SettingsSection label={t('devices.waiting')}>
-          <GroupedSection>
-            {pending.pending.map((enrollment) => {
-              const busy = busyId === enrollment.instance.id;
-              return (
-                <View key={enrollment.instance.id} style={styles.pending}>
-                  <Text style={[styles.pendingTitle, { color: theme.colors.text }]}>
-                    {enrollment.instance.displayName}
-                  </Text>
-                  <Muted>
-                    {`${platformLabel(enrollment.instance.platform)} · ${t('devices.requestedAt', { when: formatWhen(enrollment.instance.createdAt) })}`}
-                  </Muted>
-                  <Muted>{t('devices.compareCode')}</Muted>
-                  <Text
-                    style={[
-                      styles.fingerprint,
-                      {
-                        color: theme.colors.text,
-                        backgroundColor: theme.colors.backgroundSecondary,
-                      },
-                    ]}
-                    accessibilityLabel={t('enrollment.fingerprint')}
-                    selectable
-                  >
-                    {enrollment.fingerprint}
-                  </Text>
-                  <View style={styles.actions}>
-                    <Button
-                      style={styles.action}
-                      disabled={busyId !== null}
-                      onPress={() => void reject(enrollment)}
-                      tone="neutral"
-                      appearance="outline"
-                    >
-                      {t('devices.reject')}
-                    </Button>
-                    <Button
-                      style={styles.action}
-                      loading={busy}
-                      disabled={busyId !== null && !busy}
-                      onPress={() => void approve(enrollment)}
-                      tone="accent"
-                      appearance="solid"
-                    >
-                      {t('devices.approve')}
-                    </Button>
-                  </View>
-                </View>
-              );
-            })}
-          </GroupedSection>
-        </SettingsSection>
-      ) : null}
-
-      <SettingsSection
-        label={t('devices.enrolled')}
-        action={
-          <Button
-            iconOnly
-            appearance="plain"
-            icon={RiRefreshLine}
-            accessibilityLabel={t('devices.refresh')}
-            onPress={() => void refreshAll()}
-          />
-        }
-      >
-        <GroupedSection>
-          {!loaded && enrolled.length === 0 ? (
-            <View style={styles.empty}>
-              <ActivityIndicator color={theme.colors.primary} />
-            </View>
-          ) : enrolled.length === 0 ? (
-            <View style={styles.empty}>
-              <Muted>{t('devices.none')}</Muted>
-            </View>
-          ) : (
-            enrolled.map((instance) => {
-              const removable = !instance.isThis && instance.status !== 'revoked';
-              return (
-                <GroupedSectionItem
-                  titleNumberOfLines={0}
-                  descriptionLines={0}
-                  wrapControl
-                  key={instance.id}
-                  title={
-                    instance.isThis
-                      ? t('devices.thisDevice', { name: instance.displayName })
-                      : instance.displayName
-                  }
-                  description={describeInstance(instance, t)}
-                  rightElement={
-                    !removable ? undefined : busyId === instance.id ? (
-                      <ActivityIndicator color={theme.colors.error} />
-                    ) : (
-                      <Button
-                        iconOnly
-                        appearance="plain"
-                        icon={RiDeleteBinLine}
-                        tone="danger"
-                        disabled={busyId !== null}
-                        accessibilityLabel={t('devices.remove')}
-                        onPress={() => void revoke(instance)}
-                      />
+      {pending.pending.length > 0
+        ? toElement(
+            LSettingsSection(
+              t('devices.waiting'),
+              LGroupedSection(
+                Embed(
+                  pending.pending.map((enrollment) => {
+                    const busy = busyId === enrollment.instance.id;
+                    return toElement(
+                      VStack(
+                        LText(enrollment.instance.displayName)
+                          .weight('semibold')
+                          .font('16')
+                          .foreground('foreground'),
+                        LText(
+                          `${platformLabel(enrollment.instance.platform)} · ${t('devices.requestedAt', { when: formatWhen(enrollment.instance.createdAt) })}`,
+                        ).textStyle('muted'),
+                        LText(t('devices.compareCode')).textStyle('muted'),
+                        Embed(
+                          <Text
+                            style={[
+                              styles.fingerprint,
+                              {
+                                color: theme.colors.text,
+                                backgroundColor: theme.colors.backgroundSecondary,
+                              },
+                            ]}
+                            accessibilityLabel={t('enrollment.fingerprint')}
+                            selectable
+                          >
+                            {enrollment.fingerprint}
+                          </Text>,
+                        ),
+                        HStack(
+                          LButton(LText(t('devices.reject')))
+                            .disabled(busyId !== null)
+                            .onPress(() => void reject(enrollment))
+                            .tint('neutral')
+                            .style('outline')
+                            .grow(),
+                          LButton(LText(t('devices.approve')))
+                            .loading(busy)
+                            .disabled(busyId !== null && !busy)
+                            .onPress(() => void approve(enrollment))
+                            .tint('accent')
+                            .style('solid')
+                            .grow(),
+                        ).spacing('md'),
+                      )
+                        .padding('all', 'lg')
+                        .spacing('6'),
+                      enrollment.instance.id,
+                    );
+                  }),
+                ),
+              ),
+            ),
+          )
+        : null}
+      {toElement(
+        LSettingsSection(
+          t('devices.enrolled'),
+          LGroupedSection(
+            Embed(
+              !loaded && enrolled.length === 0
+                ? toElement(
+                    VStack(Embed(<ActivityIndicator color={theme.colors.primary} />))
+                      .padding('vertical', '2xl')
+                      .align('center'),
+                  )
+                : enrolled.length === 0
+                  ? toElement(
+                      VStack(LText(t('devices.none')).textStyle('muted'))
+                        .padding('vertical', '2xl')
+                        .align('center'),
                     )
-                  }
-                />
-              );
-            })
-          )}
-        </GroupedSection>
-      </SettingsSection>
+                  : enrolled.map((instance) => {
+                      const removable = !instance.isThis && instance.status !== 'revoked';
+                      return toElement(
+                        LGroupedSectionItem(
+                          instance.isThis
+                            ? t('devices.thisDevice', { name: instance.displayName })
+                            : instance.displayName,
+                        )
+                          .lines(0)
+                          .descriptionLines(0)
+                          .wrapControl()
+                          .description(describeInstance(instance, t))
+                          .trailing(
+                            Embed(
+                              !removable ? undefined : busyId === instance.id ? (
+                                <ActivityIndicator color={theme.colors.error} />
+                              ) : (
+                                <Button
+                                  iconOnly
+                                  appearance="plain"
+                                  icon={RiDeleteBinLine}
+                                  tone="danger"
+                                  disabled={busyId !== null}
+                                  accessibilityLabel={t('devices.remove')}
+                                  onPress={() => void revoke(instance)}
+                                />
+                              ),
+                            ),
+                          ),
+                        instance.id,
+                      );
+                    }),
+            ),
+          ),
+        ).trailing(
+          Embed(
+            <Button
+              iconOnly
+              appearance="plain"
+              icon={RiRefreshLine}
+              accessibilityLabel={t('devices.refresh')}
+              onPress={() => void refreshAll()}
+            />,
+          ),
+        ),
+      )}
     </>
   );
 }
@@ -297,8 +317,6 @@ function formatWhen(iso: string): string {
 }
 
 const styles = StyleSheet.create({
-  pending: { padding: 16, gap: 6 },
-  pendingTitle: { fontSize: 16, fontWeight: '600' },
   fingerprint: {
     marginVertical: 6,
     paddingVertical: 12,
@@ -315,7 +333,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     overflow: 'hidden',
   },
-  actions: { flexDirection: 'row', gap: 12 },
-  action: { flex: 1 },
-  empty: { paddingVertical: 24, alignItems: 'center' },
 });

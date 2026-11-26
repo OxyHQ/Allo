@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { MediaView, TimelineItemView } from '@allo/core';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
 import { messageEntities } from '@oxy.so/bloom/message-bubble';
 import { DocumentGrid, SharedMediaGrid } from '@oxy.so/bloom/message-media';
-import { List } from '@oxy.so/bloom/list';
 
 import { useMediaUri } from '@/lib/allo/useMediaUri';
+
+import {
+  ChatEmptyState as LChatEmptyState,
+  Embed,
+  List as LList,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /** How many attachments a tab draws before it stops decrypting thumbnails. */
 const LIMIT = 30;
@@ -95,24 +101,32 @@ export function SharedMedia({ items }: { items: readonly TimelineItemView[] }) {
     setUris((current) => (current[id] === uri ? current : { ...current, [id]: uri }));
   }, []);
 
-  if (attachments.length === 0) return <ChatEmptyState title={t('chat.info.noMedia')} />;
+  if (attachments.length === 0)
+    return toElement(LChatEmptyState({ title: t('chat.info.noMedia') }));
 
-  return (
-    <View style={styles.pane}>
-      {attachments.map((attachment) => (
-        <TileSource key={attachment.id} attachment={attachment} onReady={onReady} />
-      ))}
-      <SharedMediaGrid
-        items={attachments.map((attachment) => ({
-          id: attachment.id,
-          source: uris[attachment.id] ?? '',
-          kind: attachment.media.kind === 'video' ? 'video' : 'image',
-          duration: attachment.media.durationMs ? attachment.media.durationMs / 1000 : undefined,
-        }))}
-        columns={3}
-        accessibilityLabel={t('chat.details.media')}
-      />
-    </View>
+  return toElement(
+    VStack(
+      Embed(
+        attachments.map((attachment) => (
+          <TileSource key={attachment.id} attachment={attachment} onReady={onReady} />
+        )),
+      ),
+      Embed(
+        <SharedMediaGrid
+          items={attachments.map((attachment) => ({
+            id: attachment.id,
+            source: uris[attachment.id] ?? '',
+            kind: attachment.media.kind === 'video' ? 'video' : 'image',
+            duration: attachment.media.durationMs ? attachment.media.durationMs / 1000 : undefined,
+          }))}
+          columns={3}
+          accessibilityLabel={t('chat.details.media')}
+        />,
+      ),
+    )
+      .padding('horizontal', 'lg')
+      .padding('bottom', 'lg')
+      .spacing('sm'),
   );
 }
 
@@ -120,20 +134,26 @@ export function SharedMedia({ items }: { items: readonly TimelineItemView[] }) {
 export function SharedFiles({ items }: { items: readonly TimelineItemView[] }) {
   const { t } = useTranslation();
   const attachments = useMemo(() => attachmentsOf(items, ['file']), [items]);
-  if (attachments.length === 0) return <ChatEmptyState title={t('chat.info.noFiles')} />;
-  return (
-    <View style={styles.pane}>
-      <DocumentGrid
-        items={attachments.map(({ id, media }) => ({
-          id,
-          name: media.filename,
-          mimeType: media.mime,
-          sizeBytes: media.size,
-        }))}
-        divider
-        accessibilityLabel={t('chat.details.files')}
-      />
-    </View>
+  if (attachments.length === 0)
+    return toElement(LChatEmptyState({ title: t('chat.info.noFiles') }));
+  return toElement(
+    VStack(
+      Embed(
+        <DocumentGrid
+          items={attachments.map(({ id, media }) => ({
+            id,
+            name: media.filename,
+            mimeType: media.mime,
+            sizeBytes: media.size,
+          }))}
+          divider
+          accessibilityLabel={t('chat.details.files')}
+        />,
+      ),
+    )
+      .padding('horizontal', 'lg')
+      .padding('bottom', 'lg')
+      .spacing('sm'),
   );
 }
 
@@ -141,22 +161,28 @@ export function SharedFiles({ items }: { items: readonly TimelineItemView[] }) {
 export function SharedVoice({ items }: { items: readonly TimelineItemView[] }) {
   const { t } = useTranslation();
   const attachments = useMemo(() => attachmentsOf(items, ['voice', 'audio']), [items]);
-  if (attachments.length === 0) return <ChatEmptyState title={t('chat.info.noVoice')} />;
-  return (
-    <View style={styles.pane}>
-      <DocumentGrid
-        items={attachments.map(({ id, media }) => ({
-          id,
-          name: media.kind === 'voice' ? t('chat.attachment.voice') : media.filename,
-          kind: 'audio' as const,
-          mimeType: media.mime,
-          sizeBytes: media.size,
-          metaLabel: media.durationMs ? `${Math.round(media.durationMs / 1000)}s` : undefined,
-        }))}
-        divider
-        accessibilityLabel={t('chat.details.voice')}
-      />
-    </View>
+  if (attachments.length === 0)
+    return toElement(LChatEmptyState({ title: t('chat.info.noVoice') }));
+  return toElement(
+    VStack(
+      Embed(
+        <DocumentGrid
+          items={attachments.map(({ id, media }) => ({
+            id,
+            name: media.kind === 'voice' ? t('chat.attachment.voice') : media.filename,
+            kind: 'audio' as const,
+            mimeType: media.mime,
+            sizeBytes: media.size,
+            metaLabel: media.durationMs ? `${Math.round(media.durationMs / 1000)}s` : undefined,
+          }))}
+          divider
+          accessibilityLabel={t('chat.details.voice')}
+        />,
+      ),
+    )
+      .padding('horizontal', 'lg')
+      .padding('bottom', 'lg')
+      .spacing('sm'),
   );
 }
 
@@ -176,22 +202,21 @@ export function SharedLinks({ items }: { items: readonly TimelineItemView[] }) {
     return found;
   }, [items]);
 
-  if (links.length === 0) return <ChatEmptyState title={t('chat.info.noLinks')} />;
+  if (links.length === 0) return toElement(LChatEmptyState({ title: t('chat.info.noLinks') }));
 
-  return (
-    <View style={styles.pane}>
-      <List
-        items={links.map((link) => ({
+  return toElement(
+    VStack(
+      LList(
+        links.map((link) => ({
           id: link.id,
           title: link.url,
           role: 'link',
           onPress: () => void Linking.openURL(link.url),
-        }))}
-      />
-    </View>
+        })),
+      ),
+    )
+      .padding('horizontal', 'lg')
+      .padding('bottom', 'lg')
+      .spacing('sm'),
   );
 }
-
-const styles = StyleSheet.create({
-  pane: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
-});

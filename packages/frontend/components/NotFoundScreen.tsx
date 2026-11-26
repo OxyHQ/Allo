@@ -1,41 +1,42 @@
-import { Button } from '@oxy.so/bloom/button';
-import { ChatEmptyState } from '@oxy.so/bloom/chat-screen';
-import { IconCircle } from '@oxy.so/bloom/icon-circle';
 import { RiCompass3Line } from '@oxy.so/bloom/icons/RiCompass3Line';
-import { Screen } from '@oxy.so/bloom/screen';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import {
+  Button as LButton,
+  ChatEmptyState as LChatEmptyState,
+  HStack,
+  IconCircle as LIconCircle,
+  Text,
+  VStack,
+} from '@oxy.so/bloom-language';
+import { screen } from '@oxy.so/bloom-language/router';
 
 /** A path that names nothing: say so, and offer the way back and the way home. */
-export default function NotFoundScreen() {
+export default screen(function NotFoundScreen() {
   const router = useRouter();
   const { t } = useTranslation();
 
-  return (
-    <Screen scroll="none">
-      <View style={styles.root}>
-        <ChatEmptyState
-          illustration={<IconCircle icon={RiCompass3Line} />}
-          title={t('notFound.title')}
-          description={t('notFound.description')}
-          action={
-            <View style={styles.actions}>
-              {router.canGoBack() ? (
-                <Button onPress={() => router.back()} tone="neutral" appearance="outline">
-                  {t('notFound.goBack')}
-                </Button>
-              ) : null}
-              <Button onPress={() => router.replace('/')}>{t('notFound.goHome')}</Button>
-            </View>
-          }
-        />
-      </View>
-    </Screen>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'center' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  return VStack(
+    LChatEmptyState({
+      title: t('notFound.title'),
+      description: t('notFound.description'),
+      illustration: LIconCircle(RiCompass3Line),
+      action: HStack(
+        router.canGoBack()
+          ? LButton(Text(t('notFound.goBack')))
+              .onPress(() => router.back())
+              .tint('neutral')
+              .style('outline')
+          : null,
+        LButton(Text(t('notFound.goHome'))).onPress(() => router.replace('/')),
+      )
+        .wrap()
+        .justify('center')
+        .spacing('sm'),
+    }),
+  )
+    .justify('center')
+    .grow()
+    .header(false)
+    .screenScroll('none');
 });
