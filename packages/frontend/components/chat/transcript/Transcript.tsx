@@ -7,17 +7,19 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ScrollToBottomButton } from '@oxy.so/bloom/chat-screen';
-import {
-  MessageList,
-  TypingBubble,
-  type MessageBubbleLabels,
-  type MessageListItem,
-} from '@oxy.so/bloom/message-bubble';
+import type { MessageBubbleLabels, MessageListItem } from '@oxy.so/bloom/message-bubble';
 
 import { useFollowLatest } from './useFollowLatest';
 
-import { Embed, VStack, toElement } from '@oxy.so/bloom-language';
+import {
+  Embed,
+  Group,
+  MessageList as LMessageList,
+  ScrollToBottomButton as LScrollToBottomButton,
+  TypingBubble as LTypingBubble,
+  VStack,
+  toElement,
+} from '@oxy.so/bloom-language';
 
 /** How far from the newest message the "scroll to latest" button appears. */
 const SCROLLED_UP_PX = 320;
@@ -78,7 +80,7 @@ export const Transcript = memo(function Transcript({
 
   return toElement(
     VStack(
-      Embed(
+      Embed((render) => (
         <ScrollView
           ref={scroller}
           style={styles.root}
@@ -93,25 +95,23 @@ export const Transcript = memo(function Transcript({
           // where they are (`useFollowLatest`).
           {...follow.scrollProps}
         >
-          <MessageList
-            items={items}
-            showAvatars={isGroup}
-            showSenderNames={isGroup}
-            unreadLabel={t('chat.unreadMessages')}
-            labels={labels}
-          />
-          {typing ? <TypingBubble label={t('chat.typing.someone')} /> : null}
-        </ScrollView>,
-      ),
+          {render(
+            Group(
+              LMessageList(items, {
+                showAvatars: isGroup,
+                showSenderNames: isGroup,
+                unreadLabel: t('chat.unreadMessages'),
+                labels,
+              }),
+              typing ? LTypingBubble().label(t('chat.typing.someone')) : null,
+            ),
+          )}
+        </ScrollView>
+      )),
       VStack(
-        Embed(
-          <ScrollToBottomButton
-            visible={scrolledUp}
-            unreadCount={unreadCount}
-            accessibilityLabel={t('chat.scrollToLatest')}
-            onPress={follow.jumpToEnd}
-          />,
-        ),
+        LScrollToBottomButton({ visible: scrolledUp, unreadCount })
+          .label(t('chat.scrollToLatest'))
+          .onPress(follow.jumpToEnd),
       )
         .position({ right: 'lg', bottom: 'lg' })
         .allowsHitTesting('children'),
