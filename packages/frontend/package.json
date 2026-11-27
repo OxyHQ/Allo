@@ -109,7 +109,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@oxy.so/bloom-language-compiler": "1.6.0",
+    "@oxy.so/bloom-language-compiler": "1.7.0",
     "@oxy.so/ship": "2.0.1",
     "@react-native/jest-preset": "0.88.1",
     "@types/jest": "30.0.0",
